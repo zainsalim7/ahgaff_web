@@ -1,0 +1,86 @@
+# Docker Compose for EduAnalytic Attendance System
+# Usage: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: eduanalytic-mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-your_secure_password}
+      MONGO_INITDB_DATABASE: attendance_db
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    ports:
+      - "27017:27017"
+    networks:
+      - eduanalytic-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # FastAPI Backend
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: eduanalytic-backend
+    restart: unless-stopped
+    environment:
+      - MONGO_URL=mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-your_secure_password}@mongodb:27017/attendance_db?authSource=admin
+      - JWT_SECRET=${JWT_SECRET:-your_jwt_secret_key_here_change_in_production}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+    ports:
+      - "8001:8001"
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - eduanalytic-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Nginx Reverse Proxy (Optional - for production with SSL)
+  nginx:
+    image: nginx:alpine
+    container_name: eduanalytic-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./certbot/www:/var/www/certbot:ro
+      - ./certbot/conf:/etc/letsencrypt:ro
+    depends_on:
+      - backend
+    networks:
+      - eduanalytic-network
+
+  # Certbot for SSL (Optional)
+  certbot:
+    image: certbot/certbot
+    container_name: eduanalytic-certbot
+    volumes:
+      - ./certbot/www:/var/www/certbot
+      - ./certbot/conf:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+networks:
+  eduanalytic-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+  mongodb_config:
