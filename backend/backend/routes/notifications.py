@@ -45,6 +45,74 @@ class SendNotificationRequest(BaseModel):
     teacher_user_id: Optional[str] = None
 
 
+
+@router.get("/notifications/my")
+async def get_my_notifications(
+    page: int = 1,
+    limit: int = 50,
+    current_user: dict = Depends(get_current_user)
+):
+    """جلب إشعارات المستخدم الحالي"""
+    db = get_db()
+    user_id = current_user["id"]
+    
+    skip = (page - 1) * limit
+    total = await db.notifications.count_documents({"user_id": user_id})
+    unread = await db.notifications.count_documents({"user_id": user_id, "is_read": False})
+    
+    notifications = await db.notifications.find(
+        {"user_id": user_id}
+    ).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    
+    result = []
+    for n in notifications:
+        result.append({
+            "id": str(n["_id"]),
+            "title": n.get("title", ""),
+            "message": n.get("message", ""),
+            "type": n.get("type", "info"),
+            "is_read": n.get("is_read", False),
+            "course_name": n.get("course_name", ""),
+            "created_at": n.get("created_at", ""),
+        })
+    
+    return {
+        "notifications": result,
+        "total": total,
+        "unread_count": unread,
+        "page": page,
+    }
+
+
+@router.post("/notifications/mark-read/{notification_id}")
+async def mark_notification_read(
+    notification_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """تعليم إشعار كمقروء"""
+    db = get_db()
+    from bson import ObjectId
+    await db.notifications.update_one(
+        {"_id": ObjectId(notification_id), "user_id": current_user["id"]},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "تم"}
+
+
+@router.post("/notifications/mark-all-read")
+async def mark_all_notifications_read(
+    current_user: dict = Depends(get_current_user)
+):
+    """تعليم جميع الإشعارات كمقروءة"""
+    db = get_db()
+    await db.notifications.update_many(
+        {"user_id": current_user["id"], "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    return {"message": "تم تعليم جميع الإشعارات كمقروءة"}
+
+
+
 @router.post("/notifications/register-token")
 async def register_device_token(
     request: RegisterTokenRequest,
