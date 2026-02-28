@@ -1114,14 +1114,23 @@ async def init_default_roles(current_user: dict = Depends(get_current_user)):
     ]
     
     created = 0
+    updated = 0
     for role in default_roles:
         existing = await db.roles.find_one({"system_key": role["system_key"]})
         if not existing:
             role["created_at"] = get_yemen_time()
             await db.roles.insert_one(role)
             created += 1
+        else:
+            # تحديث الصلاحيات للأدوار الموجودة لتطابق الافتراضية
+            if set(existing.get("permissions", [])) != set(role["permissions"]):
+                await db.roles.update_one(
+                    {"system_key": role["system_key"]},
+                    {"$set": {"permissions": role["permissions"]}}
+                )
+                updated += 1
     
-    return {"message": f"تم إنشاء {created} دور افتراضي"}
+    return {"message": f"تم إنشاء {created} دور وتحديث {updated} دور"}
 
 # ==================== Permissions Management Routes ====================
 
