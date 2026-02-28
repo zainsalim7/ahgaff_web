@@ -240,6 +240,58 @@ async def search_students_for_notification(
     return students
 
 
+@router.get("/notifications/search-teachers")
+async def search_teachers_for_notification(
+    q: str = "",
+    current_user: dict = Depends(get_current_user)
+):
+    """البحث عن معلمين لإرسال إشعار"""
+    db = get_db()
+
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+
+    # البحث في جدول المعلمين
+    query = {}
+    if q:
+        query["$or"] = [
+            {"full_name": {"$regex": q, "$options": "i"}},
+            {"teacher_id": {"$regex": q, "$options": "i"}},
+        ]
+
+    teachers = await db.teachers.find(query, {
+        "_id": 0,
+        "user_id": 1,
+        "teacher_id": 1,
+        "full_name": 1,
+    }).to_list(50)
+
+    return teachers
+
+
+@router.get("/notifications/courses")
+async def get_courses_for_notification(
+    current_user: dict = Depends(get_current_user)
+):
+    """جلب المقررات لإرسال إشعار لطلابها"""
+    db = get_db()
+
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+
+    courses = await db.courses.find({"is_active": True}).to_list(200)
+    result = []
+    for c in courses:
+        enrollments_count = await db.enrollments.count_documents({"course_id": str(c["_id"])})
+        result.append({
+            "id": str(c["_id"]),
+            "name": c.get("name", ""),
+            "code": c.get("code", ""),
+            "students_count": enrollments_count,
+        })
+    return result
+
+
 @router.get("/notifications/stats")
 async def get_notification_stats(
     current_user: dict = Depends(get_current_user)
