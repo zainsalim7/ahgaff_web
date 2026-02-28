@@ -80,6 +80,9 @@ export default function SendNotification() {
       if (!selectedStudent) { Alert.alert('تنبيه', 'اختر الطالب'); return; }
       payload.student_user_id = selectedStudent.user_id;
       payload.student_name = selectedStudent.full_name;
+    } else if (targetType === 'role') {
+      if (!selectedRole) { Alert.alert('تنبيه', 'اختر الدور'); return; }
+      payload.target_role = selectedRole;
     }
 
     setSending(true);
