@@ -3709,6 +3709,63 @@ async def get_course_lectures(
     
     return result
 
+async def notify_lecture_created(course: dict, date: str, start_time: str, end_time: str):
+    """إرسال تنبيه تلقائي عند إنشاء محاضرة جديدة - للمعلم وطلاب المقرر"""
+    try:
+        course_name = course.get("name", "")
+        course_id = str(course["_id"])
+        title = f"محاضرة جديدة - {course_name}"
+        message = f"تم إنشاء محاضرة جديدة لمقرر {course_name} بتاريخ {date} من {start_time} إلى {end_time}. يرجى مراجعة التطبيق للاطلاع على التحديثات."
+        
+        target_user_ids = []
+        
+        # 1. تنبيه المعلم
+        teacher_id = course.get("teacher_id")
+        if teacher_id:
+            teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+            if teacher and teacher.get("user_id"):
+                target_user_ids.append(teacher["user_id"])
+        
+        # 2. تنبيه طلاب المقرر
+        enrollments = await db.enrollments.find({"course_id": course_id}).to_list(5000)
+        student_ids = [e["student_id"] for e in enrollments]
+        if student_ids:
+            students = await db.students.find(
+                {"_id": {"$in": [ObjectId(sid) for sid in student_ids]}}
+            ).to_list(5000)
+            for s in students:
+                if s.get("user_id"):
+                    target_user_ids.append(s["user_id"])
+        
+        # حفظ الإشعارات داخل التطبيق
+        if target_user_ids:
+            in_app = [{
+                "user_id": uid,
+                "title": title,
+                "message": message,
+                "type": "reminder",
+                "course_id": course_id,
+                "course_name": course_name,
+                "is_read": False,
+                "created_at": get_yemen_time().isoformat(),
+            } for uid in set(target_user_ids)]
+            await db.notifications.insert_many(in_app)
+        
+        # إرسال push notifications
+        from services.firebase_service import send_notification_to_many
+        if target_user_ids:
+            tokens_docs = await db.fcm_tokens.find(
+                {"user_id": {"$in": list(set(target_user_ids))}}
+            ).to_list(5000)
+            tokens = [doc["token"] for doc in tokens_docs if doc.get("token")]
+            if tokens:
+                await send_notification_to_many(tokens, title, message)
+        
+        logging.info(f"تم إرسال تنبيهات محاضرة جديدة: {course_name} إلى {len(set(target_user_ids))} مستخدم")
+    except Exception as e:
+        logging.error(f"خطأ في إرسال تنبيه المحاضرة: {str(e)}")
+
+
 @api_router.post("/lectures")
 async def create_lecture(
     data: LectureCreate,
