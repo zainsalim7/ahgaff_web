@@ -467,6 +467,21 @@ export default function ReportsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 أنواع التقارير</Text>
           <View style={styles.reportTypesGrid}>
+            {/* ملخص المعلم - للمعلم والإدارة */}
+            {(canViewReport(userRole, userPermissions, 'report_teacher_workload')) && (
+            <TouchableOpacity 
+              style={[styles.reportTypeCard, { borderWidth: 2, borderColor: '#1565c0' }]}
+              onPress={() => router.push('/report-teacher-summary')}
+              data-testid="report-teacher-summary-btn"
+            >
+              <View style={[styles.reportTypeIcon, { backgroundColor: '#e3f2fd' }]}>
+                <Ionicons name="person-circle" size={28} color="#1565c0" />
+              </View>
+              <Text style={styles.reportTypeTitle}>ملخص المعلم</Text>
+              <Text style={styles.reportTypeDesc}>جميع المقررات مع نسب الحضور</Text>
+            </TouchableOpacity>
+            )}
+
             {/* تقرير الحضور الشامل */}
             {canViewReport(userRole, userPermissions, 'report_attendance_overview') && (
             <TouchableOpacity 
