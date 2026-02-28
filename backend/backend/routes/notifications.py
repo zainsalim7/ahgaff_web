@@ -36,11 +36,13 @@ class RegisterTokenRequest(BaseModel):
 class SendNotificationRequest(BaseModel):
     title: str
     body: str
-    target_type: str = "all"  # all, role, student
+    target_type: str = "all"  # all, role, student, course, teacher
     target_role: Optional[str] = None
     user_ids: Optional[List[str]] = None
     student_user_id: Optional[str] = None
     student_name: Optional[str] = None
+    course_id: Optional[str] = None
+    teacher_user_id: Optional[str] = None
 
 
 @router.post("/notifications/register-token")
