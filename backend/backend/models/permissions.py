@@ -126,11 +126,9 @@ DEFAULT_PERMISSIONS = {
     UserRole.TEACHER: [
         Permission.RECORD_ATTENDANCE,
         Permission.VIEW_ATTENDANCE,
-        Permission.VIEW_REPORTS,
         Permission.EXPORT_REPORTS,
         Permission.MANAGE_LECTURES,
         Permission.VIEW_LECTURES,
-        Permission.REPORT_ATTENDANCE_OVERVIEW,
         Permission.REPORT_ABSENT_STUDENTS,
         Permission.REPORT_COURSE,
         Permission.REPORT_TEACHER_WORKLOAD,
