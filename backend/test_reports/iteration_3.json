@@ -21,7 +21,7 @@
   ],
   "action_items": [],
   "critical_code_review_comments": [
-    "EXPO_PUBLIC_BACKEND_URL is configured to https://attendance-debug-1.preview.emergentagent.com in console logs - appears to be different from the test URL",
+    "EXPO_PUBLIC_BACKEND_URL is configured to https://mobile-build-17.preview.emergentagent.com in console logs - appears to be different from the test URL",
     "Import interface correctly requires both القسم (Department) and المقرر (Course) before enabling file selection button",
     "Add Student form correctly requires المقرر (Course) as mandatory field for new students"
   ],

@@ -84,7 +84,7 @@
   "rca_of_the_issue": {
     "root_cause": "The loading state issue appears to be related to React Native Web/Expo Router navigation lifecycle. When navigating via Link or router.push(), the component re-mounts but the state updates from fetchData() don't trigger a re-render. The API calls complete (confirmed via console logs) but setLoading(false) and setRoles() don't update the UI.",
     "reproduction_steps": [
-      "1. Navigate to https://attendance-debug-1.preview.emergentagent.com",
+      "1. Navigate to https://mobile-build-17.preview.emergentagent.com",
       "2. Login with admin/admin123",
       "3. Click on 'الإدارة' (Administration) tab in bottom navigation",
       "4. Click on 'إدارة الأدوار' (Roles Management) card",

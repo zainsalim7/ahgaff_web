@@ -9,7 +9,7 @@ import os
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://attendance-debug-1.preview.emergentagent.com"
+    BASE_URL = "https://mobile-build-17.preview.emergentagent.com"
 
 
 class TestTrashManagement:
