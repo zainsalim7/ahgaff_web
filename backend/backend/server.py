@@ -5251,7 +5251,7 @@ async def get_teacher_workload_report(
             teacher_id = str(teacher_record["_id"])
         else:
             raise HTTPException(status_code=404, detail="لم يتم العثور على سجل المعلم")
-    elif not has_permission(current_user, Permission.VIEW_REPORTS):
+    elif not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # تحديد الفترة
