@@ -3952,6 +3952,10 @@ async def generate_semester_lectures_advanced(
             
             current += timedelta(days=7)
     
+    # إرسال تنبيه عند إنشاء محاضرات الفصل
+    if lectures_created > 0:
+        await notify_lecture_created(course, data.start_date if hasattr(data, 'start_date') else "", "", "")
+
     return {
         "message": f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي",
         "lectures_created": lectures_created
