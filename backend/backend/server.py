@@ -4831,7 +4831,7 @@ async def get_absent_students_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير الطلاب المتغيبين - الذين تجاوزوا نسبة غياب معينة"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS):
+    if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_ABSENT_STUDENTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب المقررات
@@ -4840,6 +4840,14 @@ async def get_absent_students_report(
         course_query["department_id"] = department_id
     if course_id:
         course_query["_id"] = ObjectId(course_id)
+    
+    # المعلم يرى مقرراته فقط
+    if current_user["role"] == UserRole.TEACHER:
+        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
+        if teacher_record:
+            course_query["teacher_id"] = str(teacher_record["_id"])
+        else:
+            return {"students": [], "total_count": 0, "min_absence_rate_filter": min_absence_rate}
     
     courses = await db.courses.find(course_query).to_list(100)
     
