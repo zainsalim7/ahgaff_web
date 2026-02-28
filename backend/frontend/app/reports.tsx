@@ -801,8 +801,8 @@ export default function ReportsScreen() {
         </View>
         )}
 
-        {/* Export Attendance - Only if user has permission */}
-        {canExportReports && (
+        {/* Export Attendance - Only for admins with view_reports */}
+        {canViewReports && canExportReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 تصدير سجل الحضور</Text>
           <Text style={styles.hintText}>اختر المقرر:</Text>
