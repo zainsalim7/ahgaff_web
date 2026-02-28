@@ -118,6 +118,23 @@ export default function SendNotification() {
           </Picker>
         </View>
 
+        {/* Role selector */}
+        {targetType === 'role' && (
+          <View>
+            <Text style={styles.label}>الدور:</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker selectedValue={selectedRole} onValueChange={setSelectedRole} style={styles.picker}>
+                <Picker.Item label="-- اختر الدور --" value="" />
+                <Picker.Item label="المعلمون" value="teacher" />
+                <Picker.Item label="الطلاب" value="student" />
+                <Picker.Item label="الموظفون" value="employee" />
+                <Picker.Item label="رؤساء الأقسام" value="department_head" />
+                <Picker.Item label="العمداء" value="dean" />
+              </Picker>
+            </View>
+          </View>
+        )}
+
         {/* Course selector */}
         {targetType === 'course' && (
           <View>
