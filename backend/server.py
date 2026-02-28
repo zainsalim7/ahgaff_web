@@ -34,9 +34,7 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # JWT Configuration
-SECRET_KEY = os.environ.get('SECRET_KEY')
-if not SECRET_KEY:
-    raise ValueError("SECRET_KEY environment variable is required")
+SECRET_KEY = os.environ.get('JWT_SECRET') or os.environ.get('SECRET_KEY') or 'default_secret_key_change_in_production'
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -47,12 +45,18 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
+mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+db = client[os.environ.get('DB_NAME', 'attendance_db')]
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
+
+# Health check endpoint (before router)
+@app.get("/health")
+@app.get("/api/health")
+async def health_check():
+    return {"status": "healthy", "message": "API is running"}
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
