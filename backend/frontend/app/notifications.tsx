@@ -151,6 +151,11 @@ export default function NotificationsPage() {
             <Text style={styles.markAllText}>قراءة الكل</Text>
           </TouchableOpacity>
         )}
+        {(user?.role === 'admin' || user?.permissions?.includes('send_notifications')) && (
+          <TouchableOpacity onPress={() => router.push('/send-notification')} style={[styles.markAllButton, { backgroundColor: '#4caf50' }]} data-testid="send-notification-btn">
+            <Ionicons name="send" size={16} color="#fff" />
+          </TouchableOpacity>
+        )}
       </View>
 
       {/* Unread Badge */}
