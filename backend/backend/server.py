@@ -3736,6 +3736,9 @@ async def create_lecture(
     
     result = await db.lectures.insert_one(lecture)
     
+    # إرسال تنبيه تلقائي للمعلم وطلاب المقرر
+    await notify_lecture_created(course, data.date, data.start_time, data.end_time)
+    
     return {
         "id": str(result.inserted_id),
         "message": "تم إنشاء المحاضرة بنجاح"
