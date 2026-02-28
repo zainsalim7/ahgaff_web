@@ -44,7 +44,7 @@ export default function NotificationsPage() {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const response = await api.get<NotificationsResponse>('/notifications');
+      const response = await api.get('/notifications/my');
       setNotifications(response.data.notifications);
       setUnreadCount(response.data.unread_count);
     } catch (error) {
