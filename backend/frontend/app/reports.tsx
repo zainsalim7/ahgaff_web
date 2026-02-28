@@ -434,8 +434,8 @@ export default function ReportsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.scrollView}>
-        {/* Summary Stats */}
-        {summary && (
+        {/* Summary Stats - Only for users with view_reports */}
+        {summary && canViewReports && (
           <View style={styles.summaryCard}>
             <Text style={styles.sectionTitle}>ملخص النظام</Text>
             <View style={styles.statsGrid}>
