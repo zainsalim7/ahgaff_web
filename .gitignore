@@ -47,3 +47,7 @@ test_result.md
 
 # Supervisor
 /var/log/
+-e 
+# Environment files
+*.env
+*.env.*
