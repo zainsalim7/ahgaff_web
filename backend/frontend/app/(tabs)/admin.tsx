@@ -242,6 +242,16 @@ export default function AdminScreen() {
       permission: 'send_notifications',
       teacherOnly: false,
     },
+    {
+      title: 'إرسال إشعار',
+      icon: 'send',
+      color: '#4caf50',
+      bg: '#e8f5e9',
+      count: 0,
+      route: '/send-notification',
+      permission: 'send_notifications',
+      teacherOnly: false,
+    },
   ];
 
   // تصفية العناصر حسب صلاحيات المستخدم ونطاقه
