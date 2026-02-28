@@ -16,6 +16,7 @@ export default function SendNotification() {
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [targetType, setTargetType] = useState('all');
+  const [selectedRole, setSelectedRole] = useState('');
   const [sending, setSending] = useState(false);
 
   // Course selection
