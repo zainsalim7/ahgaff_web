@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
@@ -19,18 +19,6 @@ import json
 import pandas as pd
 from io import BytesIO
 
-# توقيت اليمن (عدن) UTC+3
-YEMEN_TIMEZONE = timezone(timedelta(hours=3))
-
-def get_yemen_time():
-    """الحصول على الوقت الحالي بتوقيت اليمن (UTC+3)"""
-    return datetime.now(YEMEN_TIMEZONE)
-
-def get_yemen_date_start():
-    """الحصول على بداية اليوم بتوقيت اليمن"""
-    now = get_yemen_time()
-    return now.replace(hour=0, minute=0, second=0, microsecond=0)
-
 # PDF imports
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -43,44 +31,13 @@ from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import arabic_reshaper
 from bidi.algorithm import get_display
 
-# استيراد النماذج من الملفات المنفصلة
-from models.permissions import (
-    UserRole, Permission, DEFAULT_PERMISSIONS, ALL_PERMISSIONS,
-    FULL_PERMISSION_MAPPING, ScopeType, user_has_permission
-)
-from models.users import (
-    UserBase, UserCreate, UserLogin, UserResponse, Token,
-    UserPermissionScope, UserPermissionsUpdate, UserPermissionResponse
-)
-from models.roles import RoleCreate, RoleUpdate, RoleResponse
-from models.departments import DepartmentBase, DepartmentCreate, DepartmentResponse
-from models.university import (
-    UniversityBase, UniversityCreate, UniversityUpdate, UniversityResponse,
-    FacultyBase, FacultyCreate, FacultyUpdate, FacultyResponse
-)
-from models.students import StudentBase, StudentCreate, StudentResponse
-from models.teachers import TeacherBase, TeacherCreate, TeacherUpdate, TeacherResponse
-from models.courses import CourseBase, CourseCreate, CourseResponse, AttendanceStatus
-from models.lectures import (
-    LectureStatus, ACTIVE_LECTURE_STATUSES,
-    LectureCreate, LectureUpdate, LectureResponse, GenerateLecturesRequest
-)
-from models.attendance import (
-    AttendanceRecord, AttendanceSessionCreate, AttendanceResponse,
-    AttendanceStats, SingleAttendanceCreate, OfflineSyncData
-)
-from models.semesters import SemesterStatus, SemesterCreate, SemesterUpdate, SemesterResponse
-from models.settings import SemesterDates, AcademicYearConfig, SystemSettings, SettingsUpdate
-from models.notifications import NotificationType, NotificationBase, NotificationCreate, NotificationResponse
-from models.activity_logs import ActivityLogType, ActivityLog, ActivityLogResponse
-from models.enrollments import EnrollmentCreate, EnrollmentResponse
-from models.auth import ActivateStudentAccount, ChangePasswordRequest, ForceChangePasswordRequest
-
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # JWT Configuration
-SECRET_KEY = os.environ.get('SECRET_KEY', 'ahgaff-university-secure-key-2026-x9f8k2m5n7p3q1w4')
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is required")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -90,54 +47,20 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Security
 security = HTTPBearer()
 
-# MongoDB connection - with error handling
-mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
-try:
-    client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
-    db = client[os.environ.get('DB_NAME', 'ahgaff_attendance')]
-except Exception as e:
-    print(f"Warning: MongoDB connection failed: {e}")
-    client = None
-    db = None
-
-# تهيئة قاعدة البيانات للـ routes
-from routes.deps import set_database
-if db is not None:
-    set_database(db)
-
-# استيراد الـ routes المنفصلة
-from routes.auth import router as auth_router
-from routes.users import router as users_router
-from routes.roles import router as roles_router
-from routes.departments import router as departments_router
-from routes.students import router as students_router
-from routes.teachers import router as teachers_router
-from routes.courses import router as courses_router
-from routes.notifications import router as notifications_router
+# MongoDB connection
+mongo_url = os.environ['MONGO_URL']
+client = AsyncIOMotorClient(mongo_url)
+db = client[os.environ['DB_NAME']]
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
 
-# CORS - يجب أن يكون أول middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["*"],
-)
-
-# Health check MUST be first - before any middleware
+# ==================== Root Health Check Endpoints ====================
+# Health check on root path for Railway
 @app.get("/health")
 async def root_health_check():
     """Root health check endpoint for Railway deployment"""
     return {"status": "ok"}
-
-@app.get("/api/health")
-async def api_health_check_direct():
-    """Direct API health check endpoint"""
-    return {"status": "ok", "message": "Server is running"}
 
 @app.get("/")
 async def root():
@@ -147,102 +70,11 @@ async def root():
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
-# ==================== Trash Helper ====================
-async def save_to_trash(item_type: str, item_name: str, backup_data: dict, deleted_by: str):
-    """حفظ عنصر محذوف في سلة المحذوفات"""
-    trash_item = {
-        "item_type": item_type,
-        "item_name": item_name,
-        "backup_data": backup_data,
-        "deleted_by": deleted_by,
-        "deleted_at": get_yemen_time(),
-        "expires_at": get_yemen_time() + timedelta(days=30),
-    }
-    await db.trash.insert_one(trash_item)
-
-async def restore_from_trash_helper(backup_data: dict):
-    """استعادة عنصر من سلة المحذوفات"""
-    backup_type = backup_data.get("backup_type")
-    
-    if backup_type == "course_backup":
-        course_data = backup_data.get("course", {})
-        course_data.pop("_id", None)
-        course_data.pop("id", None)
-        result = await db.courses.insert_one(course_data)
-        new_id = str(result.inserted_id)
-        
-        student_id_map = {}
-        for s in backup_data.get("students", []):
-            old_id = s.pop("_id", None)
-            existing = await db.students.find_one({"student_id": s.get("student_id")})
-            if existing:
-                student_id_map[old_id] = str(existing["_id"])
-            else:
-                res = await db.students.insert_one(s)
-                student_id_map[old_id] = str(res.inserted_id)
-        
-        for e in backup_data.get("enrollments", []):
-            e.pop("_id", None)
-            e["course_id"] = new_id
-            old_sid = e.get("student_id")
-            if old_sid in student_id_map:
-                e["student_id"] = student_id_map[old_sid]
-            await db.enrollments.insert_one(e)
-        
-        for l in backup_data.get("lectures", []):
-            l.pop("_id", None)
-            l["course_id"] = new_id
-            await db.lectures.insert_one(l)
-        
-        for a in backup_data.get("attendance", []):
-            a.pop("_id", None)
-            a["course_id"] = new_id
-            old_sid = a.get("student_id")
-            if old_sid in student_id_map:
-                a["student_id"] = student_id_map[old_sid]
-            await db.attendance.insert_one(a)
-        
-        return {"message": "تم استعادة المقرر بنجاح", "new_id": new_id}
-    
-    elif backup_type == "teacher_backup":
-        teacher_data = backup_data.get("teacher", {})
-        teacher_data.pop("_id", None)
-        teacher_data.pop("user_id", None)
-        result = await db.teachers.insert_one(teacher_data)
-        new_id = str(result.inserted_id)
-        
-        for c in backup_data.get("teaching_load", []):
-            course_code = c.get("code")
-            if course_code:
-                await db.courses.update_many({"code": course_code, "teacher_id": None}, {"$set": {"teacher_id": new_id}})
-        
-        return {"message": "تم استعادة المعلم بنجاح", "new_id": new_id}
-    
-    elif backup_type == "student_backup":
-        student_data = backup_data.get("student", {})
-        student_data.pop("_id", None)
-        student_data.pop("user_id", None)
-        
-        existing = await db.students.find_one({"student_id": student_data.get("student_id")})
-        if existing:
-            raise HTTPException(status_code=400, detail=f"الطالب برقم {student_data.get('student_id')} موجود بالفعل")
-        
-        result = await db.students.insert_one(student_data)
-        new_id = str(result.inserted_id)
-        
-        for e in backup_data.get("enrollments", []):
-            e.pop("_id", None)
-            e["student_id"] = new_id
-            await db.enrollments.insert_one(e)
-        
-        for a in backup_data.get("attendance", []):
-            a.pop("_id", None)
-            a["student_id"] = new_id
-            await db.attendance.insert_one(a)
-        
-        return {"message": "تم استعادة الطالب بنجاح", "new_id": new_id}
-    
-    raise HTTPException(status_code=400, detail="نوع النسخة الاحتياطية غير معروف")
+# ==================== API Health Check Endpoint ====================
+@api_router.get("/health")
+async def api_health_check():
+    """API health check endpoint"""
+    return {"status": "ok", "message": "Server is running"}
 
 # Configure logging
 logging.basicConfig(
@@ -250,6 +82,831 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+# ==================== Models ====================
+
+class UserRole:
+    ADMIN = "admin"
+    TEACHER = "teacher"
+    STUDENT = "student"
+    EMPLOYEE = "employee"
+
+# نظام الصلاحيات - كل صلاحية تمثل إجراء معين في النظام
+class Permission:
+    # ==================== صلاحيات الأقسام (Departments) ====================
+    MANAGE_DEPARTMENTS = "manage_departments"       # إدارة كاملة (للتوافق)
+    VIEW_DEPARTMENTS = "view_departments"           # عرض الأقسام
+    ADD_DEPARTMENT = "add_department"               # إضافة قسم
+    EDIT_DEPARTMENT = "edit_department"             # تعديل قسم
+    DELETE_DEPARTMENT = "delete_department"         # حذف قسم
+    
+    # ==================== صلاحيات المقررات (Courses) ====================
+    MANAGE_COURSES = "manage_courses"               # إدارة كاملة (للتوافق)
+    VIEW_COURSES = "view_courses"                   # عرض المقررات
+    ADD_COURSE = "add_course"                       # إضافة مقرر
+    EDIT_COURSE = "edit_course"                     # تعديل مقرر
+    DELETE_COURSE = "delete_course"                 # حذف مقرر
+    
+    # ==================== صلاحيات الطلاب (Students) ====================
+    MANAGE_STUDENTS = "manage_students"             # إدارة كاملة (للتوافق)
+    VIEW_STUDENTS = "view_students"                 # عرض الطلاب
+    ADD_STUDENT = "add_student"                     # إضافة طالب
+    EDIT_STUDENT = "edit_student"                   # تعديل طالب
+    DELETE_STUDENT = "delete_student"               # حذف طالب
+    IMPORT_STUDENTS = "import_students"             # استيراد طلاب من Excel
+    
+    # ==================== صلاحيات المعلمين (Teachers) ====================
+    MANAGE_TEACHERS = "manage_teachers"             # إدارة كاملة (للتوافق)
+    VIEW_TEACHERS = "view_teachers"                 # عرض المعلمين
+    ADD_TEACHER = "add_teacher"                     # إضافة معلم
+    EDIT_TEACHER = "edit_teacher"                   # تعديل معلم
+    DELETE_TEACHER = "delete_teacher"               # حذف معلم
+    
+    # ==================== صلاحيات المستخدمين (Users) ====================
+    MANAGE_USERS = "manage_users"                   # إدارة كاملة (للتوافق)
+    VIEW_USERS = "view_users"                       # عرض المستخدمين
+    ADD_USER = "add_user"                           # إضافة مستخدم
+    EDIT_USER = "edit_user"                         # تعديل مستخدم
+    DELETE_USER = "delete_user"                     # حذف مستخدم
+    RESET_PASSWORD = "reset_password"               # إعادة تعيين كلمة المرور
+    
+    # ==================== صلاحيات الكليات (Faculties) ====================
+    MANAGE_FACULTIES = "manage_faculties"           # إدارة كاملة (للتوافق)
+    VIEW_FACULTIES = "view_faculties"               # عرض الكليات
+    ADD_FACULTY = "add_faculty"                     # إضافة كلية
+    EDIT_FACULTY = "edit_faculty"                   # تعديل كلية
+    DELETE_FACULTY = "delete_faculty"               # حذف كلية
+    
+    # ==================== صلاحيات المحاضرات (Lectures) ====================
+    MANAGE_LECTURES = "manage_lectures"             # إدارة كاملة (للتوافق)
+    VIEW_LECTURES = "view_lectures"                 # عرض المحاضرات
+    ADD_LECTURE = "add_lecture"                     # إضافة محاضرة
+    EDIT_LECTURE = "edit_lecture"                   # تعديل محاضرة
+    DELETE_LECTURE = "delete_lecture"               # حذف محاضرة
+    
+    # ==================== صلاحيات التسجيل (Enrollments) ====================
+    MANAGE_ENROLLMENTS = "manage_enrollments"       # إدارة كاملة (للتوافق)
+    VIEW_ENROLLMENTS = "view_enrollments"           # عرض التسجيلات
+    ADD_ENROLLMENT = "add_enrollment"               # تسجيل طالب في مقرر
+    DELETE_ENROLLMENT = "delete_enrollment"         # إلغاء تسجيل طالب
+    
+    # ==================== صلاحيات الحضور (Attendance) ====================
+    RECORD_ATTENDANCE = "record_attendance"         # تسجيل الحضور
+    TAKE_ATTENDANCE = "take_attendance"             # أخذ الحضور
+    VIEW_ATTENDANCE = "view_attendance"             # عرض الحضور
+    EDIT_ATTENDANCE = "edit_attendance"             # تعديل الحضور
+    
+    # ==================== صلاحيات الإشعارات (Notifications) ====================
+    SEND_NOTIFICATIONS = "send_notifications"       # إرسال إشعارات وإنذارات للطلاب
+    
+    # ==================== صلاحيات التقارير العامة ====================
+    VIEW_REPORTS = "view_reports"                   # عرض جميع التقارير (للتوافق)
+    VIEW_STATISTICS = "view_statistics"             # عرض الإحصائيات
+    EXPORT_REPORTS = "export_reports"               # تصدير التقارير
+    IMPORT_DATA = "import_data"                     # استيراد البيانات
+    
+    # ==================== صلاحيات التقارير الفردية ====================
+    REPORT_ATTENDANCE_OVERVIEW = "report_attendance_overview"  # تقرير الحضور الشامل
+    REPORT_ABSENT_STUDENTS = "report_absent_students"          # تقرير الطلاب المتغيبين
+    REPORT_WARNINGS = "report_warnings"                        # تقرير الإنذارات والحرمان
+    REPORT_DAILY = "report_daily"                              # التقرير اليومي
+    REPORT_STUDENT = "report_student"                          # تقرير طالب
+    REPORT_COURSE = "report_course"                            # تقرير مقرر
+    REPORT_TEACHER_WORKLOAD = "report_teacher_workload"        # تقرير نصاب المدرس
+    
+    # ==================== صلاحيات الأدوار والإعدادات ====================
+    MANAGE_ROLES = "manage_roles"                   # إدارة الأدوار
+    MANAGE_SETTINGS = "manage_settings"             # إدارة الإعدادات
+    MANAGE_SEMESTERS = "manage_semesters"           # إدارة الفصول الدراسية
+
+# الصلاحيات الافتراضية لكل دور
+DEFAULT_PERMISSIONS = {
+    UserRole.ADMIN: [
+        Permission.MANAGE_USERS,
+        Permission.MANAGE_DEPARTMENTS,
+        Permission.MANAGE_COURSES,
+        Permission.MANAGE_STUDENTS,
+        Permission.RECORD_ATTENDANCE,
+        Permission.VIEW_ATTENDANCE,
+        Permission.EDIT_ATTENDANCE,
+        Permission.VIEW_REPORTS,
+        Permission.EXPORT_REPORTS,
+        Permission.IMPORT_DATA,
+        Permission.MANAGE_LECTURES,
+        Permission.VIEW_LECTURES,
+        # صلاحيات التقارير الفردية
+        Permission.REPORT_ATTENDANCE_OVERVIEW,
+        Permission.REPORT_ABSENT_STUDENTS,
+        Permission.REPORT_WARNINGS,
+        Permission.REPORT_DAILY,
+        Permission.REPORT_STUDENT,
+        Permission.REPORT_COURSE,
+        Permission.REPORT_TEACHER_WORKLOAD,
+    ],
+    UserRole.TEACHER: [
+        Permission.RECORD_ATTENDANCE,
+        Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_REPORTS,
+        Permission.EXPORT_REPORTS,
+        Permission.MANAGE_LECTURES,
+        Permission.VIEW_LECTURES,
+        # تقارير محددة للمدرس
+        Permission.REPORT_ATTENDANCE_OVERVIEW,
+        Permission.REPORT_ABSENT_STUDENTS,
+        Permission.REPORT_COURSE,
+    ],
+    UserRole.EMPLOYEE: [
+        Permission.MANAGE_STUDENTS,
+        Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_REPORTS,
+        Permission.EXPORT_REPORTS,
+        Permission.IMPORT_DATA,
+        Permission.VIEW_LECTURES,
+        # تقارير محددة للموظف
+        Permission.REPORT_STUDENT,
+        Permission.REPORT_ABSENT_STUDENTS,
+        Permission.REPORT_WARNINGS,
+    ],
+    UserRole.STUDENT: [
+        Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_LECTURES,
+        # تقرير الطالب الشخصي فقط
+        Permission.REPORT_STUDENT,
+    ],
+}
+
+# قائمة جميع الصلاحيات المتاحة للعرض في الواجهة
+ALL_PERMISSIONS = [
+    # ==================== صلاحيات الأقسام ====================
+    {"key": Permission.MANAGE_DEPARTMENTS, "label": "إدارة كاملة للأقسام", "category": "الأقسام"},
+    {"key": Permission.VIEW_DEPARTMENTS, "label": "عرض الأقسام", "category": "الأقسام"},
+    {"key": Permission.ADD_DEPARTMENT, "label": "إضافة قسم", "category": "الأقسام"},
+    {"key": Permission.EDIT_DEPARTMENT, "label": "تعديل قسم", "category": "الأقسام"},
+    {"key": Permission.DELETE_DEPARTMENT, "label": "حذف قسم", "category": "الأقسام"},
+    
+    # ==================== صلاحيات المقررات ====================
+    {"key": Permission.MANAGE_COURSES, "label": "إدارة كاملة للمقررات", "category": "المقررات"},
+    {"key": Permission.VIEW_COURSES, "label": "عرض المقررات", "category": "المقررات"},
+    {"key": Permission.ADD_COURSE, "label": "إضافة مقرر", "category": "المقررات"},
+    {"key": Permission.EDIT_COURSE, "label": "تعديل مقرر", "category": "المقررات"},
+    {"key": Permission.DELETE_COURSE, "label": "حذف مقرر", "category": "المقررات"},
+    
+    # ==================== صلاحيات الطلاب ====================
+    {"key": Permission.MANAGE_STUDENTS, "label": "إدارة كاملة للطلاب", "category": "الطلاب"},
+    {"key": Permission.VIEW_STUDENTS, "label": "عرض الطلاب", "category": "الطلاب"},
+    {"key": Permission.ADD_STUDENT, "label": "إضافة طالب", "category": "الطلاب"},
+    {"key": Permission.EDIT_STUDENT, "label": "تعديل طالب", "category": "الطلاب"},
+    {"key": Permission.DELETE_STUDENT, "label": "حذف طالب", "category": "الطلاب"},
+    {"key": Permission.IMPORT_STUDENTS, "label": "استيراد طلاب من Excel", "category": "الطلاب"},
+    
+    # ==================== صلاحيات المعلمين ====================
+    {"key": Permission.MANAGE_TEACHERS, "label": "إدارة كاملة للمعلمين", "category": "المعلمين"},
+    {"key": Permission.VIEW_TEACHERS, "label": "عرض المعلمين", "category": "المعلمين"},
+    {"key": Permission.ADD_TEACHER, "label": "إضافة معلم", "category": "المعلمين"},
+    {"key": Permission.EDIT_TEACHER, "label": "تعديل معلم", "category": "المعلمين"},
+    {"key": Permission.DELETE_TEACHER, "label": "حذف معلم", "category": "المعلمين"},
+    
+    # ==================== صلاحيات المستخدمين ====================
+    {"key": Permission.MANAGE_USERS, "label": "إدارة كاملة للمستخدمين", "category": "المستخدمين"},
+    {"key": Permission.VIEW_USERS, "label": "عرض المستخدمين", "category": "المستخدمين"},
+    {"key": Permission.ADD_USER, "label": "إضافة مستخدم", "category": "المستخدمين"},
+    {"key": Permission.EDIT_USER, "label": "تعديل مستخدم", "category": "المستخدمين"},
+    {"key": Permission.DELETE_USER, "label": "حذف مستخدم", "category": "المستخدمين"},
+    {"key": Permission.RESET_PASSWORD, "label": "إعادة تعيين كلمة المرور", "category": "المستخدمين"},
+    
+    # ==================== صلاحيات الكليات ====================
+    {"key": Permission.MANAGE_FACULTIES, "label": "إدارة كاملة للكليات", "category": "الكليات"},
+    {"key": Permission.VIEW_FACULTIES, "label": "عرض الكليات", "category": "الكليات"},
+    {"key": Permission.ADD_FACULTY, "label": "إضافة كلية", "category": "الكليات"},
+    {"key": Permission.EDIT_FACULTY, "label": "تعديل كلية", "category": "الكليات"},
+    {"key": Permission.DELETE_FACULTY, "label": "حذف كلية", "category": "الكليات"},
+    
+    # ==================== صلاحيات المحاضرات ====================
+    {"key": Permission.MANAGE_LECTURES, "label": "إدارة كاملة للمحاضرات", "category": "المحاضرات"},
+    {"key": Permission.VIEW_LECTURES, "label": "عرض المحاضرات", "category": "المحاضرات"},
+    {"key": Permission.ADD_LECTURE, "label": "إضافة محاضرة", "category": "المحاضرات"},
+    {"key": Permission.EDIT_LECTURE, "label": "تعديل محاضرة", "category": "المحاضرات"},
+    {"key": Permission.DELETE_LECTURE, "label": "حذف محاضرة", "category": "المحاضرات"},
+    
+    # ==================== صلاحيات التسجيل ====================
+    {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
+    {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
+    {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},
+    {"key": Permission.DELETE_ENROLLMENT, "label": "إلغاء تسجيل طالب", "category": "التسجيل"},
+    
+    # ==================== صلاحيات الحضور ====================
+    {"key": Permission.RECORD_ATTENDANCE, "label": "تسجيل الحضور", "category": "الحضور"},
+    {"key": Permission.TAKE_ATTENDANCE, "label": "أخذ الحضور", "category": "الحضور"},
+    {"key": Permission.VIEW_ATTENDANCE, "label": "عرض الحضور", "category": "الحضور"},
+    {"key": Permission.EDIT_ATTENDANCE, "label": "تعديل الحضور", "category": "الحضور"},
+    
+    # ==================== صلاحيات الإشعارات ====================
+    {"key": Permission.SEND_NOTIFICATIONS, "label": "إرسال إشعارات وإنذارات للطلاب", "category": "الإشعارات"},
+    
+    # ==================== صلاحيات التقارير العامة ====================
+    {"key": Permission.VIEW_REPORTS, "label": "عرض جميع التقارير", "category": "التقارير"},
+    {"key": Permission.VIEW_STATISTICS, "label": "عرض الإحصائيات", "category": "التقارير"},
+    {"key": Permission.EXPORT_REPORTS, "label": "تصدير التقارير", "category": "التقارير"},
+    {"key": Permission.IMPORT_DATA, "label": "استيراد البيانات", "category": "التقارير"},
+    
+    # ==================== صلاحيات التقارير الفردية ====================
+    {"key": Permission.REPORT_ATTENDANCE_OVERVIEW, "label": "تقرير الحضور الشامل", "category": "التقارير الفردية"},
+    {"key": Permission.REPORT_ABSENT_STUDENTS, "label": "تقرير الطلاب المتغيبين", "category": "التقارير الفردية"},
+    {"key": Permission.REPORT_WARNINGS, "label": "تقرير الإنذارات والحرمان", "category": "التقارير الفردية"},
+    {"key": Permission.REPORT_DAILY, "label": "التقرير اليومي", "category": "التقارير الفردية"},
+    {"key": Permission.REPORT_STUDENT, "label": "تقرير طالب", "category": "التقارير الفردية"},
+    {"key": Permission.REPORT_COURSE, "label": "تقرير مقرر", "category": "التقارير الفردية"},
+    {"key": Permission.REPORT_TEACHER_WORKLOAD, "label": "تقرير نصاب المدرس", "category": "التقارير الفردية"},
+    
+    # ==================== صلاحيات النظام ====================
+    {"key": Permission.MANAGE_ROLES, "label": "إدارة الأدوار", "category": "النظام"},
+    {"key": Permission.MANAGE_SETTINGS, "label": "إدارة الإعدادات", "category": "النظام"},
+    {"key": Permission.MANAGE_SEMESTERS, "label": "إدارة الفصول الدراسية", "category": "النظام"},
+]
+
+# ==================== نماذج الأدوار المخصصة ====================
+
+class RoleCreate(BaseModel):
+    """نموذج إنشاء دور جديد"""
+    name: str  # اسم الدور (مثل: أستاذ، موظف شؤون طلاب)
+    description: Optional[str] = ""  # وصف الدور
+    permissions: List[str]  # قائمة الصلاحيات المسندة للدور
+    is_system: bool = False  # هل هو دور نظامي (لا يمكن حذفه)
+
+class RoleUpdate(BaseModel):
+    """نموذج تحديث دور"""
+    name: Optional[str] = None
+    description: Optional[str] = None
+    permissions: Optional[List[str]] = None
+
+class RoleResponse(BaseModel):
+    """نموذج استجابة الدور"""
+    id: str
+    name: str
+    description: str
+    permissions: List[str]
+    is_system: bool
+    users_count: int = 0
+    created_at: datetime
+
+# ==================== دالة مساعدة للصلاحيات الكاملة ====================
+
+# الصلاحيات الكاملة تشمل الصلاحيات الفرعية
+FULL_PERMISSION_MAPPING = {
+    Permission.MANAGE_DEPARTMENTS: [
+        Permission.VIEW_DEPARTMENTS, Permission.ADD_DEPARTMENT, 
+        Permission.EDIT_DEPARTMENT, Permission.DELETE_DEPARTMENT
+    ],
+    Permission.MANAGE_COURSES: [
+        Permission.VIEW_COURSES, Permission.ADD_COURSE, 
+        Permission.EDIT_COURSE, Permission.DELETE_COURSE
+    ],
+    Permission.MANAGE_STUDENTS: [
+        Permission.VIEW_STUDENTS, Permission.ADD_STUDENT, 
+        Permission.EDIT_STUDENT, Permission.DELETE_STUDENT, Permission.IMPORT_STUDENTS
+    ],
+    Permission.MANAGE_TEACHERS: [
+        Permission.VIEW_TEACHERS, Permission.ADD_TEACHER, 
+        Permission.EDIT_TEACHER, Permission.DELETE_TEACHER
+    ],
+    Permission.MANAGE_USERS: [
+        Permission.VIEW_USERS, Permission.ADD_USER, 
+        Permission.EDIT_USER, Permission.DELETE_USER, Permission.RESET_PASSWORD
+    ],
+    Permission.MANAGE_FACULTIES: [
+        Permission.VIEW_FACULTIES, Permission.ADD_FACULTY, 
+        Permission.EDIT_FACULTY, Permission.DELETE_FACULTY
+    ],
+    Permission.MANAGE_LECTURES: [
+        Permission.VIEW_LECTURES, Permission.ADD_LECTURE, 
+        Permission.EDIT_LECTURE, Permission.DELETE_LECTURE
+    ],
+    Permission.MANAGE_ENROLLMENTS: [
+        Permission.VIEW_ENROLLMENTS, Permission.ADD_ENROLLMENT, Permission.DELETE_ENROLLMENT
+    ],
+}
+
+def user_has_permission(user_permissions: List[str], required_permission: str) -> bool:
+    """التحقق من أن المستخدم لديه صلاحية معينة (مع دعم الصلاحيات الكاملة)"""
+    
+    # إذا كان لديه الصلاحية مباشرة
+    if required_permission in user_permissions:
+        return True
+    
+    # التحقق من الصلاحيات الكاملة
+    for full_perm, sub_perms in FULL_PERMISSION_MAPPING.items():
+        if full_perm in user_permissions and required_permission in sub_perms:
+            return True
+    
+    return False
+
+class ScopeType:
+    """نوع نطاق الصلاحية"""
+    GLOBAL = "global"           # صلاحية عامة على كل النظام
+    DEPARTMENT = "department"   # صلاحية على قسم معين
+    COURSE = "course"           # صلاحية على مقرر معين
+
+class UserPermissionScope(BaseModel):
+    """نموذج نطاق الصلاحية للمستخدم"""
+    scope_type: str  # global, department, course
+    scope_id: Optional[str] = None  # معرف القسم أو المقرر (None للصلاحية العامة)
+    permissions: List[str]  # قائمة الصلاحيات
+
+class UserPermissionsUpdate(BaseModel):
+    """نموذج تحديث صلاحيات المستخدم"""
+    scopes: List[UserPermissionScope]
+
+class UserPermissionResponse(BaseModel):
+    """نموذج استجابة صلاحيات المستخدم"""
+    user_id: str
+    scopes: List[dict]
+
+class UserBase(BaseModel):
+    username: str
+    full_name: str
+    role: Optional[str] = None  # الدور القديم - للتوافق
+    role_id: Optional[str] = None  # معرف الدور الجديد
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    permissions: Optional[List[str]] = None  # صلاحيات مخصصة للمستخدم
+    # حقول النطاق - لربط المستخدم بالجهة التي يديرها
+    university_id: Optional[str] = None  # لرئيس الجامعة
+    faculty_id: Optional[str] = None  # للعميد ومدير التسجيل
+    department_id: Optional[str] = None  # لرئيس القسم والمدرس
+    # نطاقات الصلاحيات المتعددة (للمستخدمين الذين لديهم صلاحيات على أكثر من كلية/قسم)
+    faculty_ids: Optional[List[str]] = None  # قائمة الكليات المسموح بها
+    department_ids: Optional[List[str]] = None  # قائمة الأقسام المسموح بها
+    course_ids: Optional[List[str]] = None  # قائمة المقررات المسموح بها
+    # مستوى الصلاحية (للتحكم في النطاق)
+    permission_level: Optional[str] = None  # university, faculty, department, course
+
+class UserCreate(UserBase):
+    password: str
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserResponse(UserBase):
+    id: str
+    created_at: datetime
+    is_active: bool = True
+    permissions: List[str] = []
+    # حقول أسماء الكليات والأقسام للعرض
+    faculty_name: Optional[str] = None
+    department_name: Optional[str] = None
+    department_names: Optional[List[str]] = None
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+    user: UserResponse
+
+class DepartmentBase(BaseModel):
+    name: str
+    code: str
+    description: Optional[str] = None
+    faculty_id: Optional[str] = None  # معرف الكلية
+
+class DepartmentCreate(DepartmentBase):
+    pass
+
+class DepartmentResponse(DepartmentBase):
+    id: str
+    faculty_name: Optional[str] = None  # اسم الكلية للعرض
+    created_at: datetime
+
+# ==================== University & Faculty Models (الهيكل التنظيمي) ====================
+
+class UniversityBase(BaseModel):
+    """نموذج الجامعة"""
+    name: str
+    code: str
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+
+class UniversityCreate(UniversityBase):
+    pass
+
+class UniversityUpdate(BaseModel):
+    name: Optional[str] = None
+    description: Optional[str] = None
+    logo_url: Optional[str] = None
+    address: Optional[str] = None
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    website: Optional[str] = None
+
+class UniversityResponse(UniversityBase):
+    id: str
+    faculties_count: int = 0
+    created_at: datetime
+
+class FacultyBase(BaseModel):
+    """نموذج الكلية"""
+    name: str
+    code: str
+    description: Optional[str] = None
+    dean_id: Optional[str] = None  # معرف العميد
+    # إعدادات خاصة بالكلية
+    levels_count: Optional[int] = 5  # عدد المستويات
+    sections: Optional[List[str]] = None  # الشعب المتاحة
+    attendance_late_minutes: Optional[int] = 15  # دقائق التأخير
+    max_absence_percent: Optional[float] = 25  # نسبة الغياب القصوى
+
+class FacultyCreate(FacultyBase):
+    pass
+
+class FacultyUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    description: Optional[str] = None
+    dean_id: Optional[str] = None
+    levels_count: Optional[int] = None
+    sections: Optional[List[str]] = None
+    attendance_late_minutes: Optional[int] = None
+    max_absence_percent: Optional[float] = None
+
+class FacultyResponse(FacultyBase):
+    id: str
+    dean_name: Optional[str] = None  # اسم العميد للعرض
+    departments_count: int = 0
+    created_at: datetime
+
+# ==================== Activity Log Models (نظام تسجيل الأنشطة) ====================
+
+class ActivityLogType:
+    """أنواع الأنشطة"""
+    # أنشطة المصادقة
+    LOGIN = "login"
+    LOGOUT = "logout"
+    PASSWORD_CHANGE = "password_change"
+    
+    # أنشطة العرض
+    VIEW_PAGE = "view_page"
+    VIEW_REPORT = "view_report"
+    
+    # أنشطة الإنشاء
+    CREATE_USER = "create_user"
+    CREATE_STUDENT = "create_student"
+    CREATE_COURSE = "create_course"
+    CREATE_DEPARTMENT = "create_department"
+    CREATE_FACULTY = "create_faculty"
+    CREATE_LECTURE = "create_lecture"
+    
+    # أنشطة التعديل
+    UPDATE_USER = "update_user"
+    UPDATE_STUDENT = "update_student"
+    UPDATE_COURSE = "update_course"
+    UPDATE_DEPARTMENT = "update_department"
+    UPDATE_FACULTY = "update_faculty"
+    UPDATE_LECTURE = "update_lecture"
+    
+    # أنشطة الحذف
+    DELETE_USER = "delete_user"
+    DELETE_STUDENT = "delete_student"
+    DELETE_COURSE = "delete_course"
+    DELETE_DEPARTMENT = "delete_department"
+    DELETE_FACULTY = "delete_faculty"
+    DELETE_LECTURE = "delete_lecture"
+    
+    # أنشطة الحضور
+    RECORD_ATTENDANCE = "record_attendance"
+    UPDATE_ATTENDANCE = "update_attendance"
+    
+    # أنشطة التصدير/الاستيراد
+    EXPORT_DATA = "export_data"
+    IMPORT_DATA = "import_data"
+
+class ActivityLog(BaseModel):
+    """نموذج سجل النشاط"""
+    user_id: str
+    username: str
+    user_role: str
+    action: str  # نوع النشاط
+    action_ar: str  # وصف النشاط بالعربي
+    entity_type: Optional[str] = None  # نوع الكيان (user, student, course, etc.)
+    entity_id: Optional[str] = None  # معرف الكيان
+    entity_name: Optional[str] = None  # اسم الكيان
+    details: Optional[dict] = None  # تفاصيل إضافية
+    ip_address: Optional[str] = None
+    user_agent: Optional[str] = None
+    faculty_id: Optional[str] = None  # معرف الكلية (للفلترة)
+    department_id: Optional[str] = None  # معرف القسم (للفلترة)
+    timestamp: datetime = None
+
+class ActivityLogResponse(BaseModel):
+    id: str
+    user_id: str
+    username: str
+    user_role: str
+    action: str
+    action_ar: str
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    entity_name: Optional[str] = None
+    details: Optional[dict] = None
+    ip_address: Optional[str] = None
+    faculty_id: Optional[str] = None
+    department_id: Optional[str] = None
+    timestamp: datetime
+
+class StudentBase(BaseModel):
+    student_id: str  # رقم الطالب
+    full_name: str
+    department_id: str
+    level: int  # المستوى الدراسي (1-4)
+    section: str  # الشعبة
+    phone: Optional[str] = None
+    email: Optional[str] = None
+
+class StudentCreate(StudentBase):
+    password: Optional[str] = None
+
+class StudentResponse(StudentBase):
+    id: str
+    user_id: Optional[str] = None
+    qr_code: str
+    created_at: datetime
+    is_active: bool = True
+
+# ==================== Notification Models (نماذج الإشعارات) ====================
+
+class NotificationType(str, Enum):
+    WARNING = "warning"  # إنذار (نسبة غياب عالية)
+    DEPRIVATION = "deprivation"  # حرمان
+    INFO = "info"  # معلومات عامة
+    REMINDER = "reminder"  # تذكير
+
+class NotificationBase(BaseModel):
+    title: str
+    message: str
+    type: NotificationType = NotificationType.INFO
+    # بيانات إضافية
+    course_id: Optional[str] = None
+    course_name: Optional[str] = None
+    absence_rate: Optional[float] = None
+    remaining_allowed: Optional[int] = None
+
+class NotificationCreate(NotificationBase):
+    student_id: str  # معرف الطالب في جدول students
+    user_id: Optional[str] = None  # معرف المستخدم (إذا كان لديه حساب)
+
+class NotificationResponse(NotificationBase):
+    id: str
+    student_id: str
+    is_read: bool = False
+    created_at: datetime
+
+# ==================== Teacher Models (نماذج المعلمين) ====================
+
+class TeacherBase(BaseModel):
+    teacher_id: str  # الرقم الوظيفي
+    full_name: str
+    department_id: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    specialization: Optional[str] = None  # التخصص
+    academic_title: Optional[str] = None  # الوصف الأكاديمي (أستاذ، أستاذ مشارك، أستاذ مساعد، محاضر، معيد)
+    teaching_load: Optional[int] = None  # نصاب التدريس (عدد الساعات)
+
+class TeacherCreate(TeacherBase):
+    pass
+
+class TeacherUpdate(BaseModel):
+    full_name: Optional[str] = None
+    department_id: Optional[str] = None
+    email: Optional[str] = None
+    phone: Optional[str] = None
+    specialization: Optional[str] = None
+    academic_title: Optional[str] = None
+    teaching_load: Optional[int] = None
+
+class TeacherResponse(TeacherBase):
+    id: str
+    user_id: Optional[str] = None  # معرف حساب المستخدم إذا كان مفعلاً
+    created_at: datetime
+    is_active: bool = True
+
+class CourseBase(BaseModel):
+    name: str
+    code: str
+    department_id: str
+    teacher_id: Optional[str] = None  # معرف المعلم من collection المعلمين
+    level: int
+    section: Optional[str] = ""  # الشعبة - اختيارية
+    semester_id: Optional[str] = None  # معرف الفصل الدراسي
+    academic_year: Optional[str] = ""
+
+class CourseCreate(CourseBase):
+    pass
+
+class CourseResponse(CourseBase):
+    id: str
+    teacher_name: Optional[str] = None  # اسم المعلم للعرض
+    department_name: Optional[str] = None  # اسم القسم للعرض
+    semester_name: Optional[str] = None  # اسم الفصل للعرض
+    created_at: Optional[datetime] = None
+    is_active: bool = True
+
+class AttendanceStatus:
+    PRESENT = "present"
+    ABSENT = "absent"
+    LATE = "late"
+    EXCUSED = "excused"
+
+# ==================== Semester Models (نماذج الفصول الدراسية) ====================
+
+class SemesterStatus:
+    ACTIVE = "active"      # الفصل الحالي النشط
+    UPCOMING = "upcoming"  # فصل قادم
+    CLOSED = "closed"      # فصل منتهي (مغلق)
+    ARCHIVED = "archived"  # فصل مؤرشف
+
+class SemesterCreate(BaseModel):
+    name: str  # اسم الفصل (الفصل الأول، الفصل الثاني، الصيفي)
+    academic_year: str  # السنة الدراسية (2024-2025)
+    start_date: Optional[str] = None  # تاريخ البداية
+    end_date: Optional[str] = None  # تاريخ النهاية
+    status: str = SemesterStatus.UPCOMING
+
+class SemesterUpdate(BaseModel):
+    name: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    status: Optional[str] = None
+
+class SemesterResponse(BaseModel):
+    id: str
+    name: str
+    academic_year: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    status: str
+    courses_count: int = 0
+    students_count: int = 0
+    attendance_records: int = 0
+    created_at: datetime
+    closed_at: Optional[datetime] = None
+    archived_at: Optional[datetime] = None
+
+# ==================== Settings Models (الإعدادات العامة) ====================
+
+class SemesterDates(BaseModel):
+    name: str  # اسم الفصل
+    start_date: Optional[str] = None  # تاريخ البداية YYYY-MM-DD
+    end_date: Optional[str] = None  # تاريخ النهاية YYYY-MM-DD
+
+class AcademicYearConfig(BaseModel):
+    year: str  # مثال: "2024-2025"
+    is_current: bool = False
+    semesters: List[SemesterDates] = []
+
+class SystemSettings(BaseModel):
+    college_name: str = "كلية الشريعة والقانون"
+    college_name_en: Optional[str] = "Faculty of Sharia and Law"
+    academic_year: str = "2024-2025"
+    current_semester: str = "الفصل الأول"
+    current_semester_id: Optional[str] = None  # معرف الفصل الحالي
+    semester_start_date: Optional[str] = None  # تاريخ بداية الفصل الحالي
+    semester_end_date: Optional[str] = None  # تاريخ نهاية الفصل الحالي
+    levels_count: int = 5  # عدد المستويات الدراسية
+    sections: List[str] = ["أ", "ب", "ج"]  # الشُعب المتاحة
+    attendance_late_minutes: int = 15  # دقائق التأخير المسموحة
+    max_absence_percent: float = 25.0  # نسبة الغياب القصوى
+    logo_url: Optional[str] = None
+    primary_color: str = "#1565c0"
+    secondary_color: str = "#ff9800"
+    academic_years: List[str] = []  # قائمة السنوات الأكاديمية المتاحة
+
+class SettingsUpdate(BaseModel):
+    college_name: Optional[str] = None
+    college_name_en: Optional[str] = None
+    academic_year: Optional[str] = None
+    current_semester: Optional[str] = None
+    semester_start_date: Optional[str] = None
+    semester_end_date: Optional[str] = None
+    levels_count: Optional[int] = None
+    sections: Optional[List[str]] = None
+    attendance_late_minutes: Optional[int] = None
+    max_absence_percent: Optional[float] = None
+    logo_url: Optional[str] = None
+    primary_color: Optional[str] = None
+    secondary_color: Optional[str] = None
+    academic_years: Optional[List[str]] = None
+
+# ==================== Lecture Models (المحاضرات/الحصص) ====================
+
+class LectureStatus:
+    SCHEDULED = "scheduled"  # مجدولة
+    COMPLETED = "completed"  # منعقدة
+    CANCELLED = "cancelled"  # ملغاة
+
+# الحالات التي تُحسب في الإحصائيات (المحاضرات الفعّالة فقط)
+ACTIVE_LECTURE_STATUSES = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED]
+
+class LectureCreate(BaseModel):
+    course_id: str
+    date: str  # YYYY-MM-DD
+    start_time: str  # HH:MM
+    end_time: str  # HH:MM
+    room: Optional[str] = ""
+    notes: Optional[str] = ""
+
+class LectureUpdate(BaseModel):
+    date: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    room: Optional[str] = None
+    status: Optional[str] = None
+    notes: Optional[str] = None
+
+class LectureResponse(BaseModel):
+    id: str
+    course_id: str
+    date: str
+    start_time: str
+    end_time: str
+    room: str
+    status: str
+    notes: str
+    created_at: datetime
+
+class GenerateLecturesRequest(BaseModel):
+    course_id: str
+    start_date: str  # تاريخ بداية الفصل
+    end_date: str    # تاريخ نهاية الفصل
+    day_of_week: int # 0=السبت، 1=الأحد، ...
+    start_time: str  # HH:MM
+    end_time: str    # HH:MM
+    room: Optional[str] = ""
+
+class AttendanceRecord(BaseModel):
+    student_id: str
+    status: str = AttendanceStatus.PRESENT
+
+# ==================== Student Account Activation (تفعيل حساب الطالب) ====================
+
+class ActivateStudentAccount(BaseModel):
+    student_id: str  # معرف الطالب في قاعدة البيانات
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+class ForceChangePasswordRequest(BaseModel):
+    new_password: str
+
+class AttendanceSessionCreate(BaseModel):
+    lecture_id: str  # تغيير من course_id إلى lecture_id
+    notes: Optional[str] = None
+    records: List[AttendanceRecord]
+
+class AttendanceResponse(BaseModel):
+    id: str
+    lecture_id: str
+    course_id: str
+    student_id: str
+    status: str
+    date: datetime
+    recorded_by: str
+    method: str  # manual or qr
+    notes: Optional[str] = None
+
+class AttendanceStats(BaseModel):
+    total_sessions: int
+    present_count: int
+    absent_count: int
+    late_count: int
+    excused_count: int
+    attendance_rate: float
+
+class SingleAttendanceCreate(BaseModel):
+    lecture_id: str  # تغيير من course_id إلى lecture_id
+    student_id: str
+    status: str = AttendanceStatus.PRESENT
+    method: str = "qr"
+    notes: Optional[str] = None
+
+class OfflineSyncData(BaseModel):
+    attendance_records: List[dict]
+
+# ==================== Enrollment Models ====================
+
+class EnrollmentCreate(BaseModel):
+    course_id: str
+    student_ids: List[str]  # قائمة أرقام الطلاب للتسجيل
+
+class EnrollmentResponse(BaseModel):
+    id: str
+    course_id: str
+    student_id: str
+    enrolled_at: datetime
+    enrolled_by: str
 
 # ==================== Helper Functions ====================
 
@@ -263,7 +920,7 @@ def get_password_hash(password):
 
 def create_access_token(data: dict):
     to_encode = data.copy()
-    expire = get_yemen_time() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    expire = datetime.utcnow() + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
@@ -304,13 +961,6 @@ ACTION_TRANSLATIONS = {
     "delete_role": "حذف دور",
     "enroll_students": "تسجيل طلاب في مقرر",
     "unenroll_students": "إلغاء تسجيل طلاب",
-    "safe_delete_student": "حذف طالب (آمن)",
-    "safe_delete_teacher": "حذف معلم (آمن)",
-    "safe_delete_course": "حذف مقرر (آمن)",
-    "restore_student": "استعادة طالب",
-    "restore_teacher": "استعادة معلم",
-    "restore_course": "استعادة مقرر",
-    "override_lecture_status": "تغيير حالة محاضرة",
 }
 
 async def log_activity(
@@ -341,7 +991,7 @@ async def log_activity(
             "user_agent": user_agent,
             "faculty_id": user.get("faculty_id"),
             "department_id": user.get("department_id"),
-            "timestamp": get_yemen_time()
+            "timestamp": datetime.utcnow()
         }
         
         await db.activity_logs.insert_one(log_entry)
@@ -368,30 +1018,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     if user is None:
         raise credentials_exception
     
-    # احصل على صلاحيات المستخدم - من الدور المخصص أو من جدول الأدوار أو الافتراضية
-    user_permissions = []
-    
-    if user.get("role_id"):
-        try:
-            role_doc = await db.roles.find_one({"_id": ObjectId(user["role_id"])})
-            if role_doc:
-                user_permissions = list(role_doc.get("permissions", []))
-        except Exception:
-            pass
-    
-    if not user_permissions:
-        user_role = user.get("role", "employee")
-        role_doc = await db.roles.find_one({"system_key": user_role})
-        if role_doc:
-            user_permissions = list(role_doc.get("permissions", []))
-        else:
-            user_permissions = list(DEFAULT_PERMISSIONS.get(user_role, []))
-    
-    custom_permissions = user.get("custom_permissions", [])
-    if custom_permissions:
-        for perm in custom_permissions:
-            if perm not in user_permissions:
-                user_permissions.append(perm)
+    # احصل على صلاحيات المستخدم - إما المخصصة أو الافتراضية للدور
+    user_permissions = user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
     
     return {
         "id": str(user["_id"]),
@@ -611,10 +1239,139 @@ async def get_teacher_course_ids(user_id: str, teacher_record_id: str = None) ->
     return [str(c["_id"]) for c in courses]
 
 # ==================== Auth Routes ====================
-# تم نقل هذه الـ routes إلى routes/auth.py
-# الـ endpoints التالية متاحة عبر auth_router:
-# - POST /api/auth/login
-# - GET /api/auth/me
+
+@api_router.post("/auth/login")
+async def login(user_data: UserLogin):
+    user = await db.users.find_one({"username": user_data.username})
+    # التحقق من وجود المستخدم وكلمة المرور (قد تكون في password أو hashed_password)
+    password_field = user.get("hashed_password") or user.get("password") if user else None
+    
+    if not user or not password_field:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="اسم المستخدم أو كلمة المرور غير صحيحة"
+        )
+    
+    try:
+        is_valid = verify_password(user_data.password, password_field)
+    except Exception:
+        is_valid = False
+    
+    if not is_valid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="اسم المستخدم أو كلمة المرور غير صحيحة"
+        )
+    
+    if not user.get("is_active", True):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="الحساب غير مفعل"
+        )
+    
+    access_token = create_access_token(data={"sub": str(user["_id"])})
+    
+    # جلب صلاحيات الدور أولاً (الصلاحيات الديناميكية)
+    user_permissions = []
+    
+    # 1. جلب صلاحيات الدور من role_id إذا كان موجوداً
+    if user.get("role_id"):
+        try:
+            role_doc = await db.roles.find_one({"_id": ObjectId(user["role_id"])})
+            if role_doc:
+                user_permissions = list(role_doc.get("permissions", []))
+        except:
+            pass
+    
+    # 2. إذا لم يكن هناك role_id، جلب من system_key
+    if not user_permissions:
+        user_role = user.get("role", "employee")
+        role_doc = await db.roles.find_one({"system_key": user_role})
+        if role_doc:
+            user_permissions = list(role_doc.get("permissions", []))
+        else:
+            # إذا لم يوجد دور في قاعدة البيانات، استخدم الافتراضي
+            user_permissions = list(DEFAULT_PERMISSIONS.get(user_role, []))
+    
+    # 3. دمج أي صلاحيات مخصصة للمستخدم (إضافية)
+    custom_permissions = user.get("custom_permissions", [])
+    if custom_permissions:
+        for perm in custom_permissions:
+            if perm not in user_permissions:
+                user_permissions.append(perm)
+    
+    # تسجيل نشاط الدخول
+    await log_activity(
+        user=user,
+        action="login",
+        entity_type="user",
+        entity_id=str(user["_id"]),
+        entity_name=user["username"]
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user": {
+            "id": str(user["_id"]),
+            "username": user["username"],
+            "full_name": user["full_name"],
+            "role": user["role"],
+            "email": user.get("email"),
+            "phone": user.get("phone"),
+            "created_at": user["created_at"],
+            "is_active": user.get("is_active", True),
+            "permissions": user_permissions,
+            "must_change_password": user.get("must_change_password", False),
+            "student_id": user.get("student_id"),  # إذا كان المستخدم طالب
+            "faculty_id": user.get("faculty_id"),  # معرف الكلية
+            "department_id": user.get("department_id")  # معرف القسم
+        }
+    }
+
+@api_router.get("/auth/me", response_model=UserResponse)
+async def get_me(current_user: dict = Depends(get_current_user)):
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    
+    # جلب صلاحيات الدور ديناميكياً (تتحدث تلقائياً عند تحديث الدور)
+    user_permissions = []
+    
+    # 1. جلب صلاحيات الدور من role_id إذا كان موجوداً
+    if user.get("role_id"):
+        try:
+            role_doc = await db.roles.find_one({"_id": ObjectId(user["role_id"])})
+            if role_doc:
+                user_permissions = list(role_doc.get("permissions", []))
+        except:
+            pass
+    
+    # 2. إذا لم يكن هناك role_id، جلب من system_key
+    if not user_permissions:
+        user_role = user.get("role", "employee")
+        role_doc = await db.roles.find_one({"system_key": user_role})
+        if role_doc:
+            user_permissions = list(role_doc.get("permissions", []))
+        else:
+            user_permissions = list(DEFAULT_PERMISSIONS.get(user_role, []))
+    
+    # 3. دمج أي صلاحيات مخصصة للمستخدم
+    custom_permissions = user.get("custom_permissions", [])
+    if custom_permissions:
+        for perm in custom_permissions:
+            if perm not in user_permissions:
+                user_permissions.append(perm)
+    
+    return {
+        "id": str(user["_id"]),
+        "username": user["username"],
+        "full_name": user["full_name"],
+        "role": user["role"],
+        "email": user.get("email"),
+        "phone": user.get("phone"),
+        "created_at": user["created_at"],
+        "is_active": user.get("is_active", True),
+        "permissions": user_permissions
+    }
 
 # ==================== User Management Routes ====================
 
@@ -629,7 +1386,7 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
     
     user_dict = user.dict()
     user_dict["password"] = get_password_hash(user.password)
-    user_dict["created_at"] = get_yemen_time()
+    user_dict["created_at"] = datetime.utcnow()
     user_dict["is_active"] = True
     
     # التأكد من أن permissions قائمة وليست None
@@ -864,7 +1621,7 @@ async def reset_user_password(
     # تحديث كلمة المرور
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
-        {"$set": {"password": hashed_password, "updated_at": get_yemen_time()}}
+        {"$set": {"password": hashed_password, "updated_at": datetime.utcnow()}}
     )
     
     # تسجيل النشاط
@@ -901,7 +1658,7 @@ async def toggle_user_active(
     
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
-        {"$set": {"is_active": new_status, "updated_at": get_yemen_time()}}
+        {"$set": {"is_active": new_status, "updated_at": datetime.utcnow()}}
     )
     
     # تسجيل النشاط
@@ -944,7 +1701,7 @@ async def get_all_roles(current_user: dict = Depends(get_current_user)):
             "is_system": role.get("is_system", False),
             "system_key": system_key,
             "users_count": users_count,
-            "created_at": role.get("created_at", get_yemen_time())
+            "created_at": role.get("created_at", datetime.utcnow())
         })
     
     return result
@@ -971,7 +1728,7 @@ async def create_role(role_data: RoleCreate, current_user: dict = Depends(get_cu
         "description": role_data.description or "",
         "permissions": role_data.permissions,
         "is_system": False,
-        "created_at": get_yemen_time(),
+        "created_at": datetime.utcnow(),
         "created_by": current_user["id"]
     }
     
@@ -1001,7 +1758,7 @@ async def get_role(role_id: str, current_user: dict = Depends(get_current_user))
         "permissions": role.get("permissions", []),
         "is_system": role.get("is_system", False),
         "users_count": users_count,
-        "created_at": role.get("created_at", get_yemen_time())
+        "created_at": role.get("created_at", datetime.utcnow())
     }
 
 @api_router.put("/roles/{role_id}")
@@ -1049,7 +1806,7 @@ async def update_role(role_id: str, role_data: RoleUpdate, current_user: dict = 
             update_data["permissions"] = role_data.permissions
     
     if update_data:
-        update_data["updated_at"] = get_yemen_time()
+        update_data["updated_at"] = datetime.utcnow()
         await db.roles.update_one({"_id": ObjectId(role_id)}, {"$set": update_data})
     
     return {"message": "تم تحديث الدور بنجاح"}
@@ -1114,23 +1871,14 @@ async def init_default_roles(current_user: dict = Depends(get_current_user)):
     ]
     
     created = 0
-    updated = 0
     for role in default_roles:
         existing = await db.roles.find_one({"system_key": role["system_key"]})
         if not existing:
-            role["created_at"] = get_yemen_time()
+            role["created_at"] = datetime.utcnow()
             await db.roles.insert_one(role)
             created += 1
-        else:
-            # تحديث الصلاحيات للأدوار الموجودة لتطابق الافتراضية
-            if set(existing.get("permissions", [])) != set(role["permissions"]):
-                await db.roles.update_one(
-                    {"system_key": role["system_key"]},
-                    {"$set": {"permissions": role["permissions"]}}
-                )
-                updated += 1
     
-    return {"message": f"تم إنشاء {created} دور وتحديث {updated} دور"}
+    return {"message": f"تم إنشاء {created} دور افتراضي"}
 
 # ==================== Permissions Management Routes ====================
 
@@ -1252,7 +2000,7 @@ async def create_department(dept: DepartmentCreate, current_user: dict = Depends
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     dept_dict = dept.dict()
-    dept_dict["created_at"] = get_yemen_time()
+    dept_dict["created_at"] = datetime.utcnow()
     
     result = await db.departments.insert_one(dept_dict)
     dept_dict["id"] = str(result.inserted_id)
@@ -1501,7 +2249,7 @@ async def get_department_head_dashboard(current_user: dict = Depends(get_current
         total_courses += dept_courses_count
         
         # حساب نسبة الحضور اليومي
-        today = get_yemen_time().replace(hour=0, minute=0, second=0, microsecond=0)
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
         today_attendance = 0
         today_total = 0
         
@@ -1634,7 +2382,7 @@ async def create_student_notification(
         message = f"إشعار متعلق بمقرر {course_name}"
     
     # التحقق من عدم وجود إشعار مشابه خلال آخر 24 ساعة
-    yesterday = get_yemen_time() - timedelta(days=1)
+    yesterday = datetime.utcnow() - timedelta(days=1)
     existing_notification = await db.notifications.find_one({
         "student_id": student_db_id,
         "course_id": course_id,
@@ -1652,7 +2400,7 @@ async def create_student_notification(
                     "absence_rate": absence_rate,
                     "remaining_allowed": remaining_allowed,
                     "is_read": False,
-                    "updated_at": get_yemen_time()
+                    "updated_at": datetime.utcnow()
                 }}
             )
         return None
@@ -1669,24 +2417,10 @@ async def create_student_notification(
         "absence_rate": absence_rate,
         "remaining_allowed": remaining_allowed,
         "is_read": False,
-        "created_at": get_yemen_time()
+        "created_at": datetime.utcnow()
     }
     
     result = await db.notifications.insert_one(notification)
-    
-    # إرسال إشعار Firebase Push للطالب
-    try:
-        from services.firebase_service import send_notification_to_many
-        user_id = student.get("user_id")
-        if user_id:
-            tokens_docs = await db.fcm_tokens.find({"user_id": user_id}).to_list(100)
-            tokens = [doc["token"] for doc in tokens_docs]
-            if tokens:
-                await send_notification_to_many(tokens, title, message)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).error(f"Firebase push failed for student: {e}")
-    
     return str(result.inserted_id)
 
 async def check_and_create_absence_notifications(student_id: str, course_id: str):
@@ -1903,7 +2637,7 @@ async def create_manual_notification(
         "is_manual": True,  # تمييز الإنذار اليدوي
         "sent_by": current_user["id"],
         "sent_by_name": current_user.get("full_name", ""),
-        "created_at": get_yemen_time()
+        "created_at": datetime.utcnow()
     }
     
     result = await db.notifications.insert_one(notification)
@@ -1961,24 +2695,6 @@ async def get_student_notifications(
 
 # ==================== Student Routes ====================
 
-@api_router.post("/students/bulk-change-level")
-async def bulk_change_level(request: Request, current_user: dict = Depends(get_current_user)):
-    """تغيير مستوى مجموعة من الطلاب"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    data = await request.json()
-    student_ids = data.get("student_ids", [])
-    new_level = data.get("new_level")
-    if not student_ids or new_level is None:
-        raise HTTPException(status_code=400, detail="بيانات ناقصة")
-    
-    updated = 0
-    for sid in student_ids:
-        result = await db.students.update_one({"_id": ObjectId(sid)}, {"$set": {"level": int(new_level)}})
-        if result.modified_count > 0:
-            updated += 1
-    return {"message": f"تم تغيير مستوى {updated} طالب إلى المستوى {new_level}", "updated": updated}
-
 @api_router.post("/students", response_model=StudentResponse)
 async def create_student(student: StudentCreate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN:
@@ -1990,7 +2706,7 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     
     student_dict = student.dict()
     student_dict["qr_code"] = generate_qr_code(student.student_id)
-    student_dict["created_at"] = get_yemen_time()
+    student_dict["created_at"] = datetime.utcnow()
     student_dict["is_active"] = True
     
     # Create user account for student if password provided
@@ -2003,7 +2719,7 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
             "role": UserRole.STUDENT,
             "email": student.email,
             "phone": student.phone,
-            "created_at": get_yemen_time(),
+            "created_at": datetime.utcnow(),
             "is_active": True
         }
         user_result = await db.users.insert_one(user_data)
@@ -2145,133 +2861,7 @@ async def delete_student(student_id: str, current_user: dict = Depends(get_curre
     
     await db.students.delete_one({"_id": ObjectId(student_id)})
     
-    await log_activity(current_user, "delete_student", "student", student_id, student.get("full_name", ""))
-    
     return {"message": "تم حذف الطالب بنجاح"}
-
-@api_router.get("/students/{student_id}/backup-info")
-async def get_student_backup_info(student_id: str, current_user: dict = Depends(get_current_user)):
-    """معلومات الطالب قبل الحذف"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    student = await db.students.find_one({"_id": ObjectId(student_id)})
-    if not student:
-        raise HTTPException(status_code=404, detail="الطالب غير موجود")
-    
-    enrollments = await db.enrollments.find({"student_id": student_id}).to_list(100)
-    course_ids = [e["course_id"] for e in enrollments]
-    courses = []
-    for cid in course_ids:
-        c = await db.courses.find_one({"_id": ObjectId(cid)})
-        if c:
-            courses.append(c)
-    attendance_count = await db.attendance.count_documents({"student_id": student_id})
-    
-    return {
-        "student_name": student.get("full_name", ""),
-        "student_id_num": student.get("student_id", ""),
-        "courses_count": len(courses),
-        "courses_names": [c.get("name", "") for c in courses],
-        "attendance_count": attendance_count,
-        "has_user_account": bool(student.get("user_id")),
-    }
-
-@api_router.post("/students/{student_id}/safe-delete")
-async def safe_delete_student(student_id: str, current_user: dict = Depends(get_current_user)):
-    """حذف آمن للطالب مع نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    student = await db.students.find_one({"_id": ObjectId(student_id)})
-    if not student:
-        raise HTTPException(status_code=404, detail="الطالب غير موجود")
-    
-    def clean_doc(doc):
-        d = {}
-        for k, v in doc.items():
-            if k == '_id' or isinstance(v, ObjectId):
-                d[k] = str(v)
-            elif hasattr(v, 'isoformat'):
-                d[k] = v.isoformat()
-            else:
-                d[k] = v
-        return d
-    
-    enrollments = await db.enrollments.find({"student_id": student_id}).to_list(100)
-    attendance = await db.attendance.find({"student_id": student_id}).to_list(50000)
-    
-    backup = {
-        "backup_type": "student_backup",
-        "backup_date": get_yemen_time().isoformat(),
-        "student": clean_doc(student),
-        "enrollments": [clean_doc(e) for e in enrollments],
-        "attendance": [clean_doc(a) for a in attendance],
-    }
-    
-    # حذف التسجيلات
-    await db.enrollments.delete_many({"student_id": student_id})
-    # حذف سجلات الحضور
-    await db.attendance.delete_many({"student_id": student_id})
-    # حذف حساب المستخدم
-    if student.get("user_id"):
-        await db.users.delete_one({"_id": ObjectId(student["user_id"])})
-    # حذف الطالب
-    await db.students.delete_one({"_id": ObjectId(student_id)})
-    
-    # حفظ في سلة المحذوفات
-    await save_to_trash("student", student.get("full_name", ""), backup, current_user.get("username", "admin"))
-    
-    await log_activity(current_user, "safe_delete_student", "student", student_id, student.get("full_name", ""), {"enrollments": len(enrollments), "attendance": len(attendance)})
-    
-    return {
-        "message": "تم حذف الطالب بنجاح",
-        "backup": backup,
-        "deleted": {"enrollments": len(enrollments), "attendance": len(attendance)}
-    }
-
-@api_router.post("/students/restore")
-async def restore_student(request: Request, current_user: dict = Depends(get_current_user)):
-    """استعادة طالب من نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    data = await request.json()
-    if data.get("backup_type") != "student_backup":
-        raise HTTPException(status_code=400, detail="ملف النسخة الاحتياطية غير صالح")
-    
-    student_data = data.get("student", {})
-    old_student_id = student_data.pop("_id", None)
-    student_data.pop("user_id", None)
-    
-    # Check if student with same student_id already exists
-    existing = await db.students.find_one({"student_id": student_data.get("student_id")})
-    if existing:
-        raise HTTPException(status_code=400, detail=f"الطالب برقم {student_data.get('student_id')} موجود بالفعل")
-    
-    result = await db.students.insert_one(student_data)
-    new_student_id = str(result.inserted_id)
-    
-    # Restore enrollments
-    restored_enrollments = 0
-    for e in data.get("enrollments", []):
-        e.pop("_id", None)
-        e["student_id"] = new_student_id
-        await db.enrollments.insert_one(e)
-        restored_enrollments += 1
-    
-    # Restore attendance
-    restored_attendance = 0
-    for a in data.get("attendance", []):
-        a.pop("_id", None)
-        a["student_id"] = new_student_id
-        await db.attendance.insert_one(a)
-        restored_attendance += 1
-    
-    await log_activity(current_user, "restore_student", "student", new_student_id, student_data.get("full_name", ""))
-    
-    return {
-        "message": "تم استعادة الطالب بنجاح",
-        "new_student_id": new_student_id,
-        "restored": {"enrollments": restored_enrollments, "attendance": restored_attendance}
-    }
 
 class StudentUpdate(BaseModel):
     full_name: Optional[str] = None
@@ -2347,7 +2937,7 @@ async def activate_student_account(student_id: str, current_user: dict = Depends
         "student_record_id": str(student["_id"]),  # ربط بسجل الطالب
         "must_change_password": True,  # إجبار على تغيير كلمة المرور
         "is_active": True,
-        "created_at": get_yemen_time()
+        "created_at": datetime.utcnow()
     }
     
     result = await db.users.insert_one(user_dict)
@@ -2449,7 +3039,7 @@ async def get_teachers(
             "phone": teacher.get("phone"),
             "specialization": teacher.get("specialization"),
             "user_id": teacher.get("user_id"),
-            "created_at": teacher.get("created_at", get_yemen_time()),
+            "created_at": teacher.get("created_at", datetime.utcnow()),
             "is_active": teacher.get("is_active", True)
         }
         result.append(teacher_dict)
@@ -2467,7 +3057,7 @@ async def create_teacher(teacher: TeacherCreate, current_user: dict = Depends(ge
         raise HTTPException(status_code=400, detail="الرقم الوظيفي مستخدم مسبقاً")
     
     teacher_dict = teacher.dict()
-    teacher_dict["created_at"] = get_yemen_time()
+    teacher_dict["created_at"] = datetime.utcnow()
     teacher_dict["is_active"] = True
     
     result = await db.teachers.insert_one(teacher_dict)
@@ -2491,7 +3081,7 @@ async def get_teacher(teacher_id: str, current_user: dict = Depends(get_current_
         "phone": teacher.get("phone"),
         "specialization": teacher.get("specialization"),
         "user_id": teacher.get("user_id"),
-        "created_at": teacher.get("created_at", get_yemen_time()),
+        "created_at": teacher.get("created_at", datetime.utcnow()),
         "is_active": teacher.get("is_active", True)
     }
 
@@ -2574,111 +3164,6 @@ async def update_teacher(teacher_id: str, data: TeacherUpdate, current_user: dic
         "is_active": updated.get("is_active", True)
     }
 
-@api_router.get("/teachers/{teacher_id}/backup-info")
-async def get_teacher_backup_info(teacher_id: str, current_user: dict = Depends(get_current_user)):
-    """معلومات المعلم قبل الحذف"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
-    if not teacher:
-        raise HTTPException(status_code=404, detail="المعلم غير موجود")
-    
-    courses = await db.courses.find({"teacher_id": teacher_id}).to_list(100)
-    course_ids = [str(c["_id"]) for c in courses]
-    lectures_count = await db.lectures.count_documents({"course_id": {"$in": course_ids}}) if course_ids else 0
-    attendance_count = await db.attendance.count_documents({"course_id": {"$in": course_ids}}) if course_ids else 0
-    
-    return {
-        "teacher_name": teacher.get("full_name", ""),
-        "employee_id": teacher.get("employee_id", ""),
-        "courses_count": len(courses),
-        "courses_names": [c.get("name", "") for c in courses],
-        "lectures_count": lectures_count,
-        "attendance_count": attendance_count,
-        "has_user_account": bool(teacher.get("user_id")),
-    }
-
-@api_router.post("/teachers/{teacher_id}/safe-delete")
-async def safe_delete_teacher(teacher_id: str, current_user: dict = Depends(get_current_user)):
-    """حذف آمن للمعلم مع نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
-    if not teacher:
-        raise HTTPException(status_code=404, detail="المعلم غير موجود")
-    
-    def clean_doc(doc):
-        d = {}
-        for k, v in doc.items():
-            if k == '_id' or isinstance(v, ObjectId):
-                d[k] = str(v)
-            elif hasattr(v, 'isoformat'):
-                d[k] = v.isoformat()
-            else:
-                d[k] = v
-        return d
-    
-    # جمع نصاب التدريس والبيانات المرتبطة
-    courses = await db.courses.find({"teacher_id": teacher_id}).to_list(100)
-    course_ids = [str(c["_id"]) for c in courses]
-    lectures = await db.lectures.find({"course_id": {"$in": course_ids}}).to_list(10000) if course_ids else []
-    attendance = await db.attendance.find({"course_id": {"$in": course_ids}}).to_list(50000) if course_ids else []
-    
-    backup = {
-        "backup_type": "teacher_backup",
-        "backup_date": get_yemen_time().isoformat(),
-        "teacher": clean_doc(teacher),
-        "teaching_load": [clean_doc(c) for c in courses],
-        "lectures": [clean_doc(l) for l in lectures],
-        "attendance": [clean_doc(a) for a in attendance],
-    }
-    
-    # إزالة ربط المعلم بالمقررات (المقررات تبقى بدون معلم)
-    await db.courses.update_many({"teacher_id": teacher_id}, {"$set": {"teacher_id": None}})
-    
-    # حذف حساب المستخدم
-    if teacher.get("user_id"):
-        await db.users.delete_one({"_id": ObjectId(teacher["user_id"])})
-    
-    # حذف المعلم
-    await db.teachers.delete_one({"_id": ObjectId(teacher_id)})
-    
-    # حفظ في سلة المحذوفات
-    await save_to_trash("teacher", teacher.get("full_name", ""), backup, current_user.get("username", "admin"))
-    
-    await log_activity(current_user, "safe_delete_teacher", "teacher", teacher_id, teacher.get("full_name", ""))
-    
-    return {
-        "message": "تم حذف المعلم بنجاح",
-        "backup": backup,
-        "deleted": {"courses_unlinked": len(courses), "lectures_in_backup": len(lectures), "attendance_in_backup": len(attendance)}
-    }
-
-@api_router.post("/teachers/restore")
-async def restore_teacher(request: Request, current_user: dict = Depends(get_current_user)):
-    """استعادة معلم من نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    data = await request.json()
-    if data.get("backup_type") != "teacher_backup":
-        raise HTTPException(status_code=400, detail="ملف النسخة الاحتياطية غير صالح")
-    
-    teacher_data = data.get("teacher", {})
-    old_teacher_id = teacher_data.pop("_id", None)
-    teacher_data.pop("user_id", None)
-    
-    result = await db.teachers.insert_one(teacher_data)
-    new_teacher_id = str(result.inserted_id)
-    
-    # إعادة ربط المقررات
-    for c in data.get("teaching_load", []):
-        course_code = c.get("code")
-        if course_code:
-            await db.courses.update_many({"code": course_code, "teacher_id": None}, {"$set": {"teacher_id": new_teacher_id}})
-    
-    await log_activity(current_user, "restore_teacher", "teacher", new_teacher_id, teacher_data.get("full_name", ""))
-    return {"message": "تم استعادة المعلم بنجاح", "new_teacher_id": new_teacher_id}
-
 @api_router.delete("/teachers/{teacher_id}")
 async def delete_teacher(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """حذف معلم"""
@@ -2694,7 +3179,6 @@ async def delete_teacher(teacher_id: str, current_user: dict = Depends(get_curre
         await db.users.delete_one({"_id": ObjectId(teacher["user_id"])})
     
     await db.teachers.delete_one({"_id": ObjectId(teacher_id)})
-    await log_activity(current_user, "delete_teacher", "teacher", teacher_id, teacher.get("full_name", ""))
     return {"message": "تم حذف المعلم بنجاح"}
 
 # ==================== Teacher Account Activation (تفعيل حساب المعلم) ====================
@@ -2726,7 +3210,7 @@ async def activate_teacher_account(teacher_id: str, current_user: dict = Depends
         "teacher_record_id": str(teacher["_id"]),
         "must_change_password": True,
         "is_active": True,
-        "created_at": get_yemen_time()
+        "created_at": datetime.utcnow()
     }
     
     result = await db.users.insert_one(user_dict)
@@ -2818,7 +3302,7 @@ async def change_password(data: ChangePasswordRequest, current_user: dict = Depe
             "$set": {
                 "password": get_password_hash(data.new_password),
                 "must_change_password": False,
-                "password_changed_at": get_yemen_time()
+                "password_changed_at": datetime.utcnow()
             }
         }
     )
@@ -2851,7 +3335,7 @@ async def force_change_password(data: ForceChangePasswordRequest, current_user: 
             "$set": {
                 "password": get_password_hash(data.new_password),
                 "must_change_password": False,
-                "password_changed_at": get_yemen_time()
+                "password_changed_at": datetime.utcnow()
             }
         }
     )
@@ -2866,18 +3350,8 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course_dict = course.dict()
-    course_dict["created_at"] = get_yemen_time()
+    course_dict["created_at"] = datetime.utcnow()
     course_dict["is_active"] = True
-    
-    # ربط تلقائي بالفصل الدراسي النشط إذا لم يتم تحديده
-    if not course_dict.get("semester_id"):
-        settings = await db.settings.find_one({"_id": "system_settings"})
-        if settings and settings.get("current_semester_id"):
-            course_dict["semester_id"] = settings["current_semester_id"]
-        else:
-            active_sem = await db.semesters.find_one({"status": "active"})
-            if active_sem:
-                course_dict["semester_id"] = str(active_sem["_id"])
     
     result = await db.courses.insert_one(course_dict)
     course_dict["id"] = str(result.inserted_id)
@@ -2929,28 +3403,17 @@ async def get_courses(
             except:
                 pass
         
-        # اسم الفصل الدراسي
-        semester_name = None
-        if c.get("semester_id"):
-            try:
-                sem = await db.semesters.find_one({"_id": ObjectId(c["semester_id"])})
-                if sem:
-                    semester_name = sem.get("name")
-            except:
-                pass
-        
         result.append({
             "id": str(c["_id"]),
-            "name": c.get("name", ""),
-            "code": c.get("code", ""),
-            "department_id": c.get("department_id", ""),
+            "name": c["name"],
+            "code": c["code"],
+            "department_id": c["department_id"],
             "teacher_id": c.get("teacher_id"),
             "teacher_name": teacher_name,
-            "level": c.get("level", 1),
+            "level": c["level"],
             "section": c.get("section"),
             "semester": c.get("semester"),
             "semester_id": c.get("semester_id"),
-            "semester_name": semester_name,
             "academic_year": c.get("academic_year"),
             "created_at": c.get("created_at"),
             "is_active": c.get("is_active", True)
@@ -2978,170 +3441,6 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
         "is_active": course.get("is_active", True)
     }
 
-@api_router.get("/courses/{course_id}/backup-info")
-async def get_course_backup_info(course_id: str, current_user: dict = Depends(get_current_user)):
-    """معلومات المقرر قبل الحذف"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    course = await db.courses.find_one({"_id": ObjectId(course_id)})
-    if not course:
-        raise HTTPException(status_code=404, detail="المقرر غير موجود")
-    
-    enrollments_count = await db.enrollments.count_documents({"course_id": course_id})
-    lectures_count = await db.lectures.count_documents({"course_id": course_id})
-    attendance_count = await db.attendance.count_documents({"course_id": course_id})
-    
-    return {
-        "course_name": course.get("name", ""),
-        "course_code": course.get("code", ""),
-        "enrollments_count": enrollments_count,
-        "lectures_count": lectures_count,
-        "attendance_count": attendance_count,
-    }
-
-@api_router.post("/courses/{course_id}/safe-delete")
-async def safe_delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
-    """حذف آمن للمقرر - يرجع نسخة احتياطية ثم يحذف كل شيء"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    course = await db.courses.find_one({"_id": ObjectId(course_id)})
-    if not course:
-        raise HTTPException(status_code=404, detail="المقرر غير موجود")
-    
-    # 1. جمع بيانات النسخة الاحتياطية
-    enrollments = await db.enrollments.find({"course_id": course_id}).to_list(10000)
-    student_ids = [ObjectId(e["student_id"]) for e in enrollments]
-    students = await db.students.find({"_id": {"$in": student_ids}}).to_list(10000) if student_ids else []
-    lectures = await db.lectures.find({"course_id": course_id}).to_list(10000)
-    attendance = await db.attendance.find({"course_id": course_id}).to_list(50000)
-    
-    # تحويل ObjectId لـ string
-    def clean_doc(doc):
-        d = {k: str(v) if k == '_id' or isinstance(v, ObjectId) else v for k, v in doc.items()}
-        # Convert datetime objects
-        for k, v in d.items():
-            if hasattr(v, 'isoformat'):
-                d[k] = v.isoformat()
-        return d
-    
-    backup = {
-        "backup_type": "course_backup",
-        "backup_date": get_yemen_time().isoformat(),
-        "course": clean_doc(course),
-        "students": [clean_doc(s) for s in students],
-        "enrollments": [clean_doc(e) for e in enrollments],
-        "lectures": [clean_doc(l) for l in lectures],
-        "attendance": [clean_doc(a) for a in attendance],
-    }
-    
-    # 2. إلغاء تسجيل جميع الطلاب
-    await db.enrollments.delete_many({"course_id": course_id})
-    
-    # 3. حذف سجلات الحضور
-    await db.attendance.delete_many({"course_id": course_id})
-    
-    # 4. حذف المحاضرات
-    await db.lectures.delete_many({"course_id": course_id})
-    
-    # 5. حذف المقرر
-    await db.courses.delete_one({"_id": ObjectId(course_id)})
-    
-    # حفظ في سلة المحذوفات
-    await save_to_trash("course", course.get("name", ""), backup, current_user.get("username", "admin"))
-    
-    await log_activity(current_user, "safe_delete_course", "course", course_id, course.get("name", ""))
-    
-    return {
-        "message": "تم حذف المقرر بنجاح",
-        "backup": backup,
-        "deleted": {
-            "enrollments": len(enrollments),
-            "lectures": len(lectures),
-            "attendance": len(attendance),
-        }
-    }
-
-@api_router.post("/courses/restore")
-async def restore_course(request: Request, current_user: dict = Depends(get_current_user)):
-    """استعادة مقرر محذوف من نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    data = await request.json()
-    
-    if data.get("backup_type") != "course_backup":
-        raise HTTPException(status_code=400, detail="ملف النسخة الاحتياطية غير صالح")
-    
-    course_data = data.get("course", {})
-    if not course_data:
-        raise HTTPException(status_code=400, detail="بيانات المقرر مفقودة")
-    
-    # 1. استعادة المقرر
-    course_id = course_data.pop("_id", None)
-    course_data.pop("id", None)
-    result = await db.courses.insert_one(course_data)
-    new_course_id = str(result.inserted_id)
-    
-    # 2. استعادة الطلاب (فقط غير الموجودين)
-    restored_students = 0
-    student_id_map = {}
-    for s in data.get("students", []):
-        old_id = s.pop("_id", None)
-        existing = await db.students.find_one({"student_id": s.get("student_id")})
-        if existing:
-            student_id_map[old_id] = str(existing["_id"])
-        else:
-            res = await db.students.insert_one(s)
-            student_id_map[old_id] = str(res.inserted_id)
-            restored_students += 1
-    
-    # 3. استعادة التسجيلات
-    restored_enrollments = 0
-    for e in data.get("enrollments", []):
-        e.pop("_id", None)
-        e["course_id"] = new_course_id
-        if e.get("student_id") in student_id_map:
-            e["student_id"] = student_id_map[e["student_id"]]
-        await db.enrollments.insert_one(e)
-        restored_enrollments += 1
-    
-    # 4. استعادة المحاضرات
-    restored_lectures = 0
-    lecture_id_map = {}
-    for l in data.get("lectures", []):
-        old_id = l.pop("_id", None)
-        l["course_id"] = new_course_id
-        res = await db.lectures.insert_one(l)
-        lecture_id_map[old_id] = str(res.inserted_id)
-        restored_lectures += 1
-    
-    # 5. استعادة الحضور
-    restored_attendance = 0
-    for a in data.get("attendance", []):
-        a.pop("_id", None)
-        a["course_id"] = new_course_id
-        if a.get("lecture_id") in lecture_id_map:
-            a["lecture_id"] = lecture_id_map[a["lecture_id"]]
-        if a.get("student_id") in student_id_map:
-            a["student_id"] = student_id_map[a["student_id"]]
-        await db.attendance.insert_one(a)
-        restored_attendance += 1
-    
-    await log_activity(current_user, "restore_course", "course", new_course_id, course_data.get("name", ""))
-    
-    return {
-        "message": "تم استعادة المقرر بنجاح",
-        "new_course_id": new_course_id,
-        "restored": {
-            "students": restored_students,
-            "enrollments": restored_enrollments,
-            "lectures": restored_lectures,
-            "attendance": restored_attendance,
-        }
-    }
-
 @api_router.delete("/courses/{course_id}")
 async def delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN:
@@ -3154,68 +3453,6 @@ async def delete_course(course_id: str, current_user: dict = Depends(get_current
     return {"message": "تم حذف المقرر بنجاح"}
 
 # ==================== Enrollment Routes (تسجيل الطلاب في المقررات) ====================
-
-@api_router.post("/enrollments/bulk-copy")
-async def bulk_copy_students(request: Request, current_user: dict = Depends(get_current_user)):
-    """نسخ طلاب إلى مقرر آخر"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    data = await request.json()
-    student_ids = data.get("student_ids", [])
-    target_course_id = data.get("target_course_id")
-    if not student_ids or not target_course_id:
-        raise HTTPException(status_code=400, detail="بيانات ناقصة")
-    target = await db.courses.find_one({"_id": ObjectId(target_course_id)})
-    if not target:
-        raise HTTPException(status_code=404, detail="المقرر المستهدف غير موجود")
-    
-    copied = 0
-    already = 0
-    for sid in student_ids:
-        existing = await db.enrollments.find_one({"course_id": target_course_id, "student_id": sid})
-        if existing:
-            already += 1
-            continue
-        await db.enrollments.insert_one({
-            "course_id": target_course_id,
-            "student_id": sid,
-            "enrolled_at": get_yemen_time(),
-            "enrolled_by": current_user["id"]
-        })
-        copied += 1
-    return {"message": f"تم نسخ {copied} طالب", "copied": copied, "already_enrolled": already}
-
-@api_router.post("/enrollments/bulk-move")
-async def bulk_move_students(request: Request, current_user: dict = Depends(get_current_user)):
-    """نقل طلاب من مقرر إلى آخر"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    data = await request.json()
-    student_ids = data.get("student_ids", [])
-    source_course_id = data.get("source_course_id")
-    target_course_id = data.get("target_course_id")
-    if not student_ids or not source_course_id or not target_course_id:
-        raise HTTPException(status_code=400, detail="بيانات ناقصة")
-    target = await db.courses.find_one({"_id": ObjectId(target_course_id)})
-    if not target:
-        raise HTTPException(status_code=404, detail="المقرر المستهدف غير موجود")
-    
-    moved = 0
-    already = 0
-    for sid in student_ids:
-        existing = await db.enrollments.find_one({"course_id": target_course_id, "student_id": sid})
-        if existing:
-            already += 1
-        else:
-            await db.enrollments.insert_one({
-                "course_id": target_course_id,
-                "student_id": sid,
-                "enrolled_at": get_yemen_time(),
-                "enrolled_by": current_user["id"]
-            })
-        await db.enrollments.delete_one({"course_id": source_course_id, "student_id": sid})
-        moved += 1
-    return {"message": f"تم نقل {moved} طالب", "moved": moved, "already_enrolled": already}
 
 @api_router.get("/enrollments/{course_id}")
 async def get_course_enrollments(course_id: str, current_user: dict = Depends(get_current_user)):
@@ -3291,7 +3528,7 @@ async def enroll_students(
         enrollment = {
             "course_id": course_id,
             "student_id": str(student["_id"]),
-            "enrolled_at": get_yemen_time(),
+            "enrolled_at": datetime.utcnow(),
             "enrolled_by": current_user["id"]
         }
         await db.enrollments.insert_one(enrollment)
@@ -3391,7 +3628,7 @@ async def import_enrollments_excel(
             enrollment = {
                 "course_id": course_id,
                 "student_id": str(student["_id"]),
-                "enrolled_at": get_yemen_time(),
+                "enrolled_at": datetime.utcnow(),
                 "enrolled_by": current_user["id"]
             }
             await db.enrollments.insert_one(enrollment)
@@ -3490,7 +3727,7 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
 @api_router.get("/lectures/today")
 async def get_today_lectures(current_user: dict = Depends(get_current_user)):
     """الحصول على محاضرات اليوم للمعلم"""
-    today = get_yemen_time().strftime("%Y-%m-%d")
+    today = datetime.utcnow().strftime("%Y-%m-%d")
     
     # جلب مقررات المعلم
     course_query = {"is_active": True}
@@ -3519,26 +3756,6 @@ async def get_today_lectures(current_user: dict = Depends(get_current_user)):
         "date": today
     }).sort("start_time", 1).to_list(100)
     
-    # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
-    now = get_yemen_time()
-    for lecture in lectures:
-        if lecture.get("status") == LectureStatus.SCHEDULED and not lecture.get("status_override"):
-            try:
-                lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M")
-                lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
-                lecture_start = datetime.strptime(f"{lecture['date']} {lecture['start_time']}", "%Y-%m-%d %H:%M")
-                lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
-                duration = (lecture_end - lecture_start).total_seconds() / 60
-                allowed_end = lecture_end + timedelta(minutes=duration)
-                if now > allowed_end:
-                    await db.lectures.update_one(
-                        {"_id": lecture["_id"]},
-                        {"$set": {"status": LectureStatus.ABSENT}}
-                    )
-                    lecture["status"] = LectureStatus.ABSENT
-            except:
-                pass
-
     result = []
     for lecture in lectures:
         course = course_map.get(lecture["course_id"], {})
@@ -3603,26 +3820,6 @@ async def get_month_lectures(year: int, month: int, current_user: dict = Depends
         "date": {"$gte": start_date, "$lt": end_date}
     }).sort("date", 1).to_list(500)
     
-    # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
-    now = get_yemen_time()
-    for lecture in lectures:
-        if lecture.get("status") == LectureStatus.SCHEDULED and not lecture.get("status_override"):
-            try:
-                lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M")
-                lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
-                lecture_start = datetime.strptime(f"{lecture['date']} {lecture['start_time']}", "%Y-%m-%d %H:%M")
-                lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
-                duration = (lecture_end - lecture_start).total_seconds() / 60
-                allowed_end = lecture_end + timedelta(minutes=duration)
-                if now > allowed_end:
-                    await db.lectures.update_one(
-                        {"_id": lecture["_id"]},
-                        {"$set": {"status": LectureStatus.ABSENT}}
-                    )
-                    lecture["status"] = LectureStatus.ABSENT
-            except:
-                pass
-
     # تجميع التواريخ والمحاضرات
     dates_with_lectures = {}
     lectures_list = []
@@ -3673,26 +3870,6 @@ async def get_course_lectures(
     
     lectures = await db.lectures.find(query).sort("date", 1).to_list(1000)
     
-    # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
-    now = get_yemen_time()
-    for lecture in lectures:
-        if lecture.get("status") == LectureStatus.SCHEDULED and not lecture.get("status_override"):
-            try:
-                lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M")
-                lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
-                lecture_start = datetime.strptime(f"{lecture['date']} {lecture['start_time']}", "%Y-%m-%d %H:%M")
-                lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
-                duration = (lecture_end - lecture_start).total_seconds() / 60
-                allowed_end = lecture_end + timedelta(minutes=duration)
-                if now > allowed_end:
-                    await db.lectures.update_one(
-                        {"_id": lecture["_id"]},
-                        {"$set": {"status": LectureStatus.ABSENT}}
-                    )
-                    lecture["status"] = LectureStatus.ABSENT
-            except:
-                pass
-    
     result = []
     for lecture in lectures:
         result.append({
@@ -3730,7 +3907,7 @@ async def create_lecture(
         "room": data.room or "",
         "status": LectureStatus.SCHEDULED,
         "notes": data.notes or "",
-        "created_at": get_yemen_time(),
+        "created_at": datetime.utcnow(),
         "created_by": current_user["id"]
     }
     
@@ -3740,28 +3917,6 @@ async def create_lecture(
         "id": str(result.inserted_id),
         "message": "تم إنشاء المحاضرة بنجاح"
     }
-
-@api_router.put("/lectures/{lecture_id}/status")
-async def update_lecture_status(lecture_id: str, request: Request, current_user: dict = Depends(get_current_user)):
-    """تغيير حالة المحاضرة (يتطلب صلاحية override_lecture_status)"""
-    if not has_permission(current_user, Permission.OVERRIDE_LECTURE_STATUS):
-        raise HTTPException(status_code=403, detail="ليس لديك صلاحية تغيير حالة المحاضرة")
-    
-    data = await request.json()
-    new_status = data.get("status")
-    valid = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.CANCELLED, LectureStatus.ABSENT]
-    if new_status not in valid:
-        raise HTTPException(status_code=400, detail=f"حالة غير صالحة. الحالات المتاحة: {valid}")
-    
-    lecture = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
-    if not lecture:
-        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
-    
-    await db.lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": {"status": new_status, "status_override": True}})
-    
-    status_names = {"scheduled": "مجدولة", "completed": "منعقدة", "cancelled": "ملغاة", "absent": "غائب"}
-    await log_activity(current_user, "override_lecture_status", "lecture", lecture_id, None, {"old_status": lecture.get("status", ""), "new_status": new_status})
-    return {"message": f"تم تغيير حالة المحاضرة إلى: {status_names.get(new_status, new_status)}"}
 
 @api_router.post("/lectures/generate")
 async def generate_semester_lectures(
@@ -3801,7 +3956,7 @@ async def generate_semester_lectures(
             "room": data.room or "",
             "status": LectureStatus.SCHEDULED,
             "notes": "",
-            "created_at": get_yemen_time(),
+            "created_at": datetime.utcnow(),
             "created_by": current_user["id"]
         }
         await db.lectures.insert_one(lecture)
@@ -3884,7 +4039,7 @@ async def generate_semester_lectures_advanced(
                     "room": data.room,
                     "status": LectureStatus.SCHEDULED,
                     "notes": "",
-                    "created_at": get_yemen_time(),
+                    "created_at": datetime.utcnow(),
                     "created_by": current_user["id"]
                 }
                 await db.lectures.insert_one(lecture)
@@ -3990,258 +4145,13 @@ async def get_lecture_details(
         "attendance_status": get_lecture_attendance_status(lecture)
     }
 
-@api_router.get("/lectures/{lecture_id}/pdf")
-async def export_lecture_attendance_pdf(
-    lecture_id: str,
-    current_user: dict = Depends(get_current_user)
-):
-    """تصدير تقرير حضور المحاضرة كملف PDF"""
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
-    from reportlab.lib.units import mm
-    from reportlab.pdfgen import canvas
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    from bidi.algorithm import get_display
-    import arabic_reshaper
-
-    try:
-        oid = ObjectId(lecture_id)
-    except Exception:
-        raise HTTPException(status_code=400, detail="معرف المحاضرة غير صالح")
-
-    lecture = await db.lectures.find_one({"_id": oid})
-    if not lecture:
-        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
-
-    course = await db.courses.find_one({"_id": ObjectId(lecture["course_id"])})
-    enrollments = await db.enrollments.find({"course_id": lecture["course_id"]}).to_list(10000)
-    student_ids = [ObjectId(e["student_id"]) for e in enrollments]
-    students = await db.students.find({"_id": {"$in": student_ids}}).to_list(10000)
-
-    attendance_records = await db.attendance.find({"lecture_id": lecture_id}).to_list(10000)
-    attendance_map = {r["student_id"]: r["status"] for r in attendance_records}
-    
-    # وقت بدء التحضير
-    attendance_time = None
-    if attendance_records:
-        times = [r.get("recorded_at") or r.get("created_at") for r in attendance_records if r.get("recorded_at") or r.get("created_at")]
-        if times:
-            earliest = min(times)
-            if hasattr(earliest, 'strftime'):
-                # تحويل من UTC إلى توقيت اليمن
-                if earliest.tzinfo is None:
-                    earliest = earliest.replace(tzinfo=timezone.utc)
-                yemen_time = earliest.astimezone(YEMEN_TIMEZONE)
-                attendance_time = yemen_time.strftime('%H:%M')
-    
-    # المعلم المحضّر
-    teacher_name = ""
-    if course and course.get("teacher_id"):
-        try:
-            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
-            if teacher:
-                teacher_name = teacher.get("full_name", "")
-        except:
-            pass
-
-    # جلب بيانات القسم والكلية
-    department = None
-    if course and course.get("department_id"):
-        try:
-            department = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
-        except:
-            pass
-
-    # Register Arabic font
-    font_path = Path(__file__).parent / "fonts" / "Amiri-Regular.ttf"
-    if font_path.exists():
-        pdfmetrics.registerFont(TTFont('Amiri', str(font_path)))
-        arabic_font = 'Amiri'
-    else:
-        arabic_font = 'Helvetica'
-
-    def draw_arabic(c, text, x, y, font_name=arabic_font, font_size=12):
-        reshaped = arabic_reshaper.reshape(text)
-        bidi_text = get_display(reshaped)
-        c.setFont(font_name, font_size)
-        c.drawRightString(x, y, bidi_text)
-
-    buffer = BytesIO()
-    width, height = A4
-    c = canvas.Canvas(buffer, pagesize=A4)
-
-    # Header
-    y = height - 40
-    draw_arabic(c, "جامعة الأحقاف - تقرير الحضور", width - 30, y, font_size=18)
-    y -= 8
-    c.setStrokeColor(colors.HexColor("#1565c0"))
-    c.setLineWidth(2)
-    c.line(30, y, width - 30, y)
-
-    # Course & Lecture info
-    y -= 28
-    course_name = course["name"] if course else "غير معروف"
-    course_code = course.get("code", "") if course else ""
-    draw_arabic(c, f"المقرر: {course_name} ({course_code})", width - 30, y, font_size=13)
-    y -= 22
-    
-    # المستوى والشعبة
-    level = course.get("level", "") if course else ""
-    section = course.get("section", "") if course else ""
-    level_section = ""
-    if level:
-        level_section += f"المستوى: {level}"
-    if section:
-        level_section += f"          الشعبة: {section}"
-    if level_section:
-        draw_arabic(c, level_section, width - 30, y, font_size=12)
-        y -= 22
-    
-    # القسم والكلية
-    dept_name = department.get("name", "") if department else ""
-    college_name = department.get("college", "") if department else ""
-    dept_info = ""
-    if dept_name:
-        dept_info += f"القسم: {dept_name}"
-    if college_name:
-        dept_info += f"          الكلية: {college_name}"
-    if dept_info:
-        draw_arabic(c, dept_info, width - 30, y, font_size=12)
-        y -= 22
-    
-    draw_arabic(c, f"التاريخ: {lecture['date']}          الوقت: {lecture['start_time']} - {lecture['end_time']}", width - 30, y, font_size=12)
-    y -= 20
-    room = lecture.get("room", "")
-    status_ar = {"scheduled": "مجدولة", "completed": "منعقدة", "cancelled": "ملغاة", "absent": "غائب"}.get(lecture.get("status", ""), lecture.get("status", ""))
-    draw_arabic(c, f"القاعة: {room}          الحالة: {status_ar}", width - 30, y, font_size=12)
-
-    # Stats
-    present = sum(1 for s in students if attendance_map.get(str(s["_id"])) == "present")
-    absent = sum(1 for s in students if attendance_map.get(str(s["_id"])) == "absent")
-    excused = sum(1 for s in students if attendance_map.get(str(s["_id"])) == "excused")
-    total = len(students)
-
-    y -= 30
-    c.setFillColor(colors.HexColor("#f5f5f5"))
-    c.roundRect(30, y - 20, width - 60, 35, 5, fill=1, stroke=0)
-    c.setFillColor(colors.black)
-    draw_arabic(c, f"الإجمالي: {total}     حاضر: {present}     غائب: {absent}     معذور: {excused}", width - 40, y, font_size=11)
-
-    # Table header
-    y -= 45
-    col_status_x = 80
-    col_id_x = 200
-    col_name_x = width - 40
-    col_num_x = width - 20
-
-    c.setFillColor(colors.HexColor("#1565c0"))
-    c.roundRect(30, y - 8, width - 60, 25, 3, fill=1, stroke=0)
-    c.setFillColor(colors.white)
-    c.setFont(arabic_font, 11)
-
-    reshaped = arabic_reshaper.reshape("الحالة")
-    c.drawString(col_status_x - 20, y, get_display(reshaped))
-    reshaped = arabic_reshaper.reshape("الرقم الأكاديمي")
-    c.drawString(col_id_x - 30, y, get_display(reshaped))
-    reshaped = arabic_reshaper.reshape("اسم الطالب")
-    c.drawRightString(col_name_x, y, get_display(reshaped))
-    reshaped = arabic_reshaper.reshape("#")
-    c.drawRightString(col_num_x, y, get_display(reshaped))
-
-    # Table rows
-    y -= 28
-    status_labels = {"present": "حاضر", "absent": "غائب", "excused": "معذور"}
-    status_colors = {"present": "#4caf50", "absent": "#f44336", "excused": "#ff9800"}
-
-    for i, student in enumerate(students):
-        if y < 50:
-            c.showPage()
-            y = height - 40
-            draw_arabic(c, "جامعة الأحقاف - تقرير الحضور (تابع)", width - 30, y, font_size=14)
-            y -= 30
-
-        # Alternating row background
-        if i % 2 == 0:
-            c.setFillColor(colors.HexColor("#fafafa"))
-            c.rect(30, y - 6, width - 60, 22, fill=1, stroke=0)
-
-        c.setFillColor(colors.black)
-
-        # Row number
-        c.setFont(arabic_font, 11)
-        reshaped = arabic_reshaper.reshape(str(i + 1))
-        c.drawRightString(col_num_x, y, get_display(reshaped))
-
-        # Student name
-        draw_arabic(c, student["full_name"], col_name_x, y, font_size=11)
-
-        # Student ID
-        sid = student.get("student_id", "")
-        c.setFont(arabic_font, 10)
-        c.drawString(col_id_x - 30, y, str(sid))
-
-        # Status with color
-        att_status = attendance_map.get(str(student["_id"]), None)
-        label = status_labels.get(att_status, "---")
-        color = status_colors.get(att_status, "#999")
-        c.setFillColor(colors.HexColor(color))
-        reshaped = arabic_reshaper.reshape(label)
-        c.drawString(col_status_x - 15, y, get_display(reshaped))
-        c.setFillColor(colors.black)
-
-        y -= 24
-
-    # Footer - التوقيع
-    y -= 20
-    c.setStrokeColor(colors.HexColor("#e0e0e0"))
-    c.setLineWidth(0.5)
-    c.line(30, y, width - 30, y)
-    y -= 18
-    
-    # اسم المحضّر ووقت التحضير
-    if teacher_name:
-        draw_arabic(c, f"المحضّر: {teacher_name}", width - 30, y, font_size=10)
-        y -= 16
-    if attendance_time:
-        draw_arabic(c, f"وقت بدء التحضير: {attendance_time}", width - 30, y, font_size=10)
-        y -= 16
-    
-    now = get_yemen_time()
-    draw_arabic(c, f"تم إنشاء التقرير في: {now.strftime('%Y-%m-%d %H:%M')} (توقيت اليمن)", width - 30, y, font_size=9)
-    
-    # خط التوقيع
-    y -= 30
-    c.setStrokeColor(colors.HexColor("#333"))
-    c.setLineWidth(0.8)
-    c.line(width - 200, y, width - 30, y)
-    y -= 14
-    draw_arabic(c, "توقيع المحضّر", width - 30, y, font_size=9)
-
-    c.save()
-    buffer.seek(0)
-
-    filename = f"{course_name}_{lecture['date']}.pdf"
-    # URL encode for HTTP header (Arabic characters)
-    from urllib.parse import quote
-    encoded_filename = quote(filename)
-    return StreamingResponse(
-        buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
-    )
-
-
 def get_lecture_attendance_status(lecture: dict) -> dict:
     """حساب حالة التحضير للمحاضرة"""
-    now = get_yemen_time()
+    now = datetime.utcnow()
     
     try:
         lecture_start = datetime.strptime(f"{lecture['date']} {lecture['start_time']}", "%Y-%m-%d %H:%M")
         lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M")
-        # توحيد التوقيت
-        lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
-        lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
     except:
         return {
             "can_take_attendance": False,
@@ -4255,37 +4165,37 @@ def get_lecture_attendance_status(lecture: dict) -> dict:
     # الوقت المسموح به للتحضير = وقت نهاية المحاضرة + مدة المحاضرة
     allowed_end_time = lecture_end + timedelta(minutes=lecture_duration)
     
-    # إذا لم يحن وقت المحاضرة بعد (مسموح 15 دقيقة قبل البداية)
-    early_start_allowed = lecture_start - timedelta(minutes=15)
-    if now < early_start_allowed:
-        minutes_until = int((lecture_start - now).total_seconds() / 60)
+    # إذا تم التحضير مسبقاً (المحاضرة مكتملة)
+    if lecture.get("status") == LectureStatus.COMPLETED:
         return {
             "can_take_attendance": False,
-            "reason": f"لم يحن وقت المحاضرة بعد. تبدأ بعد {minutes_until} دقيقة",
+            "reason": "تم التحضير مسبقاً ولا يمكن التعديل",
+            "status": "completed"
+        }
+    
+    # إذا لم يحن وقت المحاضرة بعد
+    if now < lecture_start:
+        time_until_start = int((lecture_start - now).total_seconds() / 60)
+        return {
+            "can_take_attendance": False,
+            "reason": f"لم يحن وقت المحاضرة بعد. تبدأ الساعة {lecture['start_time']}",
             "status": "not_started",
-            "starts_at": lecture_start.strftime("%H:%M")
+            "minutes_until_start": time_until_start
         }
     
     # إذا انتهى الوقت المسموح
     if now > allowed_end_time:
-        if lecture.get("status") == LectureStatus.COMPLETED:
-            return {
-                "can_take_attendance": False,
-                "reason": "تم التحضير مسبقاً وانتهى وقت التعديل",
-                "status": "completed"
-            }
         return {
             "can_take_attendance": False,
             "reason": f"انتهى وقت التحضير المسموح. كان يمكن التحضير حتى {allowed_end_time.strftime('%H:%M')}",
             "status": "expired"
         }
     
-    # ضمن الوقت المسموح - يمكن التحضير أو التعديل
+    # يمكن التحضير
     time_remaining = int((allowed_end_time - now).total_seconds() / 60)
-    is_update = lecture.get("status") == LectureStatus.COMPLETED
     return {
         "can_take_attendance": True,
-        "reason": "يمكن تعديل الحضور" if is_update else "يمكن التحضير الآن",
+        "reason": "يمكن التحضير الآن",
         "status": "available",
         "minutes_remaining": time_remaining,
         "deadline": allowed_end_time.strftime("%H:%M")
@@ -4359,31 +4269,10 @@ async def record_attendance_session(
         raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")
     
     # === التحقق من قواعد التحضير ===
-    now = get_yemen_time()
-    
-    # إذا كان هذا تسجيل أوفلاين، استخدم وقت التسجيل الأصلي للتحقق
-    check_time = now
-    is_offline_sync = False
-    if session.offline_recorded_at:
-        try:
-            offline_time = datetime.fromisoformat(session.offline_recorded_at.replace('Z', '+00:00'))
-            if offline_time.tzinfo is None:
-                offline_time = offline_time.replace(tzinfo=YEMEN_TIMEZONE)
-            else:
-                offline_time = offline_time.astimezone(YEMEN_TIMEZONE)
-            # التحقق أن الوقت معقول (خلال آخر 48 ساعة)
-            if (now - offline_time).total_seconds() < 48 * 3600:
-                check_time = offline_time
-                is_offline_sync = True
-        except:
-            pass
-    
+    now = datetime.utcnow()
     lecture_date = datetime.strptime(lecture["date"], "%Y-%m-%d")
     lecture_start = datetime.strptime(f"{lecture['date']} {lecture['start_time']}", "%Y-%m-%d %H:%M")
     lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M")
-    # توحيد التوقيت
-    lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
-    lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
     
     # حساب مدة المحاضرة
     lecture_duration = (lecture_end - lecture_start).total_seconds() / 60  # بالدقائق
@@ -4391,22 +4280,27 @@ async def record_attendance_session(
     # الوقت المسموح به للتحضير = وقت نهاية المحاضرة + مدة المحاضرة
     allowed_end_time = lecture_end + timedelta(minutes=lecture_duration)
     
-    # التحقق: لا يُسمح بالتحضير قبل وقت بداية المحاضرة (مسموح 15 دقيقة مبكراً)
-    early_start_allowed = lecture_start - timedelta(minutes=15)
-    if check_time < early_start_allowed and not is_offline_sync:
+    # التحقق: لا يُسمح بالتحضير قبل وقت بداية المحاضرة
+    if now < lecture_start:
         raise HTTPException(
-            status_code=400,
-            detail=f"لم يحن وقت المحاضرة بعد. تبدأ الساعة {lecture_start.strftime('%H:%M')}"
+            status_code=400, 
+            detail=f"لا يمكن التحضير قبل وقت بداية المحاضرة ({lecture['start_time']})"
         )
     
     # التحقق: لا يُسمح بالتحضير بعد انتهاء الوقت المسموح
-    if check_time > allowed_end_time:
+    if now > allowed_end_time:
         raise HTTPException(
             status_code=400, 
             detail=f"انتهى وقت التحضير المسموح به. كان يمكن التحضير حتى {allowed_end_time.strftime('%H:%M')}"
         )
     
-    # السماح بالتعديل طالما نحن في الوقت المسموح (حتى لو تم التحضير مسبقاً)
+    # التحقق: إذا تم التحضير مسبقاً (المحاضرة مكتملة)، لا يُسمح بالتعديل
+    existing_attendance = await db.attendance.count_documents({"lecture_id": session.lecture_id})
+    if existing_attendance > 0 and lecture.get("status") == LectureStatus.COMPLETED:
+        raise HTTPException(
+            status_code=400, 
+            detail="تم تسجيل الحضور لهذه المحاضرة مسبقاً ولا يمكن التعديل عليه"
+        )
     # === نهاية التحقق من القواعد ===
     
     # Delete existing attendance for this lecture (فقط إذا لم تكن مكتملة)
@@ -4419,11 +4313,11 @@ async def record_attendance_session(
             "course_id": lecture["course_id"],
             "student_id": record.student_id,
             "status": record.status,
-            "date": get_yemen_time(),
+            "date": datetime.utcnow(),
             "recorded_by": current_user["id"],
             "method": "manual",
             "notes": session.notes,
-            "created_at": get_yemen_time()
+            "created_at": datetime.utcnow()
         }
         attendance_records.append(att_record)
     
@@ -4442,9 +4336,6 @@ async def record_attendance_session(
     )
     
     return {"message": f"تم تسجيل حضور {len(attendance_records)} طالب بنجاح"}
-
-    # TODO: Send push notifications after attendance (background task)
-    # This will be triggered when we have enough FCM tokens registered
 
 @api_router.post("/attendance/single")
 async def record_single_attendance(
@@ -4479,11 +4370,11 @@ async def record_single_attendance(
         "course_id": lecture["course_id"],
         "student_id": data.student_id,
         "status": data.status,
-        "date": get_yemen_time(),
+        "date": datetime.utcnow(),
         "recorded_by": current_user["id"],
         "method": data.method,
         "notes": data.notes,
-        "created_at": get_yemen_time()
+        "created_at": datetime.utcnow()
     }
     
     await db.attendance.insert_one(att_record)
@@ -4663,13 +4554,13 @@ async def sync_offline_attendance(
                 "course_id": record["course_id"],
                 "student_id": record["student_id"],
                 "status": record.get("status", AttendanceStatus.PRESENT),
-                "date": datetime.fromisoformat(record["date"]) if record.get("date") else get_yemen_time(),
+                "date": datetime.fromisoformat(record["date"]) if record.get("date") else datetime.utcnow(),
                 "recorded_by": current_user["id"],
                 "method": record.get("method", "manual"),
                 "notes": record.get("notes"),
                 "local_id": record.get("local_id"),
-                "created_at": get_yemen_time(),
-                "synced_at": get_yemen_time()
+                "created_at": datetime.utcnow(),
+                "synced_at": datetime.utcnow()
             }
             
             await db.attendance.insert_one(att_record)
@@ -4752,7 +4643,7 @@ async def get_summary_report(current_user: dict = Depends(get_current_user)):
     total_departments = await db.departments.count_documents({})
     
     # Get today's attendance (only from active lectures)
-    today_start = get_yemen_time().replace(hour=0, minute=0, second=0, microsecond=0)
+    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     today_records = await db.attendance.find({"date": {"$gte": today_start}}).to_list(10000)
     
     # جلب جميع المحاضرات الفعّالة
@@ -4856,7 +4747,7 @@ async def get_absent_students_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير الطلاب المتغيبين - الذين تجاوزوا نسبة غياب معينة"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_ABSENT_STUDENTS):
+    if not has_permission(current_user, Permission.VIEW_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب المقررات
@@ -4865,14 +4756,6 @@ async def get_absent_students_report(
         course_query["department_id"] = department_id
     if course_id:
         course_query["_id"] = ObjectId(course_id)
-    
-    # المعلم يرى مقرراته فقط
-    if current_user["role"] == UserRole.TEACHER:
-        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
-        if teacher_record:
-            course_query["teacher_id"] = str(teacher_record["_id"])
-        else:
-            return {"students": [], "total_count": 0, "min_absence_rate_filter": min_absence_rate}
     
     courses = await db.courses.find(course_query).to_list(100)
     
@@ -5018,7 +4901,7 @@ async def get_daily_report(
     if date:
         report_date = datetime.fromisoformat(date)
     else:
-        report_date = get_yemen_time()
+        report_date = datetime.utcnow()
     
     day_start = report_date.replace(hour=0, minute=0, second=0, microsecond=0)
     day_end = day_start + timedelta(days=1)
@@ -5170,18 +5053,12 @@ async def get_course_detailed_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير المقرر التفصيلي - تحليل كامل لمقرر معين"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_COURSE):
+    if not has_permission(current_user, Permission.VIEW_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
-    
-    # المعلم يرى مقرراته فقط
-    if current_user["role"] == UserRole.TEACHER:
-        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
-        if not teacher_record or course.get("teacher_id") != str(teacher_record["_id"]):
-            raise HTTPException(status_code=403, detail="هذا المقرر ليس من مقرراتك")
     
     # جلب المعلم
     teacher_name = None
@@ -5260,182 +5137,6 @@ async def get_course_detailed_report(
         }
     }
 
-@api_router.get("/reports/teacher-summary")
-async def get_teacher_summary_report(
-    teacher_id: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """تقرير ملخص المعلم - جميع مقرراته مع نسب الحضور"""
-    # المعلم يرى بياناته فقط
-    if current_user["role"] == UserRole.TEACHER:
-        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
-        if teacher_record:
-            teacher_id = str(teacher_record["_id"])
-        else:
-            raise HTTPException(status_code=404, detail="لم يتم العثور على سجل المعلم")
-    elif not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    # جلب بيانات المعلم
-    if teacher_id:
-        teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
-    else:
-        raise HTTPException(status_code=400, detail="يجب تحديد المعلم")
-    
-    if not teacher:
-        raise HTTPException(status_code=404, detail="المعلم غير موجود")
-    
-    # جلب مقررات المعلم
-    courses = await db.courses.find({"teacher_id": teacher_id, "is_active": True}).to_list(50)
-    
-    courses_summary = []
-    total_students = 0
-    total_lectures_count = 0
-    total_present = 0
-    total_absent = 0
-    total_late = 0
-    total_records = 0
-    
-    for course in courses:
-        cid = str(course["_id"])
-        
-        # المحاضرات الفعالة
-        active_lecture_ids = await get_active_lecture_ids(cid)
-        lectures_count = len(active_lecture_ids)
-        
-        # المحاضرات المنعقدة فعلياً
-        held_lectures = await db.lectures.count_documents({
-            "_id": {"$in": [ObjectId(lid) for lid in active_lecture_ids]},
-            "status": {"$in": ["held", "completed"]}
-        }) if active_lecture_ids else 0
-        
-        # عدد الطلاب المسجلين
-        enrollments = await db.enrollments.find({"course_id": cid}).to_list(1000)
-        students_count = len(enrollments)
-        total_students += students_count
-        total_lectures_count += lectures_count
-        
-        # إحصائيات الحضور
-        attendance_records = await db.attendance.find({
-            "course_id": cid,
-            "lecture_id": {"$in": list(active_lecture_ids)}
-        }).to_list(10000) if active_lecture_ids else []
-        
-        present = sum(1 for r in attendance_records if r["status"] == AttendanceStatus.PRESENT)
-        absent = sum(1 for r in attendance_records if r["status"] == AttendanceStatus.ABSENT)
-        late = sum(1 for r in attendance_records if r["status"] == AttendanceStatus.LATE)
-        course_total = len(attendance_records)
-        
-        total_present += present
-        total_absent += absent
-        total_late += late
-        total_records += course_total
-        
-        attendance_rate = round((present + late * 0.5) / course_total * 100, 1) if course_total > 0 else 0
-        
-        # جلب اسم القسم
-        dept_name = ""
-        if course.get("department_id"):
-            dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
-            if dept:
-                dept_name = dept.get("name", "")
-        
-        courses_summary.append({
-            "course_id": cid,
-            "course_name": course["name"],
-            "course_code": course.get("code", ""),
-            "department_name": dept_name,
-            "level": course.get("level", ""),
-            "section": course.get("section", ""),
-            "students_count": students_count,
-            "total_lectures": lectures_count,
-            "held_lectures": held_lectures,
-            "present_count": present,
-            "absent_count": absent,
-            "late_count": late,
-            "attendance_rate": attendance_rate
-        })
-    
-    # ترتيب حسب نسبة الحضور
-    courses_summary.sort(key=lambda x: x["attendance_rate"], reverse=True)
-    
-    overall_rate = round((total_present + total_late * 0.5) / total_records * 100, 1) if total_records > 0 else 0
-    
-    return {
-        "teacher": {
-            "id": teacher_id,
-            "full_name": teacher.get("full_name", ""),
-            "teacher_id": teacher.get("teacher_id", ""),
-            "phone": teacher.get("phone", ""),
-            "email": teacher.get("email", "")
-        },
-        "courses": courses_summary,
-        "summary": {
-            "total_courses": len(courses_summary),
-            "total_students": total_students,
-            "total_lectures": total_lectures_count,
-            "total_present": total_present,
-            "total_absent": total_absent,
-            "total_late": total_late,
-            "overall_attendance_rate": overall_rate
-        }
-    }
-
-@api_router.get("/export/report/teacher-summary/excel")
-async def export_teacher_summary_excel(
-    teacher_id: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """تصدير تقرير ملخص المعلم إلى Excel"""
-    if not has_permission(current_user, Permission.EXPORT_REPORTS):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    report = await get_teacher_summary_report(teacher_id, current_user)
-    
-    output = BytesIO()
-    with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        # ورقة الملخص
-        summary_data = [{
-            "المعلم": report["teacher"]["full_name"],
-            "الرقم الوظيفي": report["teacher"]["teacher_id"],
-            "عدد المقررات": report["summary"]["total_courses"],
-            "إجمالي الطلاب": report["summary"]["total_students"],
-            "إجمالي المحاضرات": report["summary"]["total_lectures"],
-            "نسبة الحضور العامة %": report["summary"]["overall_attendance_rate"]
-        }]
-        pd.DataFrame(summary_data).to_excel(writer, sheet_name="الملخص", index=False)
-        
-        # ورقة المقررات
-        courses_data = []
-        for idx, c in enumerate(report["courses"], 1):
-            courses_data.append({
-                "#": idx,
-                "المقرر": c["course_name"],
-                "الرمز": c["course_code"],
-                "القسم": c["department_name"],
-                "المستوى": c["level"],
-                "الشعبة": c["section"],
-                "الطلاب": c["students_count"],
-                "المحاضرات": c["total_lectures"],
-                "المنعقدة": c["held_lectures"],
-                "حاضر": c["present_count"],
-                "غائب": c["absent_count"],
-                "متأخر": c["late_count"],
-                "نسبة الحضور %": c["attendance_rate"]
-            })
-        if courses_data:
-            pd.DataFrame(courses_data).to_excel(writer, sheet_name="المقررات", index=False)
-    
-    output.seek(0)
-    teacher_name = report["teacher"]["full_name"].replace(" ", "_")
-    return StreamingResponse(
-        output,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=teacher_summary_{teacher_name}.xlsx"}
-    )
-
-
-
 @api_router.get("/reports/teacher-workload")
 async def get_teacher_workload_report(
     teacher_id: Optional[str] = None,
@@ -5444,21 +5145,13 @@ async def get_teacher_workload_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير نصاب المدرس - كم نصابه، كم درسها فعلياً، كم ساعات زائدة"""
-    # السماح للمعلم بالوصول لتقريره الخاص
-    if current_user["role"] == UserRole.TEACHER:
-        # المعلم يرى تقريره فقط
-        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
-        if teacher_record:
-            teacher_id = str(teacher_record["_id"])
-        else:
-            raise HTTPException(status_code=404, detail="لم يتم العثور على سجل المعلم")
-    elif not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
+    if not has_permission(current_user, Permission.VIEW_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # تحديد الفترة
     if not start_date or not end_date:
         # افتراضي: الشهر الحالي
-        today = get_yemen_time()
+        today = datetime.utcnow()
         start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
         end = (start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
     else:
@@ -5744,7 +5437,7 @@ async def export_daily_excel(
     df.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
     
-    report_date = date or get_yemen_time().strftime("%Y-%m-%d")
+    report_date = date or datetime.utcnow().strftime("%Y-%m-%d")
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -5901,345 +5594,6 @@ async def export_attendance_overview_excel(
         headers={"Content-Disposition": f"attachment; filename=attendance_overview.xlsx"}
     )
 
-# ==================== Semester Report PDF ====================
-
-@api_router.get("/export/semester-report/pdf")
-async def export_semester_report_pdf(
-    course_id: Optional[str] = None,
-    department_id: Optional[str] = None,
-    current_user: dict = Depends(get_current_user)
-):
-    """تقرير PDF شامل للفصل الدراسي - جميع المقررات أو مقرر محدد"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    from reportlab.lib.pagesizes import A4
-    from reportlab.lib import colors
-    from reportlab.lib.units import mm
-    from reportlab.pdfgen import canvas
-    from reportlab.pdfbase import pdfmetrics
-    from reportlab.pdfbase.ttfonts import TTFont
-    from bidi.algorithm import get_display
-    import arabic_reshaper
-    
-    # Arabic font
-    font_path = Path(__file__).parent / "fonts" / "Amiri-Regular.ttf"
-    if font_path.exists():
-        try:
-            pdfmetrics.registerFont(TTFont('Amiri', str(font_path)))
-        except:
-            pass
-        arabic_font = 'Amiri'
-    else:
-        arabic_font = 'Helvetica'
-    
-    def draw_arabic(c, text, x, y, font_name=arabic_font, font_size=12):
-        reshaped = arabic_reshaper.reshape(str(text))
-        bidi_text = get_display(reshaped)
-        c.setFont(font_name, font_size)
-        c.drawRightString(x, y, bidi_text)
-    
-    def draw_arabic_left(c, text, x, y, font_name=arabic_font, font_size=12):
-        reshaped = arabic_reshaper.reshape(str(text))
-        bidi_text = get_display(reshaped)
-        c.setFont(font_name, font_size)
-        c.drawString(x, y, bidi_text)
-    
-    # جلب المقررات
-    course_query = {"is_active": True}
-    if course_id:
-        course_query["_id"] = ObjectId(course_id)
-    if department_id:
-        course_query["department_id"] = department_id
-    
-    courses_list = await db.courses.find(course_query).to_list(200)
-    if not courses_list:
-        raise HTTPException(status_code=404, detail="لا توجد مقررات")
-    
-    # جلب بيانات الأقسام والمعلمين
-    dept_cache = {}
-    teacher_cache = {}
-    
-    buffer = BytesIO()
-    width, height = A4
-    c_pdf = canvas.Canvas(buffer, pagesize=A4)
-    
-    now = get_yemen_time()
-    
-    # =================== صفحة الغلاف ===================
-    y = height - 80
-    draw_arabic(c_pdf, "جامعة الأحقاف", width - 30, y, font_size=24)
-    y -= 35
-    draw_arabic(c_pdf, "تقرير الفصل الدراسي الشامل", width - 30, y, font_size=20)
-    y -= 10
-    c_pdf.setStrokeColor(colors.HexColor("#1565c0"))
-    c_pdf.setLineWidth(2)
-    c_pdf.line(30, y, width - 30, y)
-    y -= 30
-    
-    draw_arabic(c_pdf, f"تاريخ التقرير: {now.strftime('%Y-%m-%d %H:%M')}", width - 30, y, font_size=12)
-    y -= 22
-    draw_arabic(c_pdf, f"عدد المقررات: {len(courses_list)}", width - 30, y, font_size=12)
-    y -= 22
-    
-    if department_id:
-        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
-        if dept:
-            draw_arabic(c_pdf, f"القسم: {dept.get('name', '')}", width - 30, y, font_size=12)
-            y -= 22
-            if dept.get("college"):
-                draw_arabic(c_pdf, f"الكلية: {dept['college']}", width - 30, y, font_size=12)
-                y -= 22
-    
-    # ملخص عام
-    y -= 20
-    total_lectures_all = 0
-    total_completed_all = 0
-    total_absent_all = 0
-    total_cancelled_all = 0
-    total_students_all = set()
-    
-    for course in courses_list:
-        cid = str(course["_id"])
-        lectures = await db.lectures.find({"course_id": cid}).to_list(500)
-        total_lectures_all += len(lectures)
-        total_completed_all += sum(1 for l in lectures if l.get("status") == LectureStatus.COMPLETED)
-        total_absent_all += sum(1 for l in lectures if l.get("status") == LectureStatus.ABSENT)
-        total_cancelled_all += sum(1 for l in lectures if l.get("status") == LectureStatus.CANCELLED)
-        enrollments = await db.enrollments.find({"course_id": cid}).to_list(1000)
-        for e in enrollments:
-            total_students_all.add(e["student_id"])
-    
-    c_pdf.setFillColor(colors.HexColor("#e3f2fd"))
-    c_pdf.roundRect(30, y - 80, width - 60, 90, 8, fill=1, stroke=0)
-    c_pdf.setFillColor(colors.black)
-    y -= 15
-    draw_arabic(c_pdf, "ملخص عام", width - 40, y, font_size=14)
-    y -= 22
-    draw_arabic(c_pdf, f"إجمالي المحاضرات: {total_lectures_all}          المنعقدة: {total_completed_all}          الغائب: {total_absent_all}          الملغاة: {total_cancelled_all}", width - 40, y, font_size=11)
-    y -= 22
-    scheduled_all = total_lectures_all - total_completed_all - total_absent_all - total_cancelled_all
-    draw_arabic(c_pdf, f"المجدولة: {scheduled_all}          إجمالي الطلاب: {len(total_students_all)}", width - 40, y, font_size=11)
-    
-    c_pdf.showPage()
-    
-    # =================== تفاصيل كل مقرر ===================
-    for course_idx, course in enumerate(courses_list):
-        cid = str(course["_id"])
-        
-        # جلب المعلم
-        teacher_name = ""
-        if course.get("teacher_id"):
-            if course["teacher_id"] not in teacher_cache:
-                try:
-                    t = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
-                    teacher_cache[course["teacher_id"]] = t.get("full_name", "") if t else ""
-                except:
-                    teacher_cache[course["teacher_id"]] = ""
-            teacher_name = teacher_cache[course["teacher_id"]]
-        
-        # جلب القسم
-        dept_name = ""
-        college_name = ""
-        if course.get("department_id"):
-            if course["department_id"] not in dept_cache:
-                try:
-                    d = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
-                    dept_cache[course["department_id"]] = d if d else {}
-                except:
-                    dept_cache[course["department_id"]] = {}
-            dept_obj = dept_cache[course["department_id"]]
-            dept_name = dept_obj.get("name", "")
-            college_name = dept_obj.get("college", "")
-        
-        # جلب المحاضرات
-        lectures = await db.lectures.find({"course_id": cid}).sort("date", 1).to_list(500)
-        active_lectures = [l for l in lectures if l.get("status") != LectureStatus.CANCELLED]
-        
-        # إحصائيات المحاضرات
-        completed_count = sum(1 for l in lectures if l.get("status") == LectureStatus.COMPLETED)
-        absent_count = sum(1 for l in lectures if l.get("status") == LectureStatus.ABSENT)
-        cancelled_count = sum(1 for l in lectures if l.get("status") == LectureStatus.CANCELLED)
-        scheduled_count = sum(1 for l in lectures if l.get("status") == LectureStatus.SCHEDULED)
-        
-        # جلب الطلاب
-        enrollments = await db.enrollments.find({"course_id": cid}).to_list(1000)
-        student_ids = [ObjectId(e["student_id"]) for e in enrollments]
-        students = await db.students.find({"_id": {"$in": student_ids}}).to_list(1000) if student_ids else []
-        
-        active_lecture_ids = {str(l["_id"]) for l in active_lectures}
-        
-        # =================== رأس صفحة المقرر ===================
-        y = height - 40
-        c_pdf.setFillColor(colors.HexColor("#1565c0"))
-        c_pdf.roundRect(30, y - 15, width - 60, 35, 5, fill=1, stroke=0)
-        c_pdf.setFillColor(colors.white)
-        draw_arabic(c_pdf, f"المقرر {course_idx + 1}/{len(courses_list)}: {course['name']} ({course.get('code', '')})", width - 40, y, font_size=14)
-        c_pdf.setFillColor(colors.black)
-        
-        y -= 40
-        if teacher_name:
-            draw_arabic(c_pdf, f"المعلم: {teacher_name}", width - 30, y, font_size=11)
-            y -= 20
-        
-        info_parts = []
-        if course.get("level"):
-            info_parts.append(f"المستوى: {course['level']}")
-        if course.get("section"):
-            info_parts.append(f"الشعبة: {course['section']}")
-        if dept_name:
-            info_parts.append(f"القسم: {dept_name}")
-        if college_name:
-            info_parts.append(f"الكلية: {college_name}")
-        if info_parts:
-            draw_arabic(c_pdf, "          ".join(info_parts), width - 30, y, font_size=10)
-            y -= 20
-        
-        # إحصائيات المحاضرات
-        y -= 5
-        c_pdf.setFillColor(colors.HexColor("#f5f5f5"))
-        c_pdf.roundRect(30, y - 20, width - 60, 35, 5, fill=1, stroke=0)
-        c_pdf.setFillColor(colors.black)
-        draw_arabic(c_pdf, f"المحاضرات: {len(lectures)}     منعقدة: {completed_count}     غائب: {absent_count}     ملغاة: {cancelled_count}     مجدولة: {scheduled_count}     الطلاب: {len(students)}", width - 40, y, font_size=10)
-        
-        # =================== جدول الطلاب ===================
-        y -= 45
-        if students:
-            # حساب حضور كل طالب
-            students_data = []
-            for student in students:
-                sid = str(student["_id"])
-                records = await db.attendance.find({
-                    "student_id": sid,
-                    "course_id": cid,
-                    "lecture_id": {"$in": list(active_lecture_ids)}
-                }).to_list(1000)
-                
-                present = sum(1 for r in records if r["status"] == AttendanceStatus.PRESENT)
-                absent_s = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
-                excused = sum(1 for r in records if r["status"] == AttendanceStatus.EXCUSED)
-                late = sum(1 for r in records if r.get("status") == AttendanceStatus.LATE)
-                total_active = len(active_lecture_ids) if active_lecture_ids else 1
-                rate = round((present + late * 0.5) / total_active * 100, 1) if total_active > 0 else 0
-                
-                students_data.append({
-                    "name": student.get("full_name", ""),
-                    "student_id": student.get("student_id", ""),
-                    "present": present,
-                    "absent": absent_s,
-                    "excused": excused,
-                    "late": late,
-                    "rate": rate
-                })
-            
-            students_data.sort(key=lambda x: x["rate"], reverse=True)
-            
-            # Table header
-            c_pdf.setFillColor(colors.HexColor("#1565c0"))
-            c_pdf.roundRect(30, y - 8, width - 60, 25, 3, fill=1, stroke=0)
-            c_pdf.setFillColor(colors.white)
-            
-            col_rate = 50
-            col_late = 95
-            col_excused = 140
-            col_absent = 185
-            col_present = 235
-            col_sid = 310
-            col_name = width - 40
-            col_num = width - 20
-            
-            c_pdf.setFont(arabic_font, 9)
-            for label, x in [("النسبة", col_rate), ("متأخر", col_late), ("معذور", col_excused), ("غائب", col_absent), ("حاضر", col_present)]:
-                reshaped = arabic_reshaper.reshape(label)
-                c_pdf.drawString(x - 15, y, get_display(reshaped))
-            
-            reshaped = arabic_reshaper.reshape("الرقم")
-            c_pdf.drawString(col_sid - 15, y, get_display(reshaped))
-            reshaped = arabic_reshaper.reshape("الاسم")
-            c_pdf.drawRightString(col_name, y, get_display(reshaped))
-            reshaped = arabic_reshaper.reshape("#")
-            c_pdf.drawRightString(col_num, y, get_display(reshaped))
-            
-            y -= 26
-            c_pdf.setFillColor(colors.black)
-            
-            for i, sd in enumerate(students_data):
-                if y < 60:
-                    c_pdf.showPage()
-                    y = height - 40
-                    # إعادة رسم العنوان
-                    draw_arabic(c_pdf, f"{course['name']} ({course.get('code', '')}) - تابع", width - 30, y, font_size=12)
-                    y -= 30
-                
-                if i % 2 == 0:
-                    c_pdf.setFillColor(colors.HexColor("#fafafa"))
-                    c_pdf.rect(30, y - 6, width - 60, 20, fill=1, stroke=0)
-                    c_pdf.setFillColor(colors.black)
-                
-                c_pdf.setFont(arabic_font, 9)
-                
-                # Row number
-                reshaped = arabic_reshaper.reshape(str(i + 1))
-                c_pdf.drawRightString(col_num, y, get_display(reshaped))
-                
-                # Student name
-                draw_arabic(c_pdf, sd["name"], col_name, y, font_size=9)
-                
-                # Student ID
-                c_pdf.drawString(col_sid - 15, y, str(sd["student_id"]))
-                
-                # Counts
-                c_pdf.setFont(arabic_font, 9)
-                c_pdf.drawString(col_present, y, str(sd["present"]))
-                c_pdf.drawString(col_absent, y, str(sd["absent"]))
-                c_pdf.drawString(col_excused, y, str(sd["excused"]))
-                c_pdf.drawString(col_late, y, str(sd["late"]))
-                
-                # Rate with color
-                rate_color = "#4caf50" if sd["rate"] >= 75 else "#ff9800" if sd["rate"] >= 50 else "#f44336"
-                c_pdf.setFillColor(colors.HexColor(rate_color))
-                c_pdf.drawString(col_rate - 5, y, f"{sd['rate']}%")
-                c_pdf.setFillColor(colors.black)
-                
-                y -= 20
-        else:
-            draw_arabic(c_pdf, "لا يوجد طلاب مسجلين في هذا المقرر", width - 30, y, font_size=11)
-            y -= 20
-        
-        # فاصل بين المقررات
-        if course_idx < len(courses_list) - 1:
-            c_pdf.showPage()
-    
-    # =================== الصفحة الأخيرة - التوقيع ===================
-    y -= 30
-    if y < 100:
-        c_pdf.showPage()
-        y = height - 60
-    
-    c_pdf.setStrokeColor(colors.HexColor("#e0e0e0"))
-    c_pdf.setLineWidth(0.5)
-    c_pdf.line(30, y, width - 30, y)
-    y -= 20
-    draw_arabic(c_pdf, f"تم إنشاء التقرير في: {now.strftime('%Y-%m-%d %H:%M')} (توقيت اليمن)", width - 30, y, font_size=9)
-    y -= 30
-    c_pdf.setStrokeColor(colors.HexColor("#333"))
-    c_pdf.setLineWidth(0.8)
-    c_pdf.line(width - 200, y, width - 30, y)
-    y -= 14
-    draw_arabic(c_pdf, "توقيع المسؤول", width - 30, y, font_size=9)
-    
-    c_pdf.save()
-    buffer.seek(0)
-    
-    filename = f"تقرير_الفصل_{now.strftime('%Y%m%d')}.pdf"
-    from urllib.parse import quote
-    encoded_filename = quote(filename)
-    return StreamingResponse(
-        buffer,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
-    )
-
 # ==================== Initialize Admin ====================
 
 @api_router.post("/init-admin")
@@ -6255,7 +5609,7 @@ async def init_admin():
         "full_name": "مدير النظام",
         "role": UserRole.ADMIN,
         "email": "admin@sharia.edu",
-        "created_at": get_yemen_time(),
+        "created_at": datetime.utcnow(),
         "is_active": True
     }
     
@@ -6279,7 +5633,7 @@ async def reset_admin():
             "full_name": "مدير النظام",
             "role": "admin",
             "email": "admin@sharia.edu",
-            "created_at": get_yemen_time(),
+            "created_at": datetime.utcnow(),
             "is_active": True,
             "permissions": [
                 "manage_users", "manage_departments", "manage_courses",
@@ -6317,7 +5671,7 @@ async def create_schedule(schedule: ScheduleCreate, current_user: dict = Depends
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     schedule_dict = schedule.dict()
-    schedule_dict["created_at"] = get_yemen_time()
+    schedule_dict["created_at"] = datetime.utcnow()
     
     result = await db.schedule.insert_one(schedule_dict)
     schedule_dict["id"] = str(result.inserted_id)
@@ -6400,7 +5754,7 @@ async def get_today_schedule(current_user: dict = Depends(get_current_user)):
         0: 'monday', 1: 'tuesday', 2: 'wednesday', 
         3: 'thursday', 4: 'friday', 5: 'saturday', 6: 'sunday'
     }
-    today = days_map[get_yemen_time().weekday()]
+    today = days_map[datetime.utcnow().weekday()]
     
     query = {"day": today}
     
@@ -6430,33 +5784,6 @@ async def get_today_schedule(current_user: dict = Depends(get_current_user)):
     return result
 
 # ==================== Import/Export Routes ====================
-
-@api_router.post("/students/import-preview/{course_id}")
-async def preview_import_students(
-    course_id: str,
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
-):
-    """Preview students from Excel file before importing"""
-    try:
-        contents = await file.read()
-        df = pd.read_excel(BytesIO(contents))
-        
-        column_mapping = {
-            'رقم القيد': 'student_id', 'الرقم الجامعي': 'student_id', 'رقم الطالب': 'student_id',
-            'اسم الطالب': 'full_name', 'الاسم': 'full_name', 'الاسم الكامل': 'full_name',
-        }
-        df = df.rename(columns=column_mapping)
-        
-        total = len(df)
-        names = []
-        if 'full_name' in df.columns:
-            names = df['full_name'].dropna().head(10).tolist()
-        
-        return {"total": total, "sample_names": names, "columns": list(df.columns)}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=f"فشل قراءة الملف: {str(e)}")
-
 
 @api_router.post("/students/import/{course_id}")
 async def import_students_to_course(
@@ -6518,13 +5845,13 @@ async def import_students_to_course(
                     student_data = {
                         "student_id": student_id_str,
                         "full_name": str(row['full_name']),
-                        "department_id": course.get("department_id", ""),
-                        "level": course.get("level", 1),
-                        "section": course.get("section", ""),
+                        "department_id": course["department_id"],
+                        "level": course["level"],
+                        "section": course["section"],
                         "phone": str(row.get('phone', '')) if pd.notna(row.get('phone')) else None,
                         "email": str(row.get('email', '')) if pd.notna(row.get('email')) else None,
                         "qr_code": generate_qr_code(student_id_str),
-                        "created_at": get_yemen_time(),
+                        "created_at": datetime.utcnow(),
                         "is_active": True,
                         "user_id": None
                     }
@@ -6545,7 +5872,7 @@ async def import_students_to_course(
                     await db.enrollments.insert_one({
                         "student_id": student_db_id,
                         "course_id": course_id,
-                        "enrolled_at": get_yemen_time(),
+                        "enrolled_at": datetime.utcnow(),
                         "is_active": True
                     })
                     enrolled += 1
@@ -6654,7 +5981,7 @@ async def import_students_from_excel(
                     "phone": str(row.get('phone', '')) if pd.notna(row.get('phone')) else None,
                     "email": str(row.get('email', '')) if pd.notna(row.get('email')) else None,
                     "qr_code": generate_qr_code(str(row['student_id'])),
-                    "created_at": get_yemen_time(),
+                    "created_at": datetime.utcnow(),
                     "is_active": True,
                     "user_id": None
                 }
@@ -7286,7 +6613,7 @@ async def get_all_semesters(
             "end_date": sem.get("end_date"),
             "status": sem.get("status", SemesterStatus.UPCOMING),
             "courses_count": courses_count,
-            "created_at": sem.get("created_at", get_yemen_time()),
+            "created_at": sem.get("created_at", datetime.utcnow()),
             "closed_at": sem.get("closed_at"),
             "archived_at": sem.get("archived_at"),
         })
@@ -7308,7 +6635,7 @@ async def create_semester(data: SemesterCreate, current_user: dict = Depends(get
         raise HTTPException(status_code=400, detail="يوجد فصل بهذا الاسم في هذه السنة")
     
     semester_dict = data.dict()
-    semester_dict["created_at"] = get_yemen_time()
+    semester_dict["created_at"] = datetime.utcnow()
     semester_dict["created_by"] = current_user["id"]
     
     result = await db.semesters.insert_one(semester_dict)
@@ -7353,12 +6680,12 @@ async def update_semester(semester_id: str, data: SemesterUpdate, current_user: 
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     if update_data:
-        update_data["updated_at"] = get_yemen_time()
+        update_data["updated_at"] = datetime.utcnow()
         await db.semesters.update_one({"_id": ObjectId(semester_id)}, {"$set": update_data})
         
         # إذا كان الفصل نشطاً، قم بتحديث الإعدادات أيضاً
         if semester.get("status") == SemesterStatus.ACTIVE:
-            settings_update = {"updated_at": get_yemen_time()}
+            settings_update = {"updated_at": datetime.utcnow()}
             
             if data.name:
                 settings_update["current_semester"] = data.name
@@ -7393,7 +6720,7 @@ async def activate_semester(semester_id: str, current_user: dict = Depends(get_c
     # إلغاء تفعيل الفصل الحالي
     await db.semesters.update_many(
         {"status": SemesterStatus.ACTIVE},
-        {"$set": {"status": SemesterStatus.CLOSED, "closed_at": get_yemen_time()}}
+        {"$set": {"status": SemesterStatus.CLOSED, "closed_at": datetime.utcnow()}}
     )
     
     # تفعيل الفصل الجديد
@@ -7407,7 +6734,7 @@ async def activate_semester(semester_id: str, current_user: dict = Depends(get_c
         "current_semester_id": semester_id,
         "current_semester": semester["name"],
         "academic_year": semester["academic_year"],
-        "updated_at": get_yemen_time()
+        "updated_at": datetime.utcnow()
     }
     
     # إضافة تواريخ الفصل إذا كانت موجودة
@@ -7439,7 +6766,7 @@ async def close_semester(semester_id: str, current_user: dict = Depends(get_curr
     
     await db.semesters.update_one(
         {"_id": ObjectId(semester_id)},
-        {"$set": {"status": SemesterStatus.CLOSED, "closed_at": get_yemen_time()}}
+        {"$set": {"status": SemesterStatus.CLOSED, "closed_at": datetime.utcnow()}}
     )
     
     return {"message": "تم إغلاق الفصل الدراسي بنجاح"}
@@ -7476,7 +6803,7 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
         "attendance_records": attendance_records,
         "courses_count": len(courses),
         "attendance_count": len(attendance_records),
-        "archived_at": get_yemen_time(),
+        "archived_at": datetime.utcnow(),
         "archived_by": current_user["id"]
     }
     
@@ -7487,7 +6814,7 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
         {"_id": ObjectId(semester_id)},
         {"$set": {
             "status": SemesterStatus.ARCHIVED,
-            "archived_at": get_yemen_time(),
+            "archived_at": datetime.utcnow(),
             "archive_stats": {
                 "courses_count": len(courses),
                 "attendance_count": len(attendance_records)
@@ -7559,8 +6886,8 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
         # إنشاء إعدادات افتراضية
         default_settings = SystemSettings().dict()
         default_settings["_id"] = "system_settings"
-        default_settings["created_at"] = get_yemen_time()
-        default_settings["updated_at"] = get_yemen_time()
+        default_settings["created_at"] = datetime.utcnow()
+        default_settings["updated_at"] = datetime.utcnow()
         # إضافة سنوات افتراضية
         current_year = datetime.now().year
         default_settings["academic_years"] = [f"{current_year-1}-{current_year}", f"{current_year}-{current_year+1}"]
@@ -7570,51 +6897,32 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
     # جلب تواريخ الفصل من الفصل النشط إذا لم تكن في الإعدادات
     semester_start = settings.get("semester_start_date")
     semester_end = settings.get("semester_end_date")
-    current_semester_id = settings.get("current_semester_id")
-    current_semester_name = settings.get("current_semester", "الفصل الأول")
-    academic_year = settings.get("academic_year", "2024-2025")
     
-    # محاولة جلب البيانات من الفصل النشط إذا كانت ناقصة
-    if not semester_start or not semester_end or not current_semester_id:
+    if not semester_start or not semester_end:
+        # محاولة جلب التواريخ من الفصل النشط
         active_semester = await db.semesters.find_one({"status": SemesterStatus.ACTIVE})
-        if not active_semester:
-            # محاولة البحث عن أي فصل غير مؤرشف
-            active_semester = await db.semesters.find_one({"status": {"$ne": "archived"}})
-        
         if active_semester:
             semester_start = semester_start or active_semester.get("start_date")
             semester_end = semester_end or active_semester.get("end_date")
             
-            # تحديث الإعدادات تلقائياً
-            update_fields = {}
-            if not current_semester_id:
-                current_semester_id = str(active_semester["_id"])
-                update_fields["current_semester_id"] = current_semester_id
-            if not settings.get("current_semester"):
-                current_semester_name = active_semester.get("name", current_semester_name)
-                update_fields["current_semester"] = current_semester_name
-            if active_semester.get("academic_year") and not settings.get("academic_year"):
-                academic_year = active_semester["academic_year"]
-                update_fields["academic_year"] = academic_year
-            if active_semester.get("start_date") and not settings.get("semester_start_date"):
-                update_fields["semester_start_date"] = active_semester["start_date"]
-            if active_semester.get("end_date") and not settings.get("semester_end_date"):
-                update_fields["semester_end_date"] = active_semester["end_date"]
-            
-            if update_fields:
-                update_fields["updated_at"] = get_yemen_time()
-                await db.settings.update_one(
-                    {"_id": "system_settings"},
-                    {"$set": update_fields},
-                    upsert=True
-                )
+            # تحديث الإعدادات للمرة القادمة
+            if active_semester.get("start_date") or active_semester.get("end_date"):
+                update_fields = {}
+                if active_semester.get("start_date") and not settings.get("semester_start_date"):
+                    update_fields["semester_start_date"] = active_semester["start_date"]
+                if active_semester.get("end_date") and not settings.get("semester_end_date"):
+                    update_fields["semester_end_date"] = active_semester["end_date"]
+                if update_fields:
+                    await db.settings.update_one(
+                        {"_id": "system_settings"},
+                        {"$set": update_fields}
+                    )
     
     return {
         "college_name": settings.get("college_name", "كلية الشريعة والقانون"),
         "college_name_en": settings.get("college_name_en", "Faculty of Sharia and Law"),
-        "academic_year": academic_year,
-        "current_semester": current_semester_name,
-        "current_semester_id": current_semester_id,
+        "academic_year": settings.get("academic_year", "2024-2025"),
+        "current_semester": settings.get("current_semester", "الفصل الأول"),
         "semester_start_date": semester_start,
         "semester_end_date": semester_end,
         "levels_count": settings.get("levels_count", 5),
@@ -7635,7 +6943,7 @@ async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الإعدادات")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
-    update_data["updated_at"] = get_yemen_time()
+    update_data["updated_at"] = datetime.utcnow()
     
     await db.settings.update_one(
         {"_id": "system_settings"},
@@ -7880,7 +7188,7 @@ async def update_my_institution(data: dict = Body(...), current_user: dict = Dep
     if current_user["role"] == UserRole.ADMIN:
         # المدير يحدث بيانات الجامعة
         update_data = {k: v for k, v in data.items() if v is not None and k != "type"}
-        update_data["updated_at"] = get_yemen_time()
+        update_data["updated_at"] = datetime.utcnow()
         
         await db.university.update_one(
             {},
@@ -7899,7 +7207,7 @@ async def update_my_institution(data: dict = Body(...), current_user: dict = Dep
         update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
         
         if update_data:
-            update_data["updated_at"] = get_yemen_time()
+            update_data["updated_at"] = datetime.utcnow()
             await db.faculties.update_one(
                 {"_id": ObjectId(faculty_id)},
                 {"$set": update_data}
@@ -7932,7 +7240,7 @@ async def get_available_permissions(current_user: dict = Depends(get_current_use
     }
 
 @api_router.get("/users/{user_id}/permissions")
-async def get_user_permissions_endpoint_v2(user_id: str, current_user: dict = Depends(get_current_user)):
+async def get_user_permissions(user_id: str, current_user: dict = Depends(get_current_user)):
     """الحصول على صلاحيات مستخدم معين"""
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك بعرض صلاحيات المستخدمين")
@@ -8002,7 +7310,7 @@ async def add_user_permission(
         "scope_id": permission_data.scope_id,
         "scope_name": scope_name,
         "permissions": permission_data.permissions,
-        "created_at": get_yemen_time(),
+        "created_at": datetime.utcnow(),
         "created_by": current_user["id"]
     }
     
@@ -8017,7 +7325,7 @@ async def add_user_permission(
         # تحديث الصلاحيات الموجودة
         await db.user_permissions.update_one(
             {"_id": existing["_id"]},
-            {"$set": {"permissions": permission_data.permissions, "updated_at": get_yemen_time()}}
+            {"$set": {"permissions": permission_data.permissions, "updated_at": datetime.utcnow()}}
         )
         return {"message": "تم تحديث الصلاحيات بنجاح", "id": str(existing["_id"])}
     else:
@@ -8077,7 +7385,7 @@ async def update_all_user_permissions(
             "scope_id": scope.scope_id,
             "scope_name": scope_name,
             "permissions": scope.permissions,
-            "created_at": get_yemen_time(),
+            "created_at": datetime.utcnow(),
             "created_by": current_user["id"]
         }
         await db.user_permissions.insert_one(perm_doc)
@@ -8138,7 +7446,7 @@ async def get_university(current_user: dict = Depends(get_current_user)):
         "email": university.get("email"),
         "website": university.get("website"),
         "faculties_count": faculties_count,
-        "created_at": university.get("created_at", get_yemen_time())
+        "created_at": university.get("created_at", datetime.utcnow())
     }
 
 @api_router.post("/university")
@@ -8161,7 +7469,7 @@ async def create_or_update_university(
         "phone": university_data.phone,
         "email": university_data.email,
         "website": university_data.website,
-        "updated_at": get_yemen_time()
+        "updated_at": datetime.utcnow()
     }
     
     if existing:
@@ -8172,7 +7480,7 @@ async def create_or_update_university(
         university_id = str(existing["_id"])
         action = "update_university"
     else:
-        university_doc["created_at"] = get_yemen_time()
+        university_doc["created_at"] = datetime.utcnow()
         result = await db.university.insert_one(university_doc)
         university_id = str(result.inserted_id)
         action = "create_university"
@@ -8224,7 +7532,7 @@ async def get_faculties(current_user: dict = Depends(get_current_user)):
             "dean_id": faculty.get("dean_id"),
             "dean_name": dean_name,
             "departments_count": departments_count,
-            "created_at": faculty.get("created_at", get_yemen_time())
+            "created_at": faculty.get("created_at", datetime.utcnow())
         })
     
     return result
@@ -8250,7 +7558,7 @@ async def get_faculty(faculty_id: str, current_user: dict = Depends(get_current_
         "dean_id": faculty.get("dean_id"),
         "dean_name": dean_name,
         "departments_count": departments_count,
-        "created_at": faculty.get("created_at", get_yemen_time()),
+        "created_at": faculty.get("created_at", datetime.utcnow()),
         # إعدادات الكلية
         "levels_count": faculty.get("levels_count", 5),
         "sections": faculty.get("sections", ["أ", "ب", "ج"]),
@@ -8287,7 +7595,7 @@ async def update_faculty_settings(
     update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
     
     if update_data:
-        update_data["updated_at"] = get_yemen_time()
+        update_data["updated_at"] = datetime.utcnow()
         await db.faculties.update_one(
             {"_id": ObjectId(faculty_id)},
             {"$set": update_data}
@@ -8323,7 +7631,7 @@ async def create_faculty(
         "code": faculty_data.code,
         "description": faculty_data.description,
         "dean_id": faculty_data.dean_id,
-        "created_at": get_yemen_time()
+        "created_at": datetime.utcnow()
     }
     
     result = await db.faculties.insert_one(faculty_doc)
@@ -8355,7 +7663,7 @@ async def update_faculty(
         raise HTTPException(status_code=404, detail="الكلية غير موجودة")
     
     update_data = {k: v for k, v in faculty_data.dict().items() if v is not None}
-    update_data["updated_at"] = get_yemen_time()
+    update_data["updated_at"] = datetime.utcnow()
     
     await db.faculties.update_one(
         {"_id": ObjectId(faculty_id)},
@@ -8563,115 +7871,16 @@ async def record_page_view(
     )
     return {"message": "تم التسجيل"}
 
-# ==================== Trash Management (سلة المحذوفات) ====================
-
-@api_router.get("/trash")
-async def get_trash_items(current_user: dict = Depends(get_current_user)):
-    """عرض جميع العناصر في سلة المحذوفات"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    now = get_yemen_time()
-    now_naive = now.replace(tzinfo=None) if now.tzinfo else now
-    # حذف العناصر المنتهية الصلاحية
-    await db.trash.delete_many({"expires_at": {"$lt": now_naive}})
-    
-    items = await db.trash.find().sort("deleted_at", -1).to_list(500)
-    result = []
-    for item in items:
-        exp = item["expires_at"]
-        now_naive = now.replace(tzinfo=None) if now.tzinfo else now
-        exp_naive = exp.replace(tzinfo=None) if hasattr(exp, 'tzinfo') and exp.tzinfo else exp
-        days_remaining = (exp_naive - now_naive).days
-        result.append({
-            "id": str(item["_id"]),
-            "item_type": item["item_type"],
-            "item_name": item["item_name"],
-            "deleted_by": item.get("deleted_by", ""),
-            "deleted_at": item["deleted_at"].isoformat() if hasattr(item["deleted_at"], 'isoformat') else str(item["deleted_at"]),
-            "expires_at": exp.isoformat() if hasattr(exp, 'isoformat') else str(exp),
-            "days_remaining": max(0, days_remaining),
-        })
-    return result
-
-@api_router.post("/trash/{trash_id}/restore")
-async def restore_trash_item(trash_id: str, current_user: dict = Depends(get_current_user)):
-    """استعادة عنصر من سلة المحذوفات"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    trash_item = await db.trash.find_one({"_id": ObjectId(trash_id)})
-    if not trash_item:
-        raise HTTPException(status_code=404, detail="العنصر غير موجود في سلة المحذوفات")
-    
-    result = await restore_from_trash_helper(trash_item["backup_data"])
-    
-    # حذف من السلة بعد الاستعادة
-    await db.trash.delete_one({"_id": ObjectId(trash_id)})
-    
-    return result
-
-@api_router.delete("/trash/{trash_id}")
-async def permanent_delete_trash_item(trash_id: str, current_user: dict = Depends(get_current_user)):
-    """حذف نهائي لعنصر من سلة المحذوفات"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    result = await db.trash.delete_one({"_id": ObjectId(trash_id)})
-    if result.deleted_count == 0:
-        raise HTTPException(status_code=404, detail="العنصر غير موجود")
-    
-    return {"message": "تم الحذف النهائي بنجاح"}
-
-@api_router.delete("/trash")
-async def clear_all_trash(current_user: dict = Depends(get_current_user)):
-    """تفريغ سلة المحذوفات بالكامل"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    result = await db.trash.delete_many({})
-    return {"message": f"تم تفريغ سلة المحذوفات ({result.deleted_count} عنصر)"}
-
 # Include the router in the main app
-# إضافة الـ routers المنفصلة (المرحلة 2 من إعادة الهيكلة)
-# ملاحظة: api_router يجب أن يُضاف أولاً لأنه يحتوي على routes محددة مثل /departments/dashboard
+app.add_middleware(
+    CORSMiddleware,
+    allow_credentials=True,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 app.include_router(api_router)
-
-app.include_router(auth_router, prefix="/api")
-app.include_router(users_router, prefix="/api")
-app.include_router(roles_router, prefix="/api")
-app.include_router(departments_router, prefix="/api")
-app.include_router(students_router, prefix="/api")
-app.include_router(teachers_router, prefix="/api")
-app.include_router(courses_router, prefix="/api")
-app.include_router(notifications_router, prefix="/api")
-
-
-@app.on_event("startup")
-async def startup_event():
-    from services.firebase_service import init_firebase
-    init_firebase()
-    # تحديث صلاحيات الأدوار الافتراضية تلقائياً
-    await sync_default_roles()
-
-async def sync_default_roles():
-    """مزامنة صلاحيات الأدوار الافتراضية مع قاعدة البيانات"""
-    role_map = {
-        "admin": UserRole.ADMIN,
-        "teacher": UserRole.TEACHER,
-        "employee": UserRole.EMPLOYEE,
-        "student": UserRole.STUDENT,
-    }
-    for system_key, role_enum in role_map.items():
-        default_perms = list(DEFAULT_PERMISSIONS.get(role_enum, []))
-        existing = await db.roles.find_one({"system_key": system_key})
-        if existing:
-            if set(existing.get("permissions", [])) != set(default_perms):
-                await db.roles.update_one(
-                    {"system_key": system_key},
-                    {"$set": {"permissions": default_perms}}
-                )
-                logging.info(f"تم تحديث صلاحيات دور {system_key}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

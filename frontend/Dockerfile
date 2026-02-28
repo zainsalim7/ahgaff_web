@@ -1,23 +1,26 @@
-FROM python:3.11-slim
+FROM node:20-alpine
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+# Build argument for backend URL
+ARG EXPO_PUBLIC_BACKEND_URL=https://ahgaffweb-production-c582.up.railway.app
+ENV EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
 
-# Copy requirements first for caching
-COPY requirements.txt .
+# Install dependencies
+COPY package.json yarn.lock ./
+RUN yarn install
 
-# Install Python dependencies
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy application code
+# Copy source code
 COPY . .
 
-# Expose port
-EXPOSE 8080
+# Build the web version
+RUN npx expo export --platform web
 
-# Run the application
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8080"]
+# Install serve
+RUN npm install -g serve
+
+# Expose port
+EXPOSE 3000
+
+# Serve the static files - use $PORT from Railway
+CMD serve dist -s -l ${PORT:-3000}
