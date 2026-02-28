@@ -4246,6 +4246,17 @@ def get_lecture_attendance_status(lecture: dict) -> dict:
     # الوقت المسموح به للتحضير = وقت نهاية المحاضرة + مدة المحاضرة
     allowed_end_time = lecture_end + timedelta(minutes=lecture_duration)
     
+    # إذا لم يحن وقت المحاضرة بعد (مسموح 15 دقيقة قبل البداية)
+    early_start_allowed = lecture_start - timedelta(minutes=15)
+    if now < early_start_allowed:
+        minutes_until = int((lecture_start - now).total_seconds() / 60)
+        return {
+            "can_take_attendance": False,
+            "reason": f"لم يحن وقت المحاضرة بعد. تبدأ بعد {minutes_until} دقيقة",
+            "status": "not_started",
+            "starts_at": lecture_start.strftime("%H:%M")
+        }
+    
     # إذا انتهى الوقت المسموح
     if now > allowed_end_time:
         if lecture.get("status") == LectureStatus.COMPLETED:
