@@ -5145,12 +5145,18 @@ async def get_course_detailed_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير المقرر التفصيلي - تحليل كامل لمقرر معين"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS):
+    if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_COURSE):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    # المعلم يرى مقرراته فقط
+    if current_user["role"] == UserRole.TEACHER:
+        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
+        if not teacher_record or course.get("teacher_id") != str(teacher_record["_id"]):
+            raise HTTPException(status_code=403, detail="هذا المقرر ليس من مقرراتك")
     
     # جلب المعلم
     teacher_name = None
