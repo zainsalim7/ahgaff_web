@@ -5235,6 +5235,182 @@ async def get_course_detailed_report(
         }
     }
 
+@api_router.get("/reports/teacher-summary")
+async def get_teacher_summary_report(
+    teacher_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تقرير ملخص المعلم - جميع مقرراته مع نسب الحضور"""
+    # المعلم يرى بياناته فقط
+    if current_user["role"] == UserRole.TEACHER:
+        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
+        if teacher_record:
+            teacher_id = str(teacher_record["_id"])
+        else:
+            raise HTTPException(status_code=404, detail="لم يتم العثور على سجل المعلم")
+    elif not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # جلب بيانات المعلم
+    if teacher_id:
+        teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+    else:
+        raise HTTPException(status_code=400, detail="يجب تحديد المعلم")
+    
+    if not teacher:
+        raise HTTPException(status_code=404, detail="المعلم غير موجود")
+    
+    # جلب مقررات المعلم
+    courses = await db.courses.find({"teacher_id": teacher_id, "is_active": True}).to_list(50)
+    
+    courses_summary = []
+    total_students = 0
+    total_lectures_count = 0
+    total_present = 0
+    total_absent = 0
+    total_late = 0
+    total_records = 0
+    
+    for course in courses:
+        cid = str(course["_id"])
+        
+        # المحاضرات الفعالة
+        active_lecture_ids = await get_active_lecture_ids(cid)
+        lectures_count = len(active_lecture_ids)
+        
+        # المحاضرات المنعقدة فعلياً
+        held_lectures = await db.lectures.count_documents({
+            "_id": {"$in": [ObjectId(lid) for lid in active_lecture_ids]},
+            "status": {"$in": ["held", "completed"]}
+        }) if active_lecture_ids else 0
+        
+        # عدد الطلاب المسجلين
+        enrollments = await db.enrollments.find({"course_id": cid}).to_list(1000)
+        students_count = len(enrollments)
+        total_students += students_count
+        total_lectures_count += lectures_count
+        
+        # إحصائيات الحضور
+        attendance_records = await db.attendance.find({
+            "course_id": cid,
+            "lecture_id": {"$in": list(active_lecture_ids)}
+        }).to_list(10000) if active_lecture_ids else []
+        
+        present = sum(1 for r in attendance_records if r["status"] == AttendanceStatus.PRESENT)
+        absent = sum(1 for r in attendance_records if r["status"] == AttendanceStatus.ABSENT)
+        late = sum(1 for r in attendance_records if r["status"] == AttendanceStatus.LATE)
+        course_total = len(attendance_records)
+        
+        total_present += present
+        total_absent += absent
+        total_late += late
+        total_records += course_total
+        
+        attendance_rate = round((present + late * 0.5) / course_total * 100, 1) if course_total > 0 else 0
+        
+        # جلب اسم القسم
+        dept_name = ""
+        if course.get("department_id"):
+            dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
+            if dept:
+                dept_name = dept.get("name", "")
+        
+        courses_summary.append({
+            "course_id": cid,
+            "course_name": course["name"],
+            "course_code": course.get("code", ""),
+            "department_name": dept_name,
+            "level": course.get("level", ""),
+            "section": course.get("section", ""),
+            "students_count": students_count,
+            "total_lectures": lectures_count,
+            "held_lectures": held_lectures,
+            "present_count": present,
+            "absent_count": absent,
+            "late_count": late,
+            "attendance_rate": attendance_rate
+        })
+    
+    # ترتيب حسب نسبة الحضور
+    courses_summary.sort(key=lambda x: x["attendance_rate"], reverse=True)
+    
+    overall_rate = round((total_present + total_late * 0.5) / total_records * 100, 1) if total_records > 0 else 0
+    
+    return {
+        "teacher": {
+            "id": teacher_id,
+            "full_name": teacher.get("full_name", ""),
+            "teacher_id": teacher.get("teacher_id", ""),
+            "phone": teacher.get("phone", ""),
+            "email": teacher.get("email", "")
+        },
+        "courses": courses_summary,
+        "summary": {
+            "total_courses": len(courses_summary),
+            "total_students": total_students,
+            "total_lectures": total_lectures_count,
+            "total_present": total_present,
+            "total_absent": total_absent,
+            "total_late": total_late,
+            "overall_attendance_rate": overall_rate
+        }
+    }
+
+@api_router.get("/export/report/teacher-summary/excel")
+async def export_teacher_summary_excel(
+    teacher_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تصدير تقرير ملخص المعلم إلى Excel"""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    report = await get_teacher_summary_report(teacher_id, current_user)
+    
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        # ورقة الملخص
+        summary_data = [{
+            "المعلم": report["teacher"]["full_name"],
+            "الرقم الوظيفي": report["teacher"]["teacher_id"],
+            "عدد المقررات": report["summary"]["total_courses"],
+            "إجمالي الطلاب": report["summary"]["total_students"],
+            "إجمالي المحاضرات": report["summary"]["total_lectures"],
+            "نسبة الحضور العامة %": report["summary"]["overall_attendance_rate"]
+        }]
+        pd.DataFrame(summary_data).to_excel(writer, sheet_name="الملخص", index=False)
+        
+        # ورقة المقررات
+        courses_data = []
+        for idx, c in enumerate(report["courses"], 1):
+            courses_data.append({
+                "#": idx,
+                "المقرر": c["course_name"],
+                "الرمز": c["course_code"],
+                "القسم": c["department_name"],
+                "المستوى": c["level"],
+                "الشعبة": c["section"],
+                "الطلاب": c["students_count"],
+                "المحاضرات": c["total_lectures"],
+                "المنعقدة": c["held_lectures"],
+                "حاضر": c["present_count"],
+                "غائب": c["absent_count"],
+                "متأخر": c["late_count"],
+                "نسبة الحضور %": c["attendance_rate"]
+            })
+        if courses_data:
+            pd.DataFrame(courses_data).to_excel(writer, sheet_name="المقررات", index=False)
+    
+    output.seek(0)
+    teacher_name = report["teacher"]["full_name"].replace(" ", "_")
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=teacher_summary_{teacher_name}.xlsx"}
+    )
+
+
+
 @api_router.get("/reports/teacher-workload")
 async def get_teacher_workload_report(
     teacher_id: Optional[str] = None,
