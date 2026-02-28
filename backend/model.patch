@@ -1,0 +1,581 @@
+diff --git a/frontend/app/manage-users.tsx b/frontend/app/manage-users.tsx
+index 59b75fa..a1478ce 100644
+--- a/frontend/app/manage-users.tsx
++++ b/frontend/app/manage-users.tsx
+@@ -1349,6 +1349,12 @@ const styles = StyleSheet.create({
+     fontSize: 13,
+     color: '#666',
+   },
++  requiredHint: {
++    fontSize: 12,
++    color: '#f44336',
++    marginTop: 4,
++    marginBottom: 8,
++  },
+   scopeItemTextActive: {
+     color: '#1565c0',
+     fontWeight: '600',
+diff --git a/model.patch b/model.patch
+index 07f94b6..e69de29 100644
+--- a/model.patch
++++ b/model.patch
+@@ -1,559 +0,0 @@
+-diff --git a/frontend/app/_layout.tsx b/frontend/app/_layout.tsx
+-index 2bdf99f..85b531a 100644
+---- a/frontend/app/_layout.tsx
+-+++ b/frontend/app/_layout.tsx
+-@@ -54,8 +54,8 @@ export default function RootLayout() {
+-           <Stack.Screen name="add-department" options={{ title: 'إضافة قسم' }} />
+-           <Stack.Screen name="reports" options={{ title: 'التقارير' }} />
+-           <Stack.Screen name="course-lectures" options={{ title: 'محاضرات المقرر' }} />
+--          <Stack.Screen name="settings" options={{ title: 'الإعدادات' }} />
+-           <Stack.Screen name="permissions" options={{ title: 'الصلاحيات' }} />
+-+          <Stack.Screen name="general-settings" options={{ title: 'الإعدادات العامة' }} />
+-           <Stack.Screen name="change-password" options={{ title: 'تغيير كلمة المرور', headerShown: false }} />
+-         </Stack>
+-       </View>
+-diff --git a/model.patch b/model.patch
+-index ac85237..e69de29 100644
+---- a/model.patch
+-+++ b/model.patch
+-@@ -1,540 +0,0 @@
+--diff --git a/model.patch b/model.patch
+--index 1f83035..e69de29 100644
+----- a/model.patch
+--+++ b/model.patch
+--@@ -1,535 +0,0 @@
+---diff --git a/model.patch b/model.patch
+---index 395d901..e69de29 100644
+------ a/model.patch
+---+++ b/model.patch
+---@@ -1,516 +0,0 @@
+----diff --git a/frontend/app/add-student.tsx b/frontend/app/add-student.tsx
+----index 7ffe2dc..4862d01 100644
+------- a/frontend/app/add-student.tsx
+----+++ b/frontend/app/add-student.tsx
+----@@ -1045,8 +1045,7 @@ export default function AddStudentScreen() {
+----                 />
+----               </>
+----             )}
+-----          </ScrollView>
+-----        </>
+----+          </>
+----         )}
+----       </KeyboardAvoidingView>
+----     </SafeAreaView>
+----diff --git a/model.patch b/model.patch
+----index 93bfca6..e69de29 100644
+------- a/model.patch
+----+++ b/model.patch
+----@@ -1,497 +0,0 @@
+-----diff --git a/model.patch b/model.patch
+-----index c58f424..e69de29 100644
+-------- a/model.patch
+-----+++ b/model.patch
+-----@@ -1,492 +0,0 @@
+------diff --git a/frontend/src/services/api.ts b/frontend/src/services/api.ts
+------index 7a5170b..2f46e51 100644
+--------- a/frontend/src/services/api.ts
+------+++ b/frontend/src/services/api.ts
+------@@ -118,6 +118,7 @@ export const teachersAPI = {
+------   getAll: (params?: { department_id?: string }) =>
+------     api.get('/teachers', { params }),
+------   getById: (id: string) => api.get(`/teachers/${id}`),
+------+  getCourses: (teacherId: string) => api.get(`/teachers/${teacherId}/courses`),
+------   update: (id: string, data: any) => api.put(`/teachers/${id}`, data),
+------   delete: (id: string) => api.delete(`/teachers/${id}`),
+------   // تفعيل/إلغاء تفعيل حساب المعلم
+------diff --git a/model.patch b/model.patch
+------index f1a1dcf..e69de29 100644
+--------- a/model.patch
+------+++ b/model.patch
+------@@ -1,475 +0,0 @@
+-------diff --git a/model.patch b/model.patch
+-------index 87b15e0..e69de29 100644
+---------- a/model.patch
+-------+++ b/model.patch
+-------@@ -1,470 +0,0 @@
+--------diff --git a/model.patch b/model.patch
+--------index 5b9fb98..e69de29 100644
+----------- a/model.patch
+--------+++ b/model.patch
+--------@@ -1,465 +0,0 @@
+---------diff --git a/model.patch b/model.patch
+---------index 600b583..e69de29 100644
+------------ a/model.patch
+---------+++ b/model.patch
+---------@@ -1,460 +0,0 @@
+----------diff --git a/model.patch b/model.patch
+----------index 0259527..e69de29 100644
+------------- a/model.patch
+----------+++ b/model.patch
+----------@@ -1,455 +0,0 @@
+-----------diff --git a/model.patch b/model.patch
+-----------index 451c310..e69de29 100644
+-------------- a/model.patch
+-----------+++ b/model.patch
+-----------@@ -1,450 +0,0 @@
+------------diff --git a/frontend/app/manage-users.tsx b/frontend/app/manage-users.tsx
+------------index 092bc17..9be4408 100644
+--------------- a/frontend/app/manage-users.tsx
+------------+++ b/frontend/app/manage-users.tsx
+------------@@ -181,6 +181,8 @@ export default function ManageUsersScreen() {
+------------       await usersAPI.create({
+------------         ...formData,
+------------         role_id: formData.role_id,
+------------+        scope_type: formData.scope_type || undefined,
+------------+        scope_id: formData.scope_id || undefined,
+------------       });
+------------       
+------------       if (Platform.OS === 'web') {
+------------@@ -196,6 +198,8 @@ export default function ManageUsersScreen() {
+------------         role_id: '',
+------------         email: '',
+------------         phone: '',
+------------+        scope_type: '',
+------------+        scope_id: '',
+------------       });
+------------       fetchData();
+------------     } catch (error: any) {
+------------@@ -220,6 +224,8 @@ export default function ManageUsersScreen() {
+------------         role_id: formData.role_id,
+------------         email: formData.email,
+------------         phone: formData.phone,
+------------+        scope_type: formData.scope_type || undefined,
+------------+        scope_id: formData.scope_id || undefined,
+------------       });
+------------       
+------------       if (Platform.OS === 'web') {
+------------@@ -278,6 +284,8 @@ export default function ManageUsersScreen() {
+------------       role_id: (user as any).role_id || '',
+------------       email: user.email || '',
+------------       phone: user.phone || '',
+------------+      scope_type: (user as any).scope_type || '',
+------------+      scope_id: (user as any).scope_id || '',
+------------     });
+------------     setShowEditModal(true);
+------------   };
+------------@@ -485,14 +493,19 @@ export default function ManageUsersScreen() {
+------------               
+------------               <Text style={styles.inputLabel}>الدور</Text>
+------------               <View style={styles.roleSelector}>
+-------------                {roles.map(role => (
+------------+                {roles.filter(r => !['student', 'teacher'].includes((r as any).system_key || '')).map(role => (
+------------                   <TouchableOpacity
+------------                     key={role.id}
+------------                     style={[
+------------                       styles.roleSelectorItem,
+------------                       formData.role_id === role.id && styles.roleSelectorItemActive
+------------                     ]}
+-------------                    onPress={() => setFormData(prev => ({ ...prev, role_id: role.id }))}
+------------+                    onPress={() => setFormData(prev => ({ 
+------------+                      ...prev, 
+------------+                      role_id: role.id,
+------------+                      scope_type: '',
+------------+                      scope_id: ''
+------------+                    }))}
+------------                   >
+------------                     <Text style={[
+------------                       styles.roleSelectorText,
+------------@@ -504,6 +517,93 @@ export default function ManageUsersScreen() {
+------------                 ))}
+------------               </View>
+------------               
+------------+              {/* إذا كان الدور يتطلب تحديد نطاق (مشرف قسم/مقرر) */}
+------------+              {formData.role_id && roles.find(r => r.id === formData.role_id)?.name?.includes('مشرف') && (
+------------+                <>
+------------+                  <Text style={styles.inputLabel}>نوع الإشراف</Text>
+------------+                  <View style={styles.roleSelector}>
+------------+                    <TouchableOpacity
+------------+                      style={[
+------------+                        styles.roleSelectorItem,
+------------+                        formData.scope_type === 'department' && styles.roleSelectorItemActive
+------------+                      ]}
+------------+                      onPress={() => setFormData(prev => ({ ...prev, scope_type: 'department', scope_id: '' }))}
+------------+                    >
+------------+                      <Text style={[
+------------+                        styles.roleSelectorText,
+------------+                        formData.scope_type === 'department' && styles.roleSelectorTextActive
+------------+                      ]}>
+------------+                        قسم
+------------+                      </Text>
+------------+                    </TouchableOpacity>
+------------+                    <TouchableOpacity
+------------+                      style={[
+------------+                        styles.roleSelectorItem,
+------------+                        formData.scope_type === 'course' && styles.roleSelectorItemActive
+------------+                      ]}
+------------+                      onPress={() => setFormData(prev => ({ ...prev, scope_type: 'course', scope_id: '' }))}
+------------+                    >
+------------+                      <Text style={[
+------------+                        styles.roleSelectorText,
+------------+                        formData.scope_type === 'course' && styles.roleSelectorTextActive
+------------+                      ]}>
+------------+                        مقرر
+------------+                      </Text>
+------------+                    </TouchableOpacity>
+------------+                  </View>
+------------+                  
+------------+                  {formData.scope_type === 'department' && (
+------------+                    <>
+------------+                      <Text style={styles.inputLabel}>اختر القسم</Text>
+------------+                      <View style={styles.scopeSelector}>
+------------+                        {departments.map(dept => (
+------------+                          <TouchableOpacity
+------------+                            key={dept.id}
+------------+                            style={[
+------------+                              styles.scopeItem,
+------------+                              formData.scope_id === dept.id && styles.scopeItemActive
+------------+                            ]}
+------------+                            onPress={() => setFormData(prev => ({ ...prev, scope_id: dept.id }))}
+------------+                          >
+------------+                            <Text style={[
+------------+                              styles.scopeItemText,
+------------+                              formData.scope_id === dept.id && styles.scopeItemTextActive
+------------+                            ]}>
+------------+                              {dept.name}
+------------+                            </Text>
+------------+                          </TouchableOpacity>
+------------+                        ))}
+------------+                      </View>
+------------+                    </>
+------------+                  )}
+------------+                  
+------------+                  {formData.scope_type === 'course' && (
+------------+                    <>
+------------+                      <Text style={styles.inputLabel}>اختر المقرر</Text>
+------------+                      <View style={styles.scopeSelector}>
+------------+                        {courses.map(course => (
+------------+                          <TouchableOpacity
+------------+                            key={course.id}
+------------+                            style={[
+------------+                              styles.scopeItem,
+------------+                              formData.scope_id === course.id && styles.scopeItemActive
+------------+                            ]}
+------------+                            onPress={() => setFormData(prev => ({ ...prev, scope_id: course.id }))}
+------------+                          >
+------------+                            <Text style={[
+------------+                              styles.scopeItemText,
+------------+                              formData.scope_id === course.id && styles.scopeItemTextActive
+------------+                            ]}>
+------------+                              {course.name}
+------------+                            </Text>
+------------+                          </TouchableOpacity>
+------------+                        ))}
+------------+                      </View>
+------------+                    </>
+------------+                  )}
+------------+                </>
+------------+              )}
+------------+              
+------------               <Text style={styles.inputLabel}>البريد الإلكتروني</Text>
+------------               <TextInput
+------------                 style={styles.input}
+------------@@ -1118,4 +1218,27 @@ const styles = StyleSheet.create({
+------------     fontSize: 14,
+------------     color: '#333',
+------------   },
+------------+  scopeSelector: {
+------------+    flexDirection: 'row',
+------------+    flexWrap: 'wrap',
+------------+    gap: 8,
+------------+  },
+------------+  scopeItem: {
+------------+    paddingHorizontal: 14,
+------------+    paddingVertical: 8,
+------------+    borderRadius: 16,
+------------+    backgroundColor: '#f0f0f0',
+------------+    marginRight: 8,
+------------+    marginBottom: 8,
+------------+  },
+------------+  scopeItemActive: {
+------------+    backgroundColor: '#1565c0',
+------------+  },
+------------+  scopeItemText: {
+------------+    fontSize: 13,
+------------+    color: '#666',
+------------+  },
+------------+  scopeItemTextActive: {
+------------+    color: '#fff',
+------------+  },
+------------ });
+------------diff --git a/model.patch b/model.patch
+------------index 8305d07..c23bf08 100644
+--------------- a/model.patch
+------------+++ b/model.patch
+------------@@ -1,261 +0,0 @@
+-------------diff --git a/frontend/app/manage-users.tsx b/frontend/app/manage-users.tsx
+-------------index a9820dc..8107ce9 100644
+---------------- a/frontend/app/manage-users.tsx
+-------------+++ b/frontend/app/manage-users.tsx
+-------------@@ -478,20 +478,20 @@ export default function ManageUsersScreen() {
+-------------               
+-------------               <Text style={styles.inputLabel}>الدور</Text>
+-------------               <View style={styles.roleSelector}>
+--------------                {roles.filter(r => r.key !== 'student').map(role => (
+-------------+                {roles.map(role => (
+-------------                   <TouchableOpacity
+--------------                    key={role.key}
+-------------+                    key={role.id}
+-------------                     style={[
+-------------                       styles.roleSelectorItem,
+--------------                      formData.role === role.key && styles.roleSelectorItemActive
+-------------+                      formData.role_id === role.id && styles.roleSelectorItemActive
+-------------                     ]}
+--------------                    onPress={() => setFormData(prev => ({ ...prev, role: role.key }))}
+-------------+                    onPress={() => setFormData(prev => ({ ...prev, role_id: role.id }))}
+-------------                   >
+-------------                     <Text style={[
+-------------                       styles.roleSelectorText,
+--------------                      formData.role === role.key && styles.roleSelectorTextActive
+-------------+                      formData.role_id === role.id && styles.roleSelectorTextActive
+-------------                     ]}>
+--------------                      {role.label}
+-------------+                      {role.name}
+-------------                     </Text>
+-------------                   </TouchableOpacity>
+-------------                 ))}
+-------------@@ -550,20 +550,20 @@ export default function ManageUsersScreen() {
+-------------               
+-------------               <Text style={styles.inputLabel}>الدور</Text>
+-------------               <View style={styles.roleSelector}>
+--------------                {roles.filter(r => r.key !== 'student').map(role => (
+-------------+                {roles.map(role => (
+-------------                   <TouchableOpacity
+--------------                    key={role.key}
+-------------+                    key={role.id}
+-------------                     style={[
+-------------                       styles.roleSelectorItem,
+--------------                      formData.role === role.key && styles.roleSelectorItemActive
+-------------+                      formData.role_id === role.id && styles.roleSelectorItemActive
+-------------                     ]}
+--------------                    onPress={() => setFormData(prev => ({ ...prev, role: role.key }))}
+-------------+                    onPress={() => setFormData(prev => ({ ...prev, role_id: role.id }))}
+-------------                   >
+-------------                     <Text style={[
+-------------                       styles.roleSelectorText,
+--------------                      formData.role === role.key && styles.roleSelectorTextActive
+-------------+                      formData.role_id === role.id && styles.roleSelectorTextActive
+-------------                     ]}>
+--------------                      {role.label}
+-------------+                      {role.name}
+-------------                     </Text>
+-------------                   </TouchableOpacity>
+-------------                 ))}
+-------------diff --git a/model.patch b/model.patch
+-------------index 01aa848..e69de29 100644
+---------------- a/model.patch
+-------------+++ b/model.patch
+-------------@@ -1,198 +0,0 @@
+--------------diff --git a/model.patch b/model.patch
+--------------index cf1a260..e69de29 100644
+----------------- a/model.patch
+--------------+++ b/model.patch
+--------------@@ -1,193 +0,0 @@
+---------------diff --git a/model.patch b/model.patch
+---------------index 07d3927..e69de29 100644
+------------------ a/model.patch
+---------------+++ b/model.patch
+---------------@@ -1,188 +0,0 @@
+----------------diff --git a/frontend/src/services/api.ts b/frontend/src/services/api.ts
+----------------index 582614b..f433b46 100644
+------------------- a/frontend/src/services/api.ts
+----------------+++ b/frontend/src/services/api.ts
+----------------@@ -176,18 +176,6 @@ export const exportAPI = {
+----------------     api.post(`/students/${studentId}/deactivate`),
+---------------- };
+---------------- 
+-----------------// Auth API - المصادقة
+-----------------export const authAPI = {
+-----------------  login: (username: string, password: string) =>
+-----------------    api.post('/auth/login', { username, password }),
+-----------------  
+-----------------  changePassword: (currentPassword: string, newPassword: string) =>
+-----------------    api.post('/auth/change-password', { current_password: currentPassword, new_password: newPassword }),
+-----------------  
+-----------------  forceChangePassword: (newPassword: string) =>
+-----------------    api.post('/auth/force-change-password', { new_password: newPassword }),
+-----------------};
+-----------------
+---------------- // Enrollment API - تسجيل الطلاب في المقررات
+---------------- export const enrollmentAPI = {
+----------------   getEnrolled: (courseId: string) => 
+----------------diff --git a/model.patch b/model.patch
+----------------index 85bfbb5..e69de29 100644
+------------------- a/model.patch
+----------------+++ b/model.patch
+----------------@@ -1,160 +0,0 @@
+-----------------diff --git a/model.patch b/model.patch
+-----------------index 7588c3f..e69de29 100644
+-------------------- a/model.patch
+-----------------+++ b/model.patch
+-----------------@@ -1,155 +0,0 @@
+------------------diff --git a/test_result.md b/test_result.md
+------------------index b704cae..d58d2d7 100644
+--------------------- a/test_result.md
+------------------+++ b/test_result.md
+------------------@@ -119,87 +119,108 @@ backend:
+------------------ 
+------------------   - task: "Users CRUD API"
+------------------     implemented: true
+-------------------    working: NA
+------------------+    working: true
+------------------     file: "server.py"
+------------------     stuck_count: 0
+------------------     priority: "high"
+-------------------    needs_retesting: true
+------------------+    needs_retesting: false
+------------------     status_history:
+------------------       - working: NA
+------------------         agent: "main"
+------------------         comment: "Implemented users CRUD endpoints"
+------------------+      - working: true
+------------------+        agent: "testing"
+------------------+        comment: "✅ All user CRUD operations tested successfully - Create Teacher (POST /api/users) and Get Teachers (GET /api/users?role=teacher) working correctly with proper authentication and authorization"
+------------------ 
+------------------   - task: "Departments CRUD API"
+------------------     implemented: true
+-------------------    working: NA
+------------------+    working: true
+------------------     file: "server.py"
+------------------     stuck_count: 0
+------------------     priority: "high"
+-------------------    needs_retesting: true
+------------------+    needs_retesting: false
+------------------     status_history:
+------------------       - working: NA
+------------------         agent: "main"
+------------------         comment: "Implemented departments CRUD endpoints"
+------------------+      - working: true
+------------------+        agent: "testing"
+------------------+        comment: "✅ Department CRUD operations tested successfully - Create Department (POST /api/departments) and Get Departments (GET /api/departments) working correctly with proper Arabic text support"
+------------------ 
+------------------   - task: "Students CRUD API"
+------------------     implemented: true
+-------------------    working: NA
+------------------+    working: true
+------------------     file: "server.py"
+------------------     stuck_count: 0
+------------------     priority: "high"
+-------------------    needs_retesting: true
+------------------+    needs_retesting: false
+------------------     status_history:
+------------------       - working: NA
+------------------         agent: "main"
+------------------         comment: "Implemented students CRUD endpoints with QR code generation"
+------------------+      - working: true
+------------------+        agent: "testing"
+------------------+        comment: "✅ Student CRUD operations tested successfully - Create Student (POST /api/students) and Get Students (GET /api/students) working correctly with QR code generation and user account creation"
+------------------ 
+------------------   - task: "Courses CRUD API"
+------------------     implemented: true
+-------------------    working: NA
+------------------+    working: true
+------------------     file: "server.py"
+------------------     stuck_count: 0
+------------------     priority: "high"
+-------------------    needs_retesting: true
+------------------+    needs_retesting: false
+------------------     status_history:
+------------------       - working: NA
+------------------         agent: "main"
+------------------         comment: "Implemented courses CRUD endpoints"
+------------------+      - working: true
+------------------+        agent: "testing"
+------------------+        comment: "✅ Course CRUD operations tested successfully - Create Course (POST /api/courses) and Get Courses (GET /api/courses) working correctly with proper department and teacher associations"
+------------------ 
+------------------   - task: "Attendance Recording API"
+------------------     implemented: true
+-------------------    working: NA
+------------------+    working: true
+------------------     file: "server.py"
+------------------     stuck_count: 0
+------------------     priority: "high"
+-------------------    needs_retesting: true
+------------------+    needs_retesting: false
+------------------     status_history:
+------------------       - working: NA
+------------------         agent: "main"
+------------------         comment: "Implemented attendance session and single record endpoints"
+------------------+      - working: true
+------------------+        agent: "testing"
+------------------+        comment: "✅ Attendance recording tested successfully - Record Attendance Session (POST /api/attendance/session) and Get Course Attendance (GET /api/attendance/course/{id}) working correctly with proper authorization"
+------------------ 
+------------------   - task: "Statistics and Reports API"
+------------------     implemented: true
+-------------------    working: NA
+------------------+    working: true
+------------------     file: "server.py"
+------------------     stuck_count: 0
+------------------     priority: "medium"
+-------------------    needs_retesting: true
+------------------+    needs_retesting: false
+------------------     status_history:
+------------------       - working: NA
+------------------         agent: "main"
+------------------         comment: "Implemented stats endpoints for students, courses, and reports"
+------------------+      - working: true
+------------------+        agent: "testing"
+------------------+        comment: "✅ Statistics and Reports tested successfully - Get Student Stats (GET /api/attendance/stats/student/{id}) and Get Summary Report (GET /api/reports/summary) working correctly with accurate calculations"
+------------------ 
+------------------   - task: "Offline Sync API"
+------------------     implemented: true
+-------------------    working: NA
+------------------+    working: true
+------------------     file: "server.py"
+------------------     stuck_count: 0
+------------------     priority: "medium"
+-------------------    needs_retesting: true
+------------------+    needs_retesting: false
+------------------     status_history:
+------------------       - working: NA
+------------------         agent: "main"
+------------------         comment: "Implemented sync endpoint for offline attendance records"
+------------------+      - working: true
+------------------+        agent: "testing"
+------------------+        comment: "✅ Offline Sync tested successfully - Sync Attendance (POST /api/sync/attendance) working correctly with proper duplicate detection and batch processing"
+------------------ 
+------------------ frontend:
+------------------   - task: "Login Screen"
+------------------@@ -282,16 +303,18 @@ metadata:
+------------------ 
+------------------ test_plan:
+------------------   current_focus:
+-------------------    - "Authentication API"
+-------------------    - "Users CRUD API"
+-------------------    - "Departments CRUD API"
+-------------------    - "Students CRUD API"
+-------------------    - "Courses CRUD API"
+-------------------    - "Attendance Recording API"
+------------------+    - "Login Screen"
+------------------+    - "Home Dashboard"
+------------------+    - "Admin Panel"
+------------------+    - "Take Attendance Screen"
+------------------+    - "QR Scanner"
+------------------+    - "Course Stats"
+------------------   stuck_tasks: []
+------------------   test_all: false
+------------------   test_priority: "high_first"
+------------------ 
+------------------ agent_communication:
+------------------   - agent: "main"
+-------------------    message: "MVP implementation complete. Testing backend APIs first, then frontend."
+------------------\ No newline at end of file
+------------------+    message: "MVP implementation complete. Testing backend APIs first, then frontend."
+------------------+  - agent: "testing"
+------------------+    message: "✅ BACKEND TESTING COMPLETE - All 8 backend API modules tested successfully with 100% pass rate. All CRUD operations, authentication, attendance recording, statistics, and offline sync working correctly. Ready for frontend testing or deployment."
+------------------\ No newline at end of file
+---diff --git a/test_result.md b/test_result.md
+---index 1c462b1..2b6feb2 100644
+------ a/test_result.md
+---+++ b/test_result.md
+---@@ -325,4 +325,6 @@ agent_communication:
+---   - agent: "main"
+---     message: "✅ تم تنفيذ صفحة طلاب المقرر مع إحصائيات الحضور - الميزات المنفذة: 1) عرض ملخص الحضور لكل طالب (حاضر/غائب/متأخر/نسبة), 2) عرض حسب المحاضرة مع قائمة المحاضرات القابلة للاختيار, 3) عرض حالة كل طالب في المحاضرة المختارة, 4) إضافة زر الطلاب على بطاقات المقررات. تم أيضاً إضافة API جديد GET /api/attendance/lecture/{lecture_id} لجلب سجلات الحضور لمحاضرة معينة."
+---   - agent: "main"
+----    message: "✅ تم التحقق من عمل استيراد الطلاب من Excel - Backend API يعمل بشكل مثالي. اختبار مباشر: POST /api/import/students أرجع 200 OK. تم استيراد 3 طلاب اختبار (1001, 1002, 1003) بنجاح. تم تحسين frontend logging للتشخيص. صلاحيات admin تعمل (has_permission يرجع True للـ admin role)"
+---\ No newline at end of file
+---+    message: "✅ تم التحقق من عمل استيراد الطلاب من Excel - Backend API يعمل بشكل مثالي. اختبار مباشر: POST /api/import/students أرجع 200 OK. تم استيراد 3 طلاب اختبار (1001, 1002, 1003) بنجاح. تم تحسين frontend logging للتشخيص. صلاحيات admin تعمل (has_permission يرجع True للـ admin role)"
+---+  - agent: "testing"
+---+    message: "✅ COMPREHENSIVE BACKEND API TESTING COMPLETED - Tested all requested APIs with admin credentials (admin/admin123). SUCCESS RATE: 87% (20/23 tests passed). ✅ WORKING: Authentication (login/me), Students CRUD, Departments (GET/POST), Courses CRUD, Users (GET), Roles (GET), Reports/Summary, Settings. ❌ MINOR ISSUES: GET /api/departments/{id} returns 405 (endpoint not implemented), POST /api/users fails with validation error (permissions field None instead of list). All core functionality verified working with 72 students, 3 departments, 3 courses in system."
+---\ No newline at end of file

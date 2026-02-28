@@ -9,8 +9,9 @@ import logging
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
+from enum import Enum
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from bson import ObjectId
@@ -29,6 +30,39 @@ from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 import arabic_reshaper
 from bidi.algorithm import get_display
+
+# استيراد النماذج من الملفات المنفصلة
+from models.permissions import (
+    UserRole, Permission, DEFAULT_PERMISSIONS, ALL_PERMISSIONS,
+    FULL_PERMISSION_MAPPING, ScopeType, user_has_permission
+)
+from models.users import (
+    UserBase, UserCreate, UserLogin, UserResponse, Token,
+    UserPermissionScope, UserPermissionsUpdate, UserPermissionResponse
+)
+from models.roles import RoleCreate, RoleUpdate, RoleResponse
+from models.departments import DepartmentBase, DepartmentCreate, DepartmentResponse
+from models.university import (
+    UniversityBase, UniversityCreate, UniversityUpdate, UniversityResponse,
+    FacultyBase, FacultyCreate, FacultyUpdate, FacultyResponse
+)
+from models.students import StudentBase, StudentCreate, StudentResponse
+from models.teachers import TeacherBase, TeacherCreate, TeacherUpdate, TeacherResponse
+from models.courses import CourseBase, CourseCreate, CourseResponse, AttendanceStatus
+from models.lectures import (
+    LectureStatus, ACTIVE_LECTURE_STATUSES,
+    LectureCreate, LectureUpdate, LectureResponse, GenerateLecturesRequest
+)
+from models.attendance import (
+    AttendanceRecord, AttendanceSessionCreate, AttendanceResponse,
+    AttendanceStats, SingleAttendanceCreate, OfflineSyncData
+)
+from models.semesters import SemesterStatus, SemesterCreate, SemesterUpdate, SemesterResponse
+from models.settings import SemesterDates, AcademicYearConfig, SystemSettings, SettingsUpdate
+from models.notifications import NotificationType, NotificationBase, NotificationCreate, NotificationResponse
+from models.activity_logs import ActivityLogType, ActivityLog, ActivityLogResponse
+from models.enrollments import EnrollmentCreate, EnrollmentResponse
+from models.auth import ActivateStudentAccount, ChangePasswordRequest, ForceChangePasswordRequest
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -49,17 +83,45 @@ mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ.get('DB_NAME', 'attendance_db')]
 
+# تهيئة قاعدة البيانات للـ routes
+from routes.deps import set_database
+set_database(db)
+
+# استيراد الـ routes المنفصلة
+from routes.auth import router as auth_router
+from routes.users import router as users_router
+
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
 
+<<<<<<< HEAD:backend/server.py.backup
+# ==================== Root Health Check Endpoints ====================
+# Health check on root path for Railway
+@app.get("/health")
+async def root_health_check():
+    """Root health check endpoint for Railway deployment"""
+    return {"status": "ok"}
+
+@app.get("/")
+async def root():
+    """Root endpoint"""
+    return {"status": "ok", "message": "نظام حضور جامعة الأحقاف"}
+=======
 # Health check endpoint (before router)
 @app.get("/health")
 @app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "message": "API is running"}
+>>>>>>> 1ccbcb4 (Add health endpoint, fix env vars, remove old config):server.py
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+# ==================== API Health Check Endpoint ====================
+@api_router.get("/health")
+async def api_health_check():
+    """API health check endpoint"""
+    return {"status": "ok", "message": "Server is running"}
 
 # Configure logging
 logging.basicConfig(
@@ -68,597 +130,15 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ==================== Models ====================
-
-class UserRole:
-    ADMIN = "admin"
-    TEACHER = "teacher"
-    STUDENT = "student"
-    EMPLOYEE = "employee"
-
-# نظام الصلاحيات - كل صلاحية تمثل إجراء معين في النظام
-class Permission:
-    # صلاحيات الإدارة
-    MANAGE_USERS = "manage_users"           # إدارة المستخدمين
-    MANAGE_DEPARTMENTS = "manage_departments" # إدارة الأقسام
-    MANAGE_COURSES = "manage_courses"       # إدارة المقررات
-    MANAGE_STUDENTS = "manage_students"     # إدارة الطلاب
-    MANAGE_FACULTIES = "manage_faculties"   # إدارة الكليات
-    MANAGE_TEACHERS = "manage_teachers"     # إدارة المعلمين
-    MANAGE_ENROLLMENTS = "manage_enrollments" # إدارة التسجيل في المقررات
-    
-    # صلاحيات الحضور
-    RECORD_ATTENDANCE = "record_attendance"  # تسجيل الحضور
-    TAKE_ATTENDANCE = "take_attendance"      # أخذ الحضور
-    VIEW_ATTENDANCE = "view_attendance"      # عرض الحضور
-    EDIT_ATTENDANCE = "edit_attendance"      # تعديل الحضور
-    
-    # صلاحيات التقارير
-    VIEW_REPORTS = "view_reports"           # عرض التقارير
-    VIEW_STATISTICS = "view_statistics"     # عرض الإحصائيات
-    EXPORT_REPORTS = "export_reports"       # تصدير التقارير
-    IMPORT_DATA = "import_data"             # استيراد البيانات
-    
-    # صلاحيات المحاضرات والمقررات
-    MANAGE_LECTURES = "manage_lectures"     # إدارة المحاضرات
-    VIEW_LECTURES = "view_lectures"         # عرض المحاضرات
-    VIEW_COURSES = "view_courses"           # عرض المقررات
-
-# الصلاحيات الافتراضية لكل دور
-DEFAULT_PERMISSIONS = {
-    UserRole.ADMIN: [
-        Permission.MANAGE_USERS,
-        Permission.MANAGE_DEPARTMENTS,
-        Permission.MANAGE_COURSES,
-        Permission.MANAGE_STUDENTS,
-        Permission.RECORD_ATTENDANCE,
-        Permission.VIEW_ATTENDANCE,
-        Permission.EDIT_ATTENDANCE,
-        Permission.VIEW_REPORTS,
-        Permission.EXPORT_REPORTS,
-        Permission.IMPORT_DATA,
-        Permission.MANAGE_LECTURES,
-        Permission.VIEW_LECTURES,
-    ],
-    UserRole.TEACHER: [
-        Permission.RECORD_ATTENDANCE,
-        Permission.VIEW_ATTENDANCE,
-        Permission.VIEW_REPORTS,
-        Permission.EXPORT_REPORTS,
-        Permission.MANAGE_LECTURES,
-        Permission.VIEW_LECTURES,
-    ],
-    UserRole.EMPLOYEE: [
-        Permission.MANAGE_STUDENTS,
-        Permission.VIEW_ATTENDANCE,
-        Permission.VIEW_REPORTS,
-        Permission.EXPORT_REPORTS,
-        Permission.IMPORT_DATA,
-        Permission.VIEW_LECTURES,
-    ],
-    UserRole.STUDENT: [
-        Permission.VIEW_ATTENDANCE,
-        Permission.VIEW_LECTURES,
-    ],
-}
-
-# قائمة جميع الصلاحيات المتاحة للعرض في الواجهة
-ALL_PERMISSIONS = [
-    {"key": Permission.MANAGE_USERS, "label": "إدارة المستخدمين", "category": "الإدارة"},
-    {"key": Permission.MANAGE_DEPARTMENTS, "label": "إدارة الأقسام", "category": "الإدارة"},
-    {"key": Permission.MANAGE_COURSES, "label": "إدارة المقررات", "category": "الإدارة"},
-    {"key": Permission.MANAGE_STUDENTS, "label": "إدارة الطلاب", "category": "الإدارة"},
-    {"key": Permission.MANAGE_FACULTIES, "label": "إدارة الكليات", "category": "الإدارة"},
-    {"key": Permission.MANAGE_TEACHERS, "label": "إدارة المعلمين", "category": "الإدارة"},
-    {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة التسجيل في المقررات", "category": "الإدارة"},
-    {"key": Permission.RECORD_ATTENDANCE, "label": "تسجيل الحضور", "category": "الحضور"},
-    {"key": Permission.TAKE_ATTENDANCE, "label": "أخذ الحضور", "category": "الحضور"},
-    {"key": Permission.VIEW_ATTENDANCE, "label": "عرض الحضور", "category": "الحضور"},
-    {"key": Permission.EDIT_ATTENDANCE, "label": "تعديل الحضور", "category": "الحضور"},
-    {"key": Permission.VIEW_REPORTS, "label": "عرض التقارير", "category": "التقارير"},
-    {"key": Permission.VIEW_STATISTICS, "label": "عرض الإحصائيات", "category": "التقارير"},
-    {"key": Permission.EXPORT_REPORTS, "label": "تصدير التقارير", "category": "التقارير"},
-    {"key": Permission.IMPORT_DATA, "label": "استيراد البيانات", "category": "التقارير"},
-    {"key": Permission.MANAGE_LECTURES, "label": "إدارة المحاضرات", "category": "المحاضرات"},
-    {"key": Permission.VIEW_LECTURES, "label": "عرض المحاضرات", "category": "المحاضرات"},
-    {"key": Permission.VIEW_COURSES, "label": "عرض المقررات", "category": "المقررات"},
-    {"key": "manage_roles", "label": "إدارة الأدوار", "category": "الإدارة"},
-    {"key": "manage_semesters", "label": "إدارة الفصول الدراسية", "category": "الإدارة"},
-]
-
-# ==================== نماذج الأدوار المخصصة ====================
-
-class RoleCreate(BaseModel):
-    """نموذج إنشاء دور جديد"""
-    name: str  # اسم الدور (مثل: أستاذ، موظف شؤون طلاب)
-    description: Optional[str] = ""  # وصف الدور
-    permissions: List[str]  # قائمة الصلاحيات المسندة للدور
-    is_system: bool = False  # هل هو دور نظامي (لا يمكن حذفه)
-
-class RoleUpdate(BaseModel):
-    """نموذج تحديث دور"""
-    name: Optional[str] = None
-    description: Optional[str] = None
-    permissions: Optional[List[str]] = None
-
-class RoleResponse(BaseModel):
-    """نموذج استجابة الدور"""
-    id: str
-    name: str
-    description: str
-    permissions: List[str]
-    is_system: bool
-    users_count: int = 0
-    created_at: datetime
-
-class ScopeType:
-    """نوع نطاق الصلاحية"""
-    GLOBAL = "global"           # صلاحية عامة على كل النظام
-    DEPARTMENT = "department"   # صلاحية على قسم معين
-    COURSE = "course"           # صلاحية على مقرر معين
-
-class UserPermissionScope(BaseModel):
-    """نموذج نطاق الصلاحية للمستخدم"""
-    scope_type: str  # global, department, course
-    scope_id: Optional[str] = None  # معرف القسم أو المقرر (None للصلاحية العامة)
-    permissions: List[str]  # قائمة الصلاحيات
-
-class UserPermissionsUpdate(BaseModel):
-    """نموذج تحديث صلاحيات المستخدم"""
-    scopes: List[UserPermissionScope]
-
-class UserPermissionResponse(BaseModel):
-    """نموذج استجابة صلاحيات المستخدم"""
-    user_id: str
-    scopes: List[dict]
-
-class UserBase(BaseModel):
-    username: str
-    full_name: str
-    role: Optional[str] = None  # الدور القديم - للتوافق
-    role_id: Optional[str] = None  # معرف الدور الجديد
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    permissions: Optional[List[str]] = None  # صلاحيات مخصصة للمستخدم
-    # حقول النطاق - لربط المستخدم بالجهة التي يديرها
-    university_id: Optional[str] = None  # لرئيس الجامعة
-    faculty_id: Optional[str] = None  # للعميد ومدير التسجيل
-    department_id: Optional[str] = None  # لرئيس القسم والمدرس (انتماء إداري)
-
-class UserCreate(UserBase):
-    password: str
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
-
-class UserResponse(UserBase):
-    id: str
-    created_at: datetime
-    is_active: bool = True
-    permissions: List[str] = []
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    user: UserResponse
-
-class DepartmentBase(BaseModel):
-    name: str
-    code: str
-    description: Optional[str] = None
-    faculty_id: Optional[str] = None  # معرف الكلية
-
-class DepartmentCreate(DepartmentBase):
-    pass
-
-class DepartmentResponse(DepartmentBase):
-    id: str
-    faculty_name: Optional[str] = None  # اسم الكلية للعرض
-    created_at: datetime
-
-# ==================== University & Faculty Models (الهيكل التنظيمي) ====================
-
-class UniversityBase(BaseModel):
-    """نموذج الجامعة"""
-    name: str
-    code: str
-    description: Optional[str] = None
-    logo_url: Optional[str] = None
-    address: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    website: Optional[str] = None
-
-class UniversityCreate(UniversityBase):
-    pass
-
-class UniversityUpdate(BaseModel):
-    name: Optional[str] = None
-    description: Optional[str] = None
-    logo_url: Optional[str] = None
-    address: Optional[str] = None
-    phone: Optional[str] = None
-    email: Optional[str] = None
-    website: Optional[str] = None
-
-class UniversityResponse(UniversityBase):
-    id: str
-    faculties_count: int = 0
-    created_at: datetime
-
-class FacultyBase(BaseModel):
-    """نموذج الكلية"""
-    name: str
-    code: str
-    description: Optional[str] = None
-    dean_id: Optional[str] = None  # معرف العميد
-
-class FacultyCreate(FacultyBase):
-    pass
-
-class FacultyUpdate(BaseModel):
-    name: Optional[str] = None
-    code: Optional[str] = None
-    description: Optional[str] = None
-    dean_id: Optional[str] = None
-
-class FacultyResponse(FacultyBase):
-    id: str
-    dean_name: Optional[str] = None  # اسم العميد للعرض
-    departments_count: int = 0
-    created_at: datetime
-
-# ==================== Activity Log Models (نظام تسجيل الأنشطة) ====================
-
-class ActivityLogType:
-    """أنواع الأنشطة"""
-    # أنشطة المصادقة
-    LOGIN = "login"
-    LOGOUT = "logout"
-    PASSWORD_CHANGE = "password_change"
-    
-    # أنشطة العرض
-    VIEW_PAGE = "view_page"
-    VIEW_REPORT = "view_report"
-    
-    # أنشطة الإنشاء
-    CREATE_USER = "create_user"
-    CREATE_STUDENT = "create_student"
-    CREATE_COURSE = "create_course"
-    CREATE_DEPARTMENT = "create_department"
-    CREATE_FACULTY = "create_faculty"
-    CREATE_LECTURE = "create_lecture"
-    
-    # أنشطة التعديل
-    UPDATE_USER = "update_user"
-    UPDATE_STUDENT = "update_student"
-    UPDATE_COURSE = "update_course"
-    UPDATE_DEPARTMENT = "update_department"
-    UPDATE_FACULTY = "update_faculty"
-    UPDATE_LECTURE = "update_lecture"
-    
-    # أنشطة الحذف
-    DELETE_USER = "delete_user"
-    DELETE_STUDENT = "delete_student"
-    DELETE_COURSE = "delete_course"
-    DELETE_DEPARTMENT = "delete_department"
-    DELETE_FACULTY = "delete_faculty"
-    DELETE_LECTURE = "delete_lecture"
-    
-    # أنشطة الحضور
-    RECORD_ATTENDANCE = "record_attendance"
-    UPDATE_ATTENDANCE = "update_attendance"
-    
-    # أنشطة التصدير/الاستيراد
-    EXPORT_DATA = "export_data"
-    IMPORT_DATA = "import_data"
-
-class ActivityLog(BaseModel):
-    """نموذج سجل النشاط"""
-    user_id: str
-    username: str
-    user_role: str
-    action: str  # نوع النشاط
-    action_ar: str  # وصف النشاط بالعربي
-    entity_type: Optional[str] = None  # نوع الكيان (user, student, course, etc.)
-    entity_id: Optional[str] = None  # معرف الكيان
-    entity_name: Optional[str] = None  # اسم الكيان
-    details: Optional[dict] = None  # تفاصيل إضافية
-    ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
-    faculty_id: Optional[str] = None  # معرف الكلية (للفلترة)
-    department_id: Optional[str] = None  # معرف القسم (للفلترة)
-    timestamp: datetime = None
-
-class ActivityLogResponse(BaseModel):
-    id: str
-    user_id: str
-    username: str
-    user_role: str
-    action: str
-    action_ar: str
-    entity_type: Optional[str] = None
-    entity_id: Optional[str] = None
-    entity_name: Optional[str] = None
-    details: Optional[dict] = None
-    ip_address: Optional[str] = None
-    faculty_id: Optional[str] = None
-    department_id: Optional[str] = None
-    timestamp: datetime
-
-class StudentBase(BaseModel):
-    student_id: str  # رقم الطالب
-    full_name: str
-    department_id: str
-    level: int  # المستوى الدراسي (1-4)
-    section: str  # الشعبة
-    phone: Optional[str] = None
-    email: Optional[str] = None
-
-class StudentCreate(StudentBase):
-    password: Optional[str] = None
-
-class StudentResponse(StudentBase):
-    id: str
-    user_id: Optional[str] = None
-    qr_code: str
-    created_at: datetime
-    is_active: bool = True
-
-# ==================== Teacher Models (نماذج المعلمين) ====================
-
-class TeacherBase(BaseModel):
-    teacher_id: str  # الرقم الوظيفي
-    full_name: str
-    department_id: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    specialization: Optional[str] = None  # التخصص
-    academic_title: Optional[str] = None  # الوصف الأكاديمي (أستاذ، أستاذ مشارك، أستاذ مساعد، محاضر، معيد)
-    teaching_load: Optional[int] = None  # نصاب التدريس (عدد الساعات)
-
-class TeacherCreate(TeacherBase):
-    pass
-
-class TeacherUpdate(BaseModel):
-    full_name: Optional[str] = None
-    department_id: Optional[str] = None
-    email: Optional[str] = None
-    phone: Optional[str] = None
-    specialization: Optional[str] = None
-    academic_title: Optional[str] = None
-    teaching_load: Optional[int] = None
-
-class TeacherResponse(TeacherBase):
-    id: str
-    user_id: Optional[str] = None  # معرف حساب المستخدم إذا كان مفعلاً
-    created_at: datetime
-    is_active: bool = True
-
-class CourseBase(BaseModel):
-    name: str
-    code: str
-    department_id: str
-    teacher_id: Optional[str] = None  # معرف المعلم من collection المعلمين
-    level: int
-    section: Optional[str] = ""  # الشعبة - اختيارية
-    semester_id: Optional[str] = None  # معرف الفصل الدراسي
-    academic_year: Optional[str] = ""
-
-class CourseCreate(CourseBase):
-    pass
-
-class CourseResponse(CourseBase):
-    id: str
-    teacher_name: Optional[str] = None  # اسم المعلم للعرض
-    department_name: Optional[str] = None  # اسم القسم للعرض
-    semester_name: Optional[str] = None  # اسم الفصل للعرض
-    created_at: Optional[datetime] = None
-    is_active: bool = True
-
-class AttendanceStatus:
-    PRESENT = "present"
-    ABSENT = "absent"
-    LATE = "late"
-    EXCUSED = "excused"
-
-# ==================== Semester Models (نماذج الفصول الدراسية) ====================
-
-class SemesterStatus:
-    ACTIVE = "active"      # الفصل الحالي النشط
-    UPCOMING = "upcoming"  # فصل قادم
-    CLOSED = "closed"      # فصل منتهي (مغلق)
-    ARCHIVED = "archived"  # فصل مؤرشف
-
-class SemesterCreate(BaseModel):
-    name: str  # اسم الفصل (الفصل الأول، الفصل الثاني، الصيفي)
-    academic_year: str  # السنة الدراسية (2024-2025)
-    start_date: Optional[str] = None  # تاريخ البداية
-    end_date: Optional[str] = None  # تاريخ النهاية
-    status: str = SemesterStatus.UPCOMING
-
-class SemesterUpdate(BaseModel):
-    name: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    status: Optional[str] = None
-
-class SemesterResponse(BaseModel):
-    id: str
-    name: str
-    academic_year: str
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    status: str
-    courses_count: int = 0
-    students_count: int = 0
-    attendance_records: int = 0
-    created_at: datetime
-    closed_at: Optional[datetime] = None
-    archived_at: Optional[datetime] = None
-
-# ==================== Settings Models (الإعدادات العامة) ====================
-
-class SemesterDates(BaseModel):
-    name: str  # اسم الفصل
-    start_date: Optional[str] = None  # تاريخ البداية YYYY-MM-DD
-    end_date: Optional[str] = None  # تاريخ النهاية YYYY-MM-DD
-
-class AcademicYearConfig(BaseModel):
-    year: str  # مثال: "2024-2025"
-    is_current: bool = False
-    semesters: List[SemesterDates] = []
-
-class SystemSettings(BaseModel):
-    college_name: str = "كلية الشريعة والقانون"
-    college_name_en: Optional[str] = "Faculty of Sharia and Law"
-    academic_year: str = "2024-2025"
-    current_semester: str = "الفصل الأول"
-    current_semester_id: Optional[str] = None  # معرف الفصل الحالي
-    semester_start_date: Optional[str] = None  # تاريخ بداية الفصل الحالي
-    semester_end_date: Optional[str] = None  # تاريخ نهاية الفصل الحالي
-    levels_count: int = 5  # عدد المستويات الدراسية
-    sections: List[str] = ["أ", "ب", "ج"]  # الشُعب المتاحة
-    attendance_late_minutes: int = 15  # دقائق التأخير المسموحة
-    max_absence_percent: float = 25.0  # نسبة الغياب القصوى
-    logo_url: Optional[str] = None
-    primary_color: str = "#1565c0"
-    secondary_color: str = "#ff9800"
-    academic_years: List[str] = []  # قائمة السنوات الأكاديمية المتاحة
-
-class SettingsUpdate(BaseModel):
-    college_name: Optional[str] = None
-    college_name_en: Optional[str] = None
-    academic_year: Optional[str] = None
-    current_semester: Optional[str] = None
-    semester_start_date: Optional[str] = None
-    semester_end_date: Optional[str] = None
-    levels_count: Optional[int] = None
-    sections: Optional[List[str]] = None
-    attendance_late_minutes: Optional[int] = None
-    max_absence_percent: Optional[float] = None
-    logo_url: Optional[str] = None
-    primary_color: Optional[str] = None
-    secondary_color: Optional[str] = None
-    academic_years: Optional[List[str]] = None
-
-# ==================== Lecture Models (المحاضرات/الحصص) ====================
-
-class LectureStatus:
-    SCHEDULED = "scheduled"  # مجدولة
-    COMPLETED = "completed"  # منعقدة
-    CANCELLED = "cancelled"  # ملغاة
-
-# الحالات التي تُحسب في الإحصائيات (المحاضرات الفعّالة فقط)
-ACTIVE_LECTURE_STATUSES = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED]
-
-class LectureCreate(BaseModel):
-    course_id: str
-    date: str  # YYYY-MM-DD
-    start_time: str  # HH:MM
-    end_time: str  # HH:MM
-    room: Optional[str] = ""
-    notes: Optional[str] = ""
-
-class LectureUpdate(BaseModel):
-    date: Optional[str] = None
-    start_time: Optional[str] = None
-    end_time: Optional[str] = None
-    room: Optional[str] = None
-    status: Optional[str] = None
-    notes: Optional[str] = None
-
-class LectureResponse(BaseModel):
-    id: str
-    course_id: str
-    date: str
-    start_time: str
-    end_time: str
-    room: str
-    status: str
-    notes: str
-    created_at: datetime
-
-class GenerateLecturesRequest(BaseModel):
-    course_id: str
-    start_date: str  # تاريخ بداية الفصل
-    end_date: str    # تاريخ نهاية الفصل
-    day_of_week: int # 0=السبت، 1=الأحد، ...
-    start_time: str  # HH:MM
-    end_time: str    # HH:MM
-    room: Optional[str] = ""
-
-class AttendanceRecord(BaseModel):
-    student_id: str
-    status: str = AttendanceStatus.PRESENT
-
-# ==================== Student Account Activation (تفعيل حساب الطالب) ====================
-
-class ActivateStudentAccount(BaseModel):
-    student_id: str  # معرف الطالب في قاعدة البيانات
-
-class ChangePasswordRequest(BaseModel):
-    current_password: str
-    new_password: str
-
-class ForceChangePasswordRequest(BaseModel):
-    new_password: str
-
-class AttendanceSessionCreate(BaseModel):
-    lecture_id: str  # تغيير من course_id إلى lecture_id
-    notes: Optional[str] = None
-    records: List[AttendanceRecord]
-
-class AttendanceResponse(BaseModel):
-    id: str
-    lecture_id: str
-    course_id: str
-    student_id: str
-    status: str
-    date: datetime
-    recorded_by: str
-    method: str  # manual or qr
-    notes: Optional[str] = None
-
-class AttendanceStats(BaseModel):
-    total_sessions: int
-    present_count: int
-    absent_count: int
-    late_count: int
-    excused_count: int
-    attendance_rate: float
-
-class SingleAttendanceCreate(BaseModel):
-    lecture_id: str  # تغيير من course_id إلى lecture_id
-    student_id: str
-    status: str = AttendanceStatus.PRESENT
-    method: str = "qr"
-    notes: Optional[str] = None
-
-class OfflineSyncData(BaseModel):
-    attendance_records: List[dict]
-
-# ==================== Enrollment Models ====================
-
-class EnrollmentCreate(BaseModel):
-    course_id: str
-    student_ids: List[str]  # قائمة أرقام الطلاب للتسجيل
-
-class EnrollmentResponse(BaseModel):
-    id: str
-    course_id: str
-    student_id: str
-    enrolled_at: datetime
-    enrolled_by: str
-
 # ==================== Helper Functions ====================
 
 def verify_password(plain_password, hashed_password):
     return pwd_context.verify(plain_password, hashed_password)
 
 def get_password_hash(password):
-    return pwd_context.hash(password)
+    # Truncate password to 72 bytes for bcrypt compatibility
+    password_bytes = password.encode('utf-8')[:72]
+    return pwd_context.hash(password_bytes.decode('utf-8'))
 
 def create_access_token(data: dict):
     to_encode = data.copy()
@@ -850,6 +330,10 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
     
     faculty_id = user_data.get("faculty_id")
     department_id = user_data.get("department_id")
+    # دعم الأقسام المتعددة
+    department_ids = user_data.get("department_ids", [])
+    if not department_ids and department_id:
+        department_ids = [department_id]
     teacher_record_id = user_data.get("teacher_record_id")
     
     # Dean (عميد) - يرى بيانات كليته
@@ -870,12 +354,56 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
             if dept_ids:
                 query["department_id"] = {"$in": dept_ids}
     
-    # Department Head (رئيس قسم) - يرى بيانات قسمه
-    elif role == "department_head" and department_id:
-        if scope_type in ["students", "courses", "teachers"]:
-            query["department_id"] = department_id
+    # Department Head (رئيس قسم) - يرى بيانات أقسامه (قسم واحد أو أقسام متعددة)
+    elif role == "department_head":
+        if department_ids and len(department_ids) > 0:
+            if scope_type in ["students", "courses", "teachers"]:
+                if len(department_ids) == 1:
+                    query["department_id"] = department_ids[0]
+                else:
+                    query["department_id"] = {"$in": department_ids}
+            elif scope_type == "departments":
+                if len(department_ids) == 1:
+                    query["_id"] = ObjectId(department_ids[0])
+                else:
+                    query["_id"] = {"$in": [ObjectId(did) for did in department_ids]}
+        elif department_id:
+            if scope_type in ["students", "courses", "teachers"]:
+                query["department_id"] = department_id
+            elif scope_type == "departments":
+                query["_id"] = ObjectId(department_id)
+    
+    # Custom role with faculty (no department) - يرى بيانات الكلية كلها
+    elif role == "custom" and faculty_id and not department_id:
+        if scope_type == "students":
+            dept_ids = await get_faculty_department_ids(faculty_id)
+            if dept_ids:
+                query["department_id"] = {"$in": dept_ids}
+        elif scope_type == "courses":
+            dept_ids = await get_faculty_department_ids(faculty_id)
+            if dept_ids:
+                query["department_id"] = {"$in": dept_ids}
         elif scope_type == "departments":
-            query["_id"] = ObjectId(department_id)
+            query["faculty_id"] = faculty_id
+        elif scope_type == "teachers":
+            dept_ids = await get_faculty_department_ids(faculty_id)
+            if dept_ids:
+                query["department_id"] = {"$in": dept_ids}
+    
+    # Custom role with department(s) - يرى بيانات أقسامه (قسم واحد أو أقسام متعددة)
+    elif role == "custom" and (department_ids or department_id):
+        # استخدام الأقسام المتعددة إن وُجدت
+        user_dept_ids = department_ids if department_ids else [department_id]
+        if scope_type in ["students", "courses", "teachers"]:
+            if len(user_dept_ids) == 1:
+                query["department_id"] = user_dept_ids[0]
+            else:
+                query["department_id"] = {"$in": user_dept_ids}
+        elif scope_type == "departments":
+            if len(user_dept_ids) == 1:
+                query["_id"] = ObjectId(user_dept_ids[0])
+            else:
+                query["_id"] = {"$in": [ObjectId(did) for did in user_dept_ids]}
     
     # Registration Manager / Registrar - يرى بيانات الكلية
     elif role in ["registration_manager", "registrar"] and faculty_id:
@@ -933,105 +461,10 @@ async def get_teacher_course_ids(user_id: str, teacher_record_id: str = None) ->
     return [str(c["_id"]) for c in courses]
 
 # ==================== Auth Routes ====================
-
-@api_router.post("/auth/login")
-async def login(user_data: UserLogin):
-    user = await db.users.find_one({"username": user_data.username})
-    # التحقق من وجود المستخدم وكلمة المرور (قد تكون في password أو hashed_password)
-    password_field = user.get("hashed_password") or user.get("password") if user else None
-    
-    if not user or not password_field:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="اسم المستخدم أو كلمة المرور غير صحيحة"
-        )
-    
-    try:
-        is_valid = verify_password(user_data.password, password_field)
-    except Exception:
-        is_valid = False
-    
-    if not is_valid:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="اسم المستخدم أو كلمة المرور غير صحيحة"
-        )
-    
-    if not user.get("is_active", True):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="الحساب غير مفعل"
-        )
-    
-    access_token = create_access_token(data={"sub": str(user["_id"])})
-    
-    # احصل على صلاحيات المستخدم من الدور أولاً، ثم من DEFAULT_PERMISSIONS
-    user_permissions = user.get("permissions")
-    
-    if not user_permissions:
-        # جلب الصلاحيات من جدول الأدوار
-        user_role = user.get("role", "employee")
-        role_doc = await db.roles.find_one({"system_key": user_role})
-        if role_doc:
-            user_permissions = role_doc.get("permissions", [])
-        else:
-            # إذا لم يوجد دور في قاعدة البيانات، استخدم الافتراضي
-            user_permissions = list(DEFAULT_PERMISSIONS.get(user_role, []))
-    
-    # تسجيل نشاط الدخول
-    await log_activity(
-        user=user,
-        action="login",
-        entity_type="user",
-        entity_id=str(user["_id"]),
-        entity_name=user["username"]
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "user": {
-            "id": str(user["_id"]),
-            "username": user["username"],
-            "full_name": user["full_name"],
-            "role": user["role"],
-            "email": user.get("email"),
-            "phone": user.get("phone"),
-            "created_at": user["created_at"],
-            "is_active": user.get("is_active", True),
-            "permissions": user_permissions,
-            "must_change_password": user.get("must_change_password", False),
-            "student_id": user.get("student_id"),  # إذا كان المستخدم طالب
-            "faculty_id": user.get("faculty_id"),  # معرف الكلية
-            "department_id": user.get("department_id")  # معرف القسم
-        }
-    }
-
-@api_router.get("/auth/me", response_model=UserResponse)
-async def get_me(current_user: dict = Depends(get_current_user)):
-    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-    
-    # جلب الصلاحيات من الدور
-    user_permissions = user.get("permissions")
-    if not user_permissions:
-        user_role = user.get("role", "employee")
-        role_doc = await db.roles.find_one({"system_key": user_role})
-        if role_doc:
-            user_permissions = role_doc.get("permissions", [])
-        else:
-            user_permissions = list(DEFAULT_PERMISSIONS.get(user_role, []))
-    
-    return {
-        "id": str(user["_id"]),
-        "username": user["username"],
-        "full_name": user["full_name"],
-        "role": user["role"],
-        "email": user.get("email"),
-        "phone": user.get("phone"),
-        "created_at": user["created_at"],
-        "is_active": user.get("is_active", True),
-        "permissions": user_permissions
-    }
+# تم نقل هذه الـ routes إلى routes/auth.py
+# الـ endpoints التالية متاحة عبر auth_router:
+# - POST /api/auth/login
+# - GET /api/auth/me
 
 # ==================== User Management Routes ====================
 
@@ -1064,6 +497,10 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
         user_dict["role"] = "employee"  # افتراضي
         user_dict["permissions"] = []
     
+    # دعم الأقسام المتعددة - ضبط department_id للتوافق
+    if user_dict.get("department_ids") and len(user_dict["department_ids"]) > 0:
+        user_dict["department_id"] = user_dict["department_ids"][0]
+    
     result = await db.users.insert_one(user_dict)
     
     # إرجاع البيانات بالشكل المطلوب
@@ -1081,6 +518,7 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
         "university_id": user_dict.get("university_id"),
         "faculty_id": user_dict.get("faculty_id"),
         "department_id": user_dict.get("department_id"),
+        "department_ids": user_dict.get("department_ids", []),
     }
 
 @api_router.get("/users", response_model=List[UserResponse])
@@ -1111,6 +549,7 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
             "university_id": u.get("university_id"),
             "faculty_id": u.get("faculty_id"),
             "department_id": u.get("department_id"),
+            "department_ids": u.get("department_ids", []),
         }
         
         # جلب اسم الكلية إذا موجود
@@ -1121,13 +560,28 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
             except:
                 user_data["faculty_name"] = None
         
-        # جلب اسم القسم إذا موجود
-        if u.get("department_id"):
+        # جلب أسماء الأقسام - دعم الأقسام المتعددة
+        dept_ids_to_fetch = u.get("department_ids") or []
+        if not dept_ids_to_fetch and u.get("department_id"):
+            dept_ids_to_fetch = [u.get("department_id")]
+        
+        if dept_ids_to_fetch and len(dept_ids_to_fetch) > 0:
             try:
-                dept = await db.departments.find_one({"_id": ObjectId(u["department_id"])})
-                user_data["department_name"] = dept["name"] if dept else None
-            except:
+                dept_names = []
+                for did in dept_ids_to_fetch:
+                    if did:  # التأكد من أن المعرف ليس None أو فارغاً
+                        dept = await db.departments.find_one({"_id": ObjectId(did)})
+                        if dept:
+                            dept_names.append(dept["name"])
+                user_data["department_name"] = " | ".join(dept_names) if dept_names else None
+                user_data["department_names"] = dept_names
+            except Exception as e:
+                logger.error(f"Error fetching department names: {e}")
                 user_data["department_name"] = None
+                user_data["department_names"] = []
+        else:
+            user_data["department_name"] = None
+            user_data["department_names"] = []
         
         result.append(user_data)
     
@@ -1153,7 +607,8 @@ class UserUpdate(BaseModel):
     # حقول النطاق
     university_id: Optional[str] = None
     faculty_id: Optional[str] = None
-    department_id: Optional[str] = None
+    department_id: Optional[str] = None  # للتوافق مع القديم
+    department_ids: Optional[List[str]] = None  # قائمة الأقسام المتعددة
 
 @api_router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depends(get_current_user)):
@@ -1187,6 +642,16 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
         update_data["faculty_id"] = data.faculty_id if data.faculty_id else None
     if data.department_id is not None:
         update_data["department_id"] = data.department_id if data.department_id else None
+    
+    # دعم الأقسام المتعددة
+    if data.department_ids is not None:
+        # تخزين قائمة الأقسام
+        update_data["department_ids"] = data.department_ids if data.department_ids else []
+        # إذا كانت هناك أقسام متعددة، نضع أول قسم كـ department_id للتوافق
+        if data.department_ids and len(data.department_ids) > 0:
+            update_data["department_id"] = data.department_ids[0]
+        else:
+            update_data["department_id"] = None
     
     # تحديث الدور إذا تم تحديده (فقط لغير المدير)
     if data.role_id and user.get("role") != UserRole.ADMIN:
@@ -1222,7 +687,8 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
         "permissions": user_permissions,
         "university_id": updated.get("university_id"),
         "faculty_id": updated.get("faculty_id"),
-        "department_id": updated.get("department_id")
+        "department_id": updated.get("department_id"),
+        "department_ids": updated.get("department_ids", [])
     }
 
 # ==================== User Management Actions ====================
@@ -1252,7 +718,13 @@ async def reset_user_password(
     )
     
     # تسجيل النشاط
-    await log_activity("reset_password", current_user["id"], f"Reset password for user: {user.get('username')}")
+    await log_activity(
+        user=current_user,
+        action="reset_password",
+        entity_type="user",
+        entity_id=user_id,
+        entity_name=user.get('username')
+    )
     
     return {"message": "تم إعادة تعيين كلمة المرور بنجاح"}
 
@@ -1284,7 +756,13 @@ async def toggle_user_active(
     
     # تسجيل النشاط
     action = "activate_user" if new_status else "deactivate_user"
-    await log_activity(action, current_user["id"], f"{'Activated' if new_status else 'Deactivated'} user: {user.get('username')}")
+    await log_activity(
+        user=current_user,
+        action=action,
+        entity_type="user",
+        entity_id=user_id,
+        entity_name=user.get('username')
+    )
     
     return {"message": f"تم {'تفعيل' if new_status else 'إيقاف'} المستخدم بنجاح", "is_active": new_status}
 
@@ -1809,6 +1287,504 @@ async def get_departments_stats(current_user: dict = Depends(get_current_user)):
         })
     
     return result
+
+@api_router.get("/departments/dashboard")
+async def get_department_head_dashboard(current_user: dict = Depends(get_current_user)):
+    """لوحة تحكم رئيس القسم - إحصائيات الأقسام + التنبيهات"""
+    
+    # جلب الأقسام التي يديرها المستخدم
+    user_data = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    if not user_data:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    
+    # جلب قائمة الأقسام
+    department_ids = user_data.get("department_ids") or []
+    if not department_ids and user_data.get("department_id"):
+        department_ids = [user_data.get("department_id")]
+    
+    # إذا كان المستخدم admin أو لديه faculty_id، جلب كل الأقسام
+    if current_user["role"] == UserRole.ADMIN:
+        depts = await db.departments.find({}).to_list(100)
+    elif user_data.get("faculty_id") and not department_ids:
+        depts = await db.departments.find({"faculty_id": user_data["faculty_id"]}).to_list(100)
+    elif department_ids:
+        depts = await db.departments.find({"_id": {"$in": [ObjectId(did) for did in department_ids]}}).to_list(100)
+    else:
+        depts = []
+    
+    # جلب إعدادات النظام
+    settings = await db.settings.find_one({"type": "general"})
+    warning_threshold = settings.get("warning_threshold", 15) if settings else 15
+    deprivation_threshold = settings.get("deprivation_threshold", 25) if settings else 25
+    
+    departments_data = []
+    total_students = 0
+    total_courses = 0
+    all_warnings = []
+    
+    for dept in depts:
+        dept_id = str(dept["_id"])
+        
+        # جلب المقررات في هذا القسم
+        courses = await db.courses.find({"department_id": dept_id, "is_active": True}).to_list(100)
+        course_ids = [str(c["_id"]) for c in courses]
+        
+        # جلب الطلاب المسجلين
+        student_ids = set()
+        for course_id in course_ids:
+            enrollments = await db.enrollments.find({"course_id": course_id}).to_list(1000)
+            for e in enrollments:
+                student_ids.add(e["student_id"])
+        
+        dept_students_count = len(student_ids)
+        dept_courses_count = len(courses)
+        total_students += dept_students_count
+        total_courses += dept_courses_count
+        
+        # حساب نسبة الحضور اليومي
+        today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_attendance = 0
+        today_total = 0
+        
+        for course_id in course_ids:
+            # جلب محاضرات اليوم
+            today_lectures = await db.lectures.find({
+                "course_id": course_id,
+                "date": {"$gte": today}
+            }).to_list(100)
+            
+            for lecture in today_lectures:
+                lecture_id = str(lecture["_id"])
+                records = await db.attendance.find({
+                    "lecture_id": lecture_id,
+                    "course_id": course_id
+                }).to_list(1000)
+                
+                today_total += len(records)
+                today_attendance += sum(1 for r in records if r["status"] == AttendanceStatus.PRESENT)
+        
+        attendance_rate = round((today_attendance / today_total * 100), 1) if today_total > 0 else 0
+        
+        # جلب التنبيهات (طلاب قريبون من الحرمان)
+        dept_warnings = []
+        for course in courses:
+            cid = str(course["_id"])
+            active_lecture_ids = await get_active_lecture_ids(cid)
+            total_lectures = len(active_lecture_ids)
+            
+            if total_lectures == 0:
+                continue
+            
+            enrollments = await db.enrollments.find({"course_id": cid}).to_list(1000)
+            
+            for enrollment in enrollments:
+                student_id = enrollment["student_id"]
+                
+                records = await db.attendance.find({
+                    "student_id": student_id,
+                    "course_id": cid,
+                    "lecture_id": {"$in": list(active_lecture_ids)}
+                }).to_list(1000)
+                
+                absent_count = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
+                absence_rate = (absent_count / total_lectures) * 100
+                
+                if absence_rate >= warning_threshold:
+                    student = await db.students.find_one({"_id": ObjectId(student_id)})
+                    if student:
+                        warning_data = {
+                            "student_id": student.get("student_id"),
+                            "student_name": student.get("full_name"),
+                            "course_name": course["name"],
+                            "course_code": course.get("code", ""),
+                            "department_id": dept_id,
+                            "department_name": dept["name"],
+                            "total_lectures": total_lectures,
+                            "absent_count": absent_count,
+                            "absence_rate": round(absence_rate, 2),
+                            "remaining_allowed": max(0, int((deprivation_threshold / 100) * total_lectures) - absent_count),
+                            "status": "محروم" if absence_rate >= deprivation_threshold else "إنذار"
+                        }
+                        dept_warnings.append(warning_data)
+                        all_warnings.append(warning_data)
+        
+        # جلب اسم الكلية
+        faculty_name = None
+        if dept.get("faculty_id"):
+            try:
+                faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
+                faculty_name = faculty["name"] if faculty else None
+            except:
+                pass
+        
+        departments_data.append({
+            "id": dept_id,
+            "name": dept["name"],
+            "code": dept.get("code", ""),
+            "faculty_name": faculty_name,
+            "students_count": dept_students_count,
+            "courses_count": dept_courses_count,
+            "today_attendance_rate": attendance_rate,
+            "warnings_count": len([w for w in dept_warnings if w["status"] == "إنذار"]),
+            "deprivations_count": len([w for w in dept_warnings if w["status"] == "محروم"])
+        })
+    
+    return {
+        "departments": departments_data,
+        "summary": {
+            "total_departments": len(departments_data),
+            "total_students": total_students,
+            "total_courses": total_courses,
+            "total_warnings": len([w for w in all_warnings if w["status"] == "إنذار"]),
+            "total_deprivations": len([w for w in all_warnings if w["status"] == "محروم"])
+        },
+        "warnings": sorted(all_warnings, key=lambda x: x["absence_rate"], reverse=True)[:20],  # أعلى 20 تنبيه
+        "thresholds": {
+            "warning": warning_threshold,
+            "deprivation": deprivation_threshold
+        }
+    }
+
+# ==================== Notification Routes (مسارات الإشعارات) ====================
+
+async def create_student_notification(
+    student_id: str,
+    student_db_id: str,
+    notification_type: NotificationType,
+    course_name: str,
+    course_id: str,
+    absence_rate: float,
+    remaining_allowed: int
+):
+    """إنشاء إشعار للطالب"""
+    
+    # جلب بيانات الطالب
+    student = await db.students.find_one({"_id": ObjectId(student_db_id)})
+    if not student:
+        return None
+    
+    # تحديد العنوان والرسالة حسب النوع
+    if notification_type == NotificationType.WARNING:
+        title = f"⚠️ إنذار غياب - {course_name}"
+        message = f"نسبة غيابك في مقرر {course_name} وصلت إلى {absence_rate:.1f}%. يتبقى لك {remaining_allowed} غياب مسموح قبل الحرمان."
+    elif notification_type == NotificationType.DEPRIVATION:
+        title = f"🚫 تنبيه حرمان - {course_name}"
+        message = f"تجاوزت نسبة الغياب المسموحة في مقرر {course_name}. نسبة غيابك الحالية: {absence_rate:.1f}%."
+    else:
+        title = f"📢 إشعار - {course_name}"
+        message = f"إشعار متعلق بمقرر {course_name}"
+    
+    # التحقق من عدم وجود إشعار مشابه خلال آخر 24 ساعة
+    yesterday = datetime.utcnow() - timedelta(days=1)
+    existing_notification = await db.notifications.find_one({
+        "student_id": student_db_id,
+        "course_id": course_id,
+        "type": notification_type.value,
+        "created_at": {"$gte": yesterday}
+    })
+    
+    if existing_notification:
+        # تحديث الإشعار الموجود إذا تغيرت النسبة
+        if existing_notification.get("absence_rate") != absence_rate:
+            await db.notifications.update_one(
+                {"_id": existing_notification["_id"]},
+                {"$set": {
+                    "message": message,
+                    "absence_rate": absence_rate,
+                    "remaining_allowed": remaining_allowed,
+                    "is_read": False,
+                    "updated_at": datetime.utcnow()
+                }}
+            )
+        return None
+    
+    # إنشاء إشعار جديد
+    notification = {
+        "student_id": student_db_id,
+        "user_id": student.get("user_id"),
+        "title": title,
+        "message": message,
+        "type": notification_type.value,
+        "course_id": course_id,
+        "course_name": course_name,
+        "absence_rate": absence_rate,
+        "remaining_allowed": remaining_allowed,
+        "is_read": False,
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.notifications.insert_one(notification)
+    return str(result.inserted_id)
+
+async def check_and_create_absence_notifications(student_id: str, course_id: str):
+    """التحقق من نسبة الغياب وإنشاء إشعارات إذا لزم الأمر"""
+    
+    # جلب الطالب
+    student = await db.students.find_one({"student_id": student_id})
+    if not student:
+        return
+    
+    student_db_id = str(student["_id"])
+    
+    # جلب المقرر
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        return
+    
+    # جلب الإعدادات
+    settings = await db.settings.find_one({"type": "general"})
+    warning_threshold = settings.get("warning_threshold", 15) if settings else 15
+    deprivation_threshold = settings.get("deprivation_threshold", 25) if settings else 25
+    
+    # حساب نسبة الغياب
+    active_lecture_ids = await get_active_lecture_ids(course_id)
+    total_lectures = len(active_lecture_ids)
+    
+    if total_lectures == 0:
+        return
+    
+    records = await db.attendance.find({
+        "student_id": student_id,
+        "course_id": course_id,
+        "lecture_id": {"$in": list(active_lecture_ids)}
+    }).to_list(1000)
+    
+    absent_count = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
+    absence_rate = (absent_count / total_lectures) * 100
+    
+    # حساب الغيابات المتبقية
+    max_allowed = int((deprivation_threshold / 100) * total_lectures)
+    remaining_allowed = max(0, max_allowed - absent_count)
+    
+    # إنشاء إشعار حسب النسبة
+    if absence_rate >= deprivation_threshold:
+        await create_student_notification(
+            student_id=student_id,
+            student_db_id=student_db_id,
+            notification_type=NotificationType.DEPRIVATION,
+            course_name=course["name"],
+            course_id=course_id,
+            absence_rate=absence_rate,
+            remaining_allowed=0
+        )
+    elif absence_rate >= warning_threshold:
+        await create_student_notification(
+            student_id=student_id,
+            student_db_id=student_db_id,
+            notification_type=NotificationType.WARNING,
+            course_name=course["name"],
+            course_id=course_id,
+            absence_rate=absence_rate,
+            remaining_allowed=remaining_allowed
+        )
+
+@api_router.get("/notifications")
+async def get_notifications(
+    limit: int = 50,
+    unread_only: bool = False,
+    current_user: dict = Depends(get_current_user)
+):
+    """جلب إشعارات المستخدم الحالي"""
+    
+    # البحث عن الطالب المرتبط بهذا المستخدم
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    
+    # البحث عن الطالب
+    student = await db.students.find_one({"user_id": str(user["_id"])})
+    
+    if not student:
+        # إذا لم يكن طالباً، ربما يكون admin أو معلم - إرجاع قائمة فارغة
+        return {"notifications": [], "unread_count": 0}
+    
+    student_db_id = str(student["_id"])
+    
+    # جلب الإشعارات
+    query = {"student_id": student_db_id}
+    if unread_only:
+        query["is_read"] = False
+    
+    notifications = await db.notifications.find(query).sort("created_at", -1).limit(limit).to_list(limit)
+    
+    # حساب عدد الإشعارات غير المقروءة
+    unread_count = await db.notifications.count_documents({"student_id": student_db_id, "is_read": False})
+    
+    result = []
+    for n in notifications:
+        result.append({
+            "id": str(n["_id"]),
+            "title": n["title"],
+            "message": n["message"],
+            "type": n["type"],
+            "course_id": n.get("course_id"),
+            "course_name": n.get("course_name"),
+            "absence_rate": n.get("absence_rate"),
+            "remaining_allowed": n.get("remaining_allowed"),
+            "is_read": n.get("is_read", False),
+            "created_at": n["created_at"]
+        })
+    
+    return {"notifications": result, "unread_count": unread_count}
+
+@api_router.get("/notifications/count")
+async def get_unread_notifications_count(current_user: dict = Depends(get_current_user)):
+    """جلب عدد الإشعارات غير المقروءة"""
+    
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    if not user:
+        return {"count": 0}
+    
+    student = await db.students.find_one({"user_id": str(user["_id"])})
+    if not student:
+        return {"count": 0}
+    
+    count = await db.notifications.count_documents({
+        "student_id": str(student["_id"]),
+        "is_read": False
+    })
+    
+    return {"count": count}
+
+@api_router.put("/notifications/{notification_id}/read")
+async def mark_notification_as_read(
+    notification_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """تحديد إشعار كمقروء"""
+    
+    notification = await db.notifications.find_one({"_id": ObjectId(notification_id)})
+    if not notification:
+        raise HTTPException(status_code=404, detail="الإشعار غير موجود")
+    
+    await db.notifications.update_one(
+        {"_id": ObjectId(notification_id)},
+        {"$set": {"is_read": True}}
+    )
+    
+    return {"message": "تم تحديد الإشعار كمقروء"}
+
+@api_router.put("/notifications/read-all")
+async def mark_all_notifications_as_read(current_user: dict = Depends(get_current_user)):
+    """تحديد جميع الإشعارات كمقروءة"""
+    
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    if not user:
+        return {"message": "لا توجد إشعارات"}
+    
+    student = await db.students.find_one({"user_id": str(user["_id"])})
+    if not student:
+        return {"message": "لا توجد إشعارات"}
+    
+    result = await db.notifications.update_many(
+        {"student_id": str(student["_id"]), "is_read": False},
+        {"$set": {"is_read": True}}
+    )
+    
+    return {"message": f"تم تحديد {result.modified_count} إشعار كمقروء"}
+
+class ManualNotificationCreate(BaseModel):
+    student_id: str  # معرف الطالب (من جدول students)
+    title: str
+    message: str
+    type: str = "warning"  # warning, deprivation, info, reminder
+    course_id: Optional[str] = None
+
+@api_router.post("/notifications/manual")
+async def create_manual_notification(
+    data: ManualNotificationCreate,
+    current_user: dict = Depends(get_current_user)
+):
+    """إنشاء إنذار/إشعار يدوي لطالب معين"""
+    
+    # التحقق من الصلاحيات - يجب أن يكون admin أو لديه صلاحية send_notifications
+    if current_user["role"] != UserRole.ADMIN:
+        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        user_permissions = user.get("permissions", []) if user else []
+        
+        if Permission.SEND_NOTIFICATIONS not in user_permissions:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بإرسال إنذارات. تحتاج صلاحية 'إرسال إشعارات وإنذارات للطلاب'")
+    
+    # جلب بيانات الطالب
+    student = await db.students.find_one({"_id": ObjectId(data.student_id)})
+    if not student:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    
+    # جلب اسم المقرر إذا تم تحديده
+    course_name = None
+    if data.course_id:
+        course = await db.courses.find_one({"_id": ObjectId(data.course_id)})
+        if course:
+            course_name = course["name"]
+    
+    # إنشاء الإشعار
+    notification = {
+        "student_id": data.student_id,
+        "user_id": student.get("user_id"),
+        "title": data.title,
+        "message": data.message,
+        "type": data.type,
+        "course_id": data.course_id,
+        "course_name": course_name,
+        "is_read": False,
+        "is_manual": True,  # تمييز الإنذار اليدوي
+        "sent_by": current_user["id"],
+        "sent_by_name": current_user.get("full_name", ""),
+        "created_at": datetime.utcnow()
+    }
+    
+    result = await db.notifications.insert_one(notification)
+    
+    # تسجيل النشاط
+    await log_activity(
+        user=current_user,
+        action="send_manual_notification",
+        entity_type="notification",
+        entity_id=str(result.inserted_id),
+        entity_name=student.get('full_name', student.get('student_id'))
+    )
+    
+    return {
+        "message": f"تم إرسال الإنذار للطالب {student.get('full_name')} بنجاح",
+        "notification_id": str(result.inserted_id)
+    }
+
+@api_router.get("/students/{student_id}/notifications")
+async def get_student_notifications(
+    student_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """جلب إشعارات طالب معين (للمدير أو من لديه صلاحية)"""
+    
+    # التحقق من الصلاحيات
+    if current_user["role"] != UserRole.ADMIN:
+        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        user_permissions = user.get("permissions", []) if user else []
+        
+        if Permission.SEND_NOTIFICATIONS not in user_permissions:
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # جلب الإشعارات
+    notifications = await db.notifications.find(
+        {"student_id": student_id}
+    ).sort("created_at", -1).limit(50).to_list(50)
+    
+    result = []
+    for n in notifications:
+        result.append({
+            "id": str(n["_id"]),
+            "title": n["title"],
+            "message": n["message"],
+            "type": n["type"],
+            "course_id": n.get("course_id"),
+            "course_name": n.get("course_name"),
+            "is_read": n.get("is_read", False),
+            "is_manual": n.get("is_manual", False),
+            "sent_by_name": n.get("sent_by_name"),
+            "created_at": n["created_at"]
+        })
+    
+    return {"notifications": result, "count": len(result)}
 
 # ==================== Student Routes ====================
 
@@ -3440,6 +3416,11 @@ async def record_attendance_session(
     
     if attendance_records:
         await db.attendance.insert_many(attendance_records)
+        
+        # التحقق من نسب الغياب وإنشاء إشعارات للطلاب الغائبين
+        for record in session.records:
+            if record.status == AttendanceStatus.ABSENT:
+                await check_and_create_absence_notifications(record.student_id, lecture["course_id"])
     
     # Update lecture status to completed
     await db.lectures.update_one(
@@ -4728,6 +4709,39 @@ async def init_admin():
     await db.users.insert_one(admin_data)
     return {"message": "تم إنشاء حساب المشرف بنجاح", "username": "admin", "password": "admin123"}
 
+@api_router.post("/reset-admin")
+async def reset_admin():
+    """Reset admin user - creates new or updates existing"""
+    try:
+        # Delete existing admin
+        await db.users.delete_many({"username": "admin"})
+        
+        # Create fresh admin - use dynamic hash
+        admin_password = "admin123"
+        hashed = get_password_hash(admin_password)
+        
+        admin_data = {
+            "username": "admin",
+            "password": hashed,
+            "full_name": "مدير النظام",
+            "role": "admin",
+            "email": "admin@sharia.edu",
+            "created_at": datetime.utcnow(),
+            "is_active": True,
+            "permissions": [
+                "manage_users", "manage_departments", "manage_courses",
+                "manage_students", "record_attendance", "view_attendance",
+                "edit_attendance", "view_reports", "export_reports",
+                "import_data", "manage_lectures", "view_lectures"
+            ]
+        }
+        
+        await db.users.insert_one(admin_data)
+        return {"message": "تم إعادة إنشاء حساب المشرف بنجاح", "username": "admin", "password": "admin123"}
+    except Exception as e:
+        logger.error(f"Error resetting admin: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 # ==================== Schedule Routes ====================
 
 class ScheduleBase(BaseModel):
@@ -4882,11 +4896,31 @@ async def import_students_to_course(
     try:
         contents = await file.read()
         df = pd.read_excel(BytesIO(contents))
+        logger.info(f"Import to course: columns={list(df.columns)}, rows={len(df)}")
+        
+        # دعم أسماء الأعمدة بالعربي والإنجليزي
+        column_mapping = {
+            'رقم القيد': 'student_id',
+            'الرقم الجامعي': 'student_id',
+            'رقم الطالب': 'student_id',
+            'اسم الطالب': 'full_name',
+            'الاسم': 'full_name',
+            'الاسم الكامل': 'full_name',
+            'الهاتف': 'phone',
+            'رقم الهاتف': 'phone',
+            'الجوال': 'phone',
+            'البريد': 'email',
+            'البريد الإلكتروني': 'email',
+        }
+        
+        # إعادة تسمية الأعمدة
+        df = df.rename(columns=column_mapping)
+        logger.info(f"Columns after mapping: {list(df.columns)}")
         
         if 'student_id' not in df.columns:
-            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: student_id")
+            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: رقم الطالب (student_id)")
         if 'full_name' not in df.columns:
-            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: full_name")
+            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: اسم الطالب (full_name)")
         
         imported = 0
         enrolled = 0
@@ -4991,6 +5025,8 @@ async def import_students_from_excel(
             'البريد': 'email',
             'البريد الإلكتروني': 'email',
             'الإيميل': 'email',
+            # إضافة "رقم الطالب" كبديل لـ "رقم القيد"
+            'رقم الطالب': 'student_id',
         }
         
         # إعادة تسمية الأعمدة
@@ -5008,6 +5044,7 @@ async def import_students_from_excel(
             raise HTTPException(status_code=400, detail="يجب تحديد المستوى أو تضمينه في ملف Excel")
         
         imported = 0
+        imported_ids = []
         errors = []
         
         for index, row in df.iterrows():
@@ -5042,7 +5079,8 @@ async def import_students_from_excel(
                     "user_id": None
                 }
                 
-                await db.students.insert_one(student_data)
+                result = await db.students.insert_one(student_data)
+                imported_ids.append(str(result.inserted_id))
                 imported += 1
             except Exception as e:
                 errors.append(f"خطأ في الصف {index + 2}: {str(e)}")
@@ -5050,6 +5088,7 @@ async def import_students_from_excel(
         return {
             "message": f"تم استيراد {imported} طالب بنجاح",
             "imported": imported,
+            "imported_ids": imported_ids,
             "errors": errors[:10]  # Return first 10 errors only
         }
     except HTTPException:
@@ -5291,17 +5330,14 @@ async def export_department_report(
 
 @api_router.get("/template/students")
 async def get_students_template(current_user: dict = Depends(get_current_user)):
-    """Download students import template"""
-    if current_user["role"] != UserRole.ADMIN:
+    """Download students import template - يحتوي فقط على الحقول المطلوبة"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.IMPORT_DATA):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
+    # الحقول المطلوبة فقط: رقم القيد واسم الطالب
     data = {
-        "student_id": ["12345", "12346"],
-        "full_name": ["محمد أحمد علي", "أحمد محمد سعيد"],
-        "level": [1, 2],
-        "section": ["A", "B"],
-        "phone": ["0501234567", "0507654321"],
-        "email": ["student1@email.com", "student2@email.com"]
+        "رقم القيد": ["12345", "12346", "12347"],
+        "اسم الطالب": ["محمد أحمد علي", "أحمد محمد سعيد", "خالد سالم"],
     }
     
     df = pd.DataFrame(data)
@@ -5739,6 +5775,25 @@ async def update_semester(semester_id: str, data: SemesterUpdate, current_user: 
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         await db.semesters.update_one({"_id": ObjectId(semester_id)}, {"$set": update_data})
+        
+        # إذا كان الفصل نشطاً، قم بتحديث الإعدادات أيضاً
+        if semester.get("status") == SemesterStatus.ACTIVE:
+            settings_update = {"updated_at": datetime.utcnow()}
+            
+            if data.name:
+                settings_update["current_semester"] = data.name
+            if data.academic_year:
+                settings_update["academic_year"] = data.academic_year
+            if data.start_date:
+                settings_update["semester_start_date"] = data.start_date
+            if data.end_date:
+                settings_update["semester_end_date"] = data.end_date
+            
+            if len(settings_update) > 1:  # أكثر من updated_at فقط
+                await db.settings.update_one(
+                    {"_id": "system_settings"},
+                    {"$set": settings_update}
+                )
     
     return {"message": "تم تحديث الفصل الدراسي بنجاح"}
 
@@ -5767,15 +5822,23 @@ async def activate_semester(semester_id: str, current_user: dict = Depends(get_c
         {"$set": {"status": SemesterStatus.ACTIVE}}
     )
     
-    # تحديث الإعدادات
+    # تحديث الإعدادات - تضمين تواريخ الفصل الدراسي
+    settings_update = {
+        "current_semester_id": semester_id,
+        "current_semester": semester["name"],
+        "academic_year": semester["academic_year"],
+        "updated_at": datetime.utcnow()
+    }
+    
+    # إضافة تواريخ الفصل إذا كانت موجودة
+    if semester.get("start_date"):
+        settings_update["semester_start_date"] = semester["start_date"]
+    if semester.get("end_date"):
+        settings_update["semester_end_date"] = semester["end_date"]
+    
     await db.settings.update_one(
         {"_id": "system_settings"},
-        {"$set": {
-            "current_semester_id": semester_id,
-            "current_semester": semester["name"],
-            "academic_year": semester["academic_year"],
-            "updated_at": datetime.utcnow()
-        }},
+        {"$set": settings_update},
         upsert=True
     )
     
@@ -5924,13 +5987,37 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
         await db.settings.insert_one(default_settings)
         settings = default_settings
     
+    # جلب تواريخ الفصل من الفصل النشط إذا لم تكن في الإعدادات
+    semester_start = settings.get("semester_start_date")
+    semester_end = settings.get("semester_end_date")
+    
+    if not semester_start or not semester_end:
+        # محاولة جلب التواريخ من الفصل النشط
+        active_semester = await db.semesters.find_one({"status": SemesterStatus.ACTIVE})
+        if active_semester:
+            semester_start = semester_start or active_semester.get("start_date")
+            semester_end = semester_end or active_semester.get("end_date")
+            
+            # تحديث الإعدادات للمرة القادمة
+            if active_semester.get("start_date") or active_semester.get("end_date"):
+                update_fields = {}
+                if active_semester.get("start_date") and not settings.get("semester_start_date"):
+                    update_fields["semester_start_date"] = active_semester["start_date"]
+                if active_semester.get("end_date") and not settings.get("semester_end_date"):
+                    update_fields["semester_end_date"] = active_semester["end_date"]
+                if update_fields:
+                    await db.settings.update_one(
+                        {"_id": "system_settings"},
+                        {"$set": update_fields}
+                    )
+    
     return {
         "college_name": settings.get("college_name", "كلية الشريعة والقانون"),
         "college_name_en": settings.get("college_name_en", "Faculty of Sharia and Law"),
         "academic_year": settings.get("academic_year", "2024-2025"),
         "current_semester": settings.get("current_semester", "الفصل الأول"),
-        "semester_start_date": settings.get("semester_start_date"),
-        "semester_end_date": settings.get("semester_end_date"),
+        "semester_start_date": semester_start,
+        "semester_end_date": semester_end,
         "levels_count": settings.get("levels_count", 5),
         "sections": settings.get("sections", ["أ", "ب", "ج"]),
         "attendance_late_minutes": settings.get("attendance_late_minutes", 15),
@@ -6007,6 +6094,219 @@ async def get_academic_years():
 async def get_semesters():
     """الحصول على قائمة الفصول الدراسية"""
     return {"semesters": ["الفصل الأول", "الفصل الثاني", "الفصل الصيفي"]}
+
+@api_router.get("/my-scope")
+async def get_my_scope(current_user: dict = Depends(get_current_user)):
+    """
+    الحصول على نطاق صلاحيات المستخدم الحالي
+    يحدد ما يمكنه الوصول إليه (جامعة، كليات، أقسام، مقررات)
+    """
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    
+    scope = {
+        "level": "none",  # university, faculty, department, course, none
+        "university_access": False,
+        "faculties": [],  # قائمة الكليات المسموح بها
+        "departments": [],  # قائمة الأقسام المسموح بها
+        "courses": [],  # قائمة المقررات المسموح بها
+        "can_manage_settings": False,  # هل يمكنه إدارة الإعدادات العامة
+    }
+    
+    # المدير له صلاحية كاملة
+    if current_user["role"] == UserRole.ADMIN:
+        scope["level"] = "university"
+        scope["university_access"] = True
+        scope["can_manage_settings"] = True
+        # جلب كل الكليات
+        faculties = await db.faculties.find({}).to_list(None)
+        scope["faculties"] = [{"id": str(f["_id"]), "name": f["name"]} for f in faculties]
+        return scope
+    
+    # التحقق من مستوى الصلاحية المحدد للمستخدم
+    permission_level = user.get("permission_level", "")
+    
+    # التحقق من الكليات المخصصة
+    faculty_ids = user.get("faculty_ids", [])
+    if not faculty_ids and user.get("faculty_id"):
+        faculty_ids = [user.get("faculty_id")]
+    
+    # التحقق من الأقسام المخصصة
+    department_ids = user.get("department_ids", [])
+    if not department_ids and user.get("department_id"):
+        department_ids = [user.get("department_id")]
+    
+    # التحقق من المقررات المخصصة
+    course_ids = user.get("course_ids", [])
+    
+    # استنتاج مستوى الصلاحية إذا لم يكن محدداً
+    # الأولوية للأكثر تحديداً (قسم > كلية > جامعة)
+    if not permission_level:
+        if department_ids:
+            permission_level = "department"
+        elif faculty_ids:
+            permission_level = "faculty"
+    
+    # تحديد مستوى الصلاحية بناءً على البيانات
+    if permission_level == "university" or (user.get("permissions") and "manage_university" in user.get("permissions", [])):
+        scope["level"] = "university"
+        scope["university_access"] = True
+        scope["can_manage_settings"] = True
+        faculties = await db.faculties.find({}).to_list(None)
+        scope["faculties"] = [{"id": str(f["_id"]), "name": f["name"]} for f in faculties]
+    elif permission_level == "department" or (department_ids and not (permission_level == "faculty")):
+        # مستوى القسم - الأكثر تحديداً
+        scope["level"] = "department"
+        # جلب الأقسام المحددة فقط
+        for did in department_ids:
+            try:
+                dept = await db.departments.find_one({"_id": ObjectId(did)})
+                if dept:
+                    scope["departments"].append({
+                        "id": str(dept["_id"]), 
+                        "name": dept["name"],
+                        "faculty_id": dept.get("faculty_id")
+                    })
+                    # إضافة الكلية التابع لها القسم (للعرض فقط، ليس للصلاحية الكاملة)
+                    if dept.get("faculty_id"):
+                        faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
+                        if faculty and not any(f["id"] == str(faculty["_id"]) for f in scope["faculties"]):
+                            scope["faculties"].append({"id": str(faculty["_id"]), "name": faculty["name"]})
+            except:
+                pass
+    elif permission_level == "faculty" or faculty_ids:
+        # مستوى الكلية
+        scope["level"] = "faculty"
+        # جلب الكليات المحددة فقط
+        for fid in faculty_ids:
+            try:
+                faculty = await db.faculties.find_one({"_id": ObjectId(fid)})
+                if faculty:
+                    scope["faculties"].append({"id": str(faculty["_id"]), "name": faculty["name"]})
+            except:
+                pass
+        # جلب الأقسام التابعة للكليات المحددة
+        if scope["faculties"]:
+            departments = await db.departments.find({"faculty_id": {"$in": faculty_ids}}).to_list(None)
+            scope["departments"] = [{"id": str(d["_id"]), "name": d["name"], "faculty_id": d.get("faculty_id")} for d in departments]
+    elif course_ids:
+        scope["level"] = "course"
+        # جلب المقررات المحددة فقط
+        for cid in course_ids:
+            try:
+                course = await db.courses.find_one({"_id": ObjectId(cid)})
+                if course:
+                    scope["courses"].append({"id": str(course["_id"]), "name": course["name"]})
+            except:
+                pass
+    
+    return scope
+
+@api_router.get("/my-institution")
+async def get_my_institution(current_user: dict = Depends(get_current_user)):
+    """
+    الحصول على بيانات المؤسسة الخاصة بالمستخدم الحالي
+    - المدير: يحصل على بيانات الجامعة
+    - المستخدمين الآخرين: يحصلون على بيانات كليتهم
+    """
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    
+    if current_user["role"] == UserRole.ADMIN:
+        # المدير يرى بيانات الجامعة
+        university = await db.university.find_one({})
+        if university:
+            return {
+                "type": "university",
+                "id": str(university["_id"]),
+                "name": university.get("name", "جامعة الأحقاف"),
+                "name_en": university.get("name_en", "Al-Ahgaff University"),
+                "code": university.get("code", "AHGAFF"),
+                "description": university.get("description"),
+                "logo_url": university.get("logo_url"),
+                "address": university.get("address"),
+                "phone": university.get("phone"),
+                "email": university.get("email"),
+                "website": university.get("website"),
+            }
+        else:
+            # إذا لم توجد جامعة، ارجع الإعدادات العامة
+            settings = await db.settings.find_one({"_id": "system_settings"})
+            return {
+                "type": "settings",
+                "name": settings.get("college_name", "جامعة الأحقاف") if settings else "جامعة الأحقاف",
+                "name_en": settings.get("college_name_en", "Al-Ahgaff University") if settings else "Al-Ahgaff University",
+            }
+    else:
+        # المستخدمون الآخرون يرون بيانات كليتهم
+        faculty_id = user.get("faculty_id") if user else None
+        
+        if faculty_id:
+            faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
+            if faculty:
+                return {
+                    "type": "faculty",
+                    "id": str(faculty["_id"]),
+                    "name": faculty.get("name"),
+                    "name_en": faculty.get("name_en"),
+                    "code": faculty.get("code"),
+                    "description": faculty.get("description"),
+                    "levels_count": faculty.get("levels_count", 5),
+                    "sections": faculty.get("sections", ["أ", "ب", "ج"]),
+                    "attendance_late_minutes": faculty.get("attendance_late_minutes", 15),
+                    "max_absence_percent": faculty.get("max_absence_percent", 25),
+                }
+        
+        # إذا لم يكن مرتبطاً بكلية، ارجع الإعدادات العامة
+        settings = await db.settings.find_one({"_id": "system_settings"})
+        return {
+            "type": "settings",
+            "name": settings.get("college_name", "النظام") if settings else "النظام",
+            "name_en": settings.get("college_name_en") if settings else None,
+            "levels_count": settings.get("levels_count", 5) if settings else 5,
+            "sections": settings.get("sections", ["أ", "ب", "ج"]) if settings else ["أ", "ب", "ج"],
+            "attendance_late_minutes": settings.get("attendance_late_minutes", 15) if settings else 15,
+            "max_absence_percent": settings.get("max_absence_percent", 25) if settings else 25,
+        }
+
+@api_router.put("/my-institution")
+async def update_my_institution(data: dict = Body(...), current_user: dict = Depends(get_current_user)):
+    """
+    تحديث بيانات المؤسسة الخاصة بالمستخدم
+    - المدير: يمكنه تحديث بيانات الجامعة
+    - مستخدم لديه صلاحية: يمكنه تحديث بيانات كليته
+    """
+    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    
+    if current_user["role"] == UserRole.ADMIN:
+        # المدير يحدث بيانات الجامعة
+        update_data = {k: v for k, v in data.items() if v is not None and k != "type"}
+        update_data["updated_at"] = datetime.utcnow()
+        
+        await db.university.update_one(
+            {},
+            {"$set": update_data},
+            upsert=True
+        )
+        return {"message": "تم تحديث بيانات الجامعة بنجاح"}
+    else:
+        # التحقق من صلاحية التحديث
+        faculty_id = user.get("faculty_id") if user else None
+        if not faculty_id:
+            raise HTTPException(status_code=403, detail="أنت غير مرتبط بكلية")
+        
+        # تحديث بيانات الكلية (الإعدادات الخاصة فقط)
+        allowed_fields = ["levels_count", "sections", "attendance_late_minutes", "max_absence_percent", "description"]
+        update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
+        
+        if update_data:
+            update_data["updated_at"] = datetime.utcnow()
+            await db.faculties.update_one(
+                {"_id": ObjectId(faculty_id)},
+                {"$set": update_data}
+            )
+        
+        return {"message": "تم تحديث إعدادات الكلية بنجاح"}
 
 @api_router.get("/")
 async def root():
@@ -6332,7 +6632,7 @@ async def get_faculties(current_user: dict = Depends(get_current_user)):
 
 @api_router.get("/faculties/{faculty_id}")
 async def get_faculty(faculty_id: str, current_user: dict = Depends(get_current_user)):
-    """جلب بيانات كلية محددة"""
+    """جلب بيانات كلية محددة مع إعداداتها"""
     faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
     if not faculty:
         raise HTTPException(status_code=404, detail="الكلية غير موجودة")
@@ -6351,8 +6651,59 @@ async def get_faculty(faculty_id: str, current_user: dict = Depends(get_current_
         "dean_id": faculty.get("dean_id"),
         "dean_name": dean_name,
         "departments_count": departments_count,
-        "created_at": faculty.get("created_at", datetime.utcnow())
+        "created_at": faculty.get("created_at", datetime.utcnow()),
+        # إعدادات الكلية
+        "levels_count": faculty.get("levels_count", 5),
+        "sections": faculty.get("sections", ["أ", "ب", "ج"]),
+        "attendance_late_minutes": faculty.get("attendance_late_minutes", 15),
+        "max_absence_percent": faculty.get("max_absence_percent", 25),
+        "primary_color": faculty.get("primary_color", "#1565c0"),
+        "secondary_color": faculty.get("secondary_color", "#ff9800"),
+        # معلومات التواصل
+        "phone": faculty.get("phone", ""),
+        "whatsapp": faculty.get("whatsapp", ""),
+        "email": faculty.get("email", ""),
     }
+
+@api_router.put("/faculties/{faculty_id}/settings")
+async def update_faculty_settings(
+    faculty_id: str,
+    data: dict = Body(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """تحديث إعدادات كلية"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل إعدادات الكليات")
+    
+    faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
+    if not faculty:
+        raise HTTPException(status_code=404, detail="الكلية غير موجودة")
+    
+    # الحقول المسموح تحديثها
+    allowed_fields = [
+        "levels_count", "sections", "attendance_late_minutes", "max_absence_percent",
+        "primary_color", "secondary_color", "phone", "whatsapp", "email"
+    ]
+    
+    update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
+    
+    if update_data:
+        update_data["updated_at"] = datetime.utcnow()
+        await db.faculties.update_one(
+            {"_id": ObjectId(faculty_id)},
+            {"$set": update_data}
+        )
+    
+    # تسجيل النشاط
+    await log_activity(
+        user=current_user,
+        action="update_faculty_settings",
+        entity_type="faculty",
+        entity_id=faculty_id,
+        entity_name=faculty["name"]
+    )
+    
+    return {"message": "تم تحديث إعدادات الكلية بنجاح"}
 
 @api_router.post("/faculties")
 async def create_faculty(
@@ -6621,6 +6972,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# إضافة الـ routers المنفصلة (المرحلة 2 من إعادة الهيكلة)
+# ملاحظة: الـ routes القديمة في api_router تبقى كـ fallback
+app.include_router(auth_router, prefix="/api")
+app.include_router(users_router, prefix="/api")
 
 app.include_router(api_router)
 
