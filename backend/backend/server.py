@@ -8651,6 +8651,27 @@ app.include_router(notifications_router, prefix="/api")
 async def startup_event():
     from services.firebase_service import init_firebase
     init_firebase()
+    # تحديث صلاحيات الأدوار الافتراضية تلقائياً
+    await sync_default_roles()
+
+async def sync_default_roles():
+    """مزامنة صلاحيات الأدوار الافتراضية مع قاعدة البيانات"""
+    role_map = {
+        "admin": UserRole.ADMIN,
+        "teacher": UserRole.TEACHER,
+        "employee": UserRole.EMPLOYEE,
+        "student": UserRole.STUDENT,
+    }
+    for system_key, role_enum in role_map.items():
+        default_perms = list(DEFAULT_PERMISSIONS.get(role_enum, []))
+        existing = await db.roles.find_one({"system_key": system_key})
+        if existing:
+            if set(existing.get("permissions", [])) != set(default_perms):
+                await db.roles.update_one(
+                    {"system_key": system_key},
+                    {"$set": {"permissions": default_perms}}
+                )
+                logging.info(f"تم تحديث صلاحيات دور {system_key}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
