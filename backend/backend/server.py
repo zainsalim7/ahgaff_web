@@ -4382,8 +4382,13 @@ async def record_attendance_session(
     # الوقت المسموح به للتحضير = وقت نهاية المحاضرة + مدة المحاضرة
     allowed_end_time = lecture_end + timedelta(minutes=lecture_duration)
     
-    # التحقق: لا يُسمح بالتحضير قبل وقت بداية المحاضرة (مع السماح بالتأخير)
-    # لا نمنع التحضير قبل البداية - الأستاذ قد يبدأ مبكراً
+    # التحقق: لا يُسمح بالتحضير قبل وقت بداية المحاضرة (مسموح 15 دقيقة مبكراً)
+    early_start_allowed = lecture_start - timedelta(minutes=15)
+    if check_time < early_start_allowed and not is_offline_sync:
+        raise HTTPException(
+            status_code=400,
+            detail=f"لم يحن وقت المحاضرة بعد. تبدأ الساعة {lecture_start.strftime('%H:%M')}"
+        )
     
     # التحقق: لا يُسمح بالتحضير بعد انتهاء الوقت المسموح
     if check_time > allowed_end_time:
