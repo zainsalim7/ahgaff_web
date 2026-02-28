@@ -574,7 +574,8 @@ export default function ReportsScreen() {
           </View>
         </View>
 
-        {/* تقرير الفصل الدراسي الشامل */}
+        {/* تقرير الفصل الدراسي الشامل - Only for users with view_reports */}
+        {canViewReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>تقرير الفصل الدراسي الشامل (PDF)</Text>
           <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, marginTop: 8 }}>
