@@ -68,7 +68,9 @@ ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
 # JWT Configuration
-SECRET_KEY = os.environ.get('JWT_SECRET') or os.environ.get('SECRET_KEY') or 'default_secret_key_change_in_production'
+SECRET_KEY = os.environ.get('SECRET_KEY')
+if not SECRET_KEY:
+    raise ValueError("SECRET_KEY environment variable is required")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
 
@@ -79,9 +81,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 security = HTTPBearer()
 
 # MongoDB connection
-mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
+mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ.get('DB_NAME', 'attendance_db')]
+db = client[os.environ['DB_NAME']]
 
 # تهيئة قاعدة البيانات للـ routes
 from routes.deps import set_database
@@ -94,7 +96,6 @@ from routes.users import router as users_router
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
 
-<<<<<<< HEAD:backend/server.py.backup
 # ==================== Root Health Check Endpoints ====================
 # Health check on root path for Railway
 @app.get("/health")
@@ -106,13 +107,6 @@ async def root_health_check():
 async def root():
     """Root endpoint"""
     return {"status": "ok", "message": "نظام حضور جامعة الأحقاف"}
-=======
-# Health check endpoint (before router)
-@app.get("/health")
-@app.get("/api/health")
-async def health_check():
-    return {"status": "healthy", "message": "API is running"}
->>>>>>> 1ccbcb4 (Add health endpoint, fix env vars, remove old config):server.py
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
