@@ -14,14 +14,30 @@ const getApiUrl = () => {
   console.log('EXPO_PUBLIC_BACKEND_URL:', expoBackendUrl);
   
   if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    // في الويب، استخدم الـ origin الحالي
+    // في الويب
     const origin = window.location.origin;
     console.log('Web origin:', origin);
+    
     // إذا كنا على localhost:3000، نستخدم localhost:8001 للـ backend
     if (origin.includes('localhost:3000')) {
       return 'http://localhost:8001';
     }
-    // للـ preview URLs الخارجية، استخدم نفس الـ origin
+    
+    // إذا كنا على Emergent preview
+    if (origin.includes('preview.emergentagent.com')) {
+      return origin;
+    }
+    
+    // إذا كنا على Railway (ahgaffweb)، استخدم Backend URL الثابت
+    if (origin.includes('railway.app')) {
+      return 'https://ahgaffweb-production-c582.up.railway.app';
+    }
+    
+    // للمواقع الأخرى، استخدم الـ env variable
+    if (expoBackendUrl) {
+      return expoBackendUrl;
+    }
+    
     return origin;
   }
   
@@ -121,14 +137,40 @@ export const settingsAPI = {
   getSemesters: () => api.get('/settings/semesters'),
 };
 
+// Institution API - بيانات المؤسسة حسب المستخدم
+export const institutionAPI = {
+  get: () => api.get('/my-institution'),
+  update: (data: any) => api.put('/my-institution', data),
+};
+
+// Scope API - نطاق صلاحيات المستخدم
+export const scopeAPI = {
+  get: () => api.get('/my-scope'),
+};
+
 // Departments API
 export const departmentsAPI = {
   create: (data: any) => api.post('/departments', data),
   getAll: () => api.get('/departments'),
   getStats: () => api.get('/departments/stats'),
+  getDashboard: () => api.get('/departments/dashboard'),
   getDetails: (id: string) => api.get(`/departments/${id}/details`),
   update: (id: string, data: any) => api.put(`/departments/${id}`, data),
   delete: (id: string) => api.delete(`/departments/${id}`),
+};
+
+// Notifications API (الإشعارات)
+export const notificationsAPI = {
+  getAll: (params?: { limit?: number; unread_only?: boolean }) =>
+    api.get('/notifications', { params }),
+  getCount: () => api.get('/notifications/count'),
+  markAsRead: (id: string) => api.put(`/notifications/${id}/read`),
+  markAllAsRead: () => api.put('/notifications/read-all'),
+  // إنذار يدوي
+  sendManual: (data: { student_id: string; title: string; message: string; type?: string; course_id?: string }) =>
+    api.post('/notifications/manual', data),
+  getStudentNotifications: (studentId: string) =>
+    api.get(`/students/${studentId}/notifications`),
 };
 
 // Students API
@@ -227,6 +269,8 @@ export const reportsAPI = {
     api.get(`/reports/course/${courseId}/detailed`),
   getTeacherWorkload: (params?: { teacher_id?: string; start_date?: string; end_date?: string }) =>
     api.get('/reports/teacher-workload', { params }),
+  getTeacherSummary: (params?: { teacher_id?: string }) =>
+    api.get('/reports/teacher-summary', { params }),
   // تصدير التقارير
   exportWarningsExcel: (params?: { department_id?: string }) =>
     api.get('/export/report/warnings/excel', { params, responseType: 'blob' }),
@@ -234,6 +278,8 @@ export const reportsAPI = {
     api.get('/export/report/absent-students/excel', { params, responseType: 'blob' }),
   exportTeacherWorkloadExcel: (params?: { teacher_id?: string; start_date?: string; end_date?: string }) =>
     api.get('/export/report/teacher-workload/excel', { params, responseType: 'blob' }),
+  exportTeacherSummaryExcel: (params?: { teacher_id?: string }) =>
+    api.get('/export/report/teacher-summary/excel', { params, responseType: 'blob' }),
   exportDailyExcel: (params?: { date?: string; department_id?: string }) =>
     api.get('/export/report/daily/excel', { params, responseType: 'blob' }),
   exportStudentReportExcel: (studentId: string) =>
@@ -272,6 +318,9 @@ export const exportAPI = {
   
   exportDeptReportPDF: (deptId: string) => 
     api.get(`/export/report/${deptId}/pdf`, { responseType: 'blob' }),
+  
+  exportSemesterReportPDF: (params?: { course_id?: string; department_id?: string }) =>
+    api.get('/export/semester-report/pdf', { params, responseType: 'blob' }),
   
   importStudents: async (file: FormData, departmentId: string, level?: string, section?: string) => {
     let url = `/import/students?department_id=${departmentId}`;
@@ -397,6 +446,9 @@ export const lecturesAPI = {
   update: (lectureId: string, data: any) => 
     api.put(`/lectures/${lectureId}`, data),
   
+  updateStatus: (lectureId: string, status: string) =>
+    api.put(`/lectures/${lectureId}/status`, { status }),
+  
   delete: (lectureId: string) => 
     api.delete(`/lectures/${lectureId}`),
 };
@@ -471,6 +523,7 @@ export const facultiesAPI = {
   update: (id: string, data: { name?: string; code?: string; description?: string }) =>
     api.put(`/faculties/${id}`, data),
   delete: (id: string) => api.delete(`/faculties/${id}`),
+  updateSettings: (id: string, data: any) => api.put(`/faculties/${id}/settings`, data),
 };
 
 export default api;
