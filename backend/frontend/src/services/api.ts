@@ -269,6 +269,8 @@ export const reportsAPI = {
     api.get(`/reports/course/${courseId}/detailed`),
   getTeacherWorkload: (params?: { teacher_id?: string; start_date?: string; end_date?: string }) =>
     api.get('/reports/teacher-workload', { params }),
+  getTeacherSummary: (params?: { teacher_id?: string }) =>
+    api.get('/reports/teacher-summary', { params }),
   // تصدير التقارير
   exportWarningsExcel: (params?: { department_id?: string }) =>
     api.get('/export/report/warnings/excel', { params, responseType: 'blob' }),
