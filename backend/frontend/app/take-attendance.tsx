@@ -364,40 +364,53 @@ export default function TakeAttendanceScreen() {
           ]);
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving attendance:', error);
       
-      // في حالة الفشل، حاول الحفظ أوفلاين
-      try {
-        const student_names: Record<string, string> = {};
-        students.forEach(s => { student_names[s.id] = s.full_name; });
-        
-        for (const [studentId, status] of Object.entries(attendance)) {
-          await addAttendanceRecord({
-            lecture_id: lectureId as string,
-            course_id: course?.id || courseId as string,
-            student_id: studentId,
-            student_name: student_names[studentId],
-            status: status as 'present' | 'absent' | 'late' | 'excused',
-            method: 'manual_offline',
-          });
-        }
-        
-        const fallbackMsg = 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)';
+      // التحقق: هل الخطأ من الخادم (مثل "لم يحن وقت المحاضرة") أم فشل اتصال حقيقي
+      const serverError = error?.response?.data?.detail;
+      const statusCode = error?.response?.status;
+      
+      if (serverError && (statusCode === 400 || statusCode === 403)) {
+        // خطأ من الخادم - عرض الرسالة الفعلية (مثل: لم يحن وقت المحاضرة)
         if (Platform.OS === 'web') {
-          window.alert(fallbackMsg);
-          goBack();
+          window.alert(serverError);
         } else {
-          Alert.alert('تم الحفظ', fallbackMsg, [
-            { text: 'حسناً', onPress: () => goBack() }
-          ]);
+          Alert.alert('غير مسموح', serverError);
         }
-      } catch (offlineError) {
-        const errorMsg = 'فشل في حفظ الحضور';
-        if (Platform.OS === 'web') {
-          window.alert(errorMsg);
-        } else {
-          Alert.alert('خطأ', errorMsg);
+      } else {
+        // فشل اتصال حقيقي - حفظ أوفلاين
+        try {
+          const student_names: Record<string, string> = {};
+          students.forEach(s => { student_names[s.id] = s.full_name; });
+          
+          for (const [studentId, status] of Object.entries(attendance)) {
+            await addAttendanceRecord({
+              lecture_id: lectureId as string,
+              course_id: course?.id || courseId as string,
+              student_id: studentId,
+              student_name: student_names[studentId],
+              status: status as 'present' | 'absent' | 'late' | 'excused',
+              method: 'manual_offline',
+            });
+          }
+          
+          const fallbackMsg = 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)';
+          if (Platform.OS === 'web') {
+            window.alert(fallbackMsg);
+            goBack();
+          } else {
+            Alert.alert('تم الحفظ', fallbackMsg, [
+              { text: 'حسناً', onPress: () => goBack() }
+            ]);
+          }
+        } catch (offlineError) {
+          const errorMsg = 'فشل في حفظ الحضور';
+          if (Platform.OS === 'web') {
+            window.alert(errorMsg);
+          } else {
+            Alert.alert('خطأ', errorMsg);
+          }
         }
       }
     } finally {
