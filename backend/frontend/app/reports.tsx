@@ -852,8 +852,8 @@ export default function ReportsScreen() {
         </View>
         )}
 
-        {/* Export Department Report - Only if user has permission */}
-        {canExportReports && (
+        {/* Export Department Report - Only for admins with view_reports */}
+        {canViewReports && canExportReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📋 تقرير القسم الشامل</Text>
           <View style={styles.exportRow}>
