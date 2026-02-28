@@ -158,6 +158,21 @@ async def send_notification_api(
 
     result = await send_notification_to_many(tokens, request.title, request.body)
 
+    # حفظ الإشعار داخل التطبيق لكل مستخدم مستهدف
+    target_user_ids = list(set(doc["user_id"] for doc in tokens_docs))
+    in_app_notifications = []
+    for uid in target_user_ids:
+        in_app_notifications.append({
+            "user_id": uid,
+            "title": request.title,
+            "message": request.body,
+            "type": "info",
+            "is_read": False,
+            "created_at": get_yemen_time().isoformat(),
+        })
+    if in_app_notifications:
+        await db.notifications.insert_many(in_app_notifications)
+
     await db.notification_history.insert_one({
         "title": request.title,
         "body": request.body,
