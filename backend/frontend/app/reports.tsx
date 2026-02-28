@@ -752,9 +752,10 @@ export default function ReportsScreen() {
             </View>
           )}
         </View>
+        )}
 
-        {/* Export Students - Only if user has permission */}
-        {canExportReports && (
+        {/* Export Students - Only for admins with view_reports */}
+        {canViewReports && canExportReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📤 تصدير قائمة الطلاب</Text>
           {/* Show active filters info */}
