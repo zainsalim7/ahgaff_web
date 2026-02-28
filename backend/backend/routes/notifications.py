@@ -110,6 +110,22 @@ async def send_notification_api(
     if request.target_type == "student" and request.student_user_id:
         query["user_id"] = request.student_user_id
         target_desc = f"طالب: {request.student_name or request.student_user_id}"
+    elif request.target_type == "teacher" and request.teacher_user_id:
+        query["user_id"] = request.teacher_user_id
+        # جلب اسم المعلم
+        teacher_user = await db.users.find_one({"_id": __import__('bson').ObjectId(request.teacher_user_id)})
+        teacher_name = teacher_user.get("full_name", "") if teacher_user else ""
+        target_desc = f"معلم: {teacher_name}"
+    elif request.target_type == "course" and request.course_id:
+        # إرسال لجميع طلاب المقرر
+        enrollments = await db.enrollments.find({"course_id": request.course_id}).to_list(5000)
+        student_ids = [e["student_id"] for e in enrollments]
+        students = await db.students.find({"_id": {"$in": [__import__('bson').ObjectId(sid) for sid in student_ids]}}).to_list(5000)
+        user_ids = [s["user_id"] for s in students if s.get("user_id")]
+        query["user_id"] = {"$in": user_ids} if user_ids else {"$in": []}
+        course = await db.courses.find_one({"_id": __import__('bson').ObjectId(request.course_id)})
+        course_name = course.get("name", "") if course else ""
+        target_desc = f"طلاب مقرر: {course_name} ({len(user_ids)} طالب)"
     elif request.target_type == "role" and request.target_role:
         users = await db.users.find({"role": request.target_role}, {"_id": 1}).to_list(10000)
         user_ids = [str(u["_id"]) for u in users]
