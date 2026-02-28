@@ -20,17 +20,22 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { departmentsAPI, coursesAPI, reportsAPI, exportAPI } from '../src/services/api';
+import { departmentsAPI, coursesAPI, reportsAPI, exportAPI, API_URL } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { Department, Course } from '../src/types';
-
-const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
 // دالة التحقق من الصلاحيات
 const checkPermission = (userRole: string, userPermissions: string[], permission: string): boolean => {
   if (userRole === 'admin') return true;
   return userPermissions?.includes(permission) || false;
+};
+
+// دالة التحقق من صلاحية تقرير معين (تدعم view_reports للتوافق مع الإصدارات القديمة)
+const canViewReport = (userRole: string, userPermissions: string[], reportPermission: string): boolean => {
+  if (userRole === 'admin') return true;
+  // إذا كان لديه صلاحية view_reports العامة أو صلاحية التقرير المحدد
+  return userPermissions?.includes('view_reports') || userPermissions?.includes(reportPermission) || false;
 };
 
 // Custom Dropdown Component
@@ -201,31 +206,14 @@ export default function ReportsScreen() {
   const [exportSection, setExportSection] = useState<string>('');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   
-  // صلاحيات المستخدم
-  const [userRole, setUserRole] = useState<string>('');
-  const [userPermissions, setUserPermissions] = useState<string[]>([]);
+  // صلاحيات المستخدم - من الـ store مباشرة
+  const userRole = user?.role || '';
+  const userPermissions = user?.permissions || [];
   const canViewReports = checkPermission(userRole, userPermissions, 'view_reports');
   const canExportReports = checkPermission(userRole, userPermissions, 'export_reports');
   
   const LEVELS = ['1', '2', '3', '4', '5'];
   const SECTIONS = ['أ', 'ب', 'ج', 'د'];
-
-  // تحميل صلاحيات المستخدم
-  useEffect(() => {
-    const loadUserPermissions = async () => {
-      try {
-        const storedUser = await AsyncStorage.getItem('user');
-        if (storedUser) {
-          const userData = JSON.parse(storedUser);
-          setUserRole(userData.role || '');
-          setUserPermissions(userData.permissions || []);
-        }
-      } catch (error) {
-        console.error('Error loading user permissions:', error);
-      }
-    };
-    loadUserPermissions();
-  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -419,6 +407,26 @@ export default function ReportsScreen() {
     }
   };
 
+  const handleExportSemesterPDF = async () => {
+    setExporting('semester_pdf');
+    try {
+      const params: any = {};
+      if (selectedCourse) params.course_id = selectedCourse;
+      if (selectedDept) params.department_id = selectedDept;
+      
+      const response = await exportAPI.exportSemesterReportPDF(params);
+      const filename = `semester_report_${new Date().toISOString().split('T')[0]}.pdf`;
+      await downloadBlob(response.data, filename);
+      Alert.alert('نجاح', 'تم تصدير تقرير الفصل الدراسي');
+    } catch (error: any) {
+      console.error('Export semester PDF error:', error);
+      const msg = error.response?.data?.detail || 'فشل في تصدير التقرير';
+      Alert.alert('خطأ', msg);
+    } finally {
+      setExporting(null);
+    }
+  };
+
   if (loading) {
     return <LoadingScreen />;
   }
@@ -426,8 +434,8 @@ export default function ReportsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView style={styles.scrollView}>
-        {/* Summary Stats */}
-        {summary && (
+        {/* Summary Stats - Only for users with view_reports */}
+        {summary && canViewReports && (
           <View style={styles.summaryCard}>
             <Text style={styles.sectionTitle}>ملخص النظام</Text>
             <View style={styles.statsGrid}>
@@ -459,9 +467,12 @@ export default function ReportsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 أنواع التقارير</Text>
           <View style={styles.reportTypesGrid}>
+            {/* تقرير الحضور الشامل */}
+            {canViewReport(userRole, userPermissions, 'report_attendance_overview') && (
             <TouchableOpacity 
               style={styles.reportTypeCard}
               onPress={() => router.push('/report-attendance-overview')}
+              data-testid="report-attendance-overview-btn"
             >
               <View style={[styles.reportTypeIcon, { backgroundColor: '#e3f2fd' }]}>
                 <Ionicons name="stats-chart" size={28} color="#1565c0" />
@@ -469,10 +480,14 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeTitle}>الحضور الشامل</Text>
               <Text style={styles.reportTypeDesc}>نسب الحضور لجميع المقررات</Text>
             </TouchableOpacity>
+            )}
 
+            {/* تقرير الطلاب المتغيبين */}
+            {canViewReport(userRole, userPermissions, 'report_absent_students') && (
             <TouchableOpacity 
               style={styles.reportTypeCard}
               onPress={() => router.push('/report-absent-students')}
+              data-testid="report-absent-students-btn"
             >
               <View style={[styles.reportTypeIcon, { backgroundColor: '#ffebee' }]}>
                 <Ionicons name="person-remove" size={28} color="#f44336" />
@@ -480,10 +495,14 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeTitle}>الطلاب المتغيبين</Text>
               <Text style={styles.reportTypeDesc}>تجاوزوا نسبة غياب معينة</Text>
             </TouchableOpacity>
+            )}
 
+            {/* تقرير الإنذارات والحرمان */}
+            {canViewReport(userRole, userPermissions, 'report_warnings') && (
             <TouchableOpacity 
               style={styles.reportTypeCard}
               onPress={() => router.push('/report-warnings')}
+              data-testid="report-warnings-btn"
             >
               <View style={[styles.reportTypeIcon, { backgroundColor: '#fff3e0' }]}>
                 <Ionicons name="warning" size={28} color="#ff9800" />
@@ -491,10 +510,14 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeTitle}>الإنذارات والحرمان</Text>
               <Text style={styles.reportTypeDesc}>الطلاب المعرضين للحرمان</Text>
             </TouchableOpacity>
+            )}
 
+            {/* التقرير اليومي */}
+            {canViewReport(userRole, userPermissions, 'report_daily') && (
             <TouchableOpacity 
               style={styles.reportTypeCard}
               onPress={() => router.push('/report-daily')}
+              data-testid="report-daily-btn"
             >
               <View style={[styles.reportTypeIcon, { backgroundColor: '#e8f5e9' }]}>
                 <Ionicons name="calendar" size={28} color="#4caf50" />
@@ -502,10 +525,14 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeTitle}>التقرير اليومي</Text>
               <Text style={styles.reportTypeDesc}>ملخص الحضور لكل يوم</Text>
             </TouchableOpacity>
+            )}
 
+            {/* تقرير طالب */}
+            {canViewReport(userRole, userPermissions, 'report_student') && (
             <TouchableOpacity 
               style={styles.reportTypeCard}
               onPress={() => router.push('/report-student')}
+              data-testid="report-student-btn"
             >
               <View style={[styles.reportTypeIcon, { backgroundColor: '#f3e5f5' }]}>
                 <Ionicons name="person" size={28} color="#9c27b0" />
@@ -513,10 +540,14 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeTitle}>تقرير طالب</Text>
               <Text style={styles.reportTypeDesc}>حضور طالب في مقرراته</Text>
             </TouchableOpacity>
+            )}
 
+            {/* تقرير مقرر */}
+            {canViewReport(userRole, userPermissions, 'report_course') && (
             <TouchableOpacity 
               style={styles.reportTypeCard}
               onPress={() => router.push('/report-course')}
+              data-testid="report-course-btn"
             >
               <View style={[styles.reportTypeIcon, { backgroundColor: '#e0f7fa' }]}>
                 <Ionicons name="book" size={28} color="#00bcd4" />
@@ -524,10 +555,14 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeTitle}>تقرير مقرر</Text>
               <Text style={styles.reportTypeDesc}>تحليل كامل للمقرر</Text>
             </TouchableOpacity>
+            )}
 
+            {/* تقرير نصاب المدرس */}
+            {canViewReport(userRole, userPermissions, 'report_teacher_workload') && (
             <TouchableOpacity 
               style={styles.reportTypeCard}
               onPress={() => router.push('/report-teacher-workload')}
+              data-testid="report-teacher-workload-btn"
             >
               <View style={[styles.reportTypeIcon, { backgroundColor: '#fce4ec' }]}>
                 <Ionicons name="time" size={28} color="#e91e63" />
@@ -535,10 +570,71 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeTitle}>نصاب المدرس</Text>
               <Text style={styles.reportTypeDesc}>ساعات التدريس الفعلية</Text>
             </TouchableOpacity>
+            )}
           </View>
         </View>
 
+        {/* تقرير الفصل الدراسي الشامل - Only for users with view_reports */}
+        {canViewReports && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>تقرير الفصل الدراسي الشامل (PDF)</Text>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, marginTop: 8 }}>
+            <Text style={{ fontSize: 13, color: '#666', marginBottom: 12 }}>
+              تقرير شامل يحتوي على جميع المقررات مع إحصائيات الحضور لكل طالب
+            </Text>
+            
+            <View style={{ flexDirection: 'row', gap: 10, marginBottom: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Dropdown
+                  label="القسم (اختياري)"
+                  value={selectedDept || ''}
+                  placeholder="جميع الأقسام"
+                  options={departments.map(d => ({ id: d.id, name: d.name }))}
+                  onSelect={(id) => setSelectedDept(id || null)}
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Dropdown
+                  label="المقرر (اختياري)"
+                  value={selectedCourse || ''}
+                  placeholder="جميع المقررات"
+                  options={courses.map(c => ({ id: c.id, name: `${c.name} (${c.code || ''})` }))}
+                  onSelect={(id) => setSelectedCourse(id || null)}
+                />
+              </View>
+            </View>
+            
+            <TouchableOpacity
+              style={{
+                backgroundColor: '#1565c0',
+                padding: 14,
+                borderRadius: 10,
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                opacity: exporting === 'semester_pdf' ? 0.6 : 1,
+              }}
+              onPress={handleExportSemesterPDF}
+              disabled={exporting === 'semester_pdf'}
+              data-testid="export-semester-pdf-btn"
+            >
+              {exporting === 'semester_pdf' ? (
+                <ActivityIndicator color="#fff" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="document-text" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 15, marginRight: 8 }}>
+                    تصدير تقرير الفصل PDF
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+        )}
+
         {/* Advanced Export Filters */}
+        {canViewReports && (
         <View style={styles.section}>
           <TouchableOpacity 
             style={styles.advancedFilterHeader}
@@ -656,9 +752,10 @@ export default function ReportsScreen() {
             </View>
           )}
         </View>
+        )}
 
-        {/* Export Students - Only if user has permission */}
-        {canExportReports && (
+        {/* Export Students - Only for admins with view_reports */}
+        {canViewReports && canExportReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📤 تصدير قائمة الطلاب</Text>
           {/* Show active filters info */}
@@ -704,8 +801,8 @@ export default function ReportsScreen() {
         </View>
         )}
 
-        {/* Export Attendance - Only if user has permission */}
-        {canExportReports && (
+        {/* Export Attendance - Only for admins with view_reports */}
+        {canViewReports && canExportReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 تصدير سجل الحضور</Text>
           <Text style={styles.hintText}>اختر المقرر:</Text>
@@ -755,8 +852,8 @@ export default function ReportsScreen() {
         </View>
         )}
 
-        {/* Export Department Report - Only if user has permission */}
-        {canExportReports && (
+        {/* Export Department Report - Only for admins with view_reports */}
+        {canViewReports && canExportReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📋 تقرير القسم الشامل</Text>
           <View style={styles.exportRow}>
