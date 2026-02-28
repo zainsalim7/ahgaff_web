@@ -631,8 +631,10 @@ export default function ReportsScreen() {
             </TouchableOpacity>
           </View>
         </View>
+        )}
 
         {/* Advanced Export Filters */}
+        {canViewReports && (
         <View style={styles.section}>
           <TouchableOpacity 
             style={styles.advancedFilterHeader}
