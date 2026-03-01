@@ -19,6 +19,19 @@ export default function SendNotification() {
   const [selectedRole, setSelectedRole] = useState('');
   const [sending, setSending] = useState(false);
 
+  // التحقق من الصلاحية
+  const canSend = user?.role === 'admin' || 
+    user?.permissions?.includes('send_notifications') || 
+    user?.permissions?.includes('manage_notifications');
+
+  useEffect(() => {
+    if (!canSend) {
+      Alert.alert('غير مصرح', 'ليس لديك صلاحية إرسال الإشعارات', [
+        { text: 'رجوع', onPress: () => goBack(router) }
+      ]);
+    }
+  }, [canSend]);
+
   // Course selection
   const [courses, setCourses] = useState<any[]>([]);
   const [selectedCourse, setSelectedCourse] = useState('');
