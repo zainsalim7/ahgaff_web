@@ -111,6 +111,24 @@ export default function SendNotification() {
     }
   };
 
+  if (!canSend) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} data-testid="back-btn">
+            <Ionicons name="arrow-forward" size={24} color="#1565c0" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>إرسال إشعار</Text>
+          <View style={{ width: 32 }} />
+        </View>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          <Ionicons name="lock-closed" size={48} color="#f44336" />
+          <Text style={{ fontSize: 16, color: '#666', marginTop: 12, textAlign: 'center' }}>ليس لديك صلاحية إرسال الإشعارات</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
