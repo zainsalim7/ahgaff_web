@@ -400,6 +400,10 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#1565c0',
   },
+  deleteBtn: {
+    padding: 6,
+    marginLeft: 4,
+  },
   notificationMessage: {
     fontSize: 14,
     color: '#666',
