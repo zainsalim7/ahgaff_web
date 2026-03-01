@@ -9,6 +9,7 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -85,6 +86,37 @@ export default function NotificationsPage() {
       setUnreadCount(0);
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
+    }
+  };
+
+  const deleteNotification = async (notificationId: string) => {
+    const doDelete = async () => {
+      try {
+        await api.delete(`/notifications/${notificationId}`);
+        setNotifications(prev => prev.filter(n => n.id !== notificationId));
+        const deleted = notifications.find(n => n.id === notificationId);
+        if (deleted && !deleted.is_read) {
+          setUnreadCount(prev => Math.max(0, prev - 1));
+        }
+      } catch (error) {
+        console.error('Error deleting notification:', error);
+        if (Platform.OS === 'web') {
+          window.alert('فشل حذف الإشعار');
+        } else {
+          Alert.alert('خطأ', 'فشل حذف الإشعار');
+        }
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm('هل تريد حذف هذا الإشعار؟')) {
+        await doDelete();
+      }
+    } else {
+      Alert.alert('تأكيد', 'هل تريد حذف هذا الإشعار؟', [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'حذف', style: 'destructive', onPress: doDelete },
+      ]);
     }
   };
 
