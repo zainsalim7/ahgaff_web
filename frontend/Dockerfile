@@ -7,8 +7,9 @@ ARG EXPO_PUBLIC_BACKEND_URL=https://ahgaffweb-production-c582.up.railway.app
 ENV EXPO_PUBLIC_BACKEND_URL=$EXPO_PUBLIC_BACKEND_URL
 
 # Install dependencies
-COPY package.json yarn.lock ./
-RUN yarn install
+COPY package.json ./
+COPY yarn.lock* ./
+RUN yarn install --frozen-lockfile 2>/dev/null || yarn install
 
 # Copy source code
 COPY . .
