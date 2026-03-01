@@ -262,6 +262,22 @@ async def send_notification_api(
     }
 
 
+@router.delete("/notifications/{notification_id}")
+async def delete_notification(
+    notification_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """حذف إشعار"""
+    db = get_db()
+    from bson import ObjectId
+    result = await db.notifications.delete_one(
+        {"_id": ObjectId(notification_id), "user_id": current_user["id"]}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="الإشعار غير موجود")
+    return {"message": "تم حذف الإشعار"}
+
+
 @router.get("/notifications/history")
 async def get_notification_history(
     current_user: dict = Depends(get_current_user)
