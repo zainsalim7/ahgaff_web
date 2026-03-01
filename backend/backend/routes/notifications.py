@@ -204,30 +204,27 @@ async def send_notification_api(
         query["user_id"] = {"$in": request.user_ids}
         target_desc = f"{len(request.user_ids)} مستخدم"
 
-    tokens_docs = await db.fcm_tokens.find(query).to_list(10000)
-    tokens = list(set(doc["token"] for doc in tokens_docs))
-
-    if not tokens:
-        # Save to history even if no devices
-        await db.notification_history.insert_one({
-            "title": request.title,
-            "body": request.body,
-            "sent_by": str(current_user["_id"]),
-            "sent_by_name": current_user.get("full_name", current_user.get("username", "")),
-            "target_type": request.target_type,
-            "target_role": request.target_role,
-            "target_desc": target_desc,
-            "devices_count": 0,
-            "success": 0,
-            "failure": 0,
-            "created_at": get_yemen_time().isoformat(),
-        })
-        return {"message": "لا توجد أجهزة مسجلة", "sent": 0, "devices": 0}
-
-    result = await send_notification_to_many(tokens, request.title, request.body)
+    # جمع user_ids المستهدفين لحفظ الإشعارات داخل التطبيق
+    target_user_ids = []
+    if request.target_type == "student" and request.student_user_id:
+        target_user_ids = [request.student_user_id]
+    elif request.target_type == "teacher" and request.teacher_user_id:
+        target_user_ids = [request.teacher_user_id]
+    elif request.target_type == "course" and request.course_id:
+        enrollments = await db.enrollments.find({"course_id": request.course_id}).to_list(5000)
+        student_ids = [e["student_id"] for e in enrollments]
+        students_list = await db.students.find({"_id": {"$in": [__import__('bson').ObjectId(sid) for sid in student_ids]}}).to_list(5000)
+        target_user_ids = [s["user_id"] for s in students_list if s.get("user_id")]
+    elif request.target_type == "role" and request.target_role:
+        users = await db.users.find({"role": request.target_role}, {"_id": 1}).to_list(10000)
+        target_user_ids = [str(u["_id"]) for u in users]
+    elif request.target_type == "all":
+        all_users = await db.users.find({}, {"_id": 1}).to_list(50000)
+        target_user_ids = [str(u["_id"]) for u in all_users]
+    elif request.target_type == "users" and request.user_ids:
+        target_user_ids = request.user_ids
 
     # حفظ الإشعار داخل التطبيق لكل مستخدم مستهدف
-    target_user_ids = list(set(doc["user_id"] for doc in tokens_docs))
     in_app_notifications = []
     for uid in target_user_ids:
         in_app_notifications.append({
@@ -241,6 +238,14 @@ async def send_notification_api(
     if in_app_notifications:
         await db.notifications.insert_many(in_app_notifications)
 
+    # إرسال push notifications عبر FCM
+    tokens_docs = await db.fcm_tokens.find(query).to_list(10000)
+    tokens = list(set(doc["token"] for doc in tokens_docs))
+
+    result = {"success": 0, "failure": 0}
+    if tokens:
+        result = await send_notification_to_many(tokens, request.title, request.body)
+
     await db.notification_history.insert_one({
         "title": request.title,
         "body": request.body,
@@ -250,6 +255,7 @@ async def send_notification_api(
         "target_role": request.target_role,
         "target_desc": target_desc,
         "devices_count": len(tokens),
+        "users_count": len(target_user_ids),
         "success": result.get("success", 0),
         "failure": result.get("failure", 0),
         "created_at": get_yemen_time().isoformat(),
@@ -258,6 +264,7 @@ async def send_notification_api(
     return {
         "message": f"تم إرسال الإشعار إلى {target_desc}",
         "devices": len(tokens),
+        "users": len(target_user_ids),
         **result
     }
 
