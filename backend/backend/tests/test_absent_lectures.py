@@ -11,7 +11,7 @@ import requests
 import os
 from datetime import datetime, timedelta
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://mobile-build-17.preview.emergentagent.com'))
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://auth-stable-1.preview.emergentagent.com'))
 if BASE_URL.endswith('/'):
     BASE_URL = BASE_URL.rstrip('/')
 
