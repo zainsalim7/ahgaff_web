@@ -77,6 +77,39 @@ export default function TabsLayout() {
   // هل المستخدم معلم؟
   const isTeacher = role === 'teacher';
 
+  // عدد الإشعارات غير المقروءة
+  const [unreadNotifs, setUnreadNotifs] = useState(0);
+
+  useEffect(() => {
+    const fetchUnread = async () => {
+      if (!user) return;
+      try {
+        const res = await api.get('/notifications/my?limit=1');
+        setUnreadNotifs(res.data?.unread_count || 0);
+      } catch (e) {}
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 30000); // كل 30 ثانية
+    return () => clearInterval(interval);
+  }, [user]);
+
+  const NotificationBell = () => (
+    <TouchableOpacity
+      onPress={() => router.push('/notifications')}
+      style={{ marginHorizontal: 12, padding: 4 }}
+      data-testid="notification-bell"
+    >
+      <View>
+        <Ionicons name="notifications-outline" size={24} color="#fff" />
+        {unreadNotifs > 0 && (
+          <View style={styles.notifBadge}>
+            <Text style={styles.notifBadgeText}>{unreadNotifs > 9 ? '9+' : unreadNotifs}</Text>
+          </View>
+        )}
+      </View>
+    </TouchableOpacity>
+  );
+
   // جلب اسم المؤسسة حسب المستخدم
   useEffect(() => {
     const fetchInstitution = async () => {
