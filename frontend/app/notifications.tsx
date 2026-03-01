@@ -241,6 +241,16 @@ export default function NotificationsPage() {
                   <Text style={styles.notificationTime}>{formatDate(notification.created_at)}</Text>
                 </View>
                 {!notification.is_read && <View style={styles.unreadDot} />}
+                <TouchableOpacity
+                  onPress={(e) => {
+                    e.stopPropagation?.();
+                    deleteNotification(notification.id);
+                  }}
+                  style={styles.deleteBtn}
+                  data-testid={`delete-notification-${notification.id}`}
+                >
+                  <Ionicons name="trash-outline" size={18} color="#d32f2f" />
+                </TouchableOpacity>
               </View>
 
               <Text style={styles.notificationMessage}>{notification.message}</Text>
