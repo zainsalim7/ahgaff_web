@@ -6,7 +6,7 @@ import {
   ScrollView,
   TouchableOpacity,
   RefreshControl,
-  Alert,
+  Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +15,6 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usersAPI, studentsAPI, departmentsAPI, coursesAPI, scopeAPI } from '../../src/services/api';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 
-// دالة للتحقق من الصلاحيات
 const checkPermission = (userRole: string, userPermissions: string[], requiredPermission: string): boolean => {
   if (userRole === 'admin') return true;
   return userPermissions?.includes(requiredPermission) || false;
@@ -27,12 +26,9 @@ export default function AdminScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [userRole, setUserRole] = useState<string>('');
   const [userPermissions, setUserPermissions] = useState<string[]>([]);
-  const [userScope, setUserScope] = useState<any>(null); // نطاق صلاحيات المستخدم
+  const [userScope, setUserScope] = useState<any>(null);
   const [counts, setCounts] = useState({
-    teachers: 0,
-    students: 0,
-    departments: 0,
-    courses: 0,
+    teachers: 0, students: 0, departments: 0, courses: 0, faculties: 0,
   });
 
   const loadUserData = useCallback(async () => {
@@ -42,9 +38,6 @@ export default function AdminScreen() {
         const user = JSON.parse(storedUser);
         setUserRole(user.role || '');
         setUserPermissions(user.permissions || []);
-        console.log('Admin: Loaded user role:', user.role, 'permissions:', user.permissions?.length);
-      } else {
-        console.log('Admin: No stored user found');
       }
     } catch (error) {
       console.error('Error loading user data:', error);
@@ -53,21 +46,16 @@ export default function AdminScreen() {
 
   const fetchCounts = useCallback(async () => {
     try {
-      // جلب نطاق صلاحيات المستخدم
       try {
         const scopeRes = await scopeAPI.get();
         setUserScope(scopeRes.data);
-      } catch (e) {
-        console.log('Error fetching scope:', e);
-      }
-      
+      } catch (e) {}
       const [teachers, students, departments, courses] = await Promise.all([
         usersAPI.getAll('teacher'),
         studentsAPI.getAll(),
         departmentsAPI.getAll(),
         coursesAPI.getAll(),
       ]);
-
       setCounts({
         teachers: teachers.data?.length || 0,
         students: students.data?.length || 0,
@@ -76,15 +64,7 @@ export default function AdminScreen() {
         faculties: 0,
       });
     } catch (error) {
-      console.error('Error fetching counts:', error);
-      // Set default values on error
-      setCounts({
-        teachers: 0,
-        students: 0,
-        departments: 0,
-        courses: 0,
-        faculties: 0,
-      });
+      setCounts({ teachers: 0, students: 0, departments: 0, courses: 0, faculties: 0 });
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -96,293 +76,253 @@ export default function AdminScreen() {
     fetchCounts();
   }, [loadUserData, fetchCounts]);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchCounts();
-  };
+  const onRefresh = () => { setRefreshing(true); fetchCounts(); };
 
-  if (loading) {
-    return <LoadingScreen />;
-  }
+  if (loading) return <LoadingScreen />;
 
-  // تعريف عناصر القائمة مع الصلاحيات المطلوبة
-  const allMenuItems = [
+  // تعريف المجموعات
+  const allGroups = [
     {
-      title: 'إدارة الكليات',
-      icon: 'school',
-      color: '#673ab7',
-      bg: '#ede7f6',
-      count: counts.faculties || 0,
-      route: '/general-settings',
-      permission: 'manage_faculties',
-      description: 'إدارة الكليات وإعداداتها',
+      groupTitle: 'إدارة البيانات',
+      groupIcon: 'folder-open',
+      groupColor: '#1565c0',
+      items: [
+        { title: 'الكليات', icon: 'school', color: '#673ab7', bg: '#ede7f6', route: '/general-settings', permission: 'manage_faculties', count: counts.faculties },
+        { title: 'الأقسام', icon: 'business', color: '#e91e63', bg: '#fce4ec', route: '/add-department', permission: 'manage_departments', count: counts.departments },
+        { title: 'المعلمين', icon: 'person', color: '#4caf50', bg: '#e8f5e9', route: '/manage-teachers', permission: 'manage_users', count: counts.teachers },
+        { title: 'الطلاب', icon: 'people', color: '#1565c0', bg: '#e3f2fd', route: '/students', permission: 'manage_students', count: counts.students },
+        { title: 'المقررات', icon: 'book', color: '#ff9800', bg: '#fff3e0', route: '/add-course', permission: 'manage_courses', count: counts.courses },
+      ],
     },
     {
-      title: 'إدارة الأقسام',
-      icon: 'business',
-      color: '#e91e63',
-      bg: '#fce4ec',
-      count: counts.departments,
-      route: '/add-department',
-      permission: 'manage_departments',
+      groupTitle: 'الجدول والحضور',
+      groupIcon: 'calendar',
+      groupColor: '#9c27b0',
+      items: [
+        { title: 'جدول المحاضرات', icon: 'calendar', color: '#9c27b0', bg: '#f3e5f5', route: '/schedule', permission: 'manage_lectures' },
+        { title: 'لوحة الأقسام', icon: 'grid', color: '#009688', bg: '#e0f2f1', route: '/department-dashboard', permission: 'view_reports' },
+        { title: 'الأوفلاين', icon: 'cloud-offline', color: '#607d8b', bg: '#eceff1', route: '/offline-sync', permission: null, teacherOnly: true },
+      ],
     },
     {
-      title: 'لوحة تحكم الأقسام',
-      icon: 'grid',
-      color: '#009688',
-      bg: '#e0f2f1',
-      count: 0,
-      route: '/department-dashboard',
-      permission: 'view_reports',
-      description: 'إحصائيات وتنبيهات الأقسام',
+      groupTitle: 'التقارير',
+      groupIcon: 'bar-chart',
+      groupColor: '#00bcd4',
+      items: [
+        { title: 'التقارير والتصدير', icon: 'document-text', color: '#00bcd4', bg: '#e0f7fa', route: '/reports', permission: 'view_reports' },
+      ],
     },
     {
-      title: 'الإعدادات العامة',
-      icon: 'settings',
-      color: '#1565c0',
-      bg: '#e3f2fd',
-      count: 0,
-      route: '/general-settings',
-      permission: null,
-      adminOnly: true,
-      description: 'الجامعة، الفصول، الإعدادات',
+      groupTitle: 'الإشعارات',
+      groupIcon: 'notifications',
+      groupColor: '#ff9800',
+      items: [
+        { title: 'إرسال إشعار', icon: 'send', color: '#4caf50', bg: '#e8f5e9', route: '/send-notification', permission: 'send_notifications' },
+        { title: 'سجل الإشعارات', icon: 'notifications', color: '#1565c0', bg: '#e3f2fd', route: '/manage-notifications', permission: 'send_notifications' },
+      ],
     },
     {
-      title: 'إدارة المعلمين',
-      icon: 'person',
-      color: '#4caf50',
-      bg: '#e8f5e9',
-      count: counts.teachers,
-      route: '/manage-teachers',
-      permission: 'manage_users',
-    },
-    {
-      title: 'إدارة الطلاب',
-      icon: 'people',
-      color: '#1565c0',
-      bg: '#e3f2fd',
-      count: counts.students,
-      route: '/students',
-      permission: 'manage_students',
-    },
-    {
-      title: 'إدارة المقررات',
-      icon: 'book',
-      color: '#ff9800',
-      bg: '#fff3e0',
-      count: counts.courses,
-      route: '/add-course',
-      permission: 'manage_courses',
-    },
-    {
-      title: 'جدول المحاضرات',
-      icon: 'calendar',
-      color: '#9c27b0',
-      bg: '#f3e5f5',
-      count: 0,
-      route: '/schedule',
-      permission: 'manage_lectures',
-    },
-    {
-      title: 'التقارير والتصدير',
-      icon: 'document-text',
-      color: '#00bcd4',
-      bg: '#e0f7fa',
-      count: 0,
-      route: '/reports',
-      permission: 'view_reports',
-    },
-    {
-      title: 'إدارة المستخدمين والصلاحيات',
-      icon: 'people-circle',
-      color: '#673ab7',
-      bg: '#ede7f6',
-      count: 0,
-      route: '/manage-users',
-      permission: 'manage_users',
-      adminOnly: true,
-    },
-    {
-      title: 'إدارة الأدوار',
-      icon: 'shield-checkmark',
-      color: '#ff5722',
-      bg: '#fbe9e7',
-      count: 0,
-      route: '/manage-roles',
-      permission: 'manage_roles',
-      adminOnly: true,
-    },
-    {
-      title: 'سجلات النشاط',
-      icon: 'list',
-      color: '#3f51b5',
-      bg: '#e8eaf6',
-      count: 0,
-      route: '/activity-logs',
-      permission: null,
-      adminOnly: true,
-    },
-    {
-      title: 'إدارة الأوفلاين',
-      icon: 'cloud-offline',
-      color: '#009688',
-      bg: '#e0f2f1',
-      count: 0,
-      route: '/offline-sync',
-      permission: null,
-      teacherOnly: true,
-    },
-    {
-      title: 'إرسال إشعار',
-      icon: 'send',
-      color: '#4caf50',
-      bg: '#e8f5e9',
-      count: 0,
-      route: '/send-notification',
-      permission: 'send_notifications',
-      teacherOnly: false,
-    },
-    {
-      title: 'سجل الإشعارات',
-      icon: 'notifications',
-      color: '#1565c0',
-      bg: '#e3f2fd',
-      count: 0,
-      route: '/manage-notifications',
-      permission: 'send_notifications',
-      teacherOnly: false,
+      groupTitle: 'النظام والصلاحيات',
+      groupIcon: 'settings',
+      groupColor: '#f44336',
+      items: [
+        { title: 'الإعدادات', icon: 'settings', color: '#1565c0', bg: '#e3f2fd', route: '/general-settings', permission: null, adminOnly: true },
+        { title: 'المستخدمين', icon: 'people-circle', color: '#673ab7', bg: '#ede7f6', route: '/manage-users', permission: 'manage_users', adminOnly: true },
+        { title: 'الأدوار', icon: 'shield-checkmark', color: '#ff5722', bg: '#fbe9e7', route: '/manage-roles', permission: 'manage_roles', adminOnly: true },
+        { title: 'سجل النشاط', icon: 'list', color: '#3f51b5', bg: '#e8eaf6', route: '/activity-logs', permission: null, adminOnly: true },
+      ],
     },
   ];
 
-  // تصفية العناصر حسب صلاحيات المستخدم ونطاقه
-  const menuItems = allMenuItems.filter(item => {
-    // المدير يرى كل شيء
+  // فلترة حسب الصلاحيات
+  const canSee = (item: any) => {
     if (userRole === 'admin') return true;
-    
-    // للمعلم فقط
-    if (item.teacherOnly) {
-      return userRole === 'teacher' || userPermissions?.includes('record_attendance');
-    }
-    
-    // العناصر التي تتطلب صلاحيات محددة
-    if (item.permission) {
-      // التحقق من الصلاحية ومن النطاق
-      const hasPermission = checkPermission(userRole, userPermissions, item.permission);
-      if (!hasPermission) return false;
-      
-      // إذا كان لديه الصلاحية، تحقق من النطاق
-      // إدارة الكليات - يظهر فقط إذا كان لديه صلاحية على مستوى كلية أو أعلى
-      if (item.permission === 'manage_faculties') {
-        return userScope?.level === 'university' || userScope?.level === 'faculty';
-      }
-      
-      // إدارة الأقسام - يظهر إذا كان لديه صلاحية على مستوى قسم أو أعلى
-      if (item.permission === 'manage_departments') {
-        return userScope?.level === 'university' || userScope?.level === 'faculty' || userScope?.level === 'department';
-      }
-      
-      return true;
-    }
-    
-    // العناصر الخاصة بالمدير فقط (adminOnly)
+    if (item.teacherOnly) return userRole === 'teacher' || userPermissions?.includes('record_attendance');
     if (item.adminOnly) {
-      // الإعدادات العامة - فقط للمدير أو من لديه صلاحية على مستوى الجامعة
-      if (item.route === '/general-settings') {
-        return userScope?.can_manage_settings === true || userScope?.level === 'university';
-      }
-      // سجلات النشاط - للمدير فقط
-      if (item.route === '/activity-logs') {
-        return false;
-      }
-      // إدارة الأدوار - يتطلب صلاحية manage_roles
-      if (item.route === '/manage-roles') {
-        return userPermissions?.includes('manage_roles');
-      }
-      // باقي العناصر adminOnly - للمدير فقط
+      if (item.route === '/general-settings') return userScope?.can_manage_settings === true || userScope?.level === 'university';
+      if (item.route === '/activity-logs') return false;
+      if (item.route === '/manage-roles') return userPermissions?.includes('manage_roles');
       return false;
     }
-    
+    if (item.permission) {
+      const has = checkPermission(userRole, userPermissions, item.permission);
+      if (!has) return false;
+      if (item.permission === 'manage_faculties') return userScope?.level === 'university' || userScope?.level === 'faculty';
+      if (item.permission === 'manage_departments') return ['university', 'faculty', 'department'].includes(userScope?.level);
+      return true;
+    }
     return false;
-  });
+  };
+
+  const filteredGroups = allGroups
+    .map(g => ({ ...g, items: g.items.filter(canSee) }))
+    .filter(g => g.items.length > 0);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView
         style={styles.scrollView}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
-        }
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        <Text style={styles.sectionTitle}>إدارة النظام</Text>
-        
-        {menuItems.map((item, index) => (
-          <TouchableOpacity
-            key={index}
-            style={styles.menuCard}
-            onPress={() => router.replace(item.route as any)}
-          >
-            <View style={[styles.iconContainer, { backgroundColor: item.bg }]}>
-              <Ionicons name={item.icon as any} size={28} color={item.color} />
+        {/* Header */}
+        <View style={styles.pageHeader} data-testid="admin-header">
+          <Ionicons name="shield-checkmark" size={28} color="#1565c0" />
+          <Text style={styles.pageTitle}>لوحة التحكم</Text>
+        </View>
+
+        {/* Stats Row */}
+        <View style={styles.statsRow} data-testid="admin-stats">
+          {[
+            { label: 'المعلمين', count: counts.teachers, icon: 'person', color: '#4caf50' },
+            { label: 'الطلاب', count: counts.students, icon: 'people', color: '#1565c0' },
+            { label: 'المقررات', count: counts.courses, icon: 'book', color: '#ff9800' },
+            { label: 'الأقسام', count: counts.departments, icon: 'business', color: '#e91e63' },
+          ].map((stat, i) => (
+            <View key={i} style={styles.statItem}>
+              <View style={[styles.statIcon, { backgroundColor: stat.color + '15' }]}>
+                <Ionicons name={stat.icon as any} size={18} color={stat.color} />
+              </View>
+              <Text style={styles.statNum}>{stat.count}</Text>
+              <Text style={styles.statLabel}>{stat.label}</Text>
             </View>
-            <View style={styles.menuInfo}>
-              <Text style={styles.menuTitle}>{item.title}</Text>
-              <Text style={styles.menuCount}>{item.count} مسجل</Text>
+          ))}
+        </View>
+
+        {/* Groups */}
+        {filteredGroups.map((group, gi) => (
+          <View key={gi} style={styles.groupContainer} data-testid={`admin-group-${gi}`}>
+            <View style={styles.groupHeader}>
+              <Ionicons name={group.groupIcon as any} size={18} color={group.groupColor} />
+              <Text style={[styles.groupTitle, { color: group.groupColor }]}>{group.groupTitle}</Text>
             </View>
-            <Ionicons name="chevron-forward" size={24} color="#999" />
-          </TouchableOpacity>
+            <View style={styles.grid}>
+              {group.items.map((item, ii) => (
+                <TouchableOpacity
+                  key={ii}
+                  style={styles.gridItem}
+                  onPress={() => router.replace(item.route as any)}
+                  activeOpacity={0.7}
+                  data-testid={`admin-btn-${item.route.replace(/\//g, '-').slice(1)}`}
+                >
+                  <View style={[styles.gridIcon, { backgroundColor: item.bg }]}>
+                    <Ionicons name={item.icon as any} size={26} color={item.color} />
+                  </View>
+                  <Text style={styles.gridTitle} numberOfLines={1}>{item.title}</Text>
+                  {item.count > 0 && (
+                    <Text style={styles.gridCount}>{item.count}</Text>
+                  )}
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
         ))}
+
+        <View style={{ height: 30 }} />
       </ScrollView>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  scrollView: {
-    flex: 1,
-    padding: 16,
-  },
-  sectionTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 16,
-  },
-  menuCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+  container: { flex: 1, backgroundColor: '#f0f2f5' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 16 },
+  pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    gap: 10,
+    marginBottom: 20,
   },
-  iconContainer: {
-    width: 56,
-    height: 56,
-    borderRadius: 12,
-    justifyContent: 'center',
+  pageTitle: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#1a1a2e',
+  },
+  statsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  statItem: {
+    flex: 1,
     alignItems: 'center',
   },
-  menuInfo: {
-    flex: 1,
-    marginHorizontal: 16,
+  statIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
   },
-  menuTitle: {
-    fontSize: 16,
+  statNum: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#1a1a2e',
+  },
+  statLabel: {
+    fontSize: 11,
+    color: '#888',
+    marginTop: 2,
+  },
+  groupContainer: {
+    marginBottom: 20,
+  },
+  groupHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingHorizontal: 4,
+  },
+  groupTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+  },
+  grid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  gridItem: {
+    width: Platform.OS === 'web' ? 'calc(25% - 8px)' as any : '47%' as any,
+    minWidth: 90,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    paddingVertical: 18,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  gridIcon: {
+    width: 52,
+    height: 52,
+    borderRadius: 14,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  gridTitle: {
+    fontSize: 13,
     fontWeight: '600',
     color: '#333',
+    textAlign: 'center',
   },
-  menuCount: {
-    fontSize: 14,
-    color: '#666',
+  gridCount: {
+    fontSize: 12,
+    color: '#888',
     marginTop: 4,
   },
 });
