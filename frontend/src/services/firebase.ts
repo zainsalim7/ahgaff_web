@@ -10,10 +10,13 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-let app;
-let messaging;
+const isConfigured = !!firebaseConfig.projectId;
+
+let app: any;
+let messaging: any;
 
 export function getFirebaseApp() {
+  if (!isConfigured) return null;
   if (!app) {
     app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
   }
@@ -21,35 +24,28 @@ export function getFirebaseApp() {
 }
 
 export async function getFirebaseMessaging() {
+  if (!isConfigured) return null;
   if (messaging) return messaging;
-  
+
   const supported = await isSupported();
-  if (!supported) {
-    console.log('Firebase Messaging is not supported in this browser');
-    return null;
-  }
-  
+  if (!supported) return null;
+
   const firebaseApp = getFirebaseApp();
+  if (!firebaseApp) return null;
   messaging = getMessaging(firebaseApp);
   return messaging;
 }
 
 export async function requestNotificationPermission() {
+  if (!isConfigured) return null;
   try {
     const permission = await Notification.requestPermission();
-    if (permission !== 'granted') {
-      console.log('Notification permission denied');
-      return null;
-    }
+    if (permission !== 'granted') return null;
 
     const fcmMessaging = await getFirebaseMessaging();
     if (!fcmMessaging) return null;
 
-    const token = await getToken(fcmMessaging, {
-      vapidKey: undefined, // Will use default Firebase VAPID key
-    });
-
-    console.log('FCM Token:', token);
+    const token = await getToken(fcmMessaging, { vapidKey: undefined });
     return token;
   } catch (error) {
     console.error('Error getting FCM token:', error);
@@ -57,11 +53,11 @@ export async function requestNotificationPermission() {
   }
 }
 
-export function onForegroundMessage(callback) {
+export function onForegroundMessage(callback: (payload: any) => void) {
+  if (!isConfigured) return;
   getFirebaseMessaging().then((fcmMessaging) => {
     if (!fcmMessaging) return;
     onMessage(fcmMessaging, (payload) => {
-      console.log('Foreground message:', payload);
       callback(payload);
     });
   });
