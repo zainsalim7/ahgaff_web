@@ -11,7 +11,8 @@ class LectureStatus:
     CANCELLED = "cancelled"
     ABSENT = "absent"
 
-ACTIVE_LECTURE_STATUSES = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT]
+# المحاضرات الفعّالة فقط - غياب الأستاذ والملغاة لا تُحسب على الطالب
+ACTIVE_LECTURE_STATUSES = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED]
 
 class LectureCreate(BaseModel):
     course_id: str
