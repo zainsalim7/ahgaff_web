@@ -6,6 +6,7 @@ from bson import ObjectId
 from datetime import datetime
 from typing import List
 
+from models.lectures import ACTIVE_LECTURE_STATUSES
 
 from .deps import security
 
@@ -620,11 +621,11 @@ async def get_teacher_workload_report(
         for course in courses:
             cid = str(course["_id"])
             
-            # المحاضرات المجدولة في الفترة
+            # المحاضرات المجدولة في الفترة (فقط المنعقدة والمجدولة - بدون الملغاة وغياب الأستاذ)
             scheduled_lectures = await db.lectures.find({
                 "course_id": cid,
                 "date": {"$gte": start, "$lte": end},
-                "is_cancelled": {"$ne": True}
+                "status": {"$in": ACTIVE_LECTURE_STATUSES}
             }).to_list(500)
             
             # المحاضرات التي تم تسجيل حضور فيها (المنفذة فعلياً)
