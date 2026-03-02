@@ -9,10 +9,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function TabsLayout() {
   const user = useAuthStore((state) => state.user);
-  const role = user?.role || 'student';
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const role = user?.role || '';
   const permissions = user?.permissions || [];
   const pendingCount = useOfflineSyncStore((state) => state.getPendingRecordsCount());
   const [institutionName, setInstitutionName] = useState('نظام الحضور');
+
+  // لا تعرض التبويبات حتى يتم تحميل بيانات المستخدم
+  const isReady = !isLoading && !!user && !!role;
 
   // تفعيل إشعارات Firebase
   useEffect(() => {
@@ -58,24 +62,27 @@ export default function TabsLayout() {
   }, [user]);
 
   // التحقق من الصلاحيات الإدارية
-  const hasAdminPermissions = role === 'admin' || 
+  const hasAdminPermissions = isReady && (role === 'admin' || 
     permissions.includes('manage_users') || 
     permissions.includes('manage_students') ||
     permissions.includes('manage_faculties') ||
     permissions.includes('manage_departments') ||
     permissions.includes('manage_courses') ||
-    permissions.includes('manage_roles');
+    permissions.includes('manage_roles'));
   
   // التحقق من صلاحية المقررات
-  const hasCoursesPermission = role === 'admin' || 
+  const hasCoursesPermission = isReady && (role === 'admin' || 
     role === 'teacher' ||
     permissions.includes('manage_courses') ||
     permissions.includes('view_courses') ||
     permissions.includes('manage_lectures') ||
-    permissions.includes('record_attendance');
+    permissions.includes('record_attendance'));
 
   // هل المستخدم معلم؟
-  const isTeacher = role === 'teacher';
+  const isTeacher = isReady && role === 'teacher';
+  
+  // هل المستخدم طالب؟
+  const isStudent = isReady && role === 'student';
 
   // جلب اسم المؤسسة حسب المستخدم
   useEffect(() => {
@@ -169,7 +176,7 @@ export default function TabsLayout() {
             <Ionicons name="checkmark-circle" size={size} color={color} />
           ),
           headerTitle: 'سجل حضوري',
-          href: role === 'student' ? undefined : null,
+          href: isStudent ? undefined : null,
         }}
       />
 
@@ -193,7 +200,7 @@ export default function TabsLayout() {
             <Ionicons name="calendar" size={size} color={color} />
           ),
           headerTitle: 'جدول محاضراتي',
-          href: role === 'student' ? undefined : null,
+          href: isStudent ? undefined : null,
         }}
       />
 
