@@ -153,12 +153,6 @@ export default function LoginScreen() {
                 <Text style={styles.loginButtonText}>تسجيل الدخول</Text>
               )}
             </TouchableOpacity>
-
-            {initialized && (
-              <View style={styles.demoInfo}>
-                <Text style={styles.demoText}>للتجربة: admin / admin123</Text>
-              </View>
-            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -274,16 +268,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     flex: 1,
-  },
-  demoInfo: {
-    marginTop: 16,
-    padding: 12,
-    backgroundColor: '#e3f2fd',
-    borderRadius: 8,
-  },
-  demoText: {
-    textAlign: 'center',
-    color: '#1565c0',
-    fontSize: 14,
   },
 });
