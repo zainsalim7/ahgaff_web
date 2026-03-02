@@ -285,6 +285,17 @@ export default function TakeAttendanceScreen() {
   }, [fetchData]);
 
   const toggleStatus = (studentId: string) => {
+    // التحقق من إمكانية التحضير
+    if (attendanceStatus && !attendanceStatus.can_take_attendance) {
+      const msg = attendanceStatus.reason || 'لا يمكن تسجيل الحضور حالياً';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('غير مسموح', msg);
+      }
+      return;
+    }
+    
     // التحقق من الصلاحية
     if (!canRecordAttendance && !canEditAttendance) {
       Alert.alert('تنبيه', 'ليس لديك صلاحية لتعديل الحضور');
@@ -605,12 +616,14 @@ export default function TakeAttendanceScreen() {
             </Text>
           </View>
         ) : (
-          <FlatList
-            data={students}
-            renderItem={renderStudent}
-            keyExtractor={(item) => item.id}
-            contentContainerStyle={styles.listContent}
-          />
+          <View style={{ flex: 1, opacity: canTakeAttendanceNow ? 1 : 0.5 }}>
+            <FlatList
+              data={students}
+              renderItem={renderStudent}
+              keyExtractor={(item) => item.id}
+              contentContainerStyle={styles.listContent}
+            />
+          </View>
         )}
 
         {/* Save Button - Only visible if user has permission AND attendance is allowed */}
