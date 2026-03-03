@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
 import { useOfflineStore } from '../../src/store/offlineStore';
 import { reportsAPI, attendanceAPI, studentsAPI, departmentsAPI, settingsAPI, coursesAPI, enrollmentAPI, lecturesAPI } from '../../src/services/api';
+import api from '../../src/services/api';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import QRCode from 'react-native-qrcode-svg';
 import { formatGregorianDate, formatMonthYear, GREGORIAN_MONTHS_AR, WEEKDAYS_AR } from '../../src/utils/dateUtils';
@@ -67,6 +68,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [notifCount, setNotifCount] = useState(0);
   
   // Teacher calendar states
   const [todayLectures, setTodayLectures] = useState<TodayLecture[]>([]);
@@ -131,6 +133,12 @@ export default function HomeScreen() {
 
   const fetchData = useCallback(async () => {
     try {
+      // جلب عدد الإشعارات غير المقروءة لجميع الأدوار
+      try {
+        const notifRes = await api.get('/notifications/count');
+        setNotifCount(notifRes.data?.count || 0);
+      } catch (e) {}
+
       if (user?.role === 'admin') {
         const response = await reportsAPI.getSummary();
         setSummary(response.data);
@@ -409,10 +417,15 @@ export default function HomeScreen() {
             >
               <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
                 <Ionicons name="notifications" size={28} color="#ff9800" />
+                {notifCount > 0 && (
+                  <View style={styles.notifBadge}>
+                    <Text style={styles.notifBadgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
+                  </View>
+                )}
               </View>
               <View style={styles.actionInfo}>
                 <Text style={styles.actionTitle}>الإشعارات</Text>
-                <Text style={styles.actionDesc}>عرض الإشعارات والتنبيهات</Text>
+                <Text style={styles.actionDesc}>{notifCount > 0 ? `لديك ${notifCount} إشعار جديد` : 'عرض الإشعارات'}</Text>
               </View>
               <Ionicons name="chevron-forward" size={24} color="#999" />
             </TouchableOpacity>
@@ -909,10 +922,15 @@ export default function HomeScreen() {
               >
                 <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
                   <Ionicons name="notifications" size={28} color="#ff9800" />
+                  {notifCount > 0 && (
+                    <View style={styles.notifBadge}>
+                      <Text style={styles.notifBadgeText}>{notifCount > 9 ? '9+' : notifCount}</Text>
+                    </View>
+                  )}
                 </View>
                 <View style={styles.actionInfo}>
                   <Text style={styles.actionTitle}>الإشعارات</Text>
-                  <Text style={styles.actionDesc}>عرض الإشعارات والتنبيهات</Text>
+                  <Text style={styles.actionDesc}>{notifCount > 0 ? `لديك ${notifCount} إشعار جديد` : 'عرض الإشعارات والتنبيهات'}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={24} color="#999" />
               </TouchableOpacity>
@@ -1139,6 +1157,23 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#666',
     marginTop: 2,
+  },
+  notifBadge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    backgroundColor: '#f44336',
+    borderRadius: 10,
+    minWidth: 20,
+    height: 20,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  notifBadgeText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: 'bold',
   },
   // Student Info Card Styles
   studentInfoCard: {

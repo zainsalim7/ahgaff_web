@@ -1802,18 +1802,11 @@ async def get_notifications(
 
 @api_router.get("/notifications/count")
 async def get_unread_notifications_count(current_user: dict = Depends(get_current_user)):
-    """جلب عدد الإشعارات غير المقروءة"""
-    
-    user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-    if not user:
-        return {"count": 0}
-    
-    student = await db.students.find_one({"user_id": str(user["_id"])})
-    if not student:
-        return {"count": 0}
+    """جلب عدد الإشعارات غير المقروءة لأي مستخدم"""
+    user_id = current_user["id"]
     
     count = await db.notifications.count_documents({
-        "student_id": str(student["_id"]),
+        "user_id": user_id,
         "is_read": False
     })
     
