@@ -1,7 +1,5 @@
 {
-  "cli": {
-    "version": ">= 5.0.0"
-  },
+  "cli": { "version": ">= 5.0.0" },
   "build": {
     "development": {
       "developmentClient": true,
@@ -14,14 +12,14 @@
         "gradleCommand": ":app:assembleRelease"
       },
       "distribution": "internal",
+      "node": "22.12.0",
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://ahgaffweb-production-c582.up.railway.app"
       }
     },
     "production": {
-      "android": {
-        "buildType": "app-bundle"
-      },
+      "android": { "buildType": "app-bundle" },
+      "node": "22.12.0",
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://ahgaffweb-production-c582.up.railway.app"
       }

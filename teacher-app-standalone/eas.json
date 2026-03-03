@@ -1,15 +1,28 @@
 {
   "cli": { "version": ">= 5.0.0" },
   "build": {
-    "development": { "developmentClient": true, "distribution": "internal" },
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal"
+    },
     "preview": {
-      "android": { "buildType": "apk", "image": "ubuntu-22.04-jdk-17-ndk-r26b", "gradleCommand": ":app:assembleRelease" },
+      "android": {
+        "buildType": "apk",
+        "image": "ubuntu-22.04-jdk-17-ndk-r26b",
+        "gradleCommand": ":app:assembleRelease"
+      },
       "distribution": "internal",
-      "env": { "EXPO_PUBLIC_BACKEND_URL": "https://ahgaffweb-production-c582.up.railway.app" }
+      "node": "22.12.0",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://ahgaffweb-production-c582.up.railway.app"
+      }
     },
     "production": {
       "android": { "buildType": "app-bundle" },
-      "env": { "EXPO_PUBLIC_BACKEND_URL": "https://ahgaffweb-production-c582.up.railway.app" }
+      "node": "22.12.0",
+      "env": {
+        "EXPO_PUBLIC_BACKEND_URL": "https://ahgaffweb-production-c582.up.railway.app"
+      }
     }
   }
 }
