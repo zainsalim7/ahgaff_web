@@ -10,7 +10,7 @@ import os
 from datetime import datetime
 
 # Base URL from environment
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://mobile-dual-build.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://edu-management-37.preview.emergentagent.com')
 
 # Test credentials
 ADMIN_USERNAME = "admin"

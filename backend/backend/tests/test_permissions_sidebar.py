@@ -11,7 +11,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://mobile-dual-build.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://edu-management-37.preview.emergentagent.com')
 
 # Test credentials
 STUDENT_CREDS = {"username": "234", "password": "student123"}

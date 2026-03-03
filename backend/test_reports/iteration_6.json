@@ -75,7 +75,7 @@
   "rca_of_the_issue": {
     "root_cause": "The manage-roles.tsx component has conditional rendering that depends on authLoading (from AuthContext) and user.role being available. When navigating within the app (not reloading), these values may not be properly synchronized, causing the loading state to persist.",
     "reproduction_steps": [
-      "1. Navigate to https://mobile-dual-build.preview.emergentagent.com",
+      "1. Navigate to https://edu-management-37.preview.emergentagent.com",
       "2. Login with admin/admin123",
       "3. Click on 'الإدارة' (Administration) tab",
       "4. Scroll down and click on 'إدارة الأدوار' (Roles Management)",
