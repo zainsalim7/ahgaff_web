@@ -1,56 +1,102 @@
-# نظام الحضور - جامعة الأحقاف
+# طالب الأحقاف - Student App PRD
 
-## المتطلبات الأساسية
-- نظام حضور مركزي لجامعة الأحقاف
-- دعم أدوار متعددة: مدير، عميد، رئيس قسم، معلم، موظف، طالب
-- 7 أنواع تقارير مع تصدير PDF/Excel
-- استيراد بيانات الطلاب من Excel
-- تطبيق موبايل (Expo/React Native) + واجهة ويب
+## Original Problem Statement
+Building a student/teacher management system for Ahgaff University. The latest phase involves creating separate, lightweight mobile apps:
+1. **Student App (APK)** - Simple, student-only - CURRENT FOCUS
+2. **Teacher App (APK)** - Simple, teacher-only - UPCOMING
+3. **Admin Panel (Web)** - Full administration - EXISTS (Railway)
 
-## ما تم إنجازه
+All three apps connect to the same FastAPI backend.
 
-### 2026-03-03 - جلسة الإصلاحات الشاملة
-- إصلاح صلاحية إرسال الإشعارات للمدير (admin role check)
-- تسجيل دخول أوفلاين (يستخدم بيانات محفوظة محلياً)
-- مربع "حفظ بياناتي" في صفحة الدخول
-- إشعارات في الصفحة الرئيسية لجميع الأدوار
-- حذف "سجل حضوري" و"جدول محاضراتي" من الرئيسية (موجودة في التبويبات)
-- تسجيل المعلم في أكثر من قسم (اختيار متعدد)
-- إصلاح خطأ React Hooks في _layout.tsx
-- إزالة إجبار تغيير كلمة المرور
-- صفحة تغيير كلمة مرور جديدة (قديمة + جديدة)
-- زر تغيير كلمة المرور في الملف الشخصي
-- API جديد /students/me/courses لمقررات الطالب
+## Architecture
+```
+/app/
+├── backend/          # FastAPI backend (shared by all apps)
+│   ├── backend/server.py  # Main server (~8800 lines)
+│   ├── routes/
+│   ├── models/
+│   └── services/
+├── frontend/         # Student App (React Native / Expo)
+│   ├── app/          # Expo Router screens
+│   │   ├── (tabs)/   # Tab-based navigation
+│   │   │   ├── index.tsx       # Student Dashboard
+│   │   │   ├── my-attendance.tsx # Attendance Records
+│   │   │   ├── my-schedule.tsx  # Lecture Schedule
+│   │   │   └── profile.tsx     # Profile & Settings
+│   │   ├── login.tsx           # Student-only login
+│   │   ├── notifications.tsx   # Notifications
+│   │   ├── change-password.tsx # Password Change
+│   │   └── student-card.tsx    # Student ID Card with QR
+│   ├── src/
+│   │   ├── services/api.ts    # API service with offline caching
+│   │   ├── store/authStore.ts # Auth state management
+│   │   ├── components/        # Reusable components
+│   │   ├── types/             # TypeScript types
+│   │   └── utils/             # Date utils, navigation
+│   ├── app.json              # App config (name: طالب الأحقاف)
+│   └── eas.json              # EAS build profiles
+```
 
-### 2026-03-01 - نظام التنبيهات
-- حذف الإشعارات (Backend + Frontend)
-- حفظ الإشعارات لجميع المستخدمين المستهدفين
-- تقييد صفحة الإرسال للمسؤولين
-- صفحة سجل الإشعارات (بدون نموذج إرسال)
+## What's Been Implemented (March 3, 2026)
 
-### سابق
-- التقارير الكاملة (7 تقارير + تصدير)
-- صلاحيات التقارير للمعلم
-- منع تسجيل حضور لمحاضرات مستقبلية
-- غياب الأستاذ لا يُحسب على الطالب
-- نصاب المعلم يحسب المنفذة فقط
-- نشر على Railway
-- لوحة تحكم جديدة (شبكة متناظرة)
+### Student App Features
+- Login screen (student-only, rejects admin/teacher roles)
+- Student dashboard with:
+  - Welcome card with student info
+  - Notifications badge
+  - Overall attendance rate
+  - QR code quick access
+  - Course count
+  - Per-course attendance breakdown with status indicators
+- Attendance records page (per course, detailed history)
+- Lecture schedule page (calendar view)
+- Profile page with:
+  - Student info display
+  - Notifications link with unread count
+  - Student card link
+  - Password change
+  - Logout
+- Notifications page with read/unread management
+- Student card with QR code and sharing
+- Offline login support (remember me + cached credentials)
+- API response caching for offline viewing
+- RTL Arabic layout support
 
-## المهام المعلقة
+### Backend APIs (All Tested - 100% Pass Rate)
+- POST /api/auth/login
+- GET /api/auth/me
+- GET /api/students/me
+- GET /api/courses
+- GET /api/departments
+- GET /api/settings
+- GET /api/notifications/count
+- GET /api/notifications/my
+- GET /api/attendance/stats/student/{id}
+- GET /api/attendance/student/{id}
+- GET /api/lectures/{courseId}
 
-### P1
-- إشعارات Push عندما يكون التطبيق مغلق (يحتاج Firebase FCM)
-- إصلاح مكون QuickNav
-- تحسين التقارير
+## P0 - Current
+- [x] Student app implementation
+- [x] Backend API testing (15/15 pass)
+- [ ] User builds APK using `eas build --profile preview --platform android`
 
-### P2
-- صفحة سجل النشاطات
-- تقسيم server.py إلى وحدات
-- بناء APK إنتاجي
+## P1 - Next
+- [ ] Teacher app (separate, lightweight)
+- [ ] Push notifications integration (requires new APK build)
+- [ ] Offline data caching verification
 
-## البنية التقنية
-- Backend: FastAPI + MongoDB
-- Frontend: Expo/React Native
-- النشر: Railway
-- المستودع: https://github.com/zainsalim7/ahgaff_student.git
+## P2 - Future
+- [ ] Improve reports
+- [ ] Activity logs UI
+- [ ] Backend refactoring (split server.py into modules)
+- [ ] Railway deployment fixes
+
+## Test Credentials
+- Student: username=234, password=123456
+- Admin: username=admin, password=admin123
+
+## Build Instructions
+```bash
+cd frontend
+npx eas build --profile preview --platform android
+```
