@@ -92,6 +92,42 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
+// كاش أوفلاين - يحفظ استجابات GET ويعرضها عند انقطاع الاتصال
+const CACHEABLE_PATHS = [
+  '/lectures/', '/courses', '/students/me', '/students/me/courses',
+  '/my-institution', '/notifications/my', '/reports/summary',
+];
+
+const shouldCache = (url: string) => {
+  return CACHEABLE_PATHS.some(path => url?.includes(path));
+};
+
+api.interceptors.response.use(
+  async (response) => {
+    // حفظ في الكاش إذا كان GET وقابل للتخزين
+    if (response.config.method === 'get' && shouldCache(response.config.url || '')) {
+      const cacheKey = `cache_${response.config.url}`;
+      try {
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(response.data));
+      } catch (e) {}
+    }
+    return response;
+  },
+  async (error) => {
+    // إذا لا يوجد استجابة (أوفلاين) وكان GET، حاول جلب من الكاش
+    if (!error.response && error.config?.method === 'get' && shouldCache(error.config.url || '')) {
+      const cacheKey = `cache_${error.config.url}`;
+      try {
+        const cached = await AsyncStorage.getItem(cacheKey);
+        if (cached) {
+          return { data: JSON.parse(cached), status: 200, config: error.config, headers: {}, statusText: 'OK (cached)' };
+        }
+      } catch (e) {}
+    }
+    return Promise.reject(error);
+  }
+);
+
 // Auth API
 export const authAPI = {
   login: (username: string, password: string) =>
