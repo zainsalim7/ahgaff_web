@@ -17,38 +17,48 @@ export default function TabsLayout() {
 
   const isReady = !isLoading && !!user && !!role;
 
-  // تفعيل إشعارات Firebase
+  // تفعيل إشعارات Firebase (Web) و Expo Push (Mobile)
   useEffect(() => {
-    if (!user || Platform.OS !== 'web') return;
+    if (!user) return;
     
     const initNotifications = async () => {
       try {
-        const { requestNotificationPermission, onForegroundMessage } = await import('../../src/services/firebase');
-        
-        const fcmToken = await requestNotificationPermission();
-        if (fcmToken) {
-          const token = await AsyncStorage.getItem('token');
-          const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-          await fetch(`${backendUrl}/api/notifications/register-token`, {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${token}`,
-            },
-            body: JSON.stringify({ token: fcmToken, device_type: 'web' }),
-          });
-        }
-
-        onForegroundMessage((payload) => {
-          if (Notification.permission === 'granted') {
-            new Notification(payload.notification?.title || 'جامعة الأحقاف', {
-              body: payload.notification?.body || '',
-              icon: '/icon.png',
-              dir: 'rtl',
-              lang: 'ar',
+        if (Platform.OS === 'web') {
+          const { requestNotificationPermission, onForegroundMessage } = await import('../../src/services/firebase');
+          
+          const fcmToken = await requestNotificationPermission();
+          if (fcmToken) {
+            const token = await AsyncStorage.getItem('token');
+            const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+            await fetch(`${backendUrl}/api/notifications/register-token`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`,
+              },
+              body: JSON.stringify({ token: fcmToken, device_type: 'web' }),
             });
           }
-        });
+
+          onForegroundMessage((payload) => {
+            if (Notification.permission === 'granted') {
+              new Notification(payload.notification?.title || 'جامعة الأحقاف', {
+                body: payload.notification?.body || '',
+                icon: '/icon.png',
+                dir: 'rtl',
+                lang: 'ar',
+              });
+            }
+          });
+        } else {
+          // Mobile: استخدم Expo Notifications
+          const { registerForPushNotifications, addNotificationReceivedListener } = await import('../../src/services/pushNotifications');
+          await registerForPushNotifications();
+          
+          addNotificationReceivedListener((notification) => {
+            console.log('Notification received:', notification);
+          });
+        }
       } catch (error) {
         console.log('Notifications init error:', error);
       }
