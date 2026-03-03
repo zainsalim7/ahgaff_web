@@ -10,17 +10,12 @@ export default function Index() {
   useEffect(() => {
     if (!isLoading) {
       if (isAuthenticated) {
-        // التحقق من الحاجة لتغيير كلمة المرور
-        if (user?.must_change_password) {
-          router.replace('/change-password');
-        } else {
-          router.replace('/(tabs)');
-        }
+        router.replace('/(tabs)');
       } else {
         router.replace('/login');
       }
     }
-  }, [isLoading, isAuthenticated, user]);
+  }, [isLoading, isAuthenticated]);
 
   return (
     <View style={styles.container}>

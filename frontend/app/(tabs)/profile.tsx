@@ -138,6 +138,17 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-back" size={20} color="#999" />
         </TouchableOpacity>
 
+        {/* Change Password Button */}
+        <TouchableOpacity 
+          style={styles.notificationsButton} 
+          onPress={() => router.push('/change-password')}
+          data-testid="change-password-btn"
+        >
+          <Ionicons name="key-outline" size={24} color="#ff9800" />
+          <Text style={styles.notificationsText}>تغيير كلمة المرور</Text>
+          <Ionicons name="chevron-back" size={20} color="#999" />
+        </TouchableOpacity>
+
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={24} color="#f44336" />
