@@ -18,6 +18,8 @@ import { useAuthStore } from '../src/store/authStore';
 import { authAPI } from '../src/services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
 // شعار جامعة الأحقاف
 const UNIVERSITY_LOGO = 'https://ahgaff.edu.ye/pluginfile.php/1/theme_lambda2/favicon/1769931878/University%20Logo.png';
 
@@ -31,10 +33,24 @@ export default function LoginScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [initialized, setInitialized] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
 
   useEffect(() => {
     initializeAdmin();
+    loadSavedCredentials();
   }, []);
+
+  const loadSavedCredentials = async () => {
+    try {
+      const saved = await AsyncStorage.getItem('saved_credentials');
+      if (saved) {
+        const { username: savedUser, password: savedPass } = JSON.parse(saved);
+        setUsername(savedUser);
+        setPassword(savedPass);
+        setRememberMe(true);
+      }
+    } catch (e) {}
+  };
 
   const initializeAdmin = async () => {
     try {
@@ -50,7 +66,6 @@ export default function LoginScreen() {
     if (Platform.OS !== 'web') {
       Alert.alert('خطأ', message);
     }
-    // إخفاء الرسالة بعد 5 ثواني
     setTimeout(() => setErrorMessage(''), 5000);
   };
 
@@ -67,10 +82,44 @@ export default function LoginScreen() {
       const response = await authAPI.login(username.trim(), password);
       const { access_token, user } = response.data;
       await setAuth(user, access_token);
+      
+      // حفظ البيانات إذا تم تفعيل "حفظ بياناتي"
+      if (rememberMe) {
+        await AsyncStorage.setItem('saved_credentials', JSON.stringify({ username: username.trim(), password }));
+      } else {
+        await AsyncStorage.removeItem('saved_credentials');
+      }
+      
+      // حفظ بيانات الدخول للأوفلاين
+      await AsyncStorage.setItem('offline_credentials', JSON.stringify({
+        username: username.trim(),
+        password,
+        user,
+        access_token,
+      }));
+      
       router.replace('/(tabs)');
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'اسم المستخدم أو كلمة المرور غير صحيحة';
-      showError(message);
+      // محاولة الدخول أوفلاين
+      if (!error.response) {
+        try {
+          const offlineData = await AsyncStorage.getItem('offline_credentials');
+          if (offlineData) {
+            const { username: savedUser, password: savedPass, user, access_token } = JSON.parse(offlineData);
+            if (username.trim() === savedUser && password === savedPass) {
+              await setAuth(user, access_token);
+              router.replace('/(tabs)');
+              return;
+            }
+          }
+          showError('لا يوجد اتصال بالإنترنت ولا توجد بيانات محفوظة');
+        } catch (e) {
+          showError('لا يوجد اتصال بالإنترنت');
+        }
+      } else {
+        const message = error.response?.data?.detail || 'اسم المستخدم أو كلمة المرور غير صحيحة';
+        showError(message);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -141,6 +190,20 @@ export default function LoginScreen() {
                 <Text style={styles.errorText}>{errorMessage}</Text>
               </View>
             )}
+
+            {/* حفظ بياناتي */}
+            <TouchableOpacity
+              style={styles.rememberRow}
+              onPress={() => setRememberMe(!rememberMe)}
+              data-testid="remember-me-checkbox"
+            >
+              <Ionicons 
+                name={rememberMe ? 'checkbox' : 'square-outline'} 
+                size={22} 
+                color={rememberMe ? '#1565c0' : '#888'} 
+              />
+              <Text style={styles.rememberText}>حفظ بياناتي</Text>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
@@ -239,6 +302,17 @@ const styles = StyleSheet.create({
     writingDirection: 'rtl',
     paddingVertical: 8,
     paddingHorizontal: 4,
+  },
+  rememberRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+    paddingHorizontal: 4,
+  },
+  rememberText: {
+    fontSize: 14,
+    color: '#555',
   },
   eyeIcon: {
     padding: 8,

@@ -59,7 +59,7 @@ export default function ManageTeachersScreen() {
   const [formData, setFormData] = useState({
     teacher_id: '',
     full_name: '',
-    department_id: '',
+    department_ids: [] as string[],
     email: '',
     phone: '',
     specialization: '',
@@ -126,7 +126,7 @@ export default function ManageTeachersScreen() {
       if (editingTeacher) {
         await teachersAPI.update(editingTeacher.id, {
           full_name: formData.full_name,
-          department_id: formData.department_id || undefined,
+          department_ids: formData.department_ids.length > 0 ? formData.department_ids : undefined,
           email: formData.email || undefined,
           phone: formData.phone || undefined,
           specialization: formData.specialization || undefined,
@@ -157,7 +157,7 @@ export default function ManageTeachersScreen() {
     setFormData({
       teacher_id: '',
       full_name: '',
-      department_id: '',
+      department_ids: [] as string[],
       email: '',
       phone: '',
       specialization: '',
@@ -175,7 +175,7 @@ export default function ManageTeachersScreen() {
     setFormData({
       teacher_id: getTeacherId(teacher),
       full_name: getTeacherName(teacher),
-      department_id: teacher.department_id || (teacher.department_ids && teacher.department_ids[0]) || '',
+      department_ids: teacher.department_ids || (teacher.department_id ? [teacher.department_id] : []) as string[],
       email: teacher.email || '',
       phone: teacher.phone || '',
       specialization: teacher.specialization || '',
@@ -496,27 +496,33 @@ export default function ManageTeachersScreen() {
               placeholder="أدخل الاسم الكامل"
             />
 
-            <Text style={styles.label}>القسم</Text>
+            <Text style={styles.label}>الأقسام (يمكن اختيار أكثر من قسم)</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.deptScroll}>
-              <TouchableOpacity
-                style={[styles.deptBtn, !formData.department_id && styles.deptBtnActive]}
-                onPress={() => setFormData({ ...formData, department_id: '' })}
-              >
-                <Text style={[styles.deptBtnText, !formData.department_id && styles.deptBtnTextActive]}>
-                  بدون قسم
-                </Text>
-              </TouchableOpacity>
-              {departments.map(dept => (
-                <TouchableOpacity
-                  key={dept.id}
-                  style={[styles.deptBtn, formData.department_id === dept.id && styles.deptBtnActive]}
-                  onPress={() => setFormData({ ...formData, department_id: dept.id })}
-                >
-                  <Text style={[styles.deptBtnText, formData.department_id === dept.id && styles.deptBtnTextActive]}>
-                    {dept.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+              {departments.map(dept => {
+                const isSelected = formData.department_ids.includes(dept.id);
+                return (
+                  <TouchableOpacity
+                    key={dept.id}
+                    style={[styles.deptBtn, isSelected && styles.deptBtnActive]}
+                    onPress={() => {
+                      const newIds = isSelected
+                        ? formData.department_ids.filter(id => id !== dept.id)
+                        : [...formData.department_ids, dept.id];
+                      setFormData({ ...formData, department_ids: newIds });
+                    }}
+                  >
+                    <Ionicons 
+                      name={isSelected ? 'checkbox' : 'square-outline'} 
+                      size={16} 
+                      color={isSelected ? '#fff' : '#666'} 
+                      style={{ marginLeft: 4 }}
+                    />
+                    <Text style={[styles.deptBtnText, isSelected && styles.deptBtnTextActive]}>
+                      {dept.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
 
             <Text style={styles.label}>التخصص</Text>
