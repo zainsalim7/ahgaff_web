@@ -17,7 +17,7 @@ export default function MyCoursesScreen() {
   const fetchCourses = useCallback(async () => {
     try {
       const res = await coursesAPI.getAll();
-      const teacherCourses = (res.data || []).filter((c: any) => c.teacher_id === user?.id || c.teacher_name === user?.full_name);
+      const teacherCourses = res.data || [];
       // Get stats for each course
       const withStats = await Promise.all(teacherCourses.map(async (c: any) => {
         try {

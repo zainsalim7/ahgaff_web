@@ -91,7 +91,11 @@ export const attendanceAPI = {
   recordSession: (data: any) => api.post('/attendance/session', data),
   getCourseStats: (courseId: string) => api.get(`/attendance/stats/course/${courseId}`),
   getCourseAttendance: (courseId: string) => api.get(`/attendance/course/${courseId}`),
-  syncOffline: (records: any[]) => api.post('/sync/attendance', { records }),
+  syncOffline: (records: any[]) => api.post('/sync/attendance', { attendance_records: records }),
+};
+
+export const teachersAPI = {
+  getMe: () => api.get('/teachers/me'),
 };
 
 export default api;

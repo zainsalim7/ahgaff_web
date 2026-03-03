@@ -31,7 +31,7 @@ export default function TakeAttendanceScreen() {
   const fetchCourses = useCallback(async () => {
     try {
       const res = await coursesAPI.getAll();
-      const teacherCourses = (res.data || []).filter((c: any) => c.teacher_id === user?.id || c.teacher_name === user?.full_name);
+      const teacherCourses = res.data || [];
       setCourses(teacherCourses);
       // Cache courses for offline
       await AsyncStorage.setItem('cached_teacher_courses', JSON.stringify(teacherCourses));

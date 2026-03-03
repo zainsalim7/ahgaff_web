@@ -8,7 +8,6 @@ import {
   RefreshControl,
   ActivityIndicator,
   Platform,
-  Alert,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,7 +56,7 @@ export default function NotificationsPage() {
 
   const markAsRead = async (notificationId: string) => {
     try {
-      await api.post(`/notifications/mark-read/${notificationId}`);
+      await api.put(`/notifications/${notificationId}/read`);
       setNotifications(prev => prev.map(n => n.id === notificationId ? { ...n, is_read: true } : n));
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
@@ -67,34 +66,11 @@ export default function NotificationsPage() {
 
   const markAllAsRead = async () => {
     try {
-      await api.post('/notifications/mark-all-read');
+      await api.put('/notifications/read-all');
       setNotifications(prev => prev.map(n => ({ ...n, is_read: true })));
       setUnreadCount(0);
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
-    }
-  };
-
-  const deleteNotification = async (notificationId: string) => {
-    const doDelete = async () => {
-      try {
-        await api.delete(`/notifications/${notificationId}`);
-        const deleted = notifications.find(n => n.id === notificationId);
-        setNotifications(prev => prev.filter(n => n.id !== notificationId));
-        if (deleted && !deleted.is_read) setUnreadCount(prev => Math.max(0, prev - 1));
-      } catch (error) {
-        if (Platform.OS === 'web') window.alert('فشل حذف الإشعار');
-        else Alert.alert('خطأ', 'فشل حذف الإشعار');
-      }
-    };
-
-    if (Platform.OS === 'web') {
-      if (window.confirm('هل تريد حذف هذا الإشعار؟')) await doDelete();
-    } else {
-      Alert.alert('تأكيد', 'هل تريد حذف هذا الإشعار؟', [
-        { text: 'إلغاء', style: 'cancel' },
-        { text: 'حذف', style: 'destructive', onPress: doDelete },
-      ]);
     }
   };
 
@@ -193,13 +169,6 @@ export default function NotificationsPage() {
                   <Text style={styles.notificationTime}>{formatDate(notification.created_at)}</Text>
                 </View>
                 {!notification.is_read && <View style={styles.unreadDot} />}
-                <TouchableOpacity
-                  onPress={(e) => { e.stopPropagation?.(); deleteNotification(notification.id); }}
-                  style={styles.deleteBtn}
-                  data-testid={`delete-notification-${notification.id}`}
-                >
-                  <Ionicons name="trash-outline" size={18} color="#c62828" />
-                </TouchableOpacity>
               </View>
 
               <Text style={styles.notificationMessage}>{notification.message}</Text>
@@ -285,7 +254,6 @@ const styles = StyleSheet.create({
   notificationTitle: { fontSize: 14, fontWeight: '600', color: '#1a1a2e' },
   notificationTime: { fontSize: 11, color: '#999', marginTop: 2 },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#1b5e20' },
-  deleteBtn: { padding: 6, marginLeft: 4 },
   notificationMessage: { fontSize: 13, color: '#666', lineHeight: 20 },
   statsContainer: { flexDirection: 'row', marginTop: 10, gap: 10 },
   statBadge: {

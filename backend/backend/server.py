@@ -3529,14 +3529,14 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
     return {
         "id": str(updated["_id"]),
         "name": updated["name"],
-        "code": updated["code"],
-        "department_id": updated["department_id"],
-        "teacher_id": updated["teacher_id"],
-        "level": updated["level"],
-        "section": updated["section"],
-        "semester": updated["semester"],
-        "academic_year": updated["academic_year"],
-        "created_at": updated["created_at"],
+        "code": updated.get("code", ""),
+        "department_id": updated.get("department_id", ""),
+        "teacher_id": updated.get("teacher_id"),
+        "level": updated.get("level", 1),
+        "section": updated.get("section"),
+        "semester": updated.get("semester"),
+        "academic_year": updated.get("academic_year"),
+        "created_at": updated.get("created_at"),
         "is_active": updated.get("is_active", True)
     }
 

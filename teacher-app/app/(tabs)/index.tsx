@@ -42,19 +42,33 @@ export default function TeacherHome() {
     if (pending.length === 0) return;
     setIsSyncing(true);
     try {
+      // Transform offline records to the format expected by /sync/attendance
+      const allRecords: any[] = [];
       for (const record of pending) {
-        try {
-          await attendanceAPI.recordSession({
+        for (const student of record.students) {
+          allRecords.push({
             course_id: record.course_id,
-            lecture_date: record.lecture_date,
-            lecture_time: record.lecture_time,
-            records: record.students.map(s => ({ student_id: s.student_id, status: s.status })),
+            student_id: student.student_id,
+            status: student.status,
+            date: `${record.lecture_date}T${record.lecture_time}:00`,
+            method: 'manual',
+            local_id: `${record.id}_${student.student_id}`,
+            notes: `تسجيل أوفلاين - ${record.course_name}`,
           });
-          await markSynced(record.id);
-        } catch (e) { console.error('Sync failed for record:', record.id, e); }
+        }
+      }
+      
+      if (allRecords.length > 0) {
+        await attendanceAPI.syncOffline(allRecords);
+      }
+      
+      for (const record of pending) {
+        await markSynced(record.id);
       }
       await removeSynced();
       setLastSyncTime(new Date().toISOString());
+    } catch (e) {
+      console.error('Sync failed:', e);
     } finally { setIsSyncing(false); }
   };
 
