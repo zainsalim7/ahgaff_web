@@ -15,16 +15,7 @@ export default function TabsLayout() {
   const pendingCount = useOfflineSyncStore((state) => state.getPendingRecordsCount());
   const [institutionName, setInstitutionName] = useState('نظام الحضور');
 
-  // لا تعرض التبويبات حتى يتم تحميل بيانات المستخدم
   const isReady = !isLoading && !!user && !!role;
-
-  if (!isReady) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
-        <ActivityIndicator size="large" color="#1565c0" />
-      </View>
-    );
-  }
 
   // تفعيل إشعارات Firebase
   useEffect(() => {
@@ -36,7 +27,6 @@ export default function TabsLayout() {
         
         const fcmToken = await requestNotificationPermission();
         if (fcmToken) {
-          // Register token with backend
           const token = await AsyncStorage.getItem('token');
           const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL || '';
           await fetch(`${backendUrl}/api/notifications/register-token`, {
@@ -47,10 +37,8 @@ export default function TabsLayout() {
             },
             body: JSON.stringify({ token: fcmToken, device_type: 'web' }),
           });
-          console.log('FCM token registered successfully');
         }
 
-        // Listen for foreground notifications
         onForegroundMessage((payload) => {
           if (Notification.permission === 'granted') {
             new Notification(payload.notification?.title || 'جامعة الأحقاف', {
