@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Tabs } from 'expo-router';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
 import { useOfflineSyncStore } from '../../src/store/offlineSyncStore';
@@ -17,6 +17,14 @@ export default function TabsLayout() {
 
   // لا تعرض التبويبات حتى يتم تحميل بيانات المستخدم
   const isReady = !isLoading && !!user && !!role;
+
+  if (!isReady) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
+        <ActivityIndicator size="large" color="#1565c0" />
+      </View>
+    );
+  }
 
   // تفعيل إشعارات Firebase
   useEffect(() => {
@@ -102,6 +110,7 @@ export default function TabsLayout() {
 
   return (
     <Tabs
+      key={`tabs-${role}-${permissions.length}`}
       screenOptions={{
         tabBarActiveTintColor: '#1565c0',
         tabBarInactiveTintColor: '#999',
