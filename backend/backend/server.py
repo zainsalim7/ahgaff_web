@@ -2894,9 +2894,9 @@ async def force_change_password(data: ForceChangePasswordRequest, current_user: 
     if not user:
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
     
-    # التحقق من أن المستخدم مطلوب منه تغيير كلمة المرور
-    if not user.get("must_change_password", False):
-        raise HTTPException(status_code=400, detail="ليس مطلوباً منك تغيير كلمة المرور")
+    # لا نمنع التغيير حتى لو سبق أن تم - لتجنب حالة علق التطبيق
+    # if not user.get("must_change_password", False):
+    #     raise HTTPException(status_code=400, detail="ليس مطلوباً منك تغيير كلمة المرور")
     
     # التحقق من طول كلمة المرور
     if len(data.new_password) < 6:

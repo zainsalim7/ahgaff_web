@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authAPI } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -53,18 +54,17 @@ export default function ChangePasswordScreen() {
       await authAPI.forceChangePassword(newPassword);
       
       if (user) {
-        setUser({ ...user, must_change_password: false });
+        const updatedUser = { ...user, must_change_password: false };
+        setUser(updatedUser);
+        // حفظ في AsyncStorage لمنع العودة لهذه الصفحة
+        await AsyncStorage.setItem('user', JSON.stringify(updatedUser));
       }
 
-      Alert.alert('تم بنجاح ✅', 'تم تغيير كلمة المرور', [
+      Alert.alert('تم بنجاح', 'تم تغيير كلمة المرور', [
         {
           text: 'متابعة',
           onPress: () => {
-            if (user?.role === 'student') {
-              router.replace('/(tabs)');
-            } else {
-              router.replace('/');
-            }
+            router.replace('/(tabs)');
           },
         },
       ]);
