@@ -2088,6 +2088,68 @@ async def get_my_student_record(current_user: dict = Depends(get_current_user)):
         "is_active": student.get("is_active", True)
     }
 
+@api_router.get("/students/me/courses")
+async def get_my_courses(current_user: dict = Depends(get_current_user)):
+    """جلب مقررات الطالب الحالي من التسجيل"""
+    if current_user["role"] != UserRole.STUDENT:
+        raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
+    
+    student = await db.students.find_one({"user_id": current_user["id"]})
+    if not student:
+        raise HTTPException(status_code=404, detail="لم يتم العثور على سجل الطالب")
+    
+    student_id = str(student["_id"])
+    
+    # جلب التسجيلات
+    enrollments = await db.enrollments.find({"student_id": student_id}).to_list(100)
+    course_ids = [e["course_id"] for e in enrollments]
+    
+    # إذا لا يوجد تسجيلات، جلب المقررات حسب القسم والمستوى
+    if not course_ids:
+        query = {
+            "department_id": student["department_id"],
+            "level": student["level"],
+        }
+        if student.get("section"):
+            query["$or"] = [
+                {"section": {"$in": [None, "", student["section"]]}},
+                {"section": {"$exists": False}},
+            ]
+        courses_list = await db.courses.find(query).to_list(100)
+    else:
+        courses_list = []
+        for cid in course_ids:
+            try:
+                course = await db.courses.find_one({"_id": ObjectId(cid)})
+                if course:
+                    courses_list.append(course)
+            except:
+                pass
+    
+    result = []
+    for c in courses_list:
+        teacher_name = "غير محدد"
+        if c.get("teacher_id"):
+            try:
+                teacher = await db.users.find_one({"_id": ObjectId(c["teacher_id"])})
+                if teacher:
+                    teacher_name = teacher.get("full_name", teacher.get("username", "غير محدد"))
+            except:
+                pass
+        result.append({
+            "id": str(c["_id"]),
+            "name": c.get("name", ""),
+            "code": c.get("code", ""),
+            "department_id": c.get("department_id", ""),
+            "level": c.get("level"),
+            "section": c.get("section", ""),
+            "teacher_name": teacher_name,
+        })
+    
+    return result
+
+
+
 @api_router.get("/students/{student_id}", response_model=StudentResponse)
 async def get_student(student_id: str, current_user: dict = Depends(get_current_user)):
     student = await db.students.find_one({"_id": ObjectId(student_id)})

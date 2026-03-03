@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
-import { studentsAPI, lecturesAPI, coursesAPI, settingsAPI } from '../../src/services/api';
+import api, { studentsAPI, lecturesAPI, coursesAPI, settingsAPI } from '../../src/services/api';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import { Ionicons } from '@expo/vector-icons';
 import {
@@ -90,13 +90,20 @@ export default function MyScheduleScreen() {
       }
       setStudent(foundStudent);
 
-      // جلب جميع المقررات حسب قسم ومستوى وشعبة الطالب
-      const coursesRes = await coursesAPI.getAll();
-      const studentCourses = coursesRes.data.filter((c: any) => 
-        c.department_id === foundStudent.department_id &&
-        c.level === foundStudent.level &&
-        (!c.section || c.section === foundStudent.section)
-      );
+      // جلب مقررات الطالب (من التسجيل أو حسب القسم/المستوى)
+      let studentCourses: any[] = [];
+      try {
+        const myCoursesRes = await api.get('/students/me/courses');
+        studentCourses = myCoursesRes.data;
+      } catch (e) {
+        // fallback: جلب من المقررات العامة حسب القسم والمستوى
+        const coursesRes = await coursesAPI.getAll();
+        studentCourses = coursesRes.data.filter((c: any) => 
+          c.department_id === foundStudent.department_id &&
+          c.level === foundStudent.level &&
+          (!c.section || c.section === foundStudent.section)
+        );
+      }
 
       // جلب المحاضرات لكل مقرر
       const allLectures: Lecture[] = [];
