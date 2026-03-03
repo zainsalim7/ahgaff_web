@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "أستاذ الأحقاف",
+    "slug": "ahgaff-teacher",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/icon.png",
+    "scheme": "ahgaff-teacher",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ahgaff.teacher",
+      "buildNumber": "1"
+    },
+    "android": {
+      "package": "com.ahgaff.teacher",
+      "versionCode": 1,
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#1b5e20"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "favicon": "./assets/images/favicon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/icon.png",
+          "color": "#1b5e20",
+          "sounds": [],
+          "androidMode": "default",
+          "androidCollapsedTitle": "أستاذ الأحقاف"
+        }
+      ]
+    ]
+  }
+}
