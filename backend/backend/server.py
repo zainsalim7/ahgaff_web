@@ -1838,12 +1838,18 @@ async def mark_all_notifications_as_read(current_user: dict = Depends(get_curren
     if not user:
         return {"message": "لا توجد إشعارات"}
     
+    # بناء استعلام البحث بناءً على نوع المستخدم
+    query = {"is_read": False}
+    
     student = await db.students.find_one({"user_id": str(user["_id"])})
-    if not student:
-        return {"message": "لا توجد إشعارات"}
+    if student:
+        query["student_id"] = str(student["_id"])
+    else:
+        # للمعلمين والمستخدمين الآخرين - استخدام user_id
+        query["user_id"] = str(user["_id"])
     
     result = await db.notifications.update_many(
-        {"student_id": str(student["_id"]), "is_read": False},
+        query,
         {"$set": {"is_read": True}}
     )
     
