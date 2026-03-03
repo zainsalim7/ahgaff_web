@@ -400,6 +400,25 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* Notifications Quick Access for Admin */}
+        {user?.role === 'admin' && (
+          <View style={styles.quickActions}>
+            <TouchableOpacity
+              style={styles.actionCard}
+              onPress={() => router.push('/notifications')}
+            >
+              <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
+                <Ionicons name="notifications" size={28} color="#ff9800" />
+              </View>
+              <View style={styles.actionInfo}>
+                <Text style={styles.actionTitle}>الإشعارات</Text>
+                <Text style={styles.actionDesc}>عرض الإشعارات والتنبيهات</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={24} color="#999" />
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* Teacher Dashboard */}
         {user?.role === 'teacher' && (
           <>
@@ -654,6 +673,20 @@ export default function HomeScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={24} color="#999" />
               </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={[styles.actionCard, { marginTop: 12 }]}
+                onPress={() => router.push('/notifications')}
+              >
+                <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
+                  <Ionicons name="notifications" size={28} color="#ff9800" />
+                </View>
+                <View style={styles.actionInfo}>
+                  <Text style={styles.actionTitle}>الإشعارات</Text>
+                  <Text style={styles.actionDesc}>عرض الإشعارات والتنبيهات</Text>
+                </View>
+                <Ionicons name="chevron-forward" size={24} color="#999" />
+              </TouchableOpacity>
             </View>
           </>
         )}
@@ -872,28 +905,14 @@ export default function HomeScreen() {
               <Text style={styles.sectionTitle}>إجراءات سريعة</Text>
               <TouchableOpacity
                 style={styles.actionCard}
-                onPress={() => router.push('/my-attendance')}
+                onPress={() => router.push('/notifications')}
               >
-                <View style={[styles.actionIcon, { backgroundColor: '#e8f5e9' }]}>
-                  <Ionicons name="checkmark-circle" size={28} color="#4caf50" />
+                <View style={[styles.actionIcon, { backgroundColor: '#fff3e0' }]}>
+                  <Ionicons name="notifications" size={28} color="#ff9800" />
                 </View>
                 <View style={styles.actionInfo}>
-                  <Text style={styles.actionTitle}>سجل حضوري</Text>
-                  <Text style={styles.actionDesc}>عرض سجل الحضور والغياب</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={24} color="#999" />
-              </TouchableOpacity>
-              
-              <TouchableOpacity
-                style={[styles.actionCard, { marginTop: 12 }]}
-                onPress={() => router.push('/my-schedule')}
-              >
-                <View style={[styles.actionIcon, { backgroundColor: '#e3f2fd' }]}>
-                  <Ionicons name="calendar" size={28} color="#1565c0" />
-                </View>
-                <View style={styles.actionInfo}>
-                  <Text style={styles.actionTitle}>جدول محاضراتي</Text>
-                  <Text style={styles.actionDesc}>عرض المحاضرات الأسبوعية والشهرية</Text>
+                  <Text style={styles.actionTitle}>الإشعارات</Text>
+                  <Text style={styles.actionDesc}>عرض الإشعارات والتنبيهات</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={24} color="#999" />
               </TouchableOpacity>
