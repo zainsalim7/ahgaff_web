@@ -1,23 +1,23 @@
 {
   "expo": {
-    "name": "نظام الحضور",
-    "slug": "eduanalytic-attendance",
+    "name": "طالب الأحقاف",
+    "slug": "ahgaff-student",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "eduanalytic",
+    "scheme": "ahgaff-student",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.eduanalytic.attendance",
+      "bundleIdentifier": "com.ahgaff.student",
       "buildNumber": "1"
     },
     "android": {
-      "package": "com.eduanalytic.attendance",
+      "package": "com.ahgaff.student",
       "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#1565c0"
+        "backgroundColor": "#0d47a1"
       }
     },
     "web": {
@@ -31,10 +31,10 @@
         "expo-notifications",
         {
           "icon": "./assets/images/icon.png",
-          "color": "#1565c0",
+          "color": "#0d47a1",
           "sounds": [],
           "androidMode": "default",
-          "androidCollapsedTitle": "نظام الحضور"
+          "androidCollapsedTitle": "طالب الأحقاف"
         }
       ]
     ]

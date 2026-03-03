@@ -1,222 +1,194 @@
-<analysis>**original_problem_statement**: The user initially requested a complete overhaul of the reporting system, including new reports and export functionality. This evolved to include flexible student import, new user management features, and fixing critical authentication bugs.
-
-The scope has since expanded significantly to cover:
-1.  **Deployment**: Deploy the application to a live server on Railway and build the mobile app (APK/IPA).
-2.  **Report Permissions**: Restrict teacher access to reports, allowing them to see data only for their own courses.
-3.  **Attendance Logic**: Prevent teachers from taking attendance for lectures that have not started yet.
-4.  **Notification System**:
-    *   Automatically notify a teacher and students when a new lecture is created.
-    *   Provide an admin interface to send custom notifications to specific users (teachers, students), all users in a course, or all users with a specific role.
-    *   Implement an in-app notification center for users to view their notifications.
+<analysis>**original_problem_statement**: The user's initial project was a student and teacher management system. The scope has evolved significantly to include:
+1.  A comprehensive notification system with in-app and push capabilities.
+2.  Fixing critical bugs related to attendance logic, permissions, and offline functionality.
+3.  A complete redesign of the admin dashboard and login page.
+4.  Deployment of the backend and frontend to Railway.
+5.  Building a mobile app (APK) for students and teachers.
+6.  The latest request is to split the single mobile app into two separate applications: one for students and one for teachers, with the administration functionality remaining on the web.
 
 **PRODUCT REQUIREMENTS**:
--   All initial requirements for reports, user management, and bug fixes.
--   A stable, deployed backend and frontend on Railway.
--   A new, comprehensive notification system (both automated and manual).
--   Corrected permissions for the 'Teacher' role across all features.
--   A fix for the attendance-taking logic to respect lecture start times.
--   Build and provide a mobile APK file.
+- A stable, deployed backend and frontend on Railway.
+- A functional notification system (in-app and push).
+- Corrected permissions for all user roles (Admin, Teacher, Student).
+- A robust offline mode for login and attendance taking.
+- A clean, modern UI/UX across the web and mobile apps.
+- Two separate mobile apps (APKs): one for students and one for teachers.
 
 **User's preferred language**: Arabic (العربية)
 
 **what currently exists?**
--   The backend has been heavily modified to add a comprehensive notification system, including APIs to send notifications to individuals, courses, and roles, as well as endpoints for fetching and managing user notifications.
--   The permissions system () has been updated to restrict teacher report access, and a startup function () was added to ensure roles in the database are always up-to-date with the code.
--   The attendance API was updated to prevent taking attendance for future lectures.
--   The frontend has new pages for sending notifications () and viewing them (). The admin panel has been updated with links to these pages.
--   The codebase is spread across at least three GitHub repositories (, , ) due to a series of chaotic attempts to fix deployment issues on Railway. This has resulted in an unstable and confusing repository structure.
--   The backend () and frontend () are deployed as separate services on Railway, but the frontend deployment is consistently failing.
+- A FastAPI backend and React Native (Expo) frontend in a monorepo structure.
+- The backend has APIs for user management, attendance, reporting, and a full notification system integrated with Firebase for push notifications.
+- The frontend includes pages for all major features, an offline caching mechanism, and role-based navigation.
+- The project is configured with Expo Application Services (EAS) to build two distinct applications from the same codebase: a teacher-app and a student-app. The admin functionality is accessible via the web interface.
+- Numerous bug fixes and UI enhancements have been implemented, including a redesigned admin panel, optional password changes, and improved offline login.
 
 **Last working item**:
--   Last item agent was working: Addressing a list of five user-reported issues and improvements for the newly created notification system.
+-   Last item agent was working: The user requested to split the single mobile application into two distinct apps: one for the teacher and one for the student, leaving the admin panel for the web only. The agent configured the project to support this.
 -   Status: IN PROGRESS
 -   Agent Testing Done: N
--   Which testing method agent to use? Both. The agent needs to implement backend changes (API logic for deleting notifications) and frontend changes (UI for confirmation messages, delete buttons, and permission checks). Testing will require backend  tests and frontend screenshots/user verification.
+-   Which testing method agent to use? The user must perform the build on their local machine using the provided EAS CLI commands for each app profile ( and ).
 -   User Testing Done: N
 
 **All Pending/In progress Issue list**:
--   Issue 1: (P0) Frontend Deployment on Railway is Failing
--   Issue 2: (P1) Users Cannot See New Notification Features
--   Issue 3: (P1) Teacher Can Still Access Pages for Future Lectures
--   Issue 4: (P2) Teacher Can Still See All Absent Students in Report
--   Issue 5: (P2) Recurring Authentication/Authorization Bug
+-   Issue 1: (P0) Build and Test Separate Student/Teacher APKs
+-   Issue 2: (P1) Push Notifications Not Received on Closed App
+-   Issue 3: (P1) Offline Data Caching Verification
+-   Issue 4: (P2) Recurring Railway Deployment Failures
 
 **Issues Detail**:
--   **Issue 1**: Frontend Deployment on Railway is Failing
-    -   **Attempted fixes**: The agent and user have gone through a chaotic series of fixes involving:
-        1.  Creating separate repositories (, ) from the original  monorepo.
-        2.  Using the Save to Github feature, which corrupted the repository structure by pushing the entire  directory.
-        3.  Manually restructuring the repos to have source files either in the root or a subdirectory (, ).
-        4.  The latest build failure for the frontend () is because Railway is configured to look for a  in the  subdirectory, but the latest code push moved all files to the root to try and fix a previous issue. The state is confused.
+-   **Issue 1**: Build and Test Separate Student/Teacher APKs
+    -   **Attempted fixes**: The agent successfully created two build profiles ( and ) in  and  to define separate names and icons for each app. The user was instructed on how to build them.
     -   **Next debug checklist**:
-        1.  **Instruct the user to fix the Railway configuration**: The user MUST go to the  service settings on Railway, find the Root Directory setting, and **clear its value** (remove ). This will make Railway look for the  in the root, matching the current repository structure.
-        2.  Trigger a new deployment on Railway for  and monitor the build logs.
-        3.  If it still fails, the entire multi-repo deployment strategy needs to be re-evaluated. Consolidating back to a single  monorepo and correctly configuring the Root Directory for *both* the frontend and backend services on Railway is the most stable long-term solution.
-    -   **Why fix this issue and what will be achieved with the fix?** This is the **absolute highest priority blocker**. No frontend changes are visible to the user, and no other bugs can be verified until the frontend is successfully deployed.
-    -   **Status**: BLOCKED
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** Frontend (by accessing the Railway URL).
-    -   **Blocked on other issue**: No, this is the primary blocker.
+        1.  Guide the user to run An Expo user account is required to proceed.
 
--   **Issue 2**: Users Cannot See New Notification Features
-    -   **Attempted fixes**: The agent implemented a full notification system (backend and frontend) and pushed the code. However, the user reports the UI hasn't changed. This is a direct symptom of Issue 1.
-    -   **Next debug checklist**:
-        1.  Resolve Issue 1: Frontend Deployment on Railway is Failing.
-        2.  Ask the user to clear their browser cache (Ctrl+Shift+R) and check the  and  pages again.
-    -   **Why fix this issue and what will be achieved with the fix?** To deliver the feature the user just requested and spent significant time specifying.
+Log in to EAS with email or username (exit and run eas login --help to see other login options)
+Input is required, but stdin is not readable. Failed to display prompt: Email or username for each profile ( and ).
+        2.  Help the user debug any build errors that arise on their local machine (they are using Windows, which has known issues with local Android builds).
+        3.  Once built, have the user install both APKs and confirm they function independently and show the correct UI for each role.
+    -   **Why fix this issue and what will be achieved with the fix?** This is the user's primary current requirement and the final step in structuring the mobile deployment.
+    -   **Status**: IN PROGRESS
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Frontend (User must build and install the APKs).
+    -   **Blocked on other issue**: None.
+
+-   **Issue 2**: Push Notifications Not Received on Closed App
+    -   **Attempted fixes**: The agent integrated , added the necessary plugins, and implemented the logic to register a device's push token with the backend. The backend is confirmed to have the Firebase service account key.
+    -   **Next debug checklist**: The root cause is that no devices have registered a push token yet because the user is still using an old APK.
+        1.  Once the new APKs from Issue 1 are built and installed, ask the user to open the app and grant notification permissions.
+        2.  Verify on the backend (e.g., via a log or an admin endpoint) that a device token has been registered for the user.
+        3.  Send a test notification and confirm it is received while the app is closed.
+    -   **Why fix this issue and what will be achieved with the fix?** This will complete the notification system, a core feature request.
     -   **Status**: BLOCKED
     -   **Is recurring issue?** N
-    -   **Should Test frontend/backend/both after fix?** Frontend.
-    -   **Blocked on other issue**: Issue 1: Frontend Deployment on Railway is Failing.
-
--   **Issue 3**: Teacher Can Still Access Pages for Future Lectures
-    -   **Attempted fixes**: The agent added a backend check to return an error if attendance is recorded too early. However, the user reports they can still *open the page* and the error message shown is a generic failed to connect instead of the specific reason. The agent identified the frontend  block was incorrectly handling the error.
-    -   **Next debug checklist**:
-        1.  Modify the  function in  to inspect the error from the server. If it's a 400 Bad Request with the specific message, show it to the user with . Only save to offline sync on a genuine network error.
-        2.  Add a  hook on the  page that checks the  flag on load. If it's false, show an alert or a full-page overlay preventing interaction.
-        3.  Push the changes and wait for the deployment to succeed (blocked by Issue 1).
-    -   **Why fix this issue and what will be achieved with the fix?** Prevents user confusion and enforces the business rule correctly on both the client and server.
-    -   **Status**: IN PROGRESS
-    -   **Is recurring issue?** Y
     -   **Should Test frontend/backend/both after fix?** Both.
-    -   **Blocked on other issue**: Issue 1: Frontend Deployment on Railway is Failing.
+    -   **Blocked on other issue**: Issue 1: Build and Test Separate Student/Teacher APKs.
 
--   **Issue 4**: Teacher Can Still See All Absent Students in Report
-    -   **Attempted fixes**: The agent fixed the backend API () to filter students based on the teacher's courses. The agent verified this with . The user still sees all students.
-    -   **Next debug checklist**: This is another symptom of the frontend not being updated. Once Issue 1 is resolved, this should be fixed. Ask the user to re-verify after the frontend has successfully deployed.
-    -   **Why fix this issue and what will be achieved with the fix?** Enforces data scoping and permissions correctly.
+-   **Issue 3**: Offline Data Caching Verification
+    -   **Attempted fixes**: The agent implemented an  to automatically cache API responses. This should allow the user to see data like schedules and courses when offline. The user reported it was not working.
+    -   **Next debug checklist**: The user likely tested this without having a populated cache.
+        1.  Instruct the user, after installing the new APK, to open the app once while connected to the internet to allow the cache to populate.
+        2.  Then, instruct them to disconnect from the internet and open the app again to verify that the previously fetched data is visible.
+    -   **Why fix this issue and what will be achieved with the fix?** Provides a better user experience and fulfills the requirement for offline functionality.
     -   **Status**: USER VERIFICATION PENDING
-    -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** Frontend.
-    -   **Blocked on other issue**: Issue 1: Frontend Deployment on Railway is Failing.
+    -   **Is recurring issue?** N
+    -   **Should Test frontend/backend/both after fix?** Frontend (User must test on the APK).
+    -   **Blocked on other issue**: Issue 1: Build and Test Separate Student/Teacher APKs.
 
--   **Issue 5**: Recurring Authentication/Authorization Bug
-    -   **Attempted fixes**: (From previous fork) A client-side cache was added to .
-    -   **Next debug checklist**: This issue has not been mentioned in the current session but was a major point of frustration. The new agent must proactively ask the user to test the admin navigation flow (e.g., login as admin, navigate away, navigate back to ) to confirm if the previous fix is stable.
-    -   **Why fix this issue and what will be achieved with the fix?** Critical for application stability and user trust.
-    -   **Status**: USER VERIFICATION PENDING
+-   **Issue 4**: Recurring Railway Deployment Failures
+    -   **Attempted fixes**: The agent correctly identified that the user needs to set the  in Railway's service settings ( for  and  for ). This has been a recurring point of confusion.
+    -   **Next debug checklist**: Proactively remind the user of the correct  settings whenever they push changes to GitHub to prevent deployment failures.
+    -   **Why fix this issue and what will be achieved with the fix?** Ensures a stable deployment pipeline, which is critical for testing and production use.
+    -   **Status**: IN PROGRESS (User education)
     -   **Is recurring issue?** Y
-    -   **Should Test frontend/backend/both after fix?** Frontend.
-    -   **Blocked on other issue**: No.
+    -   **Should Test frontend/backend/both after fix?** N/A (DevOps).
 
-**In progress Task List**:
--   **Task 1**: Implement Notification System Fixes (P0)
-    -   **Description**: The user requested 5 improvements to the notification system.
-    -   **Where to resume**: The agent needs to implement the following:
-        1.  **Confirmation Message**: In , after a successful API call in the  function, add a .
-        2.  **Delete Functionality**: Add a backend API endpoint . In the frontend  page, add a delete icon button to each notification that calls this API and removes the item from the local state.
-        3.  **Clarify Display**: The current display on  is correct. The agent should just confirm this with the user.
-        4.  **Restrict Access**: In  and , wrap the links/buttons related to sending notifications with a permission check like .
-        5.  **Registered Devices**: Explain to the user this count is for mobile push notifications via Expo and is expected to be 0 for web users.
-    -   **What will be achieved with this?** A complete, user-friendly notification system that meets all user requirements.
-    -   **Status**: NOT STARTED
-    -   **Should Test frontend/backend/both after fix?** Both.
-    -   **Blocked on something**: Issue 1: Frontend Deployment on Railway is Failing.
+**In progress Task List**: None, the main focus is on the pending issues above.
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks**:
-    -   (P0) **Build Mobile App (APK)**: Once the Railway backend URL is stable, update the frontend's environment variables and run the EAS build command. This is a primary goal for the user. (Blocked by Issue 1)
-    -   (P1) **Improve Reports**: User wants to revisit reports for improvements.
-    -   (P1) **Finalize Quick Navigation**: The  click event needs to be debugged.
+    -   (P1) **Verify All Recent Fixes**: Once the new APKs are built, systematically verify all the recent changes with the user: role-based tabs, optional password change, offline caching, push notifications, and multi-department teachers.
 -   **Future Tasks**:
-    -   (P1) **Implement Activity Logs UI**: The page  is a placeholder.
-    -   (P2) **Refactor Backend**: Break down the monolithic  into FastAPI  modules.
+    -   (P2) **Improve Reports**: User wants to revisit reports for improvements.
+    -   (P3) **Implement Activity Logs UI**: The page  is a placeholder.
+    -   (P3) **Refactor Backend**: Break down the monolithic  into FastAPI  modules.
 
 **Completed work in this session**
--   **Feature (Report Permissions)**: Restricted teacher report access to only their own courses by removing the global  permission and updating all relevant report APIs.
--   **Feature (Notification System)**: Implemented a full-featured notification system, including automated notifications on lecture creation and a manual admin interface to send targeted messages.
--   **Bugfix (Attendance)**: Added a backend check to prevent taking attendance for future lectures.
--   **Bugfix (Repository Structure)**: Attempted multiple times to fix the repository structures for  and  to enable successful Railway deployments.
--   **Feature (New Report)**: Created a new Teacher Summary Report with a backend API and frontend page.
--   **Refactor (Permissions)**: Added a  function that runs on server startup to ensure permissions in the database always match the code.
+-   **Feature (App Splitting)**: Configured  and  to build separate Student and Teacher apps.
+-   **Feature (Offline Caching)**: Implemented an  interceptor to cache API data for offline viewing.
+-   **Feature (Push Notifications)**: Integrated  to register devices and enable push notifications (pending APK build).
+-   **Feature (Notification Badges)**: Added UI badges to show the count of unread notifications.
+-   **Feature (Teacher Permissions)**: Modified the backend and frontend to allow teachers to be associated with multiple departments.
+-   **Bugfix (Offline Login)**: Fixed the offline login flow and added a Remember Me checkbox.
+-   **Bugfix (UI Hang)**: Resolved an issue where refreshing the profile page would cause the app to hang.
+-   **Bugfix (Attendance Logic)**: Modified backend logic so that a teacher's absence does not count against a student's attendance record.
+-   **UI/UX (Admin Panel)**: Completely redesigned the admin dashboard into a responsive, grouped grid layout.
+-   **UI/UX (Password Change)**: Made password change optional and moved it to the profile page with a new form requiring the current password.
+-   **UI/UX (Login Page)**: Removed hardcoded credential hints from the login page.
+-   **UI/UX (Homepage)**: Moved notification access to the homepage for all roles and cleaned up redundant links.
+-   **Deployment**: Resolved multiple Railway and Expo build failures by fixing Dockerfiles, package dependencies (), and providing correct configuration instructions.
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1**: The  component's click handler was reported as not working in the web preview in the previous handoff, and it was not addressed in this session.
-    -   **Debug checklist**: Inspect the  or  handler in . Check for console errors in the browser when it's clicked.
-    -   **Why to solve this issue and what will be achieved with this?** To complete a previously implemented feature and improve app navigation.
-    -   **Should Test frontend/backend/both after fix**: Frontend.
-    -   **Is recurring issue?** N
+-   **Issue 1**: The  component's click handler was reported as not working in a previous handoff and has not been addressed. This is a low-priority UI bug.
 
 **Known issue recurrence from previous fork**
--   **Issue recurrence in previous fork**: Recurring Authentication/Authorization Bug.
+-   **Issue recurrence in previous fork**: Railway deployment issues due to incorrect  settings.
 -   **Recurrence count**: High.
--   **Status**: USER VERIFICATION PENDING.
+-   **Status**: IN PROGRESS (Requires continuous user guidance).
 
 **Code Architecture**
-The code is currently in a chaotic state across three repositories. The intended structure for deployment seems to be:
 
 
 **Key Technical Concepts**
--   **PaaS Deployment (Railway)**: The main struggle of the session. Debugging build failures related to repository structure, Dockerfiles, and Railway-specific settings like Root Directory.
--   **Multi-Repository Management**: The agent created and managed multiple git repositories, leading to confusion and deployment issues.
--   **Role-Based Access Control (RBAC)**: Fine-tuning FastAPI endpoint logic based on user roles and permissions.
--   **Expo Notifications**: Implementing both in-app notifications (stored in MongoDB) and setting the stage for push notifications.
--   **Database Seeding/Syncing**: Creating a function that runs on application startup to synchronize roles and permissions from code to the database.
+-   **Expo Application Services (EAS)**: Using build profiles in  to generate multiple distinct apps from a single codebase.
+-   **Offline Caching**: Using  to store and retrieve API responses for offline use.
+-   **Push Notifications**: Using  to get permissions and register push tokens with the backend.
+-   **Role-Based Rendering**: Conditionally rendering navigation tabs and UI components based on the user's role and permissions from .
+-   **Railway Deployment**: Deploying a monorepo by specifying a  for each service.
 
 **key DB schema**
+-   **users**: 
+-   **teachers**:  (Now an array)
+-   **students**: 
 -   **notifications**: 
--   **roles**:  (Now auto-synced on startup)
+-   **devices**: 
 
 **All files of reference**
--   **Deployment/Repo Structure**: All , ,  files in all three repositories.
--   **Backend (Permissions & Notifications)**: , , , .
--   **Frontend (Notifications & UI)**: , , , .
--   **Frontend (Services)**: .
--   **Frontend (Context)**: .
+-   **Build Config**: , 
+-   **Authentication & Layout**: , , 
+-   **Login & Offline**: , 
+-   **Push Notifications**: , 
+-   **Teacher Multi-Department**: , 
+-   **Backend Logic**:  (for attendance, reports, and password change logic)
 
 **Areas that need refactoring**:
--   **Deployment Strategy & Repository Structure**: CRITICAL. The multi-repo setup is unmanageable. The agent should propose a plan to consolidate everything back into the single  monorepo and configure Railway to deploy the  and  services from their respective subdirectories. This will eliminate the confusion and sync issues.
--   **Backend Monolith**:  is still a very large file and should be broken into smaller, more manageable  modules under the  directory.
+-   The backend  file is still a large monolith and would benefit from being broken down into  modules within the  directory.
 
 **key api endpoints**
--   : GET user's notifications.
--   : POST to send a new custom notification.
--   : POST to mark a notification as read.
--   : GET to search for teachers (for the send notification UI).
--   : GET the new teacher summary report.
+-   : Allows user to change their password using  and .
+-   : Retrieves the courses a student is enrolled in.
+-   : Fetches the number of unread notifications for the logged-in user.
+-   : Registers a device's push notification token.
 
 **Critical Info for New Agent**
--   **PRIORITY 0: FIX THE FRONTEND DEPLOYMENT.** You cannot make progress on anything else until the user can see your changes. Guide the user to **remove the Root Directory setting on their  service in Railway**. This is the immediate unblocker.
--   **PROPOSE A REPO CONSOLIDATION PLAN.** The current 3-repository system is the source of all deployment problems. After unblocking the user, you must propose a plan to move back to a single  monorepo. This will save immense time and frustration in the long run.
--   **USER IS FRUSTRATED WITH DEPLOYMENT.** The user has been stuck in a loop of deployment failures. Be clear, concise, and focus on solving this one problem first. Do not start new features until the deployment process is stable and the user can verify your work.
--   **VERIFY ALL PENDING FIXES**: Once deployment is stable, you have a backlog of fixes to verify with the user: teacher report filtering, attendance-taking for future lectures, and the new notification UI. Go through them one by one.
+-   **A new APK build is required to see most recent fixes.** Many critical features (push notifications, offline caching, UI permission fixes, the app split itself) are implemented in the code but will not work for the user until they successfully build and install new APKs. This is the main blocker.
+-   **The user builds the APKs on their Windows machine.** Be prepared to debug local build issues. The most common pitfall is that local Android builds via EAS CLI are not officially supported on Windows; guide the user back to building on Expo's servers (the default) if they get stuck.
+-   **The user works on the live Railway deployment.** The data on their  environment is different from the data in the local preview environment. API calls should be debugged against their live data context.
+-   **Communicate in Arabic.** The user prefers Arabic. All explanations and plans must be in that language.
 
 **Last 10 User Messages and any pending HUMAN messages**
--   (Pending) User asks for 5 fixes/improvements for the notification system. (Status: Not started)
--   User reports they don't see the new notification features on the live site. (Status: Blocked by deployment)
--   User asks where the Send to specific teacher feature is. (Status: Blocked by deployment)
--   User points out that the Send by Role option is missing a dropdown to select the role. (Status: Fixed in code, but blocked by deployment)
--   User reports confusion between Manage Notifications and Send Notifications buttons. (Status: Fixed in code, but blocked by deployment)
--   User reports that automated notifications for new lectures are not being received. (Status: Agent confirmed it works locally, blocked by backend deployment being out of date)
--   User asks about several features of the notification system: meaning of registered devices, confirmation messages, deleting notifications, and where they are displayed. (Status: In Progress)
+10. User asks if  is sufficient to update the project folder before a new build. (Completed: Agent confirmed it is.)
+9. User reports that after logging in offline with a teacher account, no courses or lectures are visible. (Completed: Agent implemented an offline caching system.)
+8. User asks how a teacher can take attendance while offline. (Completed: Agent explained the existing offline sync mechanism.)
+7. User asks why push notifications are not working when the app is closed. (Completed: Agent explained that a new APK with the notification code is needed.)
+6. User provides the Firebase keys and asks the agent to check the setup. (Completed: Agent confirmed backend is ready but the app needs to be rebuilt to register devices.)
+5. User expresses the important idea of splitting the app into two: one for students and one for teachers. (In Progress: Agent configured this.)
+4. User clarifies that the login should still work for both roles, but the apps should be separate. (Completed: Agent confirmed this is the plan.)
+3. User reports that  is not working. (This was not addressed, but it's a user-side Git issue).
+2.  (Pending) User reports  when running . This indicates the user is in the wrong directory or the  folder is missing on their local machine.
+1.  (Pending) User provides a screenshot of the Git error.
 
 **Project Health Check:**
 -   **Broken**:
-    -   The frontend deployment on Railway () is completely broken and failing to build, blocking all UI/UX verification.
-    -   The repository structure is a mess across three different repos, leading to constant deployment configuration issues.
-    -   Multiple critical bug fixes and new features are implemented in code but are not live due to the deployment failures.
+    -   The APK build process is a major friction point. The user is actively trying to build the app but has faced numerous errors (Gradle, CLI versions, OS compatibility).
+-   **Mocked**: N/A
 
 **3rd Party Integrations**
--   **GitHub**: For source code hosting.
--   **Railway**: PaaS provider for backend and frontend deployment (currently unstable).
--   **Expo**: For mobile app builds and push notifications.
--    (backend): For data manipulation and Excel export.
--    (backend): For PDF generation.
+-   **Railway**: PaaS for backend and web-frontend deployment.
+-   **Expo (EAS)**: For building and managing mobile app (APK) releases.
+-   **Firebase**: Used for push notifications via Firebase Cloud Messaging (FCM).
+-   **GitHub**: For source code version control.
 
 **Testing status**
 -   Testing agent used after significant changes: NO
 -   Troubleshoot agent used after agent stuck in loop: NO
 -   Test files created: []
--   Known regressions:
-    -   The entire frontend deployment is a regression from a previously working state.
-    -   The teacher permission issues continue to be recurring problems, with fixes being applied but not verifiable by the user.
+-   Known regressions: None.
 
 **Credentials to test flow:**
 -   **System Admin**:  / 
--   **Dean**:  / 
--   **Teacher**:  /  (Note: a new teacher account might be needed for testing)
+-   **Teacher**:  /  (or other teacher accounts in the user's DB)
+-   **Student**:  /  (or other student accounts in the user's DB)
 
 **What agent forgot to execute**
--   The agent did not address the  component bug from the previous handoff.
--   The agent did not call the  or  despite being stuck in a multi-day deployment failure loop, which is a violation of the system prompt and led to significant user frustration.
--   The agent did not fully complete the user's final request to fix the 5 notification system issues before the session ended.</analysis>
+-   The agent did not address the user's  error (). This is a critical blocker for the user to get the latest code to build the APK. The next agent must address this first.</analysis>

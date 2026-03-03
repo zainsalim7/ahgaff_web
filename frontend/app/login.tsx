@@ -17,16 +17,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../src/store/authStore';
 import { authAPI } from '../src/services/api';
 import { SafeAreaView } from 'react-native-safe-area-context';
-
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// شعار جامعة الأحقاف
 const UNIVERSITY_LOGO = 'https://ahgaff.edu.ye/pluginfile.php/1/theme_lambda2/favicon/1769931878/University%20Logo.png';
 
 export default function LoginScreen() {
   const router = useRouter();
   const setAuth = useAuthStore((state) => state.setAuth);
-  
+
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -55,10 +53,8 @@ export default function LoginScreen() {
   const initializeAdmin = async () => {
     try {
       await authAPI.initAdmin();
-      setInitialized(true);
-    } catch (error) {
-      setInitialized(true);
-    }
+    } catch (error) {}
+    setInitialized(true);
   };
 
   const showError = (message: string) => {
@@ -71,9 +67,9 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setErrorMessage('');
-    
+
     if (!username.trim() || !password.trim()) {
-      showError('الرجاء إدخال اسم المستخدم وكلمة المرور');
+      showError('الرجاء إدخال رقم القيد وكلمة المرور');
       return;
     }
 
@@ -81,26 +77,32 @@ export default function LoginScreen() {
     try {
       const response = await authAPI.login(username.trim(), password);
       const { access_token, user } = response.data;
+
+      // Only allow students
+      if (user.role !== 'student') {
+        showError('هذا التطبيق مخصص للطلاب فقط');
+        setIsLoading(false);
+        return;
+      }
+
       await setAuth(user, access_token);
-      
-      // حفظ البيانات إذا تم تفعيل "حفظ بياناتي"
+
       if (rememberMe) {
         await AsyncStorage.setItem('saved_credentials', JSON.stringify({ username: username.trim(), password }));
       } else {
         await AsyncStorage.removeItem('saved_credentials');
       }
-      
-      // حفظ بيانات الدخول للأوفلاين
+
+      // Save for offline login
       await AsyncStorage.setItem('offline_credentials', JSON.stringify({
         username: username.trim(),
         password,
         user,
         access_token,
       }));
-      
+
       router.replace('/(tabs)');
     } catch (error: any) {
-      // محاولة الدخول أوفلاين
       if (!error.response) {
         try {
           const offlineData = await AsyncStorage.getItem('offline_credentials');
@@ -117,7 +119,7 @@ export default function LoginScreen() {
           showError('لا يوجد اتصال بالإنترنت');
         }
       } else {
-        const message = error.response?.data?.detail || 'اسم المستخدم أو كلمة المرور غير صحيحة';
+        const message = error.response?.data?.detail || 'رقم القيد أو كلمة المرور غير صحيحة';
         showError(message);
       }
     } finally {
@@ -135,34 +137,44 @@ export default function LoginScreen() {
           contentContainerStyle={styles.scrollContent}
           keyboardShouldPersistTaps="handled"
         >
+          {/* Header */}
           <View style={styles.header}>
             <View style={styles.logoContainer}>
-              <Image 
+              <Image
                 source={{ uri: UNIVERSITY_LOGO }}
                 style={styles.logo}
                 resizeMode="contain"
               />
             </View>
-            <Text style={styles.title}>جامعة الأحقاف</Text>
-            <Text style={styles.subtitle}>نظام الحضور المركزي</Text>
+            <Text style={styles.title}>طالب الأحقاف</Text>
+            <Text style={styles.subtitle}>تسجيل دخول الطالب</Text>
           </View>
 
+          {/* Form */}
           <View style={styles.formContainer}>
+            {errorMessage ? (
+              <View style={styles.errorBox} data-testid="login-error">
+                <Ionicons name="alert-circle" size={18} color="#c62828" />
+                <Text style={styles.errorText}>{errorMessage}</Text>
+              </View>
+            ) : null}
+
             <View style={styles.inputContainer}>
-              <Ionicons name="person" size={20} color="#666" style={styles.inputIcon} />
+              <Ionicons name="person" size={20} color="#0d47a1" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="اسم المستخدم"
+                placeholder="رقم القيد"
                 placeholderTextColor="#999"
                 value={username}
                 onChangeText={setUsername}
                 autoCapitalize="none"
                 autoCorrect={false}
+                data-testid="username-input"
               />
             </View>
 
             <View style={styles.inputContainer}>
-              <Ionicons name="lock-closed" size={20} color="#666" style={styles.inputIcon} />
+              <Ionicons name="lock-closed" size={20} color="#0d47a1" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
                 placeholder="كلمة المرور"
@@ -170,52 +182,49 @@ export default function LoginScreen() {
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
+                data-testid="password-input"
               />
-              <TouchableOpacity
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
-              >
-                <Ionicons
-                  name={showPassword ? 'eye-off' : 'eye'}
-                  size={20}
-                  color="#666"
-                />
+              <TouchableOpacity onPress={() => setShowPassword(!showPassword)} style={styles.eyeBtn}>
+                <Ionicons name={showPassword ? 'eye-off' : 'eye'} size={20} color="#999" />
               </TouchableOpacity>
             </View>
 
-            {/* رسالة الخطأ */}
-            {errorMessage !== '' && (
-              <View style={styles.errorContainer}>
-                <Ionicons name="alert-circle" size={20} color="#fff" />
-                <Text style={styles.errorText}>{errorMessage}</Text>
-              </View>
-            )}
-
-            {/* حفظ بياناتي */}
+            {/* Remember Me */}
             <TouchableOpacity
               style={styles.rememberRow}
               onPress={() => setRememberMe(!rememberMe)}
-              data-testid="remember-me-checkbox"
+              data-testid="remember-me-btn"
             >
-              <Ionicons 
-                name={rememberMe ? 'checkbox' : 'square-outline'} 
-                size={22} 
-                color={rememberMe ? '#1565c0' : '#888'} 
+              <Ionicons
+                name={rememberMe ? 'checkbox' : 'square-outline'}
+                size={22}
+                color={rememberMe ? '#0d47a1' : '#999'}
               />
-              <Text style={styles.rememberText}>حفظ بياناتي</Text>
+              <Text style={styles.rememberText}>تذكرني</Text>
             </TouchableOpacity>
 
+            {/* Login Button */}
             <TouchableOpacity
-              style={[styles.loginButton, isLoading && styles.loginButtonDisabled]}
+              style={[styles.loginBtn, isLoading && styles.loginBtnDisabled]}
               onPress={handleLogin}
               disabled={isLoading}
+              data-testid="login-btn"
             >
               {isLoading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.loginButtonText}>تسجيل الدخول</Text>
+                <>
+                  <Ionicons name="log-in-outline" size={22} color="#fff" />
+                  <Text style={styles.loginBtnText}>تسجيل الدخول</Text>
+                </>
               )}
             </TouchableOpacity>
+          </View>
+
+          {/* Footer */}
+          <View style={styles.footer}>
+            <Text style={styles.footerText}>جامعة الأحقاف</Text>
+            <Text style={styles.footerVersion}>v1.0.0</Text>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -224,127 +233,89 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#1565c0',
-  },
-  keyboardView: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    padding: 24,
-  },
-  header: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
+  container: { flex: 1, backgroundColor: '#0d47a1' },
+  keyboardView: { flex: 1 },
+  scrollContent: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+
+  header: { alignItems: 'center', marginBottom: 32 },
   logoContainer: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#fff',
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255,255,255,0.15)',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
-    padding: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 4,
+    overflow: 'hidden',
   },
-  logo: {
-    width: 70,
-    height: 70,
-  },
-  title: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#fff',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-  },
+  logo: { width: 60, height: 60 },
+  title: { fontSize: 28, fontWeight: 'bold', color: '#fff', marginBottom: 4 },
+  subtitle: { fontSize: 15, color: 'rgba(255,255,255,0.7)' },
+
   formContainer: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 24,
     padding: 24,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.15,
+    shadowRadius: 16,
+    elevation: 8,
   },
-  inputContainer: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    borderRadius: 12,
-    marginBottom: 16,
-    paddingHorizontal: 12,
-    height: 54,
-  },
-  inputIcon: {
-    marginLeft: 8,
-  },
-  input: {
-    flex: 1,
-    height: 54,
-    fontSize: 15,
-    color: '#333',
-    textAlign: 'right',
-    writingDirection: 'rtl',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-  },
-  rememberRow: {
-    flexDirection: 'row-reverse',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  rememberText: {
-    fontSize: 14,
-    color: '#555',
-  },
-  eyeIcon: {
-    padding: 8,
-  },
-  loginButton: {
-    backgroundColor: '#1565c0',
-    borderRadius: 12,
-    height: 50,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 8,
-  },
-  loginButtonDisabled: {
-    opacity: 0.7,
-  },
-  loginButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
-  errorContainer: {
+  errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f44336',
+    backgroundColor: '#ffebee',
     padding: 12,
-    borderRadius: 8,
-    marginBottom: 12,
+    borderRadius: 12,
+    marginBottom: 16,
     gap: 8,
   },
-  errorText: {
-    color: '#fff',
-    fontSize: 14,
-    flex: 1,
+  errorText: { flex: 1, color: '#c62828', fontSize: 13 },
+
+  inputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f5f7fa',
+    borderRadius: 14,
+    marginBottom: 14,
+    paddingHorizontal: 14,
+    height: 52,
+    borderWidth: 1,
+    borderColor: '#e8e8e8',
   },
+  inputIcon: { marginLeft: 8 },
+  input: {
+    flex: 1,
+    fontSize: 15,
+    color: '#1a1a2e',
+    textAlign: 'right',
+    paddingHorizontal: 8,
+  },
+  eyeBtn: { padding: 6 },
+
+  rememberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+    gap: 8,
+  },
+  rememberText: { fontSize: 14, color: '#666' },
+
+  loginBtn: {
+    backgroundColor: '#0d47a1',
+    borderRadius: 14,
+    height: 52,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    elevation: 3,
+  },
+  loginBtnDisabled: { opacity: 0.7 },
+  loginBtnText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+
+  footer: { alignItems: 'center', marginTop: 32 },
+  footerText: { fontSize: 13, color: 'rgba(255,255,255,0.5)' },
+  footerVersion: { fontSize: 11, color: 'rgba(255,255,255,0.3)', marginTop: 4 },
 });

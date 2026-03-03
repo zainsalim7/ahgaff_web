@@ -61,6 +61,6 @@
   },
   "test_data": {
     "test_course_id": "698e54c5b17b90bf5c4205fe",
-    "api_base_url": "https://auth-stable-1.preview.emergentagent.com"
+    "api_base_url": "https://mobile-dual-build.preview.emergentagent.com"
   }
 }
