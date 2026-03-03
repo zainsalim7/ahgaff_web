@@ -90,8 +90,9 @@ export default function MyAttendanceScreen() {
         const studentRes = await studentsAPI.getMe();
         student = studentRes.data;
       } catch {
-        setLoading(false);
-        return;
+        // fallback للطريقة القديمة
+        const studentsRes = await studentsAPI.getAll();
+        student = studentsRes.data.find((s: any) => s.user_id === user?.id);
       }
       
       if (!student) {

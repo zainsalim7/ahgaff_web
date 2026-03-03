@@ -3,10 +3,6 @@
     "version": ">= 5.0.0"
   },
   "build": {
-    "development": {
-      "developmentClient": true,
-      "distribution": "internal"
-    },
     "preview": {
       "android": {
         "buildType": "apk",
@@ -21,9 +17,6 @@
     "production": {
       "android": {
         "buildType": "app-bundle"
-      },
-      "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://ahgaffweb-production-c582.up.railway.app"
       }
     }
   }
