@@ -554,18 +554,6 @@ export default function ManageTeachersScreen() {
               ))}
             </ScrollView>
 
-            <Text style={styles.label}>نصاب التدريس (ساعات)</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.teaching_load}
-              onChangeText={(text) => {
-                const numericValue = text.replace(/[^0-9]/g, '');
-                setFormData({ ...formData, teaching_load: numericValue });
-              }}
-              placeholder="عدد ساعات التدريس الإجمالية"
-              keyboardType="numeric"
-            />
-
             <Text style={styles.label}>النصاب الأسبوعي (ساعات) *</Text>
             <TextInput
               style={styles.input}
