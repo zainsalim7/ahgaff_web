@@ -397,8 +397,8 @@ export default function ManageTeachersScreen() {
             {item.specialization && (
               <Text style={styles.teacherSpec}>التخصص: {item.specialization}</Text>
             )}
-            {item.teaching_load && (
-              <Text style={styles.teachingLoad}>نصاب التدريس: {item.teaching_load} ساعة</Text>
+            {(item.weekly_hours || item.teaching_load) && (
+              <Text style={styles.teachingLoad}>النصاب الأسبوعي: {item.weekly_hours || item.teaching_load} ساعة</Text>
             )}
             <View style={[styles.statusBadge, { backgroundColor: hasAccount ? '#e8f5e9' : '#fafafa' }]}>
               <Ionicons 
