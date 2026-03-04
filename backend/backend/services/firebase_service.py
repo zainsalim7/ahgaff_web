@@ -14,8 +14,6 @@ def init_firebase():
         return
     
     cred = None
-    
-    # الطريقة 1: قراءة من متغير بيئة (JSON string) - للنشر على Railway
     sa_json = os.environ.get("FIREBASE_SERVICE_ACCOUNT_JSON", "")
     if sa_json:
         try:
@@ -25,7 +23,6 @@ def init_firebase():
         except Exception as e:
             logger.error(f"Firebase: failed to parse JSON env var: {e}")
     
-    # الطريقة 2: قراءة من ملف - للتطوير المحلي
     if not cred:
         sa_path = os.environ.get("FIREBASE_SERVICE_ACCOUNT_PATH", "")
         if sa_path and os.path.exists(sa_path):
@@ -37,7 +34,7 @@ def init_firebase():
         _firebase_initialized = True
         logger.info("Firebase Admin SDK initialized successfully")
     else:
-        logger.warning("Firebase: no credentials found (set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_SERVICE_ACCOUNT_PATH)")
+        logger.warning("Firebase: no credentials found")
 
 
 async def send_notification(token: str, title: str, body: str, data: dict = None):
@@ -50,6 +47,17 @@ async def send_notification(token: str, title: str, body: str, data: dict = None
             ),
             data=data or {},
             token=token,
+            android=messaging.AndroidConfig(
+                priority='high',
+                notification=messaging.AndroidNotification(
+                    title=title,
+                    body=body,
+                    icon='ic_notification',
+                    color='#1b5e20',
+                    channel_id='default',
+                    sound='default',
+                ),
+            ),
             webpush=messaging.WebpushConfig(
                 notification=messaging.WebpushNotification(
                     title=title,
@@ -85,6 +93,17 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
         ),
         data=data or {},
         tokens=tokens,
+        android=messaging.AndroidConfig(
+            priority='high',
+            notification=messaging.AndroidNotification(
+                title=title,
+                body=body,
+                icon='ic_notification',
+                color='#1b5e20',
+                channel_id='default',
+                sound='default',
+            ),
+        ),
         webpush=messaging.WebpushConfig(
             notification=messaging.WebpushNotification(
                 title=title,
