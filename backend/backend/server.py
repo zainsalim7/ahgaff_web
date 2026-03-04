@@ -5612,9 +5612,17 @@ async def get_teacher_workload_report(
             cid = str(course["_id"])
             
             # المحاضرات المجدولة في الفترة
+            # تحويل التواريخ لمقارنة النصوص
+            start_str = start.strftime("%Y-%m-%d")
+            end_str = end.strftime("%Y-%m-%d")
+
+            # المحاضرات المجدولة في الفترة (دعم date كنص أو datetime)
             scheduled_lectures = await db.lectures.find({
                 "course_id": cid,
-                "date": {"$gte": start, "$lte": end},
+                "$or": [
+                    {"date": {"$gte": start_str, "$lte": end_str}},  # date كنص
+                    {"date": {"$gte": start, "$lte": end}}  # date كـ datetime
+                ],
                 "is_cancelled": {"$ne": True}
             }).to_list(500)
             
