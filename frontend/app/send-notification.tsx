@@ -84,35 +84,47 @@ export default function SendNotification() {
 
   const send = async () => {
     if (!title.trim() || !body.trim()) {
-      Alert.alert('تنبيه', 'يرجى كتابة العنوان والرسالة');
+      if (Platform.OS === 'web') window.alert('يرجى كتابة العنوان والرسالة');
+      else Alert.alert('تنبيه', 'يرجى كتابة العنوان والرسالة');
       return;
     }
 
     const payload: any = { title, body, target_type: targetType };
 
     if (targetType === 'course') {
-      if (!selectedCourse) { Alert.alert('تنبيه', 'اختر المقرر'); return; }
+      if (!selectedCourse) { if (Platform.OS === 'web') window.alert('اختر المقرر'); else Alert.alert('تنبيه', 'اختر المقرر'); return; }
       payload.course_id = selectedCourse;
     } else if (targetType === 'teacher') {
-      if (!selectedTeacher) { Alert.alert('تنبيه', 'اختر المعلم'); return; }
+      if (!selectedTeacher) { if (Platform.OS === 'web') window.alert('اختر المعلم'); else Alert.alert('تنبيه', 'اختر المعلم'); return; }
       payload.teacher_user_id = selectedTeacher.user_id;
     } else if (targetType === 'student') {
-      if (!selectedStudent) { Alert.alert('تنبيه', 'اختر الطالب'); return; }
+      if (!selectedStudent) { if (Platform.OS === 'web') window.alert('اختر الطالب'); else Alert.alert('تنبيه', 'اختر الطالب'); return; }
       payload.student_user_id = selectedStudent.user_id;
       payload.student_name = selectedStudent.full_name;
     } else if (targetType === 'role') {
-      if (!selectedRole) { Alert.alert('تنبيه', 'اختر الدور'); return; }
+      if (!selectedRole) { if (Platform.OS === 'web') window.alert('اختر الدور'); else Alert.alert('تنبيه', 'اختر الدور'); return; }
       payload.target_role = selectedRole;
     }
 
     setSending(true);
     try {
       await api.post('/notifications/send', payload);
-      Alert.alert('نجاح', 'تم إرسال الإشعار بنجاح', [
-        { text: 'حسناً', onPress: () => { setTitle(''); setBody(''); } }
-      ]);
+      if (Platform.OS === 'web') {
+        window.alert('تم إرسال الإشعار بنجاح');
+        setTitle('');
+        setBody('');
+      } else {
+        Alert.alert('نجاح', 'تم إرسال الإشعار بنجاح', [
+          { text: 'حسناً', onPress: () => { setTitle(''); setBody(''); } }
+        ]);
+      }
     } catch (e: any) {
-      Alert.alert('خطأ', e?.response?.data?.detail || 'فشل إرسال الإشعار');
+      const msg = e?.response?.data?.detail || 'فشل إرسال الإشعار';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('خطأ', msg);
+      }
     } finally {
       setSending(false);
     }
