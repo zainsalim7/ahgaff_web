@@ -35,6 +35,7 @@ interface Teacher {
   specialization?: string;
   academic_title?: string;
   teaching_load?: number;
+  weekly_hours?: number;
   courses_count?: number;
   user_id?: string;
   is_active: boolean;
@@ -65,6 +66,7 @@ export default function ManageTeachersScreen() {
     specialization: '',
     academic_title: '',
     teaching_load: '',
+    weekly_hours: '12',
   });
 
   // حذف آمن
@@ -132,12 +134,14 @@ export default function ManageTeachersScreen() {
           specialization: formData.specialization || undefined,
           academic_title: formData.academic_title || undefined,
           teaching_load: formData.teaching_load ? parseInt(formData.teaching_load) : undefined,
+          weekly_hours: formData.weekly_hours ? parseInt(formData.weekly_hours) : 12,
         });
         showMessage('نجاح', 'تم تحديث بيانات المعلم بنجاح');
       } else {
         await teachersAPI.create({
           ...formData,
           teaching_load: formData.teaching_load ? parseInt(formData.teaching_load) : undefined,
+          weekly_hours: formData.weekly_hours ? parseInt(formData.weekly_hours) : 12,
         });
         showMessage('نجاح', 'تم إضافة المعلم بنجاح');
       }
@@ -163,6 +167,7 @@ export default function ManageTeachersScreen() {
       specialization: '',
       academic_title: '',
       teaching_load: '',
+      weekly_hours: '12',
     });
   };
 
@@ -181,6 +186,7 @@ export default function ManageTeachersScreen() {
       specialization: teacher.specialization || '',
       academic_title: teacher.academic_title || '',
       teaching_load: teacher.teaching_load ? teacher.teaching_load.toString() : '',
+      weekly_hours: teacher.weekly_hours ? teacher.weekly_hours.toString() : '12',
     });
     setShowForm(true);
   };
@@ -553,12 +559,24 @@ export default function ManageTeachersScreen() {
               style={styles.input}
               value={formData.teaching_load}
               onChangeText={(text) => {
-                // السماح فقط بالأرقام
                 const numericValue = text.replace(/[^0-9]/g, '');
                 setFormData({ ...formData, teaching_load: numericValue });
               }}
-              placeholder="عدد ساعات التدريس الأسبوعية"
+              placeholder="عدد ساعات التدريس الإجمالية"
               keyboardType="numeric"
+            />
+
+            <Text style={styles.label}>النصاب الأسبوعي (ساعات) *</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.weekly_hours}
+              onChangeText={(text) => {
+                const numericValue = text.replace(/[^0-9]/g, '');
+                setFormData({ ...formData, weekly_hours: numericValue });
+              }}
+              placeholder="النصاب الأسبوعي (افتراضي 12 ساعة)"
+              keyboardType="numeric"
+              data-testid="weekly-hours-input"
             />
 
             <Text style={styles.label}>رقم الهاتف</Text>

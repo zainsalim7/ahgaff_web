@@ -2510,6 +2510,8 @@ async def get_teachers(
             "phone": teacher.get("phone"),
             "specialization": teacher.get("specialization"),
             "user_id": teacher.get("user_id"),
+            "weekly_hours": teacher.get("weekly_hours", 12),
+            "teaching_load": teacher.get("teaching_load"),
             "created_at": teacher.get("created_at", get_yemen_time()),
             "is_active": teacher.get("is_active", True)
         }
@@ -2552,6 +2554,8 @@ async def get_teacher(teacher_id: str, current_user: dict = Depends(get_current_
         "phone": teacher.get("phone"),
         "specialization": teacher.get("specialization"),
         "user_id": teacher.get("user_id"),
+        "weekly_hours": teacher.get("weekly_hours", 12),
+        "teaching_load": teacher.get("teaching_load"),
         "created_at": teacher.get("created_at", get_yemen_time()),
         "is_active": teacher.get("is_active", True)
     }
@@ -2632,6 +2636,8 @@ async def update_teacher(teacher_id: str, data: TeacherUpdate, current_user: dic
         "phone": updated.get("phone"),
         "specialization": updated.get("specialization"),
         "user_id": updated.get("user_id"),
+        "weekly_hours": updated.get("weekly_hours", 12),
+        "teaching_load": updated.get("teaching_load"),
         "is_active": updated.get("is_active", True)
     }
 
@@ -5601,6 +5607,16 @@ async def get_teacher_workload_report(
     for teacher in teachers:
         tid = str(teacher["_id"])
         
+        # النصاب الأسبوعي (افتراضي 12 ساعة)
+        weekly_hours = teacher.get("weekly_hours", 12)
+        
+        # حساب عدد الأسابيع في الفترة
+        total_days = (end - start).days + 1
+        total_weeks = total_days / 7
+        
+        # الساعات المطلوبة = النصاب الأسبوعي × عدد الأسابيع
+        required_hours = round(weekly_hours * total_weeks, 2)
+        
         # جلب المقررات
         courses = await db.courses.find({"teacher_id": tid, "is_active": True}).to_list(50)
         
@@ -5620,8 +5636,8 @@ async def get_teacher_workload_report(
             scheduled_lectures = await db.lectures.find({
                 "course_id": cid,
                 "$or": [
-                    {"date": {"$gte": start_str, "$lte": end_str}},  # date كنص
-                    {"date": {"$gte": start, "$lte": end}}  # date كـ datetime
+                    {"date": {"$gte": start_str, "$lte": end_str}},
+                    {"date": {"$gte": start, "$lte": end}}
                 ],
                 "is_cancelled": {"$ne": True}
             }).to_list(500)
@@ -5644,7 +5660,7 @@ async def get_teacher_workload_report(
                     duration = (end_time - start_time).seconds / 3600
                     scheduled_hours += duration
                 except:
-                    scheduled_hours += 1  # افتراضي ساعة واحدة
+                    scheduled_hours += 1
             
             for lecture in executed_lectures:
                 try:
@@ -5667,33 +5683,40 @@ async def get_teacher_workload_report(
                 "actual_hours": round(actual_hours, 2)
             })
         
-        extra_hours = total_actual_hours - total_scheduled_hours
+        # الفرق = الساعات المنفذة - الساعات المطلوبة (حسب النصاب الأسبوعي)
+        difference_hours = round(total_actual_hours - required_hours, 2)
         
         result.append({
             "teacher_id": teacher.get("teacher_id", ""),
             "teacher_name": teacher.get("full_name", ""),
             "department_id": teacher.get("department_id"),
+            "weekly_hours": weekly_hours,
             "courses": courses_data,
             "summary": {
                 "total_courses": len(courses_data),
+                "weekly_hours": weekly_hours,
+                "total_weeks": round(total_weeks, 1),
+                "required_hours": required_hours,
                 "total_scheduled_hours": round(total_scheduled_hours, 2),
                 "total_actual_hours": round(total_actual_hours, 2),
-                "extra_hours": round(extra_hours, 2),
-                "completion_rate": round((total_actual_hours / total_scheduled_hours) * 100, 2) if total_scheduled_hours > 0 else 0
+                "difference_hours": difference_hours,
+                "completion_rate": round((total_actual_hours / required_hours) * 100, 2) if required_hours > 0 else 0
             }
         })
     
     return {
         "period": {
             "start_date": start.isoformat(),
-            "end_date": end.isoformat()
+            "end_date": end.isoformat(),
+            "total_weeks": round((end - start).days / 7, 1)
         },
         "teachers": result,
         "summary": {
             "total_teachers": len(result),
+            "total_required_hours": round(sum(t["summary"]["required_hours"] for t in result), 2),
             "total_scheduled_hours": round(sum(t["summary"]["total_scheduled_hours"] for t in result), 2),
             "total_actual_hours": round(sum(t["summary"]["total_actual_hours"] for t in result), 2),
-            "total_extra_hours": round(sum(t["summary"]["extra_hours"] for t in result), 2)
+            "total_difference_hours": round(sum(t["summary"]["difference_hours"] for t in result), 2)
         }
     }
 

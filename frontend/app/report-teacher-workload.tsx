@@ -35,9 +35,12 @@ interface TeacherWorkload {
   }[];
   summary: {
     total_courses: number;
+    weekly_hours: number;
+    total_weeks: number;
+    required_hours: number;
     total_scheduled_hours: number;
     total_actual_hours: number;
-    extra_hours: number;
+    difference_hours: number;
     completion_rate: number;
   };
 }
@@ -309,16 +312,16 @@ export default function TeacherWorkloadReport() {
                 <Text style={styles.summaryLabel}>مدرس</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryValue}>{summary.total_scheduled_hours}</Text>
-                <Text style={styles.summaryLabel}>ساعة مجدولة</Text>
+                <Text style={styles.summaryValue}>{summary.total_required_hours}</Text>
+                <Text style={styles.summaryLabel}>ساعة مطلوبة</Text>
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryValue}>{summary.total_actual_hours}</Text>
                 <Text style={styles.summaryLabel}>ساعة منفذة</Text>
               </View>
-              <View style={[styles.summaryItem, summary.total_extra_hours > 0 ? styles.extraPositive : styles.extraNegative]}>
-                <Text style={styles.summaryValue}>{summary.total_extra_hours}</Text>
-                <Text style={styles.summaryLabel}>ساعات زيادة</Text>
+              <View style={[styles.summaryItem, summary.total_difference_hours >= 0 ? styles.extraPositive : styles.extraNegative]}>
+                <Text style={styles.summaryValue}>{summary.total_difference_hours >= 0 ? '+' : ''}{summary.total_difference_hours}</Text>
+                <Text style={styles.summaryLabel}>فرق الساعات</Text>
               </View>
             </View>
           </View>
@@ -349,8 +352,12 @@ export default function TeacherWorkloadReport() {
               {/* إحصائيات المدرس */}
               <View style={styles.teacherStats}>
                 <View style={styles.statBox}>
-                  <Text style={styles.statValue}>{teacher.summary.total_scheduled_hours}</Text>
-                  <Text style={styles.statLabel}>مجدول</Text>
+                  <Text style={styles.statValue}>{teacher.summary.weekly_hours || 12}</Text>
+                  <Text style={styles.statLabel}>نصاب أسبوعي</Text>
+                </View>
+                <View style={styles.statBox}>
+                  <Text style={styles.statValue}>{teacher.summary.required_hours}</Text>
+                  <Text style={styles.statLabel}>مطلوب</Text>
                 </View>
                 <View style={styles.statBox}>
                   <Text style={styles.statValue}>{teacher.summary.total_actual_hours}</Text>
@@ -358,15 +365,15 @@ export default function TeacherWorkloadReport() {
                 </View>
                 <View style={[
                   styles.statBox,
-                  teacher.summary.extra_hours >= 0 ? styles.extraBoxPositive : styles.extraBoxNegative
+                  teacher.summary.difference_hours >= 0 ? styles.extraBoxPositive : styles.extraBoxNegative
                 ]}>
                   <Text style={[
                     styles.statValue,
-                    teacher.summary.extra_hours >= 0 ? styles.extraValuePositive : styles.extraValueNegative
+                    teacher.summary.difference_hours >= 0 ? styles.extraValuePositive : styles.extraValueNegative
                   ]}>
-                    {teacher.summary.extra_hours >= 0 ? '+' : ''}{teacher.summary.extra_hours}
+                    {teacher.summary.difference_hours >= 0 ? '+' : ''}{teacher.summary.difference_hours}
                   </Text>
-                  <Text style={styles.statLabel}>زيادة/نقص</Text>
+                  <Text style={styles.statLabel}>الفرق</Text>
                 </View>
               </View>
 
