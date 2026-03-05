@@ -2504,6 +2504,101 @@ async def deactivate_student_account(student_id: str, current_user: dict = Depen
     
     return {"message": "تم إلغاء تفعيل حساب الطالب"}
 
+@api_router.post("/students/bulk-activate")
+async def bulk_activate_students(current_user: dict = Depends(get_current_user)):
+    """تفعيل حسابات جميع الطلاب دفعة واحدة"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # جلب الطلاب الذين ليس لديهم حسابات
+    students = await db.students.find({"user_id": {"$exists": False}}).to_list(5000)
+    students += await db.students.find({"user_id": None}).to_list(5000)
+    students += await db.students.find({"user_id": ""}).to_list(5000)
+    
+    # إزالة التكرار
+    seen = set()
+    unique_students = []
+    for s in students:
+        sid = str(s["_id"])
+        if sid not in seen:
+            seen.add(sid)
+            unique_students.append(s)
+    
+    activated = 0
+    failed = 0
+    
+    for student in unique_students:
+        try:
+            username = student["student_id"]
+            
+            # التحقق من عدم وجود حساب مسبق
+            existing = await db.users.find_one({"username": username})
+            if existing:
+                # ربط الحساب الموجود
+                await db.students.update_one(
+                    {"_id": student["_id"]},
+                    {"$set": {"user_id": str(existing["_id"])}}
+                )
+                activated += 1
+                continue
+            
+            # إنشاء حساب جديد
+            user_doc = {
+                "username": username,
+                "password": get_password_hash(username),
+                "full_name": student.get("full_name", ""),
+                "role": UserRole.STUDENT,
+                "is_active": True,
+                "must_change_password": True,
+                "created_at": get_yemen_time()
+            }
+            result = await db.users.insert_one(user_doc)
+            
+            await db.students.update_one(
+                {"_id": student["_id"]},
+                {"$set": {"user_id": str(result.inserted_id)}}
+            )
+            activated += 1
+        except Exception as e:
+            failed += 1
+    
+    return {
+        "message": f"تم تفعيل {activated} حساب طالب",
+        "activated": activated,
+        "failed": failed,
+        "total": len(unique_students)
+    }
+
+@api_router.post("/students/bulk-deactivate")
+async def bulk_deactivate_students(current_user: dict = Depends(get_current_user)):
+    """إلغاء تفعيل حسابات جميع الطلاب دفعة واحدة"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # جلب الطلاب الذين لديهم حسابات
+    students = await db.students.find({"user_id": {"$exists": True, "$ne": None, "$ne": ""}}).to_list(5000)
+    
+    deactivated = 0
+    
+    for student in students:
+        try:
+            if student.get("user_id"):
+                await db.users.delete_one({"_id": ObjectId(student["user_id"])})
+                await db.students.update_one(
+                    {"_id": student["_id"]},
+                    {"$unset": {"user_id": ""}}
+                )
+                deactivated += 1
+        except Exception:
+            pass
+    
+    return {
+        "message": f"تم إلغاء تفعيل {deactivated} حساب طالب",
+        "deactivated": deactivated
+    }
+
+
+
 @api_router.post("/students/{student_id}/reset-password")
 async def reset_student_password(student_id: str, current_user: dict = Depends(get_current_user)):
     """إعادة تعيين كلمة مرور الطالب"""

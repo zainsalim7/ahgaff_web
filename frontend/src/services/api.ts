@@ -226,6 +226,8 @@ export const studentsAPI = {
     api.post(`/students/${studentId}/deactivate`),
   resetPassword: (studentId: string) =>
     api.post(`/students/${studentId}/reset-password`),
+  bulkActivate: () => api.post('/students/bulk-activate'),
+  bulkDeactivate: () => api.post('/students/bulk-deactivate'),
 };
 
 // Teachers API (المعلمين)

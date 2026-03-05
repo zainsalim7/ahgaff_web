@@ -501,6 +501,50 @@ export default function StudentsScreen() {
     }, 'إلغاء التفعيل', true);
   };
 
+  // تفعيل جميع الحسابات
+  const [bulkLoading, setBulkLoading] = useState(false);
+  
+  const handleBulkActivate = () => {
+    const inactive = students.filter(s => !s.user_id).length;
+    if (inactive === 0) {
+      showMessage('تنبيه', 'جميع الطلاب لديهم حسابات مفعلة');
+      return;
+    }
+    showConfirm('تفعيل جميع الحسابات', `سيتم تفعيل حسابات ${inactive} طالب.\nكلمة المرور = الرقم الجامعي لكل طالب.\n\nهل تريد المتابعة؟`, async () => {
+      setBulkLoading(true);
+      try {
+        const res = await studentsAPI.bulkActivate();
+        showMessage('تم التفعيل ✅', `تم تفعيل ${res.data.activated} حساب طالب`);
+        fetchData();
+      } catch (error: any) {
+        showMessage('خطأ', error.response?.data?.detail || 'فشل في التفعيل الجماعي');
+      } finally {
+        setBulkLoading(false);
+      }
+    }, 'تفعيل الجميع');
+  };
+
+  // إلغاء تفعيل جميع الحسابات
+  const handleBulkDeactivate = () => {
+    const active = students.filter(s => s.user_id).length;
+    if (active === 0) {
+      showMessage('تنبيه', 'لا يوجد طلاب لديهم حسابات مفعلة');
+      return;
+    }
+    showConfirm('إلغاء تفعيل جميع الحسابات', `سيتم إلغاء تفعيل حسابات ${active} طالب.\n\nهل أنت متأكد؟`, async () => {
+      setBulkLoading(true);
+      try {
+        const res = await studentsAPI.bulkDeactivate();
+        showMessage('تم', `تم إلغاء تفعيل ${res.data.deactivated} حساب`);
+        fetchData();
+      } catch (error: any) {
+        showMessage('خطأ', error.response?.data?.detail || 'فشل في إلغاء التفعيل الجماعي');
+      } finally {
+        setBulkLoading(false);
+      }
+    }, 'إلغاء تفعيل الجميع', true);
+  };
+
   // إعادة تعيين كلمة المرور
   const handleResetPassword = (student: Student) => {
     showConfirm('إعادة تعيين كلمة المرور', `ستصبح كلمة المرور الجديدة: ${student.student_id}`, async () => {
