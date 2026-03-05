@@ -1606,6 +1606,46 @@ async def get_department_head_dashboard(current_user: dict = Depends(get_current
 
 # ==================== Notification Routes (مسارات الإشعارات) ====================
 
+# ==================== FCM Token Registration (تسجيل رمز الإشعارات) ====================
+
+@api_router.post("/fcm/register")
+async def register_fcm_token(request: Request, current_user: dict = Depends(get_current_user)):
+    """تسجيل رمز FCM للإشعارات"""
+    body = await request.json()
+    token = body.get("token")
+    platform = body.get("platform", "android")
+    
+    if not token:
+        raise HTTPException(status_code=400, detail="الرمز مطلوب")
+    
+    user_id = current_user["id"]
+    
+    # حذف الرمز القديم إذا كان موجوداً لنفس الجهاز
+    await db.fcm_tokens.delete_many({"token": token})
+    
+    # تسجيل الرمز الجديد
+    await db.fcm_tokens.insert_one({
+        "user_id": user_id,
+        "token": token,
+        "platform": platform,
+        "created_at": get_yemen_time()
+    })
+    
+    return {"message": "تم تسجيل رمز الإشعارات بنجاح"}
+
+@api_router.delete("/fcm/unregister")
+async def unregister_fcm_token(request: Request, current_user: dict = Depends(get_current_user)):
+    """إلغاء تسجيل رمز FCM"""
+    body = await request.json()
+    token = body.get("token")
+    
+    if token:
+        await db.fcm_tokens.delete_many({"token": token})
+    
+    return {"message": "تم إلغاء تسجيل الرمز"}
+
+
+
 async def create_student_notification(
     student_id: str,
     student_db_id: str,
@@ -1906,6 +1946,19 @@ async def create_manual_notification(
     }
     
     result = await db.notifications.insert_one(notification)
+    
+    # إرسال push notification عبر Firebase
+    try:
+        from services.firebase_service import send_notification_to_many
+        user_id = student.get("user_id")
+        if user_id:
+            tokens_docs = await db.fcm_tokens.find({"user_id": user_id}).to_list(100)
+            tokens = [doc["token"] for doc in tokens_docs if doc.get("token")]
+            if tokens:
+                await send_notification_to_many(tokens, data.title, data.message)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"Firebase push failed: {e}")
     
     # تسجيل النشاط
     await log_activity(
