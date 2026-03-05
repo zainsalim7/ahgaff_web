@@ -21,6 +21,9 @@ All three apps connect to the same FastAPI backend.
 
 ## What's Been Implemented
 
+### March 5, 2026
+- **Bulk Student Activation/Deactivation**: Added "Activate All" and "Deactivate All" buttons to the students management page (`/students`). Backend endpoints were already implemented; UI buttons with confirmation dialogs and loading states added.
+
 ### March 4, 2026
 - **Completed Teacher App** with offline attendance, sync mechanism, all screens
 - **Fixed schedule.tsx (Admin)**: Removed add/generate from lectures page, fixed delete/cancel (web-compatible)
@@ -28,6 +31,9 @@ All three apps connect to the same FastAPI backend.
 - **Created standalone packages** for student/teacher apps with Railway API integration
 - **Fixed EAS Build**: Added package-lock.json, removed packageManager from package.json
 - **Cleaned dependencies**: Removed 18 unused libraries from student/teacher apps
+- **Push Notifications (FCM)**: Full end-to-end fix with Firebase credentials, AndroidConfig, device registration
+- **Workload Report**: Changed logic to use `weekly_hours` field on teacher profile
+- **Admin UI Fixes**: window.confirm for web, notification confirmations, removed duplicate workload field
 
 ### Completed Features
 - Login (admin/teacher/student role-based)
@@ -41,16 +47,19 @@ All three apps connect to the same FastAPI backend.
 - Profile + change password
 - Student App (complete)
 - Teacher App (complete with offline sync)
+- Bulk student account activation/deactivation
 
 ## P0 - Current (Completed)
+- [x] Bulk student activation/deactivation UI buttons
 - [x] Teacher app implementation
 - [x] Schedule page: remove add/generate, fix delete/cancel
 - [x] Standalone packages for separate repos
+- [x] Push notifications (FCM)
 
 ## P1 - Next
-- [ ] User builds Student APK
-- [ ] User builds Teacher APK
-- [ ] Push notifications (requires APK)
+- [ ] User builds Student APK (verification pending)
+- [ ] User builds Teacher APK (verification pending)
+- [ ] Fix QuickNav.tsx click handler (low priority UI bug)
 
 ## P2 - Future
 - [ ] Improve reports (Admin Web)

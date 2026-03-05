@@ -658,6 +658,42 @@ export default function StudentsScreen() {
           </TouchableOpacity>
         )}
 
+        {/* أزرار التفعيل الجماعي */}
+        {canManageStudents && (
+          <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 0, marginBottom: 12 }}>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', backgroundColor: '#4caf50', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', gap: 8, opacity: bulkLoading ? 0.6 : 1 }}
+              onPress={handleBulkActivate}
+              disabled={bulkLoading}
+              data-testid="bulk-activate-all-btn"
+            >
+              {bulkLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="people" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>تفعيل جميع الحسابات</Text>
+                </>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flex: 1, flexDirection: 'row', backgroundColor: '#f44336', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', gap: 8, opacity: bulkLoading ? 0.6 : 1 }}
+              onPress={handleBulkDeactivate}
+              disabled={bulkLoading}
+              data-testid="bulk-deactivate-all-btn"
+            >
+              {bulkLoading ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="people-outline" size={20} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>إلغاء تفعيل الجميع</Text>
+                </>
+              )}
+            </TouchableOpacity>
+          </View>
+        )}
+
         {/* شريط البحث */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#999" />
