@@ -1175,6 +1175,43 @@ export default function GeneralSettingsScreen() {
             </TouchableOpacity>
           </>
         )}
+
+        {/* قسم صيانة البيانات */}
+        {selectedFacultyId && (
+          <View style={{ marginTop: 24, padding: 16, backgroundColor: '#fff3e0', borderRadius: 12 }}>
+            <Text style={{ fontSize: 16, fontWeight: '700', color: '#e65100', marginBottom: 12 }}>صيانة البيانات</Text>
+            
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#ff9800', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 8 }}
+              onPress={async () => {
+                try {
+                  const res = await api.post('/admin/fix-faculty-ids');
+                  const msg = res.data?.message || 'تم الإصلاح';
+                  Platform.OS === 'web' ? window.alert(msg) : Alert.alert('تم', msg);
+                } catch { Platform.OS === 'web' ? window.alert('فشل') : Alert.alert('خطأ', 'فشل'); }
+              }}
+            >
+              <Ionicons name="build" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>ربط الطلاب والمعلمين بالكليات</Text>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#ff9800', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 8 }}
+              onPress={async () => {
+                try {
+                  const res = await api.post('/admin/fix-courses-semester');
+                  const msg = res.data?.message || 'تم الإصلاح';
+                  Platform.OS === 'web' ? window.alert(msg) : Alert.alert('تم', msg);
+                } catch { Platform.OS === 'web' ? window.alert('فشل') : Alert.alert('خطأ', 'فشل'); }
+              }}
+            >
+              <Ionicons name="calendar" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>ربط المقررات بالفصل الدراسي النشط</Text>
+            </TouchableOpacity>
+            
+            <Text style={{ fontSize: 11, color: '#999', marginTop: 8, textAlign: 'center' }}>استخدم هذه الأدوات مرة واحدة بعد التحديث لإصلاح البيانات القديمة</Text>
+          </View>
+        )}
       </ScrollView>
     );
   };
