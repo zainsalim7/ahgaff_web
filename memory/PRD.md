@@ -1,41 +1,33 @@
 # طالب الأحقاف - Student & Teacher Management System PRD
 
-## Original Problem Statement
-Student/teacher management system for Ahgaff University with 3 apps (Student, Teacher, Admin) sharing one backend.
-
 ## Hierarchy: University → Faculties → Departments → Courses → Students
 
 ## What's Been Implemented
 
+### March 6, 2026 (Session 4) - faculty_id Auto-Resolution
+- Auto-populate `faculty_id` on students and teachers from their department
+- Added `_resolve_faculty_id()` helper used in: create_student, create_teacher, import_students, import_teachers
+- Migration endpoint `POST /api/admin/fix-faculty-ids` to fix existing 72 students + 3 teachers
+- `faculty_id` now returned in both student and teacher API responses
+
 ### March 6, 2026 (Session 3) - Data Integrity Fixes
-1. **Enrollment Validation**: Block students from enrolling in courses outside their department. Level mismatch shows warning but doesn't block.
-2. **Semester Linking**: All courses linked to active semester. New courses auto-link.
-3. **Department Delete Protection**: Can't delete department with active students/teachers/courses.
-4. **Teacher Cross-Department Warning**: Warning shown when assigning teacher to course in different department (allowed but flagged).
-5. **Frontend warnings**: Enrollment and course forms show backend warnings via alerts.
+- Enrollment: blocked if student from different department
+- Department delete protection (has students/teachers/courses)
+- Teacher cross-department warning on course create/update
+- Courses auto-linked to active semester + fix endpoint
 
 ### March 6, 2026 (Session 2) - Study Plans & Reports
-- Study Plan system with completion tracking
-- Lesson completion report with Excel export
-- Permission-based report access
+- Study Plan with completion tracking, Excel export, permission-based access
 
 ### March 6, 2026 (Session 1) - Attendance & Import
-- Attendance timing system (configurable per-faculty)
-- Teacher import from Excel with auto-activation
-- Bulk student actions in selection mode
+- Attendance timing (configurable per-faculty), Teacher Excel import, Bulk student actions
 
-### Previous Sessions
-- Full app, Teacher/Student apps, FCM, Standalone packages
-
-## Key Validations
-- Enrollment: blocked if student.department_id != course.department_id
-- Department delete: blocked if has students/teachers/courses
-- Faculty delete: blocked if has departments
-- Course create/update: warning if teacher from different department
-- Courses: auto-linked to active semester
+## Key Admin Endpoints
+- `POST /api/admin/fix-faculty-ids` - Fix students/teachers without faculty_id
+- `POST /api/admin/fix-courses-semester` - Fix courses without semester
 
 ## P1 - Next
-- [ ] Teacher app: study plan UI + lesson title (SEPARATE PROJECT)
+- [ ] Teacher app update (SEPARATE PROJECT)
 - [ ] User builds APKs
 - [ ] Teacher delay report
 

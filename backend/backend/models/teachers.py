@@ -9,6 +9,7 @@ class TeacherBase(BaseModel):
     teacher_id: str
     full_name: str
     department_id: Optional[str] = None
+    faculty_id: Optional[str] = None
     email: Optional[str] = None
     phone: Optional[str] = None
     specialization: Optional[str] = None

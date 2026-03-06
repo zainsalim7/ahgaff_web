@@ -2062,6 +2062,10 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     student_dict["created_at"] = get_yemen_time()
     student_dict["is_active"] = True
     
+    # تعبئة faculty_id تلقائياً من القسم
+    if student_dict.get("department_id"):
+        student_dict["faculty_id"] = await _resolve_faculty_id(student_dict["department_id"])
+    
     # Create user account for student if password provided
     user_id = None
     if student.password:
@@ -2121,6 +2125,7 @@ async def get_students(
         "student_id": s["student_id"],
         "full_name": s["full_name"],
         "department_id": s["department_id"],
+        "faculty_id": s.get("faculty_id"),
         "level": s["level"],
         "section": s["section"],
         "phone": s.get("phone"),
@@ -2671,6 +2676,7 @@ async def get_teachers(
             "teacher_id": teacher.get("teacher_id", ""),
             "full_name": teacher.get("full_name", ""),
             "department_id": teacher.get("department_id"),
+            "faculty_id": teacher.get("faculty_id"),
             "email": teacher.get("email"),
             "phone": teacher.get("phone"),
             "specialization": teacher.get("specialization"),
@@ -2697,6 +2703,10 @@ async def create_teacher(teacher: TeacherCreate, current_user: dict = Depends(ge
     teacher_dict = teacher.dict()
     teacher_dict["created_at"] = get_yemen_time()
     teacher_dict["is_active"] = True
+    
+    # تعبئة faculty_id تلقائياً من القسم
+    if teacher_dict.get("department_id"):
+        teacher_dict["faculty_id"] = await _resolve_faculty_id(teacher_dict["department_id"])
     
     result = await db.teachers.insert_one(teacher_dict)
     teacher_dict["id"] = str(result.inserted_id)
@@ -4632,6 +4642,18 @@ async def _get_faculty_attendance_settings(course: dict) -> tuple:
     except:
         pass
     return (attendance_duration, max_delay)
+
+async def _resolve_faculty_id(department_id: str) -> Optional[str]:
+    """جلب faculty_id من القسم تلقائياً"""
+    if not department_id:
+        return None
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+        if dept:
+            return dept.get("faculty_id")
+    except:
+        pass
+    return None
 
 @api_router.get("/lectures/{lecture_id}/pdf")
 async def export_lecture_attendance_pdf(
@@ -7384,6 +7406,7 @@ async def import_students_from_excel(
                     "student_id": str(row['student_id']),
                     "full_name": str(row['full_name']),
                     "department_id": department_id,
+                    "faculty_id": await _resolve_faculty_id(department_id),
                     "level": student_level,
                     "section": student_section,
                     "phone": str(row.get('phone', '')) if pd.notna(row.get('phone')) else None,
@@ -7501,6 +7524,7 @@ async def import_teachers_from_excel(
                     "teacher_id": tid,
                     "full_name": str(row['full_name']).strip(),
                     "department_id": department_id,
+                    "faculty_id": await _resolve_faculty_id(department_id),
                     "weekly_hours": weekly_h,
                     "specialization": str(row.get('specialization', '')).strip() if pd.notna(row.get('specialization')) else None,
                     "phone": str(row.get('phone', '')).strip() if pd.notna(row.get('phone')) else None,
@@ -9308,6 +9332,48 @@ async def fix_courses_without_semester(current_user: dict = Depends(get_current_
     return {
         "message": f"تم إصلاح {result.modified_count} مقرر وربطها بالفصل الدراسي النشط",
         "fixed": result.modified_count
+    }
+
+@api_router.post("/admin/fix-faculty-ids")
+async def fix_faculty_ids(current_user: dict = Depends(get_current_user)):
+    """إصلاح الطلاب والمعلمين الذين ليس لديهم faculty_id"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # بناء خريطة القسم → الكلية
+    departments = await db.departments.find().to_list(100)
+    dept_faculty_map = {}
+    for dept in departments:
+        dept_faculty_map[str(dept["_id"])] = dept.get("faculty_id")
+    
+    # إصلاح الطلاب
+    students_fixed = 0
+    students_cursor = db.students.find({"$or": [{"faculty_id": None}, {"faculty_id": ""}, {"faculty_id": {"$exists": False}}]})
+    async for student in students_cursor:
+        dept_id = student.get("department_id")
+        if dept_id and dept_id in dept_faculty_map:
+            await db.students.update_one(
+                {"_id": student["_id"]},
+                {"$set": {"faculty_id": dept_faculty_map[dept_id]}}
+            )
+            students_fixed += 1
+    
+    # إصلاح المعلمين
+    teachers_fixed = 0
+    teachers_cursor = db.teachers.find({"$or": [{"faculty_id": None}, {"faculty_id": ""}, {"faculty_id": {"$exists": False}}]})
+    async for teacher in teachers_cursor:
+        dept_id = teacher.get("department_id")
+        if dept_id and dept_id in dept_faculty_map:
+            await db.teachers.update_one(
+                {"_id": teacher["_id"]},
+                {"$set": {"faculty_id": dept_faculty_map[dept_id]}}
+            )
+            teachers_fixed += 1
+    
+    return {
+        "message": f"تم إصلاح {students_fixed} طالب و {teachers_fixed} معلم",
+        "students_fixed": students_fixed,
+        "teachers_fixed": teachers_fixed
     }
 
 

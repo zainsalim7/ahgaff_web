@@ -9,6 +9,7 @@ class StudentBase(BaseModel):
     student_id: str
     full_name: str
     department_id: str
+    faculty_id: Optional[str] = None
     level: int
     section: str
     phone: Optional[str] = None
