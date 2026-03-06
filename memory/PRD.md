@@ -21,8 +21,11 @@ All three apps connect to the same FastAPI backend.
 
 ## What's Been Implemented
 
+### March 6, 2026
+- **Bulk Student Actions in Selection Mode**: Moved activate/deactivate buttons into the selection bar alongside change level and delete. Now works on selected students only (not all). Flow: Enter selection mode → Select students → Choose action (Activate/Deactivate/Change Level/Delete).
+
 ### March 5, 2026
-- **Bulk Student Activation/Deactivation**: Added "Activate All" and "Deactivate All" buttons to the students management page (`/students`). Backend endpoints were already implemented; UI buttons with confirmation dialogs and loading states added.
+- **Bulk Student Activation/Deactivation**: Added backend endpoints and frontend handlers for bulk account management.
 
 ### March 4, 2026
 - **Completed Teacher App** with offline attendance, sync mechanism, all screens
@@ -47,10 +50,10 @@ All three apps connect to the same FastAPI backend.
 - Profile + change password
 - Student App (complete)
 - Teacher App (complete with offline sync)
-- Bulk student account activation/deactivation
+- Bulk student actions (activate/deactivate/change level/delete) via selection mode
 
 ## P0 - Current (Completed)
-- [x] Bulk student activation/deactivation UI buttons
+- [x] Bulk student activation/deactivation in selection mode
 - [x] Teacher app implementation
 - [x] Schedule page: remove add/generate, fix delete/cancel
 - [x] Standalone packages for separate repos

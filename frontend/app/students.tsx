@@ -501,48 +501,67 @@ export default function StudentsScreen() {
     }, 'إلغاء التفعيل', true);
   };
 
-  // تفعيل جميع الحسابات
+  // تفعيل/إلغاء تفعيل المحددين
   const [bulkLoading, setBulkLoading] = useState(false);
   
-  const handleBulkActivate = () => {
-    const inactive = students.filter(s => !s.user_id).length;
-    if (inactive === 0) {
-      showMessage('تنبيه', 'جميع الطلاب لديهم حسابات مفعلة');
+  const handleBulkActivateSelected = () => {
+    if (selectedIds.size === 0) return;
+    const selectedStudents = students.filter(s => selectedIds.has(s.id));
+    const inactive = selectedStudents.filter(s => !s.user_id);
+    if (inactive.length === 0) {
+      showMessage('تنبيه', 'جميع الطلاب المحددين لديهم حسابات مفعلة');
       return;
     }
-    showConfirm('تفعيل جميع الحسابات', `سيتم تفعيل حسابات ${inactive} طالب.\nكلمة المرور = الرقم الجامعي لكل طالب.\n\nهل تريد المتابعة؟`, async () => {
+    showConfirm('تفعيل الحسابات', `سيتم تفعيل ${inactive.length} حساب طالب.\nكلمة المرور = الرقم الجامعي.\n\nمتابعة؟`, async () => {
       setBulkLoading(true);
       try {
-        const res = await studentsAPI.bulkActivate();
-        showMessage('تم التفعيل ✅', `تم تفعيل ${res.data.activated} حساب طالب`);
+        let activated = 0;
+        for (const s of inactive) {
+          try {
+            await studentsAPI.activateAccount(s.id);
+            activated++;
+          } catch {}
+        }
+        showMessage('تم التفعيل', `تم تفعيل ${activated} حساب`);
+        setSelectedIds(new Set());
+        setSelectionMode(false);
         fetchData();
       } catch (error: any) {
-        showMessage('خطأ', error.response?.data?.detail || 'فشل في التفعيل الجماعي');
+        showMessage('خطأ', 'فشل في التفعيل');
       } finally {
         setBulkLoading(false);
       }
-    }, 'تفعيل الجميع');
+    }, 'تفعيل');
   };
 
-  // إلغاء تفعيل جميع الحسابات
-  const handleBulkDeactivate = () => {
-    const active = students.filter(s => s.user_id).length;
-    if (active === 0) {
-      showMessage('تنبيه', 'لا يوجد طلاب لديهم حسابات مفعلة');
+  const handleBulkDeactivateSelected = () => {
+    if (selectedIds.size === 0) return;
+    const selectedStudents = students.filter(s => selectedIds.has(s.id));
+    const active = selectedStudents.filter(s => s.user_id);
+    if (active.length === 0) {
+      showMessage('تنبيه', 'لا يوجد حسابات مفعلة بين المحددين');
       return;
     }
-    showConfirm('إلغاء تفعيل جميع الحسابات', `سيتم إلغاء تفعيل حسابات ${active} طالب.\n\nهل أنت متأكد؟`, async () => {
+    showConfirm('إلغاء تفعيل الحسابات', `سيتم إلغاء تفعيل ${active.length} حساب.\n\nمتأكد؟`, async () => {
       setBulkLoading(true);
       try {
-        const res = await studentsAPI.bulkDeactivate();
-        showMessage('تم', `تم إلغاء تفعيل ${res.data.deactivated} حساب`);
+        let deactivated = 0;
+        for (const s of active) {
+          try {
+            await studentsAPI.deactivateAccount(s.id);
+            deactivated++;
+          } catch {}
+        }
+        showMessage('تم', `تم إلغاء تفعيل ${deactivated} حساب`);
+        setSelectedIds(new Set());
+        setSelectionMode(false);
         fetchData();
       } catch (error: any) {
-        showMessage('خطأ', error.response?.data?.detail || 'فشل في إلغاء التفعيل الجماعي');
+        showMessage('خطأ', 'فشل في إلغاء التفعيل');
       } finally {
         setBulkLoading(false);
       }
-    }, 'إلغاء تفعيل الجميع', true);
+    }, 'إلغاء التفعيل', true);
   };
 
   // إعادة تعيين كلمة المرور
@@ -658,42 +677,6 @@ export default function StudentsScreen() {
           </TouchableOpacity>
         )}
 
-        {/* أزرار التفعيل الجماعي */}
-        {canManageStudents && (
-          <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 0, marginBottom: 12 }}>
-            <TouchableOpacity
-              style={{ flex: 1, flexDirection: 'row', backgroundColor: '#4caf50', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', gap: 8, opacity: bulkLoading ? 0.6 : 1 }}
-              onPress={handleBulkActivate}
-              disabled={bulkLoading}
-              data-testid="bulk-activate-all-btn"
-            >
-              {bulkLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="people" size={20} color="#fff" />
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>تفعيل جميع الحسابات</Text>
-                </>
-              )}
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={{ flex: 1, flexDirection: 'row', backgroundColor: '#f44336', padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center', gap: 8, opacity: bulkLoading ? 0.6 : 1 }}
-              onPress={handleBulkDeactivate}
-              disabled={bulkLoading}
-              data-testid="bulk-deactivate-all-btn"
-            >
-              {bulkLoading ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <>
-                  <Ionicons name="people-outline" size={20} color="#fff" />
-                  <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>إلغاء تفعيل الجميع</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        )}
-
         {/* شريط البحث */}
         <View style={styles.searchContainer}>
           <Ionicons name="search" size={20} color="#999" />
@@ -777,6 +760,22 @@ export default function StudentsScreen() {
             </TouchableOpacity>
             {selectedIds.size > 0 && (
               <>
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4caf50', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4, opacity: bulkLoading ? 0.6 : 1 }}
+                  onPress={handleBulkActivateSelected}
+                  disabled={bulkLoading}
+                >
+                  {bulkLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="person-add" size={18} color="#fff" />}
+                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>تفعيل</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ff9800', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4, opacity: bulkLoading ? 0.6 : 1 }}
+                  onPress={handleBulkDeactivateSelected}
+                  disabled={bulkLoading}
+                >
+                  {bulkLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="person-remove" size={18} color="#fff" />}
+                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>إلغاء تفعيل</Text>
+                </TouchableOpacity>
                 <TouchableOpacity 
                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#9c27b0', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
                   onPress={() => setShowLevelModal(true)}
