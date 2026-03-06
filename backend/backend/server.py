@@ -3704,10 +3704,54 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
 
 @api_router.get("/courses/{course_id}/study-plan")
 async def get_study_plan(course_id: str, current_user: dict = Depends(get_current_user)):
-    """جلب الخطة الدراسية لمقرر"""
+    """جلب الخطة الدراسية لمقرر مع حالة إكمال المواضيع"""
     plan = await db.study_plans.find_one({"course_id": course_id}, {"_id": 0})
     if not plan:
-        return {"course_id": course_id, "weeks": []}
+        return {"course_id": course_id, "weeks": [], "total_topics": 0, "completed_topics": 0, "completion_percent": 0}
+    
+    # جلب المحاضرات المكتملة التي لها plan_topic_id
+    completed_lectures = await db.lectures.find({
+        "course_id": course_id,
+        "status": LectureStatus.COMPLETED,
+        "plan_topic_id": {"$exists": True, "$ne": "", "$ne": None}
+    }, {"plan_topic_id": 1, "lesson_title": 1, "date": 1}).to_list(500)
+    
+    completed_topic_ids = {}
+    for lec in completed_lectures:
+        tid = lec.get("plan_topic_id")
+        if tid:
+            completed_topic_ids[tid] = {
+                "date": lec.get("date", ""),
+                "lesson_title": lec.get("lesson_title", "")
+            }
+    
+    total_topics = 0
+    completed_count = 0
+    
+    for week in plan.get("weeks", []):
+        week_total = 0
+        week_completed = 0
+        for topic in week.get("topics", []):
+            total_topics += 1
+            week_total += 1
+            topic_id = topic.get("id", "")
+            if topic_id in completed_topic_ids:
+                topic["completed"] = True
+                topic["completed_date"] = completed_topic_ids[topic_id].get("date", "")
+                completed_count += 1
+                week_completed += 1
+            else:
+                topic["completed"] = False
+                topic["completed_date"] = ""
+        
+        week["total_topics"] = week_total
+        week["completed_topics"] = week_completed
+        week["completion_percent"] = round((week_completed / week_total) * 100) if week_total > 0 else 0
+    
+    plan["total_topics"] = total_topics
+    plan["completed_topics"] = completed_count
+    plan["completion_percent"] = round((completed_count / total_topics) * 100) if total_topics > 0 else 0
+    
     return plan
 
 @api_router.put("/courses/{course_id}/study-plan")
