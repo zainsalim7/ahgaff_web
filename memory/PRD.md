@@ -22,47 +22,37 @@ All three apps connect to the same FastAPI backend.
 ## What's Been Implemented
 
 ### March 6, 2026
-- **Bulk Student Actions in Selection Mode**: Moved activate/deactivate buttons into the selection bar alongside change level and delete. Now works on selected students only (not all). Flow: Enter selection mode → Select students → Choose action (Activate/Deactivate/Change Level/Delete).
+- **Teacher Import from Excel**: Added import functionality with auto-account activation.
+  - Backend: `GET /api/template/teachers` (download template), `POST /api/import/teachers` (import with auto-activate)
+  - Frontend: Import modal with department selector, template download, result display
+  - Auto-creates user accounts (username=employee_id, password=employee_id)
+  - Validates required columns, rejects duplicates
+- **Bulk Student Actions in Selection Mode**: Moved activate/deactivate into selection bar with change level and delete
 
-### March 5, 2026
-- **Bulk Student Activation/Deactivation**: Added backend endpoints and frontend handlers for bulk account management.
-
-### March 4, 2026
-- **Completed Teacher App** with offline attendance, sync mechanism, all screens
-- **Fixed schedule.tsx (Admin)**: Removed add/generate from lectures page, fixed delete/cancel (web-compatible)
-- **Fixed backend**: Course update endpoint, mark-all-read for teachers
-- **Created standalone packages** for student/teacher apps with Railway API integration
-- **Fixed EAS Build**: Added package-lock.json, removed packageManager from package.json
-- **Cleaned dependencies**: Removed 18 unused libraries from student/teacher apps
-- **Push Notifications (FCM)**: Full end-to-end fix with Firebase credentials, AndroidConfig, device registration
-- **Workload Report**: Changed logic to use `weekly_hours` field on teacher profile
-- **Admin UI Fixes**: window.confirm for web, notification confirmations, removed duplicate workload field
+### Previous Sessions
+- Completed Teacher App with offline attendance
+- Fixed schedule.tsx, backend endpoints, standalone packages
+- Push Notifications (FCM) - fully configured
+- Workload Report based on weekly_hours
+- Admin UI/UX fixes (web-compatible dialogs)
 
 ### Completed Features
 - Login (admin/teacher/student role-based)
 - Dashboard with stats
-- Courses management (CRUD + lectures from inside course)
-- Lectures page (view + delete/cancel only, no add/generate)
+- Courses management (CRUD + lectures)
+- Lectures page (view + delete/cancel)
 - Attendance recording
 - Enrollment management
-- Notifications
+- Notifications with FCM
 - Reports
 - Profile + change password
-- Student App (complete)
-- Teacher App (complete with offline sync)
-- Bulk student actions (activate/deactivate/change level/delete) via selection mode
-
-## P0 - Current (Completed)
-- [x] Bulk student activation/deactivation in selection mode
-- [x] Teacher app implementation
-- [x] Schedule page: remove add/generate, fix delete/cancel
-- [x] Standalone packages for separate repos
-- [x] Push notifications (FCM)
+- Student/Teacher Apps (complete)
+- Bulk student actions via selection mode
+- **Teacher import from Excel with auto-activation**
 
 ## P1 - Next
-- [ ] User builds Student APK (verification pending)
-- [ ] User builds Teacher APK (verification pending)
-- [ ] Fix QuickNav.tsx click handler (low priority UI bug)
+- [ ] User builds Student/Teacher APKs (verification pending)
+- [ ] Fix QuickNav.tsx click handler (low priority)
 
 ## P2 - Future
 - [ ] Improve reports (Admin Web)
