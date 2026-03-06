@@ -16,57 +16,40 @@ Student/teacher management system for Ahgaff University with 3 apps (Student, Te
 
 ### March 6, 2026 (Session 2)
 - **Study Plan & Lesson Completion System**:
-  - New collection `study_plans` for semester study plans per course (divided by weeks)
-  - Teacher creates plan gradually (not mandatory to complete at semester start)
-  - `lesson_title` and `plan_topic_id` fields added to lectures (saved during attendance)
-  - Teacher can choose topic from plan OR write custom title during attendance
-  - Attendance NOT blocked without a study plan
-  - `GET /api/courses/{id}/study-plan` and `PUT /api/courses/{id}/study-plan` endpoints
-  - `GET /api/reports/lesson-completion` endpoint with department filtering
-  - New admin report page `/report-lesson-completion` with:
-    - Stats cards (total courses, with/without plan, avg completion)
-    - Progress bars per course
-    - Detail badges (planned, completed, lectures count)
-    - Modal to view study plan content
-
-### March 6, 2026 (Session 1)
-- **Attendance Timing System**: Configurable per-faculty, timer starts when teacher opens attendance
+  - `study_plans` collection: semester plans per course (divided by weeks, with topics)
+  - `lesson_title` and `plan_topic_id` on lectures (saved during attendance)
+  - `GET/PUT /api/courses/{id}/study-plan` endpoints
+  - `GET /api/reports/lesson-completion` - completion report with permission check
+  - `GET /api/export/report/lesson-completion/excel` - Excel export with full details
+  - New permission: `REPORT_LESSON_COMPLETION` - assignable to dept heads/employees
+  - Frontend report page with stats, progress bars, plan viewer modal, Excel export button
+  - Department filter for the report
+- **Attendance Timing System**: Configurable per-faculty, timer starts when teacher opens
 - **Teacher Import from Excel**: Import with auto-account activation
 - **Bulk Student Actions**: Activate/deactivate in selection mode
 
 ### Previous Sessions
 - Full app: login, dashboard, courses, lectures, attendance, enrollment, notifications, reports, profile
-- Teacher/Student apps with offline sync
-- Push Notifications (FCM)
-- Standalone packages for separate repos
+- Teacher/Student apps with offline sync, Push Notifications (FCM), Standalone packages
 
-## Key DB Collections
-- `study_plans`: {course_id, weeks: [{week_number, topics: [{id, title}]}], updated_at, updated_by}
-- `lectures`: Added fields: `lesson_title`, `plan_topic_id`, `attendance_started_at`
-- `faculties`: Added: `attendance_duration_minutes`, `max_attendance_delay_minutes`
+## Key New Endpoints
+- `GET/PUT /api/courses/{id}/study-plan`
+- `GET /api/reports/lesson-completion`
+- `GET /api/export/report/lesson-completion/excel`
+- `GET /api/template/teachers` | `POST /api/import/teachers`
+- `POST /api/students/bulk-activate` | `bulk-deactivate`
 
-## Key API Endpoints (New)
-- `GET/PUT /api/courses/{id}/study-plan` - CRUD for study plans
-- `GET /api/reports/lesson-completion` - Lesson completion report
-- `GET /api/template/teachers` - Download Excel template
-- `POST /api/import/teachers` - Import teachers from Excel
-- `POST /api/students/bulk-activate` / `bulk-deactivate`
+## Permissions
+- `report_lesson_completion`: View lesson completion report (assignable to dept heads)
 
 ## P1 - Next
-- [ ] Teacher app update: Add study plan management UI + lesson title during attendance (SEPARATE PROJECT)
-- [ ] User builds APKs (verification pending)
-- [ ] Fix QuickNav.tsx click handler
-- [ ] Teacher delay report (attendance_started_at vs scheduled time)
+- [ ] Teacher app: Add study plan UI + lesson title during attendance (SEPARATE PROJECT)
+- [ ] User builds APKs
+- [ ] Fix QuickNav.tsx
+- [ ] Teacher delay report
 
 ## P2 - Future
-- [ ] Improve reports
-- [ ] Activity logs UI
-- [ ] Backend refactoring (split server.py)
+- [ ] Improve reports | Activity logs UI | Backend refactoring
 
 ## Test Credentials
-- Admin: admin / admin123
-- Teacher: teacher180156 / teacher123
-- Student: 234 / 123456
-
-## Railway Backend
-`https://ahgaffweb-production-c582.up.railway.app`
+- Admin: admin / admin123 | Teacher: teacher180156 / teacher123 | Student: 234 / 123456

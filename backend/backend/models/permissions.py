@@ -92,6 +92,7 @@ class Permission:
     REPORT_STUDENT = "report_student"
     REPORT_COURSE = "report_course"
     REPORT_TEACHER_WORKLOAD = "report_teacher_workload"
+    REPORT_LESSON_COMPLETION = "report_lesson_completion"
     
     # صلاحيات الأدوار والإعدادات
     MANAGE_ROLES = "manage_roles"
@@ -120,6 +121,7 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_STUDENT,
         Permission.REPORT_COURSE,
         Permission.REPORT_TEACHER_WORKLOAD,
+        Permission.REPORT_LESSON_COMPLETION,
         Permission.SEND_NOTIFICATIONS,
         Permission.MANAGE_NOTIFICATIONS,
     ],
@@ -211,6 +213,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.REPORT_STUDENT, "label": "تقرير طالب", "category": "التقارير الفردية"},
     {"key": Permission.REPORT_COURSE, "label": "تقرير مقرر", "category": "التقارير الفردية"},
     {"key": Permission.REPORT_TEACHER_WORKLOAD, "label": "تقرير نصاب المدرس", "category": "التقارير الفردية"},
+    {"key": Permission.REPORT_LESSON_COMPLETION, "label": "تقرير إنجاز الدروس", "category": "التقارير الفردية"},
     {"key": Permission.MANAGE_ROLES, "label": "إدارة الأدوار", "category": "النظام"},
     {"key": Permission.MANAGE_SETTINGS, "label": "إدارة الإعدادات", "category": "النظام"},
     {"key": Permission.MANAGE_SEMESTERS, "label": "إدارة الفصول الدراسية", "category": "النظام"},

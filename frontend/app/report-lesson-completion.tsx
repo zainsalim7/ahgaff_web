@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   RefreshControl,
   Modal,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -67,6 +68,25 @@ export default function LessonCompletionReport() {
 
   const onRefresh = () => { setRefreshing(true); fetchData(); };
 
+  const exportExcel = async () => {
+    try {
+      const params: any = {};
+      if (selectedDept) params.department_id = selectedDept;
+      const res = await api.get('/export/report/lesson-completion/excel', { params, responseType: 'blob' });
+      if (Platform.OS === 'web') {
+        const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'lesson_completion_report.xlsx';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      alert('فشل في تصدير التقرير');
+    }
+  };
+
   const viewPlan = async (courseId: string, courseName: string) => {
     try {
       const res = await api.get(`/courses/${courseId}/study-plan`);
@@ -118,7 +138,13 @@ export default function LessonCompletionReport() {
           <Ionicons name="arrow-forward" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تقرير إنجاز الدروس</Text>
-        <View style={{ width: 40 }} />
+        {Platform.OS === 'web' ? (
+          <TouchableOpacity onPress={exportExcel} style={styles.backBtn}>
+            <Ionicons name="download-outline" size={24} color="#4caf50" />
+          </TouchableOpacity>
+        ) : (
+          <View style={{ width: 40 }} />
+        )}
       </View>
 
       <ScrollView
@@ -136,6 +162,15 @@ export default function LessonCompletionReport() {
               ))}
             </Picker>
           </View>
+          {Platform.OS === 'web' && (
+            <TouchableOpacity
+              onPress={exportExcel}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, backgroundColor: '#4caf50', padding: 10, borderRadius: 8 }}
+            >
+              <Ionicons name="download-outline" size={20} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>تصدير Excel</Text>
+            </TouchableOpacity>
+          )}
         </View>
 
         {/* إحصائيات سريعة */}

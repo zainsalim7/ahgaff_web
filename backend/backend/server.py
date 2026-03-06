@@ -3763,7 +3763,7 @@ async def get_lesson_completion_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير إنجاز الدروس - المخطط مقابل المنجز"""
-    if current_user["role"] not in [UserRole.ADMIN]:
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.REPORT_LESSON_COMPLETION):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب المقررات
@@ -3825,6 +3825,96 @@ async def get_lesson_completion_report(
         })
     
     return report
+
+@api_router.get("/export/report/lesson-completion/excel")
+async def export_lesson_completion_excel(
+    department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تصدير تقرير إنجاز الدروس كملف Excel"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.REPORT_LESSON_COMPLETION):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # جلب المقررات
+    course_query = {"is_active": True}
+    if department_id:
+        course_query["department_id"] = department_id
+    elif faculty_id:
+        depts = await db.departments.find({"faculty_id": faculty_id}).to_list(100)
+        dept_ids = [str(d["_id"]) for d in depts]
+        course_query["department_id"] = {"$in": dept_ids}
+    
+    courses = await db.courses.find(course_query).to_list(500)
+    
+    rows = []
+    for course in courses:
+        cid = str(course["_id"])
+        
+        plan = await db.study_plans.find_one({"course_id": cid})
+        planned_topics = 0
+        planned_titles = []
+        if plan:
+            for week in plan.get("weeks", []):
+                for topic in week.get("topics", []):
+                    planned_topics += 1
+                    planned_titles.append(f"أسبوع {week.get('week_number', '?')}: {topic.get('title', '')}")
+        
+        completed_lectures = await db.lectures.find({
+            "course_id": cid,
+            "status": LectureStatus.COMPLETED
+        }).to_list(500)
+        
+        total_lectures = await db.lectures.count_documents({"course_id": cid})
+        completed_count = len(completed_lectures)
+        lessons_with_title = sum(1 for l in completed_lectures if l.get("lesson_title"))
+        lesson_titles = [l.get("lesson_title", "-") for l in completed_lectures if l.get("lesson_title")]
+        
+        teacher_name = "غير محدد"
+        dept_name = "غير محدد"
+        if course.get("teacher_id"):
+            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
+            if teacher:
+                teacher_name = teacher["full_name"]
+        if course.get("department_id"):
+            dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
+            if dept:
+                dept_name = dept["name"]
+        
+        completion_percent = 0
+        if planned_topics > 0:
+            completion_percent = round((lessons_with_title / planned_topics) * 100, 1)
+        
+        rows.append({
+            "القسم": dept_name,
+            "المقرر": course["name"],
+            "رمز المقرر": course.get("code", ""),
+            "المعلم": teacher_name,
+            "المواضيع المخططة": planned_topics,
+            "المحاضرات الكلية": total_lectures,
+            "المحاضرات المنعقدة": completed_count,
+            "دروس بعنوان": lessons_with_title,
+            "دروس بدون عنوان": completed_count - lessons_with_title,
+            "نسبة الإنجاز (%)": completion_percent,
+            "الخطة الدراسية": "\n".join(planned_titles) if planned_titles else "لا توجد خطة",
+            "الدروس المنجزة": "\n".join(lesson_titles) if lesson_titles else "-",
+        })
+    
+    df = pd.DataFrame(rows)
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine='openpyxl') as writer:
+        df.to_excel(writer, index=False, sheet_name='إنجاز الدروس')
+        worksheet = writer.sheets['إنجاز الدروس']
+        for col in worksheet.columns:
+            max_length = max(len(str(cell.value or '')) for cell in col)
+            worksheet.column_dimensions[col[0].column_letter].width = min(max_length + 2, 40)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=lesson_completion_report.xlsx"}
+    )
 
 # ==================== Lecture Routes (المحاضرات/الحصص) ====================
 
