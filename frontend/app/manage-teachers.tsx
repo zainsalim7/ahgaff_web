@@ -19,6 +19,7 @@ import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { teachersAPI, departmentsAPI } from '../src/services/api';
+import { API_URL } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 
 interface Teacher {
@@ -75,6 +76,12 @@ export default function ManageTeachersScreen() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deletingTeacher, setDeletingTeacher] = useState(false);
   const [restoring, setRestoring] = useState(false);
+
+  // استيراد من Excel
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importDeptId, setImportDeptId] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
 
   // Alert helpers for web compatibility
   const showMessage = (title: string, message: string) => {
@@ -295,6 +302,62 @@ export default function ManageTeachersScreen() {
         showMessage('خطأ', 'فشل في قراءة الملف');
       } finally {
         setRestoring(false);
+      }
+    };
+    
+    input.click();
+  };
+
+  // تنزيل نموذج Excel
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await teachersAPI.getTemplate();
+      if (Platform.OS === 'web') {
+        const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'teachers_template.xlsx';
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      showMessage('خطأ', 'فشل في تنزيل النموذج');
+    }
+  };
+
+  // استيراد المعلمين من Excel
+  const handleImportExcel = () => {
+    if (!importDeptId) {
+      showMessage('خطأ', 'يجب تحديد القسم الافتراضي');
+      return;
+    }
+    if (Platform.OS !== 'web') return;
+    
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      setImporting(true);
+      setImportResult(null);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await teachersAPI.importFromExcel(formData, importDeptId);
+        setImportResult(res.data);
+        showMessage('تم الاستيراد', res.data.message);
+        fetchData();
+      } catch (error: any) {
+        const msg = error.response?.data?.detail || 'فشل في استيراد الملف';
+        showMessage('خطأ', msg);
+        setImportResult({ error: msg });
+      } finally {
+        setImporting(false);
       }
     };
     
@@ -615,25 +678,33 @@ export default function ManageTeachersScreen() {
         ) : (
           <>
             {/* زر الإضافة */}
-            <View style={{ flexDirection: 'row', gap: 8, margin: 16, marginBottom: 8 }}>
+            <View style={{ flexDirection: 'row', gap: 8, margin: 16, marginBottom: 8, flexWrap: 'wrap' }}>
               <TouchableOpacity
-                style={styles.addButton}
+                style={[styles.addButton, { flex: 1, margin: 0 }]}
                 onPress={() => setShowForm(true)}
               >
                 <Ionicons name="add-circle" size={24} color="#fff" />
-                <Text style={styles.addButtonText}>إضافة معلم جديد</Text>
+                <Text style={styles.addButtonText}>إضافة معلم</Text>
               </TouchableOpacity>
               
               {Platform.OS === 'web' && (
-                <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: '#1565c0' }]}
-                  onPress={handleRestore}
-                  disabled={restoring}
-                  data-testid="restore-teacher-btn"
-                >
-                  <Ionicons name="cloud-upload" size={22} color="#fff" />
-                  <Text style={styles.addButtonText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
-                </TouchableOpacity>
+                <>
+                  <TouchableOpacity
+                    style={[styles.addButton, { flex: 1, margin: 0, backgroundColor: '#4caf50' }]}
+                    onPress={() => { setImportDeptId(''); setImportResult(null); setShowImportModal(true); }}
+                  >
+                    <Ionicons name="cloud-download" size={22} color="#fff" />
+                    <Text style={styles.addButtonText}>استيراد Excel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addButton, { flex: 1, margin: 0, backgroundColor: '#1565c0' }]}
+                    onPress={handleRestore}
+                    disabled={restoring}
+                  >
+                    <Ionicons name="cloud-upload" size={22} color="#fff" />
+                    <Text style={styles.addButtonText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
+                  </TouchableOpacity>
+                </>
               )}
             </View>
 
@@ -708,6 +779,87 @@ export default function ManageTeachersScreen() {
           <ActivityIndicator size="large" color="#1565c0" />
         </View>
       )}
+      
+      {/* نافذة استيراد المعلمين */}
+      <Modal visible={showImportModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 450 }}>
+            <Ionicons name="cloud-download" size={36} color="#4caf50" style={{ alignSelf: 'center', marginBottom: 10 }} />
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#333', textAlign: 'center', marginBottom: 4 }}>
+              استيراد المعلمين من Excel
+            </Text>
+            <Text style={{ fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 16 }}>
+              سيتم تفعيل حساب كل معلم تلقائياً (اسم المستخدم وكلمة المرور = الرقم الوظيفي)
+            </Text>
+            
+            {/* تنزيل النموذج */}
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#e8f5e9', padding: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: 16 }}
+              onPress={handleDownloadTemplate}
+            >
+              <Ionicons name="download" size={20} color="#4caf50" />
+              <Text style={{ color: '#4caf50', fontWeight: '600', fontSize: 14 }}>تنزيل نموذج Excel فارغ</Text>
+            </TouchableOpacity>
+            
+            {/* اختيار القسم */}
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 6 }}>القسم الافتراضي *</Text>
+            <View style={{ backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', overflow: 'hidden', marginBottom: 16 }}>
+              <Picker
+                selectedValue={importDeptId}
+                onValueChange={setImportDeptId}
+                style={{ height: 45 }}
+              >
+                <Picker.Item label="-- اختر القسم --" value="" />
+                {departments.map(dept => (
+                  <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
+                ))}
+              </Picker>
+            </View>
+            
+            {/* نتيجة الاستيراد */}
+            {importResult && !importResult.error && (
+              <View style={{ backgroundColor: '#e8f5e9', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#2e7d32', fontWeight: '600', textAlign: 'center', marginBottom: 4 }}>
+                  تم استيراد {importResult.imported} معلم | تفعيل {importResult.activated} حساب
+                </Text>
+                {importResult.errors?.length > 0 && (
+                  <View style={{ marginTop: 8 }}>
+                    {importResult.errors.map((err: string, i: number) => (
+                      <Text key={i} style={{ color: '#e65100', fontSize: 12 }}>{err}</Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            )}
+            {importResult?.error && (
+              <View style={{ backgroundColor: '#ffebee', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                <Text style={{ color: '#c62828', textAlign: 'center' }}>{importResult.error}</Text>
+              </View>
+            )}
+            
+            {/* أزرار */}
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 14, borderRadius: 10, alignItems: 'center' }}
+                onPress={() => setShowImportModal(false)}
+              >
+                <Text style={{ color: '#666', fontWeight: '600' }}>إغلاق</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#4caf50', padding: 14, borderRadius: 10, alignItems: 'center', opacity: (importing || !importDeptId) ? 0.6 : 1 }}
+                onPress={handleImportExcel}
+                disabled={importing || !importDeptId}
+              >
+                {importing ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>اختر ملف Excel</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
       
       {/* نافذة الحذف الآمن */}
       <Modal visible={showDeleteModal} transparent animationType="fade">

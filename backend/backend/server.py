@@ -6981,6 +6981,148 @@ async def import_students_from_excel(
         logger.error(f"Import error: {str(e)}")
         raise HTTPException(status_code=400, detail=f"خطأ في قراءة الملف: {str(e)}")
 
+
+@api_router.get("/template/teachers")
+async def get_teachers_template(current_user: dict = Depends(get_current_user)):
+    """Download teachers import template"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    data = {
+        "الرقم الوظيفي": ["T001", "T002", "T003"],
+        "اسم المعلم": ["محمد أحمد", "علي سالم", "خالد عمر"],
+        "النصاب الأسبوعي": [12, 14, 10],
+    }
+    
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=teachers_template.xlsx"}
+    )
+
+@api_router.post("/import/teachers")
+async def import_teachers_from_excel(
+    file: UploadFile = File(...),
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """Import teachers from Excel file and auto-activate their accounts"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    if not department_id:
+        raise HTTPException(status_code=400, detail="يجب تحديد القسم")
+    
+    try:
+        contents = await file.read()
+        df = pd.read_excel(BytesIO(contents))
+        
+        column_mapping = {
+            'الرقم الوظيفي': 'teacher_id',
+            'رقم الموظف': 'teacher_id',
+            'رقم المعلم': 'teacher_id',
+            'اسم المعلم': 'full_name',
+            'الاسم': 'full_name',
+            'الاسم الكامل': 'full_name',
+            'النصاب الأسبوعي': 'weekly_hours',
+            'النصاب': 'weekly_hours',
+            'الساعات': 'weekly_hours',
+            'التخصص': 'specialization',
+            'الهاتف': 'phone',
+            'رقم الهاتف': 'phone',
+            'البريد': 'email',
+            'البريد الإلكتروني': 'email',
+        }
+        
+        df = df.rename(columns=column_mapping)
+        
+        if 'teacher_id' not in df.columns:
+            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: الرقم الوظيفي")
+        if 'full_name' not in df.columns:
+            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: اسم المعلم")
+        if 'weekly_hours' not in df.columns:
+            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: النصاب الأسبوعي")
+        
+        imported = 0
+        activated = 0
+        errors = []
+        
+        for index, row in df.iterrows():
+            try:
+                tid = str(row['teacher_id']).strip()
+                existing = await db.teachers.find_one({"teacher_id": tid})
+                if existing:
+                    errors.append(f"المعلم {tid} موجود مسبقاً")
+                    continue
+                
+                weekly_h = 12
+                try:
+                    weekly_h = int(row['weekly_hours'])
+                except (ValueError, TypeError):
+                    weekly_h = 12
+                
+                teacher_data = {
+                    "teacher_id": tid,
+                    "full_name": str(row['full_name']).strip(),
+                    "department_id": department_id,
+                    "weekly_hours": weekly_h,
+                    "specialization": str(row.get('specialization', '')).strip() if pd.notna(row.get('specialization')) else None,
+                    "phone": str(row.get('phone', '')).strip() if pd.notna(row.get('phone')) else None,
+                    "email": str(row.get('email', '')).strip() if pd.notna(row.get('email')) else None,
+                    "academic_title": None,
+                    "teaching_load": None,
+                    "created_at": get_yemen_time(),
+                    "is_active": True,
+                    "user_id": None,
+                }
+                
+                result = await db.teachers.insert_one(teacher_data)
+                teacher_obj_id = result.inserted_id
+                imported += 1
+                
+                # Auto-activate account: username = teacher_id, password = teacher_id
+                existing_user = await db.users.find_one({"username": tid})
+                if not existing_user:
+                    user_dict = {
+                        "username": tid,
+                        "password": get_password_hash(tid),
+                        "full_name": str(row['full_name']).strip(),
+                        "role": UserRole.TEACHER,
+                        "email": teacher_data.get("email"),
+                        "phone": teacher_data.get("phone"),
+                        "teacher_record_id": str(teacher_obj_id),
+                        "must_change_password": True,
+                        "is_active": True,
+                        "created_at": get_yemen_time(),
+                    }
+                    user_result = await db.users.insert_one(user_dict)
+                    await db.teachers.update_one(
+                        {"_id": teacher_obj_id},
+                        {"$set": {"user_id": str(user_result.inserted_id)}}
+                    )
+                    activated += 1
+                    
+            except Exception as e:
+                errors.append(f"خطأ في الصف {index + 2}: {str(e)}")
+        
+        return {
+            "message": f"تم استيراد {imported} معلم وتفعيل {activated} حساب",
+            "imported": imported,
+            "activated": activated,
+            "errors": errors[:10]
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Teacher import error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"خطأ في قراءة الملف: {str(e)}")
+
+
 @api_router.get("/export/students")
 async def export_students_to_excel(
     department_id: Optional[str] = None,

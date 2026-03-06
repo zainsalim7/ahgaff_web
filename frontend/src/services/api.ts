@@ -246,6 +246,25 @@ export const teachersAPI = {
     api.post(`/teachers/${teacherId}/deactivate`),
   resetPassword: (teacherId: string) =>
     api.post(`/teachers/${teacherId}/reset-password`),
+  // استيراد المعلمين
+  getTemplate: () =>
+    api.get('/template/teachers', { responseType: 'blob' }),
+  importFromExcel: async (file: FormData, departmentId: string) => {
+    const url = `/import/teachers?department_id=${departmentId}`;
+    if (Platform.OS !== 'web') {
+      const token = await AsyncStorage.getItem('token');
+      const fullUrl = `${API_URL}/api${url}`;
+      const response = await fetch(fullUrl, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Accept': 'application/json' },
+        body: file,
+      });
+      const data = await response.json();
+      if (!response.ok) throw { response: { data, status: response.status } };
+      return { data };
+    }
+    return api.post(url, file, { headers: { 'Accept': 'application/json' }, timeout: 60000 });
+  },
 };
 
 // Courses API
