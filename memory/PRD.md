@@ -1,8 +1,14 @@
 # طالب الأحقاف - Student & Teacher Management System PRD
 
-## Hierarchy: University → Faculties → Departments → Courses → Students
+## Hierarchy: University -> Faculties -> Departments -> Courses -> Students
 
 ## What's Been Implemented
+
+### March 7, 2026 (Session 5) - Push Notifications & QuickNav Fix
+- Verified push notification enhancements already in place (default_sound, default_vibrate_timings, visibility)
+- Fixed QuickNav.tsx event propagation bug (View -> Pressable with stopPropagation)
+- Fixed broken QuickNav routes (/add-student -> /students, /add-teacher -> /manage-teachers)
+- Note: QuickNav component is NOT used in the app - SideMenu handles all navigation
 
 ### March 6, 2026 (Session 4) - faculty_id Auto-Resolution
 - Auto-populate `faculty_id` on students and teachers from their department
@@ -25,14 +31,38 @@
 ## Key Admin Endpoints
 - `POST /api/admin/fix-faculty-ids` - Fix students/teachers without faculty_id
 - `POST /api/admin/fix-courses-semester` - Fix courses without semester
+- `GET /api/template/teachers` - Download Excel template for teacher import
+- `POST /api/import/teachers` - Import teachers from Excel
+- `GET /api/courses/{course_id}/study-plan` - Fetch study plan with completion
+- `PUT /api/courses/{course_id}/study-plan` - Create/update study plan
+- `GET /api/reports/lesson-completion` - Lesson completion report data
+- `GET /api/reports/lesson-completion/export` - Export report to Excel
+
+## Navigation
+- App uses SideMenu (hamburger button) for navigation, NOT QuickNav component
+- QuickNav.tsx exists but is dead code (never imported/rendered)
+
+## P0 - Completed
+- [x] Push notification reliability enhancement
+- [x] QuickNav code fix (though unused)
 
 ## P1 - Next
+- [ ] Backend refactoring: Split server.py into APIRouter modules
+- [ ] Guide user to deploy and test all new features
+- [ ] Guide user to run faculty_id data migration
+
+## P2 - Future
 - [ ] Teacher app update (SEPARATE PROJECT)
 - [ ] User builds APKs
 - [ ] Teacher delay report
-
-## P2 - Future
-- [ ] Improve reports | Activity logs UI | Backend refactoring
+- [ ] Improve reports | Activity logs UI
+- [ ] Remove/integrate QuickNav.tsx (dead code cleanup)
 
 ## Test Credentials
 - Admin: admin / admin123 | Teacher: teacher180156 / teacher123 | Student: 234 / 123456
+
+## Tech Stack
+- Backend: FastAPI + MongoDB
+- Frontend: Expo (React Native Web)
+- Push Notifications: Firebase Cloud Messaging (FCM)
+- Deployment: Railway
