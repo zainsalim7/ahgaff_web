@@ -16,7 +16,7 @@ from openpyxl import Workbook
 # Get BASE_URL from environment variable
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://student-teacher-mgmt.preview.emergentagent.com').rstrip('/')
+    BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://study-plan-system.preview.emergentagent.com').rstrip('/')
 
 # Test data - IDs from main agent
 DEPARTMENT_ID = "698e500997fef774e66e93a8"

@@ -37,8 +37,8 @@ const NAV_ITEMS: QuickNavItem[] = [
   // إدارة الأكاديمية
   { title: 'إدارة الأقسام', icon: 'business', route: '/add-department', color: '#e91e63', adminOnly: true },
   { title: 'إدارة المقررات', icon: 'library', route: '/add-course', color: '#ff9800', adminOnly: true },
-  { title: 'إدارة الطلاب', icon: 'school', route: '/add-student', color: '#2196f3', adminOnly: true },
-  { title: 'إدارة المعلمين', icon: 'person-add', route: '/add-teacher', color: '#009688', adminOnly: true },
+  { title: 'إدارة الطلاب', icon: 'school', route: '/students', color: '#2196f3', adminOnly: true },
+  { title: 'إدارة المعلمين', icon: 'person-add', route: '/manage-teachers', color: '#009688', adminOnly: true },
   
   // الحضور
   { title: 'تسجيل الحضور', icon: 'checkbox', route: '/take-attendance', color: '#4caf50', teacherOnly: true },
@@ -101,7 +101,7 @@ export function QuickNav({ currentRoute }: QuickNavProps) {
           style={styles.modalOverlay}
           onPress={() => setModalVisible(false)}
         >
-          <View style={styles.modalContent}>
+          <Pressable style={styles.modalContent} onPress={(e) => e.stopPropagation && e.stopPropagation()}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>التنقل السريع</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
@@ -169,7 +169,7 @@ export function QuickNav({ currentRoute }: QuickNavProps) {
                 </>
               )}
             </ScrollView>
-          </View>
+          </Pressable>
         </Pressable>
       </Modal>
     </>

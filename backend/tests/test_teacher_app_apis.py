@@ -14,7 +14,7 @@ from datetime import datetime
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
     # Fallback in case env var not set
-    BASE_URL = "https://student-teacher-mgmt.preview.emergentagent.com"
+    BASE_URL = "https://study-plan-system.preview.emergentagent.com"
 
 # Test credentials
 TEACHER_USERNAME = "teacher180156"

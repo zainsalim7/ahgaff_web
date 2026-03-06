@@ -6,7 +6,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://student-teacher-mgmt.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://study-plan-system.preview.emergentagent.com')
 
 class TestSemesterReportPDF:
     """Tests for semester report PDF export endpoint"""

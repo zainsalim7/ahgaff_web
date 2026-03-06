@@ -56,6 +56,10 @@ async def send_notification(token: str, title: str, body: str, data: dict = None
                     color='#1b5e20',
                     channel_id='default',
                     sound='default',
+                    priority='high',
+                    default_sound=True,
+                    default_vibrate_timings=True,
+                    visibility='public',
                 ),
             ),
             webpush=messaging.WebpushConfig(
@@ -102,6 +106,10 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
                 color='#1b5e20',
                 channel_id='default',
                 sound='default',
+                priority='high',
+                default_sound=True,
+                default_vibrate_timings=True,
+                visibility='public',
             ),
         ),
         webpush=messaging.WebpushConfig(
