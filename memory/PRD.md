@@ -3,49 +3,40 @@
 ## Original Problem Statement
 Student/teacher management system for Ahgaff University with 3 apps (Student, Teacher, Admin) sharing one backend.
 
-## Architecture
-```
-/app/
-├── backend/                    # FastAPI backend (shared)
-├── frontend/                   # Admin Web App (React Native / Expo)
-├── student-app-standalone/     # Standalone Student App
-└── teacher-app-standalone/     # Standalone Teacher App
-```
+## Hierarchy: University → Faculties → Departments → Courses → Students
 
 ## What's Been Implemented
 
-### March 6, 2026 (Session 2)
-- **Study Plan & Lesson Completion System**:
-  - `study_plans` collection: semester plans per course (divided by weeks, with topics)
-  - `lesson_title` and `plan_topic_id` on lectures (saved during attendance)
-  - `GET/PUT /api/courses/{id}/study-plan` endpoints
-  - `GET /api/reports/lesson-completion` - completion report with permission check
-  - `GET /api/export/report/lesson-completion/excel` - Excel export with full details
-  - New permission: `REPORT_LESSON_COMPLETION` - assignable to dept heads/employees
-  - Frontend report page with stats, progress bars, plan viewer modal, Excel export button
-  - Department filter for the report
-- **Attendance Timing System**: Configurable per-faculty, timer starts when teacher opens
-- **Teacher Import from Excel**: Import with auto-account activation
-- **Bulk Student Actions**: Activate/deactivate in selection mode
+### March 6, 2026 (Session 3) - Data Integrity Fixes
+1. **Enrollment Validation**: Block students from enrolling in courses outside their department. Level mismatch shows warning but doesn't block.
+2. **Semester Linking**: All courses linked to active semester. New courses auto-link.
+3. **Department Delete Protection**: Can't delete department with active students/teachers/courses.
+4. **Teacher Cross-Department Warning**: Warning shown when assigning teacher to course in different department (allowed but flagged).
+5. **Frontend warnings**: Enrollment and course forms show backend warnings via alerts.
+
+### March 6, 2026 (Session 2) - Study Plans & Reports
+- Study Plan system with completion tracking
+- Lesson completion report with Excel export
+- Permission-based report access
+
+### March 6, 2026 (Session 1) - Attendance & Import
+- Attendance timing system (configurable per-faculty)
+- Teacher import from Excel with auto-activation
+- Bulk student actions in selection mode
 
 ### Previous Sessions
-- Full app: login, dashboard, courses, lectures, attendance, enrollment, notifications, reports, profile
-- Teacher/Student apps with offline sync, Push Notifications (FCM), Standalone packages
+- Full app, Teacher/Student apps, FCM, Standalone packages
 
-## Key New Endpoints
-- `GET/PUT /api/courses/{id}/study-plan`
-- `GET /api/reports/lesson-completion`
-- `GET /api/export/report/lesson-completion/excel`
-- `GET /api/template/teachers` | `POST /api/import/teachers`
-- `POST /api/students/bulk-activate` | `bulk-deactivate`
-
-## Permissions
-- `report_lesson_completion`: View lesson completion report (assignable to dept heads)
+## Key Validations
+- Enrollment: blocked if student.department_id != course.department_id
+- Department delete: blocked if has students/teachers/courses
+- Faculty delete: blocked if has departments
+- Course create/update: warning if teacher from different department
+- Courses: auto-linked to active semester
 
 ## P1 - Next
-- [ ] Teacher app: Add study plan UI + lesson title during attendance (SEPARATE PROJECT)
+- [ ] Teacher app: study plan UI + lesson title (SEPARATE PROJECT)
 - [ ] User builds APKs
-- [ ] Fix QuickNav.tsx
 - [ ] Teacher delay report
 
 ## P2 - Future

@@ -236,13 +236,33 @@ export default function CourseStudentsScreen() {
 
     setSaving(true);
     try {
-      await enrollmentAPI.enroll(courseId!, selectedStudents);
-      Alert.alert('نجاح', `تم تسجيل ${selectedStudents.length} طالب`);
+      const res = await enrollmentAPI.enroll(courseId!, selectedStudents);
+      const data = res.data;
+      let msg = data.message || `تم تسجيل ${selectedStudents.length} طالب`;
+      
+      // عرض التنبيهات
+      if (data.warnings && data.warnings.length > 0) {
+        msg += '\n\n' + data.warnings.join('\n');
+      }
+      if (data.wrong_department > 0) {
+        msg += `\n\nتم رفض ${data.wrong_department} طالب (من قسم آخر)`;
+      }
+      
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('نتيجة التسجيل', msg);
+      }
       setShowAddModal(false);
       setSelectedStudents([]);
       fetchData();
     } catch (error) {
-      Alert.alert('خطأ', 'فشل في تسجيل الطلاب');
+      const errMsg = 'فشل في تسجيل الطلاب';
+      if (Platform.OS === 'web') {
+        window.alert(errMsg);
+      } else {
+        Alert.alert('خطأ', errMsg);
+      }
     } finally {
       setSaving(false);
     }

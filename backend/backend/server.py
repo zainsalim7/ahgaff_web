@@ -1290,6 +1290,23 @@ async def delete_department(dept_id: str, current_user: dict = Depends(get_curre
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
+    dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
+    if not dept:
+        raise HTTPException(status_code=404, detail="القسم غير موجود")
+    
+    # التحقق من عدم وجود بيانات مرتبطة
+    students_count = await db.students.count_documents({"department_id": dept_id, "is_active": True})
+    if students_count > 0:
+        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {students_count} طالب مرتبط به")
+    
+    teachers_count = await db.teachers.count_documents({"department_id": dept_id, "is_active": True})
+    if teachers_count > 0:
+        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {teachers_count} معلم مرتبط به")
+    
+    courses_count = await db.courses.count_documents({"department_id": dept_id, "is_active": True})
+    if courses_count > 0:
+        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {courses_count} مقرر مرتبط به")
+    
     result = await db.departments.delete_one({"_id": ObjectId(dept_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="القسم غير موجود")
@@ -3075,7 +3092,7 @@ async def force_change_password(data: ForceChangePasswordRequest, current_user: 
 
 # ==================== Course Routes ====================
 
-@api_router.post("/courses", response_model=CourseResponse)
+@api_router.post("/courses")
 async def create_course(course: CourseCreate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -3094,10 +3111,38 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
             if active_sem:
                 course_dict["semester_id"] = str(active_sem["_id"])
     
-    result = await db.courses.insert_one(course_dict)
-    course_dict["id"] = str(result.inserted_id)
+    # تنبيه عند تعيين معلم من قسم آخر
+    warning = None
+    if course_dict.get("teacher_id") and course_dict.get("department_id"):
+        try:
+            teacher = await db.teachers.find_one({"_id": ObjectId(course_dict["teacher_id"])})
+            if teacher and teacher.get("department_id") and teacher["department_id"] != course_dict["department_id"]:
+                dept = await db.departments.find_one({"_id": ObjectId(teacher["department_id"])})
+                teacher_dept_name = dept["name"] if dept else "غير معروف"
+                warning = f"تنبيه: المعلم {teacher['full_name']} ينتمي لقسم {teacher_dept_name} وليس لقسم هذا المقرر"
+        except:
+            pass
     
-    return course_dict
+    result = await db.courses.insert_one(course_dict)
+    
+    response = {
+        "id": str(result.inserted_id),
+        "name": course_dict["name"],
+        "code": course_dict.get("code", ""),
+        "department_id": course_dict.get("department_id", ""),
+        "teacher_id": course_dict.get("teacher_id"),
+        "level": course_dict.get("level", 1),
+        "section": course_dict.get("section"),
+        "semester": course_dict.get("semester"),
+        "semester_id": course_dict.get("semester_id"),
+        "academic_year": course_dict.get("academic_year"),
+        "created_at": str(course_dict.get("created_at", "")),
+        "is_active": course_dict.get("is_active", True)
+    }
+    if warning:
+        response["warning"] = warning
+    
+    return response
 
 @api_router.get("/courses", response_model=List[CourseResponse])
 async def get_courses(
@@ -3476,9 +3521,14 @@ async def enroll_students(
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     
+    course_dept = course.get("department_id", "")
+    course_level = course.get("level")
+    
     enrolled_count = 0
     already_enrolled = 0
     not_found = 0
+    wrong_department = 0
+    level_mismatch = []
     
     for student_id in data.student_ids:
         # Find student by ObjectId or student_id number
@@ -3492,6 +3542,11 @@ async def enroll_students(
             not_found += 1
             continue
         
+        # منع التسجيل من قسم آخر
+        if course_dept and student.get("department_id") and student["department_id"] != course_dept:
+            wrong_department += 1
+            continue
+        
         # Check if already enrolled
         existing = await db.enrollments.find_one({
             "course_id": course_id,
@@ -3501,6 +3556,10 @@ async def enroll_students(
         if existing:
             already_enrolled += 1
             continue
+        
+        # تنبيه عند اختلاف المستوى (لا يمنع)
+        if course_level and student.get("level") and student["level"] != course_level:
+            level_mismatch.append(f"{student.get('full_name', student.get('student_id', ''))}")
         
         # Create enrollment
         enrollment = {
@@ -3512,11 +3571,20 @@ async def enroll_students(
         await db.enrollments.insert_one(enrollment)
         enrolled_count += 1
     
+    message = f"تم تسجيل {enrolled_count} طالب"
+    warnings = []
+    if wrong_department > 0:
+        warnings.append(f"تم رفض {wrong_department} طالب (من قسم آخر)")
+    if level_mismatch:
+        warnings.append(f"تنبيه: {len(level_mismatch)} طالب مستواهم مختلف عن المقرر ({', '.join(level_mismatch[:5])})")
+    
     return {
-        "message": f"تم تسجيل {enrolled_count} طالب",
+        "message": message,
         "enrolled": enrolled_count,
         "already_enrolled": already_enrolled,
-        "not_found": not_found
+        "not_found": not_found,
+        "wrong_department": wrong_department,
+        "warnings": warnings
     }
 
 @api_router.delete("/enrollments/{course_id}/{student_id}")
@@ -3668,7 +3736,7 @@ class CourseUpdate(BaseModel):
     semester: Optional[str] = None
     academic_year: Optional[str] = None
 
-@api_router.put("/courses/{course_id}", response_model=CourseResponse)
+@api_router.put("/courses/{course_id}")
 async def update_course(course_id: str, data: CourseUpdate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -3679,6 +3747,20 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     
+    # تنبيه عند تعيين معلم من قسم آخر
+    warning = None
+    teacher_id = update_data.get("teacher_id", course.get("teacher_id"))
+    dept_id = update_data.get("department_id", course.get("department_id"))
+    if teacher_id and dept_id:
+        try:
+            teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+            if teacher and teacher.get("department_id") and teacher["department_id"] != dept_id:
+                dept = await db.departments.find_one({"_id": ObjectId(teacher["department_id"])})
+                teacher_dept_name = dept["name"] if dept else "غير معروف"
+                warning = f"تنبيه: المعلم {teacher['full_name']} ينتمي لقسم {teacher_dept_name} وليس لقسم هذا المقرر"
+        except:
+            pass
+    
     if update_data:
         await db.courses.update_one(
             {"_id": ObjectId(course_id)},
@@ -3686,7 +3768,7 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
         )
     
     updated = await db.courses.find_one({"_id": ObjectId(course_id)})
-    return {
+    result = {
         "id": str(updated["_id"]),
         "name": updated["name"],
         "code": updated.get("code", ""),
@@ -3699,6 +3781,9 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
         "created_at": updated.get("created_at"),
         "is_active": updated.get("is_active", True)
     }
+    if warning:
+        result["warning"] = warning
+    return result
 
 # ==================== Study Plan (الخطة الدراسية) ====================
 
@@ -9196,6 +9281,35 @@ async def delete_faculty(
     )
     
     return {"message": "تم حذف الكلية بنجاح"}
+
+
+@api_router.post("/admin/fix-courses-semester")
+async def fix_courses_without_semester(current_user: dict = Depends(get_current_user)):
+    """إصلاح المقررات التي ليس لها فصل دراسي بربطها بالفصل النشط"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    settings = await db.settings.find_one({"_id": "system_settings"})
+    semester_id = settings.get("current_semester_id") if settings else None
+    
+    if not semester_id:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            semester_id = str(active_sem["_id"])
+    
+    if not semester_id:
+        raise HTTPException(status_code=400, detail="لا يوجد فصل دراسي نشط")
+    
+    result = await db.courses.update_many(
+        {"$or": [{"semester_id": None}, {"semester_id": ""}, {"semester_id": {"$exists": False}}]},
+        {"$set": {"semester_id": semester_id}}
+    )
+    
+    return {
+        "message": f"تم إصلاح {result.modified_count} مقرر وربطها بالفصل الدراسي النشط",
+        "fixed": result.modified_count
+    }
+
 
 # ==================== Activity Logs APIs (واجهات سجل الأنشطة) ====================
 

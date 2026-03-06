@@ -138,12 +138,23 @@ export default function AddCourseScreen() {
         academic_year: settings?.academic_year || '',
       };
 
+      let res;
       if (editingCourse) {
-        await coursesAPI.update(editingCourse.id, courseData);
-        Alert.alert('نجاح', 'تم تحديث المقرر بنجاح');
+        res = await coursesAPI.update(editingCourse.id, courseData);
       } else {
-        await coursesAPI.create(courseData);
-        Alert.alert('نجاح', 'تم إضافة المقرر بنجاح');
+        res = await coursesAPI.create(courseData);
+      }
+      
+      // عرض التنبيه إذا كان المعلم من قسم آخر
+      let msg = editingCourse ? 'تم تحديث المقرر بنجاح' : 'تم إضافة المقرر بنجاح';
+      if (res.data?.warning) {
+        msg += '\n\n' + res.data.warning;
+      }
+      
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('نجاح', msg);
       }
       resetForm();
       setShowForm(false);
