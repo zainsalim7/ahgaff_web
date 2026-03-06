@@ -1,68 +1,49 @@
 # طالب الأحقاف - Student & Teacher Management System PRD
 
 ## Original Problem Statement
-Building a student/teacher management system for Ahgaff University with three separate applications:
-1. **Student App (APK)** - Lightweight, student-only - COMPLETED
-2. **Teacher App (APK)** - Lightweight, teacher-only with offline attendance - COMPLETED
-3. **Admin Panel (Web)** - Full administration - EXISTS (Railway)
-
-All three apps connect to the same FastAPI backend.
+Student/teacher management system for Ahgaff University with 3 apps (Student, Teacher, Admin) sharing one backend.
 
 ## Architecture
 ```
 /app/
-├── backend/                    # FastAPI backend (shared by all apps)
+├── backend/                    # FastAPI backend (shared)
 ├── frontend/                   # Admin Web App (React Native / Expo)
-├── student-app/                # Student App source
-├── teacher-app/                # Teacher App source
-├── student-app-standalone/     # Standalone Student App (for separate repo)
-└── teacher-app-standalone/     # Standalone Teacher App (for separate repo)
+├── student-app-standalone/     # Standalone Student App
+└── teacher-app-standalone/     # Standalone Teacher App
 ```
 
 ## What's Been Implemented
 
 ### March 6, 2026
-- **Teacher Import from Excel**: Added import functionality with auto-account activation.
-  - Backend: `GET /api/template/teachers` (download template), `POST /api/import/teachers` (import with auto-activate)
-  - Frontend: Import modal with department selector, template download, result display
-  - Auto-creates user accounts (username=employee_id, password=employee_id)
-  - Validates required columns, rejects duplicates
-- **Bulk Student Actions in Selection Mode**: Moved activate/deactivate into selection bar with change level and delete
+- **Attendance Timing System Overhaul**: 
+  - Configurable per-faculty: `attendance_duration_minutes` (default 15) and `max_attendance_delay_minutes` (default 30)
+  - Timer starts when teacher opens attendance (not lecture start time)
+  - Records `attendance_started_at` on lecture for monitoring teacher delays
+  - Max delay limit: teacher can't open attendance after configured minutes
+  - Settings UI added to faculty settings page
+- **Teacher Import from Excel**: Import with auto-account activation
+- **Bulk Student Actions**: Activate/deactivate in selection mode
 
 ### Previous Sessions
-- Completed Teacher App with offline attendance
-- Fixed schedule.tsx, backend endpoints, standalone packages
-- Push Notifications (FCM) - fully configured
-- Workload Report based on weekly_hours
-- Admin UI/UX fixes (web-compatible dialogs)
-
-### Completed Features
-- Login (admin/teacher/student role-based)
-- Dashboard with stats
-- Courses management (CRUD + lectures)
-- Lectures page (view + delete/cancel)
-- Attendance recording
-- Enrollment management
-- Notifications with FCM
-- Reports
-- Profile + change password
-- Student/Teacher Apps (complete)
-- Bulk student actions via selection mode
-- **Teacher import from Excel with auto-activation**
+- Full app: login, dashboard, courses, lectures, attendance, enrollment, notifications, reports, profile
+- Teacher/Student apps with offline sync
+- Push Notifications (FCM)
+- Standalone packages for separate repos
 
 ## P1 - Next
-- [ ] User builds Student/Teacher APKs (verification pending)
-- [ ] Fix QuickNav.tsx click handler (low priority)
+- [ ] User builds APKs (verification pending)
+- [ ] Fix QuickNav.tsx click handler
+- [ ] Teacher delay report (future)
 
 ## P2 - Future
-- [ ] Improve reports (Admin Web)
+- [ ] Improve reports
 - [ ] Activity logs UI
-- [ ] Backend refactoring (split server.py into modules)
+- [ ] Backend refactoring (split server.py)
 
 ## Test Credentials
-- Student: username=234, password=123456
-- Teacher: username=teacher180156, password=teacher123
-- Admin: username=admin, password=admin123
+- Admin: admin / admin123
+- Teacher: teacher180156 / teacher123
+- Student: 234 / 123456
 
 ## Railway Backend
 `https://ahgaffweb-production-c582.up.railway.app`

@@ -152,6 +152,8 @@ export default function GeneralSettingsScreen() {
     sections: string[];
     attendance_late_minutes: number;
     max_absence_percent: number;
+    attendance_duration_minutes: number;
+    max_attendance_delay_minutes: number;
     primary_color: string;
     secondary_color: string;
     phone: string;
@@ -162,6 +164,8 @@ export default function GeneralSettingsScreen() {
     sections: ['أ', 'ب', 'ج'],
     attendance_late_minutes: 15,
     max_absence_percent: 25,
+    attendance_duration_minutes: 15,
+    max_attendance_delay_minutes: 30,
     primary_color: '#1565c0',
     secondary_color: '#ff9800',
     phone: '',
@@ -870,6 +874,8 @@ export default function GeneralSettingsScreen() {
           sections: data.sections || ['أ', 'ب', 'ج'],
           attendance_late_minutes: data.attendance_late_minutes || 15,
           max_absence_percent: data.max_absence_percent || 25,
+          attendance_duration_minutes: data.attendance_duration_minutes || 15,
+          max_attendance_delay_minutes: data.max_attendance_delay_minutes || 30,
           primary_color: data.primary_color || '#1565c0',
           secondary_color: data.secondary_color || '#ff9800',
           phone: data.phone || '',
@@ -1026,6 +1032,46 @@ export default function GeneralSettingsScreen() {
                       styles.optionText,
                       facultySettings.max_absence_percent === percent && styles.optionTextActive
                     ]}>{percent}%</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.label, { marginTop: 20, color: '#1565c0' }]}>مدة التحضير (دقيقة)</Text>
+              <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>المدة المتاحة للأستاذ لتسجيل الحضور بعد فتح التحضير</Text>
+              <View style={styles.optionsRow}>
+                {[10, 15, 20, 25, 30].map(min => (
+                  <TouchableOpacity
+                    key={min}
+                    style={[
+                      styles.optionBtn,
+                      facultySettings.attendance_duration_minutes === min && styles.optionBtnActive
+                    ]}
+                    onPress={() => setFacultySettings({ ...facultySettings, attendance_duration_minutes: min })}
+                  >
+                    <Text style={[
+                      styles.optionText,
+                      facultySettings.attendance_duration_minutes === min && styles.optionTextActive
+                    ]}>{min} د</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.label, { marginTop: 20, color: '#e65100' }]}>الحد الأقصى لتأخير الأستاذ (دقيقة)</Text>
+              <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>بعد هذه المدة لا يمكن فتح التحضير نهائياً</Text>
+              <View style={styles.optionsRow}>
+                {[15, 20, 30, 45, 60].map(min => (
+                  <TouchableOpacity
+                    key={min}
+                    style={[
+                      styles.optionBtn,
+                      facultySettings.max_attendance_delay_minutes === min && styles.optionBtnActive
+                    ]}
+                    onPress={() => setFacultySettings({ ...facultySettings, max_attendance_delay_minutes: min })}
+                  >
+                    <Text style={[
+                      styles.optionText,
+                      facultySettings.max_attendance_delay_minutes === min && styles.optionTextActive
+                    ]}>{min} د</Text>
                   </TouchableOpacity>
                 ))}
               </View>

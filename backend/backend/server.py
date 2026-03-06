@@ -4266,8 +4266,24 @@ async def get_lecture_details(
         },
         "students": students_with_attendance,
         "attendance_recorded": len(attendance_records) > 0,
-        "attendance_status": get_lecture_attendance_status(lecture)
+        "attendance_status": get_lecture_attendance_status(lecture, *await _get_faculty_attendance_settings(course))
     }
+
+async def _get_faculty_attendance_settings(course: dict) -> tuple:
+    """Helper to get attendance settings from faculty via course → department → faculty"""
+    attendance_duration = 15
+    max_delay = 30
+    try:
+        if course.get("department_id"):
+            dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
+            if dept and dept.get("faculty_id"):
+                faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
+                if faculty:
+                    attendance_duration = faculty.get("attendance_duration_minutes", 15)
+                    max_delay = faculty.get("max_attendance_delay_minutes", 30)
+    except:
+        pass
+    return (attendance_duration, max_delay)
 
 @api_router.get("/lectures/{lecture_id}/pdf")
 async def export_lecture_attendance_pdf(
@@ -4511,14 +4527,13 @@ async def export_lecture_attendance_pdf(
     )
 
 
-def get_lecture_attendance_status(lecture: dict) -> dict:
+def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, max_delay: int = 30) -> dict:
     """حساب حالة التحضير للمحاضرة"""
     now = get_yemen_time()
     
     try:
         lecture_start = datetime.strptime(f"{lecture['date']} {lecture['start_time']}", "%Y-%m-%d %H:%M")
         lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M")
-        # توحيد التوقيت
         lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
         lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
     except:
@@ -4528,15 +4543,8 @@ def get_lecture_attendance_status(lecture: dict) -> dict:
             "status": "error"
         }
     
-    # حساب مدة المحاضرة بالدقائق
-    lecture_duration = (lecture_end - lecture_start).total_seconds() / 60
-    
-    # الوقت المسموح به للتحضير = وقت نهاية المحاضرة + مدة المحاضرة
-    allowed_end_time = lecture_end + timedelta(minutes=lecture_duration)
-    
-    # إذا لم يحن وقت المحاضرة بعد (مسموح 15 دقيقة قبل البداية)
-    early_start_allowed = lecture_start - timedelta(minutes=15)
-    if now < early_start_allowed:
+    # لا يمكن التحضير قبل بداية المحاضرة
+    if now < lecture_start:
         minutes_until = int((lecture_start - now).total_seconds() / 60)
         return {
             "can_take_attendance": False,
@@ -4545,30 +4553,67 @@ def get_lecture_attendance_status(lecture: dict) -> dict:
             "starts_at": lecture_start.strftime("%H:%M")
         }
     
-    # إذا انتهى الوقت المسموح
-    if now > allowed_end_time:
-        if lecture.get("status") == LectureStatus.COMPLETED:
+    # الحد الأقصى للتأخير: لا يمكن فتح التحضير بعد max_delay دقيقة من بداية المحاضرة
+    max_open_time = lecture_start + timedelta(minutes=max_delay)
+    
+    # هل بدأ التحضير فعلاً؟
+    attendance_started_at = lecture.get("attendance_started_at")
+    
+    if attendance_started_at:
+        # التحضير بدأ - المؤقت يحسب من وقت بدء التحضير الفعلي
+        if isinstance(attendance_started_at, str):
+            started = datetime.fromisoformat(attendance_started_at)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=YEMEN_TIMEZONE)
+        else:
+            started = attendance_started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=YEMEN_TIMEZONE)
+        
+        attendance_deadline = started + timedelta(minutes=attendance_duration)
+        
+        if now > attendance_deadline:
+            if lecture.get("status") == LectureStatus.COMPLETED:
+                return {
+                    "can_take_attendance": False,
+                    "reason": "تم التحضير وانتهت مدة التعديل",
+                    "status": "completed"
+                }
             return {
                 "can_take_attendance": False,
-                "reason": "تم التحضير مسبقاً وانتهى وقت التعديل",
-                "status": "completed"
+                "reason": f"انتهت مدة التحضير ({attendance_duration} دقيقة من بدء التحضير)",
+                "status": "expired"
             }
+        
+        time_remaining = int((attendance_deadline - now).total_seconds() / 60)
+        is_update = lecture.get("status") == LectureStatus.COMPLETED
+        teacher_delay = int((started - lecture_start).total_seconds() / 60)
         return {
-            "can_take_attendance": False,
-            "reason": f"انتهى وقت التحضير المسموح. كان يمكن التحضير حتى {allowed_end_time.strftime('%H:%M')}",
-            "status": "expired"
+            "can_take_attendance": True,
+            "reason": "يمكن تعديل الحضور" if is_update else "يمكن التحضير الآن",
+            "status": "available",
+            "minutes_remaining": time_remaining,
+            "deadline": attendance_deadline.strftime("%H:%M"),
+            "teacher_delay_minutes": teacher_delay,
+            "attendance_started_at": started.strftime("%H:%M"),
         }
-    
-    # ضمن الوقت المسموح - يمكن التحضير أو التعديل
-    time_remaining = int((allowed_end_time - now).total_seconds() / 60)
-    is_update = lecture.get("status") == LectureStatus.COMPLETED
-    return {
-        "can_take_attendance": True,
-        "reason": "يمكن تعديل الحضور" if is_update else "يمكن التحضير الآن",
-        "status": "available",
-        "minutes_remaining": time_remaining,
-        "deadline": allowed_end_time.strftime("%H:%M")
-    }
+    else:
+        # التحضير لم يبدأ بعد
+        if now > max_open_time:
+            return {
+                "can_take_attendance": False,
+                "reason": f"انتهى وقت فتح التحضير (الحد الأقصى للتأخير {max_delay} دقيقة)",
+                "status": "expired"
+            }
+        
+        time_remaining = int((max_open_time - now).total_seconds() / 60)
+        return {
+            "can_take_attendance": True,
+            "reason": f"يمكن التحضير الآن (متبقي {time_remaining} دقيقة لفتح التحضير)",
+            "status": "available",
+            "minutes_remaining": time_remaining,
+            "deadline": max_open_time.strftime("%H:%M"),
+        }
 
 @api_router.get("/lectures/{lecture_id}/attendance-status")
 async def get_lecture_attendance_status_api(
@@ -4580,7 +4625,17 @@ async def get_lecture_attendance_status_api(
     if not lecture:
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
-    return get_lecture_attendance_status(lecture)
+    # جلب إعدادات الكلية عبر المقرر → القسم → الكلية
+    attendance_duration = 15
+    max_delay = 30
+    try:
+        course = await db.courses.find_one({"_id": ObjectId(lecture["course_id"])})
+        if course:
+            attendance_duration, max_delay = await _get_faculty_attendance_settings(course)
+    except:
+        pass
+    
+    return get_lecture_attendance_status(lecture, attendance_duration, max_delay)
 
 
 @api_router.get("/attendance/lecture/{lecture_id}")
@@ -4640,6 +4695,9 @@ async def record_attendance_session(
     # === التحقق من قواعد التحضير ===
     now = get_yemen_time()
     
+    # جلب إعدادات الكلية
+    attendance_duration, max_delay = await _get_faculty_attendance_settings(course)
+    
     # إذا كان هذا تسجيل أوفلاين، استخدم وقت التسجيل الأصلي للتحقق
     check_time = now
     is_offline_sync = False
@@ -4664,28 +4722,47 @@ async def record_attendance_session(
     lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
     lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
     
-    # حساب مدة المحاضرة
-    lecture_duration = (lecture_end - lecture_start).total_seconds() / 60  # بالدقائق
-    
-    # الوقت المسموح به للتحضير = وقت نهاية المحاضرة + مدة المحاضرة
-    allowed_end_time = lecture_end + timedelta(minutes=lecture_duration)
-    
-    # التحقق: لا يُسمح بالتحضير قبل وقت بداية المحاضرة (مسموح 15 دقيقة مبكراً)
-    early_start_allowed = lecture_start - timedelta(minutes=15)
-    if check_time < early_start_allowed and not is_offline_sync:
+    # التحقق: لا يُسمح بالتحضير قبل وقت بداية المحاضرة
+    if check_time < lecture_start and not is_offline_sync:
         raise HTTPException(
             status_code=400,
             detail=f"لم يحن وقت المحاضرة بعد. تبدأ الساعة {lecture_start.strftime('%H:%M')}"
         )
     
-    # التحقق: لا يُسمح بالتحضير بعد انتهاء الوقت المسموح
-    if check_time > allowed_end_time:
-        raise HTTPException(
-            status_code=400, 
-            detail=f"انتهى وقت التحضير المسموح به. كان يمكن التحضير حتى {allowed_end_time.strftime('%H:%M')}"
+    # هل بدأ التحضير مسبقاً؟
+    attendance_started_at = lecture.get("attendance_started_at")
+    
+    if attendance_started_at:
+        # التحضير بدأ - المؤقت من وقت البدء الفعلي
+        if isinstance(attendance_started_at, str):
+            started = datetime.fromisoformat(attendance_started_at)
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=YEMEN_TIMEZONE)
+        else:
+            started = attendance_started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=YEMEN_TIMEZONE)
+        
+        attendance_deadline = started + timedelta(minutes=attendance_duration)
+        if check_time > attendance_deadline and not is_offline_sync:
+            raise HTTPException(
+                status_code=400,
+                detail=f"انتهت مدة التحضير ({attendance_duration} دقيقة)"
+            )
+    else:
+        # التحضير لم يبدأ بعد - التحقق من الحد الأقصى للتأخير
+        max_open_time = lecture_start + timedelta(minutes=max_delay)
+        if check_time > max_open_time and not is_offline_sync:
+            raise HTTPException(
+                status_code=400,
+                detail=f"انتهى وقت فتح التحضير (الحد الأقصى للتأخير {max_delay} دقيقة)"
+            )
+        # تسجيل وقت بدء التحضير الفعلي
+        await db.lectures.update_one(
+            {"_id": ObjectId(session.lecture_id)},
+            {"$set": {"attendance_started_at": check_time.isoformat()}}
         )
     
-    # السماح بالتعديل طالما نحن في الوقت المسموح (حتى لو تم التحضير مسبقاً)
     # === نهاية التحقق من القواعد ===
     
     # Delete existing attendance for this lecture (فقط إذا لم تكن مكتملة)
@@ -8727,7 +8804,8 @@ async def update_faculty_settings(
     # الحقول المسموح تحديثها
     allowed_fields = [
         "levels_count", "sections", "attendance_late_minutes", "max_absence_percent",
-        "primary_color", "secondary_color", "phone", "whatsapp", "email"
+        "primary_color", "secondary_color", "phone", "whatsapp", "email",
+        "attendance_duration_minutes", "max_attendance_delay_minutes"
     ]
     
     update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
