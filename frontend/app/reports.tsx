@@ -586,6 +586,21 @@ export default function ReportsScreen() {
               <Text style={styles.reportTypeDesc}>ساعات التدريس الفعلية</Text>
             </TouchableOpacity>
             )}
+
+            {/* تقرير إنجاز الدروس */}
+            {canViewReport(userRole, userPermissions, 'report_lesson_completion') && (
+            <TouchableOpacity 
+              style={styles.reportTypeCard}
+              onPress={() => router.push('/report-lesson-completion')}
+              data-testid="report-lesson-completion-btn"
+            >
+              <View style={[styles.reportTypeIcon, { backgroundColor: '#e8f5e9' }]}>
+                <Ionicons name="checkmark-done" size={28} color="#4caf50" />
+              </View>
+              <Text style={styles.reportTypeTitle}>إنجاز الدروس</Text>
+              <Text style={styles.reportTypeDesc}>المخطط مقابل المنجز</Text>
+            </TouchableOpacity>
+            )}
           </View>
         </View>
 

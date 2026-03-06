@@ -3700,6 +3700,132 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
         "is_active": updated.get("is_active", True)
     }
 
+# ==================== Study Plan (الخطة الدراسية) ====================
+
+@api_router.get("/courses/{course_id}/study-plan")
+async def get_study_plan(course_id: str, current_user: dict = Depends(get_current_user)):
+    """جلب الخطة الدراسية لمقرر"""
+    plan = await db.study_plans.find_one({"course_id": course_id}, {"_id": 0})
+    if not plan:
+        return {"course_id": course_id, "weeks": []}
+    return plan
+
+@api_router.put("/courses/{course_id}/study-plan")
+async def update_study_plan(
+    course_id: str,
+    data: dict,
+    current_user: dict = Depends(get_current_user)
+):
+    """إنشاء أو تحديث الخطة الدراسية لمقرر"""
+    if current_user["role"] not in [UserRole.ADMIN, UserRole.TEACHER]:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    # التحقق أن المعلم هو صاحب المقرر
+    if current_user["role"] == UserRole.TEACHER:
+        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        teacher_record_id = user.get("teacher_record_id", current_user["id"]) if user else current_user["id"]
+        if course.get("teacher_id") != teacher_record_id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل خطة هذا المقرر")
+    
+    weeks = data.get("weeks", [])
+    
+    # توليد id لكل موضوع إذا لم يكن موجوداً
+    import uuid
+    for week in weeks:
+        topics = week.get("topics", [])
+        for topic in topics:
+            if not topic.get("id"):
+                topic["id"] = str(uuid.uuid4())[:8]
+    
+    plan_data = {
+        "course_id": course_id,
+        "weeks": weeks,
+        "updated_at": get_yemen_time().isoformat(),
+        "updated_by": current_user["id"]
+    }
+    
+    await db.study_plans.update_one(
+        {"course_id": course_id},
+        {"$set": plan_data},
+        upsert=True
+    )
+    
+    return {"message": "تم حفظ الخطة الدراسية", "weeks": weeks}
+
+@api_router.get("/reports/lesson-completion")
+async def get_lesson_completion_report(
+    department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تقرير إنجاز الدروس - المخطط مقابل المنجز"""
+    if current_user["role"] not in [UserRole.ADMIN]:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # جلب المقررات
+    course_query = {"is_active": True}
+    if department_id:
+        course_query["department_id"] = department_id
+    elif faculty_id:
+        depts = await db.departments.find({"faculty_id": faculty_id}).to_list(100)
+        dept_ids = [str(d["_id"]) for d in depts]
+        course_query["department_id"] = {"$in": dept_ids}
+    
+    courses = await db.courses.find(course_query).to_list(500)
+    
+    report = []
+    for course in courses:
+        cid = str(course["_id"])
+        
+        # جلب الخطة الدراسية
+        plan = await db.study_plans.find_one({"course_id": cid})
+        planned_topics = 0
+        if plan:
+            for week in plan.get("weeks", []):
+                planned_topics += len(week.get("topics", []))
+        
+        # جلب المحاضرات المكتملة مع عنوان الدرس
+        completed_lectures = await db.lectures.find({
+            "course_id": cid,
+            "status": LectureStatus.COMPLETED
+        }).to_list(500)
+        
+        total_lectures = await db.lectures.count_documents({"course_id": cid})
+        completed_count = len(completed_lectures)
+        lessons_with_title = sum(1 for l in completed_lectures if l.get("lesson_title"))
+        
+        # جلب اسم المعلم
+        teacher_name = "غير محدد"
+        if course.get("teacher_id"):
+            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
+            if teacher:
+                teacher_name = teacher["full_name"]
+        
+        # حساب نسبة الإنجاز
+        completion_percent = 0
+        if planned_topics > 0:
+            completion_percent = round((lessons_with_title / planned_topics) * 100, 1)
+        
+        report.append({
+            "course_id": cid,
+            "course_name": course["name"],
+            "course_code": course.get("code", ""),
+            "teacher_name": teacher_name,
+            "planned_topics": planned_topics,
+            "has_plan": plan is not None and planned_topics > 0,
+            "total_lectures": total_lectures,
+            "completed_lectures": completed_count,
+            "lessons_with_title": lessons_with_title,
+            "lessons_without_title": completed_count - lessons_with_title,
+            "completion_percent": completion_percent,
+        })
+    
+    return report
+
 # ==================== Lecture Routes (المحاضرات/الحصص) ====================
 
 @api_router.get("/lectures/today")
@@ -4257,7 +4383,10 @@ async def get_lecture_details(
             "end_time": lecture["end_time"],
             "room": lecture.get("room", ""),
             "status": lecture.get("status", LectureStatus.SCHEDULED),
-            "notes": lecture.get("notes", "")
+            "notes": lecture.get("notes", ""),
+            "lesson_title": lecture.get("lesson_title", ""),
+            "plan_topic_id": lecture.get("plan_topic_id", ""),
+            "attendance_started_at": lecture.get("attendance_started_at", ""),
         },
         "course": {
             "id": str(course["_id"]),
@@ -4792,9 +4921,15 @@ async def record_attendance_session(
                 await check_and_create_absence_notifications(record.student_id, lecture["course_id"])
     
     # Update lecture status to completed
+    lecture_update = {"status": LectureStatus.COMPLETED}
+    if session.lesson_title:
+        lecture_update["lesson_title"] = session.lesson_title
+    if session.plan_topic_id:
+        lecture_update["plan_topic_id"] = session.plan_topic_id
+    
     await db.lectures.update_one(
         {"_id": ObjectId(session.lecture_id)},
-        {"$set": {"status": LectureStatus.COMPLETED}}
+        {"$set": lecture_update}
     )
     
     return {"message": f"تم تسجيل حضور {len(attendance_records)} طالب بنجاح"}

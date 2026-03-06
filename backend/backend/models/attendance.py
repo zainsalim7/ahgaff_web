@@ -15,6 +15,8 @@ class AttendanceSessionCreate(BaseModel):
     notes: Optional[str] = None
     records: List[AttendanceRecord]
     offline_recorded_at: Optional[str] = None  # وقت التسجيل الأوفلاين (ISO format)
+    lesson_title: Optional[str] = None  # عنوان الدرس
+    plan_topic_id: Optional[str] = None  # ربط بموضوع من الخطة الدراسية
 
 class AttendanceResponse(BaseModel):
     id: str
