@@ -5300,12 +5300,28 @@ async def get_student_attendance(
     result = []
     for r in records:
         course = await db.courses.find_one({"_id": ObjectId(r["course_id"])})
+        
+        # جلب start_time و end_time من جدول المحاضرات
+        start_time = None
+        end_time = None
+        lecture_query = {"course_id": r["course_id"]}
+        if isinstance(r["date"], str):
+            lecture_query["date"] = r["date"][:10]
+        else:
+            lecture_query["date"] = r["date"].strftime("%Y-%m-%d")
+        lecture = await db.lectures.find_one(lecture_query)
+        if lecture:
+            start_time = lecture.get("start_time")
+            end_time = lecture.get("end_time")
+        
         result.append({
             "id": str(r["_id"]),
             "course_id": r["course_id"],
             "course_name": course["name"] if course else "غير معروف",
             "status": r["status"],
-            "date": r["date"].isoformat(),
+            "date": r["date"].isoformat() if hasattr(r["date"], 'isoformat') else r["date"],
+            "start_time": start_time,
+            "end_time": end_time,
             "method": r["method"]
         })
     
