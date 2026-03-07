@@ -434,7 +434,7 @@ export default function AddCourseScreen() {
         <Text style={styles.itemDetail}>
           {getDepartmentName(item.department_id)} | م{item.level}{item.section ? ` | ${item.section}` : ''}
         </Text>
-        <Text style={styles.itemDetail}>المعلم: {getTeacherName(item.teacher_id)}</Text>
+        <Text style={styles.itemDetail}>المعلم: {item.teacher_name || getTeacherName(item.teacher_id)}</Text>
       </View>
       {!selectionMode && (
         <View style={styles.actionButtons}>

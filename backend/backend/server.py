@@ -2690,10 +2690,19 @@ async def get_teachers(
     return result
 
 @api_router.post("/teachers", response_model=TeacherResponse)
-async def create_teacher(teacher: TeacherCreate, current_user: dict = Depends(get_current_user)):
+async def create_teacher(request: Request, current_user: dict = Depends(get_current_user)):
     """إضافة معلم جديد"""
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    body = await request.json()
+    
+    # دعم department_ids من الفرونت اند (مصفوفة) وتحويلها إلى department_id
+    if "department_ids" in body and body["department_ids"]:
+        if isinstance(body["department_ids"], list) and len(body["department_ids"]) > 0:
+            body["department_id"] = body["department_ids"][0]
+    
+    teacher = TeacherCreate(**{k: v for k, v in body.items() if k in TeacherCreate.__fields__})
     
     # التحقق من عدم تكرار الرقم الوظيفي
     existing = await db.teachers.find_one({"teacher_id": teacher.teacher_id})
@@ -2788,7 +2797,7 @@ async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_
     }
 
 @api_router.put("/teachers/{teacher_id}")
-async def update_teacher(teacher_id: str, data: TeacherUpdate, current_user: dict = Depends(get_current_user)):
+async def update_teacher(teacher_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     """تحديث بيانات معلم"""
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -2797,7 +2806,21 @@ async def update_teacher(teacher_id: str, data: TeacherUpdate, current_user: dic
     if not teacher:
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
     
+    body = await request.json()
+    
+    # دعم department_ids من الفرونت اند (مصفوفة) وتحويلها إلى department_id
+    if "department_ids" in body and body["department_ids"]:
+        if isinstance(body["department_ids"], list) and len(body["department_ids"]) > 0:
+            body["department_id"] = body["department_ids"][0]
+    
+    data = TeacherUpdate(**{k: v for k, v in body.items() if k in TeacherUpdate.__fields__})
+    
     update_data = {k: v for k, v in data.dict().items() if v is not None}
+    
+    # تحديث faculty_id إذا تغير القسم
+    if "department_id" in update_data:
+        update_data["faculty_id"] = await _resolve_faculty_id(update_data["department_id"])
+    
     if update_data:
         await db.teachers.update_one({"_id": ObjectId(teacher_id)}, {"$set": update_data})
     
