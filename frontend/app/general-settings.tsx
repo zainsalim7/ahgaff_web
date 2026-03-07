@@ -97,6 +97,7 @@ export default function GeneralSettingsScreen() {
   // University states
   const [university, setUniversity] = useState<University | null>(null);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [departments, setDepartments] = useState<Array<{id: string; name: string; faculty_id?: string}>>([]);
   const [editUniversity, setEditUniversity] = useState(false);
   const [showFacultyForm, setShowFacultyForm] = useState(false);
   const [editingFaculty, setEditingFaculty] = useState<Faculty | null>(null);
@@ -199,11 +200,12 @@ export default function GeneralSettingsScreen() {
   // Fetch all data
   const fetchData = useCallback(async () => {
     try {
-      const [uniRes, facRes, semestersRes, settingsRes] = await Promise.all([
+      const [uniRes, facRes, semestersRes, settingsRes, deptsRes] = await Promise.all([
         api.get('/university'),
         api.get('/faculties'),
         semestersAPI.getAll(),
         settingsAPI.get(),
+        api.get('/departments'),
       ]);
       
       // University data
@@ -220,6 +222,7 @@ export default function GeneralSettingsScreen() {
         });
       }
       setFaculties(facRes.data || []);
+      setDepartments(deptsRes.data || []);
       
       // Semesters data
       setSemesters(semestersRes.data);
@@ -701,28 +704,42 @@ export default function GeneralSettingsScreen() {
         ) : (
           faculties.map((faculty) => (
             <View key={faculty.id} style={styles.facultyCard}>
-              <View style={styles.facultyIcon}>
-                <Ionicons name="business" size={24} color="#4caf50" />
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <View style={styles.facultyIcon}>
+                  <Ionicons name="business" size={24} color="#4caf50" />
+                </View>
+                <View style={styles.facultyInfo}>
+                  <Text style={styles.facultyName}>{faculty.name}</Text>
+                  <Text style={styles.facultyCode}>{faculty.code}</Text>
+                  <Text style={styles.facultyDepts}>{faculty.departments_count} أقسام</Text>
+                </View>
+                <View style={styles.actionButtons}>
+                  <TouchableOpacity
+                    style={[styles.iconBtn, styles.editIconBtnSmall]}
+                    onPress={() => handleEditFaculty(faculty)}
+                  >
+                    <Ionicons name="create" size={18} color="#1565c0" />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.iconBtn, styles.deleteIconBtn]}
+                    onPress={() => handleDeleteFaculty(faculty)}
+                  >
+                    <Ionicons name="trash" size={18} color="#f44336" />
+                  </TouchableOpacity>
+                </View>
               </View>
-              <View style={styles.facultyInfo}>
-                <Text style={styles.facultyName}>{faculty.name}</Text>
-                <Text style={styles.facultyCode}>{faculty.code}</Text>
-                <Text style={styles.facultyDepts}>{faculty.departments_count} أقسام</Text>
-              </View>
-              <View style={styles.actionButtons}>
-                <TouchableOpacity
-                  style={[styles.iconBtn, styles.editIconBtnSmall]}
-                  onPress={() => handleEditFaculty(faculty)}
-                >
-                  <Ionicons name="create" size={18} color="#1565c0" />
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.iconBtn, styles.deleteIconBtn]}
-                  onPress={() => handleDeleteFaculty(faculty)}
-                >
-                  <Ionicons name="trash" size={18} color="#f44336" />
-                </TouchableOpacity>
-              </View>
+              {/* الأقسام التابعة للكلية */}
+              {departments.filter(d => d.faculty_id === faculty.id).length > 0 && (
+                <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: '#eee' }}>
+                  <Text style={{ fontSize: 12, color: '#888', marginBottom: 4 }}>الأقسام:</Text>
+                  {departments.filter(d => d.faculty_id === faculty.id).map(dept => (
+                    <View key={dept.id} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 3, paddingHorizontal: 8 }}>
+                      <Ionicons name="ellipse" size={6} color="#4caf50" />
+                      <Text style={{ fontSize: 13, color: '#555', marginLeft: 6 }}>{dept.name}</Text>
+                    </View>
+                  ))}
+                </View>
+              )}
             </View>
           ))
         )}
@@ -1717,8 +1734,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
   },
   facultyIcon: {
     width: 50,

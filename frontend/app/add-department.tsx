@@ -255,6 +255,12 @@ export default function AddDepartmentScreen() {
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
           <Text style={styles.itemDetail}>{item.code}</Text>
+          {item.faculty_name && (
+            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
+              <Ionicons name="business" size={12} color="#9c27b0" />
+              <Text style={{ fontSize: 12, color: '#9c27b0', marginLeft: 4, fontWeight: '600' }}>{item.faculty_name}</Text>
+            </View>
+          )}
           <View style={styles.statsRow}>
             <View style={styles.statBadge}>
               <Ionicons name="people" size={14} color="#1565c0" />
