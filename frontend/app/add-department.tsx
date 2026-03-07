@@ -74,6 +74,11 @@ export default function AddDepartmentScreen() {
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [detailsTab, setDetailsTab] = useState<'students' | 'courses' | 'teachers'>('students');
 
+  // Delete confirmation modal
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
   // Filter by faculty
   const [filterFacultyId, setFilterFacultyId] = useState<string>('');
 
@@ -216,67 +221,70 @@ export default function AddDepartmentScreen() {
   };
 
   const handleDelete = (deptId: string, deptName: string) => {
-    Alert.alert(
-      'حذف القسم',
-      `هل أنت متأكد من حذف قسم ${deptName}؟`,
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'حذف',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await departmentsAPI.delete(deptId);
-              fetchData();
-            } catch (error) {
-              Alert.alert('خطأ', 'فشل في حذف القسم');
-            }
-          },
-        },
-      ]
-    );
+    setDeleteTarget({ id: deptId, name: deptName });
+    setDeleteError(null);
+    setDeleting(false);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await departmentsAPI.delete(deleteTarget.id);
+      setDeleteTarget(null);
+      fetchData();
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || 'فشل في حذف القسم';
+      setDeleteError(msg);
+    } finally {
+      setDeleting(false);
+    }
   };
 
   const renderDepartment = ({ item }: { item: DeptStats }) => (
-    <TouchableOpacity 
-      style={styles.itemCard}
-      onPress={() => handleShowDetails(item.id)}
-      activeOpacity={0.7}
-    >
-      <View style={styles.itemIcon}>
-        <Ionicons name="business" size={24} color="#e91e63" />
-      </View>
-      <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemDetail}>{item.code}</Text>
-        <View style={styles.statsRow}>
-          <View style={styles.statBadge}>
-            <Ionicons name="people" size={14} color="#1565c0" />
-            <Text style={styles.statText}>{item.students_count} طالب</Text>
-          </View>
-          <View style={styles.statBadge}>
-            <Ionicons name="book" size={14} color="#4caf50" />
-            <Text style={styles.statText}>{item.courses_count} مقرر</Text>
+    <View style={styles.itemCard}>
+      <TouchableOpacity 
+        style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}
+        onPress={() => handleShowDetails(item.id)}
+        activeOpacity={0.7}
+      >
+        <View style={styles.itemIcon}>
+          <Ionicons name="business" size={24} color="#e91e63" />
+        </View>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={styles.itemDetail}>{item.code}</Text>
+          <View style={styles.statsRow}>
+            <View style={styles.statBadge}>
+              <Ionicons name="people" size={14} color="#1565c0" />
+              <Text style={styles.statText}>{item.students_count} طالب</Text>
+            </View>
+            <View style={styles.statBadge}>
+              <Ionicons name="book" size={14} color="#4caf50" />
+              <Text style={styles.statText}>{item.courses_count} مقرر</Text>
+            </View>
           </View>
         </View>
-      </View>
+      </TouchableOpacity>
       {canManageDepts && (
         <View style={styles.actionButtons}>
           <TouchableOpacity
             style={styles.editBtn}
-            onPress={(e) => { e.stopPropagation(); handleEdit(item); }}
+            onPress={() => handleEdit(item)}
           >
             <Ionicons name="create" size={20} color="#ff9800" />
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.deleteBtn}
-            onPress={(e) => { e.stopPropagation(); handleDelete(item.id, item.name); }}
+            style={[styles.deleteBtn, { backgroundColor: '#ffebee', borderRadius: 8 }]}
+            onPress={() => handleDelete(item.id, item.name)}
+            data-testid={`delete-dept-${item.id}`}
           >
             <Ionicons name="trash" size={20} color="#f44336" />
           </TouchableOpacity>
         </View>
       )}
-    </TouchableOpacity>
+    </View>
   );
 
   // Details Modal Content
@@ -536,6 +544,50 @@ export default function AddDepartmentScreen() {
       </KeyboardAvoidingView>
       
       {renderDetailsModal()}
+
+      {/* نافذة تأكيد الحذف */}
+      <Modal visible={deleteTarget !== null} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 400 }}>
+            <Ionicons name="warning" size={40} color="#f44336" style={{ alignSelf: 'center', marginBottom: 12 }} />
+            <Text style={{ fontSize: 18, fontWeight: '700', color: '#333', textAlign: 'center', marginBottom: 8 }}>
+              حذف القسم
+            </Text>
+            <Text style={{ fontSize: 15, color: '#666', textAlign: 'center', marginBottom: 16 }}>
+              هل أنت متأكد من حذف قسم "{deleteTarget?.name}"؟
+            </Text>
+            <Text style={{ fontSize: 13, color: '#999', textAlign: 'center', marginBottom: 16 }}>
+              لا يمكن التراجع عن هذا الإجراء
+            </Text>
+            
+            {deleteError && (
+              <View style={{ backgroundColor: '#ffebee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
+                <Text style={{ fontSize: 13, color: '#c62828', textAlign: 'center' }}>{deleteError}</Text>
+              </View>
+            )}
+            
+            <View style={{ flexDirection: 'row', gap: 10 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 14, borderRadius: 10, alignItems: 'center' }}
+                onPress={() => { setDeleteTarget(null); setDeleteError(null); }}
+              >
+                <Text style={{ color: '#666', fontWeight: '600' }}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#f44336', padding: 14, borderRadius: 10, alignItems: 'center', opacity: deleting ? 0.6 : 1 }}
+                onPress={confirmDelete}
+                disabled={deleting}
+              >
+                {deleting ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>حذف</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

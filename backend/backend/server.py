@@ -1294,18 +1294,18 @@ async def delete_department(dept_id: str, current_user: dict = Depends(get_curre
     if not dept:
         raise HTTPException(status_code=404, detail="القسم غير موجود")
     
-    # التحقق من عدم وجود بيانات مرتبطة
-    students_count = await db.students.count_documents({"department_id": dept_id, "is_active": True})
+    # التحقق من عدم وجود بيانات مرتبطة (الفعالة وغير الفعالة)
+    students_count = await db.students.count_documents({"department_id": dept_id})
     if students_count > 0:
-        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {students_count} طالب مرتبط به")
+        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {students_count} طالب مرتبط به. احذف الطلاب أولاً")
     
-    teachers_count = await db.teachers.count_documents({"department_id": dept_id, "is_active": True})
+    teachers_count = await db.teachers.count_documents({"department_id": dept_id})
     if teachers_count > 0:
-        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {teachers_count} معلم مرتبط به")
+        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {teachers_count} معلم مرتبط به. احذف المعلمين أولاً")
     
-    courses_count = await db.courses.count_documents({"department_id": dept_id, "is_active": True})
+    courses_count = await db.courses.count_documents({"department_id": dept_id})
     if courses_count > 0:
-        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {courses_count} مقرر مرتبط به")
+        raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم - يوجد {courses_count} مقرر مرتبط به. احذف المقررات أولاً")
     
     result = await db.departments.delete_one({"_id": ObjectId(dept_id)})
     if result.deleted_count == 0:
@@ -3416,6 +3416,11 @@ async def restore_course(request: Request, current_user: dict = Depends(get_curr
 async def delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # التحقق من وجود طلاب مسجلين
+    enrollments_count = await db.enrollments.count_documents({"course_id": course_id})
+    if enrollments_count > 0:
+        raise HTTPException(status_code=400, detail=f"لا يمكن حذف المقرر - يوجد {enrollments_count} طالب مسجل. استخدم الحذف الآمن")
     
     result = await db.courses.delete_one({"_id": ObjectId(course_id)})
     if result.deleted_count == 0:

@@ -219,34 +219,55 @@ export default function AddCourseScreen() {
   const handleBulkDelete = () => {
     if (selectedIds.size === 0) return;
     
-    Alert.alert(
-      'حذف متعدد',
-      `هل أنت متأكد من حذف ${selectedIds.size} مقرر؟`,
-      [
-        { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'حذف',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const deletePromises = Array.from(selectedIds).map(id => 
-                coursesAPI.delete(id)
-              );
-              await Promise.all(deletePromises);
-              Alert.alert('نجاح', `تم حذف ${selectedIds.size} مقرر`);
-              setSelectedIds(new Set());
-              setSelectionMode(false);
-              fetchData();
-            } catch (error) {
-              Alert.alert('خطأ', 'فشل في حذف بعض المقررات');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+    if (Platform.OS === 'web') {
+      const confirmed = window.confirm(`هل أنت متأكد من حذف ${selectedIds.size} مقرر؟ المقررات التي بها طلاب مسجلين لن يتم حذفها.`);
+      if (confirmed) executeBulkDelete();
+    } else {
+      Alert.alert(
+        'حذف متعدد',
+        `هل أنت متأكد من حذف ${selectedIds.size} مقرر؟`,
+        [
+          { text: 'إلغاء', style: 'cancel' },
+          { text: 'حذف', style: 'destructive', onPress: executeBulkDelete },
+        ]
+      );
+    }
+  };
+
+  const executeBulkDelete = async () => {
+    setDeleting(true);
+    const errors: string[] = [];
+    let successCount = 0;
+    
+    for (const id of Array.from(selectedIds)) {
+      try {
+        await coursesAPI.delete(id);
+        successCount++;
+      } catch (error: any) {
+        const detail = error?.response?.data?.detail || 'فشل في حذف المقرر';
+        errors.push(detail);
+      }
+    }
+    
+    if (errors.length > 0) {
+      const msg = `تم حذف ${successCount} مقرر. فشل ${errors.length}: ${errors[0]}`;
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('نتيجة الحذف', msg);
+      }
+    } else {
+      if (Platform.OS === 'web') {
+        window.alert(`تم حذف ${successCount} مقرر بنجاح`);
+      } else {
+        Alert.alert('نجاح', `تم حذف ${successCount} مقرر`);
+      }
+    }
+    
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+    fetchData();
+    setDeleting(false);
   };
 
   const handleEdit = (course: Course) => {
