@@ -4,17 +4,24 @@
 
 ## What's Been Implemented
 
-### March 7, 2026 (Session 5) - Delete Fixes & Push Notifications
-- Fixed department deletion: replaced Alert.alert with Modal dialog for web compatibility
-- Fixed card event propagation: separated clickable areas (card info vs edit/delete buttons)
-- Backend: department DELETE now checks ALL records (not just is_active=True)
-- Backend: course DELETE now checks for enrolled students before allowing deletion
-- Course bulk delete: improved error handling with per-item error messages
-- Push notification enhancements verified (default_sound, default_vibrate_timings, visibility)
-- Fixed QuickNav.tsx routes and event propagation (component is dead code - SideMenu is used)
+### March 7, 2026 (Session 5) - Critical Fixes
+**Delete Fixes:**
+- Department delete: replaced Alert.alert with Modal dialog (web compatible)
+- Department card: separated clickable areas to fix event propagation on web
+- Backend: department DELETE checks ALL records (removed is_active filter)
+- Backend: course DELETE checks for enrolled students before allowing deletion
+- Course bulk delete: improved error handling with per-item messages
+
+**Teacher-Department Link Fix:**
+- Backend create/update teacher now accepts `department_ids` array from frontend
+- Extracts first element and stores as `department_id` + auto-resolves `faculty_id`
+- Course page now uses backend `teacher_name` instead of local-only lookup
+
+**Push Notifications:**
+- Verified Android enhancements: default_sound, default_vibrate_timings, visibility
 
 ### March 6, 2026 (Session 4) - faculty_id Auto-Resolution
-- Auto-populate `faculty_id` on students and teachers from their department
+- Auto-populate `faculty_id` on students/teachers from department
 - Migration endpoint `POST /api/admin/fix-faculty-ids`
 
 ### March 6, 2026 (Session 3) - Data Integrity Fixes
@@ -26,11 +33,12 @@
 ### March 6, 2026 (Session 1) - Attendance & Import
 - Attendance timing, Teacher Excel import, Bulk student actions
 
-## Key Admin Endpoints
-- `POST /api/admin/fix-faculty-ids` - Fix students/teachers without faculty_id
-- `DELETE /api/departments/{dept_id}` - Protected: checks for students/teachers/courses
-- `DELETE /api/courses/{course_id}` - Protected: checks for enrollments
-- `POST /api/courses/{course_id}/safe-delete` - Safe delete with backup
+## Key API Endpoints
+- `POST /api/teachers` - Accepts department_ids array, stores as department_id
+- `PUT /api/teachers/{id}` - Same department_ids support
+- `DELETE /api/departments/{id}` - Protected: checks ALL students/teachers/courses
+- `DELETE /api/courses/{id}` - Protected: checks enrollments
+- `POST /api/admin/fix-faculty-ids` - Data migration for existing records
 
 ## Navigation
 - App uses SideMenu (hamburger button), NOT QuickNav component
