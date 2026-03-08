@@ -41,14 +41,24 @@
 - Session 2: Study Plans & Reports
 - Session 1: Attendance timing, Teacher Excel import
 
-## P1 - Next
-- [ ] Backend refactoring: Split server.py into APIRouter modules
-- [ ] Deploy and test all features on production
+### March 8, 2026 (Session 6)
+- **Teacher Delays Report**: Complete frontend page at `/report-teacher-delays` with summary cards, department filter, expandable teacher details, and Excel export
+- **Reports page integration**: Added "تأخر المعلمين" card to reports grid
+- **Side menu integration**: Added teacher delays link in side menu under reports section
+- **New permission**: `REPORT_TEACHER_DELAYS` added to permissions system
+- **Bug fix**: Fixed TypeError when user permissions is None (server.py line 390-393)
 
-## P2 - Future
+## P0 - Next
+- [ ] Deploy and test all features on production
+- [ ] Run faculty_id data migration from admin panel
+
+## P1 - Future
+- [ ] Backend refactoring: Split server.py into APIRouter modules
+- [ ] Improve Reports UI/UX
+
+## P2 - Backlog
 - [ ] Teacher app update (SEPARATE PROJECT)
-- [ ] Teacher delay report
-- [ ] Activity logs UI
+- [ ] Activity logs UI improvements
 
 ## Test Credentials
 - Admin: admin / admin123 | Teacher: teacher180156 / teacher123 | Student: 234 / 123456
