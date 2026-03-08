@@ -51,6 +51,8 @@
 - **Bug fix**: Frontend course report now shows error message with retry button instead of blank page on API failure
 - **Bug fix**: Fixed URL param reading in report-course.tsx (`courseId` param now supported alongside `id`)
 - **Bug fix**: Hardened ALL report endpoints (attendance-overview, absent-students, student-report, daily, warnings) with safe .get() access and try-except around ObjectId conversions to prevent 500 errors from corrupted data
+- **Bug fix**: Fixed `formatDate is not defined` crash in report-daily.tsx (function was defined as `formatDateStr` but called as `formatDate`)
+- **Validation**: Added time validation for lecture creation/update - end_time must be after start_time (prevents creating lectures like 11:00-10:00)
 
 ## P0 - Next
 - [ ] Deploy and test all features on production

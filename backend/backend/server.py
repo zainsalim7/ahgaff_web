@@ -4380,6 +4380,10 @@ async def create_lecture(
     if current_user["role"] not in [UserRole.ADMIN, UserRole.TEACHER]:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
+    # التحقق من أن وقت النهاية بعد وقت البداية
+    if data.start_time and data.end_time and data.end_time <= data.start_time:
+        raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
+    
     course = await db.courses.find_one({"_id": ObjectId(data.course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
@@ -4436,6 +4440,10 @@ async def generate_semester_lectures(
     """توليد محاضرات الفصل الدراسي تلقائياً"""
     if current_user["role"] != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # التحقق من أن وقت النهاية بعد وقت البداية
+    if data.start_time and data.end_time and data.end_time <= data.start_time:
+        raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
     
     course = await db.courses.find_one({"_id": ObjectId(data.course_id)})
     if not course:
@@ -4532,6 +4540,11 @@ async def generate_semester_lectures_advanced(
         if target_weekday is None:
             continue
         
+        # التحقق من أوقات الفترات
+        for slot in day_config.slots:
+            if slot.start_time and slot.end_time and slot.end_time <= slot.start_time:
+                raise HTTPException(status_code=400, detail=f"وقت النهاية يجب أن يكون بعد وقت البداية ({slot.start_time} - {slot.end_time})")
+        
         # البحث عن أول يوم مطابق
         current = start
         while current.weekday() != target_weekday:
@@ -4581,6 +4594,12 @@ async def update_lecture(
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
+    
+    # التحقق من أن وقت النهاية بعد وقت البداية
+    new_start = update_data.get("start_time", lecture.get("start_time", ""))
+    new_end = update_data.get("end_time", lecture.get("end_time", ""))
+    if new_start and new_end and new_end <= new_start:
+        raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
     
     if update_data:
         await db.lectures.update_one(
