@@ -5657,20 +5657,23 @@ async def get_attendance_overview_report(
         records = await db.attendance.find(attendance_query).to_list(10000)
         
         total = len(records)
-        present = sum(1 for r in records if r["status"] == AttendanceStatus.PRESENT)
-        absent = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
-        late = sum(1 for r in records if r["status"] == AttendanceStatus.LATE)
+        present = sum(1 for r in records if r.get("status") == AttendanceStatus.PRESENT)
+        absent = sum(1 for r in records if r.get("status") == AttendanceStatus.ABSENT)
+        late = sum(1 for r in records if r.get("status") == AttendanceStatus.LATE)
         
         # جلب اسم المعلم
         teacher_name = None
         if course.get("teacher_id"):
-            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
-            if teacher:
-                teacher_name = teacher.get("full_name")
+            try:
+                teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
+                if teacher:
+                    teacher_name = teacher.get("full_name")
+            except Exception:
+                pass
         
         result.append({
             "course_id": course_id,
-            "course_name": course["name"],
+            "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
             "teacher_name": teacher_name,
             "total_records": total,
@@ -5729,7 +5732,9 @@ async def get_absent_students_report(
         enrollments = await db.enrollments.find({"course_id": cid}).to_list(1000)
         
         for enrollment in enrollments:
-            student_id = enrollment["student_id"]
+            student_id = enrollment.get("student_id")
+            if not student_id:
+                continue
             
             # حساب الغياب
             attendance_records = await db.attendance.find({
@@ -5738,16 +5743,19 @@ async def get_absent_students_report(
                 "lecture_id": {"$in": list(active_lecture_ids)}
             }).to_list(1000)
             
-            absent_count = sum(1 for r in attendance_records if r["status"] == AttendanceStatus.ABSENT)
+            absent_count = sum(1 for r in attendance_records if r.get("status") == AttendanceStatus.ABSENT)
             absence_rate = (absent_count / total_lectures) * 100
             
             if absence_rate >= min_absence_rate:
-                student = await db.students.find_one({"_id": ObjectId(student_id)})
+                try:
+                    student = await db.students.find_one({"_id": ObjectId(student_id)})
+                except Exception:
+                    continue
                 if student:
                     result.append({
-                        "student_id": student.get("student_id"),
-                        "student_name": student.get("full_name"),
-                        "course_name": course["name"],
+                        "student_id": student.get("student_id", ""),
+                        "student_name": student.get("full_name", ""),
+                        "course_name": course.get("name", ""),
                         "course_code": course.get("code", ""),
                         "total_lectures": total_lectures,
                         "absent_count": absent_count,
@@ -5791,7 +5799,10 @@ async def get_student_attendance_report(
     total_lectures = 0
     
     for enrollment in enrollments:
-        course = await db.courses.find_one({"_id": ObjectId(enrollment["course_id"])})
+        try:
+            course = await db.courses.find_one({"_id": ObjectId(enrollment.get("course_id", ""))})
+        except Exception:
+            continue
         if not course:
             continue
         
@@ -5805,9 +5816,9 @@ async def get_student_attendance_report(
             "lecture_id": {"$in": list(active_lecture_ids)}
         }).to_list(1000)
         
-        present = sum(1 for r in records if r["status"] == AttendanceStatus.PRESENT)
-        absent = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
-        late = sum(1 for r in records if r["status"] == AttendanceStatus.LATE)
+        present = sum(1 for r in records if r.get("status") == AttendanceStatus.PRESENT)
+        absent = sum(1 for r in records if r.get("status") == AttendanceStatus.ABSENT)
+        late = sum(1 for r in records if r.get("status") == AttendanceStatus.LATE)
         
         total_present += present
         total_absent += absent
@@ -5815,7 +5826,7 @@ async def get_student_attendance_report(
         total_lectures += len(active_lecture_ids)
         
         courses_data.append({
-            "course_name": course["name"],
+            "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
             "total_lectures": len(active_lecture_ids),
             "present": present,
@@ -5892,9 +5903,9 @@ async def get_daily_report(
             "lecture_id": str(lecture["_id"])
         }).to_list(1000)
         
-        present = sum(1 for r in records if r["status"] == AttendanceStatus.PRESENT)
-        absent = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
-        late = sum(1 for r in records if r["status"] == AttendanceStatus.LATE)
+        present = sum(1 for r in records if r.get("status") == AttendanceStatus.PRESENT)
+        absent = sum(1 for r in records if r.get("status") == AttendanceStatus.ABSENT)
+        late = sum(1 for r in records if r.get("status") == AttendanceStatus.LATE)
         
         total_present += present
         total_absent += absent
@@ -5902,7 +5913,7 @@ async def get_daily_report(
         
         lectures_data.append({
             "lecture_id": str(lecture["_id"]),
-            "course_name": course["name"],
+            "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
             "start_time": lecture.get("start_time", ""),
             "end_time": lecture.get("end_time", ""),
@@ -5960,7 +5971,9 @@ async def get_warnings_report(
         enrollments = await db.enrollments.find({"course_id": cid}).to_list(1000)
         
         for enrollment in enrollments:
-            student_id = enrollment["student_id"]
+            student_id = enrollment.get("student_id")
+            if not student_id:
+                continue
             
             # حساب الغياب
             records = await db.attendance.find({
@@ -5969,16 +5982,19 @@ async def get_warnings_report(
                 "lecture_id": {"$in": list(active_lecture_ids)}
             }).to_list(1000)
             
-            absent_count = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
+            absent_count = sum(1 for r in records if r.get("status") == AttendanceStatus.ABSENT)
             absence_rate = (absent_count / total_lectures) * 100
             
             if absence_rate >= warning_threshold:
-                student = await db.students.find_one({"_id": ObjectId(student_id)})
+                try:
+                    student = await db.students.find_one({"_id": ObjectId(student_id)})
+                except Exception:
+                    continue
                 if student:
                     student_data = {
-                        "student_id": student.get("student_id"),
-                        "student_name": student.get("full_name"),
-                        "course_name": course["name"],
+                        "student_id": student.get("student_id", ""),
+                        "student_name": student.get("full_name", ""),
+                        "course_name": course.get("name", ""),
                         "course_code": course.get("code", ""),
                         "total_lectures": total_lectures,
                         "absent_count": absent_count,
