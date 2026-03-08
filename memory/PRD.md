@@ -50,6 +50,7 @@
 - **Bug fix**: Fixed course report 500 error - added robust error handling for invalid enrollments/lectures data in `/reports/course/{id}/detailed`
 - **Bug fix**: Frontend course report now shows error message with retry button instead of blank page on API failure
 - **Bug fix**: Fixed URL param reading in report-course.tsx (`courseId` param now supported alongside `id`)
+- **Bug fix**: Hardened ALL report endpoints (attendance-overview, absent-students, student-report, daily, warnings) with safe .get() access and try-except around ObjectId conversions to prevent 500 errors from corrupted data
 
 ## P0 - Next
 - [ ] Deploy and test all features on production
