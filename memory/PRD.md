@@ -4,51 +4,51 @@
 
 ## Role-Based Access Control (RBAC)
 
-### Roles and Permissions:
-- **Admin/Dean/Dept Head**: Full management (students, teachers, courses, reports, settings). NO direct attendance-taking.
-- **Teacher** (separate app): Take attendance, manage lectures, view own courses/students.
-- **Student** (separate app): View own attendance, schedule.
+### Teacher-Only Permissions (NOT auto-inherited by admin):
+| Permission | Description |
+|------------|-------------|
+| `record_attendance` | تسجيل الحضور المباشر |
+| `take_attendance` | بدء جلسة التحضير |
+| `manage_lectures` | إدارة المحاضرات |
+| `edit_attendance` | تعديل حالة حضور طالب بعد التحضير |
 
-### Teacher-Only Permissions (admin does NOT auto-inherit):
-- `record_attendance` - Take attendance
-- `take_attendance` - Start attendance session  
-- `manage_lectures` - Create/edit lectures
+### How to Grant `edit_attendance`:
+1. Admin → إدارة المستخدمين → اختيار المستخدم → إضافة صلاحية `edit_attendance`
+2. OR: assign the "عميد كلية" role which includes `edit_attendance`
 
-### Admin Auto-Inherits Everything Else:
-- `manage_users`, `manage_departments`, `manage_courses`, `manage_students`
-- `view_attendance`, `view_reports`, `export_reports`, etc.
+### API: Edit Attendance
+- `PUT /api/attendance/{record_id}/status`
+- Body: `{"status": "present|absent|late|excused", "reason": "optional"}`
+- Requires: `edit_attendance` permission
+- Tracks: original_status, edited_by, edited_at, edit_reason
 
 ## What's Been Implemented
 
-### March 8, 2026 (Session 5 continued) - Role Separation
-- **hasPermission**: Admin no longer auto-gets teacher-only permissions (record_attendance, take_attendance, manage_lectures)
-- **Courses tab**: "محاضرات اليوم" hidden from admin (teacher-only)
-- **SideMenu**: "محاضراتي" hidden from admin (teacherOnly flag)
-- **Course card**: Attendance-taking button hidden from admin
-
-### March 7-8, 2026 - Bug Fixes
-- Department delete: Modal dialog, better error messages
-- Teacher-Department link: Backend accepts department_ids array
-- Search: Prioritized results, max height dropdown, min 2 chars
-- Faculty display: faculty_name on department cards, departments under faculties
-- Attendance API: start_time/end_time from lectures
-- Push notification Android enhancements verified
+### March 8, 2026 (Session 5)
+- **Role separation**: Admin no longer auto-inherits teacher-only permissions
+- **Attendance edit API**: PUT endpoint with permission check + activity logging
+- **Edit UI**: Modal in course-students page with status options (present/absent/late/excused) + reason
+- **Permission enforcement**: Backend has_permission() + Frontend hasPermission() both check TEACHER_ONLY_PERMISSIONS
+- **Default roles updated**: Admin role excludes teacher-only perms; Dean keeps edit_attendance
+- **Search improvements**: Prioritized results, max height dropdown
+- **Faculty display**: department cards show faculty_name, faculties show departments
+- **Delete fixes**: Modal dialogs, enrollment protection, better error messages
+- **Teacher-department link**: Backend accepts department_ids array
 
 ### Previous Sessions
-- Session 4: faculty_id auto-resolution, migration endpoint
-- Session 3: Data integrity (enrollment validation, delete protection)
-- Session 2: Study Plans & Reports with Excel export
-- Session 1: Attendance timing, Teacher Excel import, Bulk student actions
+- Session 4: faculty_id auto-resolution
+- Session 3: Data integrity fixes
+- Session 2: Study Plans & Reports
+- Session 1: Attendance timing, Teacher Excel import
 
 ## P1 - Next
 - [ ] Backend refactoring: Split server.py into APIRouter modules
-- [ ] Guide user to deploy and test
-- [ ] Run faculty_id data migration
+- [ ] Deploy and test all features on production
 
 ## P2 - Future
 - [ ] Teacher app update (SEPARATE PROJECT)
 - [ ] Teacher delay report
-- [ ] Activity logs UI improvements
+- [ ] Activity logs UI
 
 ## Test Credentials
 - Admin: admin / admin123 | Teacher: teacher180156 / teacher123 | Student: 234 / 123456
