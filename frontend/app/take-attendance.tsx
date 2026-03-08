@@ -67,13 +67,12 @@ export default function TakeAttendanceScreen() {
   // الطالب لا يمكنه الوصول لهذه الصفحة
   const isStudent = user?.role === 'student' || authUser?.role === 'student';
   
-  // المدير والمعلم يمكنهم تسجيل الحضور بشكل افتراضي
-  // ندعم كلا الصلاحيتين للتوافق مع الأدوار المختلفة
+  // المعلم فقط يمكنه تسجيل الحضور - ليس المدير
   const canRecordAttendance = !isStudent && (hasPermission(PERMISSIONS.RECORD_ATTENDANCE) || 
                               hasPermission(PERMISSIONS.TAKE_ATTENDANCE) || 
-                              user?.role === 'admin' || 
                               user?.role === 'teacher');
-  const canEditAttendance = hasPermission(PERMISSIONS.EDIT_ATTENDANCE) || user?.role === 'admin';
+  // تعديل الحضور يتطلب صلاحية edit_attendance صراحة
+  const canEditAttendance = hasPermission(PERMISSIONS.EDIT_ATTENDANCE);
   
   // إعادة توجيه الطالب
   useEffect(() => {

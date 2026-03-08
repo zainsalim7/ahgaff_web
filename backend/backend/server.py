@@ -388,10 +388,12 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
             user_permissions = list(DEFAULT_PERMISSIONS.get(user_role, []))
     
     custom_permissions = user.get("custom_permissions", [])
-    if custom_permissions:
-        for perm in custom_permissions:
-            if perm not in user_permissions:
-                user_permissions.append(perm)
+    # دمج الصلاحيات المخصصة المباشرة أيضاً (من إدارة المستخدمين)
+    direct_permissions = user.get("permissions", [])
+    all_extra = list(set(custom_permissions) | set(direct_permissions))
+    for perm in all_extra:
+        if perm not in user_permissions:
+            user_permissions.append(perm)
     
     return {
         "id": str(user["_id"]),
@@ -408,9 +410,14 @@ def get_user_permissions(user: dict) -> List[str]:
     """الحصول على صلاحيات المستخدم"""
     return user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
 
+TEACHER_ONLY_PERMISSIONS = ["record_attendance", "take_attendance", "manage_lectures", "edit_attendance"]
+
 def has_permission(user: dict, permission: str) -> bool:
     """التحقق من أن المستخدم لديه صلاحية معينة"""
     if user["role"] == UserRole.ADMIN:
+        # المدير لا يحصل تلقائياً على صلاحيات التحضير
+        if permission in TEACHER_ONLY_PERMISSIONS:
+            return permission in user.get("permissions", [])
         return True
     permissions = get_user_permissions(user)
     return permission in permissions
@@ -5285,6 +5292,63 @@ async def get_course_attendance(
     
     return result
 
+
+@api_router.put("/attendance/{record_id}/status")
+async def update_attendance_status(
+    record_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """تعديل حالة حضور طالب - يتطلب صلاحية edit_attendance"""
+    user_permissions = current_user.get("permissions", [])
+    has_edit_perm = "edit_attendance" in user_permissions
+    
+    if not has_edit_perm:
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية تعديل الحضور")
+    
+    body = await request.json()
+    new_status = body.get("status")
+    reason = body.get("reason", "")
+    
+    if new_status not in ["present", "absent", "late", "excused"]:
+        raise HTTPException(status_code=400, detail="حالة غير صالحة")
+    
+    record = await db.attendance.find_one({"_id": ObjectId(record_id)})
+    if not record:
+        raise HTTPException(status_code=404, detail="سجل الحضور غير موجود")
+    
+    old_status = record.get("status")
+    
+    await db.attendance.update_one(
+        {"_id": ObjectId(record_id)},
+        {"$set": {
+            "status": new_status,
+            "edited_by": current_user.get("sub", current_user.get("user_id")),
+            "edited_at": get_yemen_time(),
+            "edit_reason": reason,
+            "original_status": old_status if not record.get("original_status") else record.get("original_status"),
+        }}
+    )
+    
+    # تسجيل النشاط
+    student = None
+    try:
+        student = await db.students.find_one({"_id": ObjectId(record["student_id"])})
+    except Exception:
+        student = await db.students.find_one({"student_id": record["student_id"]})
+    student_name = student["full_name"] if student else record.get("student_id", "غير معروف")
+    await log_activity(
+        current_user,
+        "update_attendance",
+        entity_type="attendance",
+        entity_id=record_id,
+        entity_name=student_name,
+        details={"old_status": old_status, "new_status": new_status, "reason": reason}
+    )
+    
+    return {"message": f"تم تعديل الحالة إلى {new_status}", "old_status": old_status, "new_status": new_status}
+
+
 @api_router.get("/attendance/student/{student_id}")
 async def get_student_attendance(
     student_id: str,
@@ -7084,9 +7148,11 @@ async def reset_admin():
             "is_active": True,
             "permissions": [
                 "manage_users", "manage_departments", "manage_courses",
-                "manage_students", "record_attendance", "view_attendance",
-                "edit_attendance", "view_reports", "export_reports",
-                "import_data", "manage_lectures", "view_lectures"
+                "manage_students", "view_attendance",
+                "view_reports", "export_reports",
+                "import_data", "view_lectures", "view_courses",
+                "manage_faculties", "manage_teachers", "manage_enrollments",
+                "view_statistics", "manage_roles", "manage_semesters"
             ]
         }
         

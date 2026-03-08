@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { coursesAPI, studentsAPI, enrollmentAPI, lecturesAPI, attendanceAPI, API_URL } from '../src/services/api';
+import api, { coursesAPI, studentsAPI, enrollmentAPI, lecturesAPI, attendanceAPI, API_URL } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { useAuthStore } from '../src/store/authStore';
@@ -198,6 +198,9 @@ export default function CourseStudentsScreen() {
     setStudentStats(stats);
   };
 
+  // صلاحية تعديل الحضور بعد التحضير
+  const hasEditAttendancePerm = hasPermission(PERMISSIONS.EDIT_ATTENDANCE);
+
   // جلب حضور محاضرة معينة
   const fetchLectureAttendance = async (lecture: Lecture) => {
     try {
@@ -205,14 +208,17 @@ export default function CourseStudentsScreen() {
       setLectureAttendance(attendanceRes.data || []);
       
       // التحقق من إمكانية التعديل
-      const now = new Date();
-      const lectureEnd = new Date(`${lecture.date}T${lecture.end_time}`);
-      const lectureDuration = (lectureEnd.getTime() - new Date(`${lecture.date}T${lecture.start_time}`).getTime()) / 60000;
-      const allowedEndTime = new Date(lectureEnd.getTime() + lectureDuration * 60000);
-      
-      // يمكن التعديل فقط إذا لم تنتهي المدة المسموحة ولم يكتمل التحضير
-      const canEdit = now <= allowedEndTime && lecture.status !== 'completed';
-      setCanEditAttendance(canEdit);
+      if (hasEditAttendancePerm) {
+        // من لديه صلاحية التعديل يمكنه التعديل في أي وقت
+        setCanEditAttendance(true);
+      } else {
+        const now = new Date();
+        const lectureEnd = new Date(`${lecture.date}T${lecture.end_time}`);
+        const lectureDuration = (lectureEnd.getTime() - new Date(`${lecture.date}T${lecture.start_time}`).getTime()) / 60000;
+        const allowedEndTime = new Date(lectureEnd.getTime() + lectureDuration * 60000);
+        const canEdit = now <= allowedEndTime && lecture.status !== 'completed';
+        setCanEditAttendance(canEdit);
+      }
     } catch (error) {
       console.error('Error fetching lecture attendance:', error);
     }
@@ -641,8 +647,41 @@ export default function CourseStudentsScreen() {
     );
   };
 
+  // تعديل حالة الحضور
+  const [editingRecord, setEditingRecord] = useState<{recordId: string; studentName: string; currentStatus: string} | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+
+  const handleEditAttendance = async (newStatus: string) => {
+    if (!editingRecord) return;
+    setEditLoading(true);
+    try {
+      await api.put(`/attendance/${editingRecord.recordId}/status`, {
+        status: newStatus,
+        reason: editReason,
+      });
+      // تحديث السجل محلياً
+      setLectureAttendance(prev => prev.map(r => 
+        r.id === editingRecord.recordId ? { ...r, status: newStatus } : r
+      ));
+      setEditingRecord(null);
+      setEditReason('');
+    } catch (error: any) {
+      const msg = error?.response?.data?.detail || 'فشل في تعديل الحالة';
+      if (Platform.OS === 'web') {
+        window.alert(msg);
+      } else {
+        Alert.alert('خطأ', msg);
+      }
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   const renderStudentWithLectureAttendance = ({ item }: { item: EnrolledStudent }) => {
     const status = getAttendanceStatus(item.student_id);
+    
+    const record = lectureAttendance.find(r => r.student_id === item.student_id);
     
     return (
       <View style={styles.studentCard}>
@@ -651,11 +690,23 @@ export default function CourseStudentsScreen() {
           <Text style={styles.studentDetail}>{item.student_number}</Text>
         </View>
         
-        <View style={[styles.attendanceStatusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
-          <View style={[styles.statusDot, { backgroundColor: getStatusColor(status) }]} />
-          <Text style={[styles.attendanceStatusText, { color: getStatusColor(status) }]}>
-            {getStatusLabel(status)}
-          </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <View style={[styles.attendanceStatusBadge, { backgroundColor: getStatusColor(status) + '20' }]}>
+            <View style={[styles.statusDot, { backgroundColor: getStatusColor(status) }]} />
+            <Text style={[styles.attendanceStatusText, { color: getStatusColor(status) }]}>
+              {getStatusLabel(status)}
+            </Text>
+          </View>
+          
+          {hasEditAttendancePerm && record && (
+            <TouchableOpacity
+              style={{ backgroundColor: '#fff3e0', padding: 6, borderRadius: 6 }}
+              onPress={() => setEditingRecord({ recordId: record.id, studentName: item.full_name, currentStatus: status })}
+              data-testid={`edit-attendance-${item.student_id}`}
+            >
+              <Ionicons name="create-outline" size={18} color="#ff9800" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     );
@@ -1240,6 +1291,66 @@ export default function CourseStudentsScreen() {
                 onPress={() => setShowActionModal(null)}
               >
                 <Text style={{ color: '#666', fontWeight: '600' }}>إلغاء</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* نافذة تعديل حالة الحضور */}
+        <Modal visible={editingRecord !== null} transparent animationType="fade">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 400 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: '#333', textAlign: 'center', marginBottom: 4 }}>
+                تعديل حالة الحضور
+              </Text>
+              <Text style={{ fontSize: 14, color: '#666', textAlign: 'center', marginBottom: 16 }}>
+                {editingRecord?.studentName}
+              </Text>
+              
+              <Text style={{ fontSize: 13, color: '#888', marginBottom: 8 }}>اختر الحالة الجديدة:</Text>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
+                {[
+                  { key: 'present', label: 'حاضر', color: '#4caf50', icon: 'checkmark-circle' },
+                  { key: 'absent', label: 'غائب', color: '#f44336', icon: 'close-circle' },
+                  { key: 'late', label: 'متأخر', color: '#ff9800', icon: 'time' },
+                  { key: 'excused', label: 'معذور', color: '#2196f3', icon: 'document-text' },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    style={{
+                      flex: 1, minWidth: '40%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+                      padding: 12, borderRadius: 10, gap: 6,
+                      backgroundColor: editingRecord?.currentStatus === opt.key ? opt.color + '30' : '#f5f5f5',
+                      borderWidth: 2, borderColor: editingRecord?.currentStatus === opt.key ? opt.color : 'transparent',
+                    }}
+                    onPress={() => {
+                      if (editingRecord && opt.key !== editingRecord.currentStatus) {
+                        handleEditAttendance(opt.key);
+                      }
+                    }}
+                    disabled={editLoading || editingRecord?.currentStatus === opt.key}
+                  >
+                    <Ionicons name={opt.icon as any} size={20} color={opt.color} />
+                    <Text style={{ color: opt.color, fontWeight: '700', fontSize: 14 }}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              
+              <Text style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>سبب التعديل (اختياري):</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, padding: 10, marginBottom: 16, fontSize: 14, textAlign: 'right' }}
+                placeholder="مثال: عذر طبي..."
+                value={editReason}
+                onChangeText={setEditReason}
+              />
+              
+              {editLoading && <ActivityIndicator style={{ marginBottom: 12 }} />}
+              
+              <TouchableOpacity
+                style={{ backgroundColor: '#f5f5f5', padding: 14, borderRadius: 10, alignItems: 'center' }}
+                onPress={() => { setEditingRecord(null); setEditReason(''); }}
+              >
+                <Text style={{ color: '#666', fontWeight: '600' }}>إغلاق</Text>
               </TouchableOpacity>
             </View>
           </View>

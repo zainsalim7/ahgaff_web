@@ -166,7 +166,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // صلاحيات خاصة بالمعلم فقط - لا يحصل عليها المدير تلقائياً
   const TEACHER_ONLY_PERMISSIONS = [
-    'record_attendance', 'take_attendance', 'manage_lectures'
+    'record_attendance', 'take_attendance', 'manage_lectures', 'edit_attendance'
   ];
 
   // التحقق من صلاحية واحدة
