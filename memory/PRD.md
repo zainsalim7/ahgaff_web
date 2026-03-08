@@ -47,6 +47,9 @@
 - **Side menu integration**: Added teacher delays link in side menu under reports section
 - **New permission**: `REPORT_TEACHER_DELAYS` added to permissions system
 - **Bug fix**: Fixed TypeError when user permissions is None (server.py line 390-393)
+- **Bug fix**: Fixed course report 500 error - added robust error handling for invalid enrollments/lectures data in `/reports/course/{id}/detailed`
+- **Bug fix**: Frontend course report now shows error message with retry button instead of blank page on API failure
+- **Bug fix**: Fixed URL param reading in report-course.tsx (`courseId` param now supported alongside `id`)
 
 ## P0 - Next
 - [ ] Deploy and test all features on production

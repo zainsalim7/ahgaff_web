@@ -27,8 +27,9 @@ export default function CourseDetailedReport() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [courses, setCourses] = useState<any[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState(params.id as string || '');
+  const [selectedCourse, setSelectedCourse] = useState((params.courseId || params.id || '') as string);
   const [reportData, setReportData] = useState<any>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
 
@@ -104,10 +105,14 @@ export default function CourseDetailedReport() {
     }
     
     try {
+      setReportError(null);
+      setReportData(null);
       const res = await reportsAPI.getCourseDetailedReport(selectedCourse);
       setReportData(res.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching report:', error);
+      const msg = error?.response?.data?.detail || 'فشل في تحميل التقرير. حاول مرة أخرى';
+      setReportError(msg);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -196,6 +201,18 @@ export default function CourseDetailedReport() {
           <View style={styles.emptyCard}>
             <Ionicons name="book-outline" size={64} color="#e0e0e0" />
             <Text style={styles.emptyText}>اختر مقرراً لعرض تقريره</Text>
+          </View>
+        ) : reportError ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="alert-circle-outline" size={64} color="#f44336" />
+            <Text style={[styles.emptyText, { color: '#f44336' }]}>{reportError}</Text>
+            <TouchableOpacity
+              style={{ marginTop: 16, backgroundColor: '#1565c0', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
+              onPress={() => { setLoading(true); fetchReport(); }}
+              data-testid="retry-report-btn"
+            >
+              <Text style={{ color: '#fff', fontWeight: '700' }}>إعادة المحاولة</Text>
+            </TouchableOpacity>
           </View>
         ) : reportData ? (
           <>

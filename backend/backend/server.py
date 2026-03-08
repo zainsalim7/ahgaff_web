@@ -6026,9 +6026,12 @@ async def get_course_detailed_report(
     # جلب المعلم
     teacher_name = None
     if course.get("teacher_id"):
-        teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
-        if teacher:
-            teacher_name = teacher.get("full_name")
+        try:
+            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
+            if teacher:
+                teacher_name = teacher.get("full_name")
+        except Exception:
+            pass
     
     # جلب المحاضرات
     active_lecture_ids = await get_active_lecture_ids(course_id)
@@ -6042,28 +6045,35 @@ async def get_course_detailed_report(
     # بيانات الطلاب
     students_data = []
     for enrollment in enrollments:
-        student = await db.students.find_one({"_id": ObjectId(enrollment["student_id"])})
-        if not student:
+        try:
+            sid = enrollment.get("student_id")
+            if not sid:
+                continue
+            student = await db.students.find_one({"_id": ObjectId(sid)})
+            if not student:
+                continue
+            
+            records = await db.attendance.find({
+                "student_id": str(student["_id"]),
+                "course_id": course_id,
+                "lecture_id": {"$in": list(active_lecture_ids)}
+            }).to_list(1000)
+            
+            present = sum(1 for r in records if r.get("status") == AttendanceStatus.PRESENT)
+            absent = sum(1 for r in records if r.get("status") == AttendanceStatus.ABSENT)
+            late = sum(1 for r in records if r.get("status") == AttendanceStatus.LATE)
+            
+            students_data.append({
+                "student_id": student.get("student_id", ""),
+                "student_name": student.get("full_name", ""),
+                "present": present,
+                "absent": absent,
+                "late": late,
+                "attendance_rate": round((present + late * 0.5) / len(active_lecture_ids) * 100, 2) if active_lecture_ids else 0
+            })
+        except Exception as e:
+            logger.warning(f"Skipping enrollment {enrollment.get('_id')}: {e}")
             continue
-        
-        records = await db.attendance.find({
-            "student_id": str(student["_id"]),
-            "course_id": course_id,
-            "lecture_id": {"$in": list(active_lecture_ids)}
-        }).to_list(1000)
-        
-        present = sum(1 for r in records if r["status"] == AttendanceStatus.PRESENT)
-        absent = sum(1 for r in records if r["status"] == AttendanceStatus.ABSENT)
-        late = sum(1 for r in records if r["status"] == AttendanceStatus.LATE)
-        
-        students_data.append({
-            "student_id": student.get("student_id"),
-            "student_name": student.get("full_name"),
-            "present": present,
-            "absent": absent,
-            "late": late,
-            "attendance_rate": round((present + late * 0.5) / len(active_lecture_ids) * 100, 2) if active_lecture_ids else 0
-        })
     
     # ترتيب حسب نسبة الحضور
     students_data.sort(key=lambda x: x["attendance_rate"], reverse=True)
@@ -6071,25 +6081,37 @@ async def get_course_detailed_report(
     # بيانات المحاضرات
     lectures_data = []
     for lecture in lectures:
-        records = await db.attendance.find({"lecture_id": str(lecture["_id"])}).to_list(1000)
-        present = sum(1 for r in records if r["status"] == AttendanceStatus.PRESENT)
-        
-        lectures_data.append({
-            "date": lecture.get("date").isoformat() if lecture.get("date") else "",
-            "start_time": lecture.get("start_time", ""),
-            "present_count": present,
-            "total_students": len(records),
-            "attendance_rate": round(present / len(records) * 100, 2) if records else 0
-        })
+        try:
+            records = await db.attendance.find({"lecture_id": str(lecture["_id"])}).to_list(1000)
+            present = sum(1 for r in records if r.get("status") == AttendanceStatus.PRESENT)
+            
+            date_val = lecture.get("date")
+            if date_val and hasattr(date_val, 'isoformat'):
+                date_str = date_val.isoformat()
+            elif date_val:
+                date_str = str(date_val)
+            else:
+                date_str = ""
+            
+            lectures_data.append({
+                "date": date_str,
+                "start_time": lecture.get("start_time", ""),
+                "present_count": present,
+                "total_students": len(records),
+                "attendance_rate": round(present / len(records) * 100, 2) if records else 0
+            })
+        except Exception as e:
+            logger.warning(f"Skipping lecture {lecture.get('_id')}: {e}")
+            continue
     
     return {
         "course": {
             "id": course_id,
-            "name": course["name"],
+            "name": course.get("name", ""),
             "code": course.get("code", ""),
             "teacher_name": teacher_name,
             "level": course.get("level"),
-            "section": course.get("section")
+            "section": course.get("section", "")
         },
         "students": students_data,
         "lectures": lectures_data,
