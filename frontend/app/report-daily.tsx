@@ -179,7 +179,7 @@ export default function DailyReport() {
             <Ionicons name="chevron-forward" size={24} color="#1565c0" />
           </TouchableOpacity>
           <View style={styles.dateDisplay}>
-            <Text style={styles.dateText}>{formatDate(selectedDate)}</Text>
+            <Text style={styles.dateText}>{formatDateStr(selectedDate)}</Text>
             <TouchableOpacity 
               style={styles.todayBtn}
               onPress={() => setSelectedDate(new Date().toISOString().split('T')[0])}
