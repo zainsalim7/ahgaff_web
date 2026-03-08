@@ -216,22 +216,28 @@ export default function SendNotification() {
             />
             {selectedTeacher && (
               <View style={styles.selectedItem}>
-                <Text style={styles.selectedText}>{selectedTeacher.full_name}</Text>
-                <TouchableOpacity onPress={() => { setSelectedTeacher(null); setTeacherSearch(''); }}>
+                <Text style={styles.selectedText}>{selectedTeacher.full_name} ({selectedTeacher.teacher_id})</Text>
+                <TouchableOpacity onPress={() => { setSelectedTeacher(null); setTeacherSearch(''); setTeachers([]); }}>
                   <Ionicons name="close-circle" size={20} color="#d32f2f" />
                 </TouchableOpacity>
               </View>
             )}
-            {!selectedTeacher && teachers.map(t => (
-              <TouchableOpacity
-                key={t.user_id}
-                style={styles.searchResult}
-                onPress={() => { setSelectedTeacher(t); setTeachers([]); setTeacherSearch(t.full_name); }}
-              >
-                <Ionicons name="person" size={18} color="#1565c0" />
-                <Text style={styles.searchResultText}>{t.full_name} ({t.teacher_id})</Text>
-              </TouchableOpacity>
-            ))}
+            {!selectedTeacher && teachers.length > 0 && (
+              <View style={{ maxHeight: 200, borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, backgroundColor: '#fff', marginTop: 4 }}>
+                <ScrollView nestedScrollEnabled>
+                  {teachers.map(t => (
+                    <TouchableOpacity
+                      key={t.user_id}
+                      style={styles.searchResult}
+                      onPress={() => { setSelectedTeacher(t); setTeachers([]); setTeacherSearch(t.full_name); }}
+                    >
+                      <Ionicons name="person" size={18} color="#1565c0" />
+                      <Text style={styles.searchResultText}>{t.full_name} ({t.teacher_id})</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </View>
         )}
 
@@ -248,22 +254,28 @@ export default function SendNotification() {
             />
             {selectedStudent && (
               <View style={styles.selectedItem}>
-                <Text style={styles.selectedText}>{selectedStudent.full_name}</Text>
-                <TouchableOpacity onPress={() => { setSelectedStudent(null); setStudentSearch(''); }}>
+                <Text style={styles.selectedText}>{selectedStudent.full_name} ({selectedStudent.student_id})</Text>
+                <TouchableOpacity onPress={() => { setSelectedStudent(null); setStudentSearch(''); setStudents([]); }}>
                   <Ionicons name="close-circle" size={20} color="#d32f2f" />
                 </TouchableOpacity>
               </View>
             )}
-            {!selectedStudent && students.map(s => (
-              <TouchableOpacity
-                key={s.user_id}
-                style={styles.searchResult}
-                onPress={() => { setSelectedStudent(s); setStudents([]); setStudentSearch(s.full_name); }}
-              >
-                <Ionicons name="school" size={18} color="#4caf50" />
-                <Text style={styles.searchResultText}>{s.full_name} ({s.student_id})</Text>
-              </TouchableOpacity>
-            ))}
+            {!selectedStudent && students.length > 0 && (
+              <View style={{ maxHeight: 200, borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, backgroundColor: '#fff', marginTop: 4 }}>
+                <ScrollView nestedScrollEnabled>
+                  {students.map(s => (
+                    <TouchableOpacity
+                      key={s.user_id}
+                      style={styles.searchResult}
+                      onPress={() => { setSelectedStudent(s); setStudents([]); setStudentSearch(s.full_name); }}
+                    >
+                      <Ionicons name="school" size={18} color="#4caf50" />
+                      <Text style={styles.searchResultText}>{s.full_name} ({s.student_id})</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </View>
         )}
 

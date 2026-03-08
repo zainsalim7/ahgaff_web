@@ -314,21 +314,39 @@ async def search_students_for_notification(
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
 
-    query = {}
-    if q:
-        query["$or"] = [
-            {"full_name": {"$regex": q, "$options": "i"}},
-            {"student_id": {"$regex": q, "$options": "i"}},
-        ]
+    if not q or len(q) < 2:
+        return []
 
-    students = await db.students.find(query, {
-        "_id": 0,
-        "user_id": 1,
-        "student_id": 1,
-        "full_name": 1,
-    }).to_list(50)
+    # بحث دقيق: أولاً المطابقة من البداية، ثم المطابقة الجزئية
+    exact_query = {"$or": [
+        {"student_id": q},
+        {"full_name": q},
+    ]}
+    starts_with_query = {"$or": [
+        {"full_name": {"$regex": f"^{q}", "$options": "i"}},
+        {"student_id": {"$regex": f"^{q}", "$options": "i"}},
+    ]}
+    contains_query = {"$or": [
+        {"full_name": {"$regex": q, "$options": "i"}},
+        {"student_id": {"$regex": q, "$options": "i"}},
+    ]}
 
-    return students
+    projection = {"_id": 0, "user_id": 1, "student_id": 1, "full_name": 1}
+
+    # نتائج مطابقة تماماً أولاً
+    exact = await db.students.find(exact_query, projection).to_list(5)
+    exact_ids = {s.get("student_id") for s in exact}
+
+    # نتائج تبدأ بالبحث
+    starts = await db.students.find(starts_with_query, projection).to_list(10)
+    starts = [s for s in starts if s.get("student_id") not in exact_ids]
+    starts_ids = exact_ids | {s.get("student_id") for s in starts}
+
+    # نتائج تحتوي على البحث
+    contains = await db.students.find(contains_query, projection).to_list(15)
+    contains = [s for s in contains if s.get("student_id") not in starts_ids]
+
+    return exact + starts + contains
 
 
 @router.get("/notifications/search-teachers")
@@ -342,22 +360,30 @@ async def search_teachers_for_notification(
     if not check_notification_permission(current_user):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
 
-    # البحث في جدول المعلمين
-    query = {}
-    if q:
-        query["$or"] = [
-            {"full_name": {"$regex": q, "$options": "i"}},
-            {"teacher_id": {"$regex": q, "$options": "i"}},
-        ]
+    if not q or len(q) < 2:
+        return []
 
-    teachers = await db.teachers.find(query, {
-        "_id": 0,
-        "user_id": 1,
-        "teacher_id": 1,
-        "full_name": 1,
-    }).to_list(50)
+    projection = {"_id": 0, "user_id": 1, "teacher_id": 1, "full_name": 1}
 
-    return teachers
+    exact = await db.teachers.find({"$or": [
+        {"teacher_id": q}, {"full_name": q}
+    ]}, projection).to_list(5)
+    exact_ids = {t.get("teacher_id") for t in exact}
+
+    starts = await db.teachers.find({"$or": [
+        {"full_name": {"$regex": f"^{q}", "$options": "i"}},
+        {"teacher_id": {"$regex": f"^{q}", "$options": "i"}},
+    ]}, projection).to_list(10)
+    starts = [t for t in starts if t.get("teacher_id") not in exact_ids]
+    all_ids = exact_ids | {t.get("teacher_id") for t in starts}
+
+    contains = await db.teachers.find({"$or": [
+        {"full_name": {"$regex": q, "$options": "i"}},
+        {"teacher_id": {"$regex": q, "$options": "i"}},
+    ]}, projection).to_list(15)
+    contains = [t for t in contains if t.get("teacher_id") not in all_ids]
+
+    return exact + starts + contains
 
 
 @router.get("/notifications/courses")
