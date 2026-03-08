@@ -13,7 +13,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://study-plan-system.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://punctuality-monitor.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 ADMIN_USER = {"username": "admin", "password": "admin123"}

@@ -89,6 +89,9 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'report-warnings', label: 'الإنذارات', icon: 'warning', path: '/report-warnings', permissions: [
     PERMISSIONS.REPORT_WARNINGS
   ]},
+  { id: 'report-teacher-delays', label: 'تأخر المعلمين', icon: 'alarm', path: '/report-teacher-delays', permissions: [
+    PERMISSIONS.REPORT_TEACHER_DELAYS, PERMISSIONS.VIEW_REPORTS
+  ]},
   
   { id: 'notifications', label: 'إدارة الإشعارات', icon: 'notifications', path: '/manage-notifications', permissions: [
     PERMISSIONS.MANAGE_USERS, PERMISSIONS.MANAGE_DEPARTMENTS

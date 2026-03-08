@@ -61,6 +61,6 @@
   "test_data": {
     "test_course_id": "698e54c5b17b90bf5c4205fe",
     "test_absent_lecture_id": "699fe4d6b319e3f8dd24c099",
-    "api_base_url": "https://study-plan-system.preview.emergentagent.com"
+    "api_base_url": "https://punctuality-monitor.preview.emergentagent.com"
   }
 }

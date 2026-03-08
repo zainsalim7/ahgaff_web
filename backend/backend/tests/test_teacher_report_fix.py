@@ -10,7 +10,7 @@ import pytest
 import requests
 import os
 
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://study-plan-system.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://punctuality-monitor.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 TEACHER_CREDENTIALS = {"username": "9999", "password": "9999"}

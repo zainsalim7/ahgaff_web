@@ -17,7 +17,7 @@ import time
 from datetime import datetime
 
 # Base URL from environment
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://study-plan-system.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://punctuality-monitor.preview.emergentagent.com')
 
 class TestMultiDepartmentSupport:
     """Test suite for multi-department support feature"""

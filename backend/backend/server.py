@@ -387,9 +387,9 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         else:
             user_permissions = list(DEFAULT_PERMISSIONS.get(user_role, []))
     
-    custom_permissions = user.get("custom_permissions", [])
+    custom_permissions = user.get("custom_permissions") or []
     # دمج الصلاحيات المخصصة المباشرة أيضاً (من إدارة المستخدمين)
-    direct_permissions = user.get("permissions", [])
+    direct_permissions = user.get("permissions") or []
     all_extra = list(set(custom_permissions) | set(direct_permissions))
     for perm in all_extra:
         if perm not in user_permissions:
@@ -6274,6 +6274,218 @@ async def export_teacher_summary_excel(
         headers={"Content-Disposition": f"attachment; filename=teacher_summary_{teacher_name}.xlsx"}
     )
 
+
+
+
+@api_router.get("/reports/teacher-delays")
+async def get_teacher_delays_report(
+    start_date: str = None,
+    end_date: str = None,
+    department_id: str = None,
+    faculty_id: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تقرير تأخر المعلمين في بدء التحضير"""
+    if not has_permission(current_user, "view_reports"):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+    
+    # فلتر المحاضرات التي بدأ فيها التحضير
+    query = {"attendance_started_at": {"$exists": True, "$ne": None}}
+    
+    if start_date:
+        query["date"] = {"$gte": start_date}
+    if end_date:
+        if "date" in query:
+            query["date"]["$lte"] = end_date
+        else:
+            query["date"] = {"$lte": end_date}
+    
+    lectures = await db.lectures.find(query).to_list(1000)
+    
+    # تجميع التأخيرات حسب المعلم
+    teacher_delays = {}
+    
+    for lec in lectures:
+        course = await db.courses.find_one({"_id": ObjectId(lec["course_id"])})
+        if not course:
+            continue
+        
+        # فلتر القسم/الكلية
+        if department_id and course.get("department_id") != department_id:
+            continue
+        if faculty_id:
+            dept = await db.departments.find_one({"_id": ObjectId(course.get("department_id", ""))})
+            if not dept or dept.get("faculty_id") != faculty_id:
+                continue
+        
+        teacher_id = course.get("teacher_id")
+        if not teacher_id:
+            continue
+        
+        # حساب التأخير
+        try:
+            lecture_start = datetime.strptime(f"{lec['date']}T{lec['start_time']}", "%Y-%m-%dT%H:%M")
+            started_at = lec["attendance_started_at"]
+            if isinstance(started_at, str):
+                started_at = datetime.fromisoformat(started_at)
+            
+            delay_minutes = int((started_at - lecture_start).total_seconds() / 60)
+            if delay_minutes < 0:
+                delay_minutes = 0
+        except Exception:
+            continue
+        
+        if teacher_id not in teacher_delays:
+            # جلب بيانات المعلم
+            teacher = None
+            try:
+                teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+            except Exception:
+                pass
+            
+            teacher_delays[teacher_id] = {
+                "teacher_id": teacher_id,
+                "teacher_name": teacher["full_name"] if teacher else "غير معروف",
+                "employee_id": teacher.get("teacher_id", "") if teacher else "",
+                "department": course.get("department_id", ""),
+                "total_lectures": 0,
+                "delayed_lectures": 0,
+                "total_delay_minutes": 0,
+                "max_delay_minutes": 0,
+                "delays": []
+            }
+        
+        entry = teacher_delays[teacher_id]
+        entry["total_lectures"] += 1
+        
+        if delay_minutes > 0:
+            entry["delayed_lectures"] += 1
+            entry["total_delay_minutes"] += delay_minutes
+            if delay_minutes > entry["max_delay_minutes"]:
+                entry["max_delay_minutes"] = delay_minutes
+            entry["delays"].append({
+                "date": lec["date"],
+                "course_name": course["name"],
+                "start_time": lec["start_time"],
+                "started_at": started_at.strftime("%H:%M") if hasattr(started_at, 'strftime') else str(started_at),
+                "delay_minutes": delay_minutes
+            })
+    
+    # ترتيب حسب إجمالي التأخير
+    result = sorted(teacher_delays.values(), key=lambda x: x["total_delay_minutes"], reverse=True)
+    
+    # حساب المتوسط
+    for t in result:
+        t["avg_delay_minutes"] = round(t["total_delay_minutes"] / t["delayed_lectures"], 1) if t["delayed_lectures"] > 0 else 0
+    
+    return {
+        "teachers": result,
+        "summary": {
+            "total_teachers": len(result),
+            "total_delayed_teachers": len([t for t in result if t["delayed_lectures"] > 0]),
+            "total_delay_incidents": sum(t["delayed_lectures"] for t in result),
+        }
+    }
+
+
+@api_router.get("/reports/teacher-delays/export")
+async def export_teacher_delays_report(
+    start_date: str = None,
+    end_date: str = None,
+    department_id: str = None,
+    faculty_id: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تصدير تقرير تأخر المعلمين إلى Excel"""
+    if not has_permission(current_user, "export_reports"):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+    
+    # استخدام نفس البيانات
+    report = await get_teacher_delays_report(start_date, end_date, department_id, faculty_id, current_user)
+    
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from io import BytesIO
+    
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "تأخر المعلمين"
+    ws.sheet_view.rightToLeft = True
+    
+    # العنوان
+    ws.merge_cells('A1:G1')
+    ws['A1'] = 'تقرير تأخر المعلمين في بدء التحضير'
+    ws['A1'].font = Font(bold=True, size=14)
+    ws['A1'].alignment = Alignment(horizontal='center')
+    
+    # ملخص
+    ws['A3'] = f"إجمالي المعلمين: {report['summary']['total_teachers']}"
+    ws['D3'] = f"حالات التأخر: {report['summary']['total_delay_incidents']}"
+    
+    # رؤوس الأعمدة
+    headers = ['المعلم', 'الرقم الوظيفي', 'إجمالي المحاضرات', 'محاضرات متأخرة', 'إجمالي التأخير (دقيقة)', 'متوسط التأخير', 'أقصى تأخير']
+    header_fill = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    
+    for col, header in enumerate(headers, 1):
+        cell = ws.cell(row=5, column=col, value=header)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center')
+    
+    # البيانات
+    for row, t in enumerate(report['teachers'], 6):
+        ws.cell(row=row, column=1, value=t['teacher_name'])
+        ws.cell(row=row, column=2, value=t['employee_id'])
+        ws.cell(row=row, column=3, value=t['total_lectures'])
+        ws.cell(row=row, column=4, value=t['delayed_lectures'])
+        ws.cell(row=row, column=5, value=t['total_delay_minutes'])
+        ws.cell(row=row, column=6, value=t['avg_delay_minutes'])
+        ws.cell(row=row, column=7, value=t['max_delay_minutes'])
+        
+        # تلوين المتأخرين
+        if t['delayed_lectures'] > 0:
+            for col in range(1, 8):
+                ws.cell(row=row, column=col).fill = PatternFill(start_color='FFEBEE', end_color='FFEBEE', fill_type='solid')
+    
+    # تفاصيل التأخيرات
+    if report['teachers']:
+        detail_row = len(report['teachers']) + 8
+        ws.merge_cells(f'A{detail_row}:G{detail_row}')
+        ws.cell(row=detail_row, column=1, value='تفاصيل التأخيرات')
+        ws.cell(row=detail_row, column=1).font = Font(bold=True, size=12)
+        
+        detail_row += 1
+        detail_headers = ['المعلم', 'المقرر', 'التاريخ', 'وقت البدء المحدد', 'وقت البدء الفعلي', 'التأخير (دقيقة)']
+        for col, h in enumerate(detail_headers, 1):
+            cell = ws.cell(row=detail_row, column=col, value=h)
+            cell.fill = PatternFill(start_color='FF9800', end_color='FF9800', fill_type='solid')
+            cell.font = Font(bold=True, color='FFFFFF')
+        
+        detail_row += 1
+        for t in report['teachers']:
+            for d in t['delays']:
+                ws.cell(row=detail_row, column=1, value=t['teacher_name'])
+                ws.cell(row=detail_row, column=2, value=d['course_name'])
+                ws.cell(row=detail_row, column=3, value=d['date'])
+                ws.cell(row=detail_row, column=4, value=d['start_time'])
+                ws.cell(row=detail_row, column=5, value=d['started_at'])
+                ws.cell(row=detail_row, column=6, value=d['delay_minutes'])
+                detail_row += 1
+    
+    # ضبط عرض الأعمدة
+    for col in range(1, 8):
+        ws.column_dimensions[chr(64 + col)].width = 18
+    
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=teacher_delays_report.xlsx"}
+    )
 
 
 @api_router.get("/reports/teacher-workload")

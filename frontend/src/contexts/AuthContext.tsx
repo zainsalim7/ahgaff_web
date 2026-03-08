@@ -54,6 +54,7 @@ export const PERMISSIONS = {
   REPORT_STUDENT: 'report_student',
   REPORT_COURSE: 'report_course',
   REPORT_TEACHER_WORKLOAD: 'report_teacher_workload',
+  REPORT_TEACHER_DELAYS: 'report_teacher_delays',
   // صلاحيات المحاضرات
   MANAGE_LECTURES: 'manage_lectures',
   VIEW_LECTURES: 'view_lectures',

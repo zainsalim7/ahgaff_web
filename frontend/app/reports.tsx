@@ -587,6 +587,21 @@ export default function ReportsScreen() {
             </TouchableOpacity>
             )}
 
+            {/* تقرير تأخر المعلمين */}
+            {canViewReport(userRole, userPermissions, 'report_teacher_delays') && (
+            <TouchableOpacity 
+              style={styles.reportTypeCard}
+              onPress={() => router.push('/report-teacher-delays')}
+              data-testid="report-teacher-delays-btn"
+            >
+              <View style={[styles.reportTypeIcon, { backgroundColor: '#ffebee' }]}>
+                <Ionicons name="alarm" size={28} color="#d32f2f" />
+              </View>
+              <Text style={styles.reportTypeTitle}>تأخر المعلمين</Text>
+              <Text style={styles.reportTypeDesc}>متابعة التزام المعلمين بالمواعيد</Text>
+            </TouchableOpacity>
+            )}
+
             {/* تقرير إنجاز الدروس */}
             {canViewReport(userRole, userPermissions, 'report_lesson_completion') && (
             <TouchableOpacity 
