@@ -224,8 +224,8 @@ export default function CoursesScreen() {
         }
         showsVerticalScrollIndicator={false}
       >
-        {/* قسم محاضرات اليوم */}
-        {(user?.role === 'teacher' || user?.role === 'admin') && (
+        {/* قسم محاضرات اليوم - للمعلمين فقط */}
+        {user?.role === 'teacher' && (
           <View style={styles.todaySection}>
             <View style={styles.todaySectionHeader}>
               <View style={styles.todayIconContainer}>

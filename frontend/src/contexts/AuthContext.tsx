@@ -164,6 +164,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return false;
   }, [user]);
 
+  // صلاحيات خاصة بالمعلم فقط - لا يحصل عليها المدير تلقائياً
+  const TEACHER_ONLY_PERMISSIONS = [
+    'record_attendance', 'take_attendance', 'manage_lectures'
+  ];
+
   // التحقق من صلاحية واحدة
   const hasPermission = useCallback((permission: string): boolean => {
     // استخدم التخزين المؤقت أولاً
@@ -178,8 +183,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
     
-    // المدير لديه جميع الصلاحيات تلقائياً
-    if (currentUser.role === 'admin') return true;
+    // المدير لديه جميع الصلاحيات تلقائياً ماعدا صلاحيات المعلم المباشرة
+    if (currentUser.role === 'admin') {
+      if (TEACHER_ONLY_PERMISSIONS.includes(permission)) {
+        // المدير لا يحصل على صلاحيات التحضير إلا إذا أُسندت له صراحة
+        return currentUser.permissions?.includes(permission) || false;
+      }
+      return true;
+    }
     
     // تحقق من الصلاحيات المخزنة
     return currentUser.permissions?.includes(permission) || false;
@@ -191,7 +202,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (!currentUser && isLoading) return true;
     if (!currentUser) return false;
-    if (currentUser.role === 'admin') return true;
+    if (currentUser.role === 'admin') {
+      // إذا كل الصلاحيات المطلوبة خاصة بالمعلم، تحقق من الصلاحيات الفعلية
+      const allTeacherOnly = permissions.every(p => TEACHER_ONLY_PERMISSIONS.includes(p));
+      if (allTeacherOnly) {
+        return permissions.some(p => currentUser.permissions?.includes(p));
+      }
+      return true;
+    }
     
     return permissions.some(p => currentUser.permissions?.includes(p));
   }, [user, isLoading]);

@@ -81,8 +81,7 @@ export default function TabsLayout() {
     role === 'teacher' ||
     permissions.includes('manage_courses') ||
     permissions.includes('view_courses') ||
-    permissions.includes('manage_lectures') ||
-    permissions.includes('record_attendance'));
+    permissions.includes('view_attendance'));
 
   // هل المستخدم معلم؟
   const isTeacher = isReady && role === 'teacher';

@@ -35,14 +35,14 @@ const MENU_ITEMS: MenuItem[] = [
   
   { id: 'my-lectures', label: 'محاضراتي', icon: 'calendar', path: '/(tabs)/my-lectures', permissions: [
     PERMISSIONS.RECORD_ATTENDANCE
-  ]},
+  ], teacherOnly: true },
   
-  { id: 'my-courses', label: 'مقرراتي', icon: 'book', path: '/(tabs)/courses', permissions: [
-    PERMISSIONS.RECORD_ATTENDANCE
+  { id: 'my-courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
+    PERMISSIONS.VIEW_ATTENDANCE, PERMISSIONS.MANAGE_COURSES
   ]},
   
   { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', permissions: [
-    PERMISSIONS.MANAGE_LECTURES
+    PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_REPORTS
   ]},
   
   { id: 'students', label: 'إدارة الطلاب', icon: 'people', path: '/students', permissions: [
@@ -115,6 +115,8 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
   const filteredItems = MENU_ITEMS.filter(item => {
     if (item.forAll) return true;
     if (item.adminOnly) return isAdmin;
+    // العناصر الخاصة بالمعلم فقط
+    if ((item as any).teacherOnly && userRole !== 'teacher') return false;
     if (isAdmin) return true;
     if (item.permissions.length === 0) return false;
     return hasAnyPermission(item.permissions);
