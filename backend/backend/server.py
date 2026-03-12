@@ -4388,6 +4388,20 @@ async def create_lecture(
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     
+    # منع إنشاء محاضرة بتاريخ ماضي
+    from datetime import datetime
+    now = get_yemen_time()
+    try:
+        lecture_date = datetime.strptime(data.date, "%Y-%m-%d")
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        if lecture_date < today:
+            raise HTTPException(
+                status_code=400, 
+                detail="لا يمكن إنشاء محاضرة بتاريخ ماضي"
+            )
+    except ValueError:
+        raise HTTPException(status_code=400, detail="صيغة التاريخ غير صحيحة")
+    
     lecture = {
         "course_id": data.course_id,
         "date": data.date,
