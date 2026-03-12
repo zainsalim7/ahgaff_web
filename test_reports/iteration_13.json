@@ -1,0 +1,97 @@
+{
+  "summary": "Verified Teacher Lecture Conflict Detection and Reschedule Future Date features. Backend: All 5 core API tests passed via curl - conflict detection correctly rejects overlapping times with Arabic message including course name and time details, reschedule rejects past dates, no-conflict scenarios work correctly. Frontend: Playwright verified AddLectureModal has no day-selection buttons and displays day name after date selection.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_teacher_conflict.py",
+    "/app/test_reports/pytest/teacher_conflict_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "✓ check_teacher_lecture_conflict (line 4374-4407): Correctly queries all courses by teacher_id, checks for time overlap with existing non-cancelled lectures, returns Arabic message with course name and time details",
+    "✓ create_lecture (line 4411-4467): Calls check_teacher_lecture_conflict before creating, rejects with 400 on conflict",
+    "✓ generate_semester_lectures_advanced (line 4561-4645): Calls check_teacher_lecture_conflict for each slot, skips conflicting slots silently (counts skipped)",
+    "✓ reschedule_lecture (line 4696-4800): Validates future date (line 4725-4734), calls check_teacher_lecture_conflict with exclude_lecture_id to avoid self-conflict",
+    "✓ AddLectureModal.tsx: Uses date picker only (line 207-226), displays day name after selection (lines 237-250), no day buttons",
+    "✓ course-lectures.tsx reschedule modal: Has min={new Date().toISOString().split('T')[0]} (line 1208), displays day name (lines 1233-1239)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_teacher_conflict.py"
+  ],
+  "success_rate": {
+    "backend": "100% (5/5 core API tests passed via curl)",
+    "frontend": "100% (verified AddLectureModal has no day buttons, day name displays correctly)"
+  },
+  "test_credentials": "Admin: username=admin, password=admin123",
+  "seed_data_creation": "Used existing course 698f0000d803b27aab0120af with lecture on 2026-03-20 09:00-10:30",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Teacher lecture conflict detection is fully working. POST /api/lectures and PUT /api/lectures/{id}/reschedule both check for time conflicts with other lectures assigned to the same teacher. Conflict message includes course name and time details in Arabic. AddLectureModal no longer has day-selection buttons - uses date picker only. Day name is displayed after selecting a date in both AddLectureModal and reschedule modal. Reschedule modal date picker has min date set to today.",
+  "verified_features": {
+    "teacher_lecture_conflict_detection": {
+      "status": "PASSED",
+      "tests": [
+        "POST /api/lectures with overlapping time → 400 with Arabic conflict message 'يوجد تعارض: الأستاذ لديه محاضرة في مقرر ...'",
+        "POST /api/lectures with non-overlapping time → 200 success",
+        "PUT /api/lectures/{id}/reschedule with overlapping time → 400 with conflict message",
+        "PUT /api/lectures/{id}/reschedule with past date → 400 'يجب اختيار تاريخ مستقبلي'",
+        "PUT /api/lectures/{id}/reschedule with valid future date → 200 success"
+      ],
+      "conflict_message_format": "يوجد تعارض: الأستاذ لديه محاضرة في مقرر \"[course_name]\" يوم [date] من [start_time] إلى [end_time]"
+    },
+    "add_lecture_modal_changes": {
+      "status": "PASSED",
+      "changes": [
+        "Day selection buttons (السبت، الأحد، etc.) removed - VERIFIED",
+        "Uses date picker only - VERIFIED",
+        "Day name displays after date selection (e.g., 'الأربعاء - 25 مارس 2026') - VERIFIED"
+      ]
+    },
+    "reschedule_modal_changes": {
+      "status": "PASSED (verified from code review)",
+      "changes": [
+        "Date picker has min attribute set to today's date (line 1208)",
+        "Day name displays after date selection (lines 1233-1239)"
+      ]
+    }
+  },
+  "backend_api_test_results": {
+    "test_1_create_lecture_conflict": {
+      "request": "POST /api/lectures with date=2026-03-20, start_time=09:30, end_time=10:00",
+      "expected": "400 with conflict message",
+      "actual": "400 with 'يوجد تعارض: الأستاذ لديه محاضرة في مقرر \"دراسات حضرموت \" يوم 2026-03-20 من 09:00 إلى 10:30'",
+      "status": "PASSED"
+    },
+    "test_2_create_lecture_no_conflict": {
+      "request": "POST /api/lectures with date=2026-03-20, start_time=14:00, end_time=15:00",
+      "expected": "200 success",
+      "actual": "200 with lecture ID",
+      "status": "PASSED"
+    },
+    "test_3_reschedule_past_date": {
+      "request": "PUT /api/lectures/{id}/reschedule with date=2026-01-01",
+      "expected": "400 with past date error",
+      "actual": "400 with 'يجب اختيار تاريخ مستقبلي'",
+      "status": "PASSED"
+    },
+    "test_4_reschedule_conflict": {
+      "request": "PUT /api/lectures/{id}/reschedule with date=2026-03-20, start_time=09:30, end_time=10:00",
+      "expected": "400 with conflict message",
+      "actual": "400 with conflict message",
+      "status": "PASSED"
+    },
+    "test_5_reschedule_success": {
+      "request": "PUT /api/lectures/{id}/reschedule with date=2026-04-15, start_time=14:00, end_time=15:00",
+      "expected": "200 success",
+      "actual": "200 with 'تم إعادة جدولة المحاضرة إلى 2026-04-15'",
+      "status": "PASSED"
+    }
+  }
+}

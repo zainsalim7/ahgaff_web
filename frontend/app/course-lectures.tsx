@@ -1205,6 +1205,7 @@ export default function CourseLecturesScreen() {
                 <input
                   type="date"
                   value={rescheduleData.date}
+                  min={new Date().toISOString().split('T')[0]}
                   onChange={(e: any) => setRescheduleData(prev => ({ ...prev, date: e.target.value }))}
                   data-testid="reschedule-date-input"
                   style={{
@@ -1214,20 +1215,29 @@ export default function CourseLecturesScreen() {
                     border: '1px solid #ddd',
                     fontSize: '16px',
                     textAlign: 'center',
-                    marginBottom: '16px',
+                    marginBottom: '4px',
                     boxSizing: 'border-box',
                     backgroundColor: '#f9f9f9',
                   }}
                 />
               ) : (
                 <TextInput
-                  style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16, textAlign: 'center', fontSize: 16 }}
+                  style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 4, textAlign: 'center', fontSize: 16 }}
                   placeholder="YYYY-MM-DD"
                   value={rescheduleData.date}
                   onChangeText={(text) => setRescheduleData(prev => ({ ...prev, date: text }))}
                   data-testid="reschedule-date-input"
                 />
               )}
+              {/* عرض اسم اليوم */}
+              {rescheduleData.date && (() => {
+                const [y, m, d] = rescheduleData.date.split('-').map(Number);
+                if (y && m && d) {
+                  const dayName = WEEKDAYS_AR[new Date(y, m - 1, d).getDay()];
+                  return <Text style={{ fontSize: 14, color: '#1565c0', fontWeight: '600', marginBottom: 16, textAlign: 'center' }}>{dayName}</Text>;
+                }
+                return <View style={{ marginBottom: 16 }} />;
+              })()}
               
               {/* وقت البداية */}
               <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>وقت البداية:</Text>

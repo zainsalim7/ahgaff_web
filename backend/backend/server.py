@@ -4371,6 +4371,43 @@ async def notify_lecture_created(course: dict, date: str, start_time: str, end_t
         logging.error(f"خطأ في إرسال تنبيه المحاضرة: {str(e)}")
 
 
+async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None):
+    """فحص تعارض محاضرات الأستاذ - هل لديه محاضرة أخرى في نفس الوقت؟"""
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course or not course.get("teacher_id"):
+        return None  # لا يوجد أستاذ مرتبط
+    
+    teacher_id = course["teacher_id"]
+    
+    # جلب جميع مقررات هذا الأستاذ
+    teacher_courses = await db.courses.find({"teacher_id": teacher_id}).to_list(1000)
+    course_ids = [str(c["_id"]) for c in teacher_courses]
+    
+    # البحث عن محاضرات في نفس التاريخ (غير ملغاة)
+    query = {
+        "course_id": {"$in": course_ids},
+        "date": date,
+        "status": {"$ne": LectureStatus.CANCELLED},
+    }
+    if exclude_lecture_id:
+        query["_id"] = {"$ne": ObjectId(exclude_lecture_id)}
+    
+    existing_lectures = await db.lectures.find(query).to_list(1000)
+    
+    for lec in existing_lectures:
+        ex_start = lec.get("start_time", "")
+        ex_end = lec.get("end_time", "")
+        if ex_start and ex_end and start_time and end_time:
+            # فحص التداخل الزمني
+            if start_time < ex_end and end_time > ex_start:
+                conflict_course = next((c for c in teacher_courses if str(c["_id"]) == lec["course_id"]), None)
+                conflict_name = conflict_course.get("name", "") if conflict_course else ""
+                return f"يوجد تعارض: الأستاذ لديه محاضرة في مقرر \"{conflict_name}\" يوم {date} من {ex_start} إلى {ex_end}"
+    
+    return None
+
+
+
 @api_router.post("/lectures")
 async def create_lecture(
     data: LectureCreate,
@@ -4401,6 +4438,11 @@ async def create_lecture(
             )
     except ValueError:
         raise HTTPException(status_code=400, detail="صيغة التاريخ غير صحيحة")
+    
+    # فحص تعارض المحاضرات مع نفس الأستاذ
+    conflict = await check_teacher_lecture_conflict(data.course_id, data.date, data.start_time, data.end_time)
+    if conflict:
+        raise HTTPException(status_code=400, detail=conflict)
     
     lecture = {
         "course_id": data.course_id,
@@ -4565,12 +4607,20 @@ async def generate_semester_lectures_advanced(
             current += timedelta(days=1)
         
         # توليد المحاضرات لكل أسبوع
+        conflicts_skipped = 0
         while current <= end:
             # إضافة محاضرة لكل فترة زمنية في هذا اليوم
             for slot in day_config.slots:
+                # فحص تعارض المحاضرات مع نفس الأستاذ
+                date_str = current.strftime("%Y-%m-%d")
+                conflict = await check_teacher_lecture_conflict(data.course_id, date_str, slot.start_time, slot.end_time)
+                if conflict:
+                    conflicts_skipped += 1
+                    continue
+                
                 lecture = {
                     "course_id": data.course_id,
-                    "date": current.strftime("%Y-%m-%d"),
+                    "date": date_str,
                     "start_time": slot.start_time,
                     "end_time": slot.end_time,
                     "room": data.room,
@@ -4589,8 +4639,9 @@ async def generate_semester_lectures_advanced(
         await notify_lecture_created(course, data.start_date if hasattr(data, 'start_date') else "", "", "")
 
     return {
-        "message": f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي",
-        "lectures_created": lectures_created
+        "message": f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي" + (f" (تم تخطي {conflicts_skipped} بسبب تعارض)" if conflicts_skipped > 0 else ""),
+        "lectures_created": lectures_created,
+        "conflicts_skipped": conflicts_skipped
     }
 
 @api_router.put("/lectures/{lecture_id}")
@@ -4687,6 +4738,13 @@ async def reschedule_lecture(
     end_time = new_end_time or lecture.get("end_time", "")
     if start_time and end_time and end_time <= start_time:
         raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
+    
+    # فحص تعارض المحاضرات مع نفس الأستاذ
+    conflict = await check_teacher_lecture_conflict(
+        lecture.get("course_id", ""), new_date, start_time, end_time, exclude_lecture_id=lecture_id
+    )
+    if conflict:
+        raise HTTPException(status_code=400, detail=conflict)
     
     # حفظ التاريخ القديم للإشعار
     old_date = lecture.get("date", "")
