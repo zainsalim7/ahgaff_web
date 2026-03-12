@@ -4642,6 +4642,133 @@ async def delete_lecture(
     
     return {"message": "تم حذف المحاضرة بنجاح"}
 
+@api_router.put("/lectures/{lecture_id}/reschedule")
+async def reschedule_lecture(
+    lecture_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """إعادة جدولة محاضرة لم يحضرها المعلم"""
+    # التحقق من الصلاحية
+    user_permissions = current_user.get("permissions") or []
+    is_admin = current_user["role"] == UserRole.ADMIN
+    if not is_admin and "reschedule_lecture" not in user_permissions:
+        raise HTTPException(status_code=403, detail="غير مصرح لك بإعادة جدولة المحاضرات")
+    
+    lecture = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
+    if not lecture:
+        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
+    
+    # التحقق أن المحاضرة لم يحضرها المعلم (scheduled أو absent فقط)
+    if lecture.get("status") == LectureStatus.COMPLETED:
+        raise HTTPException(status_code=400, detail="لا يمكن إعادة جدولة محاضرة تم تسجيل حضورها")
+    
+    body = await request.json()
+    new_date = body.get("date")
+    new_start_time = body.get("start_time")
+    new_end_time = body.get("end_time")
+    
+    if not new_date:
+        raise HTTPException(status_code=400, detail="يرجى تحديد التاريخ الجديد")
+    
+    # التحقق من أن التاريخ الجديد مستقبلي
+    from datetime import datetime
+    now = get_yemen_time()
+    try:
+        new_lecture_date = datetime.strptime(new_date, "%Y-%m-%d")
+        today = now.replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
+        if new_lecture_date < today:
+            raise HTTPException(status_code=400, detail="يجب اختيار تاريخ مستقبلي")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="صيغة التاريخ غير صحيحة")
+    
+    # التحقق من الأوقات
+    start_time = new_start_time or lecture.get("start_time", "")
+    end_time = new_end_time or lecture.get("end_time", "")
+    if start_time and end_time and end_time <= start_time:
+        raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
+    
+    # حفظ التاريخ القديم للإشعار
+    old_date = lecture.get("date", "")
+    old_start = lecture.get("start_time", "")
+    if hasattr(old_date, 'strftime'):
+        old_date = old_date.strftime("%Y-%m-%d")
+    
+    # تحديث المحاضرة
+    update_data = {
+        "date": new_date,
+        "status": LectureStatus.SCHEDULED,
+        "rescheduled": True,
+        "rescheduled_at": get_yemen_time().isoformat(),
+        "rescheduled_by": current_user["id"],
+    }
+    if new_start_time:
+        update_data["start_time"] = new_start_time
+    if new_end_time:
+        update_data["end_time"] = new_end_time
+    
+    await db.lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": update_data})
+    
+    # إرسال إشعار للمعلم والطلاب
+    try:
+        course = await db.courses.find_one({"_id": ObjectId(lecture.get("course_id", ""))})
+        if course:
+            course_name = course.get("name", "")
+            title = f"إعادة جدولة محاضرة - {course_name}"
+            message = f"تم إعادة جدولة محاضرة {course_name} من {old_date} ({old_start}) إلى {new_date} ({start_time})"
+            
+            target_user_ids = []
+            
+            # المعلم
+            teacher_id = course.get("teacher_id")
+            if teacher_id:
+                teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+                if teacher and teacher.get("user_id"):
+                    target_user_ids.append(teacher["user_id"])
+            
+            # الطلاب
+            enrollments = await db.enrollments.find({"course_id": str(course["_id"])}).to_list(5000)
+            student_ids = [e.get("student_id") for e in enrollments if e.get("student_id")]
+            if student_ids:
+                students = await db.students.find(
+                    {"_id": {"$in": [ObjectId(sid) for sid in student_ids]}}
+                ).to_list(5000)
+                for s in students:
+                    if s.get("user_id"):
+                        target_user_ids.append(s["user_id"])
+            
+            # حفظ الإشعارات
+            if target_user_ids:
+                in_app = [{
+                    "user_id": uid,
+                    "title": title,
+                    "message": message,
+                    "type": "reschedule",
+                    "course_id": str(course["_id"]),
+                    "course_name": course_name,
+                    "is_read": False,
+                    "created_at": get_yemen_time().isoformat(),
+                } for uid in set(target_user_ids)]
+                await db.notifications.insert_many(in_app)
+            
+            # إرسال push
+            from services.firebase_service import send_notification_to_many
+            if target_user_ids:
+                tokens_docs = await db.fcm_tokens.find(
+                    {"user_id": {"$in": list(set(target_user_ids))}}
+                ).to_list(5000)
+                tokens = [doc["token"] for doc in tokens_docs if doc.get("token")]
+                if tokens:
+                    await send_notification_to_many(tokens, title, message)
+            
+            logger.info(f"تم إرسال إشعار إعادة جدولة: {course_name} إلى {len(set(target_user_ids))} مستخدم")
+    except Exception as e:
+        logger.error(f"خطأ في إرسال إشعار إعادة الجدولة: {e}")
+    
+    return {"message": f"تم إعادة جدولة المحاضرة إلى {new_date}"}
+
+
+
 @api_router.get("/lectures/{lecture_id}/details")
 async def get_lecture_details(
     lecture_id: str,

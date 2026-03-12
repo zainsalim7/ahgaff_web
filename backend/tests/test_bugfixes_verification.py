@@ -15,7 +15,7 @@ load_dotenv()
 
 BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', '').rstrip('/')
 if not BASE_URL:
-    BASE_URL = "https://punctuality-monitor.preview.emergentagent.com"
+    BASE_URL = "https://attendance-track-38.preview.emergentagent.com"
 
 # Test course ID from request
 TEST_COURSE_ID = "698f0000d803b27aab0120af"

@@ -88,6 +88,7 @@ export default function CourseLecturesScreen() {
   const isTeacher = user?.role === 'teacher';
   const canManageLectures = !isTeacher && !isStudent && (hasPermission(PERMISSIONS.MANAGE_LECTURES) || user?.role === 'admin');
   const canOverrideStatus = hasPermission(PERMISSIONS.OVERRIDE_LECTURE_STATUS);
+  const canReschedule = hasPermission(PERMISSIONS.RESCHEDULE_LECTURE) || user?.role === 'admin';
   
   // إعادة توجيه الطالب
   useEffect(() => {
@@ -113,6 +114,11 @@ export default function CourseLecturesScreen() {
   
   // تحديد المحاضرات للحذف
   const [selectedLectures, setSelectedLectures] = useState<Set<string>>(new Set());
+  
+  // إعادة جدولة
+  const [rescheduleModal, setRescheduleModal] = useState<{lectureId: string; courseName: string; oldDate: string} | null>(null);
+  const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '08:00', end_time: '09:00' });
+  const [rescheduling, setRescheduling] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
@@ -561,6 +567,41 @@ export default function CourseLecturesScreen() {
     }
   };
 
+  const handleReschedule = async () => {
+    if (!rescheduleModal) return;
+    if (!rescheduleData.date) {
+      if (Platform.OS === 'web') window.alert('يرجى اختيار التاريخ الجديد');
+      return;
+    }
+    if (rescheduleData.start_time && rescheduleData.end_time && rescheduleData.end_time <= rescheduleData.start_time) {
+      if (Platform.OS === 'web') window.alert('وقت النهاية يجب أن يكون بعد وقت البداية');
+      return;
+    }
+    setRescheduling(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || process.env.REACT_APP_BACKEND_URL;
+      const res = await fetch(`${API_URL}/api/lectures/${rescheduleModal.lectureId}/reschedule`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify(rescheduleData),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showNotification('success', data.message || 'تم إعادة الجدولة بنجاح');
+        setRescheduleModal(null);
+        fetchData();
+      } else {
+        showNotification('error', data.detail || 'فشل في إعادة الجدولة');
+      }
+    } catch (error: any) {
+      showNotification('error', error.message || 'فشل في إعادة الجدولة');
+    } finally {
+      setRescheduling(false);
+    }
+  };
+
+
   const renderLecture = ({ item }: { item: Lecture }) => {
     const statusInfo = STATUS_LABELS[item.status] || STATUS_LABELS.scheduled;
     const isSelected = selectedLectures.has(item.id);
@@ -653,17 +694,42 @@ export default function CourseLecturesScreen() {
               )}
               {item.status === 'absent' && (
                 <>
-                  {canOverrideStatus && (
+                  {canReschedule && (
                     <TouchableOpacity
                       style={[styles.attendanceBtn, { backgroundColor: '#ff9800' }]}
+                      onPress={() => {
+                        setRescheduleData({ date: '', start_time: item.start_time || '08:00', end_time: item.end_time || '09:00' });
+                        setRescheduleModal({ lectureId: item.id, courseName: course?.name || '', oldDate: item.date });
+                      }}
+                      data-testid={`reschedule-${item.id}`}
+                    >
+                      <Ionicons name="calendar" size={20} color="#fff" />
+                      <Text style={styles.attendanceBtnText}>إعادة جدولة</Text>
+                    </TouchableOpacity>
+                  )}
+                  {canOverrideStatus && (
+                    <TouchableOpacity
+                      style={[styles.attendanceBtn, { backgroundColor: '#607d8b' }]}
                       onPress={() => handleChangeStatus(item.id, 'scheduled')}
                       data-testid={`override-absent-${item.id}`}
                     >
                       <Ionicons name="refresh" size={20} color="#fff" />
-                      <Text style={styles.attendanceBtnText}>إعادة جدولة</Text>
+                      <Text style={styles.attendanceBtnText}>تغيير الحالة</Text>
                     </TouchableOpacity>
                   )}
                 </>
+              )}
+              {item.status === 'scheduled' && canReschedule && (
+                <TouchableOpacity
+                  style={[styles.cancelBtn, { backgroundColor: '#ff980020', borderColor: '#ff9800' }]}
+                  onPress={() => {
+                    setRescheduleData({ date: '', start_time: item.start_time || '08:00', end_time: item.end_time || '09:00' });
+                    setRescheduleModal({ lectureId: item.id, courseName: course?.name || '', oldDate: item.date });
+                  }}
+                  data-testid={`reschedule-scheduled-${item.id}`}
+                >
+                  <Ionicons name="calendar" size={20} color="#ff9800" />
+                </TouchableOpacity>
               )}
               {canManageLectures && (
                 <TouchableOpacity
@@ -1128,6 +1194,78 @@ export default function CourseLecturesScreen() {
           </SafeAreaView>
         </Modal>
       </SafeAreaView>
+      
+      {/* Modal إعادة الجدولة */}
+      {rescheduleModal && (
+        <Modal visible={true} transparent animationType="fade">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 400 }}>
+              <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 16, color: '#1a237e' }}>
+                إعادة جدولة محاضرة
+              </Text>
+              <Text style={{ textAlign: 'center', color: '#666', marginBottom: 16 }}>
+                {rescheduleModal.courseName} - {rescheduleModal.oldDate}
+              </Text>
+              
+              {/* التاريخ الجديد */}
+              <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>التاريخ الجديد:</Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16, textAlign: 'center', fontSize: 16 }}
+                placeholder="YYYY-MM-DD"
+                value={rescheduleData.date}
+                onChangeText={(text) => setRescheduleData(prev => ({ ...prev, date: text }))}
+                data-testid="reschedule-date-input"
+              />
+              
+              {/* وقت البداية */}
+              <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>وقت البداية:</Text>
+              <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 16 }}>
+                <select
+                  value={rescheduleData.start_time}
+                  onChange={(e: any) => setRescheduleData(prev => ({ ...prev, start_time: e.target.value }))}
+                  style={{ padding: 12, fontSize: 16, border: 'none', borderRadius: 8, width: '100%', textAlign: 'center' }}
+                  data-testid="reschedule-start-time"
+                >
+                  {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </View>
+              
+              {/* وقت النهاية */}
+              <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>وقت النهاية:</Text>
+              <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 24 }}>
+                <select
+                  value={rescheduleData.end_time}
+                  onChange={(e: any) => setRescheduleData(prev => ({ ...prev, end_time: e.target.value }))}
+                  style={{ padding: 12, fontSize: 16, border: 'none', borderRadius: 8, width: '100%', textAlign: 'center' }}
+                  data-testid="reschedule-end-time"
+                >
+                  {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </View>
+              
+              {/* الأزرار */}
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#e0e0e0', padding: 14, borderRadius: 10, alignItems: 'center' }}
+                  onPress={() => setRescheduleModal(null)}
+                >
+                  <Text style={{ fontWeight: '600', color: '#333' }}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#ff9800', padding: 14, borderRadius: 10, alignItems: 'center', opacity: rescheduling ? 0.6 : 1 }}
+                  onPress={handleReschedule}
+                  disabled={rescheduling}
+                  data-testid="confirm-reschedule-btn"
+                >
+                  <Text style={{ fontWeight: '600', color: '#fff' }}>
+                    {rescheduling ? 'جاري...' : 'إعادة الجدولة'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
     </>
   );
 }

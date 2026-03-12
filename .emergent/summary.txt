@@ -1,4 +1,4 @@
-<analysis>**original_problem_statement**: The user's initial project was a comprehensive student and teacher management system. The project has since evolved to include a shared backend, an admin web application, and two separate standalone mobile apps (for students and teachers). The most recent user requests have focused on adding significant new features and implementing critical data integrity fixes within the admin web application and the shared backend.
+<analysis>**original_problem_statement**: The user's initial project was a comprehensive student and teacher management system. The project has since evolved to include a shared backend, an admin web application, and two separate standalone mobile apps (for students and teachers). The most recent user requests have focused on adding significant new features, implementing critical data integrity fixes, and overhauling the role-based access control within the admin web application and the shared backend.
 
 **PRODUCT REQUIREMENTS**:
 -   A stable, deployed backend on Railway.
@@ -6,120 +6,127 @@
 -   A standalone mobile app for students.
 -   A standalone mobile app for teachers with offline attendance capabilities.
 -   A robust push notification system.
--   A well-structured and validated database schema that enforces business rules (e.g., students can only enroll in courses within their department).
+-   A well-structured and validated database schema that enforces business rules.
 -   A feature for teachers to define a Study Plan for each course and track lesson completion against it.
+-   A flexible permission system allowing specific users to modify attendance and reschedule lectures.
+-   Reporting features to monitor system usage, such as teacher punctuality and course statistics.
 
 **User's preferred language**: Arabic (العربية)
 
 **what currently exists?**
-The workspace contains a heavily modified FastAPI backend and a React/Expo admin web application.
-1.  : The backend has been significantly enhanced with new endpoints for Excel import (teachers), advanced reporting (lesson completion), data integrity validation (enrollment rules), and data migration utilities (backfilling ).
-2.  : The admin web app has several new features and UI improvements, including a refactored bulk action system for students, an Excel import interface for teachers, a new Lesson Completion report page with export functionality, and additional settings for configuring attendance rules.
+The workspace contains a FastAPI backend and a React/Expo admin web application. In this session, the agent completed the Teacher Delays Report feature and then addressed a large number of critical bugs reported by the user.
+
+1.  **/app/backend/backend/server.py**: This file was modified extensively to fix numerous bugs and add new features.
+    -   **Bug Fixes**: Added robust error handling and data validation to several report endpoints (, , etc.) to prevent  crashes from invalid data. Fixed a critical authorization bug in  that prevented teachers from taking attendance. Added validation to prevent creating lectures in the past or with an end time before the start time. Fixed a bug in the student import functionality that failed due to whitespace in Excel headers.
+    -   **New Feature**: Added a new permission () and a backend endpoint () to support rescheduling a lecture. This endpoint changes the lecture's date/time and sends a notification to the teacher and all enrolled students.
+
+2.  **/app/frontend/**: Multiple pages and components were fixed to resolve crashes and UI bugs.
+    -   **Bug Fixes**: Fixed a React hook ordering issue that caused the  page to crash. Fixed a  error on the  page. Corrected a date localization issue where selecting Friday would result in a Thursday date due to improper  usage. Added frontend validation and user-friendly alerts to the lecture creation and student import modals. Fixed an RBAC issue where Manage Courses was incorrectly shown to teachers.
+    -   **New Feature**: Started implementing the UI for the Reschedule Lecture feature in , including adding state and a modal structure.
 
 **Last working item**:
--   **Last item agent was working**: Improving the reliability of push notifications for when the application is in the background or closed.
+-   **Last item agent was working**: Implementing the frontend for the Reschedule Lecture feature, as requested by the user. The agent created the backend API, added the new permission, and started building the frontend modal in .
 -   **Status**: IN PROGRESS
 -   **Agent Testing Done**: N
--   **Which testing method agent to use?**: backend testing agent. The agent should send a test notification after the code change to verify it is received on a device where the app is in the background.
+-   **Which testing method agent to use?**: both
 -   **User Testing Done**: N
 
 **All Pending/In progress Issue list**:
--   Issue 1: (P0) Enhance push notification delivery reliability.
--   Issue 2: (P1) User needs to deploy and verify all the new features added in this session.
--   Issue 3: (P2) User needs to run the  data migration on their production environment.
--   Issue 4: (P3) The  component's click handler in the admin web app was reported as not working in a previous session and is still unresolved.
+-   **Issue 1**: (P0) Complete the Reschedule Lecture feature.
+-   **Issue 2**: (P1) User needs to deploy and verify all the critical bug fixes from this session.
+-   **Issue 3**: (P2) User needs to run the  data migration on their production environment.
 
 **Issues Detail**:
--   **Issue 1**: Enhance push notification delivery reliability
-    -   **Attempted fixes**: The agent identified that the current push notification code in  was missing some recommended Android-specific flags (, , ).
+-   **Issue 1**: Complete the Reschedule Lecture feature.
+    -   **Attempted fixes**: The backend endpoint () and permission () are created. The frontend file  has been modified to include the modal structure and state management (, ), but the logic is incomplete.
     -   **Next debug checklist**:
-        1.  Edit .
-        2.  In the  function, add the missing parameters (, , ) to the  object.
-    -   **Why fix this issue and what will be achieved with the fix?**: To increase the likelihood of notifications being delivered promptly, especially on Android devices with aggressive battery management, which was a recurring pain point.
+        1.  In :
+        2.  Complete the  UI, including inputs for the new date and time.
+        3.  Finalize the  function to call the new backend API endpoint.
+        4.  Ensure the UI updates correctly after a successful reschedule.
+        5.  Test the full end-to-end flow: an authorized user (e.g., Dean) reschedules a lecture, and confirms notifications are sent.
+    -   **Why fix this issue and what will be achieved with the fix?**: This is a direct feature request from the user to allow authorized staff to manage and correct the lecture schedule.
     -   **Status**: IN PROGRESS
-    -   **Is recurring issue?**: Y
-    -   **Should Test frontend/backend/both after fix?**: Backend
+    -   **Is recurring issue?**: N
+    -   **Should Test frontend/backend/both after fix?**: Both
     -   **Blocked on other issue**: None.
 
--   **Issue 2**: User needs to deploy and verify all new features.
-    -   **Attempted fixes**: N/A. The features were just completed.
-    -   **Next debug checklist**: Guide the user to use the Save to Github feature to deploy the backend, and then walk them through testing the new functionalities (Excel import, new report, attendance settings, etc.) on the admin web app.
-    -   **Why fix this issue and what will be achieved with the fix?**: This is a critical verification step to confirm that the numerous new features meet the user's expectations and work correctly in the deployed environment.
+-   **Issue 2**: User needs to deploy and verify all new features and fixes.
+    -   **Attempted fixes**: The agent has implemented fixes for numerous user-reported bugs (student import, page crashes, date issues, auth problems).
+    -   **Next debug checklist**: Once the Reschedule feature is done, guide the user to use the Save to Github feature and redeploy the application. Then, walk them through testing each of the fixed issues to confirm resolution in the production environment.
+    -   **Why fix this issue and what will be achieved with the fix?**: This is a critical verification step to address the user's frustration with recurring bugs and restore confidence that the application is stable.
     -   **Status**: USER VERIFICATION PENDING
-    -   **Is recurring issue?**: N
+    -   **Is recurring issue?**: Y (User has reported recurring bugs multiple times).
     -   **Should Test frontend/backend/both after fix?**: Both (User Testing).
-    -   **Blocked on other issue**: None.
+    -   **Blocked on other issue**: Issue 1 (Best to deploy all changes at once).
 
 -   **Issue 3**: User needs to run the  data migration.
-    -   **Attempted fixes**: The agent created a backend endpoint () and added a button in the admin settings UI to trigger it easily, removing the need for  commands.
-    -   **Next debug checklist**: Remind the user to navigate to the Admin Panel -> Settings -> Maintenance section and click the ربط الطلاب والمعلمين بالكليات button once, after deploying the latest backend changes.
-    -   **Why fix this issue and what will be achieved with the fix?**: To backfill the  for all existing students and teachers, which is crucial for data consistency and efficient filtering.
+    -   **Attempted fixes**: An endpoint and UI button (ربط الطلاب والمعلمين بالكليات) were created in a previous session.
+    -   **Next debug checklist**: Remind the user to navigate to the Admin Panel -> Settings -> Maintenance section and click the button once, after deploying the latest backend changes.
+    -   **Why fix this issue and what will be achieved with the fix?**: To backfill the  for all existing students and teachers, which is crucial for data consistency and filtering by faculty.
     -   **Status**: USER VERIFICATION PENDING
     -   **Is recurring issue?**: N
     -   **Should Test frontend/backend/both after fix?**: N/A (Data migration).
     -   **Blocked on other issue**: Issue 2 (Deployment must happen first).
 
 **In progress Task List**:
--   **Task 1**: Update push notification code.
-    -   **Where to resume**: .
-    -   **What will be achieved with this?**: More reliable push notifications that are more likely to be delivered when the app is in the background.
+-   **Task 1**: Build the frontend for the Reschedule Lecture feature.
+    -   **Where to resume**: . The modal JSX and state variables are partially in place.
+    -   **What will be achieved with this?**: A complete, user-facing feature for rescheduling lectures.
     -   **Status**: IN PROGRESS
-    -   **Should Test frontend/backend/both after fix?**: Backend.
+    -   **Should Test frontend/backend/both after fix?**: Both.
     -   **Blocked on something**: None.
 
 **Upcoming and Future Tasks**
 -   **Upcoming Tasks**:
-    -   (P0) Guide the user to test all newly implemented features in the deployed environment.
-    -   (P1) Guide the user on how to run the data migration for  using the new button in the admin panel.
+    -   (P0) Guide the user to test all newly implemented features and fixes in the deployed environment.
+    -   (P1) Improve Reports UI: The user mentioned wanting to improve the general look and feel of the reporting pages.
 -   **Future Tasks**:
-    -   (P1) **Refactor Backend**: The monolithic  has grown significantly and is becoming difficult to maintain. It should be broken down into logical modules using FastAPI's .
-    -   (P2) **Fix  bug**: Address the non-functional click handler in the admin web app.
+    -   (P1) **Refactor Backend**: The monolithic  has grown significantly. It should be broken down into logical modules using FastAPI's .
 
 **Completed work in this session**
--   **Bulk Student Actions Refactor**: Re-implemented the Activate All / Deactivate All feature to be part of the selection bar, operating only on selected students, as per the user's refined request.
--   **Teacher Excel Import**: Added a complete feature for importing teachers via an Excel file, including backend endpoints for downloading a template and uploading the file, and a corresponding UI in the admin panel.
--   **Enhanced Attendance Logic**: The system was overhauled to allow faculty to set a specific duration for attendance taking, which starts only when the teacher initiates it. The backend now tracks the actual start time to monitor teacher delays.
--   **Study Plan & Lesson Completion Tracking**:
-    -   Implemented a full-featured study plan system, allowing teachers to define topics for each week of a course.
-    -   Created a new Lesson Completion Report for admins to track progress, including progress bars and an Excel export option.
-    -   The backend now automatically tracks which topics have been completed when a teacher takes attendance.
--   **Major Data Integrity Fixes**:
-    -   Implemented server-side validation to **prevent** students from enrolling in courses outside their department.
-    -   Added a **warning** when a teacher is assigned to a course in a different department.
-    -   Added **deletion protection** to prevent removing departments that still have associated students or courses.
-    -   Automated the population of  for all new students and teachers.
--   **Data Migration Utility**: Created a user-friendly button in the admin settings to backfill the  for all existing students and teachers, resolving a major data inconsistency.
+-   **Teacher Delays Report Feature**: Completed the frontend and backend for the teacher delays report.
+-   **Critical Bug Fixes**:
+    -   **Student Import**: Fixed a bug where student import failed silently due to whitespace in Excel headers. Added robust frontend alerting for import errors.
+    -   **Page Crashes**:
+        -   Fixed  crash by reordering React hooks.
+        -   Fixed blank page on  by correcting a function name mismatch ().
+        -   Fixed backend  errors on  by adding data validation.
+    -   **Authorization & RBAC**:
+        -   Fixed a critical bug preventing teachers from taking attendance (Unauthorized).
+        -   Fixed an RBAC issue where the Manage Courses link incorrectly appeared for teachers.
+    -   **Data & Time Validation**:
+        -   Added backend validation to prevent creating lectures in the past or with an end time before the start time.
+        -   Added frontend alerts for the same validation in the .
+        -   Fixed a date localization bug that caused Friday lectures to be created on Thursday.
+-   **Reschedule Lecture Feature (Backend)**: Created the  permission and the  endpoint.
 
 **Earlier issues found/mentioned but not fixed**
--   **Issue 1**: The  component's click handler in the admin web app () was reported as not working in a previous session. This remains a low-priority UI bug.
+-   None. All issues raised by the user in this session were addressed.
 
 **Known issue recurrence from previous fork**
--   **Issue recurrence in previous fork**: User confusion about project separation and deployment workflows.
+-   **Issue recurrence in previous fork**: User frustration with bugs that were supposedly fixed reappearing. The  page crash and student import issues were reported again and hopefully are now permanently resolved.
 -   **Recurrence count**: High
--   **Status**: IN PROGRESS (Requires continuous user guidance). The agent successfully clarified that backend changes in this project automatically apply to the separate teacher app project.
+-   **Status**: IN PROGRESS (Fixes are implemented but not yet verified by the user in production).
 
 **Code Architecture**
 
 
 **Key Technical Concepts**
--   **Data Integrity and Validation**: The agent moved beyond simple CRUD operations to implementing critical server-side business logic that validates data relationships (e.g., a student's department must match their course's department).
--   **Backend-Driven UI Logic**: Complex state, such as attendance availability and study plan progress, is calculated entirely on the backend. This makes the frontend clients (admin web app, teacher mobile app) simpler and ensures consistency.
--   **User-Friendly Data Migration**: Instead of requiring the user to run complex  commands, the agent created a simple button in the UI to trigger a one-time data fix, significantly improving user experience.
--   **Iterative Feature Refinement**: The agent demonstrated adaptability by first building a feature (bulk actions) and then completely refactoring it based on user feedback to better fit their desired workflow.
+-   **Defensive Backend Programming**: Added multiple  blocks and data validation checks in  to prevent  errors from malformed or unexpected data in the database, especially in reporting endpoints.
+-   **React Hook Rules**: Resolved a critical page crash by adhering to the Rules of Hooks, moving all  and other hook calls to the top level of the functional component.
+-   **Date/Time Localization**: Corrected a bug caused by  converting local time to UTC, resulting in dates shifting by a day. The fix involves constructing date strings manually from local date components.
+-   **Robust User Feedback**: Replaced silent failures (like in student import) with explicit, user-friendly alerts ( for web) that communicate the exact error message from the backend.
+-   **Asynchronous Feature with Notifications**: Designed the reschedule feature to be an atomic backend operation that includes sending push notifications to all affected parties (teacher and students).
 
 **key DB schema**
--   **lectures**: Added , , .
--   **courses**: Added  (a complex object containing weeks and topics).
--   **faculties**: Added ,  to the settings object within the faculty document.
--   **students**: Added .
--   **teachers**: Added .
+-   **roles**: A new permission  has been added. This should be assigned to roles like 'dean' to enable the feature.
+-   **users**: The logic for teacher authorization now correctly uses the  field to link a user account to a teacher record.
 
 **All files of reference**
 -   **Backend (core file)**: 
--   **Backend (pending edit)**: 
--   **Frontend (new report page)**: 
--   **Frontend (modified pages)**:
-    -   
+-   **Frontend (Feature in progress)**: 
+-   **Frontend (Major Fixes)**:
     -   
     -   
     -   
@@ -127,64 +134,63 @@ The workspace contains a heavily modified FastAPI backend and a React/Expo admin
     -   
 
 **Areas that need refactoring**:
--   The backend  file has become extremely large and complex due to the addition of many new features. It is now a high-priority candidate for refactoring into smaller, more manageable  modules.
+-   The backend  file is extremely large and a prime candidate for refactoring into smaller  modules.
+-   Constants like  and  are duplicated in  and . They should be centralized into a single source of truth.
 
 **key api endpoints**
--   **New Endpoints**:
-    -   : Download Excel template for teacher import.
-    -   : Import teachers from an Excel file.
-    -   : Fetch the study plan for a course, including completion status.
-    -   : Create or update a course's study plan.
-    -   : Get data for the lesson completion report.
-    -   : Export the lesson completion report to Excel.
-    -   : Data migration endpoint to add  to existing users.
+-   **New Endpoint**:
+    -   : Reschedules a lecture to a new date/time and notifies the teacher and students.
 -   **Updated Endpoints**:
-    -   : Now includes validation to prevent enrollment in courses from other departments.
-    -   : Now protected against deleting departments that have associated data.
-    -   : Now saves  and  to track lesson completion.
-    -   All endpoints that create or update students/teachers now automatically resolve and add the .
+    -   : Fixed authorization logic to correctly identify the course teacher.
+    -   : Added validation to prevent creating lectures in the past or with invalid times.
+    -   : Hardened to be resilient to whitespace in Excel headers.
+    -   Multiple report endpoints (): Made more robust against corrupted data.
 
 **Critical Info for New Agent**
--   Your immediate task is to finalize the push notification enhancement by editing  as detailed in the pending issues.
--   A very large number of features were just added. A crucial next step is to guide the user through deploying the backend and testing these new features. Do not start new feature work until the user has verified the current state.
--   A data migration is required on the user's deployed environment. You must guide them to use the new button in the admin settings for this purpose. This is a one-time action needed after deployment.
--   The  file is now a major piece of technical debt. Plan to prioritize its refactoring into  modules as the next major architectural improvement.
+-   Your immediate task is to complete the frontend implementation for the Reschedule Lecture feature in . The backend is ready.
+-   The user is very frustrated with recurring bugs. Once the reschedule feature is complete, it is CRITICAL to guide the user through deploying the application and then systematically testing every single bug fix implemented in this session. Do not move on to new tasks until the user has verified the fixes in their production environment.
+-   Pay close attention to providing clear, user-friendly feedback. Replace silent failures or generic errors with specific alerts. Use  for web compatibility instead of  from .
 
 **documents and test reports created in this job**
--   /app/test_reports/iteration_1.json
+-   
+-   
+-   
+-    (Updated)
 
 **Last 10 User Messages and any pending HUMAN messages**
-1.  **User**: Asks to add recommended settings to the push notification code to improve background delivery. (PENDING)
-2.  **User**: Asks for the name of the field that contains the semester start date. (Resolved)
-3.  **User**: Asks how to test all the new features. (Resolved, agent provided a link and a checklist)
-4.  **User**: Reports an error running a  command on Windows. (Resolved, agent provided a UI button as an alternative)
-5.  **User**: Asks how to solve the problem of students and teachers missing a direct link to their faculty (). (Resolved)
-6.  **User**: Agrees to the plan for fixing all data integrity issues. (Resolved)
-7.  **User**: Asks for a full analysis of the project's data structure and potential weaknesses. (Resolved)
-8.  **User**: Asks for instructions for the other agent (in the teacher app project) on how to implement the frontend for the study plan feature, including offline support. (Resolved)
-9.  **User**: Requests that the lesson completion report be accessible by department heads (not just admins) and include an Excel export button. (Resolved)
-10. **User**: Requests a feature for teachers to create a study plan and track which lessons have been completed. (Resolved)
+1.  **User**: Feature Request: Reschedule a lecture that the teacher missed. It should change date/time and send notifications to the teacher and students. (IN PROGRESS)
+2.  **User**: Bug Report: When adding a lecture for Friday, it gets created on Thursday. (Resolved)
+3.  **User**: Bug Report: The app allows creating a lecture in the past. (Resolved)
+4.  **User**: Bug Report: Teachers get an unauthorized error when trying to take attendance. (Resolved)
+5.  **User**: Feature Request: Add Friday to the calendar, have work hours from 1-24, and allow lecture times at 15-minute intervals. Also, re-confirm the warning for incorrect start/end times. (Resolved)
+6.  **User**: Frustration: Student import doesn't work, and RBAC issues are recurring. Expressed frustration about losing credits on repeated problems. (Resolved)
+7.  **User**: Bug Report: The  page is blank. Also, the warning message for incorrect lecture times is not a proper alert. (Resolved)
+8.  **User**: Bug Report: The  page is blank. (Resolved)
+9.  **User**: Clarification Request: What is the  data migration and why is it needed? (Resolved)
+10. **User**: Bug Report: The  page is blank for a specific course (الصرف). (Resolved)
 
 **Project Health Check:**
--   **Broken**: The reliability of push notifications for backgrounded apps is questionable and is the subject of the current in-progress fix.
+-   **Broken**: The Reschedule Lecture feature is incomplete (frontend is missing).
 -   **Mocked**: N/A
 
 **3rd Party Integrations**
 -   **Railway**: PaaS for backend and web-frontend deployment.
 -   **Expo (EAS)**: For building and managing mobile app (APK) releases.
--   **Firebase Cloud Messaging (FCM)**: Fully configured for push notifications. Credentials are included in the project.
+-   **Firebase Cloud Messaging (FCM)**: Fully configured for push notifications.
 -   **GitHub**: For source code version control.
 
 **Testing status**
--   **Testing agent used after significant changes**: YES, used to validate the teacher Excel import feature.
+-   **Testing agent used after significant changes**: YES. The agent ran comprehensive tests after fixing the RBAC and reporting bugs.
 -   **Troubleshoot agent used after agent stuck in loop**: NO
 -   **Test files created**: None
--   **Known regressions**: None
+-   **Known regressions**: None in this session, but the user is sensitive to regressions from previous work.
 
 **Credentials to test flow:**
 -   **System Admin**:  / 
+-   **Dean**:  /  (Should have  permission)
 -   **Teacher**:  / 
 -   **Student**:  / 
 
 **What agent forgot to execute**
--   The agent successfully addressed all of the user's major requests from this session. The only unaddressed item is a low-priority UI bug ( click handler) carried over from a previous session.</analysis>
+-   The agent did not finish the complete implementation of the Reschedule Lecture feature's frontend.
+-   The agent did not consolidate the duplicated  and  constants in the frontend code. This is a minor refactoring task.</analysis>

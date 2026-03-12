@@ -9,7 +9,7 @@
     "integration_issues": [
       {
         "flow": "Public Preview URL",
-        "issue": "Preview URL (https://punctuality-monitor.preview.emergentagent.com) returns 404. This is a platform-level routing issue, not an app bug.",
+        "issue": "Preview URL (https://attendance-track-38.preview.emergentagent.com) returns 404. This is a platform-level routing issue, not an app bug.",
         "affected_selectors": []
       }
     ],

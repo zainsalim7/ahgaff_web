@@ -20,7 +20,7 @@ import requests
 import os
 
 # Use the public URL for testing (from frontend/.env)
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://punctuality-monitor.preview.emergentagent.com')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://attendance-track-38.preview.emergentagent.com')
 BASE_URL = BASE_URL.rstrip('/')
 
 # Test credentials

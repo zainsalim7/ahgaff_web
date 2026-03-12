@@ -58,6 +58,7 @@ export const PERMISSIONS = {
   // صلاحيات المحاضرات
   MANAGE_LECTURES: 'manage_lectures',
   VIEW_LECTURES: 'view_lectures',
+  RESCHEDULE_LECTURE: 'reschedule_lecture',
   VIEW_COURSES: 'view_courses',
   OVERRIDE_LECTURE_STATUS: 'override_lecture_status',
 } as const;
