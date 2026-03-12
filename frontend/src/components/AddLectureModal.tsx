@@ -46,14 +46,16 @@ const DAYS = [
   { id: 'tuesday', name: 'الثلاثاء', num: 2 },
   { id: 'wednesday', name: 'الأربعاء', num: 3 },
   { id: 'thursday', name: 'الخميس', num: 4 },
+  { id: 'friday', name: 'الجمعة', num: 5 },
 ];
 
-const TIME_SLOTS = [
-  '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-  '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30',
-  '19:00', '19:30', '20:00', '20:30', '21:00',
-];
+// أوقات المحاضرات: من 01:00 إلى 00:00 (منتصف الليل) بفواصل ربع ساعة
+const TIME_SLOTS: string[] = [];
+for (let h = 1; h <= 23; h++) {
+  const hh = h.toString().padStart(2, '0');
+  TIME_SLOTS.push(`${hh}:00`, `${hh}:15`, `${hh}:30`, `${hh}:45`);
+}
+TIME_SLOTS.push('00:00');
 
 export default function AddLectureModal({
   visible,
@@ -139,17 +141,25 @@ export default function AddLectureModal({
     setSelectedDay(dayId);
   };
 
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
   const handleSave = async () => {
     if (!formData.date) {
-      Alert.alert('تنبيه', 'يرجى اختيار التاريخ');
+      showAlert('تنبيه', 'يرجى اختيار التاريخ');
       return;
     }
     if (!formData.room.trim()) {
-      Alert.alert('تنبيه', 'يرجى إدخال القاعة');
+      showAlert('تنبيه', 'يرجى إدخال القاعة');
       return;
     }
     if (formData.start_time && formData.end_time && formData.end_time <= formData.start_time) {
-      Alert.alert('خطأ في الوقت', 'وقت النهاية يجب أن يكون بعد وقت البداية');
+      showAlert('خطأ في الوقت', 'وقت النهاية يجب أن يكون بعد وقت البداية');
       return;
     }
 

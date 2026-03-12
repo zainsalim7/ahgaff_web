@@ -57,7 +57,9 @@
 - **UX**: Added Arabic alert messages in AddLectureModal for validation errors (missing date, missing room, invalid time range)
 - **RBAC fix**: Removed VIEW_COURSES from "إدارة المقررات" menu item - now only users with MANAGE_COURSES can see it (teachers won't see admin course management)
 - **Critical Bug fix**: Excel import failing silently due to trailing spaces in column names. Added `df.columns.str.strip()` to clean column headers before mapping. Tested with user's actual file (15 students imported successfully)
-- **Bug fix**: `Alert.alert` doesn't work on Expo Web - replaced with `window.alert` fallback via `showAlert` helper in course-students.tsx
+- **Calendar update**: Added Friday (الجمعة) to lecture days in both AddLectureModal and course-lectures
+- **Time slots**: Changed from 07:00-21:00 (30min intervals) to 01:00-00:00 (15min intervals: :00, :15, :30, :45)
+- **Time validation**: Frontend shows Arabic `window.alert` for invalid end_time on web platform
 
 ## P0 - Next
 - [ ] Deploy and test all features on production
