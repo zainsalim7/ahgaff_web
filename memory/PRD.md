@@ -53,6 +53,8 @@
 - **Bug fix**: Hardened ALL report endpoints (attendance-overview, absent-students, student-report, daily, warnings) with safe .get() access and try-except around ObjectId conversions to prevent 500 errors from corrupted data
 - **Bug fix**: Fixed `formatDate is not defined` crash in report-daily.tsx (function was defined as `formatDateStr` but called as `formatDate`)
 - **Validation**: Added time validation for lecture creation/update - end_time must be after start_time (prevents creating lectures like 11:00-10:00)
+- **Bug fix**: Fixed "Rendered more hooks than during the previous render" crash in course-students.tsx by consolidating all useState hooks at the top of the component
+- **UX**: Added Arabic alert messages in AddLectureModal for validation errors (missing date, missing room, invalid time range)
 
 ## P0 - Next
 - [ ] Deploy and test all features on production

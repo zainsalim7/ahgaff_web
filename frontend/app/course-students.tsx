@@ -111,6 +111,23 @@ export default function CourseStudentsScreen() {
   const [lectureAttendance, setLectureAttendance] = useState<AttendanceRecord[]>([]);
   const [studentStats, setStudentStats] = useState<{ [key: string]: StudentStats }>({});
   const [canEditAttendance, setCanEditAttendance] = useState(false);
+  
+  // Import preview state
+  const [importPreview, setImportPreview] = useState<{ total: number; names: string[]; file: File | null } | null>(null);
+  const [showImportConfirm, setShowImportConfirm] = useState(false);
+  
+  // بحث في الطلاب المسجلين
+  const [enrolledSearchText, setEnrolledSearchText] = useState('');
+  const [enrollSelectionMode, setEnrollSelectionMode] = useState(false);
+  const [selectedEnrolled, setSelectedEnrolled] = useState<string[]>([]);
+  const [showActionModal, setShowActionModal] = useState<'copy' | 'move' | null>(null);
+  const [allCourses, setAllCourses] = useState<any[]>([]);
+  const [actionLoading, setActionLoading] = useState(false);
+  
+  // تعديل حالة الحضور
+  const [editingRecord, setEditingRecord] = useState<{recordId: string; studentName: string; currentStatus: string} | null>(null);
+  const [editReason, setEditReason] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!courseId) return;
@@ -356,10 +373,6 @@ export default function CourseStudentsScreen() {
     }
   };
 
-  // Import preview state
-  const [importPreview, setImportPreview] = useState<{ total: number; names: string[]; file: File | null } | null>(null);
-  const [showImportConfirm, setShowImportConfirm] = useState(false);
-
   const handleImportExcel = async () => {
     if (Platform.OS === 'web') {
       const input = document.createElement('input');
@@ -516,14 +529,6 @@ export default function CourseStudentsScreen() {
     return '#f44336';
   };
 
-  // بحث في الطلاب المسجلين
-  const [enrolledSearchText, setEnrolledSearchText] = useState('');
-  const [enrollSelectionMode, setEnrollSelectionMode] = useState(false);
-  const [selectedEnrolled, setSelectedEnrolled] = useState<string[]>([]);
-  const [showActionModal, setShowActionModal] = useState<'copy' | 'move' | null>(null);
-  const [allCourses, setAllCourses] = useState<any[]>([]);
-  const [actionLoading, setActionLoading] = useState(false);
-  
   const filteredEnrolled = enrolledStudents.filter(s => {
     if (!enrolledSearchText) return true;
     return s.full_name.includes(enrolledSearchText) || s.student_number?.includes(enrolledSearchText);
@@ -646,11 +651,6 @@ export default function CourseStudentsScreen() {
       </View>
     );
   };
-
-  // تعديل حالة الحضور
-  const [editingRecord, setEditingRecord] = useState<{recordId: string; studentName: string; currentStatus: string} | null>(null);
-  const [editReason, setEditReason] = useState('');
-  const [editLoading, setEditLoading] = useState(false);
 
   const handleEditAttendance = async (newStatus: string) => {
     if (!editingRecord) return;

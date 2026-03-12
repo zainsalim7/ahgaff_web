@@ -9,6 +9,7 @@ import {
   Modal,
   ActivityIndicator,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -140,9 +141,15 @@ export default function AddLectureModal({
 
   const handleSave = async () => {
     if (!formData.date) {
+      Alert.alert('تنبيه', 'يرجى اختيار التاريخ');
       return;
     }
     if (!formData.room.trim()) {
+      Alert.alert('تنبيه', 'يرجى إدخال القاعة');
+      return;
+    }
+    if (formData.start_time && formData.end_time && formData.end_time <= formData.start_time) {
+      Alert.alert('خطأ في الوقت', 'وقت النهاية يجب أن يكون بعد وقت البداية');
       return;
     }
 
@@ -150,8 +157,9 @@ export default function AddLectureModal({
     try {
       await onSave(formData);
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving lecture:', error);
+      // رسالة الخطأ تُعرض من المكون الأب (course-lectures)
     } finally {
       setSaving(false);
     }
