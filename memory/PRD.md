@@ -14,31 +14,35 @@
 
 ### API: Edit Attendance
 - `PUT /api/attendance/{record_id}/status`
-- Body: `{"status": "present|absent|late|excused", "reason": "optional"}`
 - Requires: `edit_attendance` permission
 
 ### API: Reschedule Lecture
 - `PUT /api/lectures/{lecture_id}/reschedule`
 - Body: `{"date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM"}`
 - Requires: `reschedule_lecture` permission or admin role
+- Validates: future date only, no time conflicts with teacher's other lectures
 
 ## What's Been Implemented
 
+### March 13, 2026 (Session 7 continued)
+- **Date/Day Mismatch Fix**: Removed day-selection buttons from AddLectureModal. Uses date picker only. Shows day name automatically after selection.
+- **Teacher Lecture Conflict Detection**: Added `check_teacher_lecture_conflict()` to prevent overlapping lectures for the same teacher across all their courses. Applied to:
+  - `POST /api/lectures` (single lecture creation) - rejects with conflict message
+  - `POST /api/lectures/generate-semester` (bulk generation) - skips conflicting slots
+  - `PUT /api/lectures/{id}/reschedule` - rejects with conflict message
+- **Reschedule date restriction**: Both frontend (min date on date picker) and backend reject past dates
+- **Reschedule modal day name**: Shows day name after selecting date in reschedule modal
+
 ### March 12, 2026 (Session 7)
 - **Reschedule Lecture Feature (Complete)**: Fixed frontend AsyncStorage bug, uses api.put() now
-- **Date/Day Mismatch Fix**: Removed day-selection buttons from AddLectureModal. Now uses only date picker (calendar) to avoid timezone-related day mismatches. Shows day name automatically after date selection.
 
 ### March 8, 2026 (Session 6)
-- Teacher Delays Report, Reports integration, Side menu integration
-- Bug fixes: TypeError, course report 500, formatDate crash, hooks crash, Excel import, RBAC
+- Teacher Delays Report, Bug fixes (TypeError, course report 500, formatDate crash, hooks crash, Excel import, RBAC)
 - Calendar update: Added Friday, expanded time slots
-- Reschedule Lecture Backend: Created endpoint and permission
-
-### March 8, 2026 (Session 5)
-- Role separation, Attendance edit API, Edit UI, Permission enforcement
-- Default roles updated, Search improvements, Faculty display, Delete fixes
+- Reschedule Lecture Backend
 
 ### Previous Sessions
+- Session 5: Role separation, Attendance edit API, Search improvements
 - Session 4: faculty_id auto-resolution
 - Session 3: Data integrity fixes
 - Session 2: Study Plans & Reports
@@ -46,7 +50,8 @@
 
 ## P0 - Next
 - [x] Complete Reschedule Lecture feature (DONE)
-- [x] Fix date/day mismatch in AddLectureModal (DONE)
+- [x] Fix date/day mismatch (DONE)
+- [x] Teacher lecture conflict detection (DONE)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration from admin panel
 
