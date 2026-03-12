@@ -22,17 +22,36 @@
 - Requires: `edit_attendance` permission
 - Tracks: original_status, edited_by, edited_at, edit_reason
 
+### API: Reschedule Lecture
+- `PUT /api/lectures/{lecture_id}/reschedule`
+- Body: `{"date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM"}`
+- Requires: `reschedule_lecture` permission or admin role
+- Sends push notifications to teacher and enrolled students
+- Updates lecture date/time and marks as rescheduled
+
 ## What's Been Implemented
+
+### March 12, 2026 (Session 7)
+- **Reschedule Lecture Feature (Complete)**: Fixed frontend implementation by replacing broken AsyncStorage+fetch with api.put() service. Added HTML date picker for web platform. Full end-to-end feature now working.
+
+### March 8, 2026 (Session 6)
+- **Teacher Delays Report**: Complete frontend page at `/report-teacher-delays` with summary cards, department filter, expandable teacher details, and Excel export
+- **Reports page integration**: Added "تأخر المعلمين" card to reports grid
+- **Side menu integration**: Added teacher delays link in side menu under reports section
+- **New permission**: `REPORT_TEACHER_DELAYS` added to permissions system
+- **Bug fixes**: Fixed TypeError when user permissions is None, course report 500 error, formatDate crash, hooks crash, Excel import whitespace, RBAC issues, time validation, date localization
+- **Calendar update**: Added Friday, expanded time slots to 1:00-0:00 with 15-min intervals
+- **Reschedule Lecture Backend**: Created endpoint and RESCHEDULE_LECTURE permission
 
 ### March 8, 2026 (Session 5)
 - **Role separation**: Admin no longer auto-inherits teacher-only permissions
 - **Attendance edit API**: PUT endpoint with permission check + activity logging
-- **Edit UI**: Modal in course-students page with status options (present/absent/late/excused) + reason
-- **Permission enforcement**: Backend has_permission() + Frontend hasPermission() both check TEACHER_ONLY_PERMISSIONS
+- **Edit UI**: Modal in course-students page with status options + reason
+- **Permission enforcement**: Backend + Frontend permission checks
 - **Default roles updated**: Admin role excludes teacher-only perms; Dean keeps edit_attendance
 - **Search improvements**: Prioritized results, max height dropdown
-- **Faculty display**: department cards show faculty_name, faculties show departments
-- **Delete fixes**: Modal dialogs, enrollment protection, better error messages
+- **Faculty display**: department cards show faculty_name
+- **Delete fixes**: Modal dialogs, enrollment protection
 - **Teacher-department link**: Backend accepts department_ids array
 
 ### Previous Sessions
@@ -41,27 +60,8 @@
 - Session 2: Study Plans & Reports
 - Session 1: Attendance timing, Teacher Excel import
 
-### March 8, 2026 (Session 6)
-- **Teacher Delays Report**: Complete frontend page at `/report-teacher-delays` with summary cards, department filter, expandable teacher details, and Excel export
-- **Reports page integration**: Added "تأخر المعلمين" card to reports grid
-- **Side menu integration**: Added teacher delays link in side menu under reports section
-- **New permission**: `REPORT_TEACHER_DELAYS` added to permissions system
-- **Bug fix**: Fixed TypeError when user permissions is None (server.py line 390-393)
-- **Bug fix**: Fixed course report 500 error - added robust error handling for invalid enrollments/lectures data in `/reports/course/{id}/detailed`
-- **Bug fix**: Frontend course report now shows error message with retry button instead of blank page on API failure
-- **Bug fix**: Fixed URL param reading in report-course.tsx (`courseId` param now supported alongside `id`)
-- **Bug fix**: Hardened ALL report endpoints (attendance-overview, absent-students, student-report, daily, warnings) with safe .get() access and try-except around ObjectId conversions to prevent 500 errors from corrupted data
-- **Bug fix**: Fixed `formatDate is not defined` crash in report-daily.tsx (function was defined as `formatDateStr` but called as `formatDate`)
-- **Validation**: Added time validation for lecture creation/update - end_time must be after start_time (prevents creating lectures like 11:00-10:00)
-- **Bug fix**: Fixed "Rendered more hooks than during the previous render" crash in course-students.tsx by consolidating all useState hooks at the top of the component
-- **UX**: Added Arabic alert messages in AddLectureModal for validation errors (missing date, missing room, invalid time range)
-- **RBAC fix**: Removed VIEW_COURSES from "إدارة المقررات" menu item - now only users with MANAGE_COURSES can see it (teachers won't see admin course management)
-- **Critical Bug fix**: Excel import failing silently due to trailing spaces in column names. Added `df.columns.str.strip()` to clean column headers before mapping. Tested with user's actual file (15 students imported successfully)
-- **Calendar update**: Added Friday (الجمعة) to lecture days in both AddLectureModal and course-lectures
-- **Time slots**: Changed from 07:00-21:00 (30min intervals) to 01:00-00:00 (15min intervals: :00, :15, :30, :45)
-- **Time validation**: Frontend shows Arabic `window.alert` for invalid end_time on web platform
-
 ## P0 - Next
+- [x] Complete Reschedule Lecture feature (DONE - Session 7)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration from admin panel
 
@@ -74,4 +74,4 @@
 - [ ] Activity logs UI improvements
 
 ## Test Credentials
-- Admin: admin / admin123 | Teacher: teacher180156 / teacher123 | Student: 234 / 123456
+- Admin: admin / admin123 | Dean: dean / dean123 | Teacher: teacher180156 / teacher123 | Student: 234 / 123456
