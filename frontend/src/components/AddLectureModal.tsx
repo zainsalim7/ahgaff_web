@@ -14,6 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { settingsAPI } from '../services/api';
+import { WEEKDAYS_AR } from '../utils/dateUtils';
 
 interface Course {
   id: string;
@@ -39,16 +40,6 @@ export interface LectureFormData {
   notes?: string;
 }
 
-const DAYS = [
-  { id: 'saturday', name: 'السبت', num: 6 },
-  { id: 'sunday', name: 'الأحد', num: 0 },
-  { id: 'monday', name: 'الإثنين', num: 1 },
-  { id: 'tuesday', name: 'الثلاثاء', num: 2 },
-  { id: 'wednesday', name: 'الأربعاء', num: 3 },
-  { id: 'thursday', name: 'الخميس', num: 4 },
-  { id: 'friday', name: 'الجمعة', num: 5 },
-];
-
 // أوقات المحاضرات: من 01:00 إلى 00:00 (منتصف الليل) بفواصل ربع ساعة
 const TIME_SLOTS: string[] = [];
 for (let h = 1; h <= 23; h++) {
@@ -67,7 +58,6 @@ export default function AddLectureModal({
   title = 'إضافة محاضرة',
 }: AddLectureModalProps) {
   const [saving, setSaving] = useState(false);
-  const [selectedDay, setSelectedDay] = useState<string>('');
   const [semesterDates, setSemesterDates] = useState<{ start: string; end: string } | null>(null);
   
   const [formData, setFormData] = useState<LectureFormData>({
@@ -115,31 +105,8 @@ export default function AddLectureModal({
         room: '',
         notes: '',
       });
-      setSelectedDay('');
     }
   }, [visible]);
-
-  // حساب التاريخ من اليوم المختار
-  const calculateDateFromDay = (dayId: string) => {
-    if (!semesterDates) return;
-    
-    const day = DAYS.find(d => d.id === dayId);
-    if (!day) return;
-
-    const startDate = new Date(semesterDates.start);
-    const today = new Date();
-    const baseDate = today > startDate ? today : startDate;
-    
-    // البحث عن أقرب يوم مطابق
-    let targetDate = new Date(baseDate);
-    while (targetDate.getDay() !== day.num) {
-      targetDate.setDate(targetDate.getDate() + 1);
-    }
-    
-    const dateStr = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,'0')}-${String(targetDate.getDate()).padStart(2,'0')}`;
-    setFormData(prev => ({ ...prev, date: dateStr }));
-    setSelectedDay(dayId);
-  };
 
   const showAlert = (title: string, message: string) => {
     if (Platform.OS === 'web') {
@@ -232,34 +199,10 @@ export default function AddLectureModal({
             </View>
           )}
 
-          {/* Day Selection */}
+          {/* Date - التاريخ فقط بالروزنامة */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
-              <Ionicons name="calendar" size={18} color="#1565c0" /> اليوم
-            </Text>
-            <View style={styles.daysGrid}>
-              {DAYS.map(day => (
-                <TouchableOpacity
-                  key={day.id}
-                  style={[
-                    styles.dayBtn,
-                    selectedDay === day.id && styles.dayBtnActive
-                  ]}
-                  onPress={() => calculateDateFromDay(day.id)}
-                >
-                  <Text style={[
-                    styles.dayBtnText,
-                    selectedDay === day.id && styles.dayBtnTextActive
-                  ]}>{day.name}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          </View>
-
-          {/* Date */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              <Ionicons name="today" size={18} color="#9c27b0" /> التاريخ *
+              <Ionicons name="calendar" size={18} color="#1565c0" /> التاريخ *
             </Text>
             {Platform.OS === 'web' ? (
               <input
@@ -267,8 +210,8 @@ export default function AddLectureModal({
                 value={formData.date}
                 onChange={(e: any) => {
                   setFormData({ ...formData, date: e.target.value });
-                  setSelectedDay('');
                 }}
+                data-testid="lecture-date-picker"
                 style={{
                   width: '100%',
                   padding: '12px',
@@ -286,12 +229,25 @@ export default function AddLectureModal({
                 value={formData.date}
                 onChangeText={(text) => {
                   setFormData({ ...formData, date: text });
-                  setSelectedDay('');
                 }}
                 placeholder="YYYY-MM-DD"
                 placeholderTextColor="#999"
               />
             )}
+            {/* عرض اسم اليوم عند اختيار التاريخ */}
+            {formData.date && (() => {
+              const [y, m, d] = formData.date.split('-').map(Number);
+              if (y && m && d) {
+                const dt = new Date(y, m - 1, d);
+                const dayName = WEEKDAYS_AR[dt.getDay()];
+                return (
+                  <Text style={{ fontSize: 14, color: '#1565c0', fontWeight: '600', marginTop: 8, textAlign: 'center' }}>
+                    {dayName} - {d} {['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'][m-1]} {y}
+                  </Text>
+                );
+              }
+              return null;
+            })()}
             {semesterDates && (
               <Text style={styles.hint}>
                 فترة الفصل: {semesterDates.start} إلى {semesterDates.end}
@@ -454,31 +410,6 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 8,
     marginTop: 8,
-  },
-  daysGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  dayBtn: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  dayBtnActive: {
-    backgroundColor: '#1565c0',
-    borderColor: '#1565c0',
-  },
-  dayBtnText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  dayBtnTextActive: {
-    color: '#fff',
-    fontWeight: '600',
   },
   chip: {
     paddingHorizontal: 16,

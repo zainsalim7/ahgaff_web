@@ -12,47 +12,31 @@
 | `manage_lectures` | إدارة المحاضرات |
 | `edit_attendance` | تعديل حالة حضور طالب بعد التحضير |
 
-### How to Grant `edit_attendance`:
-1. Admin → إدارة المستخدمين → اختيار المستخدم → إضافة صلاحية `edit_attendance`
-2. OR: assign the "عميد كلية" role which includes `edit_attendance`
-
 ### API: Edit Attendance
 - `PUT /api/attendance/{record_id}/status`
 - Body: `{"status": "present|absent|late|excused", "reason": "optional"}`
 - Requires: `edit_attendance` permission
-- Tracks: original_status, edited_by, edited_at, edit_reason
 
 ### API: Reschedule Lecture
 - `PUT /api/lectures/{lecture_id}/reschedule`
 - Body: `{"date": "YYYY-MM-DD", "start_time": "HH:MM", "end_time": "HH:MM"}`
 - Requires: `reschedule_lecture` permission or admin role
-- Sends push notifications to teacher and enrolled students
-- Updates lecture date/time and marks as rescheduled
 
 ## What's Been Implemented
 
 ### March 12, 2026 (Session 7)
-- **Reschedule Lecture Feature (Complete)**: Fixed frontend implementation by replacing broken AsyncStorage+fetch with api.put() service. Added HTML date picker for web platform. Full end-to-end feature now working.
+- **Reschedule Lecture Feature (Complete)**: Fixed frontend AsyncStorage bug, uses api.put() now
+- **Date/Day Mismatch Fix**: Removed day-selection buttons from AddLectureModal. Now uses only date picker (calendar) to avoid timezone-related day mismatches. Shows day name automatically after date selection.
 
 ### March 8, 2026 (Session 6)
-- **Teacher Delays Report**: Complete frontend page at `/report-teacher-delays` with summary cards, department filter, expandable teacher details, and Excel export
-- **Reports page integration**: Added "تأخر المعلمين" card to reports grid
-- **Side menu integration**: Added teacher delays link in side menu under reports section
-- **New permission**: `REPORT_TEACHER_DELAYS` added to permissions system
-- **Bug fixes**: Fixed TypeError when user permissions is None, course report 500 error, formatDate crash, hooks crash, Excel import whitespace, RBAC issues, time validation, date localization
-- **Calendar update**: Added Friday, expanded time slots to 1:00-0:00 with 15-min intervals
-- **Reschedule Lecture Backend**: Created endpoint and RESCHEDULE_LECTURE permission
+- Teacher Delays Report, Reports integration, Side menu integration
+- Bug fixes: TypeError, course report 500, formatDate crash, hooks crash, Excel import, RBAC
+- Calendar update: Added Friday, expanded time slots
+- Reschedule Lecture Backend: Created endpoint and permission
 
 ### March 8, 2026 (Session 5)
-- **Role separation**: Admin no longer auto-inherits teacher-only permissions
-- **Attendance edit API**: PUT endpoint with permission check + activity logging
-- **Edit UI**: Modal in course-students page with status options + reason
-- **Permission enforcement**: Backend + Frontend permission checks
-- **Default roles updated**: Admin role excludes teacher-only perms; Dean keeps edit_attendance
-- **Search improvements**: Prioritized results, max height dropdown
-- **Faculty display**: department cards show faculty_name
-- **Delete fixes**: Modal dialogs, enrollment protection
-- **Teacher-department link**: Backend accepts department_ids array
+- Role separation, Attendance edit API, Edit UI, Permission enforcement
+- Default roles updated, Search improvements, Faculty display, Delete fixes
 
 ### Previous Sessions
 - Session 4: faculty_id auto-resolution
@@ -61,7 +45,8 @@
 - Session 1: Attendance timing, Teacher Excel import
 
 ## P0 - Next
-- [x] Complete Reschedule Lecture feature (DONE - Session 7)
+- [x] Complete Reschedule Lecture feature (DONE)
+- [x] Fix date/day mismatch in AddLectureModal (DONE)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration from admin panel
 
