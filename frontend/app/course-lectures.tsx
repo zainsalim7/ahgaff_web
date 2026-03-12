@@ -1241,29 +1241,43 @@ export default function CourseLecturesScreen() {
               
               {/* وقت البداية */}
               <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>وقت البداية:</Text>
-              <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 16 }}>
-                <select
-                  value={rescheduleData.start_time}
-                  onChange={(e: any) => setRescheduleData(prev => ({ ...prev, start_time: e.target.value }))}
-                  style={{ padding: 12, fontSize: 16, border: 'none', borderRadius: 8, width: '100%', textAlign: 'center' }}
-                  data-testid="reschedule-start-time"
-                >
-                  {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </View>
+              <input
+                type="time"
+                value={rescheduleData.start_time}
+                onChange={(e: any) => setRescheduleData(prev => ({ ...prev, start_time: e.target.value }))}
+                data-testid="reschedule-start-time"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  marginBottom: '16px',
+                  boxSizing: 'border-box',
+                  backgroundColor: '#f9f9f9',
+                }}
+              />
               
               {/* وقت النهاية */}
               <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>وقت النهاية:</Text>
-              <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 24 }}>
-                <select
-                  value={rescheduleData.end_time}
-                  onChange={(e: any) => setRescheduleData(prev => ({ ...prev, end_time: e.target.value }))}
-                  style={{ padding: 12, fontSize: 16, border: 'none', borderRadius: 8, width: '100%', textAlign: 'center' }}
-                  data-testid="reschedule-end-time"
-                >
-                  {TIME_SLOTS.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </View>
+              <input
+                type="time"
+                value={rescheduleData.end_time}
+                onChange={(e: any) => setRescheduleData(prev => ({ ...prev, end_time: e.target.value }))}
+                data-testid="reschedule-end-time"
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: '1px solid #ddd',
+                  fontSize: '16px',
+                  textAlign: 'center',
+                  marginBottom: '24px',
+                  boxSizing: 'border-box',
+                  backgroundColor: '#f9f9f9',
+                }}
+              />
               
               {/* الأزرار */}
               <View style={{ flexDirection: 'row', gap: 12 }}>
