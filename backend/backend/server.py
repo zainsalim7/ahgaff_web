@@ -5113,8 +5113,13 @@ async def record_attendance_session(
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     
     # Check if teacher owns this course
-    if current_user["role"] == UserRole.TEACHER and course["teacher_id"] != current_user["id"]:
-        raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")
+    if current_user["role"] == UserRole.TEACHER:
+        # البحث عن teacher_record_id من حساب المستخدم
+        user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        teacher_record_id = user_doc.get("teacher_record_id") if user_doc else None
+        # المقارنة بكلا المعرفين: user_id و teacher_record_id
+        if course["teacher_id"] != current_user["id"] and course["teacher_id"] != teacher_record_id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")
     
     # === التحقق من قواعد التحضير ===
     now = get_yemen_time()
