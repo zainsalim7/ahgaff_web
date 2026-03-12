@@ -403,10 +403,10 @@ export default function CourseStudentsScreen() {
             setImportPreview({ total: previewData.total, names: previewData.sample_names || [], file });
             setShowImportConfirm(true);
           } else {
-            Alert.alert('خطأ', previewData.detail || 'فشل قراءة الملف');
+            showAlert('خطأ', previewData.detail || 'فشل قراءة الملف');
           }
         } catch (error: any) {
-          Alert.alert('خطأ', error.message || 'فشل قراءة الملف');
+          showAlert('خطأ', error.message || 'فشل قراءة الملف');
         } finally {
           setImporting(false);
         }
@@ -449,6 +449,14 @@ export default function CourseStudentsScreen() {
     }
   };
 
+  const showAlert = (title: string, message: string) => {
+    if (Platform.OS === 'web') {
+      window.alert(`${title}\n${message}`);
+    } else {
+      Alert.alert(title, message);
+    }
+  };
+
   const confirmImport = async () => {
     if (!importPreview?.file) return;
     setImporting(true);
@@ -477,13 +485,13 @@ export default function CourseStudentsScreen() {
       const data = await uploadResponse.json();
       
       if (uploadResponse.ok) {
-        Alert.alert('نجاح', `تم استيراد ${data.imported} طالب جديد\nتم تسجيل ${data.enrolled} طالب في المقرر`);
+        showAlert('نجاح', `تم استيراد ${data.imported} طالب جديد\nتم تسجيل ${data.enrolled} طالب في المقرر`);
         fetchData();
       } else {
-        Alert.alert('خطأ', data.detail || 'فشل في استيراد الملف');
+        showAlert('خطأ', data.detail || 'فشل في استيراد الملف');
       }
     } catch (error: any) {
-      Alert.alert('خطأ', error.message || 'فشل في الاستيراد');
+      showAlert('خطأ', error.message || 'فشل في الاستيراد');
     } finally {
       setImporting(false);
       setImportPreview(null);

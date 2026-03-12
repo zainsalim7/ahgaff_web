@@ -7578,6 +7578,9 @@ async def preview_import_students(
         contents = await file.read()
         df = pd.read_excel(BytesIO(contents))
         
+        # تنظيف أسماء الأعمدة من المسافات الزائدة
+        df.columns = df.columns.str.strip()
+        
         column_mapping = {
             'رقم القيد': 'student_id', 'الرقم الجامعي': 'student_id', 'رقم الطالب': 'student_id',
             'اسم الطالب': 'full_name', 'الاسم': 'full_name', 'الاسم الكامل': 'full_name',
@@ -7613,6 +7616,9 @@ async def import_students_to_course(
         contents = await file.read()
         df = pd.read_excel(BytesIO(contents))
         logger.info(f"Import to course: columns={list(df.columns)}, rows={len(df)}")
+        
+        # تنظيف أسماء الأعمدة من المسافات الزائدة
+        df.columns = df.columns.str.strip()
         
         # دعم أسماء الأعمدة بالعربي والإنجليزي
         column_mapping = {

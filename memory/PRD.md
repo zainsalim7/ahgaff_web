@@ -56,6 +56,8 @@
 - **Bug fix**: Fixed "Rendered more hooks than during the previous render" crash in course-students.tsx by consolidating all useState hooks at the top of the component
 - **UX**: Added Arabic alert messages in AddLectureModal for validation errors (missing date, missing room, invalid time range)
 - **RBAC fix**: Removed VIEW_COURSES from "إدارة المقررات" menu item - now only users with MANAGE_COURSES can see it (teachers won't see admin course management)
+- **Critical Bug fix**: Excel import failing silently due to trailing spaces in column names. Added `df.columns.str.strip()` to clean column headers before mapping. Tested with user's actual file (15 students imported successfully)
+- **Bug fix**: `Alert.alert` doesn't work on Expo Web - replaced with `window.alert` fallback via `showAlert` helper in course-students.tsx
 
 ## P0 - Next
 - [ ] Deploy and test all features on production
