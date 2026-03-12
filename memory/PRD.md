@@ -55,6 +55,7 @@
 - **Validation**: Added time validation for lecture creation/update - end_time must be after start_time (prevents creating lectures like 11:00-10:00)
 - **Bug fix**: Fixed "Rendered more hooks than during the previous render" crash in course-students.tsx by consolidating all useState hooks at the top of the component
 - **UX**: Added Arabic alert messages in AddLectureModal for validation errors (missing date, missing room, invalid time range)
+- **RBAC fix**: Removed VIEW_COURSES from "إدارة المقررات" menu item - now only users with MANAGE_COURSES can see it (teachers won't see admin course management)
 
 ## P0 - Next
 - [ ] Deploy and test all features on production
