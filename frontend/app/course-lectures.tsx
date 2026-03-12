@@ -571,31 +571,23 @@ export default function CourseLecturesScreen() {
     if (!rescheduleModal) return;
     if (!rescheduleData.date) {
       if (Platform.OS === 'web') window.alert('يرجى اختيار التاريخ الجديد');
+      else Alert.alert('تنبيه', 'يرجى اختيار التاريخ الجديد');
       return;
     }
     if (rescheduleData.start_time && rescheduleData.end_time && rescheduleData.end_time <= rescheduleData.start_time) {
       if (Platform.OS === 'web') window.alert('وقت النهاية يجب أن يكون بعد وقت البداية');
+      else Alert.alert('خطأ', 'وقت النهاية يجب أن يكون بعد وقت البداية');
       return;
     }
     setRescheduling(true);
     try {
-      const token = await AsyncStorage.getItem('token');
-      const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL || process.env.REACT_APP_BACKEND_URL;
-      const res = await fetch(`${API_URL}/api/lectures/${rescheduleModal.lectureId}/reschedule`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-        body: JSON.stringify(rescheduleData),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        showNotification('success', data.message || 'تم إعادة الجدولة بنجاح');
-        setRescheduleModal(null);
-        fetchData();
-      } else {
-        showNotification('error', data.detail || 'فشل في إعادة الجدولة');
-      }
+      const res = await api.put(`/lectures/${rescheduleModal.lectureId}/reschedule`, rescheduleData);
+      showNotification('success', res.data.message || 'تم إعادة الجدولة بنجاح');
+      setRescheduleModal(null);
+      fetchData();
     } catch (error: any) {
-      showNotification('error', error.message || 'فشل في إعادة الجدولة');
+      const msg = error.response?.data?.detail || error.message || 'فشل في إعادة الجدولة';
+      showNotification('error', msg);
     } finally {
       setRescheduling(false);
     }
@@ -1209,13 +1201,33 @@ export default function CourseLecturesScreen() {
               
               {/* التاريخ الجديد */}
               <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>التاريخ الجديد:</Text>
-              <TextInput
-                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16, textAlign: 'center', fontSize: 16 }}
-                placeholder="YYYY-MM-DD"
-                value={rescheduleData.date}
-                onChangeText={(text) => setRescheduleData(prev => ({ ...prev, date: text }))}
-                data-testid="reschedule-date-input"
-              />
+              {Platform.OS === 'web' ? (
+                <input
+                  type="date"
+                  value={rescheduleData.date}
+                  onChange={(e: any) => setRescheduleData(prev => ({ ...prev, date: e.target.value }))}
+                  data-testid="reschedule-date-input"
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: '8px',
+                    border: '1px solid #ddd',
+                    fontSize: '16px',
+                    textAlign: 'center',
+                    marginBottom: '16px',
+                    boxSizing: 'border-box',
+                    backgroundColor: '#f9f9f9',
+                  }}
+                />
+              ) : (
+                <TextInput
+                  style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 12, marginBottom: 16, textAlign: 'center', fontSize: 16 }}
+                  placeholder="YYYY-MM-DD"
+                  value={rescheduleData.date}
+                  onChangeText={(text) => setRescheduleData(prev => ({ ...prev, date: text }))}
+                  data-testid="reschedule-date-input"
+                />
+              )}
               
               {/* وقت البداية */}
               <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333' }}>وقت البداية:</Text>
