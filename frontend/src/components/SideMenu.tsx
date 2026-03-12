@@ -54,7 +54,7 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
   
   { id: 'courses', label: 'إدارة المقررات', icon: 'library', path: '/add-course', permissions: [
-    PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_COURSES
+    PERMISSIONS.MANAGE_COURSES
   ]},
   
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [

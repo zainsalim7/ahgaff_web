@@ -885,6 +885,7 @@ export default function CourseStudentsScreen() {
             </TouchableOpacity>
             
             <Pressable
+              data-testid="import-excel-btn"
               style={({ pressed }) => [
                 styles.actionBtn, 
                 styles.importBtn, 
