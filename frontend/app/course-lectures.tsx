@@ -87,7 +87,6 @@ export default function CourseLecturesScreen() {
   // فقط المدير ومن لديه صلاحية manage_lectures يمكنهم إدارة المحاضرات
   const isTeacher = user?.role === 'teacher';
   const canManageLectures = !isTeacher && !isStudent && (hasPermission(PERMISSIONS.MANAGE_LECTURES) || user?.role === 'admin');
-  const canOverrideStatus = hasPermission(PERMISSIONS.OVERRIDE_LECTURE_STATUS);
   const canReschedule = hasPermission(PERMISSIONS.RESCHEDULE_LECTURE) || user?.role === 'admin';
   
   // إعادة توجيه الطالب
@@ -549,24 +548,6 @@ export default function CourseLecturesScreen() {
     }
   };
 
-  const handleChangeStatus = async (lectureId: string, newStatus: string) => {
-    const statusNames: { [key: string]: string } = {
-      scheduled: 'مجدولة',
-      completed: 'منعقدة',
-      cancelled: 'ملغاة',
-      absent: 'غائب',
-    };
-    if (!confirm(`هل تريد تغيير حالة المحاضرة إلى "${statusNames[newStatus]}"؟`)) return;
-    try {
-      await lecturesAPI.updateStatus(lectureId, newStatus);
-      showNotification('success', `تم تغيير الحالة إلى: ${statusNames[newStatus]}`);
-      fetchData();
-    } catch (error: any) {
-      const msg = error.response?.data?.detail || 'فشل في تغيير حالة المحاضرة';
-      showNotification('error', msg);
-    }
-  };
-
   const handleReschedule = async () => {
     if (!rescheduleModal) return;
     if (!rescheduleData.date) {
@@ -697,16 +678,6 @@ export default function CourseLecturesScreen() {
                     >
                       <Ionicons name="calendar" size={20} color="#fff" />
                       <Text style={styles.attendanceBtnText}>إعادة جدولة</Text>
-                    </TouchableOpacity>
-                  )}
-                  {canOverrideStatus && (
-                    <TouchableOpacity
-                      style={[styles.attendanceBtn, { backgroundColor: '#607d8b' }]}
-                      onPress={() => handleChangeStatus(item.id, 'scheduled')}
-                      data-testid={`override-absent-${item.id}`}
-                    >
-                      <Ionicons name="refresh" size={20} color="#fff" />
-                      <Text style={styles.attendanceBtnText}>تغيير الحالة</Text>
                     </TouchableOpacity>
                   )}
                 </>
