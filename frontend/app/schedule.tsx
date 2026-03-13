@@ -30,24 +30,14 @@ const DAYS = [
   { id: 'friday', name: 'الجمعة', short: 'ج', num: 5 },
 ];
 
-const TIME_SLOTS = [
-  '07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-  '11:00', '11:30', '12:00', '12:30', '13:00', '13:30', '14:00', '14:30',
-  '15:00', '15:30', '16:00', '16:30', '17:00', '17:30', '18:00', '18:30',
-  '19:00', '19:30', '20:00',
-];
+const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
+  scheduled: { label: 'مجدولة', color: '#1565c0', bg: '#e3f2fd', icon: 'time-outline' },
+  completed: { label: 'منعقدة', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' },
+  absent: { label: 'غائب', color: '#e65100', bg: '#fff3e0', icon: 'alert-circle' },
+  cancelled: { label: 'ملغاة', color: '#c62828', bg: '#ffebee', icon: 'close-circle' },
+};
 
-interface DayScheduleConfig {
-  day: string;
-  enabled: boolean;
-  slots: { start_time: string; end_time: string }[];
-}
-
-interface SemesterSettings {
-  semester_start_date: string | null;
-  semester_end_date: string | null;
-  current_semester: string;
-}
+const ACCENT_COLORS = ['#1565c0', '#00897b', '#6a1b9a', '#ef6c00', '#c62828', '#2e7d32', '#ad1457'];
 
 export default function ScheduleScreen() {
   const router = useRouter();
@@ -56,12 +46,12 @@ export default function ScheduleScreen() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [lectures, setLectures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState('saturday');
-  
-  // إعدادات الفصل
-  const [semesterSettings, setSemesterSettings] = useState<SemesterSettings | null>(null);
-
-  // محاضرات اليوم الحالي
+  const [selectedDay, setSelectedDay] = useState(() => {
+    const todayNum = new Date().getDay();
+    const todayDay = DAYS.find(d => d.num === todayNum);
+    return todayDay?.id || 'saturday';
+  });
+  const [semesterSettings, setSemesterSettings] = useState<any>(null);
   const [todayLectures, setTodayLectures] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
@@ -74,12 +64,10 @@ export default function ScheduleScreen() {
       setCourses(coursesRes.data);
       setDepartments(deptsRes.data);
       
-      // محاولة جلب تواريخ الفصل من الإعدادات
       let semStart = settingsRes.data.semester_start_date;
       let semEnd = settingsRes.data.semester_end_date;
       let semName = settingsRes.data.current_semester;
       
-      // إذا لم تكن التواريخ متوفرة، جلب من الفصل النشط مباشرة
       if (!semStart || !semEnd) {
         try {
           const currentSemRes = await api.get('/semesters/current');
@@ -88,26 +76,16 @@ export default function ScheduleScreen() {
             semEnd = semEnd || currentSemRes.data.end_date;
             semName = semName || currentSemRes.data.name;
           }
-        } catch (e) {
-          console.log('Error fetching current semester:', e);
-        }
+        } catch (e) {}
       }
       
-      setSemesterSettings({
-        semester_start_date: semStart,
-        semester_end_date: semEnd,
-        current_semester: semName,
-      });
+      setSemesterSettings({ semester_start_date: semStart, semester_end_date: semEnd, current_semester: semName });
       
-      // جلب محاضرات اليوم الحالي (للمعلم تظهر مقرراته فقط)
       try {
         const todayRes = await lecturesAPI.getToday();
         setTodayLectures(todayRes.data || []);
-      } catch (e) {
-        console.log('Error fetching today lectures:', e);
-      }
+      } catch (e) {}
       
-      // جلب المحاضرات لجميع المقررات (للعرض في الجدول الأسبوعي)
       const allLectures: any[] = [];
       for (const course of coursesRes.data) {
         try {
@@ -123,292 +101,127 @@ export default function ScheduleScreen() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+  useEffect(() => { fetchData(); }, [fetchData]);
 
-  const getCourseName = (courseId: string) => {
-    const course = courses.find(c => c.id === courseId);
-    return course?.name || 'غير محدد';
+  const getCourseName = (courseId: string) => courses.find(c => c.id === courseId)?.name || 'غير محدد';
+  const getCourseColor = (courseId: string) => {
+    const idx = courses.findIndex(c => c.id === courseId);
+    return ACCENT_COLORS[idx % ACCENT_COLORS.length];
   };
 
-  // الحصول على محاضرات اليوم المحدد
   const getDayLectures = () => {
     const day = DAYS.find(d => d.id === selectedDay);
     if (!day) return [];
-    
     return lectures
-      .filter(lecture => {
-        const date = new Date(lecture.date);
-        return date.getDay() === day.num;
-      })
-      .sort((a, b) => a.start_time.localeCompare(b.start_time));
+      .filter(l => { const d = new Date(l.date); return d.getDay() === day.num; })
+      .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
   };
 
-  // عدد المحاضرات لكل يوم
   const getDayLectureCount = (dayId: string) => {
     const day = DAYS.find(d => d.id === dayId);
     if (!day) return 0;
-    
-    return lectures.filter(lecture => {
-      const date = new Date(lecture.date);
-      return date.getDay() === day.num;
-    }).length;
+    return lectures.filter(l => new Date(l.date).getDay() === day.num).length;
   };
 
   const handleDeleteLecture = async (lectureId: string) => {
     if (Platform.OS === 'web') {
       if (!window.confirm('هل أنت متأكد من حذف هذه المحاضرة؟')) return;
-      try {
-        await lecturesAPI.delete(lectureId);
-        alert('تم حذف المحاضرة');
-        fetchData();
-      } catch (error) {
-        alert('فشل في حذف المحاضرة');
-      }
+      try { await lecturesAPI.delete(lectureId); fetchData(); } catch { alert('فشل في حذف المحاضرة'); }
     } else {
-      Alert.alert(
-        'حذف المحاضرة',
-        'هل أنت متأكد من حذف هذه المحاضرة؟',
-        [
-          { text: 'إلغاء', style: 'cancel' },
-          {
-            text: 'حذف',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await lecturesAPI.delete(lectureId);
-                Alert.alert('نجاح', 'تم حذف المحاضرة');
-                fetchData();
-              } catch (error) {
-                Alert.alert('خطأ', 'فشل في حذف المحاضرة');
-              }
-            },
-          },
-        ]
-      );
+      Alert.alert('حذف المحاضرة', 'هل أنت متأكد؟', [
+        { text: 'إلغاء', style: 'cancel' },
+        { text: 'حذف', style: 'destructive', onPress: async () => {
+          try { await lecturesAPI.delete(lectureId); fetchData(); } catch { Alert.alert('خطأ', 'فشل في الحذف'); }
+        }},
+      ]);
     }
   };
 
   const handleCancelLecture = async (lectureId: string) => {
     if (Platform.OS === 'web') {
       if (!window.confirm('هل أنت متأكد من إلغاء هذه المحاضرة؟')) return;
-      try {
-        await lecturesAPI.updateStatus(lectureId, 'cancelled');
-        alert('تم إلغاء المحاضرة');
-        fetchData();
-      } catch (error) {
-        alert('فشل في إلغاء المحاضرة');
-      }
+      try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchData(); } catch { alert('فشل في الإلغاء'); }
     } else {
-      Alert.alert(
-        'إلغاء المحاضرة',
-        'هل أنت متأكد من إلغاء هذه المحاضرة؟',
-        [
-          { text: 'تراجع', style: 'cancel' },
-          {
-            text: 'إلغاء المحاضرة',
-            style: 'destructive',
-            onPress: async () => {
-              try {
-                await lecturesAPI.updateStatus(lectureId, 'cancelled');
-                Alert.alert('نجاح', 'تم إلغاء المحاضرة');
-                fetchData();
-              } catch (error) {
-                Alert.alert('خطأ', 'فشل في إلغاء المحاضرة');
-              }
-            },
-          },
-        ]
-      );
+      Alert.alert('إلغاء المحاضرة', 'هل أنت متأكد؟', [
+        { text: 'تراجع', style: 'cancel' },
+        { text: 'إلغاء المحاضرة', style: 'destructive', onPress: async () => {
+          try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchData(); } catch { Alert.alert('خطأ', 'فشل'); }
+        }},
+      ]);
     }
   };
 
-  const renderLectureItem = ({ item }: { item: any }) => {
-    const course = item.course;
-    
-    return (
-      <TouchableOpacity
-        style={styles.lectureCard}
-        onPress={() => router.push({
-          pathname: '/take-attendance',
-          params: { lectureId: item.id, courseId: item.course_id, courseName: course?.name }
-        })}
-      >
-        <View style={styles.timeColumn}>
-          <Text style={styles.timeText}>{item.start_time}</Text>
-          <View style={styles.timeLine} />
-          <Text style={styles.timeText}>{item.end_time}</Text>
-        </View>
-        <View style={styles.lectureInfo}>
-          <Text style={styles.courseName}>{course?.name || getCourseName(item.course_id)}</Text>
-          <View style={styles.detailRow}>
-            <Ionicons name="calendar" size={14} color="#666" />
-            <Text style={styles.detailText}>{item.date}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="location" size={14} color="#666" />
-            <Text style={styles.detailText}>القاعة: {item.room || 'غير محدد'}</Text>
-          </View>
-          <View style={styles.detailRow}>
-            <Ionicons name="people" size={14} color="#666" />
-            <Text style={styles.detailText}>
-              م{course?.level || '-'} - شعبة {course?.section || '-'}
-            </Text>
-          </View>
-        </View>
-        <View style={styles.actionColumn}>
-          {user?.role === 'admin' && (
-            <>
-              {item.status !== 'cancelled' && (
-                <TouchableOpacity
-                  style={[styles.deleteBtn, { backgroundColor: '#fff3e0', marginBottom: 6 }]}
-                  onPress={(e) => { e.stopPropagation?.(); handleCancelLecture(item.id); }}
-                  data-testid={`cancel-lecture-${item.id}`}
-                >
-                  <Ionicons name="close-circle" size={18} color="#ff9800" />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={(e) => { e.stopPropagation?.(); handleDeleteLecture(item.id); }}
-                data-testid={`delete-lecture-${item.id}`}
-              >
-                <Ionicons name="trash" size={18} color="#f44336" />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      </TouchableOpacity>
-    );
-  };
-
-  // حفظ تواريخ الفصل مباشرة
-
-  // عرض إعدادات الفصل - فقط عند وجود تواريخ
-  const renderSemesterInfo = () => {
-    if (!semesterSettings?.semester_start_date || !semesterSettings?.semester_end_date) {
-      return null;
-    }
-
-    return (
-      <View style={styles.semesterInfo}>
-        <Ionicons name="calendar" size={20} color="#4caf50" />
-        <Text style={styles.semesterInfoText}>
-          {semesterSettings.current_semester}: {semesterSettings.semester_start_date} إلى {semesterSettings.semester_end_date}
-        </Text>
-      </View>
-    );
-  };
-
-  if (loading) {
-    return <LoadingScreen />;
-  }
+  if (loading) return <LoadingScreen />;
 
   const dayLectures = getDayLectures();
-  const todayDate = new Date().toLocaleDateString('ar-SA', { 
-    weekday: 'long', 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  const todayNum = new Date().getDay();
 
-  // للمعلم: عرض محاضرات اليوم فقط
+  // ===== واجهة المعلم: محاضرات اليوم =====
   if (user?.role === 'teacher') {
+    const todayDate = new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     return (
-      <SafeAreaView style={styles.container} edges={['bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
+      <SafeAreaView style={s.container} edges={['bottom']}>
+        <View style={s.header}>
+          <TouchableOpacity onPress={() => goBack()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>محاضرات اليوم</Text>
+          <Text style={s.headerTitle}>محاضرات اليوم</Text>
           <View style={{ width: 40 }} />
         </View>
-
-        {/* Today's Date */}
-        <View style={styles.todayDateSection}>
-          <View style={styles.todayIconContainer}>
-            <Ionicons name="today" size={24} color="#fff" />
+        <View style={s.teacherDateCard}>
+          <View style={s.teacherDateIcon}><Ionicons name="today" size={22} color="#fff" /></View>
+          <View style={{ flex: 1 }}>
+            <Text style={s.teacherDateLabel}>اليوم</Text>
+            <Text style={s.teacherDateValue}>{todayDate}</Text>
           </View>
-          <View>
-            <Text style={styles.todayDateTitle}>اليوم</Text>
-            <Text style={styles.todayDateText}>{todayDate}</Text>
+          <View style={s.teacherCountBadge}>
+            <Text style={s.teacherCountText}>{todayLectures.length}</Text>
+            <Text style={s.teacherCountLabel}>محاضرة</Text>
           </View>
         </View>
-
-        {/* Today's Lectures */}
         <FlatList
           data={todayLectures}
-          renderItem={({ item }) => (
-            <TouchableOpacity
-              style={styles.todayLectureCard}
-              onPress={() => router.push({
-                pathname: '/take-attendance',
-                params: { lectureId: item.id, courseId: item.course_id }
-              })}
-            >
-              <View style={styles.todayLectureTime}>
-                <Text style={styles.todayLectureTimeText}>{item.start_time}</Text>
-                <View style={styles.todayLectureTimeDivider} />
-                <Text style={styles.todayLectureTimeText}>{item.end_time}</Text>
-              </View>
-              
-              <View style={styles.todayLectureInfo}>
-                <Text style={styles.todayLectureCourseName}>{item.course_name}</Text>
-                <Text style={styles.todayLectureCourseCode}>{item.course_code}</Text>
-                {item.room && (
-                  <View style={styles.todayLectureRoom}>
-                    <Ionicons name="location" size={12} color="#666" />
-                    <Text style={styles.todayLectureRoomText}>{item.room}</Text>
-                  </View>
-                )}
-              </View>
-              
-              <View style={styles.todayLectureActions}>
-                <View style={[styles.todayLectureStatus, { 
-                  backgroundColor: item.status === 'completed' ? '#e8f5e9' : 
-                    item.status === 'absent' ? '#fff3e0' : 
-                    item.status === 'cancelled' ? '#ffebee' : '#e3f2fd' 
-                }]}>
-                  <Text style={[styles.todayLectureStatusText, { 
-                    color: item.status === 'completed' ? '#4caf50' : 
-                      item.status === 'absent' ? '#ff9800' : 
-                      item.status === 'cancelled' ? '#f44336' : '#2196f3' 
-                  }]}>
-                    {item.status === 'completed' ? 'منعقدة' : 
-                     item.status === 'absent' ? 'غائب' : 
-                     item.status === 'cancelled' ? 'ملغاة' : 'مجدولة'}
-                  </Text>
-                </View>
-                <View style={styles.todayLectureAttendance}>
-                  <Ionicons name="people" size={14} color="#1565c0" />
-                  <Text style={styles.todayLectureAttendanceText}>
-                    {item.attendance_count}/{item.total_enrolled}
-                  </Text>
-                </View>
-              </View>
-              
-              <TouchableOpacity
-                style={styles.todayLectureAttendBtn}
-                onPress={() => router.push({
-                  pathname: '/take-attendance',
-                  params: { lectureId: item.id, courseId: item.course_id }
-                })}
-              >
-                <Ionicons name="checkmark-circle" size={32} color="#4caf50" />
-              </TouchableOpacity>
-            </TouchableOpacity>
-          )}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={styles.todayLecturesList}
+          contentContainerStyle={{ padding: 16, paddingTop: 0 }}
+          renderItem={({ item }) => {
+            const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
+            return (
+              <TouchableOpacity
+                style={s.teacherCard}
+                onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id } })}
+                data-testid={`teacher-lecture-${item.id}`}
+              >
+                <View style={[s.teacherCardAccent, { backgroundColor: st.color }]} />
+                <View style={s.teacherCardTime}>
+                  <Text style={s.teacherCardTimeStart}>{item.start_time}</Text>
+                  <Ionicons name="arrow-down" size={14} color="#bbb" />
+                  <Text style={s.teacherCardTimeEnd}>{item.end_time}</Text>
+                </View>
+                <View style={s.teacherCardBody}>
+                  <Text style={s.teacherCardCourse}>{item.course_name}</Text>
+                  {item.room && (
+                    <View style={s.teacherCardDetail}>
+                      <Ionicons name="location-outline" size={13} color="#888" />
+                      <Text style={s.teacherCardDetailText}>{item.room}</Text>
+                    </View>
+                  )}
+                  <View style={[s.teacherCardStatus, { backgroundColor: st.bg }]}>
+                    <Ionicons name={st.icon as any} size={12} color={st.color} />
+                    <Text style={[s.teacherCardStatusText, { color: st.color }]}>{st.label}</Text>
+                  </View>
+                </View>
+                <View style={s.teacherCardRight}>
+                  <Text style={s.teacherCardAttCount}>{item.attendance_count}/{item.total_enrolled}</Text>
+                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                </View>
+              </TouchableOpacity>
+            );
+          }}
           ListEmptyComponent={
-            <View style={styles.emptyTodayContainer}>
-              <Ionicons name="calendar-outline" size={80} color="#ccc" />
-              <Text style={styles.emptyTodayTitle}>لا توجد محاضرات اليوم</Text>
-              <Text style={styles.emptyTodayText}>
-                ليس لديك محاضرات مجدولة لهذا اليوم
-              </Text>
+            <View style={s.emptyState}>
+              <Ionicons name="sunny-outline" size={64} color="#ddd" />
+              <Text style={s.emptyTitle}>لا توجد محاضرات اليوم</Text>
+              <Text style={s.emptySubtitle}>استمتع بيومك!</Text>
             </View>
           }
         />
@@ -416,632 +229,401 @@ export default function ScheduleScreen() {
     );
   }
 
-  // للمدير: عرض الجدول الأسبوعي الكامل
+  // ===== واجهة المدير: الجدول الأسبوعي =====
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
+    <SafeAreaView style={s.container} edges={['bottom']}>
       {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
+      <View style={s.header}>
+        <TouchableOpacity onPress={() => goBack()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>جدول المحاضرات</Text>
+        <Text style={s.headerTitle}>الجدول الأسبوعي</Text>
         <View style={{ width: 40 }} />
       </View>
 
-      {/* Semester Info */}
-      {renderSemesterInfo()}
+      {/* Semester Strip */}
+      {semesterSettings?.semester_start_date && semesterSettings?.semester_end_date && (
+        <View style={s.semesterStrip}>
+          <Ionicons name="school-outline" size={16} color="#1565c0" />
+          <Text style={s.semesterStripText}>
+            {semesterSettings.current_semester} ({semesterSettings.semester_start_date} - {semesterSettings.semester_end_date})
+          </Text>
+        </View>
+      )}
 
-      {/* Days Tabs */}
-      <ScrollView 
-        horizontal 
-        showsHorizontalScrollIndicator={false}
-        style={styles.daysContainer}
-        contentContainerStyle={styles.daysContent}
-      >
+      {/* Week Day Selector */}
+      <View style={s.weekStrip}>
         {DAYS.map(day => {
-          const dayCount = getDayLectureCount(day.id);
+          const count = getDayLectureCount(day.id);
+          const isSelected = selectedDay === day.id;
+          const isToday = day.num === todayNum;
           return (
             <TouchableOpacity
               key={day.id}
-              style={[styles.dayTab, selectedDay === day.id && styles.dayTabActive]}
+              style={[
+                s.weekDay,
+                isSelected && s.weekDaySelected,
+                isToday && !isSelected && s.weekDayToday,
+              ]}
               onPress={() => setSelectedDay(day.id)}
+              data-testid={`day-tab-${day.id}`}
             >
-              <Text style={[styles.dayText, selectedDay === day.id && styles.dayTextActive]}>
+              <Text style={[s.weekDayShort, isSelected && s.weekDayShortSelected]}>
+                {day.short}
+              </Text>
+              <Text style={[s.weekDayName, isSelected && s.weekDayNameSelected]}>
                 {day.name}
               </Text>
-              {dayCount > 0 && (
-                <View style={[styles.dayBadge, selectedDay === day.id && styles.dayBadgeActive]}>
-                  <Text style={[styles.dayBadgeText, selectedDay === day.id && styles.dayBadgeTextActive]}>
-                    {dayCount}
+              {count > 0 && (
+                <View style={[s.weekDayBadge, isSelected && s.weekDayBadgeSelected]}>
+                  <Text style={[s.weekDayBadgeText, isSelected && s.weekDayBadgeTextSelected]}>
+                    {count}
                   </Text>
                 </View>
               )}
+              {isToday && <View style={[s.todayDot, isSelected && s.todayDotSelected]} />}
             </TouchableOpacity>
           );
         })}
-      </ScrollView>
+      </View>
 
-      {/* Schedule List */}
+      {/* Summary Bar */}
+      <View style={s.summaryBar}>
+        <Text style={s.summaryText}>
+          {DAYS.find(d => d.id === selectedDay)?.name} - {dayLectures.length} محاضرة
+        </Text>
+      </View>
+
+      {/* Lectures List */}
       <FlatList
         data={dayLectures}
-        renderItem={renderLectureItem}
         keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.scheduleList}
+        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+        renderItem={({ item, index }) => {
+          const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
+          const courseColor = getCourseColor(item.course_id);
+          const course = item.course;
+          return (
+            <View style={s.lectureRow} data-testid={`lecture-card-${item.id}`}>
+              {/* Timeline */}
+              <View style={s.timeline}>
+                <View style={[s.timelineDot, { backgroundColor: courseColor }]} />
+                {index < dayLectures.length - 1 && <View style={s.timelineLine} />}
+              </View>
+
+              {/* Card */}
+              <View style={s.card}>
+                <View style={[s.cardBorder, { backgroundColor: courseColor }]} />
+                <View style={s.cardContent}>
+                  {/* Time + Status Row */}
+                  <View style={s.cardTopRow}>
+                    <View style={s.cardTimeBox}>
+                      <Ionicons name="time-outline" size={14} color={courseColor} />
+                      <Text style={[s.cardTime, { color: courseColor }]}>
+                        {item.start_time} - {item.end_time}
+                      </Text>
+                    </View>
+                    <View style={[s.cardStatusBadge, { backgroundColor: st.bg }]}>
+                      <Text style={[s.cardStatusText, { color: st.color }]}>{st.label}</Text>
+                    </View>
+                  </View>
+
+                  {/* Course Name */}
+                  <Text style={s.cardTitle}>{course?.name || getCourseName(item.course_id)}</Text>
+
+                  {/* Details Row */}
+                  <View style={s.cardDetailsRow}>
+                    {item.room ? (
+                      <View style={s.cardDetail}>
+                        <Ionicons name="location-outline" size={13} color="#888" />
+                        <Text style={s.cardDetailText}>{item.room}</Text>
+                      </View>
+                    ) : null}
+                    {course?.level ? (
+                      <View style={s.cardDetail}>
+                        <Ionicons name="school-outline" size={13} color="#888" />
+                        <Text style={s.cardDetailText}>م{course.level}</Text>
+                      </View>
+                    ) : null}
+                    <View style={s.cardDetail}>
+                      <Ionicons name="calendar-outline" size={13} color="#888" />
+                      <Text style={s.cardDetailText}>{item.date}</Text>
+                    </View>
+                  </View>
+
+                  {/* Action Buttons */}
+                  {user?.role === 'admin' && (
+                    <View style={s.cardActions}>
+                      <TouchableOpacity
+                        style={s.cardActionBtn}
+                        onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id, courseName: course?.name } })}
+                        data-testid={`view-attendance-${item.id}`}
+                      >
+                        <Ionicons name="eye-outline" size={16} color="#1565c0" />
+                        <Text style={[s.cardActionText, { color: '#1565c0' }]}>عرض</Text>
+                      </TouchableOpacity>
+                      {item.status !== 'cancelled' && (
+                        <TouchableOpacity
+                          style={s.cardActionBtn}
+                          onPress={() => handleCancelLecture(item.id)}
+                          data-testid={`cancel-lecture-${item.id}`}
+                        >
+                          <Ionicons name="close-circle-outline" size={16} color="#e65100" />
+                          <Text style={[s.cardActionText, { color: '#e65100' }]}>إلغاء</Text>
+                        </TouchableOpacity>
+                      )}
+                      <TouchableOpacity
+                        style={s.cardActionBtn}
+                        onPress={() => handleDeleteLecture(item.id)}
+                        data-testid={`delete-lecture-${item.id}`}
+                      >
+                        <Ionicons name="trash-outline" size={16} color="#c62828" />
+                        <Text style={[s.cardActionText, { color: '#c62828' }]}>حذف</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </View>
+              </View>
+            </View>
+          );
+        }}
         ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="calendar-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>لا توجد محاضرات في هذا اليوم</Text>
+          <View style={s.emptyState}>
+            <Ionicons name="calendar-outline" size={56} color="#ddd" />
+            <Text style={s.emptyTitle}>لا توجد محاضرات</Text>
+            <Text style={s.emptySubtitle}>
+              لا توجد محاضرات مجدولة ليوم {DAYS.find(d => d.id === selectedDay)?.name}
+            </Text>
           </View>
         }
       />
-
-      {/* Add Button */}
-      {/* إضافة وتوليد المحاضرات متاحة فقط من داخل المقرر */}
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#f8f9fb' },
   header: {
-    backgroundColor: '#9c27b0',
+    backgroundColor: '#1a237e',
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 16,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  generateBtn: {
-    width: 40,
-    height: 40,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  semesterWarning: {
+  backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
+  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff' },
+
+  // Semester Strip
+  semesterStrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff3e0',
-    margin: 16,
-    marginBottom: 0,
-    padding: 16,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#ffcc80',
-  },
-  semesterWarningTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#e65100',
-  },
-  semesterWarningText: {
-    fontSize: 12,
-    color: '#ff9800',
-    marginTop: 2,
-  },
-  dateInput: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 6,
-    padding: 8,
-    fontSize: 14,
-    color: '#333',
-    textAlign: 'left',
-  },
-  saveDatesBtn: {
-    backgroundColor: '#1565c0',
-    borderRadius: 6,
-    padding: 10,
-    marginTop: 12,
-    alignItems: 'center',
-  },
-  saveDatesBtnText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 14,
-  },
-  semesterInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#e8f5e9',
-    margin: 16,
-    marginBottom: 0,
-    padding: 12,
-    borderRadius: 8,
+    backgroundColor: '#e8eaf6',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
     gap: 8,
   },
-  semesterInfoText: {
-    fontSize: 13,
-    color: '#2e7d32',
-  },
-  daysContainer: {
-    marginTop: 16,
-    minHeight: 56,
-    maxHeight: 56,
-    zIndex: 10,
-    position: 'relative',
-    backgroundColor: '#f5f5f5',
-    paddingVertical: 4,
-    borderBottomWidth: 2,
-    borderBottomColor: '#e0e0e0',
-  },
-  daysContent: {
-    paddingHorizontal: 16,
-  },
-  dayTab: {
+  semesterStripText: { fontSize: 12, color: '#1a237e', fontWeight: '500' },
+
+  // Week Strip
+  weekStrip: {
     flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    marginRight: 8,
-    borderRadius: 20,
     backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  dayTabActive: {
-    backgroundColor: '#9c27b0',
-    borderColor: '#9c27b0',
-  },
-  dayText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  dayTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  dayBadge: {
-    backgroundColor: '#e0e0e0',
-    borderRadius: 10,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
-    marginLeft: 6,
-  },
-  dayBadgeActive: {
-    backgroundColor: 'rgba(255,255,255,0.3)',
-  },
-  dayBadgeText: {
-    fontSize: 11,
-    color: '#666',
-    fontWeight: '600',
-  },
-  dayBadgeTextActive: {
-    color: '#fff',
-  },
-  scheduleList: {
-    padding: 16,
-  },
-  lectureCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  timeColumn: {
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  timeText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#9c27b0',
-  },
-  timeLine: {
-    width: 2,
-    height: 20,
-    backgroundColor: '#e0e0e0',
-    marginVertical: 4,
-  },
-  lectureInfo: {
-    flex: 1,
-  },
-  courseName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-  },
-  detailRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 4,
-    gap: 4,
-  },
-  detailText: {
-    fontSize: 13,
-    color: '#666',
-  },
-  actionColumn: {
-    justifyContent: 'center',
-    gap: 8,
-  },
-  deleteBtn: {
-    padding: 8,
-    backgroundColor: '#ffebee',
-    borderRadius: 8,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-    marginTop: 16,
-  },
-  fab: {
-    position: 'absolute',
-    bottom: 24,
-    right: 24,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#9c27b0',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 4,
-    elevation: 6,
-  },
-  // Generate Modal Styles
-  generateModalContainer: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  generateModalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    backgroundColor: '#fff',
+    paddingVertical: 8,
+    paddingHorizontal: 4,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  generateModalTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-  },
-  generateModalContent: {
+  weekDay: {
     flex: 1,
-  },
-  generateSection: {
-    backgroundColor: '#fff',
-    margin: 16,
-    marginBottom: 0,
-    padding: 16,
+    alignItems: 'center',
+    paddingVertical: 10,
     borderRadius: 12,
+    marginHorizontal: 2,
+    position: 'relative',
   },
-  generateSectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-    gap: 8,
+  weekDaySelected: {
+    backgroundColor: '#1a237e',
   },
-  generateSectionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+  weekDayToday: {
+    backgroundColor: '#e8eaf6',
   },
-  generateHint: {
-    fontSize: 13,
-    color: '#666',
-    marginBottom: 12,
-  },
-  semesterDatesBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-    padding: 12,
-    backgroundColor: '#f5f5f5',
+  weekDayShort: { fontSize: 11, color: '#999', fontWeight: '600', marginBottom: 2 },
+  weekDayShortSelected: { color: 'rgba(255,255,255,0.7)' },
+  weekDayName: { fontSize: 11, color: '#555', fontWeight: '500' },
+  weekDayNameSelected: { color: '#fff', fontWeight: '700' },
+  weekDayBadge: {
+    backgroundColor: '#e8eaf6',
     borderRadius: 8,
-  },
-  semesterDateItem: {
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    marginTop: 4,
+    minWidth: 18,
     alignItems: 'center',
   },
-  semesterDateLabel: {
-    fontSize: 12,
-    color: '#666',
+  weekDayBadgeSelected: { backgroundColor: 'rgba(255,255,255,0.25)' },
+  weekDayBadgeText: { fontSize: 10, color: '#1a237e', fontWeight: '700' },
+  weekDayBadgeTextSelected: { color: '#fff' },
+  todayDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#1a237e',
+    position: 'absolute',
+    bottom: 4,
+  },
+  todayDotSelected: { backgroundColor: '#fff' },
+
+  // Summary Bar
+  summaryBar: {
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    backgroundColor: '#f8f9fb',
+  },
+  summaryText: { fontSize: 13, color: '#666', fontWeight: '500' },
+
+  // Lecture Row (Timeline style)
+  lectureRow: {
+    flexDirection: 'row',
     marginBottom: 4,
   },
-  semesterDateValue: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
+  timeline: {
+    width: 28,
+    alignItems: 'center',
+    paddingTop: 18,
   },
-  courseChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 20,
-    marginRight: 8,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    zIndex: 1,
   },
-  courseChipActive: {
-    backgroundColor: '#ff9800',
-    borderColor: '#ff9800',
+  timelineLine: {
+    width: 2,
+    flex: 1,
+    backgroundColor: '#e0e0e0',
+    marginTop: 4,
   },
-  courseChipText: {
-    fontSize: 14,
-    color: '#666',
-  },
-  courseChipTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  roomInput: {
-    backgroundColor: '#f5f5f5',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 15,
-    textAlign: 'right',
-  },
-  dayConfigCard: {
-    backgroundColor: '#f9f9f9',
-    borderRadius: 12,
-    marginBottom: 12,
+
+  // Card
+  card: {
+    flex: 1,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    marginBottom: 10,
+    flexDirection: 'row',
     overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  dayConfigHeader: {
+  cardBorder: { width: 4 },
+  cardContent: { flex: 1, padding: 14 },
+  cardTopRow: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    padding: 12,
-    backgroundColor: '#fff',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  dayConfigLeft: {
+  cardTimeBox: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  cardTime: { fontSize: 13, fontWeight: '700' },
+  cardStatusBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 },
+  cardStatusText: { fontSize: 11, fontWeight: '600' },
+  cardTitle: { fontSize: 15, fontWeight: '700', color: '#222', marginBottom: 8 },
+  cardDetailsRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginBottom: 4 },
+  cardDetail: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  cardDetailText: { fontSize: 12, color: '#888' },
+  cardActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+  },
+  cardActionBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-  },
-  dayConfigName: {
-    fontSize: 15,
-    color: '#666',
-  },
-  dayConfigNameActive: {
-    color: '#1565c0',
-    fontWeight: '600',
-  },
-  addSlotBtn: {
-    padding: 4,
-  },
-  slotsContainer: {
-    padding: 12,
-    paddingTop: 0,
-  },
-  slotRow: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 8,
-  },
-  slotLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#1565c0',
-    marginBottom: 8,
-  },
-  slotTimes: {
-    gap: 8,
-  },
-  slotTimeBox: {
-    marginBottom: 8,
-  },
-  slotTimeLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginBottom: 6,
-  },
-  slotTimeBtn: {
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 6,
-    backgroundColor: '#f5f5f5',
-    borderRadius: 6,
-    marginRight: 6,
-  },
-  slotTimeBtnActive: {
-    backgroundColor: '#1565c0',
-  },
-  slotTimeBtnText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  slotTimeBtnTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  removeSlotBtn: {
-    alignSelf: 'flex-end',
-    padding: 8,
-    backgroundColor: '#ffebee',
     borderRadius: 8,
-    marginTop: 8,
+    backgroundColor: '#f8f9fb',
   },
-  generateModalFooter: {
-    padding: 16,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-  },
-  generateButton: {
-    flexDirection: 'row',
-    backgroundColor: '#4caf50',
-    paddingVertical: 16,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-  },
-  generateButtonDisabled: {
-    backgroundColor: '#bdbdbd',
-  },
-  generateButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#fff',
-  },
-  // Teacher's Today Lectures Styles
-  todayDateSection: {
+  cardActionText: { fontSize: 12, fontWeight: '600' },
+
+  // Teacher View
+  teacherDateCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     margin: 16,
     padding: 16,
-    borderRadius: 12,
+    borderRadius: 14,
     gap: 12,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
+    shadowOpacity: 0.06,
+    shadowRadius: 8,
     elevation: 3,
   },
-  todayIconContainer: {
-    width: 48,
-    height: 48,
+  teacherDateIcon: {
+    width: 44,
+    height: 44,
     borderRadius: 12,
-    backgroundColor: '#1565c0',
+    backgroundColor: '#1a237e',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  todayDateTitle: {
-    fontSize: 12,
-    color: '#666',
-  },
-  todayDateText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-    marginTop: 2,
-  },
-  todayLecturesList: {
-    padding: 16,
-    paddingTop: 0,
-  },
-  todayLectureCard: {
+  teacherDateLabel: { fontSize: 12, color: '#888' },
+  teacherDateValue: { fontSize: 15, fontWeight: '600', color: '#222', marginTop: 2 },
+  teacherCountBadge: { alignItems: 'center', backgroundColor: '#e8eaf6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8 },
+  teacherCountText: { fontSize: 20, fontWeight: '800', color: '#1a237e' },
+  teacherCountLabel: { fontSize: 10, color: '#5c6bc0' },
+
+  teacherCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
+    borderRadius: 14,
+    marginBottom: 10,
+    overflow: 'hidden',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 6,
+    elevation: 2,
   },
-  todayLectureTime: {
-    backgroundColor: '#1565c0',
-    borderRadius: 12,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
+  teacherCardAccent: { width: 4, alignSelf: 'stretch' },
+  teacherCardTime: {
     alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 12,
+    gap: 2,
   },
-  todayLectureTimeText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  todayLectureTimeDivider: {
-    width: 20,
-    height: 2,
-    backgroundColor: 'rgba(255,255,255,0.5)',
-    marginVertical: 4,
-  },
-  todayLectureInfo: {
-    flex: 1,
-  },
-  todayLectureCourseName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  todayLectureCourseCode: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  todayLectureRoom: {
+  teacherCardTimeStart: { fontSize: 14, fontWeight: '700', color: '#1a237e' },
+  teacherCardTimeEnd: { fontSize: 12, color: '#888' },
+  teacherCardBody: { flex: 1, paddingVertical: 12, paddingRight: 8 },
+  teacherCardCourse: { fontSize: 15, fontWeight: '700', color: '#222', marginBottom: 4 },
+  teacherCardDetail: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 6 },
+  teacherCardDetailText: { fontSize: 12, color: '#888' },
+  teacherCardStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
-    marginTop: 6,
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
   },
-  todayLectureRoomText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  todayLectureActions: {
-    alignItems: 'flex-end',
-    gap: 8,
-  },
-  todayLectureStatus: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 8,
-  },
-  todayLectureStatusText: {
-    fontSize: 11,
-    fontWeight: '600',
-  },
-  todayLectureAttendance: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  todayLectureAttendanceText: {
-    fontSize: 13,
-    color: '#1565c0',
-    fontWeight: '500',
-  },
-  todayLectureAttendBtn: {
-    padding: 4,
-  },
-  emptyTodayContainer: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 60,
-    paddingHorizontal: 32,
-  },
-  emptyTodayTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#666',
-    marginTop: 16,
-  },
-  emptyTodayText: {
-    fontSize: 14,
-    color: '#999',
-    textAlign: 'center',
-    marginTop: 8,
-    lineHeight: 22,
-  },
+  teacherCardStatusText: { fontSize: 11, fontWeight: '600' },
+  teacherCardRight: { alignItems: 'center', paddingHorizontal: 12, gap: 4 },
+  teacherCardAttCount: { fontSize: 13, fontWeight: '600', color: '#1a237e' },
+
+  // Empty State
+  emptyState: { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },
+  emptyTitle: { fontSize: 17, fontWeight: '600', color: '#888', marginTop: 16 },
+  emptySubtitle: { fontSize: 13, color: '#aaa', marginTop: 6, textAlign: 'center' },
 });
