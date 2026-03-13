@@ -7639,7 +7639,7 @@ async def reset_admin():
 
 class ScheduleBase(BaseModel):
     course_id: str
-    day: str  # sunday, monday, tuesday, wednesday, thursday
+    day: str  # saturday, sunday, monday, tuesday, wednesday, thursday, friday
     start_time: str  # HH:MM
     end_time: str
     room: str

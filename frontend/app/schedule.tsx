@@ -27,6 +27,7 @@ const DAYS = [
   { id: 'tuesday', name: 'الثلاثاء', short: 'ث', num: 2 },
   { id: 'wednesday', name: 'الأربعاء', short: 'ر', num: 3 },
   { id: 'thursday', name: 'الخميس', short: 'خ', num: 4 },
+  { id: 'friday', name: 'الجمعة', short: 'ج', num: 5 },
 ];
 
 const TIME_SLOTS = [
