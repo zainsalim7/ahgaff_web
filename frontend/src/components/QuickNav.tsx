@@ -26,7 +26,7 @@ const NAV_ITEMS: QuickNavItem[] = [
   // الصفحات الرئيسية
   { title: 'الرئيسية', icon: 'home', route: '/', color: '#1565c0' },
   { title: 'الإدارة', icon: 'settings', route: '/admin', color: '#1565c0', adminOnly: true },
-  { title: 'المقررات', icon: 'book', route: '/courses', color: '#ff9800' },
+  { title: 'المقررات', icon: 'book', route: '/(tabs)/courses', color: '#ff9800' },
   { title: 'حسابي', icon: 'person', route: '/profile', color: '#4caf50' },
   
   // إدارة النظام
