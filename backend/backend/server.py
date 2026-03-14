@@ -3134,8 +3134,8 @@ async def force_change_password(data: ForceChangePasswordRequest, current_user: 
 
 @api_router.post("/courses")
 async def create_course(course: CourseCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "add_course"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بإضافة مقرر")
     
     course_dict = course.dict()
     course_dict["created_at"] = get_yemen_time()
@@ -3444,8 +3444,8 @@ async def restore_course(request: Request, current_user: dict = Depends(get_curr
 
 @api_router.delete("/courses/{course_id}")
 async def delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "delete_course"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بحذف المقرر")
     
     # التحقق من وجود طلاب مسجلين
     enrollments_count = await db.enrollments.count_documents({"course_id": course_id})
@@ -3783,8 +3783,8 @@ class CourseUpdate(BaseModel):
 
 @api_router.put("/courses/{course_id}")
 async def update_course(course_id: str, data: CourseUpdate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "edit_course"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل المقرر")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
