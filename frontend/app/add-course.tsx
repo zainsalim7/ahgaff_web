@@ -98,6 +98,8 @@ export default function AddCourseScreen() {
     level: '1',
     section: '',
   });
+  const [sectionCount, setSectionCount] = useState('');
+  const SECTION_LABELS = ['أ', 'ب', 'ج', 'د', 'ه', 'و', 'ز', 'ح', 'ط', 'ي'];
 
   const fetchData = useCallback(async () => {
     try {
@@ -124,37 +126,53 @@ export default function AddCourseScreen() {
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.code || !formData.department_id || !formData.teacher_id) {
-      Alert.alert('خطأ', 'الرجاء ملء جميع الحقول المطلوبة');
+      if (Platform.OS === 'web') window.alert('الرجاء ملء جميع الحقول المطلوبة');
+      else Alert.alert('خطأ', 'الرجاء ملء جميع الحقول المطلوبة');
       return;
     }
 
     setSaving(true);
     try {
-      // إضافة الفصل والسنة الدراسية تلقائياً من الإعدادات
-      const courseData = {
+      const baseData = {
         ...formData,
         level: parseInt(formData.level),
         semester_id: settings?.current_semester_id || null,
         academic_year: settings?.academic_year || '',
       };
 
-      let res;
       if (editingCourse) {
-        res = await coursesAPI.update(editingCourse.id, courseData);
+        // تعديل مقرر موجود
+        const res = await coursesAPI.update(editingCourse.id, baseData);
+        let msg = 'تم تحديث المقرر بنجاح';
+        if (res.data?.warning) msg += '\n\n' + res.data.warning;
+        if (Platform.OS === 'web') window.alert(msg);
+        else Alert.alert('نجاح', msg);
       } else {
-        res = await coursesAPI.create(courseData);
-      }
-      
-      // عرض التنبيه إذا كان المعلم من قسم آخر
-      let msg = editingCourse ? 'تم تحديث المقرر بنجاح' : 'تم إضافة المقرر بنجاح';
-      if (res.data?.warning) {
-        msg += '\n\n' + res.data.warning;
-      }
-      
-      if (Platform.OS === 'web') {
-        window.alert(msg);
-      } else {
-        Alert.alert('نجاح', msg);
+        const count = parseInt(sectionCount) || 0;
+        if (count > 1) {
+          // إنشاء شعب متعددة
+          let created = 0;
+          let errors: string[] = [];
+          for (let i = 0; i < count && i < SECTION_LABELS.length; i++) {
+            try {
+              await coursesAPI.create({ ...baseData, section: SECTION_LABELS[i] });
+              created++;
+            } catch (err: any) {
+              errors.push(`شعبة ${SECTION_LABELS[i]}: ${err.response?.data?.detail || 'خطأ'}`);
+            }
+          }
+          let msg = `تم إنشاء ${created} شعبة من أصل ${count} لمقرر "${formData.name}"`;
+          if (errors.length > 0) msg += '\n\nأخطاء:\n' + errors.join('\n');
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('نتيجة', msg);
+        } else {
+          // إنشاء مقرر واحد بدون شعبة
+          const res = await coursesAPI.create(baseData);
+          let msg = 'تم إضافة المقرر بنجاح';
+          if (res.data?.warning) msg += '\n\n' + res.data.warning;
+          if (Platform.OS === 'web') window.alert(msg);
+          else Alert.alert('نجاح', msg);
+        }
       }
       resetForm();
       setShowForm(false);
@@ -162,7 +180,8 @@ export default function AddCourseScreen() {
       fetchData();
     } catch (error: any) {
       const message = error.response?.data?.detail || 'حدث خطأ';
-      Alert.alert('خطأ', message);
+      if (Platform.OS === 'web') window.alert(message);
+      else Alert.alert('خطأ', message);
     } finally {
       setSaving(false);
     }
@@ -177,6 +196,7 @@ export default function AddCourseScreen() {
       level: '1',
       section: '',
     });
+    setSectionCount('');
   };
 
   // Toggle selection mode
@@ -544,13 +564,54 @@ export default function AddCourseScreen() {
               </Picker>
             </View>
 
-            <Text style={styles.label}>الشعبة (اختياري)</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.section}
-              onChangeText={(text) => setFormData({ ...formData, section: text })}
-              placeholder="مثال: A أو B"
-            />
+            {editingCourse ? (
+              <>
+                <Text style={styles.label}>الشعبة (اختياري)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={formData.section}
+                  onChangeText={(text) => setFormData({ ...formData, section: text })}
+                  placeholder="مثال: أ أو ب"
+                />
+              </>
+            ) : (
+              <>
+                <Text style={styles.label}>عدد الشعب (اختياري)</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                    value={sectionCount}
+                    onChangeText={(text) => {
+                      const num = text.replace(/[^0-9]/g, '');
+                      if (parseInt(num) > 10) return;
+                      setSectionCount(num);
+                      if (parseInt(num) > 1) setFormData({ ...formData, section: '' });
+                    }}
+                    placeholder="اتركه فارغاً لمقرر واحد"
+                    keyboardType="numeric"
+                    data-testid="section-count-input"
+                  />
+                </View>
+                {parseInt(sectionCount) > 1 && (
+                  <View style={{ backgroundColor: '#e3f2fd', padding: 12, borderRadius: 8, marginBottom: 12 }}>
+                    <Text style={{ fontSize: 13, color: '#1565c0', fontWeight: '600', textAlign: 'center' }}>
+                      سيتم إنشاء {sectionCount} شعب: {SECTION_LABELS.slice(0, parseInt(sectionCount)).join('، ')}
+                    </Text>
+                  </View>
+                )}
+                {(!sectionCount || parseInt(sectionCount) <= 1) && (
+                  <>
+                    <Text style={[styles.label, { marginTop: 4 }]}>الشعبة (اختياري)</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={formData.section}
+                      onChangeText={(text) => setFormData({ ...formData, section: text })}
+                      placeholder="اتركه فارغاً أو اكتب مثال: أ"
+                    />
+                  </>
+                )}
+              </>
+            )}
 
             {/* عرض الفصل الحالي - للإشارة فقط */}
             {settings && (
@@ -624,6 +685,7 @@ export default function AddCourseScreen() {
                 <TouchableOpacity
                   style={styles.addButton}
                   onPress={() => setShowForm(true)}
+                  data-testid="add-course-btn"
                 >
                   <Ionicons name="add-circle" size={22} color="#fff" />
                   <Text style={styles.addButtonText}>إضافة مقرر</Text>
