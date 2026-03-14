@@ -3281,7 +3281,7 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
 @api_router.get("/courses/{course_id}/backup-info")
 async def get_course_backup_info(course_id: str, current_user: dict = Depends(get_current_user)):
     """معلومات المقرر قبل الحذف"""
-    if current_user["role"] != UserRole.ADMIN:
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "delete_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
@@ -3303,8 +3303,8 @@ async def get_course_backup_info(course_id: str, current_user: dict = Depends(ge
 @api_router.post("/courses/{course_id}/safe-delete")
 async def safe_delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
     """حذف آمن للمقرر - يرجع نسخة احتياطية ثم يحذف كل شيء"""
-    if current_user["role"] != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "delete_course"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بحذف المقرر")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
