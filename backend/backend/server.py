@@ -648,7 +648,7 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
         role = await db.roles.find_one({"_id": ObjectId(user.role_id)})
         if role:
             user_dict["role_id"] = user.role_id
-            user_dict["role"] = role.get("system_key", "custom")
+            user_dict["role"] = role.get("system_key") or "custom"
             user_dict["permissions"] = role.get("permissions", [])
     elif not user.role:
         user_dict["role"] = "employee"  # افتراضي
@@ -815,7 +815,7 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
         role = await db.roles.find_one({"_id": ObjectId(data.role_id)})
         if role:
             update_data["role_id"] = data.role_id
-            update_data["role"] = role.get("system_key", "custom")
+            update_data["role"] = role.get("system_key") or "custom"
             update_data["permissions"] = role.get("permissions", [])
     
     if update_data:
@@ -1220,7 +1220,7 @@ async def assign_role_to_user(user_id: str, data: UserRoleUpdate, current_user: 
     # تحديث دور المستخدم
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
-        {"$set": {"role_id": data.role_id, "role": role.get("system_key", "custom")}}
+        {"$set": {"role_id": data.role_id, "role": role.get("system_key") or "custom"}}
     )
     
     return {
@@ -9922,6 +9922,25 @@ async def fix_courses_without_semester(current_user: dict = Depends(get_current_
         "message": f"تم إصلاح {result.modified_count} مقرر وربطها بالفصل الدراسي النشط",
         "fixed": result.modified_count
     }
+
+@api_router.post("/admin/fix-custom-roles")
+async def fix_custom_roles(current_user: dict = Depends(get_current_user)):
+    """إصلاح المستخدمين الذين لديهم role فارغ وتحويلهم إلى custom"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # إصلاح المستخدمين بدور فارغ
+    users_result = await db.users.update_many(
+        {"role": ""},
+        {"$set": {"role": "custom"}}
+    )
+    
+    return {
+        "message": f"تم إصلاح {users_result.modified_count} مستخدم (role فارغ → custom)",
+        "users_fixed": users_result.modified_count
+    }
+
+
 
 @api_router.post("/admin/fix-faculty-ids")
 async def fix_faculty_ids(current_user: dict = Depends(get_current_user)):
