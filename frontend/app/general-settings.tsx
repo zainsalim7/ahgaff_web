@@ -1226,6 +1226,21 @@ export default function GeneralSettingsScreen() {
               <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>ربط المقررات بالفصل الدراسي النشط</Text>
             </TouchableOpacity>
             
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#7b1fa2', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}
+              onPress={async () => {
+                try {
+                  const res = await api.post('/admin/fix-custom-roles');
+                  const msg = res.data?.message || 'تم الإصلاح';
+                  Platform.OS === 'web' ? window.alert(msg) : Alert.alert('تم', msg);
+                } catch { Platform.OS === 'web' ? window.alert('فشل') : Alert.alert('خطأ', 'فشل'); }
+              }}
+              data-testid="fix-custom-roles-btn"
+            >
+              <Ionicons name="people" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>إصلاح أدوار المستخدمين</Text>
+            </TouchableOpacity>
+            
             <Text style={{ fontSize: 11, color: '#999', marginTop: 8, textAlign: 'center' }}>استخدم هذه الأدوات مرة واحدة بعد التحديث لإصلاح البيانات القديمة</Text>
           </View>
         )}
