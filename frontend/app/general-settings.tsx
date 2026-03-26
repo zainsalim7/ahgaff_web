@@ -1194,7 +1194,7 @@ export default function GeneralSettingsScreen() {
         )}
 
         {/* قسم صيانة البيانات */}
-        {selectedFacultyId && (
+        {user?.role === 'admin' && (
           <View style={{ marginTop: 24, padding: 16, backgroundColor: '#fff3e0', borderRadius: 12 }}>
             <Text style={{ fontSize: 16, fontWeight: '700', color: '#e65100', marginBottom: 12 }}>صيانة البيانات</Text>
             

@@ -42,10 +42,12 @@
 
 ### March 26, 2026 (Session 9)
 - **Generate Lectures UI Fix**: Replaced horizontal scroll time buttons with `<select>` dropdown menus for web. All 93 time slots now available (was previously limited to 20 via `.slice(0,20)`).
+- **Maintenance Buttons Fix**: Made maintenance tools (fix roles, fix faculty IDs, fix courses semester) always visible for admin users without requiring faculty selection.
 
 ## P0 - Next
 - [x] Fix ALL permission checks (DONE - 78 endpoints)
 - [x] Fix Generate Lectures time UI (DONE - dropdown + all hours)
+- [x] Maintenance buttons accessible without faculty selection (DONE)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration
 
