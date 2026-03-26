@@ -40,8 +40,12 @@
 - Reschedule Feature, Teacher Delays Report, Role separation, Attendance edit
 - Study Plans, Reports, Data integrity, Excel import, Faculty management
 
+### March 26, 2026 (Session 9)
+- **Generate Lectures UI Fix**: Replaced horizontal scroll time buttons with `<select>` dropdown menus for web. All 93 time slots now available (was previously limited to 20 via `.slice(0,20)`).
+
 ## P0 - Next
 - [x] Fix ALL permission checks (DONE - 78 endpoints)
+- [x] Fix Generate Lectures time UI (DONE - dropdown + all hours)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration
 

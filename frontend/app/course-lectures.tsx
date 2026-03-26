@@ -1075,43 +1075,89 @@ export default function CourseLecturesScreen() {
                               <View style={styles.slotTimes}>
                                 <View style={styles.slotTimeBox}>
                                   <Text style={styles.slotTimeLabel}>من</Text>
-                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                    {TIME_SLOTS.slice(0, 20).map(time => (
-                                      <TouchableOpacity
-                                        key={time}
-                                        style={[
-                                          styles.slotTimeBtn,
-                                          slot.start_time === time && styles.slotTimeBtnActive
-                                        ]}
-                                        onPress={() => updateSlotTime(day.id, index, 'start_time', time)}
-                                      >
-                                        <Text style={[
-                                          styles.slotTimeBtnText,
-                                          slot.start_time === time && styles.slotTimeBtnTextActive
-                                        ]}>{time}</Text>
-                                      </TouchableOpacity>
-                                    ))}
-                                  </ScrollView>
+                                  {Platform.OS === 'web' ? (
+                                    <select
+                                      value={slot.start_time}
+                                      onChange={(e: any) => updateSlotTime(day.id, index, 'start_time', e.target.value)}
+                                      data-testid={`start-time-select-${day.id}-${index}`}
+                                      style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: '8px',
+                                        border: '1px solid #ddd',
+                                        fontSize: '15px',
+                                        backgroundColor: '#f9f9f9',
+                                        color: '#333',
+                                        cursor: 'pointer',
+                                        appearance: 'auto' as any,
+                                      }}
+                                    >
+                                      {TIME_SLOTS.map(time => (
+                                        <option key={time} value={time}>{time}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                      {TIME_SLOTS.map(time => (
+                                        <TouchableOpacity
+                                          key={time}
+                                          style={[
+                                            styles.slotTimeBtn,
+                                            slot.start_time === time && styles.slotTimeBtnActive
+                                          ]}
+                                          onPress={() => updateSlotTime(day.id, index, 'start_time', time)}
+                                        >
+                                          <Text style={[
+                                            styles.slotTimeBtnText,
+                                            slot.start_time === time && styles.slotTimeBtnTextActive
+                                          ]}>{time}</Text>
+                                        </TouchableOpacity>
+                                      ))}
+                                    </ScrollView>
+                                  )}
                                 </View>
                                 <View style={styles.slotTimeBox}>
                                   <Text style={styles.slotTimeLabel}>إلى</Text>
-                                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                                    {TIME_SLOTS.slice(0, 20).map(time => (
-                                      <TouchableOpacity
-                                        key={time}
-                                        style={[
-                                          styles.slotTimeBtn,
-                                          slot.end_time === time && styles.slotTimeBtnActive
-                                        ]}
-                                        onPress={() => updateSlotTime(day.id, index, 'end_time', time)}
-                                      >
-                                        <Text style={[
-                                          styles.slotTimeBtnText,
-                                          slot.end_time === time && styles.slotTimeBtnTextActive
-                                        ]}>{time}</Text>
-                                      </TouchableOpacity>
-                                    ))}
-                                  </ScrollView>
+                                  {Platform.OS === 'web' ? (
+                                    <select
+                                      value={slot.end_time}
+                                      onChange={(e: any) => updateSlotTime(day.id, index, 'end_time', e.target.value)}
+                                      data-testid={`end-time-select-${day.id}-${index}`}
+                                      style={{
+                                        width: '100%',
+                                        padding: '10px 12px',
+                                        borderRadius: '8px',
+                                        border: '1px solid #ddd',
+                                        fontSize: '15px',
+                                        backgroundColor: '#f9f9f9',
+                                        color: '#333',
+                                        cursor: 'pointer',
+                                        appearance: 'auto' as any,
+                                      }}
+                                    >
+                                      {TIME_SLOTS.map(time => (
+                                        <option key={time} value={time}>{time}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                                      {TIME_SLOTS.map(time => (
+                                        <TouchableOpacity
+                                          key={time}
+                                          style={[
+                                            styles.slotTimeBtn,
+                                            slot.end_time === time && styles.slotTimeBtnActive
+                                          ]}
+                                          onPress={() => updateSlotTime(day.id, index, 'end_time', time)}
+                                        >
+                                          <Text style={[
+                                            styles.slotTimeBtnText,
+                                            slot.end_time === time && styles.slotTimeBtnTextActive
+                                          ]}>{time}</Text>
+                                        </TouchableOpacity>
+                                      ))}
+                                    </ScrollView>
+                                  )}
                                 </View>
                               </View>
                               {config.slots.length > 1 && (

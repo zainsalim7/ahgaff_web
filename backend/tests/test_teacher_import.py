@@ -11,7 +11,7 @@ import os
 import io
 
 # Use public API URL
-BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://attendance-track-38.preview.emergentagent.com').rstrip('/')
+BASE_URL = os.environ.get('REACT_APP_BACKEND_URL', 'https://schedule-hub-272.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
 ADMIN_CREDS = {"username": "admin", "password": "admin123"}

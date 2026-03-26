@@ -19,7 +19,7 @@ import json
 from datetime import datetime
 
 # API Base URL from environment
-BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://attendance-track-38.preview.emergentagent.com')
+BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://schedule-hub-272.preview.emergentagent.com')
 
 # Test credentials
 ADMIN_CREDENTIALS = {
