@@ -1,6 +1,6 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, Response
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -9655,6 +9655,9 @@ async def create_or_update_university(
     }
     
     if existing:
+        # حفظ logo_url القديم إذا لم يُرسل جديد
+        if not university_data.logo_url and existing.get("logo_url"):
+            university_doc["logo_url"] = existing["logo_url"]
         await db.university.update_one(
             {"_id": existing["_id"]},
             {"$set": university_doc}
@@ -9677,6 +9680,81 @@ async def create_or_update_university(
     )
     
     return {"message": "تم حفظ بيانات الجامعة بنجاح", "id": university_id}
+
+
+# ==================== File Upload/Download APIs ====================
+
+ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5MB
+
+@api_router.post("/upload/image")
+async def upload_image(
+    file: UploadFile = File(...),
+    folder: str = "logos",
+    current_user: dict = Depends(get_current_user)
+):
+    """رفع صورة"""
+    if file.content_type not in ALLOWED_IMAGE_TYPES:
+        raise HTTPException(status_code=400, detail="نوع الملف غير مدعوم. الأنواع المدعومة: JPEG, PNG, GIF, WebP")
+    
+    data = await file.read()
+    if len(data) > MAX_IMAGE_SIZE:
+        raise HTTPException(status_code=400, detail="حجم الملف يتجاوز الحد الأقصى (5MB)")
+    
+    try:
+        from services.storage_service import upload_file
+        result = upload_file(data, file.filename, file.content_type, folder)
+        
+        # حفظ مرجع الملف في قاعدة البيانات
+        file_doc = {
+            "file_id": result["file_id"],
+            "storage_path": result["storage_path"],
+            "original_filename": result["original_filename"],
+            "content_type": result["content_type"],
+            "size": result["size"],
+            "folder": folder,
+            "uploaded_by": current_user["id"],
+            "is_deleted": False,
+            "created_at": get_yemen_time().isoformat()
+        }
+        await db.files.insert_one(file_doc)
+        
+        return {
+            "storage_path": result["storage_path"],
+            "file_id": result["file_id"],
+            "message": "تم رفع الصورة بنجاح"
+        }
+    except Exception as e:
+        logging.error(f"Upload error: {e}")
+        raise HTTPException(status_code=500, detail="فشل رفع الصورة")
+
+
+@api_router.get("/files/{path:path}")
+async def serve_file(path: str, auth: str = Query(None)):
+    """تحميل ملف من التخزين"""
+    # التحقق من التوكن عبر query param
+    if not auth:
+        raise HTTPException(status_code=401, detail="مطلوب مصادقة")
+    try:
+        payload = jwt.decode(auth, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise HTTPException(status_code=401, detail="توكن غير صالح")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="توكن غير صالح")
+    
+    try:
+        from services.storage_service import get_object
+        data, content_type = get_object(path)
+        
+        record = await db.files.find_one({"storage_path": path, "is_deleted": False})
+        if record:
+            content_type = record.get("content_type", content_type)
+        
+        return Response(content=data, media_type=content_type)
+    except Exception as e:
+        logging.error(f"File serve error: {e}")
+        raise HTTPException(status_code=404, detail="الملف غير موجود")
 
 # ==================== Faculty APIs (واجهات الكليات) ====================
 
@@ -10232,6 +10310,13 @@ app.include_router(notifications_router, prefix="/api")
 async def startup_event():
     from services.firebase_service import init_firebase
     init_firebase()
+    # تهيئة خدمة التخزين
+    try:
+        from services.storage_service import init_storage
+        init_storage()
+        logging.info("Object storage initialized successfully")
+    except Exception as e:
+        logging.warning(f"Object storage init failed (non-critical): {e}")
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
 

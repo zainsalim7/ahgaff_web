@@ -31,6 +31,7 @@ interface University {
   phone?: string;
   email?: string;
   website?: string;
+  logo_url?: string;
   faculties_count: number;
 }
 
@@ -99,6 +100,8 @@ export default function GeneralSettingsScreen() {
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [departments, setDepartments] = useState<Array<{id: string; name: string; faculty_id?: string}>>([]);
   const [editUniversity, setEditUniversity] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [showFacultyForm, setShowFacultyForm] = useState(false);
   const [editingFaculty, setEditingFaculty] = useState<Faculty | null>(null);
   const [universityForm, setUniversityForm] = useState({
@@ -249,6 +252,57 @@ export default function GeneralSettingsScreen() {
   }, [fetchData]);
 
   // ==================== University Functions ====================
+  const handleUploadLogo = async () => {
+    if (Platform.OS !== 'web') return;
+    
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/jpeg,image/png,image/gif,image/webp';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      if (file.size > 5 * 1024 * 1024) {
+        showMessage('خطأ', 'حجم الصورة يتجاوز الحد الأقصى (5MB)');
+        return;
+      }
+      
+      setUploadingLogo(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const res = await api.post('/upload/image?folder=logos', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+        
+        const storagePath = res.data.storage_path;
+        
+        // تحديث الجامعة بالشعار الجديد
+        await api.post('/university', {
+          ...universityForm,
+          logo_url: storagePath,
+        });
+        
+        // تحديث المعاينة
+        setLogoPreview(null);
+        fetchData();
+        showMessage('نجاح', 'تم رفع الشعار بنجاح');
+      } catch (error: any) {
+        showMessage('خطأ', error.response?.data?.detail || 'فشل رفع الشعار');
+      } finally {
+        setUploadingLogo(false);
+      }
+    };
+    input.click();
+  };
+
+  const getLogoUrl = (path: string | undefined) => {
+    if (!path) return null;
+    const token = require('../src/store/authStore').useAuthStore.getState().token;
+    return `${api.defaults.baseURL}/files/${path}?auth=${token}`;
+  };
+
   const handleSaveUniversity = async () => {
     if (!universityForm.name || !universityForm.code) {
       showMessage('خطأ', 'الرجاء إدخال اسم ورمز الجامعة');
@@ -495,7 +549,15 @@ export default function GeneralSettingsScreen() {
       <View style={styles.card}>
         <View style={styles.cardHeader}>
           <View style={styles.universityIcon}>
-            <Ionicons name="school" size={40} color="#1565c0" />
+            {university?.logo_url ? (
+              <img
+                src={getLogoUrl(university.logo_url) || ''}
+                style={{ width: 60, height: 60, borderRadius: 12, objectFit: 'contain' }}
+                alt="شعار الجامعة"
+              />
+            ) : (
+              <Ionicons name="school" size={40} color="#1565c0" />
+            )}
           </View>
           <View style={styles.universityInfo}>
             <Text style={styles.universityName}>
@@ -513,7 +575,7 @@ export default function GeneralSettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        {editUniversity ? (
+        {(editUniversity || !university) ? (
           <View style={styles.form}>
             <Text style={styles.label}>اسم الجامعة *</Text>
             <TextInput
@@ -574,6 +636,38 @@ export default function GeneralSettingsScreen() {
               onChangeText={(text) => setUniversityForm({ ...universityForm, website: text })}
               placeholder="www.example.com"
             />
+
+            {/* رفع شعار الجامعة */}
+            {Platform.OS === 'web' && (
+              <View style={{ marginTop: 8, marginBottom: 16 }}>
+                <Text style={styles.label}>شعار الجامعة</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                  {university?.logo_url && (
+                    <img
+                      src={getLogoUrl(university.logo_url) || ''}
+                      style={{ width: 64, height: 64, borderRadius: 8, objectFit: 'contain', border: '1px solid #e0e0e0' }}
+                      alt="الشعار الحالي"
+                    />
+                  )}
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#e3f2fd', padding: 12, borderRadius: 8, borderWidth: 1, borderColor: '#bbdefb' }}
+                    onPress={handleUploadLogo}
+                    disabled={uploadingLogo}
+                    data-testid="upload-logo-btn"
+                  >
+                    {uploadingLogo ? (
+                      <ActivityIndicator size="small" color="#1565c0" />
+                    ) : (
+                      <Ionicons name="cloud-upload" size={20} color="#1565c0" />
+                    )}
+                    <Text style={{ color: '#1565c0', fontWeight: '600', fontSize: 14 }}>
+                      {uploadingLogo ? 'جاري الرفع...' : (university?.logo_url ? 'تغيير الشعار' : 'رفع شعار')}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <Text style={{ fontSize: 11, color: '#999', marginTop: 4 }}>JPEG, PNG, GIF, WebP - حد أقصى 5MB</Text>
+              </View>
+            )}
 
             <TouchableOpacity
               style={[styles.saveBtn, saving && styles.savingBtn]}
