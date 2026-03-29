@@ -6792,9 +6792,9 @@ async def get_teacher_workload_report(
         # النصاب الأسبوعي (افتراضي 12 ساعة)
         weekly_hours = teacher.get("weekly_hours", 12)
         
-        # حساب عدد الأسابيع في الفترة
+        # حساب عدد الأسابيع في الفترة (أسابيع كاملة فقط)
         total_days = (end - start).days + 1
-        total_weeks = total_days / 7
+        total_weeks = total_days // 7
         
         # الساعات المطلوبة = النصاب الأسبوعي × عدد الأسابيع
         required_hours = round(weekly_hours * total_weeks, 2)
