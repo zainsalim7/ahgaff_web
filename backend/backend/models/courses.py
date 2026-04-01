@@ -24,6 +24,7 @@ class CourseResponse(CourseBase):
     department_name: Optional[str] = None
     semester_name: Optional[str] = None
     students_count: Optional[int] = 0
+    lectures_count: Optional[int] = 0
     created_at: Optional[datetime] = None
     is_active: bool = True
 

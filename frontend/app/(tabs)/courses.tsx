@@ -170,6 +170,11 @@ export default function CoursesScreen() {
             <Text style={[styles.metaText, { color: '#1565c0', fontWeight: '600' }]}>
               {(item as any).students_count ?? 0} طالب
             </Text>
+            <Text style={[styles.metaText, { color: '#999', marginHorizontal: 4 }]}>|</Text>
+            <Ionicons name="calendar" size={14} color="#e65100" />
+            <Text style={[styles.metaText, { color: '#e65100', fontWeight: '600' }]}>
+              {(item as any).lectures_count ?? 0} محاضرة
+            </Text>
           </View>
         </View>
         {/* عرض الأزرار فقط للمستخدمين المصرح لهم */}

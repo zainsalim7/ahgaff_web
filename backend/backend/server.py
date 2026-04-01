@@ -3263,13 +3263,23 @@ async def get_courses(
     # جلب عدد الطلاب لكل مقرر دفعة واحدة
     course_ids = [str(c["_id"]) for c in courses]
     enrollment_counts = {}
+    lecture_counts = {}
     if course_ids:
+        # عدد الطلاب
         pipeline = [
             {"$match": {"course_id": {"$in": course_ids}}},
             {"$group": {"_id": "$course_id", "count": {"$sum": 1}}}
         ]
         counts = await db.enrollments.aggregate(pipeline).to_list(None)
         enrollment_counts = {item["_id"]: item["count"] for item in counts}
+        
+        # عدد المحاضرات
+        lec_pipeline = [
+            {"$match": {"course_id": {"$in": course_ids}}},
+            {"$group": {"_id": "$course_id", "count": {"$sum": 1}}}
+        ]
+        lec_counts = await db.lectures.aggregate(lec_pipeline).to_list(None)
+        lecture_counts = {item["_id"]: item["count"] for item in lec_counts}
     
     # جلب أسماء المعلمين من collection المعلمين أو المستخدمين
     result = []
@@ -3313,6 +3323,7 @@ async def get_courses(
             "semester_name": semester_name,
             "academic_year": c.get("academic_year"),
             "students_count": enrollment_counts.get(str(c["_id"]), 0),
+            "lectures_count": lecture_counts.get(str(c["_id"]), 0),
             "created_at": c.get("created_at"),
             "is_active": c.get("is_active", True)
         })
