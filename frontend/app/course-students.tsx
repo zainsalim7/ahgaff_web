@@ -123,6 +123,7 @@ export default function CourseStudentsScreen() {
   const [showActionModal, setShowActionModal] = useState<'copy' | 'move' | null>(null);
   const [allCourses, setAllCourses] = useState<any[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
+  const [selectedTargetCourses, setSelectedTargetCourses] = useState<string[]>([]);
   
   // تعديل حالة الحضور
   const [editingRecord, setEditingRecord] = useState<{recordId: string; studentName: string; currentStatus: string} | null>(null);
@@ -574,16 +575,24 @@ export default function CourseStudentsScreen() {
       const res = await coursesAPI.getAll();
       setAllCourses((res.data || res).filter((c: any) => c.id !== courseId));
     } catch { setAllCourses([]); }
+    setSelectedTargetCourses([]);
     setShowActionModal(action);
   };
 
-  const handleCopyOrMove = async (targetCourseId: string) => {
-    if (!showActionModal || selectedEnrolled.length === 0) return;
+  const toggleTargetCourse = (id: string) => {
+    setSelectedTargetCourses(prev =>
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    );
+  };
+
+  const handleCopyOrMove = async () => {
+    const targets = selectedTargetCourses;
+    if (!showActionModal || selectedEnrolled.length === 0 || targets.length === 0) return;
     setActionLoading(true);
     try {
       const token = await AsyncStorage.getItem('token');
       const endpoint = showActionModal === 'copy' ? 'bulk-copy' : 'bulk-move';
-      const body: any = { student_ids: selectedEnrolled, target_course_id: targetCourseId };
+      const body: any = { student_ids: selectedEnrolled, target_course_ids: targets };
       if (showActionModal === 'move') body.source_course_id = courseId;
       
       const res = await fetch(`${API_URL}/api/enrollments/${endpoint}`, {
@@ -597,6 +606,7 @@ export default function CourseStudentsScreen() {
         Alert.alert('نجاح', data.message);
         setShowActionModal(null);
         setSelectedEnrolled([]);
+        setSelectedTargetCourses([]);
         setEnrollSelectionMode(false);
         fetchData();
       } else {
@@ -1257,16 +1267,21 @@ export default function CourseStudentsScreen() {
           </Modal>
         )}
 
-        {/* نافذة اختيار المقرر (نسخ/نقل) */}
+        {/* نافذة اختيار المقرر (نسخ/نقل) - اختيار متعدد */}
         <Modal visible={showActionModal === 'copy' || showActionModal === 'move'} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
             <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '90%', maxWidth: 450, maxHeight: '70%' }}>
               <Text style={{ fontSize: 17, fontWeight: '700', color: '#333', textAlign: 'center', marginBottom: 4 }}>
-                {showActionModal === 'copy' ? 'نسخ الطلاب إلى مقرر' : 'نقل الطلاب إلى مقرر'}
+                {showActionModal === 'copy' ? 'نسخ الطلاب إلى مقررات' : 'نقل الطلاب إلى مقرر'}
               </Text>
-              <Text style={{ fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 14 }}>
+              <Text style={{ fontSize: 13, color: '#888', textAlign: 'center', marginBottom: 4 }}>
                 {selectedEnrolled.length} طالب محدد
               </Text>
+              {showActionModal === 'copy' && selectedTargetCourses.length > 0 && (
+                <Text style={{ fontSize: 13, color: '#1565c0', textAlign: 'center', marginBottom: 8, fontWeight: '600' }}>
+                  تم اختيار {selectedTargetCourses.length} مقرر
+                </Text>
+              )}
               
               {actionLoading ? (
                 <ActivityIndicator size="large" color="#1565c0" style={{ marginVertical: 30 }} />
@@ -1275,32 +1290,64 @@ export default function CourseStudentsScreen() {
                   data={allCourses}
                   keyExtractor={item => item.id}
                   style={{ maxHeight: 320 }}
-                  renderItem={({ item }) => (
-                    <TouchableOpacity
-                      style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}
-                      onPress={() => handleCopyOrMove(item.id)}
-                      data-testid={`select-course-${item.id}`}
-                    >
-                      <Ionicons name="book" size={20} color={showActionModal === 'copy' ? '#1565c0' : '#ff9800'} />
-                      <View style={{ flex: 1, marginLeft: 10 }}>
-                        <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{item.name}</Text>
-                        <Text style={{ fontSize: 12, color: '#999' }}>{item.code || ''}</Text>
-                      </View>
-                      <Ionicons name="chevron-back" size={18} color="#ccc" />
-                    </TouchableOpacity>
-                  )}
+                  renderItem={({ item }) => {
+                    const isSelected = selectedTargetCourses.includes(item.id);
+                    return (
+                      <TouchableOpacity
+                        style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', backgroundColor: isSelected ? (showActionModal === 'copy' ? '#e3f2fd' : '#fff3e0') : 'transparent' }}
+                        onPress={() => {
+                          if (showActionModal === 'copy') {
+                            toggleTargetCourse(item.id);
+                          } else {
+                            setSelectedTargetCourses([item.id]);
+                          }
+                        }}
+                        data-testid={`select-course-${item.id}`}
+                      >
+                        {showActionModal === 'copy' && (
+                          <View style={{ width: 22, height: 22, borderRadius: 4, borderWidth: 2, borderColor: isSelected ? '#1565c0' : '#ccc', backgroundColor: isSelected ? '#1565c0' : 'transparent', alignItems: 'center', justifyContent: 'center', marginRight: 10 }}>
+                            {isSelected && <Ionicons name="checkmark" size={14} color="#fff" />}
+                          </View>
+                        )}
+                        <Ionicons name="book" size={20} color={showActionModal === 'copy' ? '#1565c0' : '#ff9800'} />
+                        <View style={{ flex: 1, marginLeft: 10 }}>
+                          <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{item.name}</Text>
+                          <Text style={{ fontSize: 12, color: '#999' }}>{item.code || ''}</Text>
+                        </View>
+                        {showActionModal === 'move' && (
+                          <Ionicons name="chevron-back" size={18} color="#ccc" />
+                        )}
+                      </TouchableOpacity>
+                    );
+                  }}
                   ListEmptyComponent={
                     <Text style={{ textAlign: 'center', color: '#999', paddingVertical: 30 }}>لا توجد مقررات أخرى</Text>
                   }
                 />
               )}
               
-              <TouchableOpacity
-                style={{ backgroundColor: '#f5f5f5', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 12 }}
-                onPress={() => setShowActionModal(null)}
-              >
-                <Text style={{ color: '#666', fontWeight: '600' }}>إلغاء</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 12, borderRadius: 10, alignItems: 'center' }}
+                  onPress={() => { setShowActionModal(null); setSelectedTargetCourses([]); }}
+                >
+                  <Text style={{ color: '#666', fontWeight: '600' }}>إلغاء</Text>
+                </TouchableOpacity>
+                {(showActionModal === 'copy' || (showActionModal === 'move' && selectedTargetCourses.length > 0)) && (
+                  <TouchableOpacity
+                    style={{ flex: 2, backgroundColor: selectedTargetCourses.length > 0 ? (showActionModal === 'copy' ? '#1565c0' : '#ff9800') : '#ccc', padding: 12, borderRadius: 10, alignItems: 'center' }}
+                    onPress={handleCopyOrMove}
+                    disabled={selectedTargetCourses.length === 0 || actionLoading}
+                    data-testid="confirm-copy-move-btn"
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '700' }}>
+                      {showActionModal === 'copy'
+                        ? `نسخ إلى ${selectedTargetCourses.length} مقرر`
+                        : 'نقل'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
         </Modal>

@@ -3491,33 +3491,54 @@ async def delete_course(course_id: str, current_user: dict = Depends(get_current
 
 @api_router.post("/enrollments/bulk-copy")
 async def bulk_copy_students(request: Request, current_user: dict = Depends(get_current_user)):
-    """نسخ طلاب إلى مقرر آخر"""
+    """نسخ طلاب إلى عدة مقررات"""
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "manage_courses"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     student_ids = data.get("student_ids", [])
-    target_course_id = data.get("target_course_id")
-    if not student_ids or not target_course_id:
+    # دعم مقرر واحد أو عدة مقررات
+    target_course_ids = data.get("target_course_ids", [])
+    if not target_course_ids:
+        single = data.get("target_course_id")
+        if single:
+            target_course_ids = [single]
+    if not student_ids or not target_course_ids:
         raise HTTPException(status_code=400, detail="بيانات ناقصة")
-    target = await db.courses.find_one({"_id": ObjectId(target_course_id)})
-    if not target:
-        raise HTTPException(status_code=404, detail="المقرر المستهدف غير موجود")
     
-    copied = 0
-    already = 0
-    for sid in student_ids:
-        existing = await db.enrollments.find_one({"course_id": target_course_id, "student_id": sid})
-        if existing:
-            already += 1
+    total_copied = 0
+    total_already = 0
+    results = []
+    
+    for target_course_id in target_course_ids:
+        target = await db.courses.find_one({"_id": ObjectId(target_course_id)})
+        if not target:
+            results.append({"course_id": target_course_id, "error": "غير موجود"})
             continue
-        await db.enrollments.insert_one({
-            "course_id": target_course_id,
-            "student_id": sid,
-            "enrolled_at": get_yemen_time(),
-            "enrolled_by": current_user["id"]
-        })
-        copied += 1
-    return {"message": f"تم نسخ {copied} طالب", "copied": copied, "already_enrolled": already}
+        
+        copied = 0
+        already = 0
+        for sid in student_ids:
+            existing = await db.enrollments.find_one({"course_id": target_course_id, "student_id": sid})
+            if existing:
+                already += 1
+                continue
+            await db.enrollments.insert_one({
+                "course_id": target_course_id,
+                "student_id": sid,
+                "enrolled_at": get_yemen_time(),
+                "enrolled_by": current_user["id"]
+            })
+            copied += 1
+        total_copied += copied
+        total_already += already
+        results.append({"course": target.get("name", ""), "copied": copied, "already": already})
+    
+    return {
+        "message": f"تم نسخ {total_copied} طالب إلى {len(target_course_ids)} مقرر",
+        "total_copied": total_copied,
+        "total_already": total_already,
+        "details": results
+    }
 
 @api_router.post("/enrollments/bulk-move")
 async def bulk_move_students(request: Request, current_user: dict = Depends(get_current_user)):
