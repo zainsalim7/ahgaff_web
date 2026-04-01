@@ -40,14 +40,21 @@
 - Reschedule Feature, Teacher Delays Report, Role separation, Attendance edit
 - Study Plans, Reports, Data integrity, Excel import, Faculty management
 
-### March 26, 2026 (Session 9)
-- **Generate Lectures UI Fix**: Replaced horizontal scroll time buttons with `<select>` dropdown menus for web. All 93 time slots now available (was previously limited to 20 via `.slice(0,20)`).
-- **Maintenance Buttons Fix**: Made maintenance tools (fix roles, fix faculty IDs, fix courses semester) always visible for admin users without requiring faculty selection.
+### April 1, 2026 (Session 10)
+- **Performance Optimizations**: Added GZip compression, MongoDB indexes (20+ indexes), server-side caching (5min TTL)
+- **RBAC Fix**: Added DEFAULT_PERMISSIONS for dean, department_head, registrar, registration_manager roles
+- **sync_default_roles**: Now auto-creates missing role documents in DB on startup (8 roles total)
+- **University Logo Upload**: Added file upload via Emergent Object Storage
+- **Teaching Load Fix**: Changed weekly calculation to use full weeks only (// instead of /)
 
 ## P0 - Next
 - [x] Fix ALL permission checks (DONE - 78 endpoints)
 - [x] Fix Generate Lectures time UI (DONE - dropdown + all hours)
 - [x] Maintenance buttons accessible without faculty selection (DONE)
+- [x] Add default permissions for all roles (DONE - dean, dept_head, registrar, reg_manager)
+- [x] Performance optimizations (DONE - GZip, indexes, caching)
+- [x] University logo upload (DONE - Emergent Object Storage)
+- [x] Fix teaching load calculation (DONE - full weeks only)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration
 

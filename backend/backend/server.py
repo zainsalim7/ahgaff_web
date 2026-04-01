@@ -1,6 +1,7 @@
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, status, UploadFile, File, Body, Request, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.responses import StreamingResponse, Response
+from starlette.middleware.gzip import GZipMiddleware
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -18,6 +19,8 @@ from bson import ObjectId
 import json
 import pandas as pd
 from io import BytesIO
+from functools import lru_cache
+import time as time_module
 
 # توقيت اليمن (عدن) UTC+3
 YEMEN_TIMEZONE = timezone(timedelta(hours=3))
@@ -118,6 +121,9 @@ from routes.notifications import router as notifications_router
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
 
+# Gzip compression - ضغط الردود لتسريع النقل
+app.add_middleware(GZipMiddleware, minimum_size=500)
+
 # CORS - يجب أن يكون أول middleware
 app.add_middleware(
     CORSMiddleware,
@@ -127,6 +133,29 @@ app.add_middleware(
     allow_headers=["*"],
     expose_headers=["*"],
 )
+
+# ==================== Simple Cache ====================
+_cache = {}
+CACHE_TTL = 300  # 5 دقائق
+
+def get_cached(key):
+    if key in _cache:
+        data, ts = _cache[key]
+        if time_module.time() - ts < CACHE_TTL:
+            return data
+        del _cache[key]
+    return None
+
+def set_cached(key, data):
+    _cache[key] = (data, time_module.time())
+
+def clear_cache(prefix=None):
+    if prefix:
+        keys_to_del = [k for k in _cache if k.startswith(prefix)]
+        for k in keys_to_del:
+            del _cache[k]
+    else:
+        _cache.clear()
 
 # Health check MUST be first - before any middleware
 @app.get("/health")
@@ -9611,13 +9640,17 @@ async def check_user_permission(user_id: str, permission: str, scope_type: str =
 @api_router.get("/university")
 async def get_university(current_user: dict = Depends(get_current_user)):
     """جلب بيانات الجامعة"""
+    cached = get_cached("university")
+    if cached:
+        return cached
+    
     university = await db.university.find_one()
     if not university:
         return None
     
     faculties_count = await db.faculties.count_documents({})
     
-    return {
+    result = {
         "id": str(university["_id"]),
         "name": university.get("name", ""),
         "code": university.get("code", ""),
@@ -9630,6 +9663,8 @@ async def get_university(current_user: dict = Depends(get_current_user)):
         "faculties_count": faculties_count,
         "created_at": university.get("created_at", get_yemen_time())
     }
+    set_cached("university", result)
+    return result
 
 @api_router.post("/university")
 async def create_or_update_university(
@@ -9679,6 +9714,7 @@ async def create_or_update_university(
         entity_name=university_data.name
     )
     
+    clear_cache("university")
     return {"message": "تم حفظ بيانات الجامعة بنجاح", "id": university_id}
 
 
@@ -10317,8 +10353,42 @@ async def startup_event():
         logging.info("Object storage initialized successfully")
     except Exception as e:
         logging.warning(f"Object storage init failed (non-critical): {e}")
+    # إنشاء فهارس MongoDB لتسريع الاستعلامات
+    await create_indexes()
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
+
+async def create_indexes():
+    """إنشاء فهارس لتسريع الاستعلامات"""
+    try:
+        await db.users.create_index("username", unique=True)
+        await db.users.create_index("role")
+        await db.users.create_index("faculty_id")
+        await db.users.create_index("department_id")
+        await db.users.create_index("is_active")
+        await db.students.create_index("student_id")
+        await db.students.create_index("department_id")
+        await db.students.create_index("faculty_id")
+        await db.students.create_index("is_active")
+        await db.teachers.create_index("department_id")
+        await db.teachers.create_index("faculty_id")
+        await db.courses.create_index("department_id")
+        await db.courses.create_index("teacher_id")
+        await db.courses.create_index("semester_id")
+        await db.lectures.create_index("course_id")
+        await db.lectures.create_index("teacher_id")
+        await db.lectures.create_index("date")
+        await db.lectures.create_index([("teacher_id", 1), ("date", 1)])
+        await db.attendance.create_index("lecture_id")
+        await db.attendance.create_index("student_id")
+        await db.attendance.create_index([("lecture_id", 1), ("student_id", 1)])
+        await db.enrollments.create_index("course_id")
+        await db.enrollments.create_index("student_id")
+        await db.enrollments.create_index([("course_id", 1), ("student_id", 1)])
+        await db.roles.create_index("system_key")
+        logging.info("MongoDB indexes created successfully")
+    except Exception as e:
+        logging.warning(f"Index creation warning: {e}")
 
 async def sync_default_roles():
     """مزامنة صلاحيات الأدوار الافتراضية مع قاعدة البيانات"""
@@ -10327,9 +10397,15 @@ async def sync_default_roles():
         "teacher": UserRole.TEACHER,
         "employee": UserRole.EMPLOYEE,
         "student": UserRole.STUDENT,
+        "dean": UserRole.DEAN,
+        "department_head": UserRole.DEPARTMENT_HEAD,
+        "registrar": UserRole.REGISTRAR,
+        "registration_manager": UserRole.REGISTRATION_MANAGER,
     }
     for system_key, role_enum in role_map.items():
         default_perms = list(DEFAULT_PERMISSIONS.get(role_enum, []))
+        if not default_perms:
+            continue
         existing = await db.roles.find_one({"system_key": system_key})
         if existing:
             if set(existing.get("permissions", [])) != set(default_perms):
@@ -10338,6 +10414,24 @@ async def sync_default_roles():
                     {"$set": {"permissions": default_perms}}
                 )
                 logging.info(f"تم تحديث صلاحيات دور {system_key}")
+        else:
+            role_names = {
+                "admin": "مدير النظام",
+                "teacher": "معلم",
+                "employee": "موظف",
+                "student": "طالب",
+                "dean": "عميد",
+                "department_head": "رئيس القسم",
+                "registrar": "مسجل",
+                "registration_manager": "مدير التسجيل",
+            }
+            await db.roles.insert_one({
+                "name": role_names.get(system_key, system_key),
+                "system_key": system_key,
+                "permissions": default_perms,
+                "created_at": get_yemen_time(),
+            })
+            logging.info(f"تم إنشاء دور {system_key}")
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
