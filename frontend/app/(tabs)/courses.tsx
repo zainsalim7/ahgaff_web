@@ -7,6 +7,9 @@ import {
   TouchableOpacity,
   RefreshControl,
   ScrollView,
+  Platform,
+  Modal,
+  ActivityIndicator,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,6 +18,7 @@ import { coursesAPI, departmentsAPI, lecturesAPI } from '../../src/services/api'
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import { Course, Department } from '../../src/types';
 import { useAuth, PERMISSIONS } from '../../src/contexts/AuthContext';
+import api from '../../src/services/api';
 
 interface TodayLecture {
   id: string;
@@ -38,6 +42,10 @@ export default function CoursesScreen() {
   const [todayLectures, setTodayLectures] = useState<TodayLecture[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<any>(null);
+  const [selectedDeptForImport, setSelectedDeptForImport] = useState<string>('');
 
   const fetchData = useCallback(async () => {
     try {
@@ -75,6 +83,62 @@ export default function CoursesScreen() {
   const getDepartmentName = (deptId: string) => {
     const dept = departments.find(d => d.id === deptId);
     return dept?.name || 'غير محدد';
+  };
+
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await api.get('/template/courses', { responseType: 'blob' });
+      if (Platform.OS === 'web') {
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'courses_template.xlsx';
+        link.click();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      alert('فشل تحميل النموذج');
+    }
+  };
+
+  const handleImportCourses = async () => {
+    if (!selectedDeptForImport) {
+      alert('يجب اختيار القسم أولاً');
+      return;
+    }
+    if (Platform.OS !== 'web') return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      setImporting(true);
+      setImportResult(null);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await api.post(
+          `/import/courses?department_id=${selectedDeptForImport}`,
+          formData,
+          { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+        setImportResult(res.data);
+        fetchData();
+      } catch (error: any) {
+        setImportResult({
+          message: error.response?.data?.detail || 'فشل في الاستيراد',
+          imported: 0,
+          errors: [],
+        });
+      } finally {
+        setImporting(false);
+      }
+    };
+    input.click();
   };
 
   const formatTime = (time: string) => {
@@ -256,7 +320,27 @@ export default function CoursesScreen() {
 
         {/* قسم جميع المقررات */}
         <View style={styles.allCoursesSection}>
-          <Text style={styles.sectionTitle}>جميع المقررات</Text>
+          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+            <Text style={styles.sectionTitle}>جميع المقررات</Text>
+            <View style={{ flexDirection: 'row', gap: 8 }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e8f5e9', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
+                onPress={handleDownloadTemplate}
+                data-testid="download-courses-template-btn"
+              >
+                <Ionicons name="download" size={16} color="#2e7d32" />
+                <Text style={{ color: '#2e7d32', fontSize: 13, fontWeight: '600' }}>تحميل النموذج</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#e3f2fd', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8 }}
+                onPress={() => { setShowImportModal(true); setImportResult(null); }}
+                data-testid="import-courses-btn"
+              >
+                <Ionicons name="cloud-upload" size={16} color="#1565c0" />
+                <Text style={{ color: '#1565c0', fontSize: 13, fontWeight: '600' }}>استيراد Excel</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
           
           {courses.length === 0 ? (
             <View style={styles.emptyContainer}>
@@ -273,6 +357,91 @@ export default function CoursesScreen() {
           )}
         </View>
       </ScrollView>
+
+      {/* نافذة استيراد المقررات */}
+      <Modal
+        visible={showImportModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowImportModal(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 500 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>استيراد مقررات من Excel</Text>
+              <TouchableOpacity onPress={() => setShowImportModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            {/* اختيار القسم */}
+            <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 }}>القسم *</Text>
+            {Platform.OS === 'web' ? (
+              <select
+                value={selectedDeptForImport}
+                onChange={(e: any) => setSelectedDeptForImport(e.target.value)}
+                data-testid="import-dept-select"
+                style={{
+                  width: '100%', padding: '10px 12px', borderRadius: 8,
+                  border: '1px solid #ddd', fontSize: 14, marginBottom: 16,
+                  backgroundColor: '#f9f9f9',
+                }}
+              >
+                <option value="">-- اختر القسم --</option>
+                {departments.map(dept => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+            ) : null}
+
+            {/* أزرار */}
+            <View style={{ gap: 12 }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#e8f5e9', padding: 14, borderRadius: 10 }}
+                onPress={handleDownloadTemplate}
+              >
+                <Ionicons name="download" size={20} color="#2e7d32" />
+                <Text style={{ color: '#2e7d32', fontSize: 15, fontWeight: '600' }}>تحميل نموذج Excel</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: importing ? '#e0e0e0' : '#1565c0', padding: 14, borderRadius: 10 }}
+                onPress={handleImportCourses}
+                disabled={importing}
+                data-testid="import-courses-submit-btn"
+              >
+                {importing ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="cloud-upload" size={20} color="#fff" />
+                )}
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+                  {importing ? 'جاري الاستيراد...' : 'رفع ملف Excel'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {/* نتيجة الاستيراد */}
+            {importResult && (
+              <View style={{ marginTop: 16, padding: 12, backgroundColor: importResult.imported > 0 ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: importResult.imported > 0 ? '#2e7d32' : '#c62828' }}>
+                  {importResult.message}
+                </Text>
+                {importResult.errors?.length > 0 && (
+                  <View style={{ marginTop: 8 }}>
+                    {importResult.errors.slice(0, 5).map((err: string, i: number) => (
+                      <Text key={i} style={{ fontSize: 12, color: '#c62828', marginTop: 2 }}>{err}</Text>
+                    ))}
+                    {importResult.total_errors > 5 && (
+                      <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>و {importResult.total_errors - 5} أخطاء أخرى...</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

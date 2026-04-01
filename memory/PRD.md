@@ -46,6 +46,8 @@
 - **sync_default_roles**: Now auto-creates missing role documents in DB on startup (8 roles total)
 - **University Logo Upload**: Added file upload via Emergent Object Storage
 - **Teaching Load Fix**: Changed weekly calculation to use full weeks only (// instead of /)
+- **Course Import**: Added Excel import for courses with template download. Supports multi-section courses (أ، ب، ج...)
+- **Teacher Template Update**: Enhanced teacher template with specialization, phone, email fields
 
 ## P0 - Next
 - [x] Fix ALL permission checks (DONE - 78 endpoints)

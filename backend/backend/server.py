@@ -8062,8 +8062,11 @@ async def get_teachers_template(current_user: dict = Depends(get_current_user)):
     
     data = {
         "الرقم الوظيفي": ["T001", "T002", "T003"],
-        "اسم المعلم": ["محمد أحمد", "علي سالم", "خالد عمر"],
+        "اسم المعلم": ["د. محمد أحمد", "د. علي سالم", "أ. خالد عمر"],
         "النصاب الأسبوعي": [12, 14, 10],
+        "التخصص": ["فقه", "شريعة", "لغة عربية"],
+        "الهاتف": ["777123456", "777654321", ""],
+        "البريد الإلكتروني": ["m.ahmed@univ.edu", "", ""],
     }
     
     df = pd.DataFrame(data)
@@ -8076,6 +8079,170 @@ async def get_teachers_template(current_user: dict = Depends(get_current_user)):
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=teachers_template.xlsx"}
     )
+
+@api_router.get("/template/courses")
+async def get_courses_template(current_user: dict = Depends(get_current_user)):
+    """Download courses import template"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "import_data"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    data = {
+        "اسم المقرر": ["الفقه الإسلامي", "أصول التفسير", "النحو والصرف"],
+        "رمز المقرر": ["FQH101", "TFS201", "ARB102"],
+        "عدد الساعات": [3, 2, 3],
+        "المستوى": [1, 2, 1],
+        "عدد الشعب": [1, 2, 1],
+        "الوصف": ["مقدمة في الفقه", "أصول التفسير القرآني", ""],
+    }
+    
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=courses_template.xlsx"}
+    )
+
+@api_router.post("/import/courses")
+async def import_courses_from_excel(
+    file: UploadFile = File(...),
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """استيراد مقررات من ملف Excel"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "import_data"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    if not department_id:
+        raise HTTPException(status_code=400, detail="يجب تحديد القسم")
+    
+    try:
+        contents = await file.read()
+        df = pd.read_excel(BytesIO(contents))
+        
+        column_mapping = {
+            'اسم المقرر': 'name',
+            'المقرر': 'name',
+            'رمز المقرر': 'code',
+            'الرمز': 'code',
+            'عدد الساعات': 'credit_hours',
+            'الساعات': 'credit_hours',
+            'ساعات': 'credit_hours',
+            'المستوى': 'level',
+            'عدد الشعب': 'sections_count',
+            'الشعب': 'sections_count',
+            'الوصف': 'description',
+            'وصف المقرر': 'description',
+        }
+        
+        df = df.rename(columns=column_mapping)
+        
+        if 'name' not in df.columns:
+            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: اسم المقرر")
+        if 'code' not in df.columns:
+            raise HTTPException(status_code=400, detail="العمود المطلوب غير موجود: رمز المقرر")
+        
+        # الحصول على faculty_id من القسم
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+        faculty_id = dept.get("faculty_id") if dept else None
+        
+        # الحصول على الفصل الدراسي النشط
+        active_semester = await db.semesters.find_one({"is_active": True})
+        semester_id = str(active_semester["_id"]) if active_semester else None
+        
+        imported = 0
+        errors = []
+        section_letters = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"]
+        
+        for index, row in df.iterrows():
+            try:
+                name = str(row['name']).strip()
+                code = str(row['code']).strip()
+                
+                if not name or not code or name == 'nan' or code == 'nan':
+                    errors.append(f"السطر {index + 2}: بيانات فارغة")
+                    continue
+                
+                # التحقق من عدم التكرار
+                existing = await db.courses.find_one({"code": code, "department_id": department_id})
+                if existing:
+                    errors.append(f"المقرر {code} موجود مسبقاً")
+                    continue
+                
+                credit_hours = 3
+                try:
+                    credit_hours = int(row.get('credit_hours', 3))
+                except (ValueError, TypeError):
+                    credit_hours = 3
+                
+                level = 1
+                try:
+                    level = int(row.get('level', 1))
+                except (ValueError, TypeError):
+                    level = 1
+                
+                sections_count = 1
+                try:
+                    sections_count = int(row.get('sections_count', 1))
+                except (ValueError, TypeError):
+                    sections_count = 1
+                sections_count = min(max(sections_count, 1), 10)
+                
+                description = ""
+                if 'description' in df.columns and pd.notna(row.get('description')):
+                    description = str(row['description']).strip()
+                
+                # إنشاء الشعب
+                for si in range(sections_count):
+                    section_name = section_letters[si] if sections_count > 1 else ""
+                    course_name = f"{name} ({section_name})" if section_name else name
+                    course_code = f"{code}-{section_name}" if section_name else code
+                    
+                    course_doc = {
+                        "name": course_name,
+                        "code": course_code,
+                        "section": section_name,
+                        "credit_hours": credit_hours,
+                        "level": level,
+                        "description": description,
+                        "department_id": department_id,
+                        "faculty_id": faculty_id,
+                        "teacher_id": None,
+                        "semester_id": semester_id,
+                        "syllabus_items": [],
+                        "is_active": True,
+                        "is_deleted": False,
+                        "created_at": get_yemen_time(),
+                    }
+                    
+                    await db.courses.insert_one(course_doc)
+                    imported += 1
+                
+            except Exception as e:
+                errors.append(f"السطر {index + 2}: {str(e)}")
+        
+        await log_activity(
+            user=current_user,
+            action="import_courses",
+            entity_type="course",
+            entity_id="bulk",
+            entity_name=f"استيراد {imported} مقرر"
+        )
+        
+        return {
+            "message": f"تم استيراد {imported} مقرر بنجاح",
+            "imported": imported,
+            "errors": errors[:20],
+            "total_errors": len(errors)
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logging.error(f"Course import error: {e}")
+        raise HTTPException(status_code=500, detail=f"خطأ في معالجة الملف: {str(e)}")
 
 @api_router.post("/import/teachers")
 async def import_teachers_from_excel(
