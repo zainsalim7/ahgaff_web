@@ -350,7 +350,11 @@ export default function CourseLecturesScreen() {
   // حذف المحاضرات المحددة
   const deleteSelectedLectures = async () => {
     if (selectedLectures.size === 0) {
-      Alert.alert('تنبيه', 'الرجاء تحديد محاضرات للحذف');
+      if (Platform.OS === 'web') {
+        window.alert('الرجاء تحديد محاضرات للحذف');
+      } else {
+        Alert.alert('تنبيه', 'الرجاء تحديد محاضرات للحذف');
+      }
       return;
     }
 
@@ -358,70 +362,92 @@ export default function CourseLecturesScreen() {
       ? `هل أنت متأكد من حذف جميع المحاضرات (${lectures.length} محاضرة)؟`
       : `هل أنت متأكد من حذف ${selectedLectures.size} محاضرة؟`;
 
-    Alert.alert(
-      'تأكيد الحذف',
-      confirmMessage,
-      [
+    const doDelete = async () => {
+      setDeleting(true);
+      try {
+        const deletePromises = Array.from(selectedLectures).map(id => 
+          lecturesAPI.delete(id)
+        );
+        await Promise.all(deletePromises);
+        if (Platform.OS === 'web') {
+          window.alert(`تم حذف ${selectedLectures.size} محاضرة`);
+        } else {
+          Alert.alert('نجاح', `تم حذف ${selectedLectures.size} محاضرة`);
+        }
+        setSelectedLectures(new Set());
+        setSelectionMode(false);
+        fetchData();
+      } catch (error) {
+        console.error('Error deleting lectures:', error);
+        if (Platform.OS === 'web') {
+          window.alert('حدث خطأ أثناء حذف المحاضرات');
+        } else {
+          Alert.alert('خطأ', 'حدث خطأ أثناء حذف المحاضرات');
+        }
+      } finally {
+        setDeleting(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(confirmMessage)) {
+        await doDelete();
+      }
+    } else {
+      Alert.alert('تأكيد الحذف', confirmMessage, [
         { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'حذف',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const deletePromises = Array.from(selectedLectures).map(id => 
-                lecturesAPI.delete(id)
-              );
-              await Promise.all(deletePromises);
-              Alert.alert('نجاح', `تم حذف ${selectedLectures.size} محاضرة`);
-              setSelectedLectures(new Set());
-              setSelectionMode(false);
-              fetchData();
-            } catch (error) {
-              console.error('Error deleting lectures:', error);
-              Alert.alert('خطأ', 'حدث خطأ أثناء حذف المحاضرات');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+        { text: 'حذف', style: 'destructive', onPress: doDelete },
+      ]);
+    }
   };
 
   // حذف جميع المحاضرات
   const deleteAllLectures = () => {
     if (lectures.length === 0) {
-      Alert.alert('تنبيه', 'لا توجد محاضرات للحذف');
+      if (Platform.OS === 'web') {
+        window.alert('لا توجد محاضرات للحذف');
+      } else {
+        Alert.alert('تنبيه', 'لا توجد محاضرات للحذف');
+      }
       return;
     }
 
-    Alert.alert(
-      'حذف جميع المحاضرات',
-      `هل أنت متأكد من حذف جميع المحاضرات (${lectures.length} محاضرة)؟\n\nهذا الإجراء لا يمكن التراجع عنه!`,
-      [
+    const confirmMessage = `هل أنت متأكد من حذف جميع المحاضرات (${lectures.length} محاضرة)؟\n\nهذا الإجراء لا يمكن التراجع عنه!`;
+
+    const doDeleteAll = async () => {
+      setDeleting(true);
+      try {
+        const deletePromises = lectures.map(l => lecturesAPI.delete(l.id));
+        await Promise.all(deletePromises);
+        if (Platform.OS === 'web') {
+          window.alert(`تم حذف جميع المحاضرات (${lectures.length})`);
+        } else {
+          Alert.alert('نجاح', `تم حذف جميع المحاضرات (${lectures.length})`);
+        }
+        setSelectionMode(false);
+        fetchData();
+      } catch (error) {
+        console.error('Error deleting all lectures:', error);
+        if (Platform.OS === 'web') {
+          window.alert('حدث خطأ أثناء حذف المحاضرات');
+        } else {
+          Alert.alert('خطأ', 'حدث خطأ أثناء حذف المحاضرات');
+        }
+      } finally {
+        setDeleting(false);
+      }
+    };
+
+    if (Platform.OS === 'web') {
+      if (window.confirm(confirmMessage)) {
+        doDeleteAll();
+      }
+    } else {
+      Alert.alert('حذف جميع المحاضرات', confirmMessage, [
         { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'حذف الكل',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              const deletePromises = lectures.map(l => lecturesAPI.delete(l.id));
-              await Promise.all(deletePromises);
-              Alert.alert('نجاح', `تم حذف جميع المحاضرات (${lectures.length})`);
-              setSelectionMode(false);
-              fetchData();
-            } catch (error) {
-              console.error('Error deleting all lectures:', error);
-              Alert.alert('خطأ', 'حدث خطأ أثناء حذف المحاضرات');
-            } finally {
-              setDeleting(false);
-            }
-          },
-        },
-      ]
-    );
+        { text: 'حذف الكل', style: 'destructive', onPress: doDeleteAll },
+      ]);
+    }
   };
 
   // تفعيل/تعطيل يوم
