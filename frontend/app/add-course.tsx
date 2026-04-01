@@ -267,7 +267,8 @@ export default function AddCourseScreen() {
     
     for (const id of Array.from(selectedIds)) {
       try {
-        await coursesAPI.delete(id);
+        // استخدام الحذف الآمن الذي يتعامل مع المقررات التي بها طلاب
+        await api.post(`/courses/${id}/safe-delete`);
         successCount++;
       } catch (error: any) {
         const detail = error?.response?.data?.detail || 'فشل في حذف المقرر';

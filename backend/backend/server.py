@@ -3373,7 +3373,12 @@ async def safe_delete_course(course_id: str, current_user: dict = Depends(get_cu
     
     # 1. جمع بيانات النسخة الاحتياطية
     enrollments = await db.enrollments.find({"course_id": course_id}).to_list(10000)
-    student_ids = [ObjectId(e["student_id"]) for e in enrollments]
+    student_ids = []
+    for e in enrollments:
+        try:
+            student_ids.append(ObjectId(e["student_id"]))
+        except:
+            pass
     students = await db.students.find({"_id": {"$in": student_ids}}).to_list(10000) if student_ids else []
     lectures = await db.lectures.find({"course_id": course_id}).to_list(10000)
     attendance = await db.attendance.find({"course_id": course_id}).to_list(50000)
