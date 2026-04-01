@@ -48,6 +48,8 @@
 - **Teaching Load Fix**: Changed weekly calculation to use full weeks only (// instead of /)
 - **Course Import**: Added Excel import for courses with template download. Supports multi-section courses (أ، ب، ج...)
 - **Teacher Template Update**: Enhanced teacher template with specialization, phone, email fields
+- **Multi-Course Student Copy**: Updated bulk-copy endpoint to accept multiple target_course_ids
+- **Import Courses Moved**: Moved Excel import feature from /courses to /add-course page
 
 ## P0 - Next
 - [x] Fix ALL permission checks (DONE - 78 endpoints)
@@ -57,6 +59,7 @@
 - [x] Performance optimizations (DONE - GZip, indexes, caching)
 - [x] University logo upload (DONE - Emergent Object Storage)
 - [x] Fix teaching load calculation (DONE - full weeks only)
+- [x] Move import courses from /courses to /add-course (DONE - April 1, 2026)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration
 
