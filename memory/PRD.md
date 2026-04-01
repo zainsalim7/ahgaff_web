@@ -60,6 +60,8 @@
 - [x] University logo upload (DONE - Emergent Object Storage)
 - [x] Fix teaching load calculation (DONE - full weeks only)
 - [x] Move import courses from /courses to /add-course (DONE - April 1, 2026)
+- [x] Fix teacher department_ids and academic_title not persisting on edit (DONE - April 1, 2026)
+- [x] Add Cairo Arabic web font for Chrome compatibility (DONE - April 1, 2026)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration
 

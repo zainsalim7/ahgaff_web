@@ -2712,10 +2712,12 @@ async def get_teachers(
             "teacher_id": teacher.get("teacher_id", ""),
             "full_name": teacher.get("full_name", ""),
             "department_id": teacher.get("department_id"),
+            "department_ids": teacher.get("department_ids", [teacher.get("department_id")] if teacher.get("department_id") else []),
             "faculty_id": teacher.get("faculty_id"),
             "email": teacher.get("email"),
             "phone": teacher.get("phone"),
             "specialization": teacher.get("specialization"),
+            "academic_title": teacher.get("academic_title"),
             "user_id": teacher.get("user_id"),
             "weekly_hours": teacher.get("weekly_hours", 12),
             "teaching_load": teacher.get("teaching_load"),
@@ -2749,6 +2751,12 @@ async def create_teacher(request: Request, current_user: dict = Depends(get_curr
     teacher_dict["created_at"] = get_yemen_time()
     teacher_dict["is_active"] = True
     
+    # حفظ department_ids كمصفوفة
+    if "department_ids" in body and isinstance(body["department_ids"], list):
+        teacher_dict["department_ids"] = body["department_ids"]
+    elif teacher_dict.get("department_id"):
+        teacher_dict["department_ids"] = [teacher_dict["department_id"]]
+    
     # تعبئة faculty_id تلقائياً من القسم
     if teacher_dict.get("department_id"):
         teacher_dict["faculty_id"] = await _resolve_faculty_id(teacher_dict["department_id"])
@@ -2770,9 +2778,11 @@ async def get_teacher(teacher_id: str, current_user: dict = Depends(get_current_
         "teacher_id": teacher.get("teacher_id", ""),
         "full_name": teacher.get("full_name", ""),
         "department_id": teacher.get("department_id"),
+        "department_ids": teacher.get("department_ids", [teacher.get("department_id")] if teacher.get("department_id") else []),
         "email": teacher.get("email"),
         "phone": teacher.get("phone"),
         "specialization": teacher.get("specialization"),
+        "academic_title": teacher.get("academic_title"),
         "user_id": teacher.get("user_id"),
         "weekly_hours": teacher.get("weekly_hours", 12),
         "teaching_load": teacher.get("teaching_load"),
@@ -2853,6 +2863,14 @@ async def update_teacher(teacher_id: str, request: Request, current_user: dict =
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     
+    # حفظ department_ids كمصفوفة في قاعدة البيانات
+    if "department_ids" in body and isinstance(body["department_ids"], list):
+        update_data["department_ids"] = body["department_ids"]
+    
+    # حفظ academic_title حتى لو كان فارغاً
+    if "academic_title" in body:
+        update_data["academic_title"] = body.get("academic_title") or ""
+    
     # تحديث faculty_id إذا تغير القسم
     if "department_id" in update_data:
         update_data["faculty_id"] = await _resolve_faculty_id(update_data["department_id"])
@@ -2866,9 +2884,11 @@ async def update_teacher(teacher_id: str, request: Request, current_user: dict =
         "teacher_id": updated.get("teacher_id", ""),
         "full_name": updated.get("full_name", ""),
         "department_id": updated.get("department_id"),
+        "department_ids": updated.get("department_ids", [updated.get("department_id")] if updated.get("department_id") else []),
         "email": updated.get("email"),
         "phone": updated.get("phone"),
         "specialization": updated.get("specialization"),
+        "academic_title": updated.get("academic_title"),
         "user_id": updated.get("user_id"),
         "weekly_hours": updated.get("weekly_hours", 12),
         "teaching_load": updated.get("teaching_load"),
