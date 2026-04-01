@@ -21,8 +21,8 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
 
   const style = document.createElement('style');
   style.textContent = `
-    * {
-      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif !important;
+    body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, label, input, textarea, select, button, option {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
     }
   `;
   document.head.appendChild(style);
