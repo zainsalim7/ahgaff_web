@@ -165,6 +165,12 @@ export default function CoursesScreen() {
               {getDepartmentName(item.department_id)} | المستوى {item.level} | شعبة {item.section}
             </Text>
           </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+            <Ionicons name="people" size={14} color="#1565c0" />
+            <Text style={[styles.metaText, { color: '#1565c0', fontWeight: '600' }]}>
+              {(item as any).students_count ?? 0} طالب
+            </Text>
+          </View>
         </View>
         {/* عرض الأزرار فقط للمستخدمين المصرح لهم */}
         <View style={styles.actionButtons}>

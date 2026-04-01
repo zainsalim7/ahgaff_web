@@ -517,6 +517,12 @@ export default function AddCourseScreen() {
           {getDepartmentName(item.department_id)} | م{item.level}{item.section ? ` | ${item.section}` : ''}
         </Text>
         <Text style={styles.itemDetail}>المعلم: {item.teacher_name || getTeacherName(item.teacher_id)}</Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
+          <Ionicons name="people" size={14} color="#1565c0" />
+          <Text style={[styles.itemDetail, { color: '#1565c0', fontWeight: '600' }]}>
+            {item.students_count ?? 0} طالب
+          </Text>
+        </View>
       </View>
       {!selectionMode && (
         <View style={styles.actionButtons}>
