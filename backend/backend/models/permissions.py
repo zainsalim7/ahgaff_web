@@ -8,6 +8,10 @@ class UserRole:
     TEACHER = "teacher"
     STUDENT = "student"
     EMPLOYEE = "employee"
+    DEAN = "dean"
+    DEPARTMENT_HEAD = "department_head"
+    REGISTRAR = "registrar"
+    REGISTRATION_MANAGER = "registration_manager"
 
 class Permission:
     # صلاحيات الأقسام
@@ -148,6 +152,79 @@ DEFAULT_PERMISSIONS = {
         Permission.VIEW_ATTENDANCE,
         Permission.VIEW_LECTURES,
         Permission.REPORT_STUDENT,
+    ],
+    UserRole.DEAN: [
+        Permission.MANAGE_DEPARTMENTS,
+        Permission.MANAGE_COURSES,
+        Permission.MANAGE_STUDENTS,
+        Permission.MANAGE_TEACHERS,
+        Permission.MANAGE_ENROLLMENTS,
+        Permission.MANAGE_LECTURES,
+        Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_REPORTS,
+        Permission.EXPORT_REPORTS,
+        Permission.IMPORT_DATA,
+        Permission.VIEW_LECTURES,
+        Permission.VIEW_COURSES,
+        Permission.REPORT_ATTENDANCE_OVERVIEW,
+        Permission.REPORT_ABSENT_STUDENTS,
+        Permission.REPORT_WARNINGS,
+        Permission.REPORT_DAILY,
+        Permission.REPORT_STUDENT,
+        Permission.REPORT_COURSE,
+        Permission.REPORT_TEACHER_WORKLOAD,
+        Permission.REPORT_LESSON_COMPLETION,
+    ],
+    UserRole.DEPARTMENT_HEAD: [
+        Permission.MANAGE_COURSES,
+        Permission.MANAGE_STUDENTS,
+        Permission.MANAGE_TEACHERS,
+        Permission.MANAGE_ENROLLMENTS,
+        Permission.MANAGE_LECTURES,
+        Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_REPORTS,
+        Permission.EXPORT_REPORTS,
+        Permission.IMPORT_DATA,
+        Permission.VIEW_LECTURES,
+        Permission.VIEW_COURSES,
+        Permission.REPORT_ATTENDANCE_OVERVIEW,
+        Permission.REPORT_ABSENT_STUDENTS,
+        Permission.REPORT_WARNINGS,
+        Permission.REPORT_DAILY,
+        Permission.REPORT_STUDENT,
+        Permission.REPORT_COURSE,
+        Permission.REPORT_TEACHER_WORKLOAD,
+        Permission.REPORT_LESSON_COMPLETION,
+    ],
+    UserRole.REGISTRAR: [
+        Permission.MANAGE_STUDENTS,
+        Permission.MANAGE_ENROLLMENTS,
+        Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_REPORTS,
+        Permission.EXPORT_REPORTS,
+        Permission.IMPORT_DATA,
+        Permission.VIEW_LECTURES,
+        Permission.VIEW_COURSES,
+        Permission.REPORT_STUDENT,
+        Permission.REPORT_ABSENT_STUDENTS,
+        Permission.REPORT_WARNINGS,
+        Permission.REPORT_ATTENDANCE_OVERVIEW,
+    ],
+    UserRole.REGISTRATION_MANAGER: [
+        Permission.MANAGE_STUDENTS,
+        Permission.MANAGE_ENROLLMENTS,
+        Permission.MANAGE_COURSES,
+        Permission.VIEW_ATTENDANCE,
+        Permission.VIEW_REPORTS,
+        Permission.EXPORT_REPORTS,
+        Permission.IMPORT_DATA,
+        Permission.VIEW_LECTURES,
+        Permission.VIEW_COURSES,
+        Permission.REPORT_STUDENT,
+        Permission.REPORT_ABSENT_STUDENTS,
+        Permission.REPORT_WARNINGS,
+        Permission.REPORT_ATTENDANCE_OVERVIEW,
+        Permission.REPORT_DAILY,
     ],
 }
 
