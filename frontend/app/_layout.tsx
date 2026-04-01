@@ -12,6 +12,22 @@ import { SideMenu } from '../src/components/SideMenu';
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
 
+// Load Arabic font on web to fix rendering issues in some Chrome browsers
+if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap';
+  document.head.appendChild(link);
+
+  const style = document.createElement('style');
+  style.textContent = `
+    * {
+      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 export default function RootLayout() {
   const loadAuth = useAuthStore((state) => state.loadAuth);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
