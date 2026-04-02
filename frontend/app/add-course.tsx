@@ -458,8 +458,11 @@ export default function AddCourseScreen() {
         link.click();
         window.URL.revokeObjectURL(url);
       }
-    } catch (e) {
-      alert('فشل تحميل النموذج');
+    } catch (e: any) {
+      const msg = e?.response?.status === 404 
+        ? 'يجب إعادة نشر التطبيق لتفعيل هذه الميزة' 
+        : 'فشل تحميل نموذج المحاضرات';
+      if (Platform.OS === 'web') { window.alert(msg); } else { Alert.alert('خطأ', msg); }
     }
   };
 
