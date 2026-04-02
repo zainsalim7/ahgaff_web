@@ -8149,6 +8149,209 @@ async def get_teachers_template(current_user: dict = Depends(get_current_user)):
         headers={"Content-Disposition": "attachment; filename=teachers_template.xlsx"}
     )
 
+# ==================== استيراد المحاضرات من Excel ====================
+
+@api_router.get("/template/lectures")
+async def get_lectures_template(current_user: dict = Depends(get_current_user)):
+    """تحميل نموذج استيراد المحاضرات"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "import_data"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    data = {
+        "رمز المقرر": ["FQH101", "FQH101", "ARB102"],
+        "اليوم": ["السبت", "الإثنين", "الأحد"],
+        "وقت البداية": ["08:00", "10:00", "08:00"],
+        "وقت النهاية": ["09:30", "11:30", "09:30"],
+        "القاعة": ["قاعة 101", "قاعة 203", "قاعة 105"],
+        "تاريخ البداية": ["2026-02-01", "2026-02-01", "2026-02-01"],
+        "تاريخ النهاية": ["2026-05-30", "2026-05-30", "2026-05-30"],
+    }
+    
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine='openpyxl')
+    output.seek(0)
+    
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=lectures_template.xlsx"}
+    )
+
+
+@api_router.post("/import/lectures")
+async def import_lectures_from_excel(
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user)
+):
+    """استيراد محاضرات من ملف Excel - يولّد محاضرات أسبوعية تلقائياً"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "import_data"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    try:
+        contents = await file.read()
+        df = pd.read_excel(BytesIO(contents))
+        
+        column_mapping = {
+            'رمز المقرر': 'course_code',
+            'الرمز': 'course_code',
+            'اليوم': 'day',
+            'وقت البداية': 'start_time',
+            'البداية': 'start_time',
+            'وقت النهاية': 'end_time',
+            'النهاية': 'end_time',
+            'القاعة': 'room',
+            'تاريخ البداية': 'start_date',
+            'بداية الفصل': 'start_date',
+            'تاريخ النهاية': 'end_date',
+            'نهاية الفصل': 'end_date',
+        }
+        
+        df = df.rename(columns=column_mapping)
+        
+        required_cols = ['course_code', 'day', 'start_time', 'end_time', 'start_date', 'end_date']
+        missing = [c for c in required_cols if c not in df.columns]
+        if missing:
+            col_names = {'course_code': 'رمز المقرر', 'day': 'اليوم', 'start_time': 'وقت البداية', 'end_time': 'وقت النهاية', 'start_date': 'تاريخ البداية', 'end_date': 'تاريخ النهاية'}
+            missing_ar = [col_names.get(c, c) for c in missing]
+            raise HTTPException(status_code=400, detail=f"أعمدة مطلوبة غير موجودة: {', '.join(missing_ar)}")
+        
+        # تحويل أسماء الأيام العربية إلى أرقام Python weekday
+        day_name_map = {
+            'السبت': 5, 'سبت': 5,
+            'الأحد': 6, 'أحد': 6, 'الاحد': 6, 'احد': 6,
+            'الإثنين': 0, 'الاثنين': 0, 'إثنين': 0, 'اثنين': 0,
+            'الثلاثاء': 1, 'ثلاثاء': 1,
+            'الأربعاء': 2, 'الاربعاء': 2, 'أربعاء': 2, 'اربعاء': 2,
+            'الخميس': 3, 'خميس': 3,
+            'الجمعة': 4, 'جمعة': 4,
+            'saturday': 5, 'sunday': 6, 'monday': 0,
+            'tuesday': 1, 'wednesday': 2, 'thursday': 3, 'friday': 4,
+        }
+        
+        total_lectures = 0
+        total_conflicts = 0
+        errors = []
+        courses_processed = set()
+        
+        from datetime import timedelta
+        
+        for index, row in df.iterrows():
+            row_num = index + 2  # +2 لأن Excel يبدأ من 1 + header
+            try:
+                course_code = str(row.get('course_code', '')).strip()
+                day_name = str(row.get('day', '')).strip()
+                start_time = str(row.get('start_time', '')).strip()
+                end_time = str(row.get('end_time', '')).strip()
+                room = str(row.get('room', '')).strip() if pd.notna(row.get('room')) else ''
+                start_date_str = str(row.get('start_date', '')).strip()
+                end_date_str = str(row.get('end_date', '')).strip()
+                
+                if not course_code:
+                    errors.append(f"سطر {row_num}: رمز المقرر فارغ")
+                    continue
+                
+                # البحث عن المقرر
+                course = await db.courses.find_one({"code": course_code})
+                if not course:
+                    errors.append(f"سطر {row_num}: رمز المقرر '{course_code}' غير موجود في النظام")
+                    continue
+                
+                course_id = str(course["_id"])
+                courses_processed.add(course_code)
+                
+                # التحقق من اليوم
+                target_weekday = day_name_map.get(day_name)
+                if target_weekday is None:
+                    errors.append(f"سطر {row_num}: اسم اليوم '{day_name}' غير معروف")
+                    continue
+                
+                # تنظيف الأوقات (تحويل من HH:MM:SS إلى HH:MM)
+                if len(start_time) > 5:
+                    start_time = start_time[:5]
+                if len(end_time) > 5:
+                    end_time = end_time[:5]
+                
+                if not start_time or not end_time:
+                    errors.append(f"سطر {row_num}: وقت البداية أو النهاية فارغ")
+                    continue
+                
+                if end_time <= start_time:
+                    errors.append(f"سطر {row_num}: وقت النهاية ({end_time}) يجب أن يكون بعد وقت البداية ({start_time})")
+                    continue
+                
+                # تحليل التواريخ
+                try:
+                    # دعم تنسيقات متعددة
+                    start_date_str = start_date_str.split(' ')[0]  # إزالة الوقت إن وجد
+                    end_date_str = end_date_str.split(' ')[0]
+                    start_date = datetime.strptime(start_date_str, "%Y-%m-%d")
+                    end_date = datetime.strptime(end_date_str, "%Y-%m-%d")
+                except:
+                    errors.append(f"سطر {row_num}: صيغة التاريخ غير صحيحة (المتوقع: YYYY-MM-DD)")
+                    continue
+                
+                if end_date <= start_date:
+                    errors.append(f"سطر {row_num}: تاريخ النهاية يجب أن يكون بعد تاريخ البداية")
+                    continue
+                
+                # البحث عن أول يوم مطابق
+                current = start_date
+                while current.weekday() != target_weekday:
+                    current += timedelta(days=1)
+                
+                # توليد محاضرة لكل أسبوع
+                row_lectures = 0
+                row_conflicts = 0
+                while current <= end_date:
+                    date_str = current.strftime("%Y-%m-%d")
+                    
+                    # فحص التعارض
+                    conflict = await check_teacher_lecture_conflict(course_id, date_str, start_time, end_time)
+                    if conflict:
+                        row_conflicts += 1
+                        total_conflicts += 1
+                        current += timedelta(days=7)
+                        continue
+                    
+                    lecture = {
+                        "course_id": course_id,
+                        "date": date_str,
+                        "start_time": start_time,
+                        "end_time": end_time,
+                        "room": room,
+                        "status": LectureStatus.SCHEDULED,
+                        "notes": f"تم الاستيراد من Excel",
+                        "created_at": get_yemen_time(),
+                        "created_by": current_user["id"]
+                    }
+                    await db.lectures.insert_one(lecture)
+                    row_lectures += 1
+                    total_lectures += 1
+                    
+                    current += timedelta(days=7)
+                
+                if row_conflicts > 0:
+                    errors.append(f"سطر {row_num} ({course_code} - {day_name}): تم تخطي {row_conflicts} محاضرة بسبب تعارض")
+                    
+            except Exception as e:
+                errors.append(f"سطر {row_num}: {str(e)}")
+        
+        return {
+            "message": f"تم إنشاء {total_lectures} محاضرة لـ {len(courses_processed)} مقرر",
+            "imported": total_lectures,
+            "courses_count": len(courses_processed),
+            "conflicts_skipped": total_conflicts,
+            "errors": errors[:20],
+            "total_errors": len(errors)
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Lectures import error: {str(e)}")
+        raise HTTPException(status_code=400, detail=f"خطأ في قراءة الملف: {str(e)}")
+
 @api_router.get("/template/courses")
 async def get_courses_template(current_user: dict = Depends(get_current_user)):
     """Download courses import template"""

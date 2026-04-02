@@ -63,6 +63,11 @@
 - [x] Fix teacher department_ids and academic_title not persisting on edit (DONE - April 1, 2026)
 - [x] Add Cairo Arabic web font for Chrome compatibility (DONE - April 1, 2026)
 - [x] Add students_count to courses API and display in UI (DONE - April 1, 2026)
+- [x] Add lectures_count to courses API and display in UI (DONE - April 2, 2026)
+- [x] Fix bulk delete courses (use safe-delete) (DONE - April 2, 2026)
+- [x] Fix bulk delete lectures (window.confirm for web) (DONE - April 2, 2026)
+- [x] Add search bar + section label in copy/move students modal (DONE - April 2, 2026)
+- [x] Import lectures from Excel (template + import endpoint + UI) (DONE - April 2, 2026)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration
 

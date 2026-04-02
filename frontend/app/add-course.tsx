@@ -67,11 +67,16 @@ export default function AddCourseScreen() {
   // استعادة
   const [restoring, setRestoring] = useState(false);
 
-  // استيراد Excel
+  // استيراد Excel مقررات
   const [showImportModal, setShowImportModal] = useState(false);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<any>(null);
   const [selectedDeptForImport, setSelectedDeptForImport] = useState<string>('');
+
+  // استيراد محاضرات Excel
+  const [showImportLecturesModal, setShowImportLecturesModal] = useState(false);
+  const [importingLectures, setImportingLectures] = useState(false);
+  const [importLecturesResult, setImportLecturesResult] = useState<any>(null);
 
   // صلاحيات المستخدم
   const [userRole, setUserRole] = useState<string>('');
@@ -442,6 +447,56 @@ export default function AddCourseScreen() {
     }
   };
 
+  const handleDownloadLecturesTemplate = async () => {
+    try {
+      const res = await api.get('/template/lectures', { responseType: 'blob' });
+      if (Platform.OS === 'web') {
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = 'lectures_template.xlsx';
+        link.click();
+        window.URL.revokeObjectURL(url);
+      }
+    } catch (e) {
+      alert('فشل تحميل النموذج');
+    }
+  };
+
+  const handleImportLectures = async () => {
+    if (Platform.OS !== 'web') return;
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      setImportingLectures(true);
+      setImportLecturesResult(null);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const res = await api.post('/import/lectures', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        setImportLecturesResult(res.data);
+        fetchData();
+      } catch (error: any) {
+        setImportLecturesResult({
+          message: error.response?.data?.detail || 'فشل في الاستيراد',
+          imported: 0,
+          errors: [],
+        });
+      } finally {
+        setImportingLectures(false);
+      }
+    };
+    input.click();
+  };
+
   const handleImportCourses = async () => {
     if (!selectedDeptForImport) {
       alert('يجب اختيار القسم أولاً');
@@ -795,7 +850,7 @@ export default function AddCourseScreen() {
                     data-testid="download-courses-template-btn"
                   >
                     <Ionicons name="download" size={22} color="#fff" />
-                    <Text style={styles.addButtonText}>تحميل النموذج</Text>
+                    <Text style={styles.addButtonText}>نموذج مقررات</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: '#1565c0' }]}
@@ -803,7 +858,23 @@ export default function AddCourseScreen() {
                     data-testid="import-courses-btn"
                   >
                     <Ionicons name="document-attach" size={22} color="#fff" />
-                    <Text style={styles.addButtonText}>استيراد Excel</Text>
+                    <Text style={styles.addButtonText}>استيراد مقررات</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: '#6a1b9a' }]}
+                    onPress={handleDownloadLecturesTemplate}
+                    data-testid="download-lectures-template-btn"
+                  >
+                    <Ionicons name="download" size={22} color="#fff" />
+                    <Text style={styles.addButtonText}>نموذج محاضرات</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: '#e65100' }]}
+                    onPress={() => { setShowImportLecturesModal(true); setImportLecturesResult(null); }}
+                    data-testid="import-lectures-btn"
+                  >
+                    <Ionicons name="calendar" size={22} color="#fff" />
+                    <Text style={styles.addButtonText}>استيراد محاضرات</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -1008,6 +1079,86 @@ export default function AddCourseScreen() {
                     ))}
                     {importResult.total_errors > 5 && (
                       <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>و {importResult.total_errors - 5} أخطاء أخرى...</Text>
+                    )}
+                  </View>
+                )}
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* نافذة استيراد المحاضرات */}
+      <Modal
+        visible={showImportLecturesModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setShowImportLecturesModal(false)}
+      >
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 500 }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#333' }}>استيراد محاضرات من Excel</Text>
+              <TouchableOpacity onPress={() => setShowImportLecturesModal(false)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ backgroundColor: '#fff3e0', borderRadius: 8, padding: 12, marginBottom: 16 }}>
+              <Text style={{ fontSize: 13, color: '#e65100', fontWeight: '600', marginBottom: 4 }}>متطلبات قبل الاستيراد:</Text>
+              <Text style={{ fontSize: 12, color: '#666' }}>1. يجب أن تكون المقررات موجودة في النظام مسبقاً</Text>
+              <Text style={{ fontSize: 12, color: '#666' }}>2. كل مقرر يجب أن يكون له معلم معيّن</Text>
+              <Text style={{ fontSize: 12, color: '#666' }}>3. استخدم رمز المقرر (Code) الموجود في النظام</Text>
+            </View>
+
+            <View style={{ gap: 12 }}>
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#f3e5f5', padding: 14, borderRadius: 10 }}
+                onPress={handleDownloadLecturesTemplate}
+                data-testid="download-lectures-template-modal-btn"
+              >
+                <Ionicons name="download" size={20} color="#6a1b9a" />
+                <Text style={{ color: '#6a1b9a', fontSize: 15, fontWeight: '600' }}>تحميل نموذج المحاضرات</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: importingLectures ? '#e0e0e0' : '#e65100', padding: 14, borderRadius: 10 }}
+                onPress={handleImportLectures}
+                disabled={importingLectures}
+                data-testid="import-lectures-submit-btn"
+              >
+                {importingLectures ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="cloud-upload" size={20} color="#fff" />
+                )}
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '600' }}>
+                  {importingLectures ? 'جاري الاستيراد...' : 'رفع ملف المحاضرات'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+
+            {importLecturesResult && (
+              <View style={{ marginTop: 16, padding: 12, backgroundColor: importLecturesResult.imported > 0 ? '#e8f5e9' : '#ffebee', borderRadius: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: importLecturesResult.imported > 0 ? '#2e7d32' : '#c62828' }}>
+                  {importLecturesResult.message}
+                </Text>
+                {importLecturesResult.imported > 0 && (
+                  <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+                    <Text style={{ fontSize: 13, color: '#2e7d32' }}>محاضرات: {importLecturesResult.imported}</Text>
+                    <Text style={{ fontSize: 13, color: '#1565c0' }}>مقررات: {importLecturesResult.courses_count}</Text>
+                    {importLecturesResult.conflicts_skipped > 0 && (
+                      <Text style={{ fontSize: 13, color: '#e65100' }}>تعارضات: {importLecturesResult.conflicts_skipped}</Text>
+                    )}
+                  </View>
+                )}
+                {importLecturesResult.errors?.length > 0 && (
+                  <View style={{ marginTop: 8 }}>
+                    {importLecturesResult.errors.slice(0, 5).map((err: string, i: number) => (
+                      <Text key={i} style={{ fontSize: 12, color: '#c62828', marginTop: 2 }}>{err}</Text>
+                    ))}
+                    {importLecturesResult.total_errors > 5 && (
+                      <Text style={{ fontSize: 12, color: '#666', marginTop: 4 }}>و {importLecturesResult.total_errors - 5} تنبيهات أخرى...</Text>
                     )}
                   </View>
                 )}
