@@ -124,6 +124,7 @@ export default function CourseStudentsScreen() {
   const [allCourses, setAllCourses] = useState<any[]>([]);
   const [actionLoading, setActionLoading] = useState(false);
   const [selectedTargetCourses, setSelectedTargetCourses] = useState<string[]>([]);
+  const [courseSearchQuery, setCourseSearchQuery] = useState('');
   
   // تعديل حالة الحضور
   const [editingRecord, setEditingRecord] = useState<{recordId: string; studentName: string; currentStatus: string} | null>(null);
@@ -1270,7 +1271,7 @@ export default function CourseStudentsScreen() {
         {/* نافذة اختيار المقرر (نسخ/نقل) - اختيار متعدد */}
         <Modal visible={showActionModal === 'copy' || showActionModal === 'move'} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
-            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '90%', maxWidth: 450, maxHeight: '70%' }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '90%', maxWidth: 450, maxHeight: '80%' }}>
               <Text style={{ fontSize: 17, fontWeight: '700', color: '#333', textAlign: 'center', marginBottom: 4 }}>
                 {showActionModal === 'copy' ? 'نسخ الطلاب إلى مقررات' : 'نقل الطلاب إلى مقرر'}
               </Text>
@@ -1283,13 +1284,34 @@ export default function CourseStudentsScreen() {
                 </Text>
               )}
               
+              {/* شريط البحث */}
+              <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, marginBottom: 10 }}>
+                <Ionicons name="search" size={18} color="#999" />
+                <TextInput
+                  style={{ flex: 1, padding: 10, fontSize: 14, textAlign: 'right' }}
+                  placeholder="بحث بالاسم أو الرمز..."
+                  value={courseSearchQuery}
+                  onChangeText={setCourseSearchQuery}
+                  data-testid="copy-modal-search-input"
+                />
+                {courseSearchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setCourseSearchQuery('')}>
+                    <Ionicons name="close-circle" size={18} color="#999" />
+                  </TouchableOpacity>
+                )}
+              </View>
+
               {actionLoading ? (
                 <ActivityIndicator size="large" color="#1565c0" style={{ marginVertical: 30 }} />
               ) : (
                 <FlatList
-                  data={allCourses}
+                  data={allCourses.filter(c => {
+                    if (!courseSearchQuery.trim()) return true;
+                    const q = courseSearchQuery.trim().toLowerCase();
+                    return (c.name || '').toLowerCase().includes(q) || (c.code || '').toLowerCase().includes(q) || (c.section || '').toLowerCase().includes(q);
+                  })}
                   keyExtractor={item => item.id}
-                  style={{ maxHeight: 320 }}
+                  style={{ maxHeight: 350 }}
                   renderItem={({ item }) => {
                     const isSelected = selectedTargetCourses.includes(item.id);
                     return (
@@ -1311,7 +1333,9 @@ export default function CourseStudentsScreen() {
                         )}
                         <Ionicons name="book" size={20} color={showActionModal === 'copy' ? '#1565c0' : '#ff9800'} />
                         <View style={{ flex: 1, marginLeft: 10 }}>
-                          <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{item.name}</Text>
+                          <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>
+                            {item.name}{item.section ? ` (${item.section})` : ''}
+                          </Text>
                           <Text style={{ fontSize: 12, color: '#999' }}>{item.code || ''}</Text>
                         </View>
                         {showActionModal === 'move' && (
@@ -1321,7 +1345,7 @@ export default function CourseStudentsScreen() {
                     );
                   }}
                   ListEmptyComponent={
-                    <Text style={{ textAlign: 'center', color: '#999', paddingVertical: 30 }}>لا توجد مقررات أخرى</Text>
+                    <Text style={{ textAlign: 'center', color: '#999', paddingVertical: 30 }}>لا توجد نتائج</Text>
                   }
                 />
               )}
@@ -1329,7 +1353,7 @@ export default function CourseStudentsScreen() {
               <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
                 <TouchableOpacity
                   style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 12, borderRadius: 10, alignItems: 'center' }}
-                  onPress={() => { setShowActionModal(null); setSelectedTargetCourses([]); }}
+                  onPress={() => { setShowActionModal(null); setSelectedTargetCourses([]); setCourseSearchQuery(''); }}
                 >
                   <Text style={{ color: '#666', fontWeight: '600' }}>إلغاء</Text>
                 </TouchableOpacity>
