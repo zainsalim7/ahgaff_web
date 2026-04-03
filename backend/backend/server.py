@@ -124,10 +124,52 @@ app = FastAPI(title="نظام حضور جامعة الأحقاف")
 # Gzip compression - ضغط الردود لتسريع النقل
 app.add_middleware(GZipMiddleware, minimum_size=500)
 
-# CORS - يجب أن يكون أول middleware
+# ==================== Security Headers ====================
+from starlette.middleware.base import BaseHTTPMiddleware
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-XSS-Protection"] = "1; mode=block"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        return response
+
+app.add_middleware(SecurityHeadersMiddleware)
+
+# ==================== Rate Limiting ====================
+_login_attempts = {}  # {ip: [(timestamp, success), ...]}
+RATE_LIMIT_WINDOW = 300  # 5 دقائق
+RATE_LIMIT_MAX_ATTEMPTS = 10  # أقصى عدد محاولات فاشلة
+
+def check_rate_limit(ip: str) -> bool:
+    """التحقق من تجاوز حد المحاولات - True = مسموح"""
+    now = time_module.time()
+    if ip in _login_attempts:
+        _login_attempts[ip] = [a for a in _login_attempts[ip] if now - a[0] < RATE_LIMIT_WINDOW]
+        failed = [a for a in _login_attempts[ip] if not a[1]]
+        if len(failed) >= RATE_LIMIT_MAX_ATTEMPTS:
+            return False
+    return True
+
+def record_login_attempt(ip: str, success: bool):
+    """تسجيل محاولة دخول"""
+    if ip not in _login_attempts:
+        _login_attempts[ip] = []
+    _login_attempts[ip].append((time_module.time(), success))
+
+# CORS - النطاقات المسموحة
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*")
+if ALLOWED_ORIGINS == "*":
+    origins = ["*"]
+else:
+    origins = [o.strip() for o in ALLOWED_ORIGINS.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -15,13 +15,34 @@ import logging
 
 from models.permissions import UserRole, DEFAULT_PERMISSIONS
 
+# Rate Limiting
+import time as time_module
+
+_login_attempts = {}
+RATE_LIMIT_WINDOW = 300  # 5 دقائق
+RATE_LIMIT_MAX_ATTEMPTS = 10
+
+def check_rate_limit(ip: str) -> bool:
+    now = time_module.time()
+    if ip in _login_attempts:
+        _login_attempts[ip] = [a for a in _login_attempts[ip] if now - a[0] < RATE_LIMIT_WINDOW]
+        failed = [a for a in _login_attempts[ip] if not a[1]]
+        if len(failed) >= RATE_LIMIT_MAX_ATTEMPTS:
+            return False
+    return True
+
+def record_login_attempt(ip: str, success: bool):
+    if ip not in _login_attempts:
+        _login_attempts[ip] = []
+    _login_attempts[ip].append((time_module.time(), success))
+
 # Logging
 logger = logging.getLogger(__name__)
 
 # JWT Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'ahgaff-university-secure-key-2026-x9f8k2m5n7p3q1w4')
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 ساعة بدلاً من 7 أيام
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")

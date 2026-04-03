@@ -1,7 +1,7 @@
 """
 Auth Routes - مسارات المصادقة
 """
-from fastapi import APIRouter, HTTPException, status, Depends
+from fastapi import APIRouter, HTTPException, status, Depends, Request
 from bson import ObjectId
 from datetime import datetime
 
@@ -9,20 +9,31 @@ from models.users import UserLogin, UserResponse
 from models.permissions import DEFAULT_PERMISSIONS
 from .deps import (
     get_db, get_current_user, verify_password, create_access_token,
-    log_activity, security
+    log_activity, security, check_rate_limit, record_login_attempt
 )
 
 router = APIRouter(tags=["المصادقة"])
 
 
 @router.post("/auth/login")
-async def login(user_data: UserLogin):
-    """تسجيل الدخول"""
+async def login(user_data: UserLogin, request: Request):
+    """تسجيل الدخول مع حماية Rate Limiting"""
     db = get_db()
+    
+    # Rate Limiting - فحص عدد المحاولات
+    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    
+    if not check_rate_limit(client_ip):
+        raise HTTPException(
+            status_code=429,
+            detail="تم تجاوز الحد الأقصى لمحاولات تسجيل الدخول. يرجى المحاولة بعد 5 دقائق"
+        )
+    
     user = await db.users.find_one({"username": user_data.username})
     password_field = user.get("hashed_password") or user.get("password") if user else None
     
     if not user or not password_field:
+        record_login_attempt(client_ip, False)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="اسم المستخدم أو كلمة المرور غير صحيحة"
@@ -34,16 +45,21 @@ async def login(user_data: UserLogin):
         is_valid = False
     
     if not is_valid:
+        record_login_attempt(client_ip, False)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="اسم المستخدم أو كلمة المرور غير صحيحة"
         )
     
     if not user.get("is_active", True):
+        record_login_attempt(client_ip, False)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="الحساب غير مفعل"
         )
+    
+    # تسجيل محاولة ناجحة
+    record_login_attempt(client_ip, True)
     
     access_token = create_access_token(data={"sub": str(user["_id"])})
     
