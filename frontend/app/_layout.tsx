@@ -14,15 +14,22 @@ I18nManager.forceRTL(true);
 
 // Load Arabic font on web to fix rendering issues in some Chrome browsers
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
+  // تحميل خط Cairo مع preconnect للسرعة
+  const preconnect = document.createElement('link');
+  preconnect.rel = 'preconnect';
+  preconnect.href = 'https://fonts.googleapis.com';
+  document.head.appendChild(preconnect);
+
   const link = document.createElement('link');
   link.rel = 'stylesheet';
   link.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap';
   document.head.appendChild(link);
 
+  // تطبيق الخط على كل العناصر مع الحفاظ على خطوط الأيقونات
   const style = document.createElement('style');
   style.textContent = `
-    body, p, span, div, h1, h2, h3, h4, h5, h6, a, li, td, th, label, input, textarea, select, button, option {
-      font-family: 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
+    * {
+      font-family: 'Cairo', 'Ionicons', 'Material Design Icons', 'MaterialCommunityIcons', 'FontAwesome', 'Segoe UI', Tahoma, Arial, sans-serif !important;
     }
   `;
   document.head.appendChild(style);
