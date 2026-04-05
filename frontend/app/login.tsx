@@ -54,7 +54,14 @@ export default function LoginScreen() {
 
   const initializeAdmin = async () => {
     try {
+      // تحقق إذا سبق إعداد الأدمن (تخزين محلي)
+      const alreadyInit = await AsyncStorage.getItem('admin_initialized');
+      if (alreadyInit === 'true') {
+        setInitialized(true);
+        return;
+      }
       await authAPI.initAdmin();
+      await AsyncStorage.setItem('admin_initialized', 'true');
       setInitialized(true);
     } catch (error) {
       setInitialized(true);

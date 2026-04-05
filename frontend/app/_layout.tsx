@@ -14,18 +14,13 @@ I18nManager.forceRTL(true);
 
 // Load Arabic font on web to fix rendering issues in some Chrome browsers
 if (Platform.OS === 'web' && typeof document !== 'undefined') {
-  // تحميل خط Cairo مع preconnect للسرعة
-  const preconnect = document.createElement('link');
-  preconnect.rel = 'preconnect';
-  preconnect.href = 'https://fonts.googleapis.com';
-  document.head.appendChild(preconnect);
-
+  // تحميل خط Cairo - فقط الأوزان المستخدمة
   const link = document.createElement('link');
   link.rel = 'stylesheet';
-  link.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap';
+  link.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap';
   document.head.appendChild(link);
 
-  // تطبيق الخط على كل العناصر مع الحفاظ على خطوط الأيقونات
+  // تطبيق الخط مع الحفاظ على خطوط الأيقونات
   const style = document.createElement('style');
   style.textContent = `
     * {
