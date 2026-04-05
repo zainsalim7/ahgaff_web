@@ -10839,37 +10839,98 @@ async def startup_event():
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
 
+async def _get_existing_index_keys(collection) -> set:
+    """Return a set of frozensets representing the key patterns of existing indexes."""
+    existing = set()
+    async for idx in collection.list_indexes():
+        key_pattern = frozenset(idx["key"].items())
+        existing.add(key_pattern)
+    return existing
+
+
+async def _ensure_index(collection, keys, **kwargs):
+    """
+    Create an index only if an index with the same key pattern does not already exist.
+    Returns True if a new index was created, False if it already existed.
+    """
+    # Normalise keys to a list of (field, direction) tuples
+    if isinstance(keys, str):
+        key_list = [(keys, 1)]
+    else:
+        key_list = list(keys)
+
+    key_pattern = frozenset(key_list)
+    existing = await _get_existing_index_keys(collection)
+
+    if key_pattern in existing:
+        return False  # index already exists – skip
+
+    await collection.create_index(key_list, **kwargs)
+    return True  # new index created
+
+
 async def create_indexes():
-    """إنشاء فهارس لتسريع الاستعلامات"""
-    try:
-        await db.users.create_index("username", unique=True)
-        await db.users.create_index("role")
-        await db.users.create_index("faculty_id")
-        await db.users.create_index("department_id")
-        await db.users.create_index("is_active")
-        await db.students.create_index("student_id")
-        await db.students.create_index("department_id")
-        await db.students.create_index("faculty_id")
-        await db.students.create_index("is_active")
-        await db.teachers.create_index("department_id")
-        await db.teachers.create_index("faculty_id")
-        await db.courses.create_index("department_id")
-        await db.courses.create_index("teacher_id")
-        await db.courses.create_index("semester_id")
-        await db.lectures.create_index("course_id")
-        await db.lectures.create_index("teacher_id")
-        await db.lectures.create_index("date")
-        await db.lectures.create_index([("teacher_id", 1), ("date", 1)])
-        await db.attendance.create_index("lecture_id")
-        await db.attendance.create_index("student_id")
-        await db.attendance.create_index([("lecture_id", 1), ("student_id", 1)])
-        await db.enrollments.create_index("course_id")
-        await db.enrollments.create_index("student_id")
-        await db.enrollments.create_index([("course_id", 1), ("student_id", 1)])
-        await db.roles.create_index("system_key")
-        logging.info("MongoDB indexes created successfully")
-    except Exception as e:
-        logging.warning(f"Index creation warning: {e}")
+    """
+    إنشاء فهارس MongoDB لتسريع الاستعلامات.
+    يتحقق أولاً من الفهارس الموجودة ويتخطى أي فهرس مُنشأ مسبقاً،
+    مما يُقلّل وقت بدء التشغيل عند الاتصال بـ MongoDB Atlas.
+    """
+    # تعريف جميع الفهارس المطلوبة: (collection, keys, kwargs)
+    index_definitions = [
+        # users
+        (db.users, "username",                              {"unique": True}),
+        (db.users, "role",                                  {}),
+        (db.users, "faculty_id",                            {}),
+        (db.users, "department_id",                         {}),
+        (db.users, "is_active",                             {}),
+        # students
+        (db.students, "student_id",                         {}),
+        (db.students, "department_id",                      {}),
+        (db.students, "faculty_id",                         {}),
+        (db.students, "is_active",                          {}),
+        # teachers
+        (db.teachers, "department_id",                      {}),
+        (db.teachers, "faculty_id",                         {}),
+        # courses
+        (db.courses, "department_id",                       {}),
+        (db.courses, "teacher_id",                          {}),
+        (db.courses, "semester_id",                         {}),
+        # lectures
+        (db.lectures, "course_id",                          {}),
+        (db.lectures, "teacher_id",                         {}),
+        (db.lectures, "date",                               {}),
+        (db.lectures, [("teacher_id", 1), ("date", 1)],    {}),
+        # attendance
+        (db.attendance, "lecture_id",                       {}),
+        (db.attendance, "student_id",                       {}),
+        (db.attendance, [("lecture_id", 1), ("student_id", 1)], {}),
+        # enrollments
+        (db.enrollments, "course_id",                       {}),
+        (db.enrollments, "student_id",                      {}),
+        (db.enrollments, [("course_id", 1), ("student_id", 1)], {}),
+        # roles
+        (db.roles, "system_key",                            {}),
+    ]
+
+    created_count = 0
+    skipped_count = 0
+
+    for collection, keys, kwargs in index_definitions:
+        try:
+            was_created = await _ensure_index(collection, keys, **kwargs)
+            if was_created:
+                index_name = keys if isinstance(keys, str) else keys
+                logging.info(f"MongoDB index created: {collection.name} → {index_name}")
+                created_count += 1
+            else:
+                skipped_count += 1
+        except Exception as e:
+            logging.warning(f"Index creation warning on {collection.name}: {e}")
+
+    if created_count > 0:
+        logging.info(f"MongoDB indexes: {created_count} created, {skipped_count} already existed")
+    else:
+        logging.info(f"MongoDB indexes: all {skipped_count} indexes already exist — skipped creation")
 
 async def sync_default_roles():
     """مزامنة صلاحيات الأدوار الافتراضية مع قاعدة البيانات"""
