@@ -30,51 +30,73 @@ async def get_courses(
     """الحصول على جميع المقررات"""
     db = get_db()
     query = {}
-    
+
     if department_id:
         query["department_id"] = department_id
     if teacher_id:
         query["teacher_id"] = teacher_id
-    
+
     courses = await db.courses.find(query).to_list(100)
-    
+
+    if not courses:
+        return []
+
+    # --- Bulk-fetch teachers ---
+    teacher_ids = list({
+        ObjectId(c["teacher_id"])
+        for c in courses
+        if c.get("teacher_id")
+    })
+    teachers_map: dict = {}
+    if teacher_ids:
+        async for t in db.users.find(
+            {"_id": {"$in": teacher_ids}},
+            {"_id": 1, "full_name": 1}
+        ):
+            teachers_map[str(t["_id"])] = t.get("full_name")
+
+    # --- Bulk-fetch departments ---
+    dept_ids = list({
+        ObjectId(c["department_id"])
+        for c in courses
+        if c.get("department_id")
+    })
+    depts_map: dict = {}
+    if dept_ids:
+        async for d in db.departments.find(
+            {"_id": {"$in": dept_ids}},
+            {"_id": 1, "name": 1}
+        ):
+            depts_map[str(d["_id"])] = d.get("name")
+
+    # --- Bulk-count enrollments via aggregation ---
+    course_ids = [str(c["_id"]) for c in courses]
+    enrollment_counts: dict = {cid: 0 for cid in course_ids}
+    async for bucket in db.enrollments.aggregate([
+        {"$match": {"course_id": {"$in": course_ids}}},
+        {"$group": {"_id": "$course_id", "count": {"$sum": 1}}}
+    ]):
+        enrollment_counts[bucket["_id"]] = bucket["count"]
+
+    # --- Build response in a single pass ---
     result = []
     for c in courses:
-        teacher_name = None
-        if c.get("teacher_id"):
-            try:
-                teacher = await db.users.find_one({"_id": ObjectId(c["teacher_id"])})
-                if teacher:
-                    teacher_name = teacher.get("full_name")
-            except:
-                pass
-        
-        dept_name = None
-        if c.get("department_id"):
-            try:
-                dept = await db.departments.find_one({"_id": ObjectId(c["department_id"])})
-                if dept:
-                    dept_name = dept.get("name")
-            except:
-                pass
-        
-        students_count = await db.enrollments.count_documents({"course_id": str(c["_id"])})
-        
+        cid = str(c["_id"])
         result.append({
-            "id": str(c["_id"]),
+            "id": cid,
             "name": c["name"],
             "code": c.get("code", ""),
             "department_id": c.get("department_id"),
-            "department_name": dept_name,
+            "department_name": depts_map.get(c.get("department_id", "")),
             "teacher_id": c.get("teacher_id"),
-            "teacher_name": teacher_name,
+            "teacher_name": teachers_map.get(c.get("teacher_id", "")),
             "credit_hours": c.get("credit_hours", 3),
             "description": c.get("description"),
-            "students_count": students_count,
+            "students_count": enrollment_counts.get(cid, 0),
             "is_active": c.get("is_active", True),
             "created_at": c.get("created_at", datetime.utcnow())
         })
-    
+
     return result
 
 
@@ -111,27 +133,53 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
 @router.get("/courses/{course_id}")
 async def get_course(course_id: str, current_user: dict = Depends(get_current_user)):
     """الحصول على تفاصيل مقرر"""
+    import asyncio
     db = get_db()
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
-    
-    teacher_name = None
-    if course.get("teacher_id"):
-        try:
-            teacher = await db.users.find_one({"_id": ObjectId(course["teacher_id"])})
-            if teacher:
-                teacher_name = teacher.get("full_name")
-        except:
-            pass
-    
-    students_count = await db.enrollments.count_documents({"course_id": course_id})
-    
+
+    # Build coroutines for teacher, department, and enrollment count, then
+    # run all three concurrently instead of sequentially.
+    async def fetch_teacher():
+        if course.get("teacher_id"):
+            try:
+                t = await db.users.find_one(
+                    {"_id": ObjectId(course["teacher_id"])},
+                    {"_id": 0, "full_name": 1}
+                )
+                return t.get("full_name") if t else None
+            except Exception:
+                pass
+        return None
+
+    async def fetch_department():
+        if course.get("department_id"):
+            try:
+                d = await db.departments.find_one(
+                    {"_id": ObjectId(course["department_id"])},
+                    {"_id": 0, "name": 1}
+                )
+                return d.get("name") if d else None
+            except Exception:
+                pass
+        return None
+
+    async def fetch_enrollment_count():
+        return await db.enrollments.count_documents({"course_id": course_id})
+
+    teacher_name, dept_name, students_count = await asyncio.gather(
+        fetch_teacher(),
+        fetch_department(),
+        fetch_enrollment_count()
+    )
+
     return {
         "id": str(course["_id"]),
         "name": course["name"],
         "code": course.get("code"),
         "department_id": course.get("department_id"),
+        "department_name": dept_name,
         "teacher_id": course.get("teacher_id"),
         "teacher_name": teacher_name,
         "credit_hours": course.get("credit_hours", 3),
