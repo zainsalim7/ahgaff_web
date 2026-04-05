@@ -8,6 +8,7 @@ from typing import List
 
 from models.settings import SystemSettings, SettingsUpdate
 from .deps import security
+from cache import cache, TTL_SETTINGS
 
 router = APIRouter(tags=["الإعدادات"])
 db = None
@@ -20,6 +21,10 @@ def set_db(database):
 @router.get("/settings")
 async def get_settings(current_user: dict = Depends(get_current_user)):
     """الحصول على إعدادات النظام"""
+    cached = cache.get("settings:system")
+    if cached is not None:
+        return cached
+
     settings = await db.settings.find_one({"_id": "system_settings"})
     if not settings:
         # إنشاء إعدادات افتراضية
@@ -57,7 +62,7 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
                         {"$set": update_fields}
                     )
     
-    return {
+    result = {
         "college_name": settings.get("college_name", "كلية الشريعة والقانون"),
         "college_name_en": settings.get("college_name_en", "Faculty of Sharia and Law"),
         "academic_year": settings.get("academic_year", "2024-2025"),
@@ -74,6 +79,8 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
         "academic_years": settings.get("academic_years", []),
         "updated_at": settings.get("updated_at"),
     }
+    cache.set("settings:system", result, ttl=TTL_SETTINGS)
+    return result
 
 @router.put("/settings")
 async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get_current_user)):
@@ -89,7 +96,8 @@ async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get
         {"$set": update_data},
         upsert=True
     )
-    
+
+    cache.invalidate("settings:system")
     return {"message": "تم تحديث الإعدادات بنجاح"}
 
 @router.post("/settings/academic-years")

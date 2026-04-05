@@ -1,6 +1,7 @@
 """
 Teachers Routes - مسارات إدارة المعلمين
 """
+import asyncio
 from fastapi import APIRouter, HTTPException, status, Depends
 from bson import ObjectId
 from datetime import datetime
@@ -8,6 +9,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from .deps import get_db, get_current_user, get_password_hash
+from cache import cache, TTL_TEACHERS
 
 router = APIRouter(tags=["المعلمون"])
 
@@ -27,38 +29,74 @@ async def get_teachers(
 ):
     """الحصول على جميع المعلمين - من جدول teachers"""
     db = get_db()
-    
+
+    cache_key = f"teachers:{department_id or 'all'}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     # البحث في جدول teachers
     query = {}
     if department_id:
         query["department_id"] = department_id
-    
-    teachers = await db.teachers.find(query).to_list(100)
-    
+
+    teachers = await db.teachers.find(query).to_list(200)
+    if not teachers:
+        cache.set(cache_key, [], ttl=TTL_TEACHERS)
+        return []
+
+    teacher_id_strs = [str(t["_id"]) for t in teachers]
+
+    # Collect unique department and user IDs for bulk lookups
+    dept_ids = list({t["department_id"] for t in teachers if t.get("department_id")})
+    user_ids = [ObjectId(t["user_id"]) for t in teachers if t.get("user_id")]
+
+    async def fetch_course_counts():
+        counts = {tid: 0 for tid in teacher_id_strs}
+        async for bucket in db.courses.aggregate([
+            {"$match": {"teacher_id": {"$in": teacher_id_strs}}},
+            {"$group": {"_id": "$teacher_id", "count": {"$sum": 1}}}
+        ]):
+            counts[bucket["_id"]] = bucket["count"]
+        return counts
+
+    async def fetch_departments():
+        if not dept_ids:
+            return {}
+        dmap = {}
+        try:
+            async for d in db.departments.find(
+                {"_id": {"$in": [ObjectId(did) for did in dept_ids]}},
+                {"_id": 1, "name": 1}
+            ):
+                dmap[str(d["_id"])] = d.get("name")
+        except Exception:
+            pass
+        return dmap
+
+    async def fetch_users():
+        if not user_ids:
+            return {}
+        umap = {}
+        async for u in db.users.find(
+            {"_id": {"$in": user_ids}},
+            {"_id": 1, "username": 1}
+        ):
+            umap[str(u["_id"])] = u
+        return umap
+
+    course_counts, depts_map, users_map = await asyncio.gather(
+        fetch_course_counts(),
+        fetch_departments(),
+        fetch_users(),
+    )
+
     result = []
     for t in teachers:
-        # الحصول على عدد المقررات
         teacher_id_str = str(t["_id"])
-        courses_count = await db.courses.count_documents({"teacher_id": teacher_id_str})
-        
-        # الحصول على اسم القسم
-        dept_name = None
-        if t.get("department_id"):
-            try:
-                dept = await db.departments.find_one({"_id": ObjectId(t["department_id"])})
-                if dept:
-                    dept_name = dept.get("name")
-            except:
-                pass
-        
-        # الحصول على معلومات المستخدم إن وجد
-        user_info = None
-        if t.get("user_id"):
-            try:
-                user_info = await db.users.find_one({"_id": ObjectId(t["user_id"])})
-            except:
-                pass
-        
+        dept_name = depts_map.get(t.get("department_id", "")) if t.get("department_id") else None
+        user_info = users_map.get(str(t["user_id"])) if t.get("user_id") else None
+
         result.append({
             "id": teacher_id_str,
             "teacher_id": t.get("teacher_id"),
@@ -74,13 +112,14 @@ async def get_teachers(
             "specialization": t.get("specialization"),
             "academic_title": t.get("academic_title"),
             "teaching_load": t.get("teaching_load"),
-            "courses_count": courses_count,
+            "courses_count": course_counts.get(teacher_id_str, 0),
             "is_active": t.get("is_active", True),
             "has_user_account": user_info is not None,
             "user_id": str(t.get("user_id")) if t.get("user_id") else None,
             "created_at": t.get("created_at")
         })
-    
+
+    cache.set(cache_key, result, ttl=TTL_TEACHERS)
     return result
 
 
@@ -105,7 +144,8 @@ async def create_teacher(teacher: TeacherCreate, current_user: dict = Depends(ge
     }
     
     result = await db.teachers.insert_one(teacher_doc)
-    
+
+    cache.invalidate_prefix("teachers:")
     return {
         "id": str(result.inserted_id),
         "teacher_id": teacher_id,
@@ -152,5 +192,6 @@ async def delete_teacher(teacher_id: str, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=400, detail=f"لا يمكن حذف المعلم، لديه {courses_count} مقرر")
     
     await db.users.delete_one({"_id": ObjectId(teacher_id)})
-    
+
+    cache.invalidate_prefix("teachers:")
     return {"message": "تم حذف المعلم بنجاح"}

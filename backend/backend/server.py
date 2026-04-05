@@ -93,10 +93,16 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Security
 security = HTTPBearer()
 
-# MongoDB connection - with error handling
+# MongoDB connection - with connection pooling for better concurrency
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 try:
-    client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
+    client = AsyncIOMotorClient(
+        mongo_url,
+        maxPoolSize=100,               # handle 80+ req/min across 2 replicas
+        minPoolSize=10,                # keep warm connections ready
+        serverSelectionTimeoutMS=5000, # fail fast if Atlas is unreachable
+        socketTimeoutMS=30000,         # 30 s per socket operation
+    )
     db = client[os.environ.get('DB_NAME', 'ahgaff_attendance')]
 except Exception as e:
     print(f"Warning: MongoDB connection failed: {e}")
@@ -10910,6 +10916,18 @@ async def create_indexes():
         (db.enrollments, [("course_id", 1), ("student_id", 1)], {}),
         # roles
         (db.roles, "system_key",                            {}),
+        # composite indexes for common filter patterns
+        (db.students,  [("department_id", 1), ("is_active", 1)],  {}),
+        (db.teachers,  [("teacher_id", 1),    ("is_active", 1)],  {}),
+        (db.courses,   [("department_id", 1), ("is_active", 1)],  {}),
+        (db.courses,   [("teacher_id", 1),    ("is_active", 1)],  {}),
+        (db.users,     [("role", 1),           ("is_active", 1)],  {}),
+        (db.users,     [("faculty_id", 1),     ("is_active", 1)],  {}),
+        # sorting by creation date
+        (db.students,  "created_at",                         {}),
+        (db.courses,   "created_at",                         {}),
+        (db.teachers,  "created_at",                         {}),
+        (db.activity_logs, "timestamp",                      {}),
     ]
 
     created_count = 0

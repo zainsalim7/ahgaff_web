@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from models.permissions import UserRole, DEFAULT_PERMISSIONS, ALL_PERMISSIONS
 from .deps import get_db, get_current_user
+from cache import cache, TTL_ROLES
 
 router = APIRouter(tags=["الأدوار"])
 
@@ -31,20 +32,47 @@ async def get_all_roles(current_user: dict = Depends(get_current_user)):
     db = get_db()
     if current_user["role"] != "admin":
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
+
+    cached = cache.get("roles:all")
+    if cached is not None:
+        return cached
+
     roles = await db.roles.find().to_list(100)
-    
+
+    # Build user-count map in a single aggregation instead of N queries
+    role_id_strs = [str(r["_id"]) for r in roles]
+    system_keys  = [r["system_key"] for r in roles if r.get("system_key")]
+
+    users_by_role_id: dict = {rid: 0 for rid in role_id_strs}
+    users_by_system_key: dict = {sk: 0 for sk in system_keys}
+
+    async for bucket in db.users.aggregate([
+        {"$match": {
+            "$or": [
+                {"role_id": {"$in": role_id_strs}},
+                {"role":    {"$in": system_keys}},
+            ]
+        }},
+        {"$group": {
+            "_id": {"role_id": "$role_id", "role": "$role"},
+            "count": {"$sum": 1}
+        }}
+    ]):
+        rid = bucket["_id"].get("role_id")
+        rk  = bucket["_id"].get("role")
+        cnt = bucket["count"]
+        if rid and rid in users_by_role_id:
+            users_by_role_id[rid] += cnt
+        elif rk and rk in users_by_system_key:
+            users_by_system_key[rk] += cnt
+
     result = []
     for role in roles:
-        system_key = role.get("system_key", "")
-        users_count = await db.users.count_documents({
-            "$or": [
-                {"role_id": str(role["_id"])},
-                {"role": system_key} if system_key else {"_id": None}
-            ]
-        })
+        role_id_str = str(role["_id"])
+        system_key  = role.get("system_key", "")
+        users_count = users_by_role_id.get(role_id_str, 0) + users_by_system_key.get(system_key, 0)
         result.append({
-            "id": str(role["_id"]),
+            "id": role_id_str,
             "name": role["name"],
             "description": role.get("description", ""),
             "permissions": role.get("permissions", []),
@@ -53,7 +81,8 @@ async def get_all_roles(current_user: dict = Depends(get_current_user)):
             "users_count": users_count,
             "created_at": role.get("created_at", datetime.utcnow())
         })
-    
+
+    cache.set("roles:all", result, ttl=TTL_ROLES)
     return result
 
 
@@ -83,7 +112,8 @@ async def create_role(role_data: RoleCreate, current_user: dict = Depends(get_cu
     }
     
     result = await db.roles.insert_one(role_doc)
-    
+
+    cache.invalidate("roles:all")
     return {
         "id": str(result.inserted_id),
         "message": "تم إنشاء الدور بنجاح"
@@ -158,7 +188,8 @@ async def update_role(role_id: str, role_data: RoleUpdate, current_user: dict = 
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         await db.roles.update_one({"_id": ObjectId(role_id)}, {"$set": update_data})
-    
+
+    cache.invalidate("roles:all")
     return {"message": "تم تحديث الدور بنجاح"}
 
 
@@ -181,7 +212,8 @@ async def delete_role(role_id: str, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=400, detail=f"لا يمكن حذف الدور، يوجد {users_count} مستخدم مرتبط به")
     
     await db.roles.delete_one({"_id": ObjectId(role_id)})
-    
+
+    cache.invalidate("roles:all")
     return {"message": "تم حذف الدور بنجاح"}
 
 

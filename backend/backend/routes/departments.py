@@ -1,6 +1,7 @@
 """
 Departments Routes - مسارات إدارة الأقسام
 """
+import asyncio
 from fastapi import APIRouter, HTTPException, status, Depends
 from bson import ObjectId
 from datetime import datetime
@@ -8,6 +9,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from .deps import get_db, get_current_user
+from cache import cache, TTL_DEPARTMENTS
 
 router = APIRouter(tags=["الأقسام"])
 
@@ -28,40 +30,82 @@ class DepartmentUpdate(BaseModel):
 async def get_departments(faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """الحصول على جميع الأقسام"""
     db = get_db()
+
+    # Cache key includes the optional filter so scoped and unscoped results
+    # are stored independently.
+    cache_key = f"departments:{faculty_id or 'all'}"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     query = {}
     if faculty_id:
         query["faculty_id"] = faculty_id
-    
+
     departments = await db.departments.find(query).to_list(100)
-    
+    if not departments:
+        cache.set(cache_key, [], ttl=TTL_DEPARTMENTS)
+        return []
+
+    dept_id_strs = [str(d["_id"]) for d in departments]
+
+    # Collect unique faculty IDs for a single bulk lookup
+    faculty_ids = list({d["faculty_id"] for d in departments if d.get("faculty_id")})
+
+    # Run all three aggregations concurrently
+    async def fetch_student_counts():
+        counts = {cid: 0 for cid in dept_id_strs}
+        async for bucket in db.students.aggregate([
+            {"$match": {"department_id": {"$in": dept_id_strs}}},
+            {"$group": {"_id": "$department_id", "count": {"$sum": 1}}}
+        ]):
+            counts[bucket["_id"]] = bucket["count"]
+        return counts
+
+    async def fetch_teacher_counts():
+        counts = {cid: 0 for cid in dept_id_strs}
+        async for bucket in db.teachers.aggregate([
+            {"$match": {"department_id": {"$in": dept_id_strs}}},
+            {"$group": {"_id": "$department_id", "count": {"$sum": 1}}}
+        ]):
+            counts[bucket["_id"]] = bucket["count"]
+        return counts
+
+    async def fetch_faculties():
+        if not faculty_ids:
+            return {}
+        fmap = {}
+        try:
+            async for f in db.faculties.find(
+                {"_id": {"$in": [ObjectId(fid) for fid in faculty_ids]}},
+                {"_id": 1, "name": 1}
+            ):
+                fmap[str(f["_id"])] = f.get("name")
+        except Exception:
+            pass
+        return fmap
+
+    student_counts, teacher_counts, faculties_map = await asyncio.gather(
+        fetch_student_counts(),
+        fetch_teacher_counts(),
+        fetch_faculties(),
+    )
+
     result = []
     for dept in departments:
-        students_count = await db.students.count_documents({"department_id": str(dept["_id"])})
-        teachers_count = await db.users.count_documents({
-            "role": "teacher",
-            "department_ids": str(dept["_id"])
-        })
-        
-        faculty_name = None
-        if dept.get("faculty_id"):
-            try:
-                faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
-                if faculty:
-                    faculty_name = faculty.get("name")
-            except:
-                pass
-        
+        dept_id_str = str(dept["_id"])
         result.append({
-            "id": str(dept["_id"]),
+            "id": dept_id_str,
             "name": dept["name"],
             "code": dept.get("code", ""),
             "faculty_id": dept.get("faculty_id"),
-            "faculty_name": faculty_name,
-            "students_count": students_count,
-            "teachers_count": teachers_count,
+            "faculty_name": faculties_map.get(dept.get("faculty_id", "")) if dept.get("faculty_id") else None,
+            "students_count": student_counts.get(dept_id_str, 0),
+            "teachers_count": teacher_counts.get(dept_id_str, 0),
             "created_at": dept.get("created_at", datetime.utcnow())
         })
-    
+
+    cache.set(cache_key, result, ttl=TTL_DEPARTMENTS)
     return result
 
 
@@ -84,7 +128,10 @@ async def create_department(dept: DepartmentCreate, current_user: dict = Depends
     }
     
     result = await db.departments.insert_one(dept_doc)
-    
+
+    # Invalidate cached department lists so next read is fresh
+    cache.invalidate_prefix("departments:")
+
     return {
         "id": str(result.inserted_id),
         "name": dept.name,
@@ -136,7 +183,8 @@ async def update_department(dept_id: str, data: DepartmentUpdate, current_user: 
     if update_data:
         update_data["updated_at"] = datetime.utcnow()
         await db.departments.update_one({"_id": ObjectId(dept_id)}, {"$set": update_data})
-    
+
+    cache.invalidate_prefix("departments:")
     return {"message": "تم تحديث القسم بنجاح"}
 
 
@@ -156,5 +204,6 @@ async def delete_department(dept_id: str, current_user: dict = Depends(get_curre
         raise HTTPException(status_code=400, detail=f"لا يمكن حذف القسم، يوجد {students_count} طالب مسجل فيه")
     
     await db.departments.delete_one({"_id": ObjectId(dept_id)})
-    
+
+    cache.invalidate_prefix("departments:")
     return {"message": "تم حذف القسم بنجاح"}

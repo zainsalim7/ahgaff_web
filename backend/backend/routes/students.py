@@ -60,18 +60,23 @@ async def get_students(
         ]
     
     students = await db.students.find(query).to_list(1000)
-    
+
+    if not students:
+        return []
+
+    # Bulk-fetch all referenced departments in a single query
+    dept_ids = list({ObjectId(s["department_id"]) for s in students if s.get("department_id")})
+    depts_map: dict = {}
+    if dept_ids:
+        async for d in db.departments.find(
+            {"_id": {"$in": dept_ids}},
+            {"_id": 1, "name": 1}
+        ):
+            depts_map[str(d["_id"])] = d.get("name")
+
     result = []
     for s in students:
-        dept_name = None
-        if s.get("department_id"):
-            try:
-                dept = await db.departments.find_one({"_id": ObjectId(s["department_id"])})
-                if dept:
-                    dept_name = dept.get("name")
-            except:
-                pass
-        
+        dept_name = depts_map.get(s.get("department_id", "")) if s.get("department_id") else None
         result.append({
             "id": str(s["_id"]),
             "name": s.get("name", "غير محدد"),
@@ -85,7 +90,7 @@ async def get_students(
             "is_active": s.get("is_active", True),
             "created_at": s.get("created_at", datetime.utcnow())
         })
-    
+
     return result
 
 
