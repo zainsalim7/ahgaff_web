@@ -75,9 +75,11 @@ Comprehensive student and teacher management system for Ahgaff University with s
 - Students/Lectures counts on course cards
 - Smart modal search with sections
 - Moved imports to add-course page
-- Icon tooltips (title hover) across 23 files (April 6, 2026)
-  - Replaced previously-added text labels with hover tooltips
-  - Added title="..." to ALL action icons globally
+- **CSS Hover Tooltips on all action icons (April 6, 2026)**
+  - Used `accessibilityLabel` prop (renders as `aria-label` in DOM)
+  - CSS `::after` pseudo-element with `content: attr(aria-label)` for tooltip display
+  - Dark tooltip bubble with arrow, fade-in animation
+  - Applied across 23 files covering all action buttons (edit, delete, export, etc.)
 
 ## Architecture
 ```
@@ -90,11 +92,18 @@ Comprehensive student and teacher management system for Ahgaff University with s
 │       └── services/
 ├── frontend/
 │   ├── app/
+│   │   ├── _layout.tsx           # Global CSS tooltip injection
 │   │   ├── (tabs)/              # Tab navigation pages
 │   │   ├── report-*.tsx         # Report pages (10 files)
 │   │   └── *.tsx                # Feature pages
 │   └── src/components/
 ```
+
+## Key Technical Decisions
+- **Tooltip Implementation**: Uses `accessibilityLabel` (→ `aria-label` in DOM) + CSS `::after` pseudo-elements. React Native Web does NOT forward `title` or `data-*` attributes but DOES forward `accessibilityLabel`.
+- **Font Stack**: `Cairo` for Arabic text, with `Ionicons` and icon font families preserved.
+- **Scope Filtering**: `get_user_scope_filter()` auto-restricts data by faculty/department.
+- **Granular RBAC**: Always use `has_permission(user, Permission.XYZ)`, never hardcode role checks.
 
 ## Pending Tasks
 

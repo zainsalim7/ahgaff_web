@@ -137,7 +137,7 @@ export default function DailyReport() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} title="رجوع">
+        <TouchableOpacity onPress={() => goBack()} accessibilityLabel="رجوع">
           <Ionicons name="arrow-forward" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>التقرير اليومي</Text>
@@ -147,7 +147,7 @@ export default function DailyReport() {
               style={styles.exportBtn}
               onPress={handleExportPDF}
               disabled={exportingPDF || lectures.length === 0}
-              title="تصدير PDF"
+              accessibilityLabel="تصدير PDF"
             >
               {exportingPDF ? (
                 <ActivityIndicator size="small" color="#e53935" />
@@ -160,7 +160,7 @@ export default function DailyReport() {
             style={styles.exportBtn}
             onPress={exportToExcel}
             disabled={exporting || lectures.length === 0}
-            title="تصدير Excel"
+            accessibilityLabel="تصدير Excel"
           >
             {exporting ? (
               <ActivityIndicator size="small" color="#4caf50" />

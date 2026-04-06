@@ -429,7 +429,7 @@ export default function ManageRolesScreen() {
                 <TouchableOpacity 
                   style={styles.actionBtn}
                   onPress={() => openEditModal(role)}
-                  title="تعديل"
+                  accessibilityLabel="تعديل"
                 >
                   <Ionicons name="pencil" size={20} color="#1565c0" />
                 </TouchableOpacity>
@@ -437,7 +437,7 @@ export default function ManageRolesScreen() {
                   <TouchableOpacity 
                     style={[styles.actionBtn, styles.deleteBtn]}
                     onPress={() => handleDelete(role)}
-                    title="حذف"
+                    accessibilityLabel="حذف"
                   >
                     <Ionicons name="trash" size={20} color="#f44336" />
                   </TouchableOpacity>

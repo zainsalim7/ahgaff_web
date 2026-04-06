@@ -178,7 +178,7 @@ export default function TeacherDelaysReport() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} title="رجوع">
+        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="رجوع">
           <Ionicons name="arrow-back" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تقرير تأخر المعلمين</Text>
@@ -188,7 +188,7 @@ export default function TeacherDelaysReport() {
             onPress={handleExport}
             disabled={exporting}
             data-testid="export-teacher-delays-btn"
-            title="تصدير Excel"
+            accessibilityLabel="تصدير Excel"
           >
             {exporting ? (
               <ActivityIndicator color="#fff" size="small" />

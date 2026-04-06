@@ -26,6 +26,46 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
     * {
       font-family: 'Cairo', 'Ionicons', 'Material Design Icons', 'MaterialCommunityIcons', 'FontAwesome', 'Segoe UI', Tahoma, Arial, sans-serif !important;
     }
+    [role="button"][aria-label],
+    div[aria-label] {
+      position: relative;
+    }
+    [role="button"][aria-label]:hover::after,
+    div[aria-label]:hover::after {
+      content: attr(aria-label);
+      position: absolute;
+      bottom: calc(100% + 6px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #333;
+      color: #fff;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      white-space: nowrap;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0;
+      animation: tooltipFadeIn 0.15s ease forwards;
+      font-family: 'Cairo', sans-serif !important;
+    }
+    [role="button"][aria-label]:hover::before,
+    div[aria-label]:hover::before {
+      content: '';
+      position: absolute;
+      bottom: calc(100% + 2px);
+      left: 50%;
+      transform: translateX(-50%);
+      border: 4px solid transparent;
+      border-top-color: #333;
+      z-index: 9999;
+      pointer-events: none;
+      opacity: 0;
+      animation: tooltipFadeIn 0.15s ease forwards;
+    }
+    @keyframes tooltipFadeIn {
+      to { opacity: 1; }
+    }
   `;
   document.head.appendChild(style);
 }

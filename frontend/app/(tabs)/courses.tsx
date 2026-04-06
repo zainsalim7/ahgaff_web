@@ -213,7 +213,7 @@ export default function CoursesScreen() {
               style={[styles.actionBtn, { backgroundColor: '#fff3e0' }]}
               onPress={(e) => { e.stopPropagation(); router.push({ pathname: '/course-students', params: { courseId: item.id } }); }}
               data-testid={`students-btn-${item.id}`}
-              title="الطلاب"
+              accessibilityLabel="الطلاب"
             >
               <Ionicons name="people" size={18} color="#ff9800" />
             </TouchableOpacity>
@@ -223,7 +223,7 @@ export default function CoursesScreen() {
               style={[styles.actionBtn, { backgroundColor: '#e8f5e9' }]}
               onPress={(e) => { e.stopPropagation(); router.push({ pathname: '/course-stats', params: { courseId: item.id, courseName: item.name } }); }}
               data-testid={`stats-btn-${item.id}`}
-              title="تقارير"
+              accessibilityLabel="تقارير"
             >
               <Ionicons name="stats-chart" size={18} color="#4caf50" />
             </TouchableOpacity>

@@ -278,7 +278,7 @@ export default function AddDepartmentScreen() {
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() => handleEdit(item)}
-            title="تعديل"
+            accessibilityLabel="تعديل"
           >
             <Ionicons name="create" size={20} color="#ff9800" />
           </TouchableOpacity>
@@ -286,7 +286,7 @@ export default function AddDepartmentScreen() {
             style={[styles.deleteBtn, { backgroundColor: '#ffebee', borderRadius: 8 }]}
             onPress={() => handleDelete(item.id, item.name)}
             data-testid={`delete-dept-${item.id}`}
-            title="حذف"
+            accessibilityLabel="حذف"
           >
             <Ionicons name="trash" size={20} color="#f44336" />
           </TouchableOpacity>

@@ -593,14 +593,14 @@ export default function AddCourseScreen() {
           <TouchableOpacity
             style={styles.lecturesBtn}
             onPress={() => router.push({ pathname: '/course-lectures', params: { courseId: item.id } })}
-            title="المحاضرات"
+            accessibilityLabel="المحاضرات"
           >
             <Ionicons name="calendar" size={20} color="#9c27b0" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.studentsBtn}
             onPress={() => router.push({ pathname: '/course-students', params: { courseId: item.id } })}
-            title="الطلاب"
+            accessibilityLabel="الطلاب"
           >
             <Ionicons name="people" size={20} color="#1565c0" />
           </TouchableOpacity>
@@ -608,7 +608,7 @@ export default function AddCourseScreen() {
             <TouchableOpacity
               style={styles.editBtn}
               onPress={() => handleEdit(item)}
-              title="تعديل"
+              accessibilityLabel="تعديل"
             >
               <Ionicons name="create" size={20} color="#ff9800" />
             </TouchableOpacity>
@@ -617,7 +617,7 @@ export default function AddCourseScreen() {
             <TouchableOpacity
               style={styles.deleteBtn}
               onPress={() => handleDelete(item.id, item.name)}
-              title="حذف"
+              accessibilityLabel="حذف"
             >
               <Ionicons name="trash" size={20} color="#f44336" />
             </TouchableOpacity>

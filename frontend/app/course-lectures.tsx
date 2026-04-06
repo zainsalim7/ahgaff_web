@@ -676,7 +676,7 @@ export default function CourseLecturesScreen() {
                     <TouchableOpacity
                       style={styles.cancelBtn}
                       onPress={() => handleCancelLecture(item.id)}
-                      title="إلغاء المحاضرة"
+                      accessibilityLabel="إلغاء المحاضرة"
                     >
                       <Ionicons name="close-circle" size={20} color="#f44336" />
                     </TouchableOpacity>
@@ -717,7 +717,7 @@ export default function CourseLecturesScreen() {
                     setRescheduleModal({ lectureId: item.id, courseName: course?.name || '', oldDate: item.date });
                   }}
                   data-testid={`reschedule-scheduled-${item.id}`}
-                  title="إعادة جدولة"
+                  accessibilityLabel="إعادة جدولة"
                 >
                   <Ionicons name="calendar" size={20} color="#ff9800" />
                 </TouchableOpacity>
@@ -726,7 +726,7 @@ export default function CourseLecturesScreen() {
                 <TouchableOpacity
                   style={styles.deleteBtn}
                   onPress={() => handleDeleteLecture(item.id)}
-                  title="حذف"
+                  accessibilityLabel="حذف"
                 >
                   <Ionicons name="trash" size={20} color="#f44336" />
                 </TouchableOpacity>
@@ -947,7 +947,7 @@ export default function CourseLecturesScreen() {
           onSave={handleSaveLecture}
           selectedCourseId={courseId}
           showCourseSelector={false}
-          title="إضافة محاضرة"
+          accessibilityLabel="إضافة محاضرة"
         />
 
         {/* Generate Semester Lectures Modal */}

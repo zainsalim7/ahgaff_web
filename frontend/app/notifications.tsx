@@ -248,7 +248,7 @@ export default function NotificationsPage() {
                   }}
                   style={styles.deleteBtn}
                   data-testid={`delete-notification-${notification.id}`}
-                  title="حذف"
+                  accessibilityLabel="حذف"
                 >
                   <Ionicons name="trash-outline" size={18} color="#d32f2f" />
                 </TouchableOpacity>

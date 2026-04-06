@@ -139,7 +139,7 @@ export default function CourseDetailedReport() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} title="رجوع">
+        <TouchableOpacity onPress={() => goBack()} accessibilityLabel="رجوع">
           <Ionicons name="arrow-forward" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تقرير المقرر التفصيلي</Text>
@@ -149,7 +149,7 @@ export default function CourseDetailedReport() {
               style={styles.exportBtn}
               onPress={handleExportPDF}
               disabled={exportingPDF || !reportData}
-              title="تصدير PDF"
+              accessibilityLabel="تصدير PDF"
             >
               {exportingPDF ? (
                 <ActivityIndicator size="small" color="#e53935" />
@@ -162,7 +162,7 @@ export default function CourseDetailedReport() {
             style={styles.exportBtn}
             onPress={exportToExcel}
             disabled={exporting || !reportData}
-            title="تصدير Excel"
+            accessibilityLabel="تصدير Excel"
           >
             {exporting ? (
               <ActivityIndicator size="small" color="#4caf50" />

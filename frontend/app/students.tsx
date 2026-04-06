@@ -623,7 +623,7 @@ export default function StudentsScreen() {
               <Ionicons name="key" size={18} color="#ff9800" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.viewBtn} onPress={() => handleViewDetails(item)} title="عرض التفاصيل">
+          <TouchableOpacity style={styles.viewBtn} onPress={() => handleViewDetails(item)} accessibilityLabel="عرض التفاصيل">
             <Ionicons name="eye" size={20} color="#1565c0" />
           </TouchableOpacity>
           {canManageStudents && (
@@ -631,14 +631,14 @@ export default function StudentsScreen() {
               <TouchableOpacity 
                 style={styles.warningBtn} 
                 onPress={() => handleOpenWarningModal(item)}
-                title="إنذار"
+                accessibilityLabel="إنذار"
               >
                 <Ionicons name="warning" size={20} color="#f57c00" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)} title="تعديل">
+              <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)} accessibilityLabel="تعديل">
                 <Ionicons name="pencil" size={20} color="#4caf50" />
               </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id, item.full_name)} title="حذف">
+              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id, item.full_name)} accessibilityLabel="حذف">
                 <Ionicons name="trash" size={20} color="#f44336" />
               </TouchableOpacity>
             </>
