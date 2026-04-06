@@ -20,6 +20,13 @@ if (Platform.OS === 'web' && typeof document !== 'undefined') {
   link.href = 'https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap';
   document.head.appendChild(link);
 
+  // إضافة فافيكون المتصفح
+  const favicon = document.createElement('link');
+  favicon.rel = 'icon';
+  favicon.type = 'image/png';
+  favicon.href = '/favicon.png';
+  document.head.appendChild(favicon);
+
   // تطبيق الخط مع الحفاظ على خطوط الأيقونات
   const style = document.createElement('style');
   style.textContent = `
