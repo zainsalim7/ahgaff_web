@@ -85,7 +85,7 @@ load_dotenv(ROOT_DIR / '.env')
 # JWT Configuration
 SECRET_KEY = os.environ.get('SECRET_KEY', 'ahgaff-university-secure-key-2026-x9f8k2m5n7p3q1w4')
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 7 days
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 8  # 8 hours - يوم عمل واحد
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
