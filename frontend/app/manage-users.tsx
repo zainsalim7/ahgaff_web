@@ -627,6 +627,7 @@ export default function ManageUsersScreen() {
                 <TouchableOpacity
                   style={[styles.actionBtn, user.is_active ? styles.deactivateBtn : styles.activateBtn]}
                   onPress={() => handleToggleActive(user)}
+                  title={user.is_active ? "إيقاف الحساب" : "تفعيل الحساب"}
                 >
                   <Ionicons name={user.is_active ? "pause" : "play"} size={18} color={user.is_active ? "#ff9800" : "#4caf50"} />
                 </TouchableOpacity>
@@ -635,12 +636,14 @@ export default function ManageUsersScreen() {
               <TouchableOpacity
                 style={[styles.actionBtn, styles.resetBtn]}
                 onPress={() => openResetPasswordModal(user)}
+                title="إعادة تعيين كلمة المرور"
               >
                 <Ionicons name="key" size={18} color="#9c27b0" />
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.actionBtn, styles.editBtn]}
                 onPress={() => openEditModal(user)}
+                title="تعديل"
               >
                 <Ionicons name="create" size={18} color="#1565c0" />
               </TouchableOpacity>
@@ -648,6 +651,7 @@ export default function ManageUsersScreen() {
                 <TouchableOpacity
                   style={[styles.actionBtn, styles.deleteBtn]}
                   onPress={() => handleDeleteUser(user)}
+                  title="حذف"
                 >
                   <Ionicons name="trash" size={18} color="#f44336" />
                 </TouchableOpacity>

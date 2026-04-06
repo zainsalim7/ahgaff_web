@@ -144,6 +144,7 @@ export default function ManageNotifications() {
                   onPress={() => deleteHistoryItem(index)}
                   style={styles.deleteBtn}
                   data-testid={`delete-history-${index}`}
+                  title="حذف"
                 >
                   <Ionicons name="trash-outline" size={18} color="#d32f2f" />
                 </TouchableOpacity>

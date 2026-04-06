@@ -118,7 +118,7 @@ export default function LessonCompletionReport() {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
+          <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} title="رجوع">
             <Ionicons name="arrow-forward" size={24} color="#333" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>تقرير إنجاز الدروس</Text>
@@ -134,12 +134,12 @@ export default function LessonCompletionReport() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn}>
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} title="رجوع">
           <Ionicons name="arrow-forward" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>تقرير إنجاز الدروس</Text>
         {Platform.OS === 'web' ? (
-          <TouchableOpacity onPress={exportExcel} style={styles.backBtn}>
+          <TouchableOpacity onPress={exportExcel} style={styles.backBtn} title="تصدير Excel">
             <Ionicons name="download-outline" size={24} color="#4caf50" />
           </TouchableOpacity>
         ) : (

@@ -197,7 +197,7 @@ export default function TeacherWorkloadReport() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()}>
+        <TouchableOpacity onPress={() => goBack()} title="رجوع">
           <Ionicons name="arrow-forward" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{isTeacher ? 'نصاب تدريسي' : 'تقرير نصاب المدرسين'}</Text>
@@ -207,6 +207,7 @@ export default function TeacherWorkloadReport() {
               style={styles.exportBtn}
               onPress={handleExportPDF}
               disabled={exportingPDF || data.length === 0}
+              title="تصدير PDF"
             >
               {exportingPDF ? (
                 <ActivityIndicator size="small" color="#e53935" />
@@ -219,6 +220,7 @@ export default function TeacherWorkloadReport() {
             style={styles.exportBtn}
             onPress={exportToExcel}
             disabled={exporting || data.length === 0}
+            title="تصدير Excel"
           >
             {exporting ? (
               <ActivityIndicator size="small" color="#4caf50" />

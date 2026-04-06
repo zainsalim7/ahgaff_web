@@ -272,7 +272,7 @@ export default function StudentReport() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()}>
+        <TouchableOpacity onPress={() => goBack()} title="رجوع">
           <Ionicons name="arrow-forward" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{isStudent ? 'تقرير حضوري' : 'تقرير حضور طالب'}</Text>
@@ -282,6 +282,7 @@ export default function StudentReport() {
               style={styles.exportBtn}
               onPress={handleExportPDF}
               disabled={exportingPDF || !studentData}
+              title="تصدير PDF"
             >
               {exportingPDF ? (
                 <ActivityIndicator size="small" color="#e53935" />
@@ -294,6 +295,7 @@ export default function StudentReport() {
             style={styles.exportBtn}
             onPress={exportToExcel}
             disabled={exporting || !studentData}
+            title="تصدير Excel"
           >
             {exporting ? (
               <ActivityIndicator size="small" color="#4caf50" />
@@ -311,7 +313,7 @@ export default function StudentReport() {
           <View style={styles.filterHeader}>
             <Text style={styles.filterTitle}>اختر الطالب</Text>
             <View style={styles.headerActions}>
-              <TouchableOpacity onPress={handleRefresh} style={styles.refreshBtn}>
+              <TouchableOpacity onPress={handleRefresh} style={styles.refreshBtn} title="تحديث">
                 <Ionicons name="refresh" size={20} color="#9c27b0" />
               </TouchableOpacity>
               {(selectedDept || selectedCourse || selectedStudent) && (

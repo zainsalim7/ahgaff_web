@@ -165,7 +165,7 @@ export default function ReportTeacherSummary() {
     <SafeAreaView style={styles.container} edges={['bottom']} data-testid="teacher-summary-page">
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} data-testid="back-btn">
+        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} data-testid="back-btn" title="رجوع">
           <Ionicons name="arrow-forward" size={24} color="#1565c0" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>ملخص المعلم</Text>
@@ -174,6 +174,7 @@ export default function ReportTeacherSummary() {
           disabled={exporting || !report}
           style={[styles.exportBtn, (!report || exporting) && { opacity: 0.5 }]}
           data-testid="export-excel-btn"
+          title="تصدير Excel"
         >
           {exporting ? (
             <ActivityIndicator size="small" color="#fff" />

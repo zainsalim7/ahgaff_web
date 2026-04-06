@@ -213,9 +213,9 @@ export default function CoursesScreen() {
               style={[styles.actionBtn, { backgroundColor: '#fff3e0' }]}
               onPress={(e) => { e.stopPropagation(); router.push({ pathname: '/course-students', params: { courseId: item.id } }); }}
               data-testid={`students-btn-${item.id}`}
+              title="الطلاب"
             >
               <Ionicons name="people" size={18} color="#ff9800" />
-              <Text style={styles.actionLabel}>الطلاب</Text>
             </TouchableOpacity>
           )}
           {canViewReports && (
@@ -223,9 +223,9 @@ export default function CoursesScreen() {
               style={[styles.actionBtn, { backgroundColor: '#e8f5e9' }]}
               onPress={(e) => { e.stopPropagation(); router.push({ pathname: '/course-stats', params: { courseId: item.id, courseName: item.name } }); }}
               data-testid={`stats-btn-${item.id}`}
+              title="تقارير"
             >
               <Ionicons name="stats-chart" size={18} color="#4caf50" />
-              <Text style={styles.actionLabel}>تقارير</Text>
             </TouchableOpacity>
           )}
         </View>

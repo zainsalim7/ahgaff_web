@@ -911,9 +911,9 @@ export default function GeneralSettingsScreen() {
                     <TouchableOpacity
                       style={[styles.semesterActionBtn, styles.activateBtn]}
                       onPress={() => handleActivateSemester(semester)}
+                      title="تفعيل"
                     >
                       <Ionicons name="checkmark-circle" size={18} color="#4caf50" />
-                      <Text style={[styles.actionText, { color: '#4caf50' }]}>تفعيل</Text>
                     </TouchableOpacity>
                   )}
                   
@@ -921,9 +921,9 @@ export default function GeneralSettingsScreen() {
                     <TouchableOpacity
                       style={[styles.semesterActionBtn, styles.closeActionBtn]}
                       onPress={() => handleCloseSemester(semester)}
+                      title="إغلاق"
                     >
                       <Ionicons name="close-circle" size={18} color="#ff9800" />
-                      <Text style={[styles.actionText, { color: '#ff9800' }]}>إغلاق</Text>
                     </TouchableOpacity>
                   )}
                   
@@ -931,9 +931,9 @@ export default function GeneralSettingsScreen() {
                     <TouchableOpacity
                       style={[styles.semesterActionBtn, styles.archiveBtn]}
                       onPress={() => handleArchiveSemester(semester)}
+                      title="أرشفة"
                     >
                       <Ionicons name="archive" size={18} color="#9e9e9e" />
-                      <Text style={[styles.actionText, { color: '#9e9e9e' }]}>أرشفة</Text>
                     </TouchableOpacity>
                   )}
                   
@@ -941,9 +941,9 @@ export default function GeneralSettingsScreen() {
                     <TouchableOpacity
                       style={[styles.semesterActionBtn, styles.editSemesterBtn]}
                       onPress={() => openEditSemesterModal(semester)}
+                      title="تعديل"
                     >
                       <Ionicons name="pencil" size={18} color="#1565c0" />
-                      <Text style={{ fontSize: 9, color: '#1565c0', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
                     </TouchableOpacity>
                   )}
                   
@@ -951,9 +951,9 @@ export default function GeneralSettingsScreen() {
                     <TouchableOpacity
                       style={[styles.semesterActionBtn, styles.deleteSemesterBtn]}
                       onPress={() => handleDeleteSemester(semester)}
+                      title="حذف"
                     >
                       <Ionicons name="trash" size={18} color="#f44336" />
-                      <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
                     </TouchableOpacity>
                   )}
                 </View>

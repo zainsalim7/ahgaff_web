@@ -484,6 +484,7 @@ export default function ManageTeachersScreen() {
               pathname: '/teacher-courses',
               params: { teacherId: item.id, teacherName: getTeacherName(item) }
             })}
+            title="المقررات"
           >
             <Ionicons name="book" size={18} color="#9c27b0" />
           </TouchableOpacity>
@@ -493,6 +494,7 @@ export default function ManageTeachersScreen() {
             style={[styles.actionBtn, hasAccount ? styles.deactivateBtn : styles.activateBtn]}
             onPress={() => hasAccount ? handleDeactivateAccount(item) : handleActivateAccount(item)}
             disabled={saving}
+            title={hasAccount ? "إلغاء تفعيل الحساب" : "تفعيل الحساب"}
           >
             <Ionicons 
               name={hasAccount ? "person-remove" : "person-add"} 
@@ -507,6 +509,7 @@ export default function ManageTeachersScreen() {
               style={[styles.actionBtn, styles.resetBtn]}
               onPress={() => handleResetPassword(item)}
               disabled={saving}
+              title="إعادة تعيين كلمة المرور"
             >
               <Ionicons name="key" size={18} color="#ff9800" />
             </TouchableOpacity>
@@ -516,18 +519,18 @@ export default function ManageTeachersScreen() {
           <TouchableOpacity
             style={[styles.actionBtn, styles.editBtn]}
             onPress={() => handleEdit(item)}
+            title="تعديل"
           >
             <Ionicons name="create" size={18} color="#1565c0" />
-            <Text style={{ fontSize: 9, color: '#1565c0', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
           </TouchableOpacity>
           
           {/* زر الحذف */}
           <TouchableOpacity
             style={[styles.actionBtn, styles.deleteBtn]}
             onPress={() => handleDelete(item)}
+            title="حذف"
           >
             <Ionicons name="trash" size={18} color="#f44336" />
-            <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
           </TouchableOpacity>
         </View>
       </View>

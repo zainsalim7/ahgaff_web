@@ -171,12 +171,14 @@ export default function AddTeacherScreen() {
           <TouchableOpacity
             style={styles.editBtn}
             onPress={() => handleEdit(item)}
+            title="تعديل"
           >
             <Ionicons name="create" size={20} color="#ff9800" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.deleteBtn}
             onPress={() => handleDelete(item.id, item.full_name, item.role)}
+            title="حذف"
           >
             <Ionicons name="trash" size={20} color="#f44336" />
           </TouchableOpacity>

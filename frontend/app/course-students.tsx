@@ -663,6 +663,7 @@ export default function CourseStudentsScreen() {
           <TouchableOpacity
             style={styles.removeBtn}
             onPress={() => handleUnenroll(item.student_id, item.full_name)}
+            title="إلغاء التسجيل"
           >
             <Ionicons name="close-circle" size={24} color="#f44336" />
           </TouchableOpacity>
@@ -722,6 +723,7 @@ export default function CourseStudentsScreen() {
               style={{ backgroundColor: '#fff3e0', padding: 6, borderRadius: 6 }}
               onPress={() => setEditingRecord({ recordId: record.id, studentName: item.full_name, currentStatus: status })}
               data-testid={`edit-attendance-${item.student_id}`}
+              title="تعديل الحضور"
             >
               <Ionicons name="create-outline" size={18} color="#ff9800" />
             </TouchableOpacity>

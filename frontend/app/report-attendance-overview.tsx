@@ -136,7 +136,7 @@ export default function AttendanceOverviewReport() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()}>
+        <TouchableOpacity onPress={() => goBack()} title="رجوع">
           <Ionicons name="arrow-forward" size={24} color="#333" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{isTeacher ? 'تقرير حضور مقرراتي' : 'تقرير الحضور الشامل'}</Text>
@@ -147,6 +147,7 @@ export default function AttendanceOverviewReport() {
               onPress={handleExportPDF}
               disabled={exportingPDF || courses.length === 0}
               data-testid="export-pdf-btn"
+              title="تصدير PDF"
             >
               {exportingPDF ? (
                 <ActivityIndicator size="small" color="#e53935" />
@@ -160,6 +161,7 @@ export default function AttendanceOverviewReport() {
             onPress={exportToExcel}
             disabled={exporting || courses.length === 0}
             data-testid="export-excel-btn"
+            title="تصدير Excel"
           >
             {exporting ? (
               <ActivityIndicator size="small" color="#4caf50" />

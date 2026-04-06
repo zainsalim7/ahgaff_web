@@ -623,7 +623,7 @@ export default function StudentsScreen() {
               <Ionicons name="key" size={18} color="#ff9800" />
             </TouchableOpacity>
           )}
-          <TouchableOpacity style={styles.viewBtn} onPress={() => handleViewDetails(item)}>
+          <TouchableOpacity style={styles.viewBtn} onPress={() => handleViewDetails(item)} title="عرض التفاصيل">
             <Ionicons name="eye" size={20} color="#1565c0" />
           </TouchableOpacity>
           {canManageStudents && (
@@ -631,17 +631,15 @@ export default function StudentsScreen() {
               <TouchableOpacity 
                 style={styles.warningBtn} 
                 onPress={() => handleOpenWarningModal(item)}
+                title="إنذار"
               >
                 <Ionicons name="warning" size={20} color="#f57c00" />
-                <Text style={{ fontSize: 9, color: '#f57c00', marginTop: 1, fontWeight: '600' }}>إنذار</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)}>
+              <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)} title="تعديل">
                 <Ionicons name="pencil" size={20} color="#4caf50" />
-                <Text style={{ fontSize: 9, color: '#4caf50', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id, item.full_name)}>
+              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id, item.full_name)} title="حذف">
                 <Ionicons name="trash" size={20} color="#f44336" />
-                <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
               </TouchableOpacity>
             </>
           )}
