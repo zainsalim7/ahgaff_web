@@ -6,7 +6,7 @@ from bson import ObjectId
 from datetime import datetime
 
 from models.users import UserLogin, UserResponse
-from models.permissions import DEFAULT_PERMISSIONS
+from models.permissions import DEFAULT_PERMISSIONS, FULL_PERMISSION_MAPPING
 from .deps import (
     get_db, get_current_user, verify_password, create_access_token,
     log_activity, security, check_rate_limit, record_login_attempt
@@ -88,6 +88,13 @@ async def login(user_data: UserLogin, request: Request):
             if perm not in user_permissions:
                 user_permissions.append(perm)
     
+    # توسيع الصلاحيات: manage_attendance → edit_attendance, record_attendance, إلخ
+    expanded = set(user_permissions)
+    for perm in user_permissions:
+        if perm in FULL_PERMISSION_MAPPING:
+            expanded.update(FULL_PERMISSION_MAPPING[perm])
+    user_permissions = list(expanded)
+    
     # تسجيل نشاط الدخول
     await log_activity(
         user=user,
@@ -147,6 +154,13 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         for perm in custom_permissions:
             if perm not in user_permissions:
                 user_permissions.append(perm)
+    
+    # توسيع الصلاحيات: manage_attendance → edit_attendance, record_attendance, إلخ
+    expanded = set(user_permissions)
+    for perm in user_permissions:
+        if perm in FULL_PERMISSION_MAPPING:
+            expanded.update(FULL_PERMISSION_MAPPING[perm])
+    user_permissions = list(expanded)
     
     return {
         "id": str(user["_id"]),

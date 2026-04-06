@@ -615,7 +615,7 @@ export default function TakeAttendanceScreen() {
             </Text>
           </View>
         ) : (
-          <View style={{ flex: 1, opacity: canTakeAttendanceNow ? 1 : 0.5 }}>
+          <View style={{ flex: 1, opacity: (canTakeAttendanceNow || canEditAttendance) ? 1 : 0.5 }}>
             <FlatList
               data={students}
               renderItem={renderStudent}
@@ -625,8 +625,8 @@ export default function TakeAttendanceScreen() {
           </View>
         )}
 
-        {/* Save Button - Only visible if user has permission AND attendance is allowed */}
-        {students.length > 0 && (canRecordAttendance || canEditAttendance) && canTakeAttendanceNow && (
+        {/* Save Button - Only visible if user has permission AND attendance is allowed (or user has edit permission to override) */}
+        {students.length > 0 && ((canRecordAttendance && canTakeAttendanceNow) || canEditAttendance) && (
           <TouchableOpacity
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
             onPress={saveAttendance}
@@ -646,7 +646,7 @@ export default function TakeAttendanceScreen() {
         )}
         
         {/* Message if attendance is not allowed */}
-        {students.length > 0 && !canTakeAttendanceNow && attendanceStatus && (
+        {students.length > 0 && !canTakeAttendanceNow && !canEditAttendance && attendanceStatus && (
           <View style={[styles.noPermissionBanner, { backgroundColor: 
             attendanceStatus.status === 'completed' ? '#e3f2fd' : 
             attendanceStatus.status === 'not_started' ? '#fff3e0' : '#ffebee' 

@@ -5536,7 +5536,12 @@ async def record_attendance_session(
     current_user: dict = Depends(get_current_user)
 ):
     """تسجيل حضور جماعي لمحاضرة"""
-    if current_user["role"] not in [UserRole.ADMIN, UserRole.TEACHER]:
+    can_record = current_user["role"] in [UserRole.ADMIN, UserRole.TEACHER]
+    has_edit_perm = has_permission(current_user, "edit_attendance")
+    has_manage_perm = has_permission(current_user, "manage_attendance")
+    has_record_perm = has_permission(current_user, "record_attendance")
+    
+    if not (can_record or has_edit_perm or has_manage_perm or has_record_perm):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # Verify lecture exists
@@ -5588,7 +5593,7 @@ async def record_attendance_session(
     lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
     
     # التحقق: لا يُسمح بالتحضير قبل وقت بداية المحاضرة
-    if check_time < lecture_start and not is_offline_sync:
+    if check_time < lecture_start and not is_offline_sync and not has_edit_perm:
         raise HTTPException(
             status_code=400,
             detail=f"لم يحن وقت المحاضرة بعد. تبدأ الساعة {lecture_start.strftime('%H:%M')}"
@@ -5609,7 +5614,7 @@ async def record_attendance_session(
                 started = started.replace(tzinfo=YEMEN_TIMEZONE)
         
         attendance_deadline = started + timedelta(minutes=attendance_duration)
-        if check_time > attendance_deadline and not is_offline_sync:
+        if check_time > attendance_deadline and not is_offline_sync and not has_edit_perm:
             raise HTTPException(
                 status_code=400,
                 detail=f"انتهت مدة التحضير ({attendance_duration} دقيقة)"
@@ -5617,7 +5622,7 @@ async def record_attendance_session(
     else:
         # التحضير لم يبدأ بعد - التحقق من الحد الأقصى للتأخير
         max_open_time = lecture_start + timedelta(minutes=max_delay)
-        if check_time > max_open_time and not is_offline_sync:
+        if check_time > max_open_time and not is_offline_sync and not has_edit_perm:
             raise HTTPException(
                 status_code=400,
                 detail=f"انتهى وقت فتح التحضير (الحد الأقصى للتأخير {max_delay} دقيقة)"

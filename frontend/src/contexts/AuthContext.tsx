@@ -175,7 +175,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // التحقق من صلاحية واحدة
   const hasPermission = useCallback((permission: string): boolean => {
     // استخدم التخزين المؤقت أولاً
-    const currentUser = cachedUser || user;
+    let currentUser = cachedUser || user;
+    
+    // إذا لم يتم تحميل المستخدم، حاول قراءة البيانات مباشرة من localStorage
+    if (!currentUser) {
+      try {
+        const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          cachedUser = parsed;
+          currentUser = parsed;
+        }
+      } catch {}
+    }
     
     // إذا لم يتم تحميل المستخدم بعد وما زال التحميل جاري
     if (!currentUser && isLoading) {
