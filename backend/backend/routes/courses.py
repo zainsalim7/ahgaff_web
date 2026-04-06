@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
 
-from .deps import get_db, get_current_user
+from .deps import get_db, get_current_user, has_permission
 
 router = APIRouter(tags=["المقررات"])
 
@@ -82,7 +82,7 @@ async def get_courses(
 async def create_course(course: CourseCreate, current_user: dict = Depends(get_current_user)):
     """إنشاء مقرر جديد"""
     db = get_db()
-    if current_user["role"] not in ["admin", "employee"]:
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "add_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     existing = await db.courses.find_one({"code": course.code})
@@ -145,7 +145,7 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
 async def delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
     """حذف مقرر"""
     db = get_db()
-    if current_user["role"] != "admin":
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "delete_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})

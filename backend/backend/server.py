@@ -3641,7 +3641,7 @@ async def delete_course(course_id: str, current_user: dict = Depends(get_current
 @api_router.post("/enrollments/bulk-copy")
 async def bulk_copy_students(request: Request, current_user: dict = Depends(get_current_user)):
     """نسخ طلاب إلى عدة مقررات"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "manage_courses"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     student_ids = data.get("student_ids", [])
@@ -3692,7 +3692,7 @@ async def bulk_copy_students(request: Request, current_user: dict = Depends(get_
 @api_router.post("/enrollments/bulk-move")
 async def bulk_move_students(request: Request, current_user: dict = Depends(get_current_user)):
     """نقل طلاب من مقرر إلى آخر"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "manage_courses"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     student_ids = data.get("student_ids", [])
@@ -4090,7 +4090,7 @@ async def update_study_plan(
     current_user: dict = Depends(get_current_user)
 ):
     """إنشاء أو تحديث الخطة الدراسية لمقرر"""
-    if current_user["role"] not in [UserRole.ADMIN, UserRole.TEACHER]:
+    if current_user["role"] != UserRole.ADMIN and current_user["role"] != UserRole.TEACHER and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "edit_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
@@ -4652,7 +4652,7 @@ async def create_lecture(
     current_user: dict = Depends(get_current_user)
 ):
     """إنشاء محاضرة جديدة"""
-    if current_user["role"] not in [UserRole.ADMIN, UserRole.TEACHER]:
+    if current_user["role"] != UserRole.ADMIN and current_user["role"] != UserRole.TEACHER and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "add_lecture"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من أن وقت النهاية بعد وقت البداية

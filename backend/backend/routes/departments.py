@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import List, Optional
 from pydantic import BaseModel
 
-from .deps import get_db, get_current_user
+from .deps import get_db, get_current_user, has_permission
 
 router = APIRouter(tags=["الأقسام"])
 
@@ -69,7 +69,7 @@ async def get_departments(faculty_id: Optional[str] = None, current_user: dict =
 async def create_department(dept: DepartmentCreate, current_user: dict = Depends(get_current_user)):
     """إنشاء قسم جديد"""
     db = get_db()
-    if current_user["role"] != "admin":
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_departments"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     existing = await db.departments.find_one({"name": dept.name})
@@ -118,7 +118,7 @@ async def get_department(dept_id: str, current_user: dict = Depends(get_current_
 async def update_department(dept_id: str, data: DepartmentUpdate, current_user: dict = Depends(get_current_user)):
     """تحديث قسم"""
     db = get_db()
-    if current_user["role"] != "admin":
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_departments"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
@@ -144,7 +144,7 @@ async def update_department(dept_id: str, data: DepartmentUpdate, current_user: 
 async def delete_department(dept_id: str, current_user: dict = Depends(get_current_user)):
     """حذف قسم"""
     db = get_db()
-    if current_user["role"] != "admin":
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_departments"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
