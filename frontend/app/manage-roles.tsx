@@ -45,6 +45,19 @@ const FULL_PERMISSION_MAPPING: Record<string, string[]> = {
   'manage_faculties': ['view_faculties', 'add_faculty', 'edit_faculty', 'delete_faculty'],
   'manage_lectures': ['view_lectures', 'add_lecture', 'edit_lecture', 'delete_lecture'],
   'manage_enrollments': ['view_enrollments', 'add_enrollment', 'delete_enrollment'],
+  'manage_attendance': ['record_attendance', 'take_attendance', 'view_attendance', 'edit_attendance'],
+  'manage_roles': ['view_roles', 'add_role', 'edit_role', 'delete_role'],
+};
+
+// عند تحميل الصلاحيات، توسيع الصلاحيات الأم تلقائياً
+const expandPermissions = (perms: string[]): string[] => {
+  const expanded = new Set(perms);
+  for (const perm of perms) {
+    if (perm in FULL_PERMISSION_MAPPING) {
+      FULL_PERMISSION_MAPPING[perm].forEach(sub => expanded.add(sub));
+    }
+  }
+  return Array.from(expanded);
 };
 
 // التحقق من أن الصلاحية هي صلاحية كاملة
@@ -159,7 +172,7 @@ export default function ManageRolesScreen() {
     setModalMode('edit');
     setRoleName(role.name);
     setRoleDescription(role.description);
-    setSelectedPermissions(role.permissions);
+    setSelectedPermissions(expandPermissions(role.permissions));
     setSelectedRole(role);
     setShowModal(true);
   };
