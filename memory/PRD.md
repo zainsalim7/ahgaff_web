@@ -49,7 +49,12 @@
   - إصلاح 6 endpoints للتسجيل (enroll, unenroll, bulk-copy, bulk-move, import)
   - إصلاح endpoints الخطة الدراسية وإنشاء المحاضرات
   - تحديث routes/courses.py و routes/departments.py لاستخدام has_permission
-  - 14/14 اختبار نجح (100%)
+- [x] منع sync_default_roles من الكتابة فوق الصلاحيات المُعدّلة يدوياً (P0)
+  - كان كل redeploy يُعيد الصلاحيات الافتراضية ويلغي تعديلات المستخدم!
+  - الآن: الأدوار الموجودة لا تُعدّل عند إعادة التشغيل
+- [x] إضافة أداة تنظيف الأدوار المكررة (P1)
+  - endpoint: POST /api/admin/cleanup-duplicate-roles
+  - زر في الإعدادات → الصيانة
 
 ## المهام المعلقة
 

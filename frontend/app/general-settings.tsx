@@ -1339,6 +1339,22 @@ export default function GeneralSettingsScreen() {
               <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>إصلاح أدوار المستخدمين</Text>
             </TouchableOpacity>
             
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#d32f2f', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}
+              onPress={async () => {
+                try {
+                  const res = await api.post('/admin/cleanup-duplicate-roles');
+                  const msg = res.data?.message || 'تم التنظيف';
+                  const details = res.data?.details?.join('\n') || '';
+                  Platform.OS === 'web' ? window.alert(msg + (details ? '\n' + details : '')) : Alert.alert('تم', msg);
+                } catch { Platform.OS === 'web' ? window.alert('فشل') : Alert.alert('خطأ', 'فشل'); }
+              }}
+              data-testid="cleanup-duplicate-roles-btn"
+            >
+              <Ionicons name="trash" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>تنظيف الأدوار المكررة</Text>
+            </TouchableOpacity>
+            
             <Text style={{ fontSize: 11, color: '#999', marginTop: 8, textAlign: 'center' }}>استخدم هذه الأدوات مرة واحدة بعد التحديث لإصلاح البيانات القديمة</Text>
           </View>
         )}

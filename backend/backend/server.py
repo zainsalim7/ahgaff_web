@@ -10638,6 +10638,51 @@ async def fix_custom_roles(current_user: dict = Depends(get_current_user)):
     }
 
 
+@api_router.post("/admin/cleanup-duplicate-roles")
+async def cleanup_duplicate_roles(current_user: dict = Depends(get_current_user)):
+    """حذف الأدوار المكررة - الإبقاء على الأقدم فقط"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # جمع كل الأدوار مع system_key
+    all_roles = await db.roles.find().to_list(1000)
+    
+    # تجميع حسب الاسم
+    name_groups = {}
+    for role in all_roles:
+        name = role.get("name", "")
+        if name not in name_groups:
+            name_groups[name] = []
+        name_groups[name].append(role)
+    
+    deleted = 0
+    details = []
+    for name, roles in name_groups.items():
+        if len(roles) > 1:
+            # الإبقاء على الأقدم (أو الذي لديه system_key)
+            roles.sort(key=lambda r: (
+                0 if r.get("system_key") and r["system_key"] not in [None, "", "custom"] else 1,
+                r.get("created_at", datetime.min)
+            ))
+            keep = roles[0]
+            for dup in roles[1:]:
+                # نقل المستخدمين من الدور المكرر إلى الأصلي
+                await db.users.update_many(
+                    {"role_id": str(dup["_id"])},
+                    {"$set": {"role_id": str(keep["_id"])}}
+                )
+                await db.roles.delete_one({"_id": dup["_id"]})
+                deleted += 1
+                details.append(f"حذف مكرر: {name} (ID: {dup['_id']})")
+    
+    return {
+        "message": f"تم حذف {deleted} دور مكرر",
+        "deleted": deleted,
+        "details": details
+    }
+
+
+
 
 @api_router.post("/admin/fix-faculty-ids")
 async def fix_faculty_ids(current_user: dict = Depends(get_current_user)):
@@ -10974,7 +11019,7 @@ async def create_indexes():
         logging.warning(f"Index creation warning: {e}")
 
 async def sync_default_roles():
-    """مزامنة صلاحيات الأدوار الافتراضية مع قاعدة البيانات"""
+    """مزامنة الأدوار الافتراضية - إنشاء المفقودة فقط دون تعديل الموجودة"""
     role_map = {
         "admin": UserRole.ADMIN,
         "teacher": UserRole.TEACHER,
@@ -10991,12 +11036,8 @@ async def sync_default_roles():
             continue
         existing = await db.roles.find_one({"system_key": system_key})
         if existing:
-            if set(existing.get("permissions", [])) != set(default_perms):
-                await db.roles.update_one(
-                    {"system_key": system_key},
-                    {"$set": {"permissions": default_perms}}
-                )
-                logging.info(f"تم تحديث صلاحيات دور {system_key}")
+            # لا نُعدّل الصلاحيات الموجودة - المستخدم قد خصصها يدوياً
+            logging.info(f"الدور {system_key} موجود مسبقاً - لن يتم تعديله")
         else:
             role_names = {
                 "admin": "مدير النظام",
