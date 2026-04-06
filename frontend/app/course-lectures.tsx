@@ -108,6 +108,7 @@ export default function CourseLecturesScreen() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalLectures, setTotalLectures] = useState(0);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [serverStats, setServerStats] = useState<any>(null);
   const PER_PAGE = 50;
   
   // إشعارات مرئية
@@ -190,15 +191,19 @@ export default function CourseLecturesScreen() {
     return filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   }, [lectures, selectedMonth]);
   
-  // إحصائيات سريعة
+  // إحصائيات ثابتة من السيرفر (لا تتغير عند الفلترة)
   const getStats = useCallback(() => {
-    const total = totalLectures;
-    const scheduled = lectures.filter(l => l.status === 'scheduled').length;
-    const completed = lectures.filter(l => l.status === 'completed').length;
-    const cancelled = lectures.filter(l => l.status === 'cancelled').length;
-    const absent = lectures.filter(l => l.status === 'absent').length;
-    return { total, scheduled, completed, cancelled, absent };
-  }, [lectures, totalLectures]);
+    if (serverStats) {
+      return {
+        total: serverStats.total,
+        scheduled: serverStats.scheduled,
+        completed: serverStats.completed,
+        cancelled: serverStats.cancelled,
+        absent: serverStats.absent,
+      };
+    }
+    return { total: 0, scheduled: 0, completed: 0, cancelled: 0, absent: 0 };
+  }, [serverStats]);
   
   // تبديل توسيع/طي الشهر
   const toggleMonth = (monthKey: string) => {
@@ -261,6 +266,11 @@ export default function CourseLecturesScreen() {
       setTotalPages(lecturesRes.data.total_pages || 1);
       setTotalLectures(lecturesRes.data.total || lectureData.length);
       setCurrentPage(page);
+      
+      // حفظ الإحصائيات الثابتة من السيرفر
+      if (lecturesRes.data.stats) {
+        setServerStats(lecturesRes.data.stats);
+      }
       
       // محاولة جلب تواريخ الفصل من الإعدادات
       let semStart = settingsRes.data.semester_start_date;

@@ -4457,8 +4457,18 @@ async def get_course_lectures(
     if status:
         query["status"] = status
     
-    # عدد المحاضرات الإجمالي
+    # عدد المحاضرات الإجمالي (مع الفلتر)
     total = await db.lectures.count_documents(query)
+    
+    # إحصائيات ثابتة (بدون فلتر) - تبقى دائماً ثابتة
+    base_query = {"course_id": course_id}
+    stats = {
+        "total": await db.lectures.count_documents(base_query),
+        "scheduled": await db.lectures.count_documents({**base_query, "status": "scheduled"}),
+        "completed": await db.lectures.count_documents({**base_query, "status": "completed"}),
+        "cancelled": await db.lectures.count_documents({**base_query, "status": "cancelled"}),
+        "absent": await db.lectures.count_documents({**base_query, "status": "absent"}),
+    }
     
     # تحديث جماعي: المحاضرات المجدولة التي انتهى وقتها → غائب
     now = get_yemen_time()
@@ -4518,7 +4528,8 @@ async def get_course_lectures(
         "total": total,
         "page": page,
         "per_page": per_page,
-        "total_pages": (total + per_page - 1) // per_page
+        "total_pages": (total + per_page - 1) // per_page,
+        "stats": stats
     }
 
 async def notify_lecture_created(course: dict, date: str, start_time: str, end_time: str):
