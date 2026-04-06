@@ -284,8 +284,8 @@ export default function TakeAttendanceScreen() {
   }, [fetchData]);
 
   const toggleStatus = (studentId: string) => {
-    // التحقق من إمكانية التحضير
-    if (attendanceStatus && !attendanceStatus.can_take_attendance) {
+    // التحقق من إمكانية التحضير - تجاوز القيد الزمني إذا كان لدى المستخدم صلاحية تعديل الحضور
+    if (attendanceStatus && !attendanceStatus.can_take_attendance && !canEditAttendance) {
       const msg = attendanceStatus.reason || 'لا يمكن تسجيل الحضور حالياً';
       if (Platform.OS === 'web') {
         window.alert(msg);

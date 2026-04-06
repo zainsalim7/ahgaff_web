@@ -41,6 +41,7 @@
   - إصلاح التحقق من الأدوار في record_attendance_session
   - تجاوز قيود الوقت لأصحاب صلاحية edit_attendance
   - مزامنة AuthContext مع useAuthStore عبر localStorage fallback
+  - إصلاح دالة toggleStatus لتسمح بتغيير حالة الحضور لأصحاب edit_attendance حتى بعد انتهاء الوقت
 
 ## المهام المعلقة
 
