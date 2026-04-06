@@ -1,72 +1,63 @@
-# Ahgaff University - Student & Teacher Management System
+# نظام إدارة الحضور - جامعة الأحقاف
+## Ahgaff University Attendance Management System
 
-## Original Problem Statement
-Comprehensive student and teacher management system for Ahgaff University with shared backend, admin web application, and standalone mobile apps. Focus on RBAC, schedule management, attendance tracking, and system administration.
+## المتطلبات الأساسية
+- تطبيق ويب إداري كامل مع نظام صلاحيات دقيق (RBAC)
+- إدارة الكليات والأقسام والمقررات والمعلمين والطلاب
+- جدولة المحاضرات وإعادة الجدولة وكشف التعارضات
+- إجراءات جماعية واستيراد البيانات وأدوات الصيانة
+- واجهة عربية حديثة ونظيفة وبديهية
+- ترقيم صفحات المحاضرات والتقارير
+- Tooltips توضيحية لجميع أيقونات الإجراءات
 
-## Core Requirements
-- Full-featured admin web application with granular RBAC
-- Management of Faculties, Departments, Courses, Teachers, and Students
-- Lecture scheduling, rescheduling, and conflict detection
-- Bulk actions, data imports (Excel), and maintenance tools
-- Modern, clean, and intuitive Arabic UI
-- Fast performance with caching, DB indexes, and GZip compression
-- File and image storage using Emergent Object Storage
+## البنية التقنية
+- **Backend**: FastAPI + MongoDB Atlas
+- **Frontend**: React Native Web (Expo)
+- **Auth**: JWT + RBAC دقيق مع توسيع الصلاحيات
+- **Storage**: Emergent Object Storage
+- **Notifications**: Firebase Cloud Messaging
 
-## Tech Stack
-- Backend: FastAPI + MongoDB Atlas
-- Frontend: React/Expo (Web + Mobile)
-- Auth: JWT-based
-- Storage: Emergent Object Storage
-- Notifications: Firebase Cloud Messaging
-- Deployment: Railway
+## ما تم إنجازه
 
-## Credentials
-- System Admin: admin / admin123
+### الجلسات السابقة
+- [x] إعداد المشروع الأساسي (Backend + Frontend)
+- [x] نظام RBAC شامل (78 endpoint محدثة)
+- [x] إعادة تصميم صفحة الجدول الأسبوعي
+- [x] إضافة يوم الجمعة للجدول
+- [x] توليد شُعب المقررات تلقائياً
+- [x] كشف تعارضات المحاضرات
+- [x] إعادة جدولة المحاضرات
+- [x] إصلاح التوجيه بين صفحات المعلم والإدارة
+- [x] Tooltips عالمية (aria-label + CSS)
+- [x] تحديث favicon بشعار الجامعة
+- [x] ترقيم صفحات المحاضرات (Pagination)
+- [x] إصلاح عدد المعلمين في لوحة الأقسام
+- [x] إصلاح إحصائيات المحاضرات (فصل الإحصائيات عن الفلاتر)
+- [x] إصلاح صلاحيات إعادة الجدولة وتوليد المحاضرات
 
-## Completed Features
+### الجلسة الحالية (6 أبريل 2026)
+- [x] إصلاح صلاحية تعديل الحضور لرئيس القسم (P0)
+  - إضافة توسيع الصلاحيات في endpoints تسجيل الدخول و/auth/me
+  - إصلاح التحقق من الأدوار في record_attendance_session
+  - تجاوز قيود الوقت لأصحاب صلاحية edit_attendance
+  - مزامنة AuthContext مع useAuthStore عبر localStorage fallback
 
-### Phase 1-4 (March-April 2026)
-- Granular RBAC, CRUD, Scheduling, Attendance, Reports, Excel imports
-- Security (Rate limiting, ASGI headers, CORS)
-- Performance (MongoDB indexes, GZip, Font optimization)
+## المهام المعلقة
 
-### Phase 5 - UI/UX Improvements (April 6, 2026)
-- CSS Hover Tooltips on all action icons (23 files)
-  - `accessibilityLabel` → `aria-label` in DOM → CSS `::after` tooltip
-- Custom favicon (Ahgaff University logo)
-- **Lectures page performance optimization**:
-  - Backend: Pagination (50/page) + batch status update (`update_many`)
-  - Frontend: "Load More" button + paginated API calls
-  - API response: ~100ms (was timing out before)
+### P1 - قادمة
+- [ ] تقسيم server.py (11000+ سطر) إلى ملفات routes/ منفصلة باستخدام APIRouter
+- [ ] تحسين واجهة التقارير
 
-## Architecture
-```
-/app/
-├── backend/backend/
-│   ├── server.py          # Core API (paginated lectures endpoint)
-│   ├── models/
-│   ├── routes/
-│   └── services/
-├── frontend/
-│   ├── app/_layout.tsx    # Global CSS tooltips + favicon injection
-│   ├── app/course-lectures.tsx  # Optimized with pagination
-│   └── src/services/api.ts      # Updated getByCourse with pagination params
-```
+### P2 - مستقبلية
+- [ ] تحسينات سجلات النشاط
+- [ ] تحديثات تطبيقات المعلم/الطالب المستقلة
 
-## Key Technical Decisions
-- **Tooltip**: `accessibilityLabel` + CSS `[aria-label]::after` (RN Web forwards it)
-- **Pagination**: Server-side with `page`/`per_page` params, client-side "Load More"
-- **Batch status update**: `update_many` for expired lectures instead of per-lecture updates
+## بيانات الاختبار
+- مدير النظام: `admin` / `admin123`
+- رئيس القسم: `Saeed` / `test123`
 
-## Pending Tasks
-
-### P1 - Refactor server.py
-- Split >10,000 line monolithic file into modular routes via FastAPI APIRouter
-
-### P2 - Reports UI Enhancement
-- Improve visual aesthetics of reporting dashboards
-
-### Backlog
-- Activity logs UI improvements
-- Teacher/Student standalone mobile app updates
-- Database migration guidance (MongoDB Atlas)
+## ملاحظات مهمة
+- تغيير DEFAULT_PERMISSIONS في الكود لا يُحدّث سجلات الأدوار الموجودة في MongoDB تلقائياً
+- يجب استخدام `has_permission()` بدلاً من التحقق المباشر من الدور
+- TEACHER_ONLY_PERMISSIONS تؤثر فقط على دور admin (لا تمنع رئيس القسم)
+- `manage_XYZ` يتوسع تلقائياً ليشمل `view_XYZ`, `edit_XYZ`, `add_XYZ`, `delete_XYZ` عبر FULL_PERMISSION_MAPPING
