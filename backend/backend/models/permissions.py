@@ -65,6 +65,8 @@ class Permission:
     EDIT_LECTURE = "edit_lecture"
     DELETE_LECTURE = "delete_lecture"
     OVERRIDE_LECTURE_STATUS = "override_lecture_status"
+    RESCHEDULE_LECTURE = "reschedule_lecture"
+    GENERATE_LECTURES = "generate_lectures"
     
     # صلاحيات التسجيل
     MANAGE_ENROLLMENTS = "manage_enrollments"
@@ -268,6 +270,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.EDIT_LECTURE, "label": "تعديل محاضرة", "category": "المحاضرات"},
     {"key": Permission.DELETE_LECTURE, "label": "حذف محاضرة", "category": "المحاضرات"},
     {"key": Permission.OVERRIDE_LECTURE_STATUS, "label": "تغيير حالة المحاضرة (غائب/مجدولة/منعقدة)", "category": "المحاضرات"},
+    {"key": Permission.RESCHEDULE_LECTURE, "label": "إعادة جدولة المحاضرات", "category": "المحاضرات"},
+    {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},
@@ -323,7 +327,8 @@ FULL_PERMISSION_MAPPING = {
     Permission.MANAGE_LECTURES: [
         Permission.VIEW_LECTURES, Permission.ADD_LECTURE, 
         Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
-        Permission.OVERRIDE_LECTURE_STATUS
+        Permission.OVERRIDE_LECTURE_STATUS, Permission.RESCHEDULE_LECTURE,
+        Permission.GENERATE_LECTURES
     ],
     Permission.MANAGE_ENROLLMENTS: [
         Permission.VIEW_ENROLLMENTS, Permission.ADD_ENROLLMENT, Permission.DELETE_ENROLLMENT

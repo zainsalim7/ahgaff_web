@@ -59,6 +59,7 @@ export const PERMISSIONS = {
   MANAGE_LECTURES: 'manage_lectures',
   VIEW_LECTURES: 'view_lectures',
   RESCHEDULE_LECTURE: 'reschedule_lecture',
+  GENERATE_LECTURES: 'generate_lectures',
   VIEW_COURSES: 'view_courses',
   OVERRIDE_LECTURE_STATUS: 'override_lecture_status',
 } as const;
@@ -168,7 +169,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // صلاحيات خاصة بالمعلم فقط - لا يحصل عليها المدير تلقائياً
   const TEACHER_ONLY_PERMISSIONS = [
-    'record_attendance', 'take_attendance', 'manage_lectures', 'edit_attendance'
+    'record_attendance', 'take_attendance', 'edit_attendance'
   ];
 
   // التحقق من صلاحية واحدة

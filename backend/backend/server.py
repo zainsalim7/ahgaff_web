@@ -480,6 +480,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         if perm not in user_permissions:
             user_permissions.append(perm)
     
+    # توسيع الصلاحيات: manage_lectures → reschedule_lecture, generate_lectures, إلخ
+    expanded = set(user_permissions)
+    for perm in user_permissions:
+        if perm in FULL_PERMISSION_MAPPING:
+            expanded.update(FULL_PERMISSION_MAPPING[perm])
+    user_permissions = list(expanded)
+    
     return {
         "id": str(user["_id"]),
         "username": user["username"],
@@ -492,10 +499,16 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
     }
 
 def get_user_permissions(user: dict) -> List[str]:
-    """الحصول على صلاحيات المستخدم"""
-    return user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
+    """الحصول على صلاحيات المستخدم مع توسيع الصلاحيات الرئيسية"""
+    base_permissions = user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
+    # توسيع الصلاحيات: manage_lectures يشمل reschedule_lecture, generate_lectures, إلخ
+    expanded = set(base_permissions)
+    for perm in base_permissions:
+        if perm in FULL_PERMISSION_MAPPING:
+            expanded.update(FULL_PERMISSION_MAPPING[perm])
+    return list(expanded)
 
-TEACHER_ONLY_PERMISSIONS = ["record_attendance", "take_attendance", "manage_lectures", "edit_attendance"]
+TEACHER_ONLY_PERMISSIONS = ["record_attendance", "take_attendance", "edit_attendance"]
 
 def has_permission(user: dict, permission: str) -> bool:
     """التحقق من أن المستخدم لديه صلاحية معينة"""
@@ -915,6 +928,13 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
     user_permissions = updated.get("permissions", DEFAULT_PERMISSIONS.get(updated["role"], []))
     if updated["role"] == UserRole.ADMIN:
         user_permissions = list(DEFAULT_PERMISSIONS.get(UserRole.ADMIN, []))
+    
+    # توسيع الصلاحيات
+    expanded = set(user_permissions)
+    for perm in user_permissions:
+        if perm in FULL_PERMISSION_MAPPING:
+            expanded.update(FULL_PERMISSION_MAPPING[perm])
+    user_permissions = list(expanded)
     
     return {
         "id": str(updated["_id"]),
@@ -4712,7 +4732,7 @@ async def generate_semester_lectures(
     current_user: dict = Depends(get_current_user)
 ):
     """توليد محاضرات الفصل الدراسي تلقائياً"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "manage_courses"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "generate_lectures"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من أن وقت النهاية بعد وقت البداية
@@ -4919,9 +4939,8 @@ async def reschedule_lecture(
 ):
     """إعادة جدولة محاضرة لم يحضرها المعلم"""
     # التحقق من الصلاحية
-    user_permissions = current_user.get("permissions") or []
     is_admin = current_user["role"] == UserRole.ADMIN
-    if not is_admin and "reschedule_lecture" not in user_permissions:
+    if not is_admin and not has_permission(current_user, "reschedule_lecture") and not has_permission(current_user, "manage_lectures"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بإعادة جدولة المحاضرات")
     
     lecture = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
