@@ -518,6 +518,7 @@ export default function ManageTeachersScreen() {
             onPress={() => handleEdit(item)}
           >
             <Ionicons name="create" size={18} color="#1565c0" />
+            <Text style={{ fontSize: 9, color: '#1565c0', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
           </TouchableOpacity>
           
           {/* زر الحذف */}
@@ -526,6 +527,7 @@ export default function ManageTeachersScreen() {
             onPress={() => handleDelete(item)}
           >
             <Ionicons name="trash" size={18} color="#f44336" />
+            <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
           </TouchableOpacity>
         </View>
       </View>

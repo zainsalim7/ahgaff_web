@@ -431,6 +431,7 @@ export default function ManageRolesScreen() {
                   onPress={() => openEditModal(role)}
                 >
                   <Ionicons name="pencil" size={20} color="#1565c0" />
+                  <Text style={{ fontSize: 9, color: '#1565c0', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
                 </TouchableOpacity>
                 {!role.is_system && (
                   <TouchableOpacity 
@@ -438,6 +439,7 @@ export default function ManageRolesScreen() {
                     onPress={() => handleDelete(role)}
                   >
                     <Ionicons name="trash" size={20} color="#f44336" />
+                    <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
                   </TouchableOpacity>
                 )}
               </View>

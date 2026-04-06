@@ -633,12 +633,15 @@ export default function StudentsScreen() {
                 onPress={() => handleOpenWarningModal(item)}
               >
                 <Ionicons name="warning" size={20} color="#f57c00" />
+                <Text style={{ fontSize: 9, color: '#f57c00', marginTop: 1, fontWeight: '600' }}>إنذار</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)}>
                 <Ionicons name="pencil" size={20} color="#4caf50" />
+                <Text style={{ fontSize: 9, color: '#4caf50', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id, item.full_name)}>
                 <Ionicons name="trash" size={20} color="#f44336" />
+                <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
               </TouchableOpacity>
             </>
           )}

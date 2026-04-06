@@ -215,6 +215,7 @@ export default function CoursesScreen() {
               data-testid={`students-btn-${item.id}`}
             >
               <Ionicons name="people" size={18} color="#ff9800" />
+              <Text style={styles.actionLabel}>الطلاب</Text>
             </TouchableOpacity>
           )}
           {canViewReports && (
@@ -224,6 +225,7 @@ export default function CoursesScreen() {
               data-testid={`stats-btn-${item.id}`}
             >
               <Ionicons name="stats-chart" size={18} color="#4caf50" />
+              <Text style={styles.actionLabel}>تقارير</Text>
             </TouchableOpacity>
           )}
         </View>
@@ -569,11 +571,17 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   actionBtn: {
-    width: 36,
-    height: 36,
+    width: 46,
+    height: 46,
     borderRadius: 8,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  actionLabel: {
+    fontSize: 9,
+    color: '#666',
+    marginTop: 2,
+    fontWeight: '600',
   },
   emptyContainer: {
     justifyContent: 'center',

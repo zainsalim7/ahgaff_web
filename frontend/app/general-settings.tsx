@@ -813,12 +813,14 @@ export default function GeneralSettingsScreen() {
                     onPress={() => handleEditFaculty(faculty)}
                   >
                     <Ionicons name="create" size={18} color="#1565c0" />
+                    <Text style={{ fontSize: 9, color: '#1565c0', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.iconBtn, styles.deleteIconBtn]}
                     onPress={() => handleDeleteFaculty(faculty)}
                   >
                     <Ionicons name="trash" size={18} color="#f44336" />
+                    <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -941,6 +943,7 @@ export default function GeneralSettingsScreen() {
                       onPress={() => openEditSemesterModal(semester)}
                     >
                       <Ionicons name="pencil" size={18} color="#1565c0" />
+                      <Text style={{ fontSize: 9, color: '#1565c0', marginTop: 1, fontWeight: '600' }}>تحرير</Text>
                     </TouchableOpacity>
                   )}
                   
@@ -950,6 +953,7 @@ export default function GeneralSettingsScreen() {
                       onPress={() => handleDeleteSemester(semester)}
                     >
                       <Ionicons name="trash" size={18} color="#f44336" />
+                      <Text style={{ fontSize: 9, color: '#f44336', marginTop: 1, fontWeight: '600' }}>حذف</Text>
                     </TouchableOpacity>
                   )}
                 </View>
