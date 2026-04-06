@@ -36,6 +36,9 @@ export const PERMISSIONS = {
   MANAGE_FACULTIES: 'manage_faculties',
   MANAGE_TEACHERS: 'manage_teachers',
   MANAGE_ENROLLMENTS: 'manage_enrollments',
+  ADD_ENROLLMENT: 'add_enrollment',
+  DELETE_ENROLLMENT: 'delete_enrollment',
+  VIEW_ENROLLMENTS: 'view_enrollments',
   // صلاحيات الحضور
   RECORD_ATTENDANCE: 'record_attendance',
   TAKE_ATTENDANCE: 'take_attendance',

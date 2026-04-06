@@ -77,6 +77,18 @@ export default function CourseStudentsScreen() {
   // التحقق من صلاحية إدارة الطلاب
   const canManageStudents = !isStudent && (hasPermission(PERMISSIONS.MANAGE_STUDENTS) || user?.role === 'admin');
   
+  // التحقق من صلاحيات التسجيل (منفصلة عن إدارة الطلاب)
+  const canManageEnrollments = !isStudent && (
+    hasPermission(PERMISSIONS.MANAGE_ENROLLMENTS) || 
+    hasPermission(PERMISSIONS.ADD_ENROLLMENT) || 
+    user?.role === 'admin'
+  );
+  const canUnenroll = !isStudent && (
+    hasPermission(PERMISSIONS.MANAGE_ENROLLMENTS) || 
+    hasPermission(PERMISSIONS.DELETE_ENROLLMENT) || 
+    user?.role === 'admin'
+  );
+  
   // إعادة توجيه الطالب
   useEffect(() => {
     if (!authLoading && isStudent) {
@@ -659,7 +671,7 @@ export default function CourseStudentsScreen() {
           <Text style={styles.noStatsText}>لا يوجد حضور مسجل</Text>
         )}
         
-        {canManageStudents && (
+        {canUnenroll && (
           <TouchableOpacity
             style={styles.removeBtn}
             onPress={() => handleUnenroll(item.student_id, item.full_name)}
@@ -895,7 +907,7 @@ export default function CourseStudentsScreen() {
         )}
 
         {/* Action Buttons - فقط إذا كان لديه صلاحية */}
-        {canManageStudents && viewMode === 'summary' && (
+        {canManageEnrollments && viewMode === 'summary' && (
           <View style={styles.actions}>
             <TouchableOpacity
               style={styles.actionBtn}
@@ -954,7 +966,7 @@ export default function CourseStudentsScreen() {
                 </TouchableOpacity>
               ) : null}
             </View>
-            {canManageStudents && !enrollSelectionMode && (
+            {canManageEnrollments && !enrollSelectionMode && (
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}
                 onPress={() => setEnrollSelectionMode(true)}
@@ -1031,7 +1043,7 @@ export default function CourseStudentsScreen() {
           <View style={styles.emptyState}>
             <Ionicons name="people-outline" size={64} color="#ccc" />
             <Text style={styles.emptyText}>لا يوجد طلاب مسجلين</Text>
-            {canManageStudents && (
+            {canManageEnrollments && (
               <Text style={styles.emptySubtext}>
                 اضغط على "إضافة طلاب" أو "استيراد Excel"
               </Text>

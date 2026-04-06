@@ -42,6 +42,9 @@
   - تجاوز قيود الوقت لأصحاب صلاحية edit_attendance
   - مزامنة AuthContext مع useAuthStore عبر localStorage fallback
   - إصلاح دالة toggleStatus لتسمح بتغيير حالة الحضور لأصحاب edit_attendance حتى بعد انتهاء الوقت
+- [x] فصل صلاحيات التسجيل عن إدارة المقررات (P0)
+  - الباكند: تسجيل/إلغاء تسجيل طلاب يتطلب manage_enrollments أو add_enrollment/delete_enrollment (ليس manage_courses)
+  - الفرونت: أزرار التسجيل تعتمد على صلاحيات التسجيل منفصلة عن إدارة الطلاب
 
 ## المهام المعلقة
 

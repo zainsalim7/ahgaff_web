@@ -3758,7 +3758,7 @@ async def enroll_students(
     current_user: dict = Depends(get_current_user)
 ):
     """تسجيل طلاب في مقرر"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "manage_courses"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
@@ -3838,7 +3838,7 @@ async def unenroll_student(
     current_user: dict = Depends(get_current_user)
 ):
     """إلغاء تسجيل طالب من مقرر"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "manage_courses"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "delete_enrollment"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     result = await db.enrollments.delete_one({
@@ -3860,7 +3860,7 @@ async def import_enrollments_excel(
     """استيراد طلاب إلى مقرر من ملف Excel"""
     logger.info(f"Import enrollments called: course_id={course_id}, filename={file.filename}, content_type={file.content_type}")
     
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "import_data"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment") and not has_permission(current_user, "import_data"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
