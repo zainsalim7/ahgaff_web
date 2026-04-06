@@ -103,6 +103,13 @@ export default function CourseLecturesScreen() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showGenerateModal, setShowGenerateModal] = useState(false);
   
+  // تقسيم الصفحات
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalLectures, setTotalLectures] = useState(0);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PER_PAGE = 50;
+  
   // إشعارات مرئية
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   
@@ -171,12 +178,7 @@ export default function CourseLecturesScreen() {
   const getFilteredLectures = useCallback(() => {
     let filtered = [...lectures];
     
-    // فلترة حسب الحالة
-    if (selectedStatus) {
-      filtered = filtered.filter(l => l.status === selectedStatus);
-    }
-    
-    // فلترة حسب الشهر
+    // فلترة حسب الشهر (محلياً فقط - الحالة تُفلتر من السيرفر)
     if (selectedMonth) {
       filtered = filtered.filter(l => {
         const date = parseDate(l.date);
@@ -186,17 +188,17 @@ export default function CourseLecturesScreen() {
     }
     
     return filtered.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }, [lectures, selectedStatus, selectedMonth]);
+  }, [lectures, selectedMonth]);
   
   // إحصائيات سريعة
   const getStats = useCallback(() => {
-    const total = lectures.length;
+    const total = totalLectures;
     const scheduled = lectures.filter(l => l.status === 'scheduled').length;
     const completed = lectures.filter(l => l.status === 'completed').length;
     const cancelled = lectures.filter(l => l.status === 'cancelled').length;
     const absent = lectures.filter(l => l.status === 'absent').length;
     return { total, scheduled, completed, cancelled, absent };
-  }, [lectures]);
+  }, [lectures, totalLectures]);
   
   // تبديل توسيع/طي الشهر
   const toggleMonth = (monthKey: string) => {
@@ -234,18 +236,31 @@ export default function CourseLecturesScreen() {
     }))
   );
 
-  const fetchData = useCallback(async () => {
+  const fetchData = useCallback(async (page: number = 1, append: boolean = false) => {
     if (!courseId) return;
     
     try {
+      if (page === 1) setLoading(true);
+      else setLoadingMore(true);
+      
       const [courseRes, lecturesRes, settingsRes] = await Promise.all([
-        coursesAPI.getById(courseId),
-        lecturesAPI.getByCourse(courseId),
-        settingsAPI.get(),
+        ...(page === 1 ? [coursesAPI.getById(courseId)] : [Promise.resolve({ data: course })]),
+        lecturesAPI.getByCourse(courseId, page, PER_PAGE, selectedStatus || undefined),
+        ...(page === 1 ? [settingsAPI.get()] : [Promise.resolve({ data: {} })]),
       ]);
       
-      setCourse(courseRes.data);
-      setLectures(lecturesRes.data);
+      if (page === 1) setCourse(courseRes.data);
+      
+      const lectureData = lecturesRes.data.lectures || lecturesRes.data;
+      if (append) {
+        setLectures(prev => [...prev, ...lectureData]);
+      } else {
+        setLectures(lectureData);
+      }
+      
+      setTotalPages(lecturesRes.data.total_pages || 1);
+      setTotalLectures(lecturesRes.data.total || lectureData.length);
+      setCurrentPage(page);
       
       // محاولة جلب تواريخ الفصل من الإعدادات
       let semStart = settingsRes.data.semester_start_date;
@@ -273,15 +288,16 @@ export default function CourseLecturesScreen() {
       });
     } catch (error) {
       console.error('Error fetching data:', error);
-      Alert.alert('خطأ', 'فشل في تحميل البيانات');
+      if (page === 1) Alert.alert('خطأ', 'فشل في تحميل البيانات');
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
-  }, [courseId]);
+  }, [courseId, selectedStatus, course]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchData(1);
+  }, [courseId, selectedStatus]);
 
   // حفظ محاضرة جديدة باستخدام المكون الموحد
   const handleSaveLecture = async (data: LectureFormData) => {
@@ -295,7 +311,7 @@ export default function CourseLecturesScreen() {
       });
       Alert.alert('نجاح', 'تم إضافة المحاضرة');
       showNotification('success', 'تم إضافة المحاضرة بنجاح');
-      fetchData();
+      fetchData(1);
     } catch (error: any) {
       const message = error.response?.data?.detail || 'حدث خطأ';
       showNotification('error', message);
@@ -376,7 +392,7 @@ export default function CourseLecturesScreen() {
         }
         setSelectedLectures(new Set());
         setSelectionMode(false);
-        fetchData();
+        fetchData(1);
       } catch (error) {
         console.error('Error deleting lectures:', error);
         if (Platform.OS === 'web') {
@@ -425,7 +441,7 @@ export default function CourseLecturesScreen() {
           Alert.alert('نجاح', `تم حذف جميع المحاضرات (${lectures.length})`);
         }
         setSelectionMode(false);
-        fetchData();
+        fetchData(1);
       } catch (error) {
         console.error('Error deleting all lectures:', error);
         if (Platform.OS === 'web') {
@@ -543,7 +559,7 @@ export default function CourseLecturesScreen() {
       const count = response.data.lectures_created || 0;
       showNotification('success', `تم توليد ${count} محاضرة بنجاح`);
       setShowGenerateModal(false);
-      fetchData();
+      fetchData(1);
     } catch (error: any) {
       const message = error.response?.data?.detail || 'فشل في توليد المحاضرات';
       showNotification('error', message);
@@ -557,7 +573,7 @@ export default function CourseLecturesScreen() {
     try {
       await lecturesAPI.delete(lectureId);
       showNotification('success', 'تم حذف المحاضرة');
-      fetchData();
+      fetchData(1);
     } catch (error: any) {
       showNotification('error', 'فشل في حذف المحاضرة');
     }
@@ -568,7 +584,7 @@ export default function CourseLecturesScreen() {
     try {
       await lecturesAPI.update(lectureId, { status: 'cancelled' });
       showNotification('success', 'تم إلغاء المحاضرة');
-      fetchData();
+      fetchData(1);
     } catch (error: any) {
       showNotification('error', 'فشل في إلغاء المحاضرة');
     }
@@ -591,7 +607,7 @@ export default function CourseLecturesScreen() {
       const res = await api.put(`/lectures/${rescheduleModal.lectureId}/reschedule`, rescheduleData);
       showNotification('success', res.data.message || 'تم إعادة الجدولة بنجاح');
       setRescheduleModal(null);
-      fetchData();
+      fetchData(1);
     } catch (error: any) {
       const msg = error.response?.data?.detail || error.message || 'فشل في إعادة الجدولة';
       showNotification('error', msg);
@@ -937,6 +953,24 @@ export default function CourseLecturesScreen() {
             keyExtractor={(item) => item.id}
             renderItem={renderLecture}
             contentContainerStyle={styles.listContent}
+            ListFooterComponent={() => (
+              <View style={{ padding: 16, alignItems: 'center', gap: 8 }}>
+                <Text style={{ color: '#666', fontSize: 13 }}>
+                  عرض {lectures.length} من {totalLectures} محاضرة
+                </Text>
+                {currentPage < totalPages && (
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#1565c0', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}
+                    onPress={() => fetchData(currentPage + 1, true)}
+                    disabled={loadingMore}
+                  >
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
+                      {loadingMore ? 'جاري التحميل...' : 'تحميل المزيد'}
+                    </Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
           />
         )}
 

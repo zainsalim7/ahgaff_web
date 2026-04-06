@@ -476,8 +476,8 @@ export const lecturesAPI = {
   getMonth: (year: number, month: number) => 
     api.get(`/lectures/month/${year}/${month}`),
   
-  getByCourse: (courseId: string) => 
-    api.get(`/lectures/${courseId}`),
+  getByCourse: (courseId: string, page: number = 1, perPage: number = 50, status?: string) => 
+    api.get(`/lectures/${courseId}`, { params: { page, per_page: perPage, ...(status ? { status } : {}) } }),
   
   getAttendanceStatus: (lectureId: string) =>
     api.get(`/lectures/${lectureId}/attendance-status`),

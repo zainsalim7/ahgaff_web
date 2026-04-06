@@ -4419,9 +4419,11 @@ async def get_month_lectures(year: int, month: int, current_user: dict = Depends
 async def get_course_lectures(
     course_id: str,
     status: Optional[str] = None,
+    page: int = 1,
+    per_page: int = 50,
     current_user: dict = Depends(get_current_user)
 ):
-    """الحصول على محاضرات مقرر"""
+    """الحصول على محاضرات مقرر مع تقسيم صفحات"""
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
@@ -4430,12 +4432,32 @@ async def get_course_lectures(
     if status:
         query["status"] = status
     
-    lectures = await db.lectures.find(query).sort("date", 1).to_list(1000)
+    # عدد المحاضرات الإجمالي
+    total = await db.lectures.count_documents(query)
     
-    # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
+    # تحديث جماعي: المحاضرات المجدولة التي انتهى وقتها → غائب
     now = get_yemen_time()
+    now_str = now.strftime("%Y-%m-%d %H:%M")
+    today_str = now.strftime("%Y-%m-%d")
+    
+    # تحديث المحاضرات القديمة دفعة واحدة (التي تاريخها قبل اليوم)
+    await db.lectures.update_many(
+        {
+            "course_id": course_id,
+            "status": LectureStatus.SCHEDULED,
+            "status_override": {"$ne": True},
+            "date": {"$lt": today_str}
+        },
+        {"$set": {"status": LectureStatus.ABSENT}}
+    )
+    
+    # تقسيم الصفحات
+    skip = (page - 1) * per_page
+    lectures = await db.lectures.find(query).sort("date", 1).skip(skip).limit(per_page).to_list(per_page)
+    
+    # تحديث محاضرات اليوم فقط (عدد قليل)
     for lecture in lectures:
-        if lecture.get("status") == LectureStatus.SCHEDULED and not lecture.get("status_override"):
+        if lecture.get("status") == LectureStatus.SCHEDULED and not lecture.get("status_override") and lecture.get("date") == today_str:
             try:
                 lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M")
                 lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
@@ -4466,7 +4488,13 @@ async def get_course_lectures(
             "created_at": lecture["created_at"]
         })
     
-    return result
+    return {
+        "lectures": result,
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "total_pages": (total + per_page - 1) // per_page
+    }
 
 async def notify_lecture_created(course: dict, date: str, start_time: str, end_time: str):
     """إرسال تنبيه تلقائي عند إنشاء محاضرة جديدة - للمعلم وطلاب المقرر"""
