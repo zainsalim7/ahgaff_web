@@ -69,6 +69,7 @@
 - [x] Add search bar + section label in copy/move students modal (DONE - April 2, 2026)
 - [x] Import lectures from Excel (template + import endpoint + UI) (DONE - April 2, 2026)
 - [x] Security improvements: Rate Limiting, Security Headers, CORS, Token expiry (DONE - April 3, 2026)
+- [x] Redesign /courses page with faculty/department filters + search (DONE - April 6, 2026)
 - [ ] Deploy and test all features on production
 - [ ] Run faculty_id data migration
 
