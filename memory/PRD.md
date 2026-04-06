@@ -45,6 +45,11 @@
 - [x] فصل صلاحيات التسجيل عن إدارة المقررات (P0)
   - الباكند: تسجيل/إلغاء تسجيل طلاب يتطلب manage_enrollments أو add_enrollment/delete_enrollment (ليس manage_courses)
   - الفرونت: أزرار التسجيل تعتمد على صلاحيات التسجيل منفصلة عن إدارة الطلاب
+- [x] مراجعة شاملة لنظام الصلاحيات (P0)
+  - إصلاح 6 endpoints للتسجيل (enroll, unenroll, bulk-copy, bulk-move, import)
+  - إصلاح endpoints الخطة الدراسية وإنشاء المحاضرات
+  - تحديث routes/courses.py و routes/departments.py لاستخدام has_permission
+  - 14/14 اختبار نجح (100%)
 
 ## المهام المعلقة
 
