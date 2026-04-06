@@ -1433,25 +1433,50 @@ async def get_department_details(dept_id: str, current_user: dict = Depends(get_
         raise HTTPException(status_code=404, detail="القسم غير موجود")
     
     # Get courses in this department
-    courses = await db.courses.find({"department_id": dept_id}).to_list(100)
+    courses = await db.courses.find({"department_id": dept_id}).to_list(500)
     course_ids = [str(c["_id"]) for c in courses]
     
-    # Get unique teacher IDs from courses
-    teacher_ids = list(set([c.get("teacher_id") for c in courses if c.get("teacher_id")]))
+    # Get teachers directly from teachers collection by department_ids
+    dept_teachers = await db.teachers.find({
+        "$or": [
+            {"department_ids": dept_id},
+            {"department_id": dept_id}
+        ]
+    }).to_list(500)
     
-    # Get teachers
     teachers = []
-    for tid in teacher_ids:
-        try:
-            teacher = await db.users.find_one({"_id": ObjectId(tid), "role": "teacher"})
-            if teacher:
-                teachers.append({
-                    "id": str(teacher["_id"]),
-                    "full_name": teacher["full_name"],
-                    "username": teacher["username"]
-                })
-        except:
-            pass
+    seen_teacher_ids = set()
+    for t in dept_teachers:
+        tid = str(t["_id"])
+        if tid not in seen_teacher_ids:
+            seen_teacher_ids.add(tid)
+            teachers.append({
+                "id": tid,
+                "full_name": t.get("full_name", ""),
+                "username": t.get("teacher_id", t.get("username", "")),
+                "academic_title": t.get("academic_title", ""),
+                "specialization": t.get("specialization", ""),
+            })
+    
+    # Also add teachers from courses who aren't in the department's teachers list
+    for c in courses:
+        tid = c.get("teacher_id")
+        if tid and tid not in seen_teacher_ids:
+            try:
+                teacher = await db.teachers.find_one({"_id": ObjectId(tid)})
+                if not teacher:
+                    teacher = await db.users.find_one({"_id": ObjectId(tid), "role": "teacher"})
+                if teacher:
+                    seen_teacher_ids.add(tid)
+                    teachers.append({
+                        "id": tid,
+                        "full_name": teacher.get("full_name", ""),
+                        "username": teacher.get("teacher_id", teacher.get("username", "")),
+                        "academic_title": teacher.get("academic_title", ""),
+                        "specialization": teacher.get("specialization", ""),
+                    })
+            except:
+                pass
     
     # Get students enrolled in courses of this department
     student_ids = set()

@@ -418,7 +418,12 @@ export default function AddDepartmentScreen() {
                         </View>
                         <View style={styles.listItemInfo}>
                           <Text style={styles.listItemName}>{teacher.full_name}</Text>
-                          <Text style={styles.listItemDetail}>@{teacher.username}</Text>
+                          <Text style={styles.listItemDetail}>
+                            {teacher.academic_title ? `${teacher.academic_title} | ` : ''}{teacher.username ? `@${teacher.username}` : ''}
+                          </Text>
+                          {teacher.specialization ? (
+                            <Text style={[styles.listItemDetail, { color: '#666' }]}>{teacher.specialization}</Text>
+                          ) : null}
                         </View>
                       </View>
                     ))
