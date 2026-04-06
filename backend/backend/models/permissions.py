@@ -75,6 +75,7 @@ class Permission:
     DELETE_ENROLLMENT = "delete_enrollment"
     
     # صلاحيات الحضور
+    MANAGE_ATTENDANCE = "manage_attendance"
     RECORD_ATTENDANCE = "record_attendance"
     TAKE_ATTENDANCE = "take_attendance"
     VIEW_ATTENDANCE = "view_attendance"
@@ -183,7 +184,7 @@ DEFAULT_PERMISSIONS = {
         Permission.MANAGE_TEACHERS,
         Permission.MANAGE_ENROLLMENTS,
         Permission.MANAGE_LECTURES,
-        Permission.VIEW_ATTENDANCE,
+        Permission.MANAGE_ATTENDANCE,
         Permission.VIEW_REPORTS,
         Permission.EXPORT_REPORTS,
         Permission.IMPORT_DATA,
@@ -276,6 +277,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},
     {"key": Permission.DELETE_ENROLLMENT, "label": "إلغاء تسجيل طالب", "category": "التسجيل"},
+    {"key": Permission.MANAGE_ATTENDANCE, "label": "إدارة كاملة للحضور (تسجيل + تعديل + عرض)", "category": "الحضور"},
     {"key": Permission.RECORD_ATTENDANCE, "label": "تسجيل الحضور", "category": "الحضور"},
     {"key": Permission.TAKE_ATTENDANCE, "label": "أخذ الحضور", "category": "الحضور"},
     {"key": Permission.VIEW_ATTENDANCE, "label": "عرض الحضور", "category": "الحضور"},
@@ -329,6 +331,10 @@ FULL_PERMISSION_MAPPING = {
         Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
         Permission.OVERRIDE_LECTURE_STATUS, Permission.RESCHEDULE_LECTURE,
         Permission.GENERATE_LECTURES
+    ],
+    Permission.MANAGE_ATTENDANCE: [
+        Permission.RECORD_ATTENDANCE, Permission.TAKE_ATTENDANCE,
+        Permission.VIEW_ATTENDANCE, Permission.EDIT_ATTENDANCE
     ],
     Permission.MANAGE_ENROLLMENTS: [
         Permission.VIEW_ENROLLMENTS, Permission.ADD_ENROLLMENT, Permission.DELETE_ENROLLMENT
