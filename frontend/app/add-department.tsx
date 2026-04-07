@@ -81,6 +81,11 @@ export default function AddDepartmentScreen() {
 
   // Filter by faculty
   const [filterFacultyId, setFilterFacultyId] = useState<string>('');
+  const [searchDept, setSearchDept] = useState('');
+  
+  // Pagination
+  const PAGE_SIZE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -540,18 +545,65 @@ export default function AddDepartmentScreen() {
               </TouchableOpacity>
             )}
 
-            <FlatList
-              data={departments}
-              renderItem={renderDepartment}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="business-outline" size={64} color="#ccc" />
-                  <Text style={styles.emptyText}>لا توجد أقسام</Text>
+            {/* فلتر حسب الكلية */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}>
+              {faculties.map(f => (
+                <TouchableOpacity
+                  key={f.id}
+                  style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: filterFacultyId === f.id ? '#1a237e' : '#e8eaf6' }}
+                  onPress={() => { setFilterFacultyId(prev => prev === f.id ? '' : f.id); setCurrentPage(1); }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '600', color: filterFacultyId === f.id ? '#fff' : '#1a237e' }}>{f.name}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {!filterFacultyId ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="filter-outline" size={56} color="#bbb" />
+                <Text style={styles.emptyText}>اختر كلية لعرض الأقسام</Text>
+              </View>
+            ) : (() => {
+              const filtered = departments.filter(d => d.faculty_id === filterFacultyId);
+              const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+              const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+              return (
+                <View style={{ flex: 1 }}>
+                  <Text style={{ paddingHorizontal: 16, fontSize: 12, color: '#888', marginBottom: 4 }}>{filtered.length} قسم</Text>
+                  <FlatList
+                    data={paged}
+                    renderItem={renderDepartment}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={styles.listContent}
+                    ListEmptyComponent={
+                      <View style={styles.emptyContainer}>
+                        <Ionicons name="business-outline" size={64} color="#ccc" />
+                        <Text style={styles.emptyText}>لا توجد أقسام</Text>
+                      </View>
+                    }
+                  />
+                  {totalPages > 1 && (
+                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, gap: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }}>
+                      <TouchableOpacity
+                        style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage <= 1 ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                        onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage <= 1}
+                      >
+                        <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+                      </TouchableOpacity>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{currentPage} / {totalPages}</Text>
+                      <TouchableOpacity
+                        style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage >= totalPages ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                        onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage >= totalPages}
+                      >
+                        <Ionicons name="chevron-back" size={20} color={currentPage >= totalPages ? '#ccc' : '#1565c0'} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-              }
-            />
+              );
+            })()}
           </>
         )}
       </KeyboardAvoidingView>

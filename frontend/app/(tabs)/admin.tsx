@@ -100,7 +100,7 @@ export default function AdminScreen() {
       groupColor: '#9c27b0',
       items: [
         { title: 'جدول المحاضرات', icon: 'calendar', color: '#9c27b0', bg: '#f3e5f5', route: '/schedule', permission: 'manage_lectures' },
-        { title: 'لوحة الأقسام', icon: 'grid', color: '#009688', bg: '#e0f2f1', route: '/department-dashboard', permission: 'view_reports' },
+        { title: 'الأقسام', icon: 'grid', color: '#009688', bg: '#e0f2f1', route: '/add-department', permission: 'view_reports' },
         { title: 'الأوفلاين', icon: 'cloud-offline', color: '#607d8b', bg: '#eceff1', route: '/offline-sync', permission: null, teacherOnly: true },
       ],
     },

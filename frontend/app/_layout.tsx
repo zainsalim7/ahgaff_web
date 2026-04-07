@@ -134,7 +134,6 @@ export default function RootLayout() {
           <Stack.Screen name="manage-users" options={{ title: 'إدارة المستخدمين' }} />
           <Stack.Screen name="manage-roles" options={{ title: 'الأدوار والصلاحيات' }} />
           <Stack.Screen name="manage-notifications" options={{ title: 'إدارة الإشعارات' }} />
-          <Stack.Screen name="department-dashboard" options={{ title: 'لوحة تحكم الأقسام' }} />
           <Stack.Screen name="report-attendance-overview" options={{ title: 'تقرير الحضور' }} />
           <Stack.Screen name="report-student" options={{ title: 'تقرير الطالب' }} />
           <Stack.Screen name="report-warnings" options={{ title: 'الإنذارات' }} />

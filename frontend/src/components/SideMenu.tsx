@@ -57,10 +57,6 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.MANAGE_DEPARTMENTS
   ]},
   
-  { id: 'dept-dashboard', label: 'لوحة تحكم الأقسام', icon: 'grid', path: '/department-dashboard', permissions: [
-    PERMISSIONS.MANAGE_DEPARTMENTS
-  ]},
-  
   { id: 'users', label: 'إدارة المستخدمين', icon: 'person-add', path: '/manage-users', permissions: [
     PERMISSIONS.MANAGE_USERS
   ]},
