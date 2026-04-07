@@ -36,7 +36,7 @@ const NAV_ITEMS: QuickNavItem[] = [
   
   // إدارة الأكاديمية
   { title: 'إدارة الأقسام', icon: 'business', route: '/add-department', color: '#e91e63', adminOnly: true },
-  { title: 'إدارة المقررات', icon: 'library', route: '/add-course', color: '#ff9800', adminOnly: true },
+  { title: 'إدارة المقررات', icon: 'library', route: '/courses', color: '#ff9800', adminOnly: true },
   { title: 'إدارة الطلاب', icon: 'school', route: '/students', color: '#2196f3', adminOnly: true },
   { title: 'إدارة المعلمين', icon: 'person-add', route: '/manage-teachers', color: '#009688', adminOnly: true },
   

@@ -724,7 +724,7 @@ export default function HomeScreen() {
 
                 <TouchableOpacity
                   style={styles.adminRoleCard}
-                  onPress={() => router.push('/add-course')}
+                  onPress={() => router.push('/courses')}
                 >
                   <View style={[styles.adminRoleIcon, { backgroundColor: '#fff3e0' }]}>
                     <Ionicons name="book" size={28} color="#ff9800" />

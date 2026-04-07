@@ -91,7 +91,7 @@ export default function AdminScreen() {
         { title: 'الأقسام', icon: 'business', color: '#e91e63', bg: '#fce4ec', route: '/add-department', permission: 'manage_departments', count: counts.departments },
         { title: 'المعلمين', icon: 'person', color: '#4caf50', bg: '#e8f5e9', route: '/manage-teachers', permission: 'manage_users', count: counts.teachers },
         { title: 'الطلاب', icon: 'people', color: '#1565c0', bg: '#e3f2fd', route: '/students', permission: 'manage_students', count: counts.students },
-        { title: 'المقررات', icon: 'book', color: '#ff9800', bg: '#fff3e0', route: '/add-course', permission: 'manage_courses', count: counts.courses },
+        { title: 'المقررات', icon: 'book', color: '#ff9800', bg: '#fff3e0', route: '/courses', permission: 'manage_courses', count: counts.courses },
       ],
     },
     {

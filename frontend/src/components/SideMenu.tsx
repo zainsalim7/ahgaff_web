@@ -53,7 +53,7 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.MANAGE_TEACHERS
   ]},
   
-  { id: 'courses', label: 'إدارة المقررات', icon: 'library', path: '/add-course', permissions: [
+  { id: 'courses', label: 'إدارة المقررات', icon: 'library', path: '/courses', permissions: [
     PERMISSIONS.MANAGE_COURSES
   ]},
   
