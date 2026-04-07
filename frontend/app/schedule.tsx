@@ -56,10 +56,11 @@ export default function ScheduleScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [coursesRes, deptsRes, settingsRes] = await Promise.all([
+      const [coursesRes, deptsRes, settingsRes, allLecturesRes] = await Promise.all([
         coursesAPI.getAll(),
         departmentsAPI.getAll(),
         settingsAPI.get(),
+        api.get('/lectures/all-schedule'),
       ]);
       setCourses(coursesRes.data);
       setDepartments(deptsRes.data);
@@ -81,18 +82,19 @@ export default function ScheduleScreen() {
       
       setSemesterSettings({ semester_start_date: semStart, semester_end_date: semEnd, current_semester: semName });
       
-      try {
-        const todayRes = await lecturesAPI.getToday();
-        setTodayLectures(todayRes.data || []);
-      } catch (e) {}
+      // محاضرات اليوم من البيانات المُحمّلة
+      const today = new Date().toISOString().split('T')[0];
+      const todayLects = (allLecturesRes.data || []).filter((l: any) => l.date === today);
+      setTodayLectures(todayLects);
       
-      const allLectures: any[] = [];
-      for (const course of coursesRes.data) {
-        try {
-          const lectRes = await lecturesAPI.getByCourse(course.id);
-          allLectures.push(...lectRes.data.map((l: any) => ({ ...l, course })));
-        } catch (e) {}
-      }
+      // كل المحاضرات مع بيانات المقررات (طلب واحد بدل عشرات!)
+      const courseMap: Record<string, any> = {};
+      coursesRes.data.forEach((c: any) => { courseMap[c.id] = c; });
+      
+      const allLectures = (allLecturesRes.data || []).map((l: any) => ({
+        ...l,
+        course: courseMap[l.course_id] || { name: l.course_name, code: l.course_code, section: l.section }
+      }));
       setLectures(allLectures);
     } catch (error) {
       console.error('Error fetching data:', error);

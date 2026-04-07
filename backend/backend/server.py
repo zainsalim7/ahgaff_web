@@ -4371,6 +4371,63 @@ async def get_today_lectures(current_user: dict = Depends(get_current_user)):
     
     return result
 
+
+@api_router.get("/lectures/all-schedule")
+async def get_all_schedule_lectures(current_user: dict = Depends(get_current_user)):
+    """جلب كل المحاضرات مع بيانات المقررات - للجدول الأسبوعي (طلب واحد بدل عشرات)"""
+    
+    course_query = {"is_active": True}
+    scope_filter = await get_user_scope_filter(current_user)
+    if scope_filter:
+        course_query.update(scope_filter)
+    
+    if current_user["role"] == UserRole.TEACHER:
+        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        if user and user.get("teacher_record_id"):
+            course_query["teacher_id"] = user["teacher_record_id"]
+        else:
+            course_query["teacher_id"] = current_user["id"]
+    
+    courses = await db.courses.find(course_query).to_list(500)
+    course_ids = [str(c["_id"]) for c in courses]
+    course_map = {str(c["_id"]): c for c in courses}
+    
+    if not course_ids:
+        return []
+    
+    # جلب كل المحاضرات دفعة واحدة
+    lectures = await db.lectures.find({
+        "course_id": {"$in": course_ids}
+    }).sort("date", 1).to_list(5000)
+    
+    result = []
+    for lecture in lectures:
+        course = course_map.get(lecture["course_id"], {})
+        teacher_name = ""
+        if course.get("teacher_id"):
+            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])}) if ObjectId.is_valid(course["teacher_id"]) else None
+            if teacher:
+                teacher_name = teacher.get("full_name", "")
+        
+        result.append({
+            "id": str(lecture["_id"]),
+            "course_id": lecture["course_id"],
+            "course_name": course.get("name", ""),
+            "course_code": course.get("code", ""),
+            "section": course.get("section", ""),
+            "date": lecture["date"],
+            "day": lecture.get("day", ""),
+            "start_time": lecture["start_time"],
+            "end_time": lecture["end_time"],
+            "room": lecture.get("room", ""),
+            "status": lecture.get("status", LectureStatus.SCHEDULED),
+            "teacher_name": teacher_name,
+            "created_at": lecture.get("created_at", "")
+        })
+    
+    return result
+
+
 @api_router.get("/lectures/month/{year}/{month}")
 async def get_month_lectures(year: int, month: int, current_user: dict = Depends(get_current_user)):
     """الحصول على محاضرات شهر معين للمعلم - يرجع التواريخ التي فيها محاضرات"""
