@@ -119,7 +119,7 @@ export default function ManageRolesScreen() {
       
       // التحقق من أن المكون لا يزال موجوداً قبل تحديث الحالة
       if (isMounted.current) {
-        setRoles(rolesRes.data || []);
+        setRoles((rolesRes.data || []).filter((r: Role) => r.system_key !== 'admin'));
         setAllPermissions(permsRes.data.permissions || []);
         hasFetched.current = true;
       }
