@@ -17,11 +17,17 @@ COPY . .
 # Build the web version
 RUN npx expo export --platform web
 
+# Pre-compress for faster serving
+RUN find dist -name "*.js" -o -name "*.css" -o -name "*.html" | xargs gzip -k -9 2>/dev/null || true
+
+# Copy serve config
+COPY serve.json dist/serve.json
+
 # Install serve
 RUN npm install -g serve
 
 # Expose port
 EXPOSE 3000
 
-# Serve the static files - use $PORT from Railway
+# Serve the static files with config
 CMD serve dist -s -l ${PORT:-3000}
