@@ -169,7 +169,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="book" size={size} color={color} />
           ),
-          headerTitle: 'المقررات الدراسية',
+          headerShown: false,
           href: hasCoursesPermission ? undefined : null,
         }}
       />

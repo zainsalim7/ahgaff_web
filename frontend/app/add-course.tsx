@@ -53,6 +53,10 @@ export default function AddCourseScreen() {
   const [filterDept, setFilterDept] = useState<string>('');
   const [filterLevel, setFilterLevel] = useState<string>('');
   
+  // Pagination
+  const PAGE_SIZE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+  
   // Multi-select for bulk delete
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -907,17 +911,12 @@ export default function AddCourseScreen() {
             {/* فلاتر */}
             <View style={styles.filterContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                <TouchableOpacity
-                  style={[styles.filterBtn, !filterDept && styles.filterBtnActive]}
-                  onPress={() => setFilterDept('')}
-                >
-                  <Text style={[styles.filterText, !filterDept && styles.filterTextActive]}>كل الأقسام</Text>
-                </TouchableOpacity>
                 {departments.map(dept => (
                   <TouchableOpacity
                     key={dept.id}
                     style={[styles.filterBtn, filterDept === dept.id && styles.filterBtnActive]}
-                    onPress={() => setFilterDept(dept.id)}
+                    onPress={() => { setFilterDept(prev => prev === dept.id ? '' : dept.id); setCurrentPage(1); }}
+                    data-testid={`filter-dept-${dept.id}`}
                   >
                     <Text style={[styles.filterText, filterDept === dept.id && styles.filterTextActive]}>
                       {dept.name}
@@ -927,29 +926,62 @@ export default function AddCourseScreen() {
               </ScrollView>
             </View>
 
-            <FlatList
-              data={courses.filter(c => {
+            {/* عرض المقررات فقط عند اختيار فلتر أو بحث */}
+            {(!filterDept && !searchQuery) ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="filter-outline" size={56} color="#bbb" />
+                <Text style={styles.emptyText}>اختر قسم أو ابحث لعرض المقررات</Text>
+              </View>
+            ) : (() => {
+              const filtered = courses.filter(c => {
                 if (searchQuery) {
                   const query = searchQuery.toLowerCase();
-                  if (!c.name?.toLowerCase().includes(query) && !c.code?.toLowerCase().includes(query)) {
-                    return false;
-                  }
+                  if (!c.name?.toLowerCase().includes(query) && !c.code?.toLowerCase().includes(query)) return false;
                 }
                 if (filterDept && c.department_id !== filterDept) return false;
                 return true;
-              })}
-              renderItem={renderCourse}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="book-outline" size={64} color="#ccc" />
-                  <Text style={styles.emptyText}>
-                    {searchQuery ? 'لا توجد نتائج للبحث' : 'لا توجد مقررات'}
-                  </Text>
-                </View>
-              }
-            />
+              });
+              const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+              const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+              return (
+                <>
+                  <View style={styles.pageInfo}>
+                    <Text style={styles.pageInfoText}>{filtered.length} مقرر</Text>
+                  </View>
+                  <FlatList
+                    data={paged}
+                    renderItem={renderCourse}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={styles.listContent}
+                    ListEmptyComponent={
+                      <View style={styles.emptyContainer}>
+                        <Ionicons name="book-outline" size={64} color="#ccc" />
+                        <Text style={styles.emptyText}>لا توجد نتائج</Text>
+                      </View>
+                    }
+                  />
+                  {totalPages > 1 && (
+                    <View style={styles.pagination} data-testid="pagination-controls">
+                      <TouchableOpacity
+                        style={[styles.pageBtn, currentPage <= 1 && styles.pageBtnDisabled]}
+                        onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                        disabled={currentPage <= 1}
+                      >
+                        <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+                      </TouchableOpacity>
+                      <Text style={styles.pageText}>{currentPage} / {totalPages}</Text>
+                      <TouchableOpacity
+                        style={[styles.pageBtn, currentPage >= totalPages && styles.pageBtnDisabled]}
+                        onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                        disabled={currentPage >= totalPages}
+                      >
+                        <Ionicons name="chevron-back" size={20} color={currentPage >= totalPages ? '#ccc' : '#1565c0'} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+                </>
+              );
+            })()}
           </>
         )}
       </KeyboardAvoidingView>
@@ -1483,5 +1515,41 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff8e1',
     borderWidth: 1,
     borderColor: '#ff9800',
+  },
+  pagination: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    gap: 16,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#eee',
+  },
+  pageBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e3f2fd',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnDisabled: {
+    backgroundColor: '#f5f5f5',
+  },
+  pageText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+  },
+  pageInfo: {
+    paddingHorizontal: 16,
+    paddingBottom: 4,
+  },
+  pageInfoText: {
+    fontSize: 12,
+    color: '#888',
+    fontWeight: '500',
   },
 });

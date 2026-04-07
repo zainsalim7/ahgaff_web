@@ -45,6 +45,98 @@ interface TeacherWorkload {
   };
 }
 
+const PAGE_SIZE_WL = 10;
+
+function TeacherList({ data, currentPage, setCurrentPage, styles }: { data: TeacherWorkload[]; currentPage: number; setCurrentPage: (fn: any) => void; styles: any }) {
+  const totalPages = Math.ceil(data.length / PAGE_SIZE_WL);
+  const pagedData = data.slice((currentPage - 1) * PAGE_SIZE_WL, currentPage * PAGE_SIZE_WL);
+  return (
+    <View>
+      <View style={{ marginBottom: 8 }}>
+        <Text style={{ fontSize: 12, color: '#888' }}>{data.length} معلم</Text>
+      </View>
+      {pagedData.map((teacher: TeacherWorkload, index: number) => (
+        <View key={index} style={styles.teacherCard}>
+          <View style={styles.teacherHeader}>
+            <View style={styles.teacherInfo}>
+              <Text style={styles.teacherName}>{teacher.teacher_name}</Text>
+              <Text style={styles.teacherId}>الرقم الوظيفي: {teacher.teacher_id || '-'}</Text>
+            </View>
+            <View style={[
+              styles.completionBadge,
+              teacher.summary.completion_rate >= 100 ? styles.completionGood : styles.completionWarn
+            ]}>
+              <Text style={styles.completionText}>{teacher.summary.completion_rate}%</Text>
+            </View>
+          </View>
+          <View style={styles.teacherStats}>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{teacher.summary.weekly_hours || 12}</Text>
+              <Text style={styles.statLabel}>نصاب أسبوعي</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{teacher.summary.required_hours}</Text>
+              <Text style={styles.statLabel}>مطلوب</Text>
+            </View>
+            <View style={styles.statBox}>
+              <Text style={styles.statValue}>{teacher.summary.total_actual_hours}</Text>
+              <Text style={styles.statLabel}>منفذ</Text>
+            </View>
+            <View style={[
+              styles.statBox,
+              teacher.summary.difference_hours >= 0 ? styles.extraBoxPositive : styles.extraBoxNegative
+            ]}>
+              <Text style={[
+                styles.statValue,
+                teacher.summary.difference_hours >= 0 ? styles.extraValuePositive : styles.extraValueNegative
+              ]}>
+                {teacher.summary.difference_hours >= 0 ? '+' : ''}{teacher.summary.difference_hours}
+              </Text>
+              <Text style={styles.statLabel}>الفرق</Text>
+            </View>
+          </View>
+          {teacher.courses.length > 0 && (
+            <View style={styles.coursesSection}>
+              <Text style={styles.coursesTitle}>المقررات ({teacher.courses.length})</Text>
+              {teacher.courses.map((course, cIndex) => (
+                <View key={cIndex} style={styles.courseRow}>
+                  <View style={styles.courseInfo}>
+                    <Text style={styles.courseName}>{course.course_name}</Text>
+                    <Text style={styles.courseCode}>{course.course_code}</Text>
+                  </View>
+                  <View style={styles.courseStats}>
+                    <Text style={styles.courseStatText}>{course.executed_lectures}/{course.scheduled_lectures} محاضرة</Text>
+                    <Text style={styles.courseStatText}>{course.actual_hours}/{course.scheduled_hours} ساعة</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      ))}
+      {totalPages > 1 && (
+        <View style={styles.paginationRow}>
+          <TouchableOpacity
+            style={[styles.pageBtn, currentPage <= 1 && styles.pageBtnDisabled]}
+            onPress={() => setCurrentPage((p: number) => Math.max(1, p - 1))}
+            disabled={currentPage <= 1}
+          >
+            <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+          </TouchableOpacity>
+          <Text style={styles.pageText}>{currentPage} / {totalPages}</Text>
+          <TouchableOpacity
+            style={[styles.pageBtn, currentPage >= totalPages && styles.pageBtnDisabled]}
+            onPress={() => setCurrentPage((p: number) => Math.min(totalPages, p + 1))}
+            disabled={currentPage >= totalPages}
+          >
+            <Ionicons name="chevron-back" size={20} color={currentPage >= totalPages ? '#ccc' : '#1565c0'} />
+          </TouchableOpacity>
+        </View>
+      )}
+    </View>
+  );
+}
+
 export default function TeacherWorkloadReport() {
   const router = useRouter();
   const { user } = useAuth();
@@ -60,6 +152,11 @@ export default function TeacherWorkloadReport() {
   const [endDate, setEndDate] = useState('');
   const [summary, setSummary] = useState<any>(null);
   const [exportingPDF, setExportingPDF] = useState(false);
+  const [filtersApplied, setFiltersApplied] = useState(false);
+
+  // Pagination
+  const PAGE_SIZE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
 
   const isTeacher = user?.role === 'teacher';
 
@@ -129,6 +226,12 @@ export default function TeacherWorkloadReport() {
         setDepartments(deptsRes.data);
       }
       
+      // لا نجلب التقرير حتى يختار المستخدم فلتر (للمدير فقط)
+      if (!isTeacher && !filtersApplied) {
+        setLoading(false);
+        return;
+      }
+
       // جلب التقرير
       const params: any = {};
       if (selectedTeacher) params.teacher_id = selectedTeacher;
@@ -146,14 +249,16 @@ export default function TeacherWorkloadReport() {
       
       setData(reportData);
       setSummary(reportRes.data.summary);
+      setCurrentPage(1);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedTeacher, selectedDept, startDate, endDate]);
+  }, [selectedTeacher, selectedDept, startDate, endDate, filtersApplied]);
 
+  // تحميل القوائم فقط عند أول مرة
   useEffect(() => {
     fetchData();
   }, [fetchData]);
@@ -170,6 +275,27 @@ export default function TeacherWorkloadReport() {
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(lastDay.toISOString().split('T')[0]);
+    setFiltersApplied(true);
+  };
+
+  // تحديد تواريخ الشهر السابق
+  const setPreviousMonth = () => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+    setStartDate(firstDay.toISOString().split('T')[0]);
+    setEndDate(lastDay.toISOString().split('T')[0]);
+    setFiltersApplied(true);
+  };
+
+  // تحديد تواريخ الشهر الأسبق (قبل شهرين)
+  const setTwoMonthsAgo = () => {
+    const now = new Date();
+    const firstDay = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+    const lastDay = new Date(now.getFullYear(), now.getMonth() - 1, 0);
+    setStartDate(firstDay.toISOString().split('T')[0]);
+    setEndDate(lastDay.toISOString().split('T')[0]);
+    setFiltersApplied(true);
   };
 
   // تحديد تواريخ الأسبوع الحالي
@@ -182,6 +308,7 @@ export default function TeacherWorkloadReport() {
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     setStartDate(startOfWeek.toISOString().split('T')[0]);
     setEndDate(endOfWeek.toISOString().split('T')[0]);
+    setFiltersApplied(true);
   };
 
   if (loading) {
@@ -246,7 +373,7 @@ export default function TeacherWorkloadReport() {
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={selectedDept}
-                onValueChange={setSelectedDept}
+                onValueChange={(v) => { setSelectedDept(v); if (v) setFiltersApplied(true); }}
                 style={styles.picker}
               >
                 <Picker.Item label="جميع الأقسام" value="" />
@@ -263,7 +390,7 @@ export default function TeacherWorkloadReport() {
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={selectedTeacher}
-                onValueChange={setSelectedTeacher}
+                onValueChange={(v) => { setSelectedTeacher(v); if (v) setFiltersApplied(true); }}
                 style={styles.picker}
               >
                 <Picker.Item label="جميع المدرسين" value="" />
@@ -276,20 +403,59 @@ export default function TeacherWorkloadReport() {
 
           {/* أزرار الفترة */}
           <View style={styles.periodBtns}>
-            <TouchableOpacity style={styles.periodBtn} onPress={setCurrentWeek}>
+            <TouchableOpacity style={styles.periodBtn} onPress={setCurrentWeek} data-testid="period-this-week">
               <Ionicons name="calendar-outline" size={16} color="#1565c0" />
               <Text style={styles.periodBtnText}>هذا الأسبوع</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.periodBtn} onPress={setCurrentMonth}>
+            <TouchableOpacity style={styles.periodBtn} onPress={setCurrentMonth} data-testid="period-this-month">
               <Ionicons name="calendar" size={16} color="#1565c0" />
               <Text style={styles.periodBtnText}>هذا الشهر</Text>
             </TouchableOpacity>
+          </View>
+          <View style={[styles.periodBtns, { marginTop: 8 }]}>
+            <TouchableOpacity style={styles.periodBtn} onPress={setPreviousMonth} data-testid="period-prev-month">
+              <Ionicons name="arrow-back" size={16} color="#1565c0" />
+              <Text style={styles.periodBtnText}>الشهر السابق</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.periodBtn} onPress={setTwoMonthsAgo} data-testid="period-two-months-ago">
+              <Ionicons name="arrow-back" size={16} color="#1565c0" />
+              <Text style={styles.periodBtnText}>الشهر الأسبق</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* تاريخ مخصص */}
+          {Platform.OS === 'web' && (
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterLabel}>من تاريخ</Text>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e: any) => { setStartDate(e.target.value); setFiltersApplied(true); }}
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+                  data-testid="custom-start-date"
+                />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.filterLabel}>إلى تاريخ</Text>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e: any) => { setEndDate(e.target.value); setFiltersApplied(true); }}
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+                  data-testid="custom-end-date"
+                />
+              </View>
+            </View>
+          )}
+
+          <View style={[styles.periodBtns, { marginTop: 12 }]}>
             <TouchableOpacity 
-              style={styles.periodBtn} 
-              onPress={() => { setStartDate(''); setEndDate(''); }}
+              style={[styles.periodBtn, { backgroundColor: '#ffebee' }]} 
+              onPress={() => { setStartDate(''); setEndDate(''); setSelectedTeacher(''); setSelectedDept(''); setFiltersApplied(false); setData([]); setSummary(null); }}
             >
-              <Ionicons name="refresh" size={16} color="#1565c0" />
-              <Text style={styles.periodBtnText}>إعادة تعيين</Text>
+              <Ionicons name="refresh" size={16} color="#c62828" />
+              <Text style={[styles.periodBtnText, { color: '#c62828' }]}>مسح الفلاتر</Text>
             </TouchableOpacity>
           </View>
 
@@ -330,79 +496,18 @@ export default function TeacherWorkloadReport() {
         )}
 
         {/* قائمة المدرسين */}
-        {data.length === 0 ? (
+        {!filtersApplied && !isTeacher ? (
+          <View style={styles.emptyCard}>
+            <Ionicons name="filter-outline" size={56} color="#bbb" />
+            <Text style={styles.emptyText}>اختر فترة أو قسم أو معلم لعرض النصاب</Text>
+          </View>
+        ) : data.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="document-text-outline" size={48} color="#ccc" />
             <Text style={styles.emptyText}>لا توجد بيانات</Text>
           </View>
         ) : (
-          data.map((teacher, index) => (
-            <View key={index} style={styles.teacherCard}>
-              <View style={styles.teacherHeader}>
-                <View style={styles.teacherInfo}>
-                  <Text style={styles.teacherName}>{teacher.teacher_name}</Text>
-                  <Text style={styles.teacherId}>الرقم الوظيفي: {teacher.teacher_id || '-'}</Text>
-                </View>
-                <View style={[
-                  styles.completionBadge,
-                  teacher.summary.completion_rate >= 100 ? styles.completionGood : styles.completionWarn
-                ]}>
-                  <Text style={styles.completionText}>{teacher.summary.completion_rate}%</Text>
-                </View>
-              </View>
-
-              {/* إحصائيات المدرس */}
-              <View style={styles.teacherStats}>
-                <View style={styles.statBox}>
-                  <Text style={styles.statValue}>{teacher.summary.weekly_hours || 12}</Text>
-                  <Text style={styles.statLabel}>نصاب أسبوعي</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={styles.statValue}>{teacher.summary.required_hours}</Text>
-                  <Text style={styles.statLabel}>مطلوب</Text>
-                </View>
-                <View style={styles.statBox}>
-                  <Text style={styles.statValue}>{teacher.summary.total_actual_hours}</Text>
-                  <Text style={styles.statLabel}>منفذ</Text>
-                </View>
-                <View style={[
-                  styles.statBox,
-                  teacher.summary.difference_hours >= 0 ? styles.extraBoxPositive : styles.extraBoxNegative
-                ]}>
-                  <Text style={[
-                    styles.statValue,
-                    teacher.summary.difference_hours >= 0 ? styles.extraValuePositive : styles.extraValueNegative
-                  ]}>
-                    {teacher.summary.difference_hours >= 0 ? '+' : ''}{teacher.summary.difference_hours}
-                  </Text>
-                  <Text style={styles.statLabel}>الفرق</Text>
-                </View>
-              </View>
-
-              {/* تفاصيل المقررات */}
-              {teacher.courses.length > 0 && (
-                <View style={styles.coursesSection}>
-                  <Text style={styles.coursesTitle}>المقررات ({teacher.courses.length})</Text>
-                  {teacher.courses.map((course, cIndex) => (
-                    <View key={cIndex} style={styles.courseRow}>
-                      <View style={styles.courseInfo}>
-                        <Text style={styles.courseName}>{course.course_name}</Text>
-                        <Text style={styles.courseCode}>{course.course_code}</Text>
-                      </View>
-                      <View style={styles.courseStats}>
-                        <Text style={styles.courseStatText}>
-                          {course.executed_lectures}/{course.scheduled_lectures} محاضرة
-                        </Text>
-                        <Text style={styles.courseStatText}>
-                          {course.actual_hours}/{course.scheduled_hours} ساعة
-                        </Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              )}
-            </View>
-          ))
+          <TeacherList data={data} currentPage={currentPage} setCurrentPage={setCurrentPage} styles={styles} />
         )}
       </ScrollView>
     </SafeAreaView>
@@ -693,5 +798,28 @@ const styles = StyleSheet.create({
   courseStatText: {
     fontSize: 11,
     color: '#666',
+  },
+  paginationRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 16,
+    gap: 16,
+  },
+  pageBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e3f2fd',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  pageBtnDisabled: {
+    backgroundColor: '#f5f5f5',
+  },
+  pageText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
   },
 });
