@@ -4373,8 +4373,16 @@ async def get_today_lectures(current_user: dict = Depends(get_current_user)):
 
 
 @api_router.get("/lectures/all-schedule")
-async def get_all_schedule_lectures(current_user: dict = Depends(get_current_user)):
-    """جلب كل المحاضرات مع بيانات المقررات - للجدول الأسبوعي (طلب واحد بدل عشرات)"""
+async def get_all_schedule_lectures(
+    date: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """جلب محاضرات يوم محدد فقط - للجدول الأسبوعي"""
+    
+    # إذا لم يُحدد تاريخ، نستخدم اليوم
+    if not date:
+        now = get_yemen_time()
+        date = now.strftime("%Y-%m-%d")
     
     course_query = {"is_active": True}
     scope_filter = await get_user_scope_filter(current_user)
@@ -4393,22 +4401,28 @@ async def get_all_schedule_lectures(current_user: dict = Depends(get_current_use
     course_map = {str(c["_id"]): c for c in courses}
     
     if not course_ids:
-        return []
+        return {"lectures": [], "date": date}
     
-    # جلب كل المحاضرات دفعة واحدة
+    # جلب محاضرات اليوم المحدد فقط
     lectures = await db.lectures.find({
-        "course_id": {"$in": course_ids}
-    }).sort("date", 1).to_list(5000)
+        "course_id": {"$in": course_ids},
+        "date": date
+    }).sort("start_time", 1).to_list(200)
+    
+    # جلب أسماء المعلمين دفعة واحدة
+    teacher_ids = set()
+    for c in courses:
+        if c.get("teacher_id") and ObjectId.is_valid(str(c["teacher_id"])):
+            teacher_ids.add(str(c["teacher_id"]))
+    
+    teacher_map = {}
+    if teacher_ids:
+        teachers = await db.teachers.find({"_id": {"$in": [ObjectId(tid) for tid in teacher_ids]}}).to_list(200)
+        teacher_map = {str(t["_id"]): t.get("full_name", "") for t in teachers}
     
     result = []
     for lecture in lectures:
         course = course_map.get(lecture["course_id"], {})
-        teacher_name = ""
-        if course.get("teacher_id"):
-            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])}) if ObjectId.is_valid(course["teacher_id"]) else None
-            if teacher:
-                teacher_name = teacher.get("full_name", "")
-        
         result.append({
             "id": str(lecture["_id"]),
             "course_id": lecture["course_id"],
@@ -4421,11 +4435,19 @@ async def get_all_schedule_lectures(current_user: dict = Depends(get_current_use
             "end_time": lecture["end_time"],
             "room": lecture.get("room", ""),
             "status": lecture.get("status", LectureStatus.SCHEDULED),
-            "teacher_name": teacher_name,
+            "teacher_name": teacher_map.get(str(course.get("teacher_id", "")), ""),
             "created_at": lecture.get("created_at", "")
         })
     
-    return result
+    # جلب الأيام التي فيها محاضرات (للرزنامة)
+    all_dates = await db.lectures.distinct("date", {"course_id": {"$in": course_ids}})
+    
+    return {
+        "lectures": result,
+        "date": date,
+        "total": len(result),
+        "lecture_dates": sorted(all_dates) if all_dates else []
+    }
 
 
 @api_router.get("/lectures/month/{year}/{month}")
