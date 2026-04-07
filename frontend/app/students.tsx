@@ -90,6 +90,10 @@ export default function StudentsScreen() {
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   
+  // Pagination
+  const PAGE_SIZE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+  
   // تحديد متعدد للحذف
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -702,7 +706,7 @@ export default function StudentsScreen() {
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={selectedDeptFilter}
-                onValueChange={setSelectedDeptFilter}
+                onValueChange={(v) => { setSelectedDeptFilter(v); setCurrentPage(1); }}
                 style={styles.picker}
               >
                 <Picker.Item label="الكل" value="" />
@@ -718,7 +722,7 @@ export default function StudentsScreen() {
             <View style={styles.pickerContainer}>
               <Picker
                 selectedValue={selectedLevelFilter}
-                onValueChange={setSelectedLevelFilter}
+                onValueChange={(v) => { setSelectedLevelFilter(v); setCurrentPage(1); }}
                 style={styles.picker}
               >
                 <Picker.Item label="الكل" value="" />
@@ -805,35 +809,64 @@ export default function StudentsScreen() {
         )}
 
         {/* عدد الطلاب + زر التحديد */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
-          <Text style={styles.countText}>عدد الطلاب: {filteredStudents.length} من {students.length}</Text>
-          {canManageStudents && !selectionMode && (
-            <TouchableOpacity 
-              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
-              onPress={() => setSelectionMode(true)}
-              data-testid="enter-selection-mode-btn"
-            >
-              <Ionicons name="checkbox-outline" size={18} color="#1565c0" />
-              <Text style={{ color: '#1565c0', marginLeft: 6, fontWeight: '600', fontSize: 13 }}>تحديد</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* قائمة الطلاب */}
-        <FlatList
-          data={filteredStudents}
-          renderItem={renderStudent}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-          ListEmptyComponent={
-            <View style={styles.emptyState}>
-              <Ionicons name="people-outline" size={64} color="#ccc" />
-              <Text style={styles.emptyText}>لا يوجد طلاب</Text>
-              <Text style={styles.emptySubtext}>يمكنك إضافة الطلاب من صفحة إدارة المقرر</Text>
+        {(!selectedDeptFilter && !selectedLevelFilter && !searchQuery) ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="filter-outline" size={56} color="#bbb" />
+            <Text style={styles.emptyText}>اختر قسم أو مستوى أو ابحث لعرض الطلاب</Text>
+          </View>
+        ) : (
+          <>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
+              <Text style={styles.countText}>عدد الطلاب: {filteredStudents.length} من {students.length}</Text>
+              {canManageStudents && !selectionMode && (
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                  onPress={() => setSelectionMode(true)}
+                  data-testid="enter-selection-mode-btn"
+                >
+                  <Ionicons name="checkbox-outline" size={18} color="#1565c0" />
+                  <Text style={{ color: '#1565c0', marginLeft: 6, fontWeight: '600', fontSize: 13 }}>تحديد</Text>
+                </TouchableOpacity>
+              )}
             </View>
-          }
-        />
+
+            {/* قائمة الطلاب */}
+            <FlatList
+              data={filteredStudents.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)}
+              renderItem={renderStudent}
+              keyExtractor={item => item.id}
+              contentContainerStyle={styles.listContainer}
+              showsVerticalScrollIndicator={false}
+              ListEmptyComponent={
+                <View style={styles.emptyState}>
+                  <Ionicons name="people-outline" size={64} color="#ccc" />
+                  <Text style={styles.emptyText}>لا يوجد طلاب</Text>
+                </View>
+              }
+            />
+
+            {/* ترقيم الصفحات */}
+            {Math.ceil(filteredStudents.length / PAGE_SIZE) > 1 && (
+              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, gap: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }}>
+                <TouchableOpacity
+                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage <= 1 ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                  onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                >
+                  <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+                </TouchableOpacity>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{currentPage} / {Math.ceil(filteredStudents.length / PAGE_SIZE)}</Text>
+                <TouchableOpacity
+                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage >= Math.ceil(filteredStudents.length / PAGE_SIZE) ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                  onPress={() => setCurrentPage(p => Math.min(Math.ceil(filteredStudents.length / PAGE_SIZE), p + 1))}
+                  disabled={currentPage >= Math.ceil(filteredStudents.length / PAGE_SIZE)}
+                >
+                  <Ionicons name="chevron-back" size={20} color={currentPage >= Math.ceil(filteredStudents.length / PAGE_SIZE) ? '#ccc' : '#1565c0'} />
+                </TouchableOpacity>
+              </View>
+            )}
+          </>
+        )}
       </View>
 
       {/* نافذة تفاصيل الطالب */}
