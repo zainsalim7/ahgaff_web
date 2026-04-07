@@ -37,7 +37,7 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.RECORD_ATTENDANCE
   ], teacherOnly: true },
   
-  { id: 'my-courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
+  { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
     PERMISSIONS.VIEW_ATTENDANCE, PERMISSIONS.MANAGE_COURSES
   ]},
   
@@ -51,10 +51,6 @@ const MENU_ITEMS: MenuItem[] = [
   
   { id: 'teachers', label: 'إدارة المعلمين', icon: 'school', path: '/manage-teachers', permissions: [
     PERMISSIONS.MANAGE_TEACHERS
-  ]},
-  
-  { id: 'courses', label: 'إدارة المقررات', icon: 'library', path: '/courses', permissions: [
-    PERMISSIONS.MANAGE_COURSES
   ]},
   
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [
