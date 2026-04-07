@@ -426,6 +426,10 @@ export default function ManageTeachersScreen() {
     return dept?.name || 'غير محدد';
   };
 
+  // Pagination
+  const PAGE_SIZE = 10;
+  const [currentPage, setCurrentPage] = useState(1);
+
   // فلترة المعلمين
   let filteredTeachers = teachers;
   if (filterDepartment) {
@@ -440,6 +444,8 @@ export default function ManageTeachersScreen() {
       getTeacherId(t).includes(searchQuery)
     );
   }
+
+  const hasActiveFilter = !!filterDepartment || !!searchQuery;
 
   const renderTeacher = ({ item }: { item: Teacher }) => {
     const hasAccount = !!item.user_id;
@@ -720,7 +726,7 @@ export default function ManageTeachersScreen() {
                 style={styles.searchInput}
                 placeholder="بحث بالاسم أو الرقم الوظيفي..."
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(v) => { setSearchQuery(v); setCurrentPage(1); }}
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={() => setSearchQuery('')}>
@@ -737,7 +743,7 @@ export default function ManageTeachersScreen() {
                   <View style={styles.pickerWrapper}>
                     <Picker
                       selectedValue={filterDepartment}
-                      onValueChange={(value) => setFilterDepartment(value)}
+                      onValueChange={(value) => { setFilterDepartment(value); setCurrentPage(1); }}
                       style={styles.picker}
                     >
                       <Picker.Item label={`الكل (${teachers.length})`} value="" />
@@ -755,25 +761,55 @@ export default function ManageTeachersScreen() {
             </View>
 
             {/* عداد المعلمين */}
-            <View style={styles.countContainer}>
-              <Text style={styles.countText}>
-                عدد المعلمين: {filteredTeachers.length} من {teachers.length}
-              </Text>
-            </View>
-
-            {/* قائمة المعلمين */}
-            <FlatList
-              data={filteredTeachers}
-              renderItem={renderTeacher}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-              ListEmptyComponent={
-                <View style={styles.emptyContainer}>
-                  <Ionicons name="people-outline" size={64} color="#ccc" />
-                  <Text style={styles.emptyText}>لا يوجد معلمين</Text>
+            {!hasActiveFilter ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="filter-outline" size={56} color="#bbb" />
+                <Text style={styles.emptyText}>اختر قسم أو ابحث لعرض المعلمين</Text>
+              </View>
+            ) : (
+              <>
+                <View style={styles.countContainer}>
+                  <Text style={styles.countText}>
+                    عدد المعلمين: {filteredTeachers.length} من {teachers.length}
+                  </Text>
                 </View>
-              }
-            />
+
+                {/* قائمة المعلمين */}
+                <FlatList
+                  data={filteredTeachers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)}
+                  renderItem={renderTeacher}
+                  keyExtractor={(item) => item.id}
+                  contentContainerStyle={styles.listContent}
+                  ListEmptyComponent={
+                    <View style={styles.emptyContainer}>
+                      <Ionicons name="people-outline" size={64} color="#ccc" />
+                      <Text style={styles.emptyText}>لا يوجد معلمين</Text>
+                    </View>
+                  }
+                />
+
+                {/* ترقيم الصفحات */}
+                {Math.ceil(filteredTeachers.length / PAGE_SIZE) > 1 && (
+                  <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, gap: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }}>
+                    <TouchableOpacity
+                      style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage <= 1 ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                      onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage <= 1}
+                    >
+                      <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+                    </TouchableOpacity>
+                    <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{currentPage} / {Math.ceil(filteredTeachers.length / PAGE_SIZE)}</Text>
+                    <TouchableOpacity
+                      style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage >= Math.ceil(filteredTeachers.length / PAGE_SIZE) ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                      onPress={() => setCurrentPage(p => Math.min(Math.ceil(filteredTeachers.length / PAGE_SIZE), p + 1))}
+                      disabled={currentPage >= Math.ceil(filteredTeachers.length / PAGE_SIZE)}
+                    >
+                      <Ionicons name="chevron-back" size={20} color={currentPage >= Math.ceil(filteredTeachers.length / PAGE_SIZE) ? '#ccc' : '#1565c0'} />
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
           </>
         )}
       </KeyboardAvoidingView>
