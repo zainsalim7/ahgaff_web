@@ -4439,14 +4439,10 @@ async def get_all_schedule_lectures(
             "created_at": lecture.get("created_at", "")
         })
     
-    # جلب الأيام التي فيها محاضرات (للرزنامة)
-    all_dates = await db.lectures.distinct("date", {"course_id": {"$in": course_ids}})
-    
     return {
         "lectures": result,
         "date": date,
         "total": len(result),
-        "lecture_dates": sorted(all_dates) if all_dates else []
     }
 
 

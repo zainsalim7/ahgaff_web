@@ -4,31 +4,28 @@ import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
   TouchableOpacity,
   Alert,
   FlatList,
-  ActivityIndicator,
   Platform,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { coursesAPI, departmentsAPI, settingsAPI, lecturesAPI } from '../src/services/api';
+import { settingsAPI, lecturesAPI } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
-import { Course, Department } from '../src/types';
 import api from '../src/services/api';
 
-const DAYS = [
-  { id: 'saturday', name: 'السبت', short: 'س', num: 6 },
-  { id: 'sunday', name: 'الأحد', short: 'ح', num: 0 },
-  { id: 'monday', name: 'الإثنين', short: 'ن', num: 1 },
-  { id: 'tuesday', name: 'الثلاثاء', short: 'ث', num: 2 },
-  { id: 'wednesday', name: 'الأربعاء', short: 'ر', num: 3 },
-  { id: 'thursday', name: 'الخميس', short: 'خ', num: 4 },
-  { id: 'friday', name: 'الجمعة', short: 'ج', num: 5 },
-];
+const DAYS_AR: Record<number, string> = {
+  0: 'الأحد',
+  1: 'الإثنين',
+  2: 'الثلاثاء',
+  3: 'الأربعاء',
+  4: 'الخميس',
+  5: 'الجمعة',
+  6: 'السبت',
+};
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; icon: string }> = {
   scheduled: { label: 'مجدولة', color: '#1565c0', bg: '#e3f2fd', icon: 'time-outline' },
@@ -39,101 +36,92 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string; 
 
 const ACCENT_COLORS = ['#1565c0', '#00897b', '#6a1b9a', '#ef6c00', '#c62828', '#2e7d32', '#ad1457'];
 
+function formatDateArabic(dateStr: string): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  const dayName = DAYS_AR[d.getDay()] || '';
+  const day = d.getDate();
+  const months = ['يناير','فبراير','مارس','أبريل','مايو','يونيو','يوليو','أغسطس','سبتمبر','أكتوبر','نوفمبر','ديسمبر'];
+  const month = months[d.getMonth()];
+  const year = d.getFullYear();
+  return `${dayName}، ${day} ${month} ${year}`;
+}
+
+function getToday(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function shiftDate(dateStr: string, days: number): string {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
+}
+
 export default function ScheduleScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
-  const [courses, setCourses] = useState<Course[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
   const [lectures, setLectures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedDay, setSelectedDay] = useState(() => {
-    const todayNum = new Date().getDay();
-    const todayDay = DAYS.find(d => d.num === todayNum);
-    return todayDay?.id || 'saturday';
-  });
+  const [selectedDate, setSelectedDate] = useState(getToday);
   const [semesterSettings, setSemesterSettings] = useState<any>(null);
-  const [todayLectures, setTodayLectures] = useState<any[]>([]);
 
-  const fetchData = useCallback(async () => {
+  const fetchLectures = useCallback(async (date: string) => {
     try {
-      const [coursesRes, deptsRes, settingsRes, allLecturesRes] = await Promise.all([
-        coursesAPI.getAll(),
-        departmentsAPI.getAll(),
-        settingsAPI.get(),
-        api.get('/lectures/all-schedule'),
-      ]);
-      setCourses(coursesRes.data);
-      setDepartments(deptsRes.data);
-      
-      let semStart = settingsRes.data.semester_start_date;
-      let semEnd = settingsRes.data.semester_end_date;
-      let semName = settingsRes.data.current_semester;
-      
-      if (!semStart || !semEnd) {
-        try {
-          const currentSemRes = await api.get('/semesters/current');
-          if (currentSemRes.data) {
-            semStart = semStart || currentSemRes.data.start_date;
-            semEnd = semEnd || currentSemRes.data.end_date;
-            semName = semName || currentSemRes.data.name;
-          }
-        } catch (e) {}
-      }
-      
-      setSemesterSettings({ semester_start_date: semStart, semester_end_date: semEnd, current_semester: semName });
-      
-      // محاضرات اليوم من البيانات المُحمّلة
-      const today = new Date().toISOString().split('T')[0];
-      const todayLects = (allLecturesRes.data || []).filter((l: any) => l.date === today);
-      setTodayLectures(todayLects);
-      
-      // كل المحاضرات مع بيانات المقررات (طلب واحد بدل عشرات!)
-      const courseMap: Record<string, any> = {};
-      coursesRes.data.forEach((c: any) => { courseMap[c.id] = c; });
-      
-      const allLectures = (allLecturesRes.data || []).map((l: any) => ({
-        ...l,
-        course: courseMap[l.course_id] || { name: l.course_name, code: l.course_code, section: l.section }
-      }));
-      setLectures(allLectures);
+      setLoading(true);
+      const res = await api.get(`/lectures/all-schedule?date=${date}`);
+      setLectures(res.data?.lectures || []);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error fetching lectures:', error);
+      setLectures([]);
     } finally {
       setLoading(false);
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  // Fetch semester settings once
+  useEffect(() => {
+    (async () => {
+      try {
+        const settingsRes = await settingsAPI.get();
+        let semStart = settingsRes.data.semester_start_date;
+        let semEnd = settingsRes.data.semester_end_date;
+        let semName = settingsRes.data.current_semester;
+        if (!semStart || !semEnd) {
+          try {
+            const currentSemRes = await api.get('/semesters/current');
+            if (currentSemRes.data) {
+              semStart = semStart || currentSemRes.data.start_date;
+              semEnd = semEnd || currentSemRes.data.end_date;
+              semName = semName || currentSemRes.data.name;
+            }
+          } catch {}
+        }
+        setSemesterSettings({ semester_start_date: semStart, semester_end_date: semEnd, current_semester: semName });
+      } catch {}
+    })();
+  }, []);
 
-  const getCourseName = (courseId: string) => courses.find(c => c.id === courseId)?.name || 'غير محدد';
-  const getCourseColor = (courseId: string) => {
-    const idx = courses.findIndex(c => c.id === courseId);
-    return ACCENT_COLORS[idx % ACCENT_COLORS.length];
-  };
+  useEffect(() => {
+    fetchLectures(selectedDate);
+  }, [selectedDate, fetchLectures]);
 
-  const getDayLectures = () => {
-    const day = DAYS.find(d => d.id === selectedDay);
-    if (!day) return [];
-    return lectures
-      .filter(l => { const d = new Date(l.date); return d.getDay() === day.num; })
-      .sort((a, b) => (a.start_time || '').localeCompare(b.start_time || ''));
-  };
-
-  const getDayLectureCount = (dayId: string) => {
-    const day = DAYS.find(d => d.id === dayId);
-    if (!day) return 0;
-    return lectures.filter(l => new Date(l.date).getDay() === day.num).length;
-  };
+  const isToday = selectedDate === getToday();
 
   const handleDeleteLecture = async (lectureId: string) => {
     if (Platform.OS === 'web') {
       if (!window.confirm('هل أنت متأكد من حذف هذه المحاضرة؟')) return;
-      try { await lecturesAPI.delete(lectureId); fetchData(); } catch { alert('فشل في حذف المحاضرة'); }
+      try { await lecturesAPI.delete(lectureId); fetchLectures(selectedDate); } catch { alert('فشل في حذف المحاضرة'); }
     } else {
       Alert.alert('حذف المحاضرة', 'هل أنت متأكد؟', [
         { text: 'إلغاء', style: 'cancel' },
         { text: 'حذف', style: 'destructive', onPress: async () => {
-          try { await lecturesAPI.delete(lectureId); fetchData(); } catch { Alert.alert('خطأ', 'فشل في الحذف'); }
+          try { await lecturesAPI.delete(lectureId); fetchLectures(selectedDate); } catch { Alert.alert('خطأ', 'فشل في الحذف'); }
         }},
       ]);
     }
@@ -142,104 +130,216 @@ export default function ScheduleScreen() {
   const handleCancelLecture = async (lectureId: string) => {
     if (Platform.OS === 'web') {
       if (!window.confirm('هل أنت متأكد من إلغاء هذه المحاضرة؟')) return;
-      try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchData(); } catch { alert('فشل في الإلغاء'); }
+      try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchLectures(selectedDate); } catch { alert('فشل في الإلغاء'); }
     } else {
       Alert.alert('إلغاء المحاضرة', 'هل أنت متأكد؟', [
         { text: 'تراجع', style: 'cancel' },
         { text: 'إلغاء المحاضرة', style: 'destructive', onPress: async () => {
-          try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchData(); } catch { Alert.alert('خطأ', 'فشل'); }
+          try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchLectures(selectedDate); } catch { Alert.alert('خطأ', 'فشل'); }
         }},
       ]);
     }
   };
 
-  if (loading) return <LoadingScreen />;
+  const getCourseColor = (courseId: string) => {
+    let hash = 0;
+    for (let i = 0; i < courseId.length; i++) hash = courseId.charCodeAt(i) + ((hash << 5) - hash);
+    return ACCENT_COLORS[Math.abs(hash) % ACCENT_COLORS.length];
+  };
 
-  const dayLectures = getDayLectures();
-  const todayNum = new Date().getDay();
+  const renderLectureCard = ({ item, index }: { item: any; index: number }) => {
+    const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
+    const courseColor = getCourseColor(item.course_id);
+    return (
+      <View style={s.lectureRow} data-testid={`lecture-card-${item.id}`}>
+        <View style={s.timeline}>
+          <View style={[s.timelineDot, { backgroundColor: courseColor }]} />
+          {index < lectures.length - 1 && <View style={s.timelineLine} />}
+        </View>
+        <View style={s.card}>
+          <View style={[s.cardBorder, { backgroundColor: courseColor }]} />
+          <View style={s.cardContent}>
+            <View style={s.cardTopRow}>
+              <View style={s.cardTimeBox}>
+                <Ionicons name="time-outline" size={14} color={courseColor} />
+                <Text style={[s.cardTime, { color: courseColor }]}>
+                  {item.start_time} - {item.end_time}
+                </Text>
+              </View>
+              <View style={[s.cardStatusBadge, { backgroundColor: st.bg }]}>
+                <Text style={[s.cardStatusText, { color: st.color }]}>{st.label}</Text>
+              </View>
+            </View>
+            <Text style={s.cardTitle}>{item.course_name}{item.section ? ` (${item.section})` : ''}</Text>
+            <View style={s.cardDetailsRow}>
+              {item.teacher_name ? (
+                <View style={s.cardDetail}>
+                  <Ionicons name="person-outline" size={13} color="#888" />
+                  <Text style={s.cardDetailText}>{item.teacher_name}</Text>
+                </View>
+              ) : null}
+              {item.room ? (
+                <View style={s.cardDetail}>
+                  <Ionicons name="location-outline" size={13} color="#888" />
+                  <Text style={s.cardDetailText}>{item.room}</Text>
+                </View>
+              ) : null}
+              {item.course_code ? (
+                <View style={s.cardDetail}>
+                  <Ionicons name="code-outline" size={13} color="#888" />
+                  <Text style={s.cardDetailText}>{item.course_code}</Text>
+                </View>
+              ) : null}
+            </View>
+            {(user?.role === 'admin' || user?.permissions?.includes('manage_lectures') || user?.permissions?.includes('edit_lectures')) && (
+              <View style={s.cardActions}>
+                <TouchableOpacity
+                  style={s.cardActionBtn}
+                  onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id, courseName: item.course_name } })}
+                  data-testid={`view-attendance-${item.id}`}
+                >
+                  <Ionicons name="eye-outline" size={16} color="#1565c0" />
+                  <Text style={[s.cardActionText, { color: '#1565c0' }]}>عرض</Text>
+                </TouchableOpacity>
+                {item.status !== 'cancelled' && (
+                  <TouchableOpacity
+                    style={s.cardActionBtn}
+                    onPress={() => handleCancelLecture(item.id)}
+                    data-testid={`cancel-lecture-${item.id}`}
+                  >
+                    <Ionicons name="close-circle-outline" size={16} color="#e65100" />
+                    <Text style={[s.cardActionText, { color: '#e65100' }]}>إلغاء</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity
+                  style={s.cardActionBtn}
+                  onPress={() => handleDeleteLecture(item.id)}
+                  data-testid={`delete-lecture-${item.id}`}
+                >
+                  <Ionicons name="trash-outline" size={16} color="#c62828" />
+                  <Text style={[s.cardActionText, { color: '#c62828' }]}>حذف</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        </View>
+      </View>
+    );
+  };
 
-  // ===== واجهة المعلم: محاضرات اليوم =====
+  // ===== Teacher View =====
   if (user?.role === 'teacher') {
-    const todayDate = new Date().toLocaleDateString('ar-SA', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
     return (
       <SafeAreaView style={s.container} edges={['bottom']}>
         <View style={s.header}>
           <TouchableOpacity onPress={() => goBack()} style={s.backBtn}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
-          <Text style={s.headerTitle}>محاضرات اليوم</Text>
+          <Text style={s.headerTitle}>جدول المحاضرات</Text>
           <View style={{ width: 40 }} />
         </View>
-        <View style={s.teacherDateCard}>
-          <View style={s.teacherDateIcon}><Ionicons name="today" size={22} color="#fff" /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={s.teacherDateLabel}>اليوم</Text>
-            <Text style={s.teacherDateValue}>{todayDate}</Text>
+
+        {/* Date Navigation */}
+        <View style={s.dateNav} data-testid="date-navigation">
+          <TouchableOpacity onPress={() => setSelectedDate(shiftDate(selectedDate, 1))} style={s.dateNavArrow} data-testid="next-day-btn">
+            <Ionicons name="chevron-forward" size={22} color="#1a237e" />
+          </TouchableOpacity>
+
+          <View style={s.dateNavCenter}>
+            <Text style={s.dateNavDay}>{DAYS_AR[new Date(selectedDate + 'T00:00:00').getDay()]}</Text>
+            <Text style={s.dateNavDate}>{selectedDate}</Text>
+            {Platform.OS === 'web' && (
+              <input
+                type="date"
+                value={selectedDate}
+                onChange={(e: any) => setSelectedDate(e.target.value)}
+                style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+                data-testid="date-picker-input"
+              />
+            )}
           </View>
-          <View style={s.teacherCountBadge}>
-            <Text style={s.teacherCountText}>{todayLectures.length}</Text>
-            <Text style={s.teacherCountLabel}>محاضرة</Text>
+
+          <TouchableOpacity onPress={() => setSelectedDate(shiftDate(selectedDate, -1))} style={s.dateNavArrow} data-testid="prev-day-btn">
+            <Ionicons name="chevron-back" size={22} color="#1a237e" />
+          </TouchableOpacity>
+        </View>
+
+        {!isToday && (
+          <TouchableOpacity style={s.todayBtn} onPress={() => setSelectedDate(getToday())} data-testid="go-today-btn">
+            <Ionicons name="today-outline" size={14} color="#1565c0" />
+            <Text style={s.todayBtnText}>العودة لليوم</Text>
+          </TouchableOpacity>
+        )}
+
+        <View style={s.countBadgeRow}>
+          <View style={s.countBadge}>
+            <Text style={s.countBadgeNum}>{lectures.length}</Text>
+            <Text style={s.countBadgeLabel}>محاضرة</Text>
           </View>
         </View>
-        <FlatList
-          data={todayLectures}
-          keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 16, paddingTop: 0 }}
-          renderItem={({ item }) => {
-            const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
-            return (
-              <TouchableOpacity
-                style={s.teacherCard}
-                onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id } })}
-                data-testid={`teacher-lecture-${item.id}`}
-              >
-                <View style={[s.teacherCardAccent, { backgroundColor: st.color }]} />
-                <View style={s.teacherCardTime}>
-                  <Text style={s.teacherCardTimeStart}>{item.start_time}</Text>
-                  <Ionicons name="arrow-down" size={14} color="#bbb" />
-                  <Text style={s.teacherCardTimeEnd}>{item.end_time}</Text>
-                </View>
-                <View style={s.teacherCardBody}>
-                  <Text style={s.teacherCardCourse}>{item.course_name}</Text>
-                  {item.room && (
-                    <View style={s.teacherCardDetail}>
-                      <Ionicons name="location-outline" size={13} color="#888" />
-                      <Text style={s.teacherCardDetailText}>{item.room}</Text>
-                    </View>
-                  )}
-                  <View style={[s.teacherCardStatus, { backgroundColor: st.bg }]}>
-                    <Ionicons name={st.icon as any} size={12} color={st.color} />
-                    <Text style={[s.teacherCardStatusText, { color: st.color }]}>{st.label}</Text>
+
+        {loading ? (
+          <LoadingScreen />
+        ) : (
+          <FlatList
+            data={lectures}
+            keyExtractor={(item) => item.id}
+            contentContainerStyle={{ padding: 16, paddingTop: 0 }}
+            renderItem={({ item }) => {
+              const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
+              return (
+                <TouchableOpacity
+                  style={s.teacherCard}
+                  onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id } })}
+                  data-testid={`teacher-lecture-${item.id}`}
+                >
+                  <View style={[s.teacherCardAccent, { backgroundColor: st.color }]} />
+                  <View style={s.teacherCardTime}>
+                    <Text style={s.teacherCardTimeStart}>{item.start_time}</Text>
+                    <Ionicons name="arrow-down" size={14} color="#bbb" />
+                    <Text style={s.teacherCardTimeEnd}>{item.end_time}</Text>
                   </View>
-                </View>
-                <View style={s.teacherCardRight}>
-                  <Text style={s.teacherCardAttCount}>{item.attendance_count}/{item.total_enrolled}</Text>
-                  <Ionicons name="chevron-forward" size={20} color="#ccc" />
-                </View>
-              </TouchableOpacity>
-            );
-          }}
-          ListEmptyComponent={
-            <View style={s.emptyState}>
-              <Ionicons name="sunny-outline" size={64} color="#ddd" />
-              <Text style={s.emptyTitle}>لا توجد محاضرات اليوم</Text>
-              <Text style={s.emptySubtitle}>استمتع بيومك!</Text>
-            </View>
-          }
-        />
+                  <View style={s.teacherCardBody}>
+                    <Text style={s.teacherCardCourse}>{item.course_name}</Text>
+                    {item.room && (
+                      <View style={s.teacherCardDetail}>
+                        <Ionicons name="location-outline" size={13} color="#888" />
+                        <Text style={s.teacherCardDetailText}>{item.room}</Text>
+                      </View>
+                    )}
+                    <View style={[s.teacherCardStatus, { backgroundColor: st.bg }]}>
+                      <Ionicons name={st.icon as any} size={12} color={st.color} />
+                      <Text style={[s.teacherCardStatusText, { color: st.color }]}>{st.label}</Text>
+                    </View>
+                  </View>
+                  <View style={s.teacherCardRight}>
+                    <Text style={s.teacherCardAttCount}>{item.attendance_count || 0}/{item.total_enrolled || 0}</Text>
+                    <Ionicons name="chevron-forward" size={20} color="#ccc" />
+                  </View>
+                </TouchableOpacity>
+              );
+            }}
+            ListEmptyComponent={
+              <View style={s.emptyState}>
+                <Ionicons name="sunny-outline" size={64} color="#ddd" />
+                <Text style={s.emptyTitle}>لا توجد محاضرات</Text>
+                <Text style={s.emptySubtitle}>لا توجد محاضرات في {formatDateArabic(selectedDate)}</Text>
+              </View>
+            }
+          />
+        )}
       </SafeAreaView>
     );
   }
 
-  // ===== واجهة المدير: الجدول الأسبوعي =====
+  // ===== Admin/Manager View =====
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
-      {/* Header */}
       <View style={s.header}>
         <TouchableOpacity onPress={() => goBack()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>الجدول الأسبوعي</Text>
+        <Text style={s.headerTitle}>الجدول اليومي</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -253,152 +353,65 @@ export default function ScheduleScreen() {
         </View>
       )}
 
-      {/* Week Day Selector */}
-      <View style={s.weekStrip}>
-        {DAYS.map(day => {
-          const count = getDayLectureCount(day.id);
-          const isSelected = selectedDay === day.id;
-          const isToday = day.num === todayNum;
-          return (
-            <TouchableOpacity
-              key={day.id}
-              style={[
-                s.weekDay,
-                isSelected && s.weekDaySelected,
-                isToday && !isSelected && s.weekDayToday,
-              ]}
-              onPress={() => setSelectedDay(day.id)}
-              data-testid={`day-tab-${day.id}`}
-            >
-              <Text style={[s.weekDayShort, isSelected && s.weekDayShortSelected]}>
-                {day.short}
-              </Text>
-              <Text style={[s.weekDayName, isSelected && s.weekDayNameSelected]}>
-                {day.name}
-              </Text>
-              {count > 0 && (
-                <View style={[s.weekDayBadge, isSelected && s.weekDayBadgeSelected]}>
-                  <Text style={[s.weekDayBadgeText, isSelected && s.weekDayBadgeTextSelected]}>
-                    {count}
-                  </Text>
-                </View>
-              )}
-              {isToday && <View style={[s.todayDot, isSelected && s.todayDotSelected]} />}
-            </TouchableOpacity>
-          );
-        })}
+      {/* Date Navigation */}
+      <View style={s.dateNav} data-testid="date-navigation">
+        <TouchableOpacity onPress={() => setSelectedDate(shiftDate(selectedDate, 1))} style={s.dateNavArrow} data-testid="next-day-btn">
+          <Ionicons name="chevron-forward" size={24} color="#1a237e" />
+        </TouchableOpacity>
+
+        <View style={s.dateNavCenter}>
+          <Text style={s.dateNavDay}>{DAYS_AR[new Date(selectedDate + 'T00:00:00').getDay()]}</Text>
+          <Text style={s.dateNavDate}>{formatDateArabic(selectedDate)}</Text>
+          {Platform.OS === 'web' && (
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e: any) => setSelectedDate(e.target.value)}
+              style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
+              data-testid="date-picker-input"
+            />
+          )}
+        </View>
+
+        <TouchableOpacity onPress={() => setSelectedDate(shiftDate(selectedDate, -1))} style={s.dateNavArrow} data-testid="prev-day-btn">
+          <Ionicons name="chevron-back" size={24} color="#1a237e" />
+        </TouchableOpacity>
       </View>
 
-      {/* Summary Bar */}
-      <View style={s.summaryBar}>
-        <Text style={s.summaryText}>
-          {DAYS.find(d => d.id === selectedDay)?.name} - {dayLectures.length} محاضرة
+      {/* Today button + summary */}
+      <View style={s.summaryRow}>
+        {!isToday && (
+          <TouchableOpacity style={s.todayBtn} onPress={() => setSelectedDate(getToday())} data-testid="go-today-btn">
+            <Ionicons name="today-outline" size={14} color="#1565c0" />
+            <Text style={s.todayBtnText}>اليوم</Text>
+          </TouchableOpacity>
+        )}
+        <View style={{ flex: 1 }} />
+        <Text style={s.summaryText} data-testid="lecture-count">
+          {loading ? '...' : `${lectures.length} محاضرة`}
         </Text>
       </View>
 
       {/* Lectures List */}
-      <FlatList
-        data={dayLectures}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
-        renderItem={({ item, index }) => {
-          const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
-          const courseColor = getCourseColor(item.course_id);
-          const course = item.course;
-          return (
-            <View style={s.lectureRow} data-testid={`lecture-card-${item.id}`}>
-              {/* Timeline */}
-              <View style={s.timeline}>
-                <View style={[s.timelineDot, { backgroundColor: courseColor }]} />
-                {index < dayLectures.length - 1 && <View style={s.timelineLine} />}
-              </View>
-
-              {/* Card */}
-              <View style={s.card}>
-                <View style={[s.cardBorder, { backgroundColor: courseColor }]} />
-                <View style={s.cardContent}>
-                  {/* Time + Status Row */}
-                  <View style={s.cardTopRow}>
-                    <View style={s.cardTimeBox}>
-                      <Ionicons name="time-outline" size={14} color={courseColor} />
-                      <Text style={[s.cardTime, { color: courseColor }]}>
-                        {item.start_time} - {item.end_time}
-                      </Text>
-                    </View>
-                    <View style={[s.cardStatusBadge, { backgroundColor: st.bg }]}>
-                      <Text style={[s.cardStatusText, { color: st.color }]}>{st.label}</Text>
-                    </View>
-                  </View>
-
-                  {/* Course Name */}
-                  <Text style={s.cardTitle}>{course?.name || getCourseName(item.course_id)}</Text>
-
-                  {/* Details Row */}
-                  <View style={s.cardDetailsRow}>
-                    {item.room ? (
-                      <View style={s.cardDetail}>
-                        <Ionicons name="location-outline" size={13} color="#888" />
-                        <Text style={s.cardDetailText}>{item.room}</Text>
-                      </View>
-                    ) : null}
-                    {course?.level ? (
-                      <View style={s.cardDetail}>
-                        <Ionicons name="school-outline" size={13} color="#888" />
-                        <Text style={s.cardDetailText}>م{course.level}</Text>
-                      </View>
-                    ) : null}
-                    <View style={s.cardDetail}>
-                      <Ionicons name="calendar-outline" size={13} color="#888" />
-                      <Text style={s.cardDetailText}>{item.date}</Text>
-                    </View>
-                  </View>
-
-                  {/* Action Buttons */}
-                  {user?.role === 'admin' && (
-                    <View style={s.cardActions}>
-                      <TouchableOpacity
-                        style={s.cardActionBtn}
-                        onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id, courseName: course?.name } })}
-                        data-testid={`view-attendance-${item.id}`}
-                      >
-                        <Ionicons name="eye-outline" size={16} color="#1565c0" />
-                        <Text style={[s.cardActionText, { color: '#1565c0' }]}>عرض</Text>
-                      </TouchableOpacity>
-                      {item.status !== 'cancelled' && (
-                        <TouchableOpacity
-                          style={s.cardActionBtn}
-                          onPress={() => handleCancelLecture(item.id)}
-                          data-testid={`cancel-lecture-${item.id}`}
-                        >
-                          <Ionicons name="close-circle-outline" size={16} color="#e65100" />
-                          <Text style={[s.cardActionText, { color: '#e65100' }]}>إلغاء</Text>
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity
-                        style={s.cardActionBtn}
-                        onPress={() => handleDeleteLecture(item.id)}
-                        data-testid={`delete-lecture-${item.id}`}
-                      >
-                        <Ionicons name="trash-outline" size={16} color="#c62828" />
-                        <Text style={[s.cardActionText, { color: '#c62828' }]}>حذف</Text>
-                      </TouchableOpacity>
-                    </View>
-                  )}
-                </View>
-              </View>
+      {loading ? (
+        <LoadingScreen />
+      ) : (
+        <FlatList
+          data={lectures}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
+          renderItem={renderLectureCard}
+          ListEmptyComponent={
+            <View style={s.emptyState}>
+              <Ionicons name="calendar-outline" size={56} color="#ddd" />
+              <Text style={s.emptyTitle}>لا توجد محاضرات</Text>
+              <Text style={s.emptySubtitle}>
+                لا توجد محاضرات مجدولة في {formatDateArabic(selectedDate)}
+              </Text>
             </View>
-          );
-        }}
-        ListEmptyComponent={
-          <View style={s.emptyState}>
-            <Ionicons name="calendar-outline" size={56} color="#ddd" />
-            <Text style={s.emptyTitle}>لا توجد محاضرات</Text>
-            <Text style={s.emptySubtitle}>
-              لا توجد محاضرات مجدولة ليوم {DAYS.find(d => d.id === selectedDay)?.name}
-            </Text>
-          </View>
-        }
-      />
+          }
+        />
+      )}
     </SafeAreaView>
   );
 }
@@ -427,64 +440,79 @@ const s = StyleSheet.create({
   },
   semesterStripText: { fontSize: 12, color: '#1a237e', fontWeight: '500' },
 
-  // Week Strip
-  weekStrip: {
+  // Date Navigation
+  dateNav: {
     flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#fff',
-    paddingVertical: 8,
-    paddingHorizontal: 4,
+    paddingVertical: 14,
+    paddingHorizontal: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#eee',
   },
-  weekDay: {
+  dateNavArrow: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#e8eaf6',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  dateNavCenter: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 10,
-    borderRadius: 12,
-    marginHorizontal: 2,
     position: 'relative',
   },
-  weekDaySelected: {
-    backgroundColor: '#1a237e',
+  dateNavDay: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#1a237e',
+    marginBottom: 2,
   },
-  weekDayToday: {
-    backgroundColor: '#e8eaf6',
+  dateNavDate: {
+    fontSize: 13,
+    color: '#666',
+    fontWeight: '500',
   },
-  weekDayShort: { fontSize: 11, color: '#999', fontWeight: '600', marginBottom: 2 },
-  weekDayShortSelected: { color: 'rgba(255,255,255,0.7)' },
-  weekDayName: { fontSize: 11, color: '#555', fontWeight: '500' },
-  weekDayNameSelected: { color: '#fff', fontWeight: '700' },
-  weekDayBadge: {
-    backgroundColor: '#e8eaf6',
-    borderRadius: 8,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-    marginTop: 4,
-    minWidth: 18,
-    alignItems: 'center',
-  },
-  weekDayBadgeSelected: { backgroundColor: 'rgba(255,255,255,0.25)' },
-  weekDayBadgeText: { fontSize: 10, color: '#1a237e', fontWeight: '700' },
-  weekDayBadgeTextSelected: { color: '#fff' },
-  todayDot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
-    backgroundColor: '#1a237e',
-    position: 'absolute',
-    bottom: 4,
-  },
-  todayDotSelected: { backgroundColor: '#fff' },
 
-  // Summary Bar
-  summaryBar: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#f8f9fb',
+  // Summary Row
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    gap: 8,
   },
+  todayBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  todayBtnText: { fontSize: 12, color: '#1565c0', fontWeight: '600' },
   summaryText: { fontSize: 13, color: '#666', fontWeight: '500' },
 
-  // Lecture Row (Timeline style)
+  // Count Badge (Teacher view)
+  countBadgeRow: {
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  countBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#e8eaf6',
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+  },
+  countBadgeNum: { fontSize: 18, fontWeight: '800', color: '#1a237e' },
+  countBadgeLabel: { fontSize: 12, color: '#5c6bc0' },
+
+  // Lecture Row (Timeline)
   lectureRow: {
     flexDirection: 'row',
     marginBottom: 4,
@@ -557,34 +585,6 @@ const s = StyleSheet.create({
   cardActionText: { fontSize: 12, fontWeight: '600' },
 
   // Teacher View
-  teacherDateCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    margin: 16,
-    padding: 16,
-    borderRadius: 14,
-    gap: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  teacherDateIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: '#1a237e',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  teacherDateLabel: { fontSize: 12, color: '#888' },
-  teacherDateValue: { fontSize: 15, fontWeight: '600', color: '#222', marginTop: 2 },
-  teacherCountBadge: { alignItems: 'center', backgroundColor: '#e8eaf6', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 8 },
-  teacherCountText: { fontSize: 20, fontWeight: '800', color: '#1a237e' },
-  teacherCountLabel: { fontSize: 10, color: '#5c6bc0' },
-
   teacherCard: {
     flexDirection: 'row',
     alignItems: 'center',
