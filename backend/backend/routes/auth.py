@@ -63,9 +63,9 @@ async def login(user_data: UserLogin, request: Request):
     platform = request.headers.get("x-platform", "").lower()
     user_role = user.get("role", "")
     
-    # السماح فقط إذا كان الطلب من التطبيق (ليس من المتصفح)
-    is_mobile_app = platform in ["ios", "android", "mobile"] or "expo" in user_agent
-    if user_role in ["teacher", "student"] and not is_mobile_app:
+    # نمنع فقط إذا كان الطلب من متصفح ويب
+    is_web_browser = any(b in user_agent for b in ["mozilla", "chrome", "safari", "firefox", "edge", "opera"]) and platform not in ["ios", "android", "mobile"]
+    if user_role in ["teacher", "student"] and is_web_browser:
         record_login_attempt(client_ip, False)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
