@@ -8577,6 +8577,10 @@ async def import_lectures_from_excel(
                 
                 if row_conflicts > 0:
                     errors.append(f"سطر {row_num} ({course_code} - {day_name}): تم تخطي {row_conflicts} محاضرة بسبب تعارض")
+                
+                # إرسال إشعار للمدرس بعد استيراد محاضرات مقرره
+                if row_lectures > 0 and course:
+                    await notify_lecture_created(course, "", "", "")
                     
             except Exception as e:
                 errors.append(f"سطر {row_num}: {str(e)}")
