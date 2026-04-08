@@ -633,13 +633,6 @@ export default function AddCourseScreen() {
           >
             <Ionicons name="people" size={20} color="#1565c0" />
           </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.lecturesBtn, { backgroundColor: '#e8f5e9' }]}
-            onPress={() => router.push({ pathname: '/course-lectures', params: { courseId: item.id, openGenerate: 'true' } })}
-            accessibilityLabel="توليد محاضرات"
-          >
-            <Ionicons name="add-circle" size={20} color="#2e7d32" />
-          </TouchableOpacity>
           {canEdit && (
             <TouchableOpacity
               style={styles.editBtn}
