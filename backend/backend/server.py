@@ -8403,6 +8403,7 @@ async def get_lectures_template(current_user: dict = Depends(get_current_user)):
     
     data = {
         "رمز المقرر": ["FQH101", "FQH101", "ARB102"],
+        "الشعبة": ["A", "A", "B"],
         "اليوم": ["السبت", "الإثنين", "الأحد"],
         "وقت البداية": ["08:00", "10:00", "08:00"],
         "وقت النهاية": ["09:30", "11:30", "09:30"],
@@ -8439,6 +8440,9 @@ async def import_lectures_from_excel(
         column_mapping = {
             'رمز المقرر': 'course_code',
             'الرمز': 'course_code',
+            'الشعبة': 'section',
+            'شعبة': 'section',
+            'Section': 'section',
             'اليوم': 'day',
             'وقت البداية': 'start_time',
             'البداية': 'start_time',
@@ -8484,6 +8488,7 @@ async def import_lectures_from_excel(
             row_num = index + 2  # +2 لأن Excel يبدأ من 1 + header
             try:
                 course_code = str(row.get('course_code', '')).strip()
+                section = str(row.get('section', '')).strip() if pd.notna(row.get('section')) else ''
                 day_name = str(row.get('day', '')).strip()
                 start_time = str(row.get('start_time', '')).strip()
                 end_time = str(row.get('end_time', '')).strip()
@@ -8495,9 +8500,15 @@ async def import_lectures_from_excel(
                     errors.append(f"سطر {row_num}: رمز المقرر فارغ")
                     continue
                 
-                # البحث عن المقرر
-                course = await db.courses.find_one({"code": course_code})
-                if not course:
+                # البحث عن المقرر مع مراعاة الشعبة
+                course_query = {"code": course_code}
+                if section:
+                    course_query["section"] = section
+                course = await db.courses.find_one(course_query)
+                if not course and section:
+                    errors.append(f"سطر {row_num}: رمز المقرر '{course_code}' شعبة '{section}' غير موجود في النظام")
+                    continue
+                elif not course:
                     errors.append(f"سطر {row_num}: رمز المقرر '{course_code}' غير موجود في النظام")
                     continue
                 
