@@ -195,6 +195,24 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             expanded.update(FULL_PERMISSION_MAPPING[perm])
     user_permissions = list(expanded)
     
+    # جلب اسم الكلية والقسم
+    faculty_name = None
+    department_name = None
+    if user.get("faculty_id"):
+        try:
+            faculty = await db.faculties.find_one({"_id": ObjectId(user["faculty_id"])})
+            if faculty:
+                faculty_name = faculty.get("name")
+        except:
+            pass
+    if user.get("department_id"):
+        try:
+            department = await db.departments.find_one({"_id": ObjectId(user["department_id"])})
+            if department:
+                department_name = department.get("name")
+        except:
+            pass
+
     return {
         "id": str(user["_id"]),
         "username": user["username"],
@@ -204,5 +222,11 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "phone": user.get("phone"),
         "created_at": user["created_at"],
         "is_active": user.get("is_active", True),
-        "permissions": user_permissions
+        "permissions": user_permissions,
+        "must_change_password": user.get("must_change_password", False),
+        "student_id": user.get("student_id"),
+        "faculty_id": user.get("faculty_id"),
+        "department_id": user.get("department_id"),
+        "faculty_name": faculty_name,
+        "department_name": department_name
     }
