@@ -310,7 +310,7 @@ export default function CourseLecturesScreen() {
   }, [courseId, selectedStatus]);
 
   // حفظ محاضرة جديدة باستخدام المكون الموحد
-  const handleSaveLecture = async (data: LectureFormData) => {
+  const handleSaveLecture = async (data: LectureFormData, force: boolean = false) => {
     try {
       await lecturesAPI.create(courseId!, {
         date: data.date,
@@ -318,12 +318,32 @@ export default function CourseLecturesScreen() {
         end_time: data.end_time,
         room: data.room,
         notes: data.notes || '',
+        force,
       });
       Alert.alert('نجاح', 'تم إضافة المحاضرة');
       showNotification('success', 'تم إضافة المحاضرة بنجاح');
       fetchData(1);
     } catch (error: any) {
+      const status = error.response?.status;
       const message = error.response?.data?.detail || 'حدث خطأ';
+      
+      // تحذير: تعارض شعب من نفس المقرر - السماح بالمتابعة
+      if (status === 409 && !force) {
+        if (Platform.OS === 'web') {
+          const confirmed = window.confirm(message + '\n\nهل تريد المتابعة وإنشاء المحاضرة؟');
+          if (confirmed) {
+            await handleSaveLecture(data, true);
+            return;
+          }
+        } else {
+          Alert.alert('تنبيه', message, [
+            { text: 'إلغاء', style: 'cancel' },
+            { text: 'متابعة', onPress: () => handleSaveLecture(data, true) }
+          ]);
+        }
+        return;
+      }
+      
       showNotification('error', message);
       throw error;
     }
@@ -567,7 +587,14 @@ export default function CourseLecturesScreen() {
       });
 
       const count = response.data.lectures_created || 0;
-      showNotification('success', `تم توليد ${count} محاضرة بنجاح`);
+      const skipped = response.data.conflicts_skipped || 0;
+      let msg = `تم توليد ${count} محاضرة بنجاح`;
+      if (skipped > 0) {
+        msg += `\n(تم تخطي ${skipped} محاضرة بسبب تعارض مع أستاذ آخر)`;
+        showNotification('warning', msg);
+      } else {
+        showNotification('success', msg);
+      }
       setShowGenerateModal(false);
       fetchData(1);
     } catch (error: any) {

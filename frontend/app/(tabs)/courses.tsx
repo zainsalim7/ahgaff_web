@@ -893,11 +893,19 @@ export default function AddCourseScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: '#ff9800' }]}
-                    onPress={selectAll}
+                    onPress={() => {
+                      if (selectedIds.size > 0) {
+                        setSelectedIds(new Set());
+                      } else {
+                        selectAll();
+                      }
+                    }}
                     data-testid="select-all-btn"
                   >
-                    <Ionicons name="checkbox-outline" size={22} color="#fff" />
-                    <Text style={styles.addButtonText}>تحديد الكل ({selectedIds.size})</Text>
+                    <Ionicons name={selectedIds.size > 0 ? "close-circle-outline" : "checkbox-outline"} size={22} color="#fff" />
+                    <Text style={styles.addButtonText}>
+                      {selectedIds.size > 0 ? `إلغاء التحديد (${selectedIds.size})` : `تحديد الكل`}
+                    </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
                     style={[styles.addButton, { backgroundColor: '#f44336' }]}

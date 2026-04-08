@@ -4694,13 +4694,19 @@ async def notify_lecture_created(course: dict, date: str, start_time: str, end_t
         logging.error(f"خطأ في إرسال تنبيه المحاضرة: {str(e)}")
 
 
-async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None):
-    """فحص تعارض محاضرات الأستاذ - هل لديه محاضرة أخرى في نفس الوقت؟"""
+async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None, allow_same_course: bool = False):
+    """فحص تعارض محاضرات الأستاذ - هل لديه محاضرة أخرى في نفس الوقت؟
+    allow_same_course: إذا True يرجع تحذير بدل خطأ للمقررات التي لها نفس الاسم الأساسي (شعب مختلفة)
+    """
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course or not course.get("teacher_id"):
         return None  # لا يوجد أستاذ مرتبط
     
     teacher_id = course["teacher_id"]
+    course_name = course.get("name", "")
+    # استخراج الاسم الأساسي بدون حرف الشعبة
+    import re
+    base_name = re.sub(r'\s*\([أ-ي]\)\s*$', '', course_name).strip()
     
     # جلب جميع مقررات هذا الأستاذ
     teacher_courses = await db.courses.find({"teacher_id": teacher_id}).to_list(1000)
@@ -4725,7 +4731,13 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
             if start_time < ex_end and end_time > ex_start:
                 conflict_course = next((c for c in teacher_courses if str(c["_id"]) == lec["course_id"]), None)
                 conflict_name = conflict_course.get("name", "") if conflict_course else ""
-                return f"يوجد تعارض: الأستاذ لديه محاضرة في مقرر \"{conflict_name}\" يوم {date} من {ex_start} إلى {ex_end}"
+                conflict_base = re.sub(r'\s*\([أ-ي]\)\s*$', '', conflict_name).strip()
+                
+                # إذا كان التعارض من نفس المقرر (شعب مختلفة)
+                if allow_same_course and base_name == conflict_base:
+                    return {"type": "warning", "message": f"تنبيه: يوجد محاضرة لشعبة أخرى من نفس المقرر \"{conflict_name}\" في نفس الوقت. هل تريد المتابعة؟"}
+                
+                return {"type": "error", "message": f"يوجد تعارض: الأستاذ لديه محاضرة في مقرر \"{conflict_name}\" يوم {date} من {ex_start} إلى {ex_end}"}
     
     return None
 
@@ -4763,9 +4775,12 @@ async def create_lecture(
         raise HTTPException(status_code=400, detail="صيغة التاريخ غير صحيحة")
     
     # فحص تعارض المحاضرات مع نفس الأستاذ
-    conflict = await check_teacher_lecture_conflict(data.course_id, data.date, data.start_time, data.end_time)
+    conflict = await check_teacher_lecture_conflict(data.course_id, data.date, data.start_time, data.end_time, allow_same_course=True)
     if conflict:
-        raise HTTPException(status_code=400, detail=conflict)
+        if conflict["type"] == "error":
+            raise HTTPException(status_code=400, detail=conflict["message"])
+        elif conflict["type"] == "warning" and not data.force:
+            raise HTTPException(status_code=409, detail=conflict["message"])
     
     lecture = {
         "course_id": data.course_id,
@@ -4936,8 +4951,8 @@ async def generate_semester_lectures_advanced(
             for slot in day_config.slots:
                 # فحص تعارض المحاضرات مع نفس الأستاذ
                 date_str = current.strftime("%Y-%m-%d")
-                conflict = await check_teacher_lecture_conflict(data.course_id, date_str, slot.start_time, slot.end_time)
-                if conflict:
+                conflict = await check_teacher_lecture_conflict(data.course_id, date_str, slot.start_time, slot.end_time, allow_same_course=True)
+                if conflict and conflict["type"] == "error":
                     conflicts_skipped += 1
                     continue
                 
@@ -5063,10 +5078,10 @@ async def reschedule_lecture(
     
     # فحص تعارض المحاضرات مع نفس الأستاذ
     conflict = await check_teacher_lecture_conflict(
-        lecture.get("course_id", ""), new_date, start_time, end_time, exclude_lecture_id=lecture_id
+        lecture.get("course_id", ""), new_date, start_time, end_time, exclude_lecture_id=lecture_id, allow_same_course=True
     )
-    if conflict:
-        raise HTTPException(status_code=400, detail=conflict)
+    if conflict and conflict["type"] == "error":
+        raise HTTPException(status_code=400, detail=conflict["message"])
     
     # حفظ التاريخ القديم للإشعار
     old_date = lecture.get("date", "")
@@ -8536,8 +8551,8 @@ async def import_lectures_from_excel(
                     date_str = current.strftime("%Y-%m-%d")
                     
                     # فحص التعارض
-                    conflict = await check_teacher_lecture_conflict(course_id, date_str, start_time, end_time)
-                    if conflict:
+                    conflict = await check_teacher_lecture_conflict(course_id, date_str, start_time, end_time, allow_same_course=True)
+                    if conflict and conflict["type"] == "error":
                         row_conflicts += 1
                         total_conflicts += 1
                         current += timedelta(days=7)

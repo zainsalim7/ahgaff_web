@@ -261,43 +261,94 @@ export default function AddLectureModal({
               <Ionicons name="time" size={18} color="#4caf50" /> الوقت
             </Text>
             
-            <Text style={styles.subLabel}>من</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timesRow}>
-              {TIME_SLOTS.map(time => (
-                <TouchableOpacity
-                  key={`start-${time}`}
-                  style={[
-                    styles.timeBtn,
-                    formData.start_time === time && styles.timeBtnActive
-                  ]}
-                  onPress={() => setFormData({ ...formData, start_time: time })}
-                >
-                  <Text style={[
-                    styles.timeBtnText,
-                    formData.start_time === time && styles.timeBtnTextActive
-                  ]}>{time}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+            {Platform.OS === 'web' ? (
+              <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subLabel}>من</Text>
+                  <select
+                    value={formData.start_time}
+                    onChange={(e: any) => setFormData({ ...formData, start_time: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #e0e0e0',
+                      fontSize: '15px',
+                      backgroundColor: '#f9f9f9',
+                      color: '#333',
+                      direction: 'ltr' as any,
+                    }}
+                  >
+                    <option value="">اختر</option>
+                    {TIME_SLOTS.map(time => (
+                      <option key={`start-${time}`} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.subLabel}>إلى</Text>
+                  <select
+                    value={formData.end_time}
+                    onChange={(e: any) => setFormData({ ...formData, end_time: e.target.value })}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: '8px',
+                      border: '1px solid #e0e0e0',
+                      fontSize: '15px',
+                      backgroundColor: '#f9f9f9',
+                      color: '#333',
+                      direction: 'ltr' as any,
+                    }}
+                  >
+                    <option value="">اختر</option>
+                    {TIME_SLOTS.map(time => (
+                      <option key={`end-${time}`} value={time}>{time}</option>
+                    ))}
+                  </select>
+                </View>
+              </View>
+            ) : (
+              <>
+                <Text style={styles.subLabel}>من</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timesRow}>
+                  {TIME_SLOTS.map(time => (
+                    <TouchableOpacity
+                      key={`start-${time}`}
+                      style={[
+                        styles.timeBtn,
+                        formData.start_time === time && styles.timeBtnActive
+                      ]}
+                      onPress={() => setFormData({ ...formData, start_time: time })}
+                    >
+                      <Text style={[
+                        styles.timeBtnText,
+                        formData.start_time === time && styles.timeBtnTextActive
+                      ]}>{time}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
 
-            <Text style={styles.subLabel}>إلى</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timesRow}>
-              {TIME_SLOTS.map(time => (
-                <TouchableOpacity
-                  key={`end-${time}`}
-                  style={[
-                    styles.timeBtn,
-                    formData.end_time === time && styles.timeBtnActive
-                  ]}
-                  onPress={() => setFormData({ ...formData, end_time: time })}
-                >
-                  <Text style={[
-                    styles.timeBtnText,
-                    formData.end_time === time && styles.timeBtnTextActive
-                  ]}>{time}</Text>
-                </TouchableOpacity>
-              ))}
-            </ScrollView>
+                <Text style={styles.subLabel}>إلى</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.timesRow}>
+                  {TIME_SLOTS.map(time => (
+                    <TouchableOpacity
+                      key={`end-${time}`}
+                      style={[
+                        styles.timeBtn,
+                        formData.end_time === time && styles.timeBtnActive
+                      ]}
+                      onPress={() => setFormData({ ...formData, end_time: time })}
+                    >
+                      <Text style={[
+                        styles.timeBtnText,
+                        formData.end_time === time && styles.timeBtnTextActive
+                      ]}>{time}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )}
           </View>
 
           {/* Room */}

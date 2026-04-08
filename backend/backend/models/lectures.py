@@ -21,6 +21,7 @@ class LectureCreate(BaseModel):
     end_time: str
     room: Optional[str] = ""
     notes: Optional[str] = ""
+    force: Optional[bool] = False  # تجاوز تحذير تعارض الشعب
 
 class LectureUpdate(BaseModel):
     date: Optional[str] = None

@@ -485,7 +485,7 @@ export const lecturesAPI = {
   getDetails: (lectureId: string) => 
     api.get(`/lectures/${lectureId}/details`),
   
-  create: (courseId: string, data: { date: string; start_time: string; end_time: string; room?: string; notes?: string }) =>
+  create: (courseId: string, data: { date: string; start_time: string; end_time: string; room?: string; notes?: string; force?: boolean }) =>
     api.post('/lectures', { course_id: courseId, ...data }),
   
   generate: (data: { course_id: string; start_date: string; end_date: string; day_of_week: number; start_time: string; end_time: string; room?: string }) =>
