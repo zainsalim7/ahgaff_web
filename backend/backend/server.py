@@ -3419,6 +3419,7 @@ async def get_courses(
             "teacher_name": teacher_name,
             "level": c.get("level", 1),
             "section": c.get("section"),
+            "room": c.get("room"),
             "semester": c.get("semester"),
             "semester_id": c.get("semester_id"),
             "semester_name": semester_name,
@@ -3426,7 +3427,8 @@ async def get_courses(
             "students_count": enrollment_counts.get(str(c["_id"]), 0),
             "lectures_count": lecture_counts.get(str(c["_id"]), 0),
             "created_at": c.get("created_at"),
-            "is_active": c.get("is_active", True)
+            "is_active": c.get("is_active", True),
+            "department_name": None
         })
     
     return result
@@ -4358,6 +4360,7 @@ async def get_today_lectures(current_user: dict = Depends(get_current_user)):
             "course_id": lecture["course_id"],
             "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
+            "section": course.get("section", ""),
             "date": lecture["date"],
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
@@ -4518,6 +4521,7 @@ async def get_month_lectures(year: int, month: int, current_user: dict = Depends
             "course_id": lecture["course_id"],
             "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
+            "section": course.get("section", ""),
             "date": date,
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
