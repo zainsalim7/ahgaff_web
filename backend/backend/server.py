@@ -3359,7 +3359,7 @@ async def get_courses(
         elif not query.get("department_id"):
             query["department_id"] = department_id
     
-    courses = await db.courses.find(query).to_list(100)
+    courses = await db.courses.find(query).to_list(None)
     
     # جلب عدد الطلاب لكل مقرر دفعة واحدة
     course_ids = [str(c["_id"]) for c in courses]

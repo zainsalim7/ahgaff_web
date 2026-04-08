@@ -118,15 +118,15 @@ export default function AddCourseScreen() {
   const [sectionCount, setSectionCount] = useState('');
   const SECTION_LABELS = ['أ', 'ب', 'ج', 'د', 'ه', 'و', 'ز', 'ح', 'ط', 'ي'];
 
-  const fetchData = useCallback(async () => {
+  const [coursesLoading, setCoursesLoading] = useState(false);
+
+  const fetchBaseData = useCallback(async () => {
     try {
-      const [coursesRes, deptsRes, teachersRes, settingsRes] = await Promise.all([
-        coursesAPI.getAll(),
+      const [deptsRes, teachersRes, settingsRes] = await Promise.all([
         departmentsAPI.getAll(),
         teachersAPI.getAll(),
         settingsAPI.get(),
       ]);
-      setCourses(coursesRes.data);
       setDepartments(deptsRes.data);
       setTeachers(teachersRes.data);
       setSettings(settingsRes.data);
@@ -137,9 +137,33 @@ export default function AddCourseScreen() {
     }
   }, []);
 
+  const fetchCourses = useCallback(async (deptId?: string) => {
+    setCoursesLoading(true);
+    try {
+      const params: any = {};
+      if (deptId && deptId !== 'all') {
+        params.department_id = deptId;
+      }
+      const res = await coursesAPI.getAll(params);
+      setCourses(res.data);
+    } catch (error) {
+      console.error('Error fetching courses:', error);
+    } finally {
+      setCoursesLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    fetchBaseData();
+  }, [fetchBaseData]);
+
+  useEffect(() => {
+    if (filterDept) {
+      fetchCourses(filterDept);
+    } else {
+      setCourses([]);
+    }
+  }, [filterDept, fetchCourses]);
 
   const handleSubmit = async () => {
     if (!formData.name || !formData.code || !formData.department_id || !formData.teacher_id) {
@@ -194,7 +218,7 @@ export default function AddCourseScreen() {
       resetForm();
       setShowForm(false);
       setEditingCourse(null);
-      fetchData();
+      fetchCourses(filterDept);
     } catch (error: any) {
       const message = error.response?.data?.detail || 'حدث خطأ';
       if (Platform.OS === 'web') window.alert(message);
@@ -245,7 +269,6 @@ export default function AddCourseScreen() {
             return false;
           }
         }
-        if (filterDept && c.department_id !== filterDept) return false;
         return true;
       })
       .map(c => c.id);
@@ -304,7 +327,7 @@ export default function AddCourseScreen() {
     
     setSelectedIds(new Set());
     setSelectionMode(false);
-    fetchData();
+    fetchCourses(filterDept);
     setDeleting(false);
   };
 
@@ -366,7 +389,7 @@ export default function AddCourseScreen() {
         Alert.alert('نجاح', `تم حذف "${deleteTarget.name}" وتنزيل النسخة الاحتياطية`);
         setShowDeleteModal(false);
         setDeleteTarget(null);
-        fetchData();
+        fetchCourses(filterDept);
       } else {
         Alert.alert('خطأ', data.detail || 'فشل في حذف المقرر');
       }
@@ -418,7 +441,7 @@ export default function AddCourseScreen() {
         
         if (res.ok) {
           Alert.alert('نجاح', `تم استعادة "${courseName}" بنجاح`);
-          fetchData();
+          fetchCourses(filterDept);
         } else {
           Alert.alert('خطأ', data.detail || 'فشل في الاستعادة');
         }
@@ -492,7 +515,7 @@ export default function AddCourseScreen() {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         setImportLecturesResult(res.data);
-        fetchData();
+        fetchCourses(filterDept);
       } catch (error: any) {
         setImportLecturesResult({
           message: error.response?.data?.detail || 'فشل في الاستيراد',
@@ -532,7 +555,7 @@ export default function AddCourseScreen() {
           { headers: { 'Content-Type': 'multipart/form-data' } }
         );
         setImportResult(res.data);
-        fetchData();
+        fetchCourses(filterDept);
       } catch (error: any) {
         setImportResult({
           message: error.response?.data?.detail || 'فشل في الاستيراد',
@@ -943,11 +966,16 @@ export default function AddCourseScreen() {
               </ScrollView>
             </View>
 
-            {/* عرض المقررات فقط عند اختيار فلتر أو بحث */}
-            {(!filterDept && !searchQuery) ? (
+            {/* عرض المقررات فقط عند اختيار فلتر */}
+            {!filterDept ? (
               <View style={styles.emptyContainer}>
                 <Ionicons name="filter-outline" size={56} color="#bbb" />
-                <Text style={styles.emptyText}>اختر قسم أو ابحث لعرض المقررات</Text>
+                <Text style={styles.emptyText}>اختر قسم لعرض المقررات</Text>
+              </View>
+            ) : coursesLoading ? (
+              <View style={styles.emptyContainer}>
+                <ActivityIndicator size="large" color="#1565c0" />
+                <Text style={styles.emptyText}>جاري تحميل المقررات...</Text>
               </View>
             ) : (() => {
               const filtered = courses.filter(c => {
@@ -955,7 +983,6 @@ export default function AddCourseScreen() {
                   const query = searchQuery.toLowerCase();
                   if (!c.name?.toLowerCase().includes(query) && !c.code?.toLowerCase().includes(query)) return false;
                 }
-                if (filterDept && filterDept !== 'all' && c.department_id !== filterDept) return false;
                 return true;
               });
               const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
