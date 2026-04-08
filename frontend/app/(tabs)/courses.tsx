@@ -587,16 +587,13 @@ export default function AddCourseScreen() {
       activeOpacity={0.7}
     >
       {selectionMode && (
-        <TouchableOpacity 
-          style={styles.checkbox}
-          onPress={() => toggleSelect(item.id)}
-        >
+        <View style={styles.checkbox}>
           <Ionicons 
             name={selectedIds.has(item.id) ? "checkbox" : "square-outline"} 
             size={24} 
             color={selectedIds.has(item.id) ? "#ff9800" : "#999"} 
           />
-        </TouchableOpacity>
+        </View>
       )}
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.name}</Text>
@@ -812,105 +809,107 @@ export default function AddCourseScreen() {
           </ScrollView>
         ) : (
           <>
-            {/* شريط الحذف المتعدد */}
-            {selectionMode && (
-              <View style={styles.bulkActionBar}>
-                <View style={styles.bulkActionLeft}>
-                  <TouchableOpacity onPress={toggleSelectionMode} style={styles.bulkActionClose}>
-                    <Ionicons name="close" size={24} color="#333" />
+            {/* أزرار الإجراءات */}
+            <View style={styles.actionsRow}>
+              {!selectionMode ? (
+                <>
+                  {canEdit && (
+                    <TouchableOpacity
+                      style={styles.addButton}
+                      onPress={() => setShowForm(true)}
+                      data-testid="add-course-btn"
+                    >
+                      <Ionicons name="add-circle" size={22} color="#fff" />
+                      <Text style={styles.addButtonText}>إضافة مقرر</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {canDelete && (
+                    <TouchableOpacity
+                      style={[styles.addButton, styles.selectButton]}
+                      onPress={toggleSelectionMode}
+                    >
+                      <Ionicons name="checkmark-circle" size={22} color="#fff" />
+                      <Text style={styles.addButtonText}>تحديد</Text>
+                    </TouchableOpacity>
+                  )}
+                  
+                  {canEdit && Platform.OS === 'web' && (
+                    <TouchableOpacity
+                      style={[styles.addButton, { backgroundColor: '#1565c0' }]}
+                      onPress={handleRestore}
+                      disabled={restoring}
+                    >
+                      <Ionicons name="cloud-upload" size={22} color="#fff" />
+                      <Text style={styles.addButtonText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
+                    </TouchableOpacity>
+                  )}
+
+                  {canEdit && Platform.OS === 'web' && (
+                    <>
+                      <TouchableOpacity
+                        style={[styles.addButton, { backgroundColor: '#2e7d32' }]}
+                        onPress={handleDownloadTemplate}
+                        data-testid="download-courses-template-btn"
+                      >
+                        <Ionicons name="download" size={22} color="#fff" />
+                        <Text style={styles.addButtonText}>نموذج مقررات</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.addButton, { backgroundColor: '#1565c0' }]}
+                        onPress={() => { setShowImportModal(true); setImportResult(null); }}
+                        data-testid="import-courses-btn"
+                      >
+                        <Ionicons name="document-attach" size={22} color="#fff" />
+                        <Text style={styles.addButtonText}>استيراد مقررات</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.addButton, { backgroundColor: '#6a1b9a' }]}
+                        onPress={handleDownloadLecturesTemplate}
+                        data-testid="download-lectures-template-btn"
+                      >
+                        <Ionicons name="download" size={22} color="#fff" />
+                        <Text style={styles.addButtonText}>نموذج محاضرات</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={[styles.addButton, { backgroundColor: '#e65100' }]}
+                        onPress={() => { setShowImportLecturesModal(true); setImportLecturesResult(null); }}
+                        data-testid="import-lectures-btn"
+                      >
+                        <Ionicons name="calendar" size={22} color="#fff" />
+                        <Text style={styles.addButtonText}>استيراد محاضرات</Text>
+                      </TouchableOpacity>
+                    </>
+                  )}
+                </>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: '#666' }]}
+                    onPress={toggleSelectionMode}
+                  >
+                    <Ionicons name="close" size={22} color="#fff" />
+                    <Text style={styles.addButtonText}>إلغاء</Text>
                   </TouchableOpacity>
-                  <Text style={styles.bulkActionText}>
-                    تم تحديد {selectedIds.size} مقرر
-                  </Text>
-                </View>
-                <View style={styles.bulkActionRight}>
-                  <TouchableOpacity onPress={selectAll} style={styles.bulkActionBtn}>
-                    <Ionicons name="checkbox-outline" size={20} color="#ff9800" />
-                    <Text style={styles.bulkActionBtnText}>تحديد الكل</Text>
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: '#ff9800' }]}
+                    onPress={selectAll}
+                    data-testid="select-all-btn"
+                  >
+                    <Ionicons name="checkbox-outline" size={22} color="#fff" />
+                    <Text style={styles.addButtonText}>تحديد الكل ({selectedIds.size})</Text>
                   </TouchableOpacity>
-                  <TouchableOpacity 
-                    onPress={handleBulkDelete} 
-                    style={[styles.bulkActionBtn, styles.bulkDeleteBtn]}
+                  <TouchableOpacity
+                    style={[styles.addButton, { backgroundColor: '#f44336' }]}
+                    onPress={handleBulkDelete}
                     disabled={selectedIds.size === 0 || deleting}
                   >
                     {deleting ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Ionicons name="trash" size={20} color="#fff" />
+                      <Ionicons name="trash" size={22} color="#fff" />
                     )}
-                    <Text style={styles.bulkDeleteBtnText}>حذف</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            )}
-
-            {/* أزرار الإجراءات */}
-            <View style={styles.actionsRow}>
-              {canEdit && (
-                <TouchableOpacity
-                  style={styles.addButton}
-                  onPress={() => setShowForm(true)}
-                  data-testid="add-course-btn"
-                >
-                  <Ionicons name="add-circle" size={22} color="#fff" />
-                  <Text style={styles.addButtonText}>إضافة مقرر</Text>
-                </TouchableOpacity>
-              )}
-              
-              {canDelete && (
-                <TouchableOpacity
-                  style={[styles.addButton, styles.selectButton]}
-                  onPress={toggleSelectionMode}
-                >
-                  <Ionicons name={selectionMode ? "close" : "checkmark-circle"} size={22} color="#fff" />
-                  <Text style={styles.addButtonText}>{selectionMode ? 'إلغاء' : 'تحديد'}</Text>
-                </TouchableOpacity>
-              )}
-              
-              {canEdit && Platform.OS === 'web' && (
-                <TouchableOpacity
-                  style={[styles.addButton, { backgroundColor: '#1565c0' }]}
-                  onPress={handleRestore}
-                  disabled={restoring}
-                >
-                  <Ionicons name="cloud-upload" size={22} color="#fff" />
-                  <Text style={styles.addButtonText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
-                </TouchableOpacity>
-              )}
-
-              {canEdit && Platform.OS === 'web' && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: '#2e7d32' }]}
-                    onPress={handleDownloadTemplate}
-                    data-testid="download-courses-template-btn"
-                  >
-                    <Ionicons name="download" size={22} color="#fff" />
-                    <Text style={styles.addButtonText}>نموذج مقررات</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: '#1565c0' }]}
-                    onPress={() => { setShowImportModal(true); setImportResult(null); }}
-                    data-testid="import-courses-btn"
-                  >
-                    <Ionicons name="document-attach" size={22} color="#fff" />
-                    <Text style={styles.addButtonText}>استيراد مقررات</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: '#6a1b9a' }]}
-                    onPress={handleDownloadLecturesTemplate}
-                    data-testid="download-lectures-template-btn"
-                  >
-                    <Ionicons name="download" size={22} color="#fff" />
-                    <Text style={styles.addButtonText}>نموذج محاضرات</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: '#e65100' }]}
-                    onPress={() => { setShowImportLecturesModal(true); setImportLecturesResult(null); }}
-                    data-testid="import-lectures-btn"
-                  >
-                    <Ionicons name="calendar" size={22} color="#fff" />
-                    <Text style={styles.addButtonText}>استيراد محاضرات</Text>
+                    <Text style={styles.addButtonText}>حذف ({selectedIds.size})</Text>
                   </TouchableOpacity>
                 </>
               )}
@@ -1501,6 +1500,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#ffcc80',
+    zIndex: 999,
+    position: 'relative',
   },
   bulkActionLeft: {
     flexDirection: 'row',
