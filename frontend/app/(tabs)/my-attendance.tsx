@@ -21,7 +21,7 @@ interface CourseStats {
   course_id: string;
   course_name: string;
   course_code: string;
-  total_lectures: number;
+  total_sessions: number;
   present_count: number;
   absent_count: number;
   excused_count: number;
@@ -163,7 +163,7 @@ export default function MyAttendanceScreen() {
           course_id: course.id,
           course_name: course.name,
           course_code: course.code,
-          total_lectures: total,
+          total_sessions: total,
           present_count: present,
           absent_count: absent,
           excused_count: excused,
@@ -180,8 +180,8 @@ export default function MyAttendanceScreen() {
 
       // ترتيب: المقررات التي لها محاضرات أولاً، ثم حسب نسبة الحضور
       stats.sort((a, b) => {
-        if (a.total_lectures === 0 && b.total_lectures > 0) return 1;
-        if (a.total_lectures > 0 && b.total_lectures === 0) return -1;
+        if (a.total_sessions === 0 && b.total_sessions > 0) return 1;
+        if (a.total_sessions > 0 && b.total_sessions === 0) return -1;
         return a.attendance_rate - b.attendance_rate;
       });
 
@@ -267,7 +267,7 @@ export default function MyAttendanceScreen() {
           <View style={styles.courseStats}>
             <View style={styles.statBox}>
               <Ionicons name="calendar" size={16} color="#666" />
-              <Text style={styles.statValue}>{item.total_lectures}</Text>
+              <Text style={styles.statValue}>{item.total_sessions}</Text>
               <Text style={styles.statLabel}>محاضرة</Text>
             </View>
             <View style={styles.statBox}>

@@ -118,6 +118,23 @@ async def login(user_data: UserLogin, request: Request):
         entity_name=user["username"]
     )
     
+    faculty_name = None
+    department_name = None
+    if user.get("faculty_id"):
+        try:
+            faculty = await db.faculties.find_one({"_id": ObjectId(user["faculty_id"])})
+            if faculty:
+                faculty_name = faculty.get("name")
+        except:
+            pass
+    if user.get("department_id"):
+        try:
+            department = await db.departments.find_one({"_id": ObjectId(user["department_id"])})
+            if department:
+                department_name = department.get("name")
+        except:
+            pass
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -134,7 +151,9 @@ async def login(user_data: UserLogin, request: Request):
             "must_change_password": user.get("must_change_password", False),
             "student_id": user.get("student_id"),
             "faculty_id": user.get("faculty_id"),
-            "department_id": user.get("department_id")
+            "department_id": user.get("department_id"),
+            "faculty_name": faculty_name,
+            "department_name": department_name
         }
     }
 

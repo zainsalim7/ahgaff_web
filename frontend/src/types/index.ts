@@ -10,6 +10,10 @@ export interface User {
   permissions?: string[];
   must_change_password?: boolean;
   student_id?: string;
+  faculty_id?: string;
+  department_id?: string;
+  faculty_name?: string;
+  department_name?: string;
 }
 
 export interface Department {

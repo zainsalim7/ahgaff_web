@@ -100,6 +100,26 @@ export default function ProfileScreen() {
             </View>
           </View>
 
+          {user?.faculty_name && (
+            <View style={styles.infoItem}>
+              <Ionicons name="school-outline" size={24} color="#666" />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>الكلية</Text>
+                <Text style={styles.infoValue}>{user.faculty_name}</Text>
+              </View>
+            </View>
+          )}
+
+          {user?.department_name && (
+            <View style={styles.infoItem}>
+              <Ionicons name="business-outline" size={24} color="#666" />
+              <View style={styles.infoContent}>
+                <Text style={styles.infoLabel}>القسم</Text>
+                <Text style={styles.infoValue}>{user.department_name}</Text>
+              </View>
+            </View>
+          )}
+
           {user?.email && (
             <View style={styles.infoItem}>
               <Ionicons name="mail-outline" size={24} color="#666" />

@@ -26,7 +26,7 @@ interface CourseStats {
   course_id: string;
   course_name: string;
   course_code: string;
-  total_lectures: number;
+  total_sessions: number;
   present_count: number;
   absent_count: number;
   late_count: number;
@@ -162,8 +162,10 @@ export default function HomeScreen() {
           const maxAbsence = settingsRes.data?.max_absence_percent || 25;
           setMaxAbsencePercent(maxAbsence);
           
-          // جلب اسم الكلية من الإعدادات
-          if (settingsRes.data?.college_name) {
+          // جلب اسم الكلية من بيانات المستخدم أو الإعدادات
+          if (user?.faculty_name) {
+            setCollegeName(user.faculty_name);
+          } else if (settingsRes.data?.college_name) {
             setCollegeName(settingsRes.data.college_name);
           }
           
@@ -199,7 +201,7 @@ export default function HomeScreen() {
                   course_id: course.id,
                   course_name: course.name,
                   course_code: course.code,
-                  total_lectures: totalSessions,
+                  total_sessions: totalSessions,
                   present_count: stats.present_count || 0,
                   absent_count: stats.absent_count || 0,
                   late_count: stats.late_count || 0,
@@ -213,7 +215,7 @@ export default function HomeScreen() {
                   course_id: course.id,
                   course_name: course.name,
                   course_code: course.code,
-                  total_lectures: 0,
+                  total_sessions: 0,
                   present_count: 0,
                   absent_count: 0,
                   late_count: 0,
