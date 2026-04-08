@@ -608,6 +608,13 @@ export default function AddCourseScreen() {
           >
             <Ionicons name="people" size={20} color="#1565c0" />
           </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.lecturesBtn, { backgroundColor: '#e8f5e9' }]}
+            onPress={() => router.push({ pathname: '/course-lectures', params: { courseId: item.id, openGenerate: 'true' } })}
+            accessibilityLabel="توليد محاضرات"
+          >
+            <Ionicons name="add-circle" size={20} color="#2e7d32" />
+          </TouchableOpacity>
           {canEdit && (
             <TouchableOpacity
               style={styles.editBtn}
@@ -911,6 +918,14 @@ export default function AddCourseScreen() {
             {/* فلاتر */}
             <View style={styles.filterContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                {user?.role === 'admin' && (
+                  <TouchableOpacity
+                    style={[styles.filterBtn, filterDept === 'all' && styles.filterBtnActive]}
+                    onPress={() => { setFilterDept(prev => prev === 'all' ? '' : 'all'); setCurrentPage(1); }}
+                  >
+                    <Text style={[styles.filterText, filterDept === 'all' && styles.filterTextActive]}>الكل</Text>
+                  </TouchableOpacity>
+                )}
                 {departments.map(dept => (
                   <TouchableOpacity
                     key={dept.id}
@@ -938,7 +953,7 @@ export default function AddCourseScreen() {
                   const query = searchQuery.toLowerCase();
                   if (!c.name?.toLowerCase().includes(query) && !c.code?.toLowerCase().includes(query)) return false;
                 }
-                if (filterDept && c.department_id !== filterDept) return false;
+                if (filterDept && filterDept !== 'all' && c.department_id !== filterDept) return false;
                 return true;
               });
               const totalPages = Math.ceil(filtered.length / PAGE_SIZE);

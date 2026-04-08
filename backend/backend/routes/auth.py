@@ -58,6 +58,20 @@ async def login(user_data: UserLogin, request: Request):
             detail="الحساب غير مفعل"
         )
     
+    # منع المعلمين والطلاب من دخول الويب - لهم تطبيق خاص
+    user_agent = request.headers.get("user-agent", "").lower()
+    platform = request.headers.get("x-platform", "").lower()
+    user_role = user.get("role", "")
+    
+    # السماح فقط إذا كان الطلب من التطبيق (ليس من المتصفح)
+    is_mobile_app = platform in ["ios", "android", "mobile"] or "expo" in user_agent
+    if user_role in ["teacher", "student"] and not is_mobile_app:
+        record_login_attempt(client_ip, False)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="هذا الحساب مخصص للتطبيق فقط. يرجى استخدام تطبيق الجوال"
+        )
+    
     # تسجيل محاولة ناجحة
     record_login_attempt(client_ip, True)
     
