@@ -3699,7 +3699,13 @@ async def bulk_move_students(request: Request, current_user: dict = Depends(get_
     data = await request.json()
     student_ids = data.get("student_ids", [])
     source_course_id = data.get("source_course_id")
-    target_course_id = data.get("target_course_id")
+    # دعم مقرر واحد أو عدة مقررات
+    target_course_ids = data.get("target_course_ids", [])
+    if not target_course_ids:
+        single = data.get("target_course_id")
+        if single:
+            target_course_ids = [single]
+    target_course_id = target_course_ids[0] if target_course_ids else None
     if not student_ids or not source_course_id or not target_course_id:
         raise HTTPException(status_code=400, detail="بيانات ناقصة")
     target = await db.courses.find_one({"_id": ObjectId(target_course_id)})
