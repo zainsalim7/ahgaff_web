@@ -21,6 +21,7 @@ import { Picker } from '@react-native-picker/picker';
 import api, { departmentsAPI, coursesAPI, teachersAPI, settingsAPI } from '../../src/services/api';
 import { Course, Department } from '../../src/types';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
+import { useAuthStore } from '../../src/store/authStore';
 
 interface Teacher {
   id: string;
@@ -39,6 +40,7 @@ const checkPermission = (userRole: string, userPermissions: string[], permission
 
 export default function AddCourseScreen() {
   const router = useRouter();
+  const authUser = useAuthStore((state) => state.user);
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
@@ -918,7 +920,7 @@ export default function AddCourseScreen() {
             {/* فلاتر */}
             <View style={styles.filterContainer}>
               <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {user?.role === 'admin' && (
+                {authUser?.role === 'admin' && (
                   <TouchableOpacity
                     style={[styles.filterBtn, filterDept === 'all' && styles.filterBtnActive]}
                     onPress={() => { setFilterDept(prev => prev === 'all' ? '' : 'all'); setCurrentPage(1); }}
