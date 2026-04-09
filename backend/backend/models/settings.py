@@ -25,6 +25,7 @@ class SystemSettings(BaseModel):
     levels_count: int = 5
     sections: List[str] = ["أ", "ب", "ج"]
     attendance_late_minutes: int = 15
+    attendance_edit_minutes: int = 60
     max_absence_percent: float = 25.0
     logo_url: Optional[str] = None
     primary_color: str = "#1565c0"
@@ -41,6 +42,7 @@ class SettingsUpdate(BaseModel):
     levels_count: Optional[int] = None
     sections: Optional[List[str]] = None
     attendance_late_minutes: Optional[int] = None
+    attendance_edit_minutes: Optional[int] = None
     max_absence_percent: Optional[float] = None
     logo_url: Optional[str] = None
     primary_color: Optional[str] = None

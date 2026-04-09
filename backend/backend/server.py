@@ -5221,7 +5221,13 @@ async def _get_faculty_attendance_settings(course: dict) -> tuple:
     """Helper to get attendance settings from faculty via course → department → faculty"""
     attendance_duration = 15
     max_delay = 30
+    attendance_edit_minutes = 60
     try:
+        # أولاً: جلب من إعدادات النظام
+        settings = await db.settings.find_one({"_id": "system_settings"})
+        if settings:
+            attendance_edit_minutes = settings.get("attendance_edit_minutes", 60)
+        # ثانياً: جلب من إعدادات الكلية (تتجاوز إعدادات النظام لـ duration و delay)
         if course.get("department_id"):
             dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
             if dept and dept.get("faculty_id"):
@@ -5231,7 +5237,7 @@ async def _get_faculty_attendance_settings(course: dict) -> tuple:
                     max_delay = faculty.get("max_attendance_delay_minutes", 30)
     except:
         pass
-    return (attendance_duration, max_delay)
+    return (attendance_duration, max_delay, attendance_edit_minutes)
 
 async def _resolve_faculty_id(department_id: str) -> Optional[str]:
     """جلب faculty_id من القسم تلقائياً"""
@@ -5487,7 +5493,7 @@ async def export_lecture_attendance_pdf(
     )
 
 
-def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, max_delay: int = 30) -> dict:
+def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, max_delay: int = 30, attendance_edit_minutes: int = 60) -> dict:
     """حساب حالة التحضير للمحاضرة"""
     now = get_yemen_time()
     
@@ -5535,15 +5541,17 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
         teacher_delay = int((started - lecture_start).total_seconds() / 60)
         
         if now > attendance_deadline:
-            # إذا تم التحضير والمحاضرة لا تزال جارية، يُسمح بالتعديل حتى نهاية المحاضرة
-            if is_update and now <= lecture_end:
-                time_remaining = int((lecture_end - now).total_seconds() / 60)
+            # حساب مهلة التعديل من بدء التحضير
+            edit_deadline = started + timedelta(minutes=attendance_edit_minutes)
+            # إذا تم التحضير ولا تزال مهلة التعديل سارية، يُسمح بالتعديل
+            if is_update and now <= edit_deadline:
+                time_remaining = int((edit_deadline - now).total_seconds() / 60)
                 return {
                     "can_take_attendance": True,
-                    "reason": "يمكن تعديل الحضور حتى نهاية المحاضرة",
+                    "reason": f"يمكن تعديل الحضور (متبقي {time_remaining} دقيقة)",
                     "status": "available",
                     "minutes_remaining": time_remaining,
-                    "deadline": lecture_end.strftime("%H:%M"),
+                    "deadline": edit_deadline.strftime("%H:%M"),
                     "teacher_delay_minutes": teacher_delay,
                     "attendance_started_at": started.strftime("%H:%M"),
                 }
@@ -5600,14 +5608,15 @@ async def get_lecture_attendance_status_api(
     # جلب إعدادات الكلية عبر المقرر → القسم → الكلية
     attendance_duration = 15
     max_delay = 30
+    attendance_edit_minutes = 60
     try:
         course = await db.courses.find_one({"_id": ObjectId(lecture["course_id"])})
         if course:
-            attendance_duration, max_delay = await _get_faculty_attendance_settings(course)
+            attendance_duration, max_delay, attendance_edit_minutes = await _get_faculty_attendance_settings(course)
     except:
         pass
     
-    return get_lecture_attendance_status(lecture, attendance_duration, max_delay)
+    return get_lecture_attendance_status(lecture, attendance_duration, max_delay, attendance_edit_minutes)
 
 
 @api_router.get("/attendance/lecture/{lecture_id}")
@@ -5678,7 +5687,7 @@ async def record_attendance_session(
     now = get_yemen_time()
     
     # جلب إعدادات الكلية
-    attendance_duration, max_delay = await _get_faculty_attendance_settings(course)
+    attendance_duration, max_delay, attendance_edit_minutes = await _get_faculty_attendance_settings(course)
     
     # إذا كان هذا تسجيل أوفلاين، استخدم وقت التسجيل الأصلي للتحقق
     check_time = now
@@ -5726,13 +5735,14 @@ async def record_attendance_session(
                 started = started.replace(tzinfo=YEMEN_TIMEZONE)
         
         attendance_deadline = started + timedelta(minutes=attendance_duration)
-        # إذا تم التحضير والمحاضرة لا تزال جارية، السماح بالتعديل حتى نهاية المحاضرة
+        # إذا تم التحضير، استخدام مهلة التعديل (attendance_edit_minutes) من الإعدادات
         is_completed = lecture.get("status") == LectureStatus.COMPLETED
-        effective_deadline = lecture_end if (is_completed and check_time <= lecture_end) else attendance_deadline
+        edit_deadline = started + timedelta(minutes=attendance_edit_minutes)
+        effective_deadline = edit_deadline if is_completed else attendance_deadline
         if check_time > effective_deadline and not is_offline_sync and not has_edit_perm:
             raise HTTPException(
                 status_code=400,
-                detail=f"انتهت مدة التحضير" if not is_completed else "تم التحضير وانتهت مدة التعديل (انتهت المحاضرة)"
+                detail=f"انتهت مدة التحضير ({attendance_duration} دقيقة)" if not is_completed else f"تم التحضير وانتهت مدة التعديل ({attendance_edit_minutes} دقيقة)"
             )
     else:
         # التحضير لم يبدأ بعد - التحقق من الحد الأقصى للتأخير
@@ -9852,6 +9862,7 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
         "levels_count": settings.get("levels_count", 5),
         "sections": settings.get("sections", ["أ", "ب", "ج"]),
         "attendance_late_minutes": settings.get("attendance_late_minutes", 15),
+        "attendance_edit_minutes": settings.get("attendance_edit_minutes", 60),
         "max_absence_percent": settings.get("max_absence_percent", 25.0),
         "logo_url": settings.get("logo_url"),
         "primary_color": settings.get("primary_color", "#1565c0"),
