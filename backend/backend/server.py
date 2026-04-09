@@ -3714,6 +3714,7 @@ async def bulk_move_students(request: Request, current_user: dict = Depends(get_
     
     moved = 0
     already = 0
+    target_section = target.get("section", "")
     for sid in student_ids:
         existing = await db.enrollments.find_one({"course_id": target_course_id, "student_id": sid})
         if existing:
@@ -3726,6 +3727,15 @@ async def bulk_move_students(request: Request, current_user: dict = Depends(get_
                 "enrolled_by": current_user["id"]
             })
         await db.enrollments.delete_one({"course_id": source_course_id, "student_id": sid})
+        # تحديث شعبة الطالب في سجله لتطابق المقرر المستهدف
+        if target_section:
+            try:
+                await db.students.update_one(
+                    {"_id": ObjectId(sid)},
+                    {"$set": {"section": target_section}}
+                )
+            except:
+                pass
         moved += 1
     return {"message": f"تم نقل {moved} طالب", "moved": moved, "already_enrolled": already}
 
