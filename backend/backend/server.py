@@ -10877,6 +10877,50 @@ async def fix_faculty_ids(current_user: dict = Depends(get_current_user)):
         "teachers_fixed": teachers_fixed
     }
 
+@api_router.post("/admin/fix-student-sections")
+async def fix_student_sections(current_user: dict = Depends(get_current_user)):
+    """إصلاح شعب الطلاب بناءً على تسجيلاتهم الحالية"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    # بناء خريطة المقررات (course_id → section)
+    courses = await db.courses.find({"section": {"$exists": True, "$ne": ""}}).to_list(10000)
+    course_section_map = {str(c["_id"]): c["section"] for c in courses}
+    
+    # جلب كل التسجيلات
+    enrollments = await db.enrollments.find().to_list(100000)
+    
+    # بناء خريطة: student_id → أحدث شعبة (بناءً على آخر تسجيل)
+    student_latest = {}
+    for e in enrollments:
+        sid = e["student_id"]
+        cid = e["course_id"]
+        section = course_section_map.get(cid)
+        if section:
+            enrolled_at = e.get("enrolled_at", "")
+            if sid not in student_latest or str(enrolled_at) > str(student_latest[sid][1]):
+                student_latest[sid] = (section, enrolled_at)
+    
+    # تحديث شعب الطلاب
+    fixed = 0
+    for sid, (section, _) in student_latest.items():
+        try:
+            result = await db.students.update_one(
+                {"_id": ObjectId(sid), "section": {"$ne": section}},
+                {"$set": {"section": section}}
+            )
+            if result.modified_count > 0:
+                fixed += 1
+        except:
+            pass
+    
+    return {
+        "message": f"تم تحديث شعبة {fixed} طالب",
+        "students_fixed": fixed,
+        "total_checked": len(student_latest)
+    }
+
+
 
 # ==================== Activity Logs APIs (واجهات سجل الأنشطة) ====================
 
