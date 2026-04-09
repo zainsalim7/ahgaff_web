@@ -5531,9 +5531,23 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
                 started = started.replace(tzinfo=YEMEN_TIMEZONE)
         
         attendance_deadline = started + timedelta(minutes=attendance_duration)
+        is_update = lecture.get("status") == LectureStatus.COMPLETED
+        teacher_delay = int((started - lecture_start).total_seconds() / 60)
         
         if now > attendance_deadline:
-            if lecture.get("status") == LectureStatus.COMPLETED:
+            # إذا تم التحضير والمحاضرة لا تزال جارية، يُسمح بالتعديل حتى نهاية المحاضرة
+            if is_update and now <= lecture_end:
+                time_remaining = int((lecture_end - now).total_seconds() / 60)
+                return {
+                    "can_take_attendance": True,
+                    "reason": "يمكن تعديل الحضور حتى نهاية المحاضرة",
+                    "status": "available",
+                    "minutes_remaining": time_remaining,
+                    "deadline": lecture_end.strftime("%H:%M"),
+                    "teacher_delay_minutes": teacher_delay,
+                    "attendance_started_at": started.strftime("%H:%M"),
+                }
+            if is_update:
                 return {
                     "can_take_attendance": False,
                     "reason": "تم التحضير وانتهت مدة التعديل",
@@ -5546,8 +5560,6 @@ def get_lecture_attendance_status(lecture: dict, attendance_duration: int = 15, 
             }
         
         time_remaining = int((attendance_deadline - now).total_seconds() / 60)
-        is_update = lecture.get("status") == LectureStatus.COMPLETED
-        teacher_delay = int((started - lecture_start).total_seconds() / 60)
         return {
             "can_take_attendance": True,
             "reason": "يمكن تعديل الحضور" if is_update else "يمكن التحضير الآن",
@@ -5714,10 +5726,13 @@ async def record_attendance_session(
                 started = started.replace(tzinfo=YEMEN_TIMEZONE)
         
         attendance_deadline = started + timedelta(minutes=attendance_duration)
-        if check_time > attendance_deadline and not is_offline_sync and not has_edit_perm:
+        # إذا تم التحضير والمحاضرة لا تزال جارية، السماح بالتعديل حتى نهاية المحاضرة
+        is_completed = lecture.get("status") == LectureStatus.COMPLETED
+        effective_deadline = lecture_end if (is_completed and check_time <= lecture_end) else attendance_deadline
+        if check_time > effective_deadline and not is_offline_sync and not has_edit_perm:
             raise HTTPException(
                 status_code=400,
-                detail=f"انتهت مدة التحضير ({attendance_duration} دقيقة)"
+                detail=f"انتهت مدة التحضير" if not is_completed else "تم التحضير وانتهت مدة التعديل (انتهت المحاضرة)"
             )
     else:
         # التحضير لم يبدأ بعد - التحقق من الحد الأقصى للتأخير
