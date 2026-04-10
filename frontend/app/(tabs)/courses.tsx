@@ -194,25 +194,72 @@ export default function AddCourseScreen() {
           // إنشاء شعب متعددة
           let created = 0;
           let errors: string[] = [];
+          let createdIds: string[] = [];
+          let totalMatching = 0;
           for (let i = 0; i < count && i < SECTION_LABELS.length; i++) {
             try {
-              await coursesAPI.create({ ...baseData, section: SECTION_LABELS[i] });
+              const res = await coursesAPI.create({ ...baseData, section: SECTION_LABELS[i] });
               created++;
+              if (res.data?.id) createdIds.push(res.data.id);
+              totalMatching += res.data?.matching_students_count || 0;
             } catch (err: any) {
               errors.push(`شعبة ${SECTION_LABELS[i]}: ${err.response?.data?.detail || 'خطأ'}`);
             }
           }
           let msg = `تم إنشاء ${created} شعبة من أصل ${count} لمقرر "${formData.name}"`;
           if (errors.length > 0) msg += '\n\nأخطاء:\n' + errors.join('\n');
-          if (Platform.OS === 'web') window.alert(msg);
-          else Alert.alert('نتيجة', msg);
+          // سؤال التسجيل التلقائي للشعب المتعددة
+          if (totalMatching > 0 && createdIds.length > 0) {
+            const confirmMsg = `${msg}\n\nيوجد طلاب مطابقون.\nهل تريد تسجيلهم تلقائياً في الشعب الجديدة؟`;
+            const doEnroll = Platform.OS === 'web' ? window.confirm(confirmMsg) : await new Promise(r => Alert.alert('تسجيل تلقائي', confirmMsg, [{ text: 'لا', onPress: () => r(false) }, { text: 'نعم', onPress: () => r(true) }]));
+            if (doEnroll) {
+              let totalEnrolled = 0;
+              for (const cid of createdIds) {
+                try {
+                  const enrollRes = await api.post(`/api/courses/${cid}/auto-enroll`);
+                  totalEnrolled += enrollRes.data?.enrolled || 0;
+                } catch {}
+              }
+              const enrollMsg = `تم تسجيل ${totalEnrolled} طالب تلقائياً في ${createdIds.length} شعبة`;
+              if (Platform.OS === 'web') window.alert(enrollMsg);
+              else Alert.alert('نجاح', enrollMsg);
+            }
+          } else {
+            if (Platform.OS === 'web') window.alert(msg);
+            else Alert.alert('نتيجة', msg);
+          }
         } else {
           // إنشاء مقرر واحد بدون شعبة
           const res = await coursesAPI.create(baseData);
           let msg = 'تم إضافة المقرر بنجاح';
           if (res.data?.warning) msg += '\n\n' + res.data.warning;
-          if (Platform.OS === 'web') window.alert(msg);
-          else Alert.alert('نجاح', msg);
+          // سؤال التسجيل التلقائي للطلاب المطابقين
+          const matchCount = res.data?.matching_students_count || 0;
+          if (matchCount > 0) {
+            const courseId = res.data?.id;
+            const confirmMsg = `${msg}\n\nيوجد ${matchCount} طالب مطابق (نفس القسم والمستوى${baseData.section ? ' والشعبة' : ''}).\nهل تريد تسجيلهم تلقائياً في هذا المقرر؟`;
+            if (Platform.OS === 'web') {
+              if (window.confirm(confirmMsg)) {
+                try {
+                  const enrollRes = await api.post(`/api/courses/${courseId}/auto-enroll`);
+                  window.alert(`تم تسجيل ${enrollRes.data?.enrolled || 0} طالب تلقائياً`);
+                } catch { window.alert('حدث خطأ أثناء التسجيل التلقائي'); }
+              }
+            } else {
+              Alert.alert('تسجيل تلقائي', confirmMsg, [
+                { text: 'لا', style: 'cancel' },
+                { text: 'نعم', onPress: async () => {
+                  try {
+                    const enrollRes = await api.post(`/api/courses/${courseId}/auto-enroll`);
+                    Alert.alert('نجاح', `تم تسجيل ${enrollRes.data?.enrolled || 0} طالب تلقائياً`);
+                  } catch { Alert.alert('خطأ', 'حدث خطأ أثناء التسجيل التلقائي'); }
+                }},
+              ]);
+            }
+          } else {
+            if (Platform.OS === 'web') window.alert(msg);
+            else Alert.alert('نجاح', msg);
+          }
         }
       }
       resetForm();

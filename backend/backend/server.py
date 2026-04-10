@@ -3315,6 +3315,20 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
     
     result = await db.courses.insert_one(course_dict)
     
+    # البحث عن طلاب مطابقين (القسم + المستوى + الشعبة)
+    matching_students_count = 0
+    try:
+        student_query = {
+            "department_id": course_dict.get("department_id"),
+            "level": course_dict.get("level"),
+            "is_active": True,
+        }
+        if course_dict.get("section"):
+            student_query["section"] = course_dict["section"]
+        matching_students_count = await db.students.count_documents(student_query)
+    except:
+        pass
+    
     response = {
         "id": str(result.inserted_id),
         "name": course_dict["name"],
@@ -3327,7 +3341,8 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
         "semester_id": course_dict.get("semester_id"),
         "academic_year": course_dict.get("academic_year"),
         "created_at": str(course_dict.get("created_at", "")),
-        "is_active": course_dict.get("is_active", True)
+        "is_active": course_dict.get("is_active", True),
+        "matching_students_count": matching_students_count,
     }
     if warning:
         response["warning"] = warning
@@ -3768,6 +3783,50 @@ async def get_course_enrollments(course_id: str, current_user: dict = Depends(ge
             })
     
     return result
+
+@api_router.post("/courses/{course_id}/auto-enroll")
+async def auto_enroll_matching_students(course_id: str, current_user: dict = Depends(get_current_user)):
+    """تسجيل الطلاب المطابقين تلقائياً في المقرر بناءً على القسم والمستوى والشعبة"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    student_query = {
+        "department_id": course.get("department_id"),
+        "level": course.get("level"),
+        "is_active": True,
+    }
+    if course.get("section"):
+        student_query["section"] = course["section"]
+    
+    students = await db.students.find(student_query, {"_id": 1}).to_list(10000)
+    
+    enrolled = 0
+    already = 0
+    for s in students:
+        sid = str(s["_id"])
+        existing = await db.enrollments.find_one({"course_id": course_id, "student_id": sid})
+        if existing:
+            already += 1
+            continue
+        await db.enrollments.insert_one({
+            "course_id": course_id,
+            "student_id": sid,
+            "enrolled_at": get_yemen_time(),
+            "enrolled_by": current_user["id"]
+        })
+        enrolled += 1
+    
+    return {
+        "message": f"تم تسجيل {enrolled} طالب في المقرر",
+        "enrolled": enrolled,
+        "already_enrolled": already,
+        "total_matching": len(students)
+    }
+
 
 @api_router.post("/enrollments/{course_id}")
 async def enroll_students(
@@ -8389,10 +8448,40 @@ async def import_students_from_excel(
             except Exception as e:
                 errors.append(f"خطأ في الصف {index + 2}: {str(e)}")
         
+        # التسجيل التلقائي في المقررات المطابقة
+        enrolled_courses = 0
+        if imported_ids and department_id:
+            # البحث عن المقررات المطابقة (القسم + المستوى + الشعبة)
+            course_query = {
+                "department_id": department_id,
+                "is_active": True,
+            }
+            if level:
+                course_query["level"] = level
+            if section:
+                course_query["section"] = section
+            
+            matching_courses = await db.courses.find(course_query).to_list(500)
+            
+            for mc in matching_courses:
+                course_id = str(mc["_id"])
+                for sid in imported_ids:
+                    existing_enroll = await db.enrollments.find_one({"course_id": course_id, "student_id": sid})
+                    if not existing_enroll:
+                        await db.enrollments.insert_one({
+                            "course_id": course_id,
+                            "student_id": sid,
+                            "enrolled_at": get_yemen_time(),
+                            "enrolled_by": current_user["id"]
+                        })
+                enrolled_courses += 1
+        
         return {
             "message": f"تم استيراد {imported} طالب بنجاح",
             "imported": imported,
             "imported_ids": imported_ids,
+            "enrolled_courses": enrolled_courses,
+            "enrolled_courses_msg": f"تم تسجيلهم تلقائياً في {enrolled_courses} مقرر" if enrolled_courses > 0 else "",
             "errors": errors[:10]  # Return first 10 errors only
         }
     except HTTPException:

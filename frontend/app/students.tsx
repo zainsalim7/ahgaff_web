@@ -18,6 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { departmentsAPI, studentsAPI, attendanceAPI, notificationsAPI } from '../src/services/api';
+import api from '../src/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Department, Student } from '../src/types';
 import { LoadingScreen } from '../src/components/LoadingScreen';
@@ -137,6 +138,13 @@ export default function StudentsScreen() {
   // تغيير المستوى
   const [showLevelModal, setShowLevelModal] = useState(false);
   const [changingLevel, setChangingLevel] = useState(false);
+
+  // استيراد الطلاب من Excel
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importDept, setImportDept] = useState('');
+  const [importLevel, setImportLevel] = useState('');
+  const [importSection, setImportSection] = useState('');
+  const [importing, setImporting] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!canManageStudents) return;
@@ -383,6 +391,70 @@ export default function StudentsScreen() {
     };
     
     input.click();
+  };
+
+  // استيراد الطلاب من ملف Excel
+  const handleImportStudents = async () => {
+    if (!importDept) {
+      showMessage('خطأ', 'يجب اختيار القسم');
+      return;
+    }
+    if (!importLevel) {
+      showMessage('خطأ', 'يجب اختيار المستوى');
+      return;
+    }
+
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.onchange = async (e: any) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      setImporting(true);
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        let url = `/api/import/students?department_id=${importDept}&level=${importLevel}`;
+        if (importSection) url += `&section=${encodeURIComponent(importSection)}`;
+        
+        const res = await api.post(url, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' },
+        });
+
+        let msg = res.data?.message || 'تم الاستيراد';
+        if (res.data?.enrolled_courses_msg) {
+          msg += '\n' + res.data.enrolled_courses_msg;
+        }
+        if (res.data?.errors?.length > 0) {
+          msg += '\n\nتنبيهات:\n' + res.data.errors.join('\n');
+        }
+        showMessage('نتيجة الاستيراد', msg);
+        setShowImportModal(false);
+        fetchData();
+      } catch (err: any) {
+        showMessage('خطأ', err.response?.data?.detail || 'فشل الاستيراد');
+      } finally {
+        setImporting(false);
+      }
+    };
+    input.click();
+  };
+
+  // تحميل قالب الطلاب
+  const handleDownloadTemplate = async () => {
+    try {
+      const res = await api.get('/api/template/students', { responseType: 'blob' });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', 'students_template.xlsx');
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch {
+      showMessage('خطأ', 'فشل تحميل القالب');
+    }
   };
 
   // فتح نموذج الإنذار اليدوي
@@ -667,6 +739,20 @@ export default function StudentsScreen() {
       </View>
 
       <View style={styles.content}>
+        {/* زر استيراد الطلاب من Excel */}
+        {canManageStudents && Platform.OS === 'web' && (
+          <TouchableOpacity
+            style={{ flexDirection: 'row', backgroundColor: '#2e7d32', marginHorizontal: 16, marginTop: 12, marginBottom: 4, padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => { setImportDept(''); setImportLevel(''); setImportSection(''); setShowImportModal(true); }}
+            data-testid="import-students-btn"
+          >
+            <Ionicons name="document-text" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 8 }}>
+              استيراد طلاب من Excel (مع التسجيل التلقائي في المقررات)
+            </Text>
+          </TouchableOpacity>
+        )}
+
         {/* زر استعادة */}
         {canManageStudents && Platform.OS === 'web' && (
           <TouchableOpacity
@@ -868,6 +954,68 @@ export default function StudentsScreen() {
           </>
         )}
       </View>
+
+      {/* نافذة استيراد الطلاب */}
+      <Modal visible={showImportModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 450 }}>
+            <Text style={{ fontSize: 18, fontWeight: 'bold', textAlign: 'center', marginBottom: 20, color: '#1a237e' }}>
+              استيراد طلاب من Excel
+            </Text>
+            <Text style={{ fontSize: 13, color: '#666', textAlign: 'center', marginBottom: 16 }}>
+              سيتم تسجيل الطلاب تلقائياً في جميع المقررات المطابقة للقسم والمستوى والشعبة
+            </Text>
+
+            <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: 6, color: '#333' }}>القسم *</Text>
+            <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 12 }}>
+              <Picker selectedValue={importDept} onValueChange={setImportDept} style={{ height: 44 }}>
+                <Picker.Item label="اختر القسم..." value="" />
+                {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+              </Picker>
+            </View>
+
+            <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: 6, color: '#333' }}>المستوى *</Text>
+            <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 12 }}>
+              <Picker selectedValue={importLevel} onValueChange={setImportLevel} style={{ height: 44 }}>
+                <Picker.Item label="اختر المستوى..." value="" />
+                {LEVELS.map(l => <Picker.Item key={l} label={`المستوى ${l}`} value={l} />)}
+              </Picker>
+            </View>
+
+            <Text style={{ fontSize: 14, fontWeight: '600', marginBottom: 6, color: '#333' }}>الشعبة (اختياري)</Text>
+            <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 20 }}>
+              <Picker selectedValue={importSection} onValueChange={setImportSection} style={{ height: 44 }}>
+                <Picker.Item label="كل الشعب" value="" />
+                {['أ','ب','ج','د','هـ','و','ز','ح'].map(s => <Picker.Item key={s} label={`شعبة ${s}`} value={s} />)}
+              </Picker>
+            </View>
+
+            <TouchableOpacity
+              style={{ backgroundColor: '#1565c0', padding: 10, borderRadius: 8, marginBottom: 8, alignItems: 'center' }}
+              onPress={handleDownloadTemplate}
+            >
+              <Text style={{ color: '#fff', fontSize: 14 }}>تحميل قالب Excel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{ backgroundColor: '#2e7d32', padding: 14, borderRadius: 8, marginBottom: 8, alignItems: 'center' }}
+              onPress={handleImportStudents}
+              disabled={importing}
+            >
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: 'bold' }}>
+                {importing ? 'جاري الاستيراد...' : 'اختيار ملف Excel والاستيراد'}
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{ padding: 12, borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#ddd' }}
+              onPress={() => setShowImportModal(false)}
+            >
+              <Text style={{ color: '#666', fontSize: 14 }}>إلغاء</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
 
       {/* نافذة تفاصيل الطالب */}
       <Modal
