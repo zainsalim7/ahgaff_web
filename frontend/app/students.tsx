@@ -150,15 +150,19 @@ export default function StudentsScreen() {
     if (!canManageStudents) return;
     
     try {
-      const [deptsRes, studentsRes] = await Promise.all([
-        departmentsAPI.getAll(),
-        studentsAPI.getAll(),
-      ]);
+      // جلب الأقسام أولاً (مستقل عن الطلاب)
+      const deptsRes = await departmentsAPI.getAll();
       setDepartments(deptsRes.data);
+    } catch (error) {
+      console.error('Error fetching departments:', error);
+    }
+
+    try {
+      const studentsRes = await studentsAPI.getAll();
       setStudents(studentsRes.data);
     } catch (error) {
-      console.error('Error fetching data:', error);
-      showMessage('خطأ', 'فشل في تحميل البيانات');
+      console.error('Error fetching students:', error);
+      showMessage('خطأ', 'فشل في تحميل بيانات الطلاب');
     } finally {
       setLoading(false);
     }
