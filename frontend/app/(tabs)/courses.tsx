@@ -166,7 +166,7 @@ export default function AddCourseScreen() {
   }, [filterDept, fetchCourses]);
 
   const handleSubmit = async () => {
-    if (!formData.name || !formData.code || !formData.department_id || !formData.teacher_id) {
+    if (!formData.name || !formData.code || !formData.department_id) {
       if (Platform.OS === 'web') window.alert('الرجاء ملء جميع الحقول المطلوبة');
       else Alert.alert('خطأ', 'الرجاء ملء جميع الحقول المطلوبة');
       return;
@@ -699,7 +699,7 @@ export default function AddCourseScreen() {
               </Picker>
             </View>
 
-            <Text style={styles.label}>المعلم *</Text>
+            <Text style={styles.label}>المعلم</Text>
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={formData.teacher_id}
