@@ -419,7 +419,7 @@ export default function StudentsScreen() {
       try {
         const formData = new FormData();
         formData.append('file', file);
-        let url = `/api/import/students?department_id=${importDept}&level=${importLevel}`;
+        let url = `/import/students?department_id=${importDept}&level=${importLevel}`;
         if (importSection) url += `&section=${encodeURIComponent(importSection)}`;
         
         const res = await api.post(url, formData, {
@@ -448,7 +448,7 @@ export default function StudentsScreen() {
   // تحميل قالب الطلاب
   const handleDownloadTemplate = async () => {
     try {
-      const res = await api.get('/api/template/students', { responseType: 'blob' });
+      const res = await api.get('/template/students', { responseType: 'blob' });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;

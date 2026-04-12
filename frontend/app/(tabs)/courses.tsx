@@ -216,7 +216,7 @@ export default function AddCourseScreen() {
               let totalEnrolled = 0;
               for (const cid of createdIds) {
                 try {
-                  const enrollRes = await api.post(`/api/courses/${cid}/auto-enroll`);
+                  const enrollRes = await api.post(`/courses/${cid}/auto-enroll`);
                   totalEnrolled += enrollRes.data?.enrolled || 0;
                 } catch {}
               }
@@ -241,7 +241,7 @@ export default function AddCourseScreen() {
             if (Platform.OS === 'web') {
               if (window.confirm(confirmMsg)) {
                 try {
-                  const enrollRes = await api.post(`/api/courses/${courseId}/auto-enroll`);
+                  const enrollRes = await api.post(`/courses/${courseId}/auto-enroll`);
                   window.alert(`تم تسجيل ${enrollRes.data?.enrolled || 0} طالب تلقائياً`);
                 } catch { window.alert('حدث خطأ أثناء التسجيل التلقائي'); }
               }
@@ -250,7 +250,7 @@ export default function AddCourseScreen() {
                 { text: 'لا', style: 'cancel' },
                 { text: 'نعم', onPress: async () => {
                   try {
-                    const enrollRes = await api.post(`/api/courses/${courseId}/auto-enroll`);
+                    const enrollRes = await api.post(`/courses/${courseId}/auto-enroll`);
                     Alert.alert('نجاح', `تم تسجيل ${enrollRes.data?.enrolled || 0} طالب تلقائياً`);
                   } catch { Alert.alert('خطأ', 'حدث خطأ أثناء التسجيل التلقائي'); }
                 }},
