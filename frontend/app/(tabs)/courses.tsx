@@ -987,30 +987,24 @@ export default function AddCourseScreen() {
               )}
             </View>
 
-            {/* فلاتر */}
-            <View style={styles.filterContainer}>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                {authUser?.role === 'admin' && (
-                  <TouchableOpacity
-                    style={[styles.filterBtn, filterDept === 'all' && styles.filterBtnActive]}
-                    onPress={() => { setFilterDept(prev => prev === 'all' ? '' : 'all'); setCurrentPage(1); }}
-                  >
-                    <Text style={[styles.filterText, filterDept === 'all' && styles.filterTextActive]}>الكل</Text>
-                  </TouchableOpacity>
-                )}
-                {departments.map(dept => (
-                  <TouchableOpacity
-                    key={dept.id}
-                    style={[styles.filterBtn, filterDept === dept.id && styles.filterBtnActive]}
-                    onPress={() => { setFilterDept(prev => prev === dept.id ? '' : dept.id); setCurrentPage(1); }}
-                    data-testid={`filter-dept-${dept.id}`}
-                  >
-                    <Text style={[styles.filterText, filterDept === dept.id && styles.filterTextActive]}>
-                      {dept.name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+            {/* فلتر القسم - قائمة منسدلة */}
+            <View style={{ marginHorizontal: 12, marginVertical: 8 }}>
+              <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, backgroundColor: '#fff' }}>
+                <Picker
+                  selectedValue={filterDept}
+                  onValueChange={(val: string) => { setFilterDept(val); setCurrentPage(1); }}
+                  style={{ height: 44 }}
+                  data-testid="filter-dept-picker"
+                >
+                  <Picker.Item label="اختر القسم..." value="" />
+                  {authUser?.role === 'admin' && (
+                    <Picker.Item label="الكل" value="all" />
+                  )}
+                  {departments.map(dept => (
+                    <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
+                  ))}
+                </Picker>
+              </View>
             </View>
 
             {/* عرض المقررات فقط عند اختيار فلتر */}
