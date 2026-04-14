@@ -1176,7 +1176,8 @@ export default function CourseLecturesScreen() {
                                 <View style={styles.slotTimeBox}>
                                   <Text style={styles.slotTimeLabel}>من</Text>
                                   {Platform.OS === 'web' ? (
-                                    <select
+                                    <input
+                                      type="time"
                                       value={slot.start_time}
                                       onChange={(e: any) => updateSlotTime(day.id, index, 'start_time', e.target.value)}
                                       data-testid={`start-time-select-${day.id}-${index}`}
@@ -1185,17 +1186,13 @@ export default function CourseLecturesScreen() {
                                         padding: '10px 12px',
                                         borderRadius: '8px',
                                         border: '1px solid #ddd',
-                                        fontSize: '15px',
+                                        fontSize: '16px',
                                         backgroundColor: '#f9f9f9',
                                         color: '#333',
-                                        cursor: 'pointer',
-                                        appearance: 'auto' as any,
+                                        textAlign: 'center',
+                                        boxSizing: 'border-box' as any,
                                       }}
-                                    >
-                                      {TIME_SLOTS.map(time => (
-                                        <option key={time} value={time}>{time}</option>
-                                      ))}
-                                    </select>
+                                    />
                                   ) : (
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                       {TIME_SLOTS.map(time => (
@@ -1219,7 +1216,8 @@ export default function CourseLecturesScreen() {
                                 <View style={styles.slotTimeBox}>
                                   <Text style={styles.slotTimeLabel}>إلى</Text>
                                   {Platform.OS === 'web' ? (
-                                    <select
+                                    <input
+                                      type="time"
                                       value={slot.end_time}
                                       onChange={(e: any) => updateSlotTime(day.id, index, 'end_time', e.target.value)}
                                       data-testid={`end-time-select-${day.id}-${index}`}
@@ -1228,17 +1226,13 @@ export default function CourseLecturesScreen() {
                                         padding: '10px 12px',
                                         borderRadius: '8px',
                                         border: '1px solid #ddd',
-                                        fontSize: '15px',
+                                        fontSize: '16px',
                                         backgroundColor: '#f9f9f9',
                                         color: '#333',
-                                        cursor: 'pointer',
-                                        appearance: 'auto' as any,
+                                        textAlign: 'center',
+                                        boxSizing: 'border-box' as any,
                                       }}
-                                    >
-                                      {TIME_SLOTS.map(time => (
-                                        <option key={time} value={time}>{time}</option>
-                                      ))}
-                                    </select>
+                                    />
                                   ) : (
                                     <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                                       {TIME_SLOTS.map(time => (

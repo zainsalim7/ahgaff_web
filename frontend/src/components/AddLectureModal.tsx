@@ -265,47 +265,43 @@ export default function AddLectureModal({
               <View style={{ flexDirection: 'row', gap: 16, alignItems: 'center' }}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.subLabel}>من</Text>
-                  <select
+                  <input
+                    type="time"
                     value={formData.start_time}
                     onChange={(e: any) => setFormData({ ...formData, start_time: e.target.value })}
+                    data-testid="add-lecture-start-time"
                     style={{
                       width: '100%',
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #e0e0e0',
-                      fontSize: '15px',
+                      fontSize: '16px',
                       backgroundColor: '#f9f9f9',
                       color: '#333',
-                      direction: 'ltr' as any,
+                      textAlign: 'center',
+                      boxSizing: 'border-box' as any,
                     }}
-                  >
-                    <option value="">اختر</option>
-                    {TIME_SLOTS.map(time => (
-                      <option key={`start-${time}`} value={time}>{time}</option>
-                    ))}
-                  </select>
+                  />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.subLabel}>إلى</Text>
-                  <select
+                  <input
+                    type="time"
                     value={formData.end_time}
                     onChange={(e: any) => setFormData({ ...formData, end_time: e.target.value })}
+                    data-testid="add-lecture-end-time"
                     style={{
                       width: '100%',
                       padding: '12px',
                       borderRadius: '8px',
                       border: '1px solid #e0e0e0',
-                      fontSize: '15px',
+                      fontSize: '16px',
                       backgroundColor: '#f9f9f9',
                       color: '#333',
-                      direction: 'ltr' as any,
+                      textAlign: 'center',
+                      boxSizing: 'border-box' as any,
                     }}
-                  >
-                    <option value="">اختر</option>
-                    {TIME_SLOTS.map(time => (
-                      <option key={`end-${time}`} value={time}>{time}</option>
-                    ))}
-                  </select>
+                  />
                 </View>
               </View>
             ) : (
