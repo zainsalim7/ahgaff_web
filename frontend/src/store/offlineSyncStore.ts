@@ -25,6 +25,7 @@ export interface OfflineLecture {
   start_time: string;
   end_time: string;
   room?: string;
+  attendance_recorded?: boolean;
   students: OfflineStudent[];
   cached_at: string;
 }
@@ -34,6 +35,7 @@ export interface OfflineStudent {
   student_id: string;
   full_name: string;
   qr_code?: string;
+  attendance_status?: string | null;
 }
 
 export interface OfflineSyncState {

@@ -330,6 +330,29 @@ export default function TakeAttendanceScreen() {
     }
   };
 
+  // تحديث الكاش بحالة الحضور الحالية
+  const updateCacheWithAttendance = async () => {
+    if (!lectureId || !course) return;
+    const updatedStudents = students.map(s => ({
+      id: s.id,
+      student_id: s.student_id,
+      full_name: s.full_name,
+      attendance_status: attendance[s.id] || null,
+    }));
+    await cacheLecture({
+      id: lectureId as string,
+      course_id: course.id,
+      course_name: course.name,
+      date: lecture?.date || '',
+      start_time: lecture?.start_time || '',
+      end_time: lecture?.end_time || '',
+      room: lecture?.room,
+      attendance_recorded: true,
+      students: updatedStudents,
+      cached_at: new Date().toISOString(),
+    });
+  };
+
   const saveAttendance = async () => {
     setSaving(true);
     try {
@@ -346,6 +369,9 @@ export default function TakeAttendanceScreen() {
             records,
           });
         }
+        
+        // تحديث الكاش بالحضور المحفوظ
+        await updateCacheWithAttendance();
         
         const successMsg = 'تم حفظ الحضور بنجاح';
         if (Platform.OS === 'web') {
@@ -373,6 +399,10 @@ export default function TakeAttendanceScreen() {
         }
         
         const pendingCount = getPendingRecordsCount();
+        
+        // تحديث الكاش بالحضور المحفوظ أوفلاين
+        await updateCacheWithAttendance();
+        
         const offlineMsg = `تم حفظ الحضور محلياً (${pendingCount} سجل معلق)\nسيتم المزامنة تلقائياً عند عودة الاتصال`;
         
         if (Platform.OS === 'web') {
@@ -416,6 +446,8 @@ export default function TakeAttendanceScreen() {
           }
           
           const fallbackMsg = 'تم حفظ الحضور محلياً (فشل الاتصال بالخادم)';
+          // تحديث الكاش بالحضور الأوفلاين
+          await updateCacheWithAttendance();
           if (Platform.OS === 'web') {
             window.alert(fallbackMsg);
             goBack();
