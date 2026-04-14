@@ -163,7 +163,7 @@ export default function TakeAttendanceScreen() {
           setAttendanceRecorded(data.attendance_recorded);
           setOfflineMode(false);
           
-          // تخزين البيانات محلياً للاستخدام أوفلاين
+          // تخزين البيانات محلياً للاستخدام أوفلاين (مع حالة الحضور)
           await cacheLecture({
             id: data.lecture.id,
             course_id: data.course.id,
@@ -172,10 +172,12 @@ export default function TakeAttendanceScreen() {
             start_time: data.lecture.start_time,
             end_time: data.lecture.end_time,
             room: data.lecture.room,
+            attendance_recorded: data.attendance_recorded,
             students: data.students.map((s: EnrolledStudent) => ({
               id: s.id,
               student_id: s.student_id,
               full_name: s.full_name,
+              attendance_status: s.attendance_status,
             })),
             cached_at: new Date().toISOString(),
           });
@@ -248,9 +250,17 @@ export default function TakeAttendanceScreen() {
       });
       setStudents(cachedLecture.students.map(s => ({
         ...s,
-        attendance_status: null,
+        attendance_status: s.attendance_status || null,
       })));
       setOfflineMode(true);
+      setAttendanceRecorded(cachedLecture.attendance_recorded || false);
+      
+      // تحميل الحضور المحفوظ من الكاش
+      const initialAttendance: { [key: string]: string } = {};
+      cachedLecture.students.forEach((s: any) => {
+        initialAttendance[s.id] = s.attendance_status || 'present';
+      });
+      setAttendance(initialAttendance);
       
       // السماح بالتحضير أوفلاين
       setAttendanceStatus({

@@ -5247,8 +5247,13 @@ async def get_lecture_details(
     
     # الطلاب المسجلين في المقرر
     enrollments = await db.enrollments.find({"course_id": lecture["course_id"]}).to_list(10000)
-    student_ids = [ObjectId(e["student_id"]) for e in enrollments]
-    students = await db.students.find({"_id": {"$in": student_ids}}).to_list(10000)
+    valid_student_ids = []
+    for e in enrollments:
+        try:
+            valid_student_ids.append(ObjectId(e["student_id"]))
+        except:
+            pass
+    students = await db.students.find({"_id": {"$in": valid_student_ids}}).to_list(10000)
     
     # سجلات الحضور لهذه المحاضرة
     attendance_records = await db.attendance.find({"lecture_id": lecture_id}).to_list(10000)
