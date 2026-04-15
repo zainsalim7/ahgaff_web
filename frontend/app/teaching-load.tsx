@@ -15,6 +15,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { teachingLoadAPI, teachersAPI, departmentsAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { API_URL } from '../src/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface CourseLoad {
   course_id: string;
@@ -56,6 +58,10 @@ export default function TeachingLoadPage() {
   const [existingLoads, setExistingLoads] = useState<LoadItem[]>([]);
   const [loadingSummary, setLoadingSummary] = useState(false);
   const [viewMode, setViewMode] = useState<'assign' | 'summary'>('assign');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   // Load departments on mount
   useEffect(() => {
@@ -184,6 +190,37 @@ export default function TeachingLoadPage() {
       }
     } catch (e: any) {
       Alert.alert('خطأ', e?.response?.data?.detail || 'حدث خطأ');
+    }
+  };
+
+  const handleExport = async (format: 'excel' | 'pdf') => {
+    if (format === 'excel') setExportingExcel(true);
+    else setExportingPDF(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      let url = `${API_URL}/api/export/teaching-load/${format}?`;
+      if (selectedDept) url += `department_id=${selectedDept}&`;
+      if (startDate) url += `start_date=${startDate}&`;
+      if (endDate) url += `end_date=${endDate}&`;
+
+      if (Platform.OS === 'web') {
+        const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!response.ok) throw new Error('فشل التصدير');
+        const blob = await response.blob();
+        const blobUrl = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = format === 'excel' ? 'teaching_load.xlsx' : 'teaching_load.pdf';
+        a.click();
+        window.URL.revokeObjectURL(blobUrl);
+      }
+      Alert.alert('نجاح', 'تم تصدير الملف بنجاح');
+    } catch (e: any) {
+      console.error('Export error:', e);
+      Alert.alert('خطأ', 'فشل التصدير');
+    } finally {
+      setExportingExcel(false);
+      setExportingPDF(false);
     }
   };
 
@@ -391,7 +428,81 @@ export default function TeachingLoadPage() {
         )}
 
         {viewMode === 'summary' && (
-          loadingSummary ? (
+          <>
+            {/* Date Range + Export Buttons */}
+            {Platform.OS === 'web' && (
+              <View style={styles.filterCard}>
+                <Text style={styles.filterLabel}>فترة حساب إجمالي الساعات</Text>
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>من تاريخ</Text>
+                    <input
+                      type="date"
+                      value={startDate}
+                      onChange={(e: any) => setStartDate(e.target.value)}
+                      style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+                      data-testid="export-start-date"
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 12, color: '#666', marginBottom: 4 }}>إلى تاريخ</Text>
+                    <input
+                      type="date"
+                      value={endDate}
+                      onChange={(e: any) => setEndDate(e.target.value)}
+                      style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
+                      data-testid="export-end-date"
+                    />
+                  </View>
+                </View>
+                {(startDate && endDate) && (
+                  <View style={{ backgroundColor: '#fff3e0', padding: 8, borderRadius: 8, marginBottom: 12 }}>
+                    <Text style={{ fontSize: 12, color: '#e65100', textAlign: 'center' }}>
+                      الفترة: {startDate} إلى {endDate} ({Math.max(1, Math.ceil(((new Date(endDate)).getTime() - (new Date(startDate)).getTime()) / (7 * 24 * 60 * 60 * 1000) + 1/7))} أسبوع تقريباً)
+                    </Text>
+                  </View>
+                )}
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[styles.exportBtn, { backgroundColor: '#4caf50' }]}
+                    onPress={() => handleExport('excel')}
+                    disabled={exportingExcel}
+                    data-testid="export-excel-btn"
+                  >
+                    {exportingExcel ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="download-outline" size={18} color="#fff" />
+                        <Text style={styles.exportBtnText}>تصدير Excel</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[styles.exportBtn, { backgroundColor: '#e53935' }]}
+                    onPress={() => handleExport('pdf')}
+                    disabled={exportingPDF}
+                    data-testid="export-pdf-btn"
+                  >
+                    {exportingPDF ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <>
+                        <Ionicons name="document-text-outline" size={18} color="#fff" />
+                        <Text style={styles.exportBtnText}>تصدير PDF</Text>
+                      </>
+                    )}
+                  </TouchableOpacity>
+                </View>
+                {!startDate && !endDate && (
+                  <Text style={{ fontSize: 11, color: '#999', marginTop: 8, textAlign: 'center' }}>
+                    بدون تحديد تاريخ: سيتم حساب الإجمالي على أساس فصل دراسي (16 أسبوع)
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {loadingSummary ? (
             <View style={styles.emptyCard}>
               <ActivityIndicator size="large" color="#1565c0" />
               <Text style={styles.emptyText}>جاري تحميل الجدول...</Text>
@@ -442,6 +553,7 @@ export default function TeachingLoadPage() {
               </View>
             ))
           )
+          </>
         )}
       </ScrollView>
     </SafeAreaView>
@@ -531,4 +643,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1, borderBottomColor: '#f5f5f5',
   },
   summaryTableCell: { fontSize: 13, color: '#333' },
+  exportBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 12, borderRadius: 8,
+  },
+  exportBtnText: { fontSize: 14, fontWeight: '600', color: '#fff' },
 });

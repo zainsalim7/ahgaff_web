@@ -18,44 +18,31 @@
 
 ### جلسة 15 أبريل 2026
 - [x] ميزة جدول العبء التدريسي (Teaching Load Management)
-  - Backend: route جديد `/app/backend/backend/routes/teaching_load.py`
+  - Backend route: `/app/backend/backend/routes/teaching_load.py`
   - Collection: `teaching_loads` في MongoDB
-  - Endpoints:
-    - `GET /api/teaching-load` - عرض مع فلترة بالقسم/المعلم
-    - `POST /api/teaching-load` - إنشاء/تحديث عبء
-    - `PUT /api/teaching-load/{id}` - تعديل
-    - `DELETE /api/teaching-load/{id}` - حذف
-    - `GET /api/teaching-load/teacher/{id}/courses` - مقررات المعلم مع العبء الحالي
-    - `POST /api/teaching-load/bulk` - حفظ جماعي
-  - Frontend: صفحة `/teaching-load` بوضعين:
-    - **تعيين الساعات**: اختيار القسم ← المعلم ← جدول المقررات مع إدخال الساعات الأسبوعية
-    - **عرض الجدول**: عرض جميع الأعباء مجمعة حسب المعلم
+  - CRUD Endpoints: GET/POST/PUT/DELETE `/api/teaching-load`
+  - Bulk save: `POST /api/teaching-load/bulk`
+  - Teacher courses: `GET /api/teaching-load/teacher/{id}/courses`
+  - Frontend: صفحة `/teaching-load` (تعيين الساعات + عرض الجدول)
   - صلاحيات: `MANAGE_TEACHING_LOAD`, `VIEW_TEACHING_LOAD`
-  - متاح لـ: Admin, Dean, Department Head
-  - إضافة في القائمة الجانبية
-- [x] إصلاح خطأ تعريف متغير مكرر في `take-attendance.tsx` (initialAttendance)
+- [x] تصدير العبء التدريسي Excel و PDF
+  - `GET /api/export/teaching-load/excel` - تصدير Excel
+  - `GET /api/export/teaching-load/pdf` - تصدير PDF (خط Amiri عربي)
+  - دعم فلترة بالقسم + فترة زمنية (تاريخ بداية/نهاية)
+  - حساب إجمالي الساعات = ساعات أسبوعية × عدد الأسابيع
+  - بدون تحديد فترة: يُحسب على أساس فصل دراسي (16 أسبوع)
+  - واجهة تصدير مع اختيار التواريخ في تبويب "عرض الجدول"
+- [x] إصلاح خطأ تعريف متغير مكرر في `take-attendance.tsx`
 
 ### جلسة 9 أبريل 2026
 - [x] إضافة عمود "الشعبة" في قالب استيراد المحاضرات Excel
-- [x] تعديل منطق الاستيراد لقراءة عمود الشعبة
-- [x] استيراد الطلاب من صفحة الطلاب مع التسجيل التلقائي في المقررات
-- [x] endpoint جديد: `POST /api/courses/{id}/auto-enroll`
+- [x] استيراد الطلاب + التسجيل التلقائي في المقررات
 - [x] إصلاح نافذة تعديل الحضور (attendance_edit_minutes)
 - [x] إصلاح عدم تحديث شعبة الطالب عند النقل
 
 ### جلسة 8 أبريل 2026
-- [x] إصلاح عرض مقررات القسم لحساب الأدمن
-- [x] إضافة faculty_name و department_name لاستجابة تسجيل الدخول
-- [x] إصلاح التحديد المتعدد للمقررات
-- [x] إصلاح نقل الطلاب (bulk-move)
-- [x] تحسين كشف تعارض المحاضرات (409 للشعب المختلفة)
-- [x] إضافة إشعارات عند استيراد المحاضرات
-
-### جلسة 7 أبريل 2026
-- [x] إصلاح أداء صفحة الجدول اليومي
-- [x] دمج صفحة المقررات
-- [x] تحسين تقرير نصاب المدرسين
-- [x] حظر دخول الطلاب والمعلمين لتطبيق الويب
+- [x] إصلاحات عرض المقررات، التحديد المتعدد، نقل الطلاب
+- [x] تحسين كشف تعارض المحاضرات
 
 ### جلسات سابقة
 - [x] نظام RBAC شامل (78 endpoint)
@@ -64,7 +51,7 @@
 
 ## المهام المعلقة
 - [ ] (P1) تقسيم server.py (11000+ سطر) إلى routes/ منفصلة
-- [ ] (P2) تقارير العبء التدريسي المتقدمة
+- [ ] (P2) تقارير العبء التدريسي المتقدمة (رسوم بيانية)
 - [ ] (P3) تحسين واجهة التقارير الأخرى
 - [ ] تحسينات سجلات النشاط
 
