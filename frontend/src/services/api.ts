@@ -546,6 +546,21 @@ export const semestersAPI = {
   delete: (id: string) => api.delete(`/semesters/${id}`),
 };
 
+// Teaching Load API (العبء التدريسي)
+export const teachingLoadAPI = {
+  getAll: (params?: { department_id?: string; teacher_id?: string; semester_id?: string }) =>
+    api.get('/teaching-load', { params }),
+  create: (data: { teacher_id: string; course_id: string; weekly_hours: number; semester_id?: string; notes?: string }) =>
+    api.post('/teaching-load', data),
+  update: (id: string, data: { weekly_hours?: number; notes?: string }) =>
+    api.put(`/teaching-load/${id}`, data),
+  delete: (id: string) => api.delete(`/teaching-load/${id}`),
+  getTeacherCourses: (teacherId: string) =>
+    api.get(`/teaching-load/teacher/${teacherId}/courses`),
+  bulkSave: (items: { teacher_id: string; course_id: string; weekly_hours: number; semester_id?: string; notes?: string }[]) =>
+    api.post('/teaching-load/bulk', items),
+};
+
 // Activity Logs API (سجلات النشاط)
 export const activityLogsAPI = {
   getAll: (params?: { 

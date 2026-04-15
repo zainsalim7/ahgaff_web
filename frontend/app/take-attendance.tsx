@@ -268,13 +268,6 @@ export default function TakeAttendanceScreen() {
         reason: 'وضع أوفلاين - سيتم المزامنة عند عودة الاتصال',
         status: 'offline',
       });
-      
-      // Initialize all as present
-      const initialAttendance: { [key: string]: string } = {};
-      cachedLecture.students.forEach((s) => {
-        initialAttendance[s.id] = 'present';
-      });
-      setAttendance(initialAttendance);
     } else {
       // عرض رسالة خطأ واضحة مع إمكانية إعادة المحاولة
       const status = apiError?.response?.status;

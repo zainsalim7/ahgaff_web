@@ -78,6 +78,9 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'report-workload', label: 'نصاب التدريس', icon: 'briefcase', path: '/report-teacher-workload', permissions: [
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
   ]},
+  { id: 'teaching-load', label: 'جدول العبء التدريسي', icon: 'grid', path: '/teaching-load', permissions: [
+    PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
+  ]},
   { id: 'report-warnings', label: 'الإنذارات', icon: 'warning', path: '/report-warnings', permissions: [
     PERMISSIONS.REPORT_WARNINGS
   ]},

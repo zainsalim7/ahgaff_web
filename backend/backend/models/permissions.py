@@ -105,6 +105,10 @@ class Permission:
     MANAGE_ROLES = "manage_roles"
     MANAGE_SETTINGS = "manage_settings"
     MANAGE_SEMESTERS = "manage_semesters"
+    
+    # صلاحيات العبء التدريسي
+    MANAGE_TEACHING_LOAD = "manage_teaching_load"
+    VIEW_TEACHING_LOAD = "view_teaching_load"
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -129,6 +133,8 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_LESSON_COMPLETION,
         Permission.SEND_NOTIFICATIONS,
         Permission.MANAGE_NOTIFICATIONS,
+        Permission.MANAGE_TEACHING_LOAD,
+        Permission.VIEW_TEACHING_LOAD,
     ],
     UserRole.TEACHER: [
         Permission.RECORD_ATTENDANCE,
@@ -177,6 +183,8 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_COURSE,
         Permission.REPORT_TEACHER_WORKLOAD,
         Permission.REPORT_LESSON_COMPLETION,
+        Permission.MANAGE_TEACHING_LOAD,
+        Permission.VIEW_TEACHING_LOAD,
     ],
     UserRole.DEPARTMENT_HEAD: [
         Permission.MANAGE_COURSES,
@@ -198,6 +206,8 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_COURSE,
         Permission.REPORT_TEACHER_WORKLOAD,
         Permission.REPORT_LESSON_COMPLETION,
+        Permission.MANAGE_TEACHING_LOAD,
+        Permission.VIEW_TEACHING_LOAD,
     ],
     UserRole.REGISTRAR: [
         Permission.MANAGE_STUDENTS,
@@ -298,6 +308,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_ROLES, "label": "إدارة الأدوار", "category": "النظام"},
     {"key": Permission.MANAGE_SETTINGS, "label": "إدارة الإعدادات", "category": "النظام"},
     {"key": Permission.MANAGE_SEMESTERS, "label": "إدارة الفصول الدراسية", "category": "النظام"},
+    {"key": Permission.MANAGE_TEACHING_LOAD, "label": "إدارة العبء التدريسي", "category": "العبء التدريسي"},
+    {"key": Permission.VIEW_TEACHING_LOAD, "label": "عرض العبء التدريسي", "category": "العبء التدريسي"},
 ]
 
 # الصلاحيات الكاملة تشمل الصلاحيات الفرعية
