@@ -976,7 +976,7 @@ export default function AddCourseScreen() {
               <TextInput
                 style={styles.searchInput}
                 value={searchQuery}
-                onChangeText={setSearchQuery}
+                onChangeText={(text: string) => { setSearchQuery(text); setCurrentPage(1); }}
                 placeholder="بحث بالاسم أو الرمز..."
                 placeholderTextColor="#999"
               />
