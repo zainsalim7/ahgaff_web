@@ -427,10 +427,7 @@ export default function TeachingLoadPage() {
           </>
         )}
 
-        {viewMode === 'summary' && (
-          <>
-            {/* Date Range + Export Buttons */}
-            {Platform.OS === 'web' && (
+        {viewMode === 'summary' && Platform.OS === 'web' && (
               <View style={styles.filterCard}>
                 <Text style={styles.filterLabel}>فترة حساب إجمالي الساعات</Text>
                 <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
@@ -472,10 +469,10 @@ export default function TeachingLoadPage() {
                     {exportingExcel ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Ionicons name="download-outline" size={18} color="#fff" />
                         <Text style={styles.exportBtnText}>تصدير Excel</Text>
-                      </>
+                      </View>
                     )}
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -487,10 +484,10 @@ export default function TeachingLoadPage() {
                     {exportingPDF ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <Ionicons name="document-text-outline" size={18} color="#fff" />
                         <Text style={styles.exportBtnText}>تصدير PDF</Text>
-                      </>
+                      </View>
                     )}
                   </TouchableOpacity>
                 </View>
@@ -500,21 +497,25 @@ export default function TeachingLoadPage() {
                   </Text>
                 )}
               </View>
-            )}
+        )}
 
-            {loadingSummary ? (
+        {viewMode === 'summary' && loadingSummary && (
             <View style={styles.emptyCard}>
               <ActivityIndicator size="large" color="#1565c0" />
               <Text style={styles.emptyText}>جاري تحميل الجدول...</Text>
             </View>
-          ) : Object.keys(groupedByTeacher).length === 0 ? (
+        )}
+
+        {viewMode === 'summary' && !loadingSummary && Object.keys(groupedByTeacher).length === 0 && (
             <View style={styles.emptyCard}>
               <Ionicons name="document-text-outline" size={48} color="#ccc" />
               <Text style={styles.emptyText}>
                 {selectedDept ? 'لا توجد بيانات عبء تدريسي لهذا القسم' : 'اختر القسم لعرض جدول العبء التدريسي'}
               </Text>
             </View>
-          ) : (
+        )}
+
+        {viewMode === 'summary' && !loadingSummary && Object.keys(groupedByTeacher).length > 0 &&
             Object.entries(groupedByTeacher).map(([tId, group]) => (
               <View key={tId} style={styles.summaryCard}>
                 <View style={styles.summaryHeader}>
@@ -526,7 +527,6 @@ export default function TeachingLoadPage() {
                     <Text style={styles.summaryBadgeText}>{group.totalHours} ساعة/أسبوع</Text>
                   </View>
                 </View>
-                {/* Courses table */}
                 <View style={styles.summaryTableHeader}>
                   <Text style={[styles.summaryTableHeaderCell, { flex: 2 }]}>المقرر</Text>
                   <Text style={[styles.summaryTableHeaderCell, { flex: 1 }]}>الرمز</Text>
@@ -552,9 +552,7 @@ export default function TeachingLoadPage() {
                 ))}
               </View>
             ))
-          )
-          </>
-        )}
+        }
       </ScrollView>
     </SafeAreaView>
   );
