@@ -12,6 +12,7 @@ class CourseBase(BaseModel):
     teacher_id: Optional[str] = None
     level: int
     section: Optional[str] = ""
+    credit_hours: Optional[int] = 3
     semester_id: Optional[str] = None
     academic_year: Optional[str] = ""
 

@@ -114,6 +114,7 @@ export default function AddCourseScreen() {
     teacher_id: '',
     level: '1',
     section: '',
+    credit_hours: '3',
   });
   const [sectionCount, setSectionCount] = useState('');
   const SECTION_LABELS = ['أ', 'ب', 'ج', 'د', 'ه', 'و', 'ز', 'ح', 'ط', 'ي'];
@@ -177,6 +178,7 @@ export default function AddCourseScreen() {
       const baseData = {
         ...formData,
         level: parseInt(formData.level),
+        credit_hours: parseInt(formData.credit_hours) || 3,
         semester_id: settings?.current_semester_id || null,
         academic_year: settings?.academic_year || '',
       };
@@ -283,6 +285,7 @@ export default function AddCourseScreen() {
       teacher_id: '',
       level: '1',
       section: '',
+      credit_hours: '3',
     });
     setSectionCount('');
   };
@@ -387,6 +390,7 @@ export default function AddCourseScreen() {
       teacher_id: course.teacher_id || '',
       level: String(course.level),
       section: course.section || '',
+      credit_hours: String(course.credit_hours || 3),
     });
     setShowForm(true);
   };
@@ -772,6 +776,16 @@ export default function AddCourseScreen() {
                 ))}
               </Picker>
             </View>
+
+            <Text style={styles.label}>الساعات المعتمدة</Text>
+            <TextInput
+              style={styles.input}
+              value={formData.credit_hours}
+              onChangeText={(text) => setFormData({ ...formData, credit_hours: text.replace(/[^0-9]/g, '') })}
+              placeholder="3"
+              keyboardType="numeric"
+              data-testid="credit-hours-input"
+            />
 
             {editingCourse ? (
               <>
