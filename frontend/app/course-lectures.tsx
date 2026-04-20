@@ -828,6 +828,44 @@ export default function CourseLecturesScreen() {
         <View style={styles.courseInfo}>
           <Text style={styles.courseName}>{course?.name}</Text>
           <Text style={styles.courseCode}>{course?.code}</Text>
+          <View style={styles.courseDetailsRow}>
+            {course?.teacher_name && (
+              <View style={styles.courseDetailChip}>
+                <Ionicons name="person" size={13} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.courseDetailText}>{course.teacher_name}</Text>
+              </View>
+            )}
+            {course?.department_name && (
+              <View style={styles.courseDetailChip}>
+                <Ionicons name="business" size={13} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.courseDetailText}>{course.department_name}</Text>
+              </View>
+            )}
+            {course?.level && (
+              <View style={styles.courseDetailChip}>
+                <Ionicons name="layers" size={13} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.courseDetailText}>م{course.level}</Text>
+              </View>
+            )}
+            {course?.section ? (
+              <View style={styles.courseDetailChip}>
+                <Ionicons name="git-branch" size={13} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.courseDetailText}>{course.section}</Text>
+              </View>
+            ) : null}
+            {course?.students_count != null && (
+              <View style={styles.courseDetailChip}>
+                <Ionicons name="people" size={13} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.courseDetailText}>{course.students_count} طالب</Text>
+              </View>
+            )}
+            {course?.credit_hours && (
+              <View style={styles.courseDetailChip}>
+                <Ionicons name="time" size={13} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.courseDetailText}>{course.credit_hours} ساعات معتمدة</Text>
+              </View>
+            )}
+          </View>
         </View>
 
         {/* إحصائيات سريعة */}
@@ -1437,6 +1475,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: 'rgba(255,255,255,0.8)',
     marginBottom: 8,
+  },
+  courseDetailsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 8,
+  },
+  courseDetailChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+  },
+  courseDetailText: {
+    fontSize: 12,
+    color: '#fff',
+    fontWeight: '500',
   },
   lectureCount: {
     fontSize: 16,

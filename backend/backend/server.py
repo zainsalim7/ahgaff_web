@@ -3450,22 +3450,53 @@ async def get_courses(
     
     return result
 
-@api_router.get("/courses/{course_id}", response_model=CourseResponse)
+@api_router.get("/courses/{course_id}")
 async def get_course(course_id: str, current_user: dict = Depends(get_current_user)):
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    # جلب اسم المعلم
+    teacher_name = None
+    if course.get("teacher_id"):
+        try:
+            teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
+            if teacher:
+                teacher_name = teacher.get("full_name")
+            else:
+                teacher_user = await db.users.find_one({"_id": ObjectId(course["teacher_id"])})
+                if teacher_user:
+                    teacher_name = teacher_user.get("full_name")
+        except:
+            pass
+    
+    # جلب اسم القسم
+    department_name = None
+    if course.get("department_id"):
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
+            if dept:
+                department_name = dept.get("name")
+        except:
+            pass
+    
+    # عدد الطلاب المسجلين
+    students_count = await db.enrollments.count_documents({"course_id": str(course["_id"])})
     
     return {
         "id": str(course["_id"]),
         "name": course["name"],
         "code": course["code"],
         "department_id": course["department_id"],
+        "department_name": department_name,
         "teacher_id": course["teacher_id"],
+        "teacher_name": teacher_name,
         "level": course["level"],
         "section": course.get("section", ""),
         "credit_hours": course.get("credit_hours", 3),
+        "students_count": students_count,
         "semester": course.get("semester", "الفصل الأول"),
+        "semester_id": course.get("semester_id"),
         "academic_year": course.get("academic_year", "2024-2025"),
         "created_at": course["created_at"],
         "is_active": course.get("is_active", True)
