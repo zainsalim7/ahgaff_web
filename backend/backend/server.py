@@ -7065,6 +7065,14 @@ async def get_teacher_delays_report(
             if isinstance(started_at, str):
                 started_at = datetime.fromisoformat(started_at)
             
+            # إزالة timezone للمقارنة العادلة
+            if hasattr(started_at, 'tzinfo') and started_at.tzinfo is not None:
+                started_at = started_at.replace(tzinfo=None)
+            
+            # تجاهل إذا كان التحضير في يوم مختلف (تحضير متأخر جداً)
+            if started_at.date() != lecture_start.date():
+                continue
+            
             delay_minutes = int((started_at - lecture_start).total_seconds() / 60)
             if delay_minutes < 0:
                 delay_minutes = 0
@@ -7076,6 +7084,8 @@ async def get_teacher_delays_report(
             teacher = None
             try:
                 teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+                if not teacher:
+                    teacher = await db.users.find_one({"_id": ObjectId(teacher_id)})
             except Exception:
                 pass
             
