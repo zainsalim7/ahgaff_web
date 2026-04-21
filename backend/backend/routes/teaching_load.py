@@ -320,6 +320,49 @@ async def get_teacher_courses_for_load(
             "existing_notes": load.get("notes", "") if load else "",
         })
 
+@router.get("/teaching-load/search-courses")
+async def search_courses_for_load(
+    q: str = "",
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """بحث في المقررات لإسناد العبء التدريسي"""
+    if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    db = get_db()
+    query = {"is_active": True}
+    if department_id:
+        query["department_id"] = department_id
+    if q:
+        query["$or"] = [
+            {"name": {"$regex": q, "$options": "i"}},
+            {"code": {"$regex": q, "$options": "i"}},
+        ]
+
+    courses = await db.courses.find(query).limit(20).to_list(20)
+    result = []
+    for c in courses:
+        teacher_name = ""
+        if c.get("teacher_id"):
+            try:
+                t = await db.teachers.find_one({"_id": ObjectId(c["teacher_id"])})
+                if t:
+                    teacher_name = t.get("full_name", "")
+            except Exception:
+                pass
+        result.append({
+            "course_id": str(c["_id"]),
+            "course_name": c.get("name", ""),
+            "course_code": c.get("code", ""),
+            "section": c.get("section", ""),
+            "level": c.get("level", 1),
+            "credit_hours": c.get("credit_hours", 3),
+            "current_teacher_name": teacher_name,
+        })
+    return result
+
+
     return result
 
 

@@ -557,6 +557,8 @@ export const teachingLoadAPI = {
   delete: (id: string) => api.delete(`/teaching-load/${id}`),
   getTeacherCourses: (teacherId: string, departmentId?: string) =>
     api.get(`/teaching-load/teacher/${teacherId}/courses`, { params: { department_id: departmentId } }),
+  searchCourses: (q: string, departmentId?: string) =>
+    api.get('/teaching-load/search-courses', { params: { q, department_id: departmentId } }),
   bulkSave: (items: { teacher_id: string; course_id: string; weekly_hours: number; semester_id?: string; notes?: string }[]) =>
     api.post('/teaching-load/bulk', items),
 };
