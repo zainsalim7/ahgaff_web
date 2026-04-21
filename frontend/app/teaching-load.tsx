@@ -374,72 +374,64 @@ export default function TeachingLoadPage() {
             {selectedTeacher && (
               <View style={styles.tableCard}>
                 {/* Search Box */}
-                <Text style={styles.filterLabel}>بحث عن مقرر لإضافته</Text>
+                <Text style={[styles.filterLabel, { textAlign: 'right' }]}>بحث عن مقرر لإضافته</Text>
                 {Platform.OS === 'web' ? (
-                  <View style={{ position: 'relative', marginBottom: 12 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 10, borderWidth: 1, borderColor: '#ddd', paddingHorizontal: 12 }}>
-                      <Ionicons name="search" size={18} color="#999" />
+                  <View style={{ position: 'relative', marginBottom: 16, zIndex: 100 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 10, border: '1px solid #ddd', padding: '0 12px', direction: 'rtl' }}>
                       <input
                         type="text"
                         value={searchQuery}
                         onChange={(e: any) => handleSearch(e.target.value)}
                         onFocus={() => { if (searchResults.length > 0) setShowResults(true); }}
                         placeholder="ابحث بالرمز أو اسم المقرر..."
-                        style={{ flex: 1, padding: 12, border: 'none', background: 'transparent', fontSize: 14, outline: 'none' }}
+                        style={{ flex: 1, padding: '12px 8px', border: 'none', background: 'transparent', fontSize: 15, outline: 'none', direction: 'rtl', textAlign: 'right' }}
                         data-testid="course-search-input"
                       />
-                      {searching && <ActivityIndicator size="small" color="#1565c0" />}
-                    </View>
+                      {searching ? <ActivityIndicator size="small" color="#1565c0" /> : <Ionicons name="search" size={20} color="#999" />}
+                    </div>
                     {/* Search Results Dropdown */}
                     {showResults && searchResults.length > 0 && (
-                      <View style={{ position: 'absolute', top: 50, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd', zIndex: 999, maxHeight: 250, overflow: 'hidden' as any }}>
-                        <ScrollView style={{ maxHeight: 250 }} nestedScrollEnabled>
-                          {searchResults.map(c => (
-                            <TouchableOpacity
-                              key={c.course_id}
-                              style={{ flexDirection: 'row', alignItems: 'center', padding: 12, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}
-                              onPress={() => addCourseToList(c)}
-                              data-testid={`search-result-${c.course_id}`}
-                            >
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{c.course_name}</Text>
-                                <Text style={{ fontSize: 12, color: '#888' }}>{c.course_code} - م{c.level} {c.section ? `(${c.section})` : ''}</Text>
-                                {c.current_teacher_name ? <Text style={{ fontSize: 11, color: '#e65100' }}>مسند لـ: {c.current_teacher_name}</Text> : null}
-                              </View>
-                              <Ionicons name="add-circle" size={24} color="#4caf50" />
-                            </TouchableOpacity>
-                          ))}
-                        </ScrollView>
-                      </View>
+                      <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', zIndex: 1000, maxHeight: 280, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', direction: 'rtl' }}>
+                        {searchResults.map(c => (
+                          <TouchableOpacity
+                            key={c.course_id}
+                            style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}
+                            onPress={() => addCourseToList(c)}
+                            data-testid={`search-result-${c.course_id}`}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', textAlign: 'right' }}>{c.course_name}</Text>
+                              <Text style={{ fontSize: 12, color: '#888', textAlign: 'right' }}>{c.course_code} - م{c.level} {c.section ? `(${c.section})` : ''}</Text>
+                              {c.current_teacher_name ? <Text style={{ fontSize: 11, color: '#e65100', textAlign: 'right' }}>مسند لـ: {c.current_teacher_name}</Text> : null}
+                            </View>
+                            <Ionicons name="add-circle" size={26} color="#4caf50" style={{ marginLeft: 12 }} />
+                          </TouchableOpacity>
+                        ))}
+                      </div>
                     )}
                     {showResults && searchQuery.length > 0 && searchResults.length === 0 && !searching && (
-                      <View style={{ position: 'absolute', top: 50, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#ddd', padding: 16, alignItems: 'center' }}>
+                      <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', padding: 16, textAlign: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
                         <Text style={{ color: '#999' }}>لا توجد نتائج</Text>
-                      </View>
+                      </div>
                     )}
                   </View>
                 ) : null}
 
-                {/* Selected Courses Table */}
+                {/* Selected Courses List */}
                 {selectedCourses.length > 0 && (
-                  <>
-                    <Text style={styles.tableTitle}>المقررات المختارة ({selectedCourses.length})</Text>
-                    <View style={styles.tableHeaderRow}>
-                      <Text style={[styles.tableHeaderCell, { flex: 2.5 }]}>المقرر</Text>
-                      <Text style={[styles.tableHeaderCell, { flex: 1 }]}>الرمز</Text>
-                      <Text style={[styles.tableHeaderCell, { flex: 0.7 }]}>م</Text>
-                      <Text style={[styles.tableHeaderCell, { flex: 1.3 }]}>ساعات أسبوعية</Text>
-                      <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}></Text>
-                    </View>
+                  <View style={{ marginTop: 4 }}>
+                    <Text style={[styles.tableTitle, { textAlign: 'right' }]}>المقررات المختارة ({selectedCourses.length})</Text>
                     {selectedCourses.map((c) => (
-                      <View key={c.course_id} style={[styles.tableRow, c.existing_load_id ? { backgroundColor: '#f1f8e9' } : {}]}>
-                        <View style={{ flex: 2.5 }}>
-                          <Text style={styles.tableCell}>{c.course_name}</Text>
-                          {c.section ? <Text style={{ fontSize: 10, color: '#888' }}>{c.section}</Text> : null}
+                      <View key={c.course_id} style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 12, marginBottom: 8, backgroundColor: c.existing_load_id ? '#f1f8e9' : '#fafafa', borderRadius: 10, borderWidth: 1, borderColor: c.existing_load_id ? '#c8e6c9' : '#eee' }}>
+                        {/* Course Info */}
+                        <View style={{ flex: 1, marginLeft: 12 }}>
+                          <Text style={{ fontSize: 15, fontWeight: '600', color: '#333', textAlign: 'right' }}>{c.course_name}</Text>
+                          <Text style={{ fontSize: 12, color: '#888', textAlign: 'right', marginTop: 2 }}>
+                            {c.course_code} - م{c.level} {c.section ? `| ${c.section}` : ''}
+                          </Text>
                         </View>
-                        <Text style={[styles.tableCell, { flex: 1, color: '#666' }]}>{c.course_code}</Text>
-                        <Text style={[styles.tableCell, { flex: 0.7, textAlign: 'center' }]}>{c.level}</Text>
-                        <View style={{ flex: 1.3, paddingHorizontal: 4 }}>
+                        {/* Hours Input */}
+                        <View style={{ width: 100, marginHorizontal: 8 }}>
                           {Platform.OS === 'web' ? (
                             <input
                               type="number"
@@ -447,34 +439,35 @@ export default function TeachingLoadPage() {
                               step="0.5"
                               value={hoursMap[c.course_id] || ''}
                               onChange={(e: any) => setHoursMap(prev => ({ ...prev, [c.course_id]: e.target.value }))}
-                              placeholder="0"
+                              placeholder="الساعات"
                               style={{
-                                width: '100%', padding: 8, borderRadius: 8, border: '1px solid #ddd',
-                                fontSize: 14, textAlign: 'center',
+                                width: '100%', padding: '8px 4px', borderRadius: 8, border: '1px solid #ccc',
+                                fontSize: 15, textAlign: 'center', fontWeight: '600',
                                 backgroundColor: c.existing_load_id ? '#e8f5e9' : '#fff',
                               }}
                               data-testid={`teaching-load-hours-${c.course_id}`}
                             />
                           ) : (
-                            <Text style={[styles.tableCell, { textAlign: 'center' }]}>{hoursMap[c.course_id] || '0'}</Text>
+                            <Text style={{ textAlign: 'center', fontSize: 15, fontWeight: '600' }}>{hoursMap[c.course_id] || '0'}</Text>
                           )}
+                          <Text style={{ fontSize: 10, color: '#999', textAlign: 'center', marginTop: 2 }}>ساعة/أسبوع</Text>
                         </View>
-                        <View style={{ flex: 0.5, alignItems: 'center', justifyContent: 'center' }}>
-                          <TouchableOpacity
-                            onPress={() => {
-                              if (c.existing_load_id) handleDelete(c.existing_load_id, c.course_name);
-                              else removeCourseFromList(c.course_id);
-                            }}
-                            data-testid={`remove-course-${c.course_id}`}
-                          >
-                            <Ionicons name={c.existing_load_id ? "trash-outline" : "close-circle"} size={20} color="#e53935" />
-                          </TouchableOpacity>
-                        </View>
+                        {/* Delete Button */}
+                        <TouchableOpacity
+                          onPress={() => {
+                            if (c.existing_load_id) handleDelete(c.existing_load_id, c.course_name);
+                            else removeCourseFromList(c.course_id);
+                          }}
+                          style={{ padding: 6 }}
+                          data-testid={`remove-course-${c.course_id}`}
+                        >
+                          <Ionicons name={c.existing_load_id ? "trash-outline" : "close-circle"} size={22} color="#e53935" />
+                        </TouchableOpacity>
                       </View>
                     ))}
 
                     {/* Total */}
-                    <View style={styles.totalRow}>
+                    <View style={[styles.totalRow, { flexDirection: 'row-reverse' }]}>
                       <Text style={styles.totalLabel}>المجموع الأسبوعي</Text>
                       <Text style={styles.totalValue}>
                         {Object.values(hoursMap).reduce((sum, v) => sum + (parseFloat(v) || 0), 0)} ساعة
@@ -497,7 +490,7 @@ export default function TeachingLoadPage() {
                         </View>
                       )}
                     </TouchableOpacity>
-                  </>
+                  </View>
                 )}
 
                 {selectedCourses.length === 0 && (
