@@ -4122,6 +4122,34 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
             {"$set": update_data}
         )
     
+    # مزامنة مع العبء التدريسي عند تغيير المعلم
+    new_teacher_id = update_data.get("teacher_id")
+    old_teacher_id = course.get("teacher_id")
+    if new_teacher_id is not None and new_teacher_id != old_teacher_id:
+        # حذف عبء المعلم القديم لهذا المقرر
+        if old_teacher_id:
+            await db.teaching_loads.delete_many({
+                "course_id": course_id,
+                "teacher_id": old_teacher_id,
+            })
+        # إذا المعلم الجديد ليس فارغاً، تحقق إذا عنده عبء مسبق
+        if new_teacher_id:
+            existing_load = await db.teaching_loads.find_one({
+                "course_id": course_id,
+                "teacher_id": new_teacher_id,
+            })
+            if not existing_load:
+                # إنشاء سجل عبء تدريسي جديد بساعات المقرر المعتمدة
+                credit_hours = course.get("credit_hours", 3)
+                await db.teaching_loads.insert_one({
+                    "teacher_id": new_teacher_id,
+                    "course_id": course_id,
+                    "weekly_hours": credit_hours,
+                    "created_by": current_user["id"],
+                    "created_at": datetime.now(timezone.utc),
+                    "updated_at": datetime.now(timezone.utc),
+                })
+
     updated = await db.courses.find_one({"_id": ObjectId(course_id)})
     result = {
         "id": str(updated["_id"]),

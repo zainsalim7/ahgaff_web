@@ -192,6 +192,8 @@ async def create_teaching_load(
             f"{teacher.get('full_name', '')} - {course.get('name', '')}",
             {"weekly_hours": data.weekly_hours}
         )
+        # ربط المعلم بالمقرر في courses
+        await db.courses.update_one({"_id": ObjectId(data.course_id)}, {"$set": {"teacher_id": data.teacher_id}})
         return {"id": str(existing["_id"]), "message": "تم تحديث العبء التدريسي بنجاح", "updated": True}
 
     doc = {
@@ -205,6 +207,9 @@ async def create_teaching_load(
         "updated_at": datetime.now(timezone.utc),
     }
     result = await db.teaching_loads.insert_one(doc)
+
+    # ربط المعلم بالمقرر في courses
+    await db.courses.update_one({"_id": ObjectId(data.course_id)}, {"$set": {"teacher_id": data.teacher_id}})
 
     await log_activity(
         current_user, "create_teaching_load", "teaching_load",
@@ -262,6 +267,12 @@ async def delete_teaching_load(
         raise HTTPException(status_code=404, detail="السجل غير موجود")
 
     await db.teaching_loads.delete_one({"_id": ObjectId(load_id)})
+
+    # إزالة ربط المعلم من المقرر
+    await db.courses.update_one(
+        {"_id": ObjectId(existing["course_id"]), "teacher_id": existing["teacher_id"]},
+        {"$set": {"teacher_id": None}}
+    )
 
     await log_activity(
         current_user, "delete_teaching_load", "teaching_load",
@@ -438,6 +449,12 @@ async def bulk_save_teaching_load(
                 "updated_at": datetime.now(timezone.utc),
             })
             created += 1
+
+        # ربط المعلم بالمقرر في courses
+        await db.courses.update_one(
+            {"_id": ObjectId(item.course_id)},
+            {"$set": {"teacher_id": item.teacher_id}}
+        )
 
     await log_activity(
         current_user, "bulk_teaching_load", "teaching_load",
