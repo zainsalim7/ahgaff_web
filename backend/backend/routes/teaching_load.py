@@ -153,7 +153,23 @@ async def create_teaching_load(
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
 
-    # Check if already exists
+    # التحقق: هل هذا المقرر (الشعبة) مسند لمعلم آخر؟
+    assigned_to_other = await db.teaching_loads.find_one({
+        "course_id": data.course_id,
+        "teacher_id": {"$ne": data.teacher_id},
+    })
+    if assigned_to_other:
+        other_teacher = await db.teachers.find_one({"_id": ObjectId(assigned_to_other["teacher_id"])})
+        other_name = other_teacher.get("full_name", "معلم آخر") if other_teacher else "معلم آخر"
+        course_label = f"{course.get('name', '')} ({course.get('code', '')})"
+        if course.get("section"):
+            course_label += f" - {course['section']}"
+        raise HTTPException(
+            status_code=409,
+            detail=f"المقرر {course_label} مسند بالفعل للمعلم {other_name}. يجب حذف الإسناد الأول قبل إسناده لمعلم آخر"
+        )
+
+    # Check if already exists for this teacher
     existing = await db.teaching_loads.find_one({
         "teacher_id": data.teacher_id,
         "course_id": data.course_id,
@@ -378,8 +394,22 @@ async def bulk_save_teaching_load(
     db = get_db()
     created = 0
     updated = 0
+    errors = []
 
     for item in items:
+        # التحقق: هل المقرر مسند لمعلم آخر؟
+        assigned_to_other = await db.teaching_loads.find_one({
+            "course_id": item.course_id,
+            "teacher_id": {"$ne": item.teacher_id},
+        })
+        if assigned_to_other:
+            course = await db.courses.find_one({"_id": ObjectId(item.course_id)})
+            other_teacher = await db.teachers.find_one({"_id": ObjectId(assigned_to_other["teacher_id"])})
+            course_name = course.get("name", "") if course else ""
+            other_name = other_teacher.get("full_name", "معلم آخر") if other_teacher else "معلم آخر"
+            errors.append(f"{course_name} مسند لـ {other_name}")
+            continue
+
         existing = await db.teaching_loads.find_one({
             "teacher_id": item.teacher_id,
             "course_id": item.course_id,
@@ -414,10 +444,15 @@ async def bulk_save_teaching_load(
         None, None, {"created": created, "updated": updated}
     )
 
+    msg = f"تم الحفظ بنجاح: {created} جديد، {updated} محدث"
+    if errors:
+        msg += f"\n\nلم يتم إسناد {len(errors)} مقرر:\n" + "\n".join(errors)
+
     return {
-        "message": f"تم الحفظ بنجاح: {created} جديد، {updated} محدث",
+        "message": msg,
         "created": created,
         "updated": updated,
+        "errors": errors,
     }
 
 
