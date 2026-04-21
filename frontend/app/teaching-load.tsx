@@ -23,7 +23,9 @@ interface CourseLoad {
   course_name: string;
   course_code: string;
   section: string;
+  level: number;
   credit_hours: number;
+  current_teacher_name: string;
   existing_load_id: string | null;
   existing_weekly_hours: number | null;
   existing_notes: string;
@@ -107,7 +109,7 @@ export default function TeachingLoadPage() {
     (async () => {
       setLoadingCourses(true);
       try {
-        const res = await teachingLoadAPI.getTeacherCourses(selectedTeacher);
+        const res = await teachingLoadAPI.getTeacherCourses(selectedTeacher, selectedDept || undefined);
         const data: CourseLoad[] = res.data;
         setCourses(data);
         const map: Record<string, string> = {};
@@ -180,7 +182,7 @@ export default function TeachingLoadPage() {
       Alert.alert('نجاح', 'تم الحذف');
       if (viewMode === 'summary') loadSummary();
       else if (selectedTeacher) {
-        const res = await teachingLoadAPI.getTeacherCourses(selectedTeacher);
+        const res = await teachingLoadAPI.getTeacherCourses(selectedTeacher, selectedDept || undefined);
         setCourses(res.data);
         const map: Record<string, string> = {};
         for (const c of res.data) {
@@ -340,18 +342,24 @@ export default function TeachingLoadPage() {
                   <View style={styles.tableHeaderRow}>
                     <Text style={[styles.tableHeaderCell, { flex: 2 }]}>المقرر</Text>
                     <Text style={[styles.tableHeaderCell, { flex: 1 }]}>الرمز</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>الشعبة</Text>
-                    <Text style={[styles.tableHeaderCell, { flex: 1 }]}>الساعات المعتمدة</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 0.7 }]}>م</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 0.7 }]}>الشعبة</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 1.3 }]}>المعلم الحالي</Text>
+                    <Text style={[styles.tableHeaderCell, { flex: 0.7 }]}>معتمدة</Text>
                     <Text style={[styles.tableHeaderCell, { flex: 1.2 }]}>ساعات أسبوعية</Text>
                     <Text style={[styles.tableHeaderCell, { flex: 0.5 }]}></Text>
                   </View>
                   {/* Table Body */}
                   {courses.map((c) => (
-                    <View key={c.course_id} style={styles.tableRow}>
+                    <View key={c.course_id} style={[styles.tableRow, c.existing_load_id ? { backgroundColor: '#f1f8e9' } : {}]}>
                       <Text style={[styles.tableCell, { flex: 2 }]}>{c.course_name}</Text>
                       <Text style={[styles.tableCell, { flex: 1, color: '#666' }]}>{c.course_code}</Text>
-                      <Text style={[styles.tableCell, { flex: 1, color: '#888' }]}>{c.section || '-'}</Text>
-                      <Text style={[styles.tableCell, { flex: 1, textAlign: 'center' }]}>{c.credit_hours}</Text>
+                      <Text style={[styles.tableCell, { flex: 0.7, textAlign: 'center' }]}>{c.level}</Text>
+                      <Text style={[styles.tableCell, { flex: 0.7, color: '#888', textAlign: 'center' }]}>{c.section || '-'}</Text>
+                      <Text style={[styles.tableCell, { flex: 1.3, color: c.current_teacher_name ? '#e65100' : '#999', fontSize: 11 }]}>
+                        {c.current_teacher_name || 'غير مسند'}
+                      </Text>
+                      <Text style={[styles.tableCell, { flex: 0.7, textAlign: 'center' }]}>{c.credit_hours}</Text>
                       <View style={[{ flex: 1.2, paddingHorizontal: 4 }]}>
                         {Platform.OS === 'web' ? (
                           <input

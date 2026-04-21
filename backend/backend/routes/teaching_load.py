@@ -258,14 +258,26 @@ async def delete_teaching_load(
 @router.get("/teaching-load/teacher/{teacher_id}/courses")
 async def get_teacher_courses_for_load(
     teacher_id: str,
+    department_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """جلب مقررات المعلم لتعيين العبء"""
+    """جلب جميع المقررات المتاحة لتعيين العبء للمعلم"""
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     db = get_db()
-    courses = await db.courses.find({"teacher_id": teacher_id, "is_active": True}).to_list(100)
+    
+    # جلب بيانات المعلم لمعرفة قسمه
+    teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+    
+    # جلب جميع المقررات النشطة (حسب القسم إذا محدد)
+    course_query = {"is_active": True}
+    if department_id:
+        course_query["department_id"] = department_id
+    elif teacher and teacher.get("department_id"):
+        course_query["department_id"] = teacher["department_id"]
+    
+    courses = await db.courses.find(course_query).to_list(500)
 
     # Get existing loads for this teacher
     existing_loads = await db.teaching_loads.find({"teacher_id": teacher_id}).to_list(100)
@@ -284,13 +296,25 @@ async def get_teacher_courses_for_load(
             except Exception:
                 pass
 
+        # اسم المعلم المسند حالياً للمقرر
+        current_teacher_name = ""
+        if c.get("teacher_id") and c["teacher_id"] != teacher_id:
+            try:
+                ct = await db.teachers.find_one({"_id": ObjectId(c["teacher_id"])})
+                if ct:
+                    current_teacher_name = ct.get("full_name", "")
+            except Exception:
+                pass
+
         result.append({
             "course_id": cid,
             "course_name": c.get("name", ""),
             "course_code": c.get("code", ""),
             "section": c.get("section", ""),
+            "level": c.get("level", 1),
             "department_name": dept_name,
             "credit_hours": c.get("credit_hours", 3),
+            "current_teacher_name": current_teacher_name,
             "existing_load_id": str(load["_id"]) if load else None,
             "existing_weekly_hours": load.get("weekly_hours") if load else None,
             "existing_notes": load.get("notes", "") if load else "",
