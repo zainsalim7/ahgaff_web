@@ -69,6 +69,8 @@ export default function TeachingLoadPage() {
   const [searching, setSearching] = useState(false);
   const [showResults, setShowResults] = useState(false);
   const searchTimeout = React.useRef<any>(null);
+  // Summary teacher filter
+  const [summaryTeacherId, setSummaryTeacherId] = useState('');
 
   // Load departments on mount
   useEffect(() => {
@@ -105,6 +107,7 @@ export default function TeachingLoadPage() {
   }, [selectedDept]);
 
   // Load existing teacher loads when teacher changes
+  const [loadingExisting, setLoadingExisting] = useState(false);
   useEffect(() => {
     if (!selectedTeacher) {
       setSelectedCourses([]);
@@ -114,10 +117,22 @@ export default function TeachingLoadPage() {
       return;
     }
     (async () => {
+      setLoadingExisting(true);
       try {
-        const res = await teachingLoadAPI.getTeacherCourses(selectedTeacher, selectedDept || undefined);
-        const data: CourseLoad[] = res.data;
-        const existing = data.filter(c => c.existing_load_id);
+        const res = await teachingLoadAPI.getAll({ teacher_id: selectedTeacher });
+        const items = res.data.items || [];
+        const existing: CourseLoad[] = items.map((i: any) => ({
+          course_id: i.course_id,
+          course_name: i.course_name,
+          course_code: i.course_code,
+          section: i.course_section || '',
+          level: 0,
+          credit_hours: 0,
+          current_teacher_name: '',
+          existing_load_id: i.id,
+          existing_weekly_hours: i.weekly_hours,
+          existing_notes: i.notes || '',
+        }));
         setSelectedCourses(existing);
         const map: Record<string, string> = {};
         for (const c of existing) {
@@ -126,6 +141,8 @@ export default function TeachingLoadPage() {
         setHoursMap(map);
       } catch (e) {
         console.error('Error loading teacher loads:', e);
+      } finally {
+        setLoadingExisting(false);
       }
     })();
   }, [selectedTeacher]);
@@ -174,6 +191,7 @@ export default function TeachingLoadPage() {
     try {
       const params: any = {};
       if (selectedDept) params.department_id = selectedDept;
+      if (summaryTeacherId) params.teacher_id = summaryTeacherId;
       const res = await teachingLoadAPI.getAll(params);
       setExistingLoads(res.data.items || []);
     } catch (e) {
@@ -181,11 +199,11 @@ export default function TeachingLoadPage() {
     } finally {
       setLoadingSummary(false);
     }
-  }, [selectedDept]);
+  }, [selectedDept, summaryTeacherId]);
 
   useEffect(() => {
     if (viewMode === 'summary') loadSummary();
-  }, [viewMode, selectedDept, loadSummary]);
+  }, [viewMode, selectedDept, summaryTeacherId, loadSummary]);
 
   const handleSave = async () => {
     if (!selectedTeacher) return;
@@ -207,8 +225,20 @@ export default function TeachingLoadPage() {
       const res = await teachingLoadAPI.bulkSave(items);
       Alert.alert('نجاح', res.data.message);
       // Reload existing loads
-      const refreshRes = await teachingLoadAPI.getTeacherCourses(selectedTeacher, selectedDept || undefined);
-      const existing = refreshRes.data.filter((c: CourseLoad) => c.existing_load_id);
+      const refreshRes = await teachingLoadAPI.getAll({ teacher_id: selectedTeacher });
+      const refreshItems = refreshRes.data.items || [];
+      const existing: CourseLoad[] = refreshItems.map((i: any) => ({
+        course_id: i.course_id,
+        course_name: i.course_name,
+        course_code: i.course_code,
+        section: i.course_section || '',
+        level: 0,
+        credit_hours: 0,
+        current_teacher_name: '',
+        existing_load_id: i.id,
+        existing_weekly_hours: i.weekly_hours,
+        existing_notes: i.notes || '',
+      }));
       setSelectedCourses(existing);
       const map: Record<string, string> = {};
       for (const c of existing) {
@@ -371,7 +401,13 @@ export default function TeachingLoadPage() {
             )}
 
             {/* Course Search + Selected Courses */}
-            {selectedTeacher && (
+            {selectedTeacher && loadingExisting && (
+              <View style={styles.emptyCard}>
+                <ActivityIndicator size="large" color="#1565c0" />
+                <Text style={styles.emptyText}>جاري تحميل المقررات المسندة...</Text>
+              </View>
+            )}
+            {selectedTeacher && !loadingExisting && (
               <View style={styles.tableCard}>
                 {/* Search Box */}
                 <Text style={[styles.filterLabel, { textAlign: 'right' }]}>بحث عن مقرر لإضافته</Text>
@@ -510,6 +546,24 @@ export default function TeachingLoadPage() {
               </View>
             )}
           </>
+        )}
+
+        {viewMode === 'summary' && selectedDept && (
+              <View style={styles.filterCard}>
+                <Text style={[styles.filterLabel, { textAlign: 'right' }]}>المعلم (اختياري)</Text>
+                <View style={styles.pickerWrapper}>
+                  <Picker
+                    selectedValue={summaryTeacherId}
+                    onValueChange={(v) => setSummaryTeacherId(v)}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="-- كل المعلمين --" value="" />
+                    {teachers.map(t => (
+                      <Picker.Item key={t.id} label={t.full_name} value={t.id} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
         )}
 
         {viewMode === 'summary' && Platform.OS === 'web' && (
