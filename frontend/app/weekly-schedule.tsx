@@ -442,7 +442,9 @@ export default function WeeklySchedulePage() {
                 <Ionicons name="add" size={16} color="#fff" /><Text style={st.btnText}>إضافة</Text>
               </TouchableOpacity>
             </View>
-            {rooms.map(r => (
+            )}
+
+            {selectedFaculty && rooms.map(r => (
               <View key={r.id} style={[st.card, { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' }]}>
                 <View>
                   <Text style={{ fontSize: 15, fontWeight: '600', color: '#333', textAlign: 'right' }}>{r.name}</Text>
@@ -451,8 +453,7 @@ export default function WeeklySchedulePage() {
                 <TouchableOpacity onPress={() => handleDeleteRoom(r.id)}><Ionicons name="trash-outline" size={20} color="#e53935" /></TouchableOpacity>
               </View>
             ))}
-            {rooms.length === 0 && <View style={st.emptyCard}><Text style={st.emptyText}>لا توجد قاعات لهذه الكلية</Text></View>}
-            )}
+            {selectedFaculty && rooms.length === 0 && <View style={st.emptyCard}><Text style={st.emptyText}>لا توجد قاعات لهذه الكلية</Text></View>}
 
             {!selectedFaculty && <View style={st.emptyCard}><Ionicons name="business-outline" size={48} color="#ccc" /><Text style={st.emptyText}>اختر الكلية لعرض قاعاتها</Text></View>}
           </>
