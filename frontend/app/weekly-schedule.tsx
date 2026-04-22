@@ -7,7 +7,7 @@ import { Picker } from '@react-native-picker/picker';
 import { scheduleAPI, departmentsAPI, teachersAPI, coursesAPI } from '../src/services/api';
 import api from '../src/services/api';
 
-const DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء'];
+const DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 const COLORS = ['#1565c0', '#2e7d32', '#e65100', '#6a1b9a', '#c62828', '#00838f', '#4e342e', '#37474f'];
 
 export default function WeeklySchedulePage() {

@@ -149,7 +149,7 @@ async def get_schedule_settings(current_user: dict = Depends(get_current_user)):
                 {"slot_number": 4, "name": "المحاضرة الرابعة", "start_time": "13:15", "end_time": "14:45"},
                 {"slot_number": 5, "name": "المحاضرة الخامسة", "start_time": "15:00", "end_time": "16:30"},
             ],
-            "working_days": ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء"],
+            "working_days": ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"],
         }
         await db.schedule_settings.insert_one(default)
         settings = default
