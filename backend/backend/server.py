@@ -3340,6 +3340,7 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
     
     # البحث عن طلاب مطابقين (القسم + المستوى + الشعبة)
     matching_students_count = 0
+    auto_enrolled_count = 0
     try:
         student_query = {
             "department_id": course_dict.get("department_id"),
@@ -3348,7 +3349,22 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
         }
         if course_dict.get("section"):
             student_query["section"] = course_dict["section"]
-        matching_students_count = await db.students.count_documents(student_query)
+        matching_students = await db.students.find(student_query, {"_id": 1}).to_list(10000)
+        matching_students_count = len(matching_students)
+        
+        # تسجيل تلقائي لجميع الطلاب المطابقين
+        course_id_str = str(result.inserted_id)
+        for s in matching_students:
+            sid = str(s["_id"])
+            existing = await db.enrollments.find_one({"course_id": course_id_str, "student_id": sid})
+            if not existing:
+                await db.enrollments.insert_one({
+                    "course_id": course_id_str,
+                    "student_id": sid,
+                    "enrolled_at": get_yemen_time(),
+                    "enrolled_by": current_user["id"]
+                })
+                auto_enrolled_count += 1
     except:
         pass
     
@@ -3366,6 +3382,7 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
         "created_at": str(course_dict.get("created_at", "")),
         "is_active": course_dict.get("is_active", True),
         "matching_students_count": matching_students_count,
+        "auto_enrolled_count": auto_enrolled_count,
     }
     if warning:
         response["warning"] = warning
