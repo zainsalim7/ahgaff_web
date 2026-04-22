@@ -13,6 +13,17 @@ from models.permissions import Permission
 
 router = APIRouter(tags=["الجدول الأسبوعي"])
 
+SCHEDULE_ROLES = {"admin", "dean", "department_head", "registrar"}
+
+def can_manage_schedule(user: dict) -> bool:
+    if user.get("role") in SCHEDULE_ROLES:
+        return True
+    if has_permission(user, Permission.MANAGE_SETTINGS):
+        return True
+    if has_permission(user, Permission.MANAGE_COURSES):
+        return True
+    return False
+
 
 # ===== Models =====
 
@@ -99,7 +110,7 @@ async def get_rooms(
 
 @router.post("/rooms")
 async def create_room(data: RoomCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     existing = await db.rooms.find_one({"name": data.name, "faculty_id": data.faculty_id})
@@ -113,7 +124,7 @@ async def create_room(data: RoomCreate, current_user: dict = Depends(get_current
 
 @router.put("/rooms/{room_id}")
 async def update_room(room_id: str, data: RoomUpdate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     update = {k: v for k, v in data.dict().items() if v is not None}
@@ -125,7 +136,7 @@ async def update_room(room_id: str, data: RoomUpdate, current_user: dict = Depen
 
 @router.delete("/rooms/{room_id}")
 async def delete_room(room_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await db.rooms.delete_one({"_id": ObjectId(room_id)})
@@ -165,7 +176,7 @@ async def update_schedule_settings(
     working_days: Optional[List[str]] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     update = {}
@@ -183,7 +194,7 @@ async def save_time_slots(
     slots: List[TimeSlotCreate],
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     slots_data = [s.dict() for s in slots]
@@ -217,7 +228,7 @@ async def update_teacher_preferences(
     data: TeacherPreferenceUpdate,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await db.teacher_preferences.update_one(
@@ -327,7 +338,7 @@ async def create_schedule_slot(
     data: ScheduleSlotCreate,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
 
@@ -401,7 +412,7 @@ async def update_schedule_slot(
     data: ScheduleSlotUpdate,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     existing = await db.weekly_schedule.find_one({"_id": ObjectId(slot_id)})
@@ -445,7 +456,7 @@ async def delete_schedule_slot(
     slot_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await db.weekly_schedule.delete_one({"_id": ObjectId(slot_id)})
@@ -459,7 +470,7 @@ async def clear_schedule(
     current_user: dict = Depends(get_current_user),
 ):
     """مسح كامل الجدول أو جدول كلية/قسم"""
-    if current_user["role"] != "admin":
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     query = {}
@@ -480,7 +491,7 @@ async def auto_generate_schedule(
     current_user: dict = Depends(get_current_user),
 ):
     """توليد جدول تلقائي مع مراعاة التعارضات والتفضيلات"""
-    if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
+    if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     db = get_db()
