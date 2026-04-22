@@ -46,6 +46,7 @@ export default function AddCourseScreen() {
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [enrollingAll, setEnrollingAll] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
@@ -942,16 +943,18 @@ export default function AddCourseScreen() {
                       </TouchableOpacity>
                       {filterDept && (
                         <TouchableOpacity
-                          style={[styles.addButton, { backgroundColor: '#00897b' }]}
+                          style={[styles.addButton, { backgroundColor: '#00897b', opacity: enrollingAll ? 0.6 : 1 }]}
+                          disabled={enrollingAll}
                           onPress={async () => {
-                            const msg = `تسجيل تلقائي للطلاب في جميع مقررات القسم؟\nسيتم ربط كل طالب بالمقررات المطابقة لمستواه وشعبته`;
+                            const msg = `تسجيل تلقائي للطلاب في جميع مقررات القسم؟\nسيتم ربط كل طالب بالمقررات المطابقة لمستواه وشعبته\n\nالطلاب المسجلين مسبقاً لن يتأثروا`;
                             if (Platform.OS === 'web') {
                               if (!window.confirm(msg)) return;
                             }
+                            setEnrollingAll(true);
                             try {
                               const res = await api.post(`/courses/auto-enroll-all?department_id=${filterDept}`);
                               const d = res.data;
-                              const resultMsg = `${d.message}\n\n${d.details.length > 0 ? d.details.join('\n') : 'لا توجد تسجيلات جديدة'}`;
+                              const resultMsg = `${d.message}\n\nمسجلين مسبقاً: ${d.total_already_enrolled}\n\n${d.details.length > 0 ? 'التفاصيل:\n' + d.details.join('\n') : 'لا توجد تسجيلات جديدة'}`;
                               if (Platform.OS === 'web') window.alert(resultMsg);
                               else Alert.alert('نتيجة التسجيل التلقائي', resultMsg);
                               fetchCourses(filterDept);
@@ -959,12 +962,18 @@ export default function AddCourseScreen() {
                               const errMsg = e?.response?.data?.detail || 'حدث خطأ';
                               if (Platform.OS === 'web') window.alert(errMsg);
                               else Alert.alert('خطأ', errMsg);
+                            } finally {
+                              setEnrollingAll(false);
                             }
                           }}
                           data-testid="auto-enroll-all-btn"
                         >
-                          <Ionicons name="people" size={22} color="#fff" />
-                          <Text style={styles.addButtonText}>تسجيل تلقائي للكل</Text>
+                          {enrollingAll ? (
+                            <ActivityIndicator size="small" color="#fff" />
+                          ) : (
+                            <Ionicons name="people" size={22} color="#fff" />
+                          )}
+                          <Text style={styles.addButtonText}>{enrollingAll ? 'جاري التسجيل...' : 'تسجيل تلقائي للكل'}</Text>
                         </TouchableOpacity>
                       )}
                     </>
