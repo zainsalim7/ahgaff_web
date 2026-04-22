@@ -568,7 +568,7 @@ export const teachingLoadAPI = {
 // Weekly Schedule API (الجدول الأسبوعي)
 export const scheduleAPI = {
   // القاعات
-  getRooms: () => api.get('/rooms'),
+  getRooms: (facultyId?: string) => api.get('/rooms', { params: { faculty_id: facultyId } }),
   createRoom: (data: any) => api.post('/rooms', data),
   updateRoom: (id: string, data: any) => api.put(`/rooms/${id}`, data),
   deleteRoom: (id: string) => api.delete(`/rooms/${id}`),

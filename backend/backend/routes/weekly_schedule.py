@@ -18,6 +18,7 @@ router = APIRouter(tags=["الجدول الأسبوعي"])
 
 class RoomCreate(BaseModel):
     name: str
+    faculty_id: str
     capacity: int = 30
     building: str = ""
     floor: str = ""
@@ -27,6 +28,7 @@ class RoomCreate(BaseModel):
 
 class RoomUpdate(BaseModel):
     name: Optional[str] = None
+    faculty_id: Optional[str] = None
     capacity: Optional[int] = None
     building: Optional[str] = None
     floor: Optional[str] = None
@@ -69,6 +71,7 @@ class ScheduleSlotUpdate(BaseModel):
 
 @router.get("/rooms")
 async def get_rooms(
+    faculty_id: Optional[str] = None,
     building: Optional[str] = None,
     is_active: Optional[bool] = True,
     current_user: dict = Depends(get_current_user),
@@ -77,12 +80,15 @@ async def get_rooms(
     query = {}
     if is_active is not None:
         query["is_active"] = is_active
+    if faculty_id:
+        query["faculty_id"] = faculty_id
     if building:
         query["building"] = building
     rooms = await db.rooms.find(query).sort("name", 1).to_list(500)
     return [{
         "id": str(r["_id"]),
         "name": r.get("name", ""),
+        "faculty_id": r.get("faculty_id", ""),
         "capacity": r.get("capacity", 30),
         "building": r.get("building", ""),
         "floor": r.get("floor", ""),
@@ -96,7 +102,7 @@ async def create_room(data: RoomCreate, current_user: dict = Depends(get_current
     if current_user["role"] != "admin" and not has_permission(current_user, Permission.MANAGE_SETTINGS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    existing = await db.rooms.find_one({"name": data.name})
+    existing = await db.rooms.find_one({"name": data.name, "faculty_id": data.faculty_id})
     if existing:
         raise HTTPException(status_code=409, detail=f"القاعة '{data.name}' موجودة مسبقاً")
     doc = data.dict()
@@ -497,10 +503,10 @@ async def auto_generate_schedule(
         dept_query["_id"] = ObjectId(department_id)
     departments = await db.departments.find(dept_query).to_list(100)
 
-    # Get rooms
-    rooms = await db.rooms.find({"is_active": True}).to_list(200)
+    # Get rooms for this faculty only
+    rooms = await db.rooms.find({"is_active": True, "faculty_id": faculty_id}).to_list(200)
     if not rooms:
-        raise HTTPException(status_code=400, detail="لا توجد قاعات مسجلة")
+        raise HTTPException(status_code=400, detail="لا توجد قاعات مسجلة لهذه الكلية. أضف قاعات أولاً من تبويب 'القاعات'")
 
     # Get teacher preferences
     all_prefs = await db.teacher_preferences.find().to_list(500)

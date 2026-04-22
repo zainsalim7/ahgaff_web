@@ -43,26 +43,28 @@ export default function WeeklySchedulePage() {
   useEffect(() => {
     (async () => {
       try {
-        const [facRes, settRes, roomRes] = await Promise.all([
+        const [facRes, settRes] = await Promise.all([
           api.get('/faculties'),
           scheduleAPI.getSettings(),
-          scheduleAPI.getRooms(),
         ]);
         setFaculties(facRes.data);
         setTimeSlots(settRes.data.time_slots || []);
         setEditSlots(settRes.data.time_slots || []);
-        setRooms(roomRes.data);
       } catch (e) { console.error(e); }
     })();
   }, []);
 
-  // Load departments when faculty changes
+  // Load departments and rooms when faculty changes
   useEffect(() => {
-    if (!selectedFaculty) { setDepartments([]); return; }
+    if (!selectedFaculty) { setDepartments([]); setRooms([]); return; }
     (async () => {
       try {
-        const res = await departmentsAPI.getAll();
-        setDepartments(res.data.filter((d: any) => d.faculty_id === selectedFaculty));
+        const [deptRes, roomRes] = await Promise.all([
+          departmentsAPI.getAll(),
+          scheduleAPI.getRooms(selectedFaculty),
+        ]);
+        setDepartments(deptRes.data.filter((d: any) => d.faculty_id === selectedFaculty));
+        setRooms(roomRes.data);
       } catch (e) { console.error(e); }
     })();
   }, [selectedFaculty]);
@@ -151,10 +153,13 @@ export default function WeeklySchedulePage() {
   };
 
   const handleAddRoom = async () => {
-    if (!newRoom.name) return;
+    if (!newRoom.name || !selectedFaculty) {
+      if (Platform.OS === 'web') window.alert('اختر الكلية وأدخل اسم القاعة');
+      return;
+    }
     try {
-      await scheduleAPI.createRoom({ ...newRoom, capacity: parseInt(newRoom.capacity) || 30 });
-      const res = await scheduleAPI.getRooms();
+      await scheduleAPI.createRoom({ ...newRoom, capacity: parseInt(newRoom.capacity) || 30, faculty_id: selectedFaculty });
+      const res = await scheduleAPI.getRooms(selectedFaculty);
       setRooms(res.data);
       setNewRoom({ name: '', capacity: '30', building: '', floor: '' });
     } catch (e: any) {
@@ -409,6 +414,18 @@ export default function WeeklySchedulePage() {
         {/* ====== TAB: ROOMS ====== */}
         {activeTab === 'rooms' && (
           <>
+            {/* Faculty picker for rooms */}
+            <View style={st.card}>
+              <Text style={st.label}>الكلية</Text>
+              <View style={st.pickerWrap}>
+                <Picker selectedValue={selectedFaculty} onValueChange={v => { setSelectedFaculty(v); setSelectedDept(''); }} style={{ height: 40 }}>
+                  <Picker.Item label="-- اختر الكلية --" value="" />
+                  {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                </Picker>
+              </View>
+            </View>
+
+            {selectedFaculty && (
             <View style={st.card}>
               <Text style={[st.label, { fontSize: 15, marginBottom: 12 }]}>إضافة قاعة جديدة</Text>
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
@@ -434,7 +451,10 @@ export default function WeeklySchedulePage() {
                 <TouchableOpacity onPress={() => handleDeleteRoom(r.id)}><Ionicons name="trash-outline" size={20} color="#e53935" /></TouchableOpacity>
               </View>
             ))}
-            {rooms.length === 0 && <View style={st.emptyCard}><Text style={st.emptyText}>لا توجد قاعات</Text></View>}
+            {rooms.length === 0 && <View style={st.emptyCard}><Text style={st.emptyText}>لا توجد قاعات لهذه الكلية</Text></View>}
+            )}
+
+            {!selectedFaculty && <View style={st.emptyCard}><Ionicons name="business-outline" size={48} color="#ccc" /><Text style={st.emptyText}>اختر الكلية لعرض قاعاتها</Text></View>}
           </>
         )}
 
