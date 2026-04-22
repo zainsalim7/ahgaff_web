@@ -940,6 +940,33 @@ export default function AddCourseScreen() {
                         <Ionicons name="calendar" size={22} color="#fff" />
                         <Text style={styles.addButtonText}>استيراد محاضرات</Text>
                       </TouchableOpacity>
+                      {filterDept && (
+                        <TouchableOpacity
+                          style={[styles.addButton, { backgroundColor: '#00897b' }]}
+                          onPress={async () => {
+                            const msg = `تسجيل تلقائي للطلاب في جميع مقررات القسم؟\nسيتم ربط كل طالب بالمقررات المطابقة لمستواه وشعبته`;
+                            if (Platform.OS === 'web') {
+                              if (!window.confirm(msg)) return;
+                            }
+                            try {
+                              const res = await api.post(`/courses/auto-enroll-all?department_id=${filterDept}`);
+                              const d = res.data;
+                              const resultMsg = `${d.message}\n\n${d.details.length > 0 ? d.details.join('\n') : 'لا توجد تسجيلات جديدة'}`;
+                              if (Platform.OS === 'web') window.alert(resultMsg);
+                              else Alert.alert('نتيجة التسجيل التلقائي', resultMsg);
+                              fetchCourses(filterDept);
+                            } catch (e: any) {
+                              const errMsg = e?.response?.data?.detail || 'حدث خطأ';
+                              if (Platform.OS === 'web') window.alert(errMsg);
+                              else Alert.alert('خطأ', errMsg);
+                            }
+                          }}
+                          data-testid="auto-enroll-all-btn"
+                        >
+                          <Ionicons name="people" size={22} color="#fff" />
+                          <Text style={styles.addButtonText}>تسجيل تلقائي للكل</Text>
+                        </TouchableOpacity>
+                      )}
                     </>
                   )}
                 </>

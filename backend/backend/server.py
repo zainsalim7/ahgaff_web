@@ -3901,6 +3901,72 @@ async def auto_enroll_matching_students(course_id: str, current_user: dict = Dep
     }
 
 
+@api_router.post("/courses/auto-enroll-all")
+async def auto_enroll_all_courses(
+    department_id: Optional[str] = None,
+    level: Optional[int] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تسجيل تلقائي للطلاب في جميع المقررات المطابقة دفعة واحدة"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    course_query = {"is_active": True}
+    if department_id:
+        course_query["department_id"] = department_id
+    if level:
+        course_query["level"] = level
+    
+    courses = await db.courses.find(course_query).to_list(2000)
+    
+    total_enrolled = 0
+    total_already = 0
+    courses_processed = 0
+    details = []
+    
+    for course in courses:
+        cid = str(course["_id"])
+        student_query = {
+            "department_id": course.get("department_id"),
+            "level": course.get("level"),
+            "is_active": True,
+        }
+        if course.get("section"):
+            student_query["section"] = course["section"]
+        
+        students = await db.students.find(student_query, {"_id": 1}).to_list(10000)
+        
+        enrolled = 0
+        already = 0
+        for s in students:
+            sid = str(s["_id"])
+            existing = await db.enrollments.find_one({"course_id": cid, "student_id": sid})
+            if existing:
+                already += 1
+                continue
+            await db.enrollments.insert_one({
+                "course_id": cid,
+                "student_id": sid,
+                "enrolled_at": get_yemen_time(),
+                "enrolled_by": current_user["id"]
+            })
+            enrolled += 1
+        
+        total_enrolled += enrolled
+        total_already += already
+        courses_processed += 1
+        if enrolled > 0:
+            details.append(f"{course.get('name', '')} ({course.get('code', '')}): +{enrolled} طالب")
+    
+    return {
+        "message": f"تم معالجة {courses_processed} مقرر وتسجيل {total_enrolled} طالب جديد",
+        "courses_processed": courses_processed,
+        "total_enrolled": total_enrolled,
+        "total_already_enrolled": total_already,
+        "details": details,
+    }
+
+
 @api_router.post("/enrollments/{course_id}")
 async def enroll_students(
     course_id: str, 
