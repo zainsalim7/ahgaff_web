@@ -486,6 +486,124 @@ async def _get_export_data(db, department_id: str = None, start_date: str = None
         teacher_ids_in_dept = [str(t["_id"]) for t in dept_teachers]
         query["teacher_id"] = {"$in": teacher_ids_in_dept}
 
+@router.get("/teaching-load/report/advanced")
+async def advanced_teaching_load_report(
+    department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تقرير العبء التدريسي المتقدم - مقارنة + فجوات"""
+    if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    db = get_db()
+
+    # فلتر المعلمين
+    teacher_query = {"is_active": {"$ne": False}}
+    if department_id:
+        teacher_query["department_id"] = department_id
+
+    teachers = await db.teachers.find(teacher_query).to_list(500)
+    teacher_ids = [str(t["_id"]) for t in teachers]
+
+    # فلتر المقررات
+    course_query = {"is_active": True}
+    if department_id:
+        course_query["department_id"] = department_id
+
+    all_courses = await db.courses.find(course_query).to_list(2000)
+
+    # جلب الأعباء
+    load_query = {}
+    if teacher_ids:
+        load_query["teacher_id"] = {"$in": teacher_ids}
+    all_loads = await db.teaching_loads.find(load_query).to_list(2000)
+    loads_by_teacher = {}
+    for l in all_loads:
+        tid = l["teacher_id"]
+        if tid not in loads_by_teacher:
+            loads_by_teacher[tid] = []
+        loads_by_teacher[tid].append(l)
+
+    # 1. مقارنة أعباء المعلمين
+    teacher_comparison = []
+    teachers_without_courses = []
+    for t in teachers:
+        tid = str(t["_id"])
+        t_loads = loads_by_teacher.get(tid, [])
+        assigned_courses = [c for c in all_courses if c.get("teacher_id") == tid]
+        total_weekly = sum(l.get("weekly_hours", 0) for l in t_loads)
+        max_hours = t.get("weekly_hours", 12)
+        usage_pct = round((total_weekly / max_hours * 100), 1) if max_hours > 0 else 0
+
+        entry = {
+            "teacher_id": tid,
+            "teacher_name": t.get("full_name", ""),
+            "employee_id": t.get("teacher_id", ""),
+            "department_id": t.get("department_id", ""),
+            "max_weekly_hours": max_hours,
+            "assigned_weekly_hours": round(total_weekly, 2),
+            "courses_count": len(assigned_courses),
+            "usage_percentage": usage_pct,
+            "status": "overload" if usage_pct > 100 else ("optimal" if usage_pct >= 70 else ("low" if usage_pct > 0 else "none")),
+            "courses": [{"name": c.get("name", ""), "code": c.get("code", ""), "section": c.get("section", "")} for c in assigned_courses],
+        }
+        teacher_comparison.append(entry)
+        if len(assigned_courses) == 0:
+            teachers_without_courses.append(entry)
+
+    # ترتيب حسب الاستخدام تنازلياً
+    teacher_comparison.sort(key=lambda x: x["usage_percentage"], reverse=True)
+
+    # 2. مقررات بدون معلم
+    courses_without_teacher = []
+    for c in all_courses:
+        if not c.get("teacher_id"):
+            # عدد الطلاب
+            students_count = await db.enrollments.count_documents({"course_id": str(c["_id"])})
+            courses_without_teacher.append({
+                "course_id": str(c["_id"]),
+                "course_name": c.get("name", ""),
+                "course_code": c.get("code", ""),
+                "section": c.get("section", ""),
+                "level": c.get("level", 1),
+                "credit_hours": c.get("credit_hours", 3),
+                "students_count": students_count,
+            })
+
+    # 3. إحصائيات عامة
+    total_teachers = len(teachers)
+    teachers_with_load = len([t for t in teacher_comparison if t["assigned_weekly_hours"] > 0])
+    total_courses = len(all_courses)
+    courses_assigned = len([c for c in all_courses if c.get("teacher_id")])
+    avg_load = round(sum(t["assigned_weekly_hours"] for t in teacher_comparison) / total_teachers, 1) if total_teachers > 0 else 0
+    overloaded = len([t for t in teacher_comparison if t["status"] == "overload"])
+
+    # Department name
+    dept_name = ""
+    if department_id:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+        if dept:
+            dept_name = dept.get("name", "")
+
+    return {
+        "department_name": dept_name,
+        "summary": {
+            "total_teachers": total_teachers,
+            "teachers_with_load": teachers_with_load,
+            "teachers_without_courses": len(teachers_without_courses),
+            "total_courses": total_courses,
+            "courses_assigned": courses_assigned,
+            "courses_without_teacher": len(courses_without_teacher),
+            "average_weekly_load": avg_load,
+            "overloaded_teachers": overloaded,
+        },
+        "teacher_comparison": teacher_comparison,
+        "courses_without_teacher": courses_without_teacher,
+        "teachers_without_courses": teachers_without_courses,
+    }
+
+
     loads = await db.teaching_loads.find(query).to_list(1000)
     if not loads:
         return [], 0, "", ""

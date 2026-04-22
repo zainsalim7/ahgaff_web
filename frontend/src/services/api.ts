@@ -561,6 +561,8 @@ export const teachingLoadAPI = {
     api.get('/teaching-load/search-courses', { params: { q, department_id: departmentId } }),
   bulkSave: (items: { teacher_id: string; course_id: string; weekly_hours: number; semester_id?: string; notes?: string }[]) =>
     api.post('/teaching-load/bulk', items),
+  advancedReport: (params?: { department_id?: string }) =>
+    api.get('/teaching-load/report/advanced', { params }),
 };
 
 // Activity Logs API (سجلات النشاط)
