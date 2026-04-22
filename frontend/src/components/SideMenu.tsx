@@ -59,6 +59,9 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'teaching-load-report', label: 'تقارير العبء', icon: 'analytics', path: '/teaching-load-report', permissions: [
     PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
   ]},
+  { id: 'weekly-schedule', label: 'الجدول الأسبوعي', icon: 'calendar', path: '/weekly-schedule', permissions: [
+    PERMISSIONS.MANAGE_SETTINGS, PERMISSIONS.MANAGE_COURSES
+  ]},
   
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [
     PERMISSIONS.MANAGE_DEPARTMENTS

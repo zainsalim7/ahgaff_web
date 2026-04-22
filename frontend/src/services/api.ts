@@ -565,6 +565,29 @@ export const teachingLoadAPI = {
     api.get('/teaching-load/report/advanced', { params }),
 };
 
+// Weekly Schedule API (الجدول الأسبوعي)
+export const scheduleAPI = {
+  // القاعات
+  getRooms: () => api.get('/rooms'),
+  createRoom: (data: any) => api.post('/rooms', data),
+  updateRoom: (id: string, data: any) => api.put(`/rooms/${id}`, data),
+  deleteRoom: (id: string) => api.delete(`/rooms/${id}`),
+  // الإعدادات
+  getSettings: () => api.get('/schedule-settings'),
+  saveTimeSlots: (slots: any[]) => api.post('/schedule-settings/time-slots', slots),
+  // تفضيلات المعلمين
+  getTeacherPrefs: (id: string) => api.get(`/teacher-preferences/${id}`),
+  saveTeacherPrefs: (id: string, data: any) => api.put(`/teacher-preferences/${id}`, data),
+  // الجدول
+  getSchedule: (params?: any) => api.get('/weekly-schedule', { params }),
+  createSlot: (data: any) => api.post('/weekly-schedule', data),
+  updateSlot: (id: string, data: any) => api.put(`/weekly-schedule/${id}`, data),
+  deleteSlot: (id: string) => api.delete(`/weekly-schedule/${id}`),
+  clearSchedule: (params?: any) => api.delete('/weekly-schedule/clear/all', { params }),
+  autoGenerate: (facultyId: string, deptId?: string) =>
+    api.post(`/weekly-schedule/auto-generate?faculty_id=${facultyId}${deptId ? `&department_id=${deptId}` : ''}`),
+};
+
 // Activity Logs API (سجلات النشاط)
 export const activityLogsAPI = {
   getAll: (params?: { 
