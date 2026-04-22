@@ -2807,8 +2807,29 @@ async def get_teachers(
             query["department_id"] = department_id
     
     teachers = await db.teachers.find(query).to_list(1000)
+    
+    # جلب المقررات المسندة لكل المعلمين دفعة واحدة
+    teacher_ids = [str(t["_id"]) for t in teachers]
+    all_courses = await db.courses.find({
+        "teacher_id": {"$in": teacher_ids},
+        "is_active": True,
+    }).to_list(5000)
+    # تجميع المقررات حسب المعلم
+    courses_by_teacher = {}
+    for c in all_courses:
+        tid = c.get("teacher_id", "")
+        if tid not in courses_by_teacher:
+            courses_by_teacher[tid] = []
+        courses_by_teacher[tid].append({
+            "name": c.get("name", ""),
+            "code": c.get("code", ""),
+            "section": c.get("section", ""),
+            "level": c.get("level", 1),
+        })
+    
     result = []
     for teacher in teachers:
+        tid = str(teacher["_id"])
         teacher_dict = {
             "id": str(teacher["_id"]),
             "teacher_id": teacher.get("teacher_id", ""),
@@ -2826,6 +2847,7 @@ async def get_teachers(
             "created_at": teacher.get("created_at", get_yemen_time()),
             "is_active": teacher.get("is_active", True)
         }
+        teacher_dict["assigned_courses"] = courses_by_teacher.get(tid, [])
         result.append(teacher_dict)
     return result
 

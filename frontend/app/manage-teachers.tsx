@@ -469,6 +469,18 @@ export default function ManageTeachersScreen() {
             {(item.weekly_hours || item.teaching_load) && (
               <Text style={styles.teachingLoad}>النصاب الأسبوعي: {item.weekly_hours || item.teaching_load} ساعة</Text>
             )}
+            {item.assigned_courses && item.assigned_courses.length > 0 && (
+              <View style={{ marginTop: 6, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
+                {item.assigned_courses.map((c: any, idx: number) => (
+                  <View key={idx} style={{ backgroundColor: '#e3f2fd', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                    <Ionicons name="book-outline" size={11} color="#1565c0" />
+                    <Text style={{ fontSize: 11, color: '#1565c0' }}>
+                      {c.name} ({c.code}){c.section ? ` - ${c.section}` : ''} م{c.level}
+                    </Text>
+                  </View>
+                ))}
+              </View>
+            )}
             <View style={[styles.statusBadge, { backgroundColor: hasAccount ? '#e8f5e9' : '#fafafa' }]}>
               <Ionicons 
                 name={hasAccount ? "checkmark-circle" : "close-circle"} 
