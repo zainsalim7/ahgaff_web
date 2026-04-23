@@ -461,7 +461,7 @@ export default function ManageTeachersScreen() {
             {item.academic_title && (
               <Text style={styles.academicTitle}>{item.academic_title}</Text>
             )}
-            <Text style={styles.teacherId}>الرقم الوظيفي: {getTeacherId(item)}</Text>
+            <Text style={styles.teacherId}>رقم الجوال: {getTeacherId(item)}</Text>
             <Text style={styles.teacherDept}>{getDepartmentName(item.department_id)}</Text>
             {item.specialization && (
               <Text style={styles.teacherSpec}>التخصص: {item.specialization}</Text>
@@ -571,12 +571,13 @@ export default function ManageTeachersScreen() {
               {editingTeacher ? 'تعديل بيانات المعلم' : 'إضافة معلم جديد'}
             </Text>
 
-            <Text style={styles.label}>الرقم الوظيفي *</Text>
+            <Text style={styles.label}>رقم الجوال *</Text>
             <TextInput
               style={[styles.input, editingTeacher && styles.inputDisabled]}
               value={formData.teacher_id}
-              onChangeText={(text) => setFormData({ ...formData, teacher_id: text })}
-              placeholder="أدخل الرقم الوظيفي"
+              onChangeText={(text) => setFormData({ ...formData, teacher_id: text.replace(/[^0-9+]/g, '') })}
+              placeholder="أدخل رقم الجوال"
+              keyboardType="phone-pad"
               editable={!editingTeacher}
             />
 
@@ -736,7 +737,7 @@ export default function ManageTeachersScreen() {
               <Ionicons name="search" size={20} color="#999" />
               <TextInput
                 style={styles.searchInput}
-                placeholder="بحث بالاسم أو الرقم الوظيفي..."
+                placeholder="بحث بالاسم أو رقم الجوال..."
                 value={searchQuery}
                 onChangeText={(v) => { setSearchQuery(v); setCurrentPage(1); }}
               />
