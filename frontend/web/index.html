@@ -4,7 +4,17 @@
   <meta charset="utf-8" />
   <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width,initial-scale=1,minimum-scale=1,maximum-scale=1.00001,viewport-fit=cover" />
-  <title>نظام جامعة الأحقاف</title>
+  <title>تحضير الأحقاف</title>
+  <!-- PWA -->
+  <link rel="manifest" href="/manifest.json" />
+  <meta name="theme-color" content="#1565c0" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="تحضير الأحقاف" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icon-192.png" />
+  <link rel="icon" type="image/png" sizes="512x512" href="/icon-512.png" />
+  <meta name="description" content="نظام إدارة الحضور والجداول - جامعة الأحقاف" />
   <style>
     body { margin: 0; background: #0f172a; }
     #splash-loader {
@@ -14,31 +24,43 @@
       transition: opacity 0.3s ease;
     }
     #splash-loader.hide { opacity: 0; pointer-events: none; }
-    #splash-loader img { width: 80px; height: 80px; margin-bottom: 20px; }
+    #splash-loader img { width: 80px; height: 80px; margin-bottom: 20px; border-radius: 16px; }
     #splash-loader .spinner {
       width: 32px; height: 32px; border: 3px solid rgba(255,255,255,0.15);
       border-top-color: #3b82f6; border-radius: 50%;
       animation: spin 0.8s linear infinite;
     }
     #splash-loader p { color: #94a3b8; font-family: sans-serif; font-size: 14px; margin-top: 16px; }
+    #splash-loader .app-name { color: #e2e8f0; font-family: sans-serif; font-size: 18px; font-weight: 600; margin-top: 8px; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
 <body>
   <div id="splash-loader">
-    <img src="/favicon.png" alt="" />
+    <img src="/icon-192.png" alt="تحضير الأحقاف" />
+    <p class="app-name">تحضير الأحقاف</p>
     <div class="spinner"></div>
     <p>جاري التحميل...</p>
   </div>
   <div id="root"></div>
   <script>
-    // إخفاء شاشة التحميل عندما يكتمل التطبيق
+    // إخفاء شاشة التحميل
     window.addEventListener('load', function() {
       setTimeout(function() {
         var s = document.getElementById('splash-loader');
         if (s) { s.classList.add('hide'); setTimeout(function() { s.remove(); }, 300); }
       }, 500);
     });
+    // تسجيل Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {
+        navigator.serviceWorker.register('/sw.js').then(function(reg) {
+          console.log('SW registered:', reg.scope);
+        }).catch(function(err) {
+          console.log('SW registration failed:', err);
+        });
+      });
+    }
   </script>
 </body>
 </html>
