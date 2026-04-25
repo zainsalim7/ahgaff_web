@@ -21,7 +21,8 @@ RUN npx expo export --platform web
 RUN cp -f web/manifest.json dist/ 2>/dev/null || true && \
     cp -f web/sw.js dist/ 2>/dev/null || true && \
     cp -f web/icon-192.png dist/ 2>/dev/null || true && \
-    cp -f web/icon-512.png dist/ 2>/dev/null || true
+    cp -f web/icon-512.png dist/ 2>/dev/null || true && \
+    cp -f web/favicon.png dist/ 2>/dev/null || true
 
 # Pre-compress for faster serving
 RUN find dist -name "*.js" -o -name "*.css" -o -name "*.html" | xargs gzip -k -9 2>/dev/null || true
