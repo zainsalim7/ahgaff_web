@@ -513,12 +513,27 @@ export default function WeeklySchedulePage() {
                 </TouchableOpacity>
                 {Platform.OS === 'web' && (
                   <>
-                    <a href={`${(api.defaults as any).baseURL}/rooms/template/excel`} target="_blank" style={{ textDecoration: 'none' }}>
-                      <View style={[st.btn, { backgroundColor: '#1565c0' }]}>
-                        <Ionicons name="download-outline" size={16} color="#fff" />
-                        <Text style={st.btnText}>تحميل القالب</Text>
-                      </View>
-                    </a>
+                    <TouchableOpacity
+                      style={[st.btn, { backgroundColor: '#1565c0' }]}
+                      onPress={async () => {
+                        try {
+                          const token = await (await import('@react-native-async-storage/async-storage')).default.getItem('token');
+                          const res = await fetch(`${(api.defaults as any).baseURL}/rooms/template/excel`, {
+                            headers: { Authorization: `Bearer ${token}` }
+                          });
+                          const blob = await res.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'rooms_template.xlsx';
+                          a.click();
+                          window.URL.revokeObjectURL(url);
+                        } catch { if (Platform.OS === 'web') window.alert('خطأ في تحميل القالب'); }
+                      }}
+                    >
+                      <Ionicons name="download-outline" size={16} color="#fff" />
+                      <Text style={st.btnText}>تحميل القالب</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity
                       style={[st.btn, { backgroundColor: '#e65100', opacity: importingRooms ? 0.6 : 1 }]}
                       disabled={importingRooms}
