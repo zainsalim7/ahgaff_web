@@ -10,6 +10,54 @@ import api from '../src/services/api';
 const DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 const COLORS = ['#1565c0', '#2e7d32', '#e65100', '#6a1b9a', '#c62828', '#00838f', '#4e342e', '#37474f'];
 
+function TeacherSearchBox({ teachers, selectedId, onSelect, placeholder }: { teachers: any[], selectedId: string, onSelect: (id: string) => void, placeholder?: string }) {
+  const [query, setQuery] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const selectedName = teachers.find((t: any) => t.id === selectedId)?.full_name || '';
+  const filtered = query.length > 0
+    ? teachers.filter((t: any) => t.full_name?.includes(query) || t.teacher_id?.includes(query))
+    : teachers;
+
+  if (Platform.OS !== 'web') {
+    return (
+      <View style={{ backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden' }}>
+        <Picker selectedValue={selectedId} onValueChange={onSelect} style={{ height: 40 }}>
+          <Picker.Item label={placeholder || '-- المعلم --'} value="" />
+          {teachers.map((t: any) => <Picker.Item key={t.id} label={t.full_name} value={t.id} />)}
+        </Picker>
+      </View>
+    );
+  }
+
+  return (
+    <div style={{ position: 'relative', direction: 'rtl' }}>
+      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
+        <input
+          type="text"
+          value={open ? query : selectedName}
+          onChange={(e: any) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder={placeholder || 'ابحث عن المعلم...'}
+          style={{ flex: 1, padding: '10px 12px', border: 'none', background: 'transparent', fontSize: 14, outline: 'none', textAlign: 'right' }}
+        />
+        {selectedId && <button onClick={() => { onSelect(''); setQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px', color: '#e53935', fontSize: 16 }}>x</button>}
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          {filtered.map((t: any) => (
+            <div key={t.id} onClick={() => { onSelect(t.id); setQuery(''); setOpen(false); }}
+              style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', backgroundColor: t.id === selectedId ? '#e3f2fd' : '#fff', textAlign: 'right' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{t.full_name}</div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ padding: 16, color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
+        </div>
+      )}
+      {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} />}
+    </div>
+  );
+}
+
 export default function WeeklySchedulePage() {
   const [activeTab, setActiveTab] = useState<'schedule' | 'rooms' | 'settings' | 'prefs'>('schedule');
   const [faculties, setFaculties] = useState<any[]>([]);
@@ -499,9 +547,7 @@ export default function WeeklySchedulePage() {
                   </Picker></View>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <View style={st.pickerWrap}><Picker selectedValue={selectedTeacher} onValueChange={setSelectedTeacher} style={{ height: 40 }}>
-                    <Picker.Item label="-- المعلم --" value="" />{teachers.map(t => <Picker.Item key={t.id} label={t.full_name} value={t.id} />)}
-                  </Picker></View>
+                  <TeacherSearchBox teachers={teachers} selectedId={selectedTeacher} onSelect={setSelectedTeacher} placeholder="ابحث عن المعلم..." />
                 </View>
               </View>
             </View>
