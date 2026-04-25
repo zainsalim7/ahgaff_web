@@ -45,6 +45,42 @@ interface LoadItem {
   notes: string;
 }
 
+function TeacherSearch({ teachers, selectedId, onSelect }: { teachers: any[], selectedId: string, onSelect: (id: string) => void }) {
+  const [q, setQ] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const name = teachers.find(t => t.id === selectedId)?.full_name || '';
+  const filtered = q ? teachers.filter(t => t.full_name?.includes(q) || t.teacher_id?.includes(q)) : teachers;
+
+  return (
+    <div style={{ position: 'relative', direction: 'rtl' }}>
+      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
+        <input
+          type="text"
+          value={open ? q : name}
+          onChange={(e: any) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="ابحث عن المعلم بالاسم..."
+          style={{ flex: 1, padding: '10px 12px', border: 'none', background: 'transparent', fontSize: 14, outline: 'none', textAlign: 'right' }}
+          data-testid="teaching-load-teacher-search"
+        />
+        {selectedId && <button onClick={() => { onSelect(''); setQ(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px', color: '#e53935', fontSize: 16 }}>x</button>}
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          {filtered.map((t: any) => (
+            <div key={t.id} onClick={() => { onSelect(t.id); setQ(''); setOpen(false); }}
+              style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', backgroundColor: t.id === selectedId ? '#e3f2fd' : '#fff', textAlign: 'right' }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{t.full_name}</div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ padding: 16, color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
+        </div>
+      )}
+      {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} />}
+    </div>
+  );
+}
+
 export default function TeachingLoadPage() {
   const { user } = useAuth();
   const [departments, setDepartments] = useState<any[]>([]);
@@ -379,16 +415,17 @@ export default function TeachingLoadPage() {
             {/* Teacher Picker */}
             {selectedDept && (
               <View style={styles.filterCard}>
-                <Text style={styles.filterLabel}>المعلم</Text>
+                <Text style={[styles.filterLabel, { textAlign: 'right' }]}>المعلم</Text>
                 {loadingTeachers ? (
                   <ActivityIndicator size="small" color="#1565c0" />
+                ) : Platform.OS === 'web' ? (
+                  <TeacherSearch teachers={teachers} selectedId={selectedTeacher} onSelect={setSelectedTeacher} />
                 ) : (
                   <View style={styles.pickerWrapper}>
                     <Picker
                       selectedValue={selectedTeacher}
                       onValueChange={(v) => setSelectedTeacher(v)}
                       style={styles.picker}
-                      data-testid="teaching-load-teacher-picker"
                     >
                       <Picker.Item label="-- اختر المعلم --" value="" />
                       {teachers.map(t => (
@@ -551,6 +588,9 @@ export default function TeachingLoadPage() {
         {viewMode === 'summary' && selectedDept && (
               <View style={styles.filterCard}>
                 <Text style={[styles.filterLabel, { textAlign: 'right' }]}>المعلم (اختياري)</Text>
+                {Platform.OS === 'web' ? (
+                  <TeacherSearch teachers={[{ id: '', full_name: 'كل المعلمين' }, ...teachers]} selectedId={summaryTeacherId} onSelect={setSummaryTeacherId} />
+                ) : (
                 <View style={styles.pickerWrapper}>
                   <Picker
                     selectedValue={summaryTeacherId}
@@ -563,6 +603,7 @@ export default function TeachingLoadPage() {
                     ))}
                   </Picker>
                 </View>
+                )}
               </View>
         )}
 
