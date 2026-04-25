@@ -38,6 +38,55 @@ const checkPermission = (userRole: string, userPermissions: string[], permission
   return userPermissions?.includes(permission) || false;
 };
 
+// مكون بحث المعلمين
+function TeacherSearchPicker({ teachers, selectedId, onSelect }: { teachers: any[], selectedId: string, onSelect: (id: string) => void }) {
+  const [query, setQuery] = React.useState('');
+  const [open, setOpen] = React.useState(false);
+  const selectedName = teachers.find(t => t.id === selectedId)?.full_name || '';
+
+  const filtered = query.length > 0
+    ? teachers.filter(t => t.full_name?.includes(query) || t.teacher_id?.includes(query))
+    : teachers;
+
+  return (
+    <div style={{ position: 'relative', direction: 'rtl' }}>
+      <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f5f5f5', overflow: 'hidden' }}>
+        <input
+          type="text"
+          value={open ? query : selectedName}
+          onChange={(e: any) => { setQuery(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}
+          placeholder="ابحث عن المعلم بالاسم..."
+          style={{ flex: 1, padding: '10px 12px', border: 'none', background: 'transparent', fontSize: 14, outline: 'none', textAlign: 'right' }}
+        />
+        {selectedId && (
+          <button onClick={() => { onSelect(''); setQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px', color: '#e53935', fontSize: 16 }}>x</button>
+        )}
+      </div>
+      {open && (
+        <div style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+          <div
+            onClick={() => { onSelect(''); setQuery(''); setOpen(false); }}
+            style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', color: '#999', textAlign: 'right' }}
+          >بدون معلم</div>
+          {filtered.map((t: any) => (
+            <div
+              key={t.id}
+              onClick={() => { onSelect(t.id); setQuery(''); setOpen(false); }}
+              style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', backgroundColor: t.id === selectedId ? '#e3f2fd' : '#fff', textAlign: 'right' }}
+            >
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{t.full_name}</div>
+              {t.teacher_id && <div style={{ fontSize: 11, color: '#888' }}>{t.teacher_id}</div>}
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ padding: '16px 12px', color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
+        </div>
+      )}
+      {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} />}
+    </div>
+  );
+}
+
 export default function AddCourseScreen() {
   const router = useRouter();
   const authUser = useAuthStore((state) => state.user);
@@ -752,18 +801,26 @@ export default function AddCourseScreen() {
             </View>
 
             <Text style={styles.label}>المعلم</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={formData.teacher_id}
-                onValueChange={(value) => setFormData({ ...formData, teacher_id: value })}
-                style={styles.picker}
-              >
-                <Picker.Item label="اختر المعلم..." value="" />
-                {teachers.map(teacher => (
-                  <Picker.Item key={teacher.id} label={teacher.full_name} value={teacher.id} />
-                ))}
-              </Picker>
-            </View>
+            {Platform.OS === 'web' ? (
+              <TeacherSearchPicker
+                teachers={teachers}
+                selectedId={formData.teacher_id}
+                onSelect={(id) => setFormData({ ...formData, teacher_id: id })}
+              />
+            ) : (
+              <View style={styles.pickerWrapper}>
+                <Picker
+                  selectedValue={formData.teacher_id}
+                  onValueChange={(value) => setFormData({ ...formData, teacher_id: value })}
+                  style={styles.picker}
+                >
+                  <Picker.Item label="اختر المعلم..." value="" />
+                  {teachers.map(teacher => (
+                    <Picker.Item key={teacher.id} label={teacher.full_name} value={teacher.id} />
+                  ))}
+                </Picker>
+              </View>
+            )}
 
             <Text style={styles.label}>المستوى *</Text>
             <View style={styles.pickerWrapper}>
