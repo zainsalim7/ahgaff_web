@@ -74,6 +74,7 @@ export default function WeeklySchedulePage() {
 
   // Rooms state
   const [newRoom, setNewRoom] = useState({ name: '', capacity: '30', building: '', floor: '' });
+  const [importingRooms, setImportingRooms] = useState(false);
   // Settings state
   const [editSlots, setEditSlots] = useState<any[]>([]);
   const [savingSlots, setSavingSlots] = useState(false);
@@ -221,6 +222,26 @@ export default function WeeklySchedulePage() {
       await scheduleAPI.deleteRoom(id);
       setRooms(prev => prev.filter(r => r.id !== id));
     } catch {}
+  };
+
+  const handleImportRooms = async (file: File) => {
+    if (!selectedFaculty) return;
+    setImportingRooms(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await scheduleAPI.importRooms(selectedFaculty, formData);
+      const d = res.data;
+      let msg = d.message;
+      if (d.errors?.length) msg += '\n\n' + d.errors.join('\n');
+      if (Platform.OS === 'web') window.alert(msg);
+      const roomsRes = await scheduleAPI.getRooms(selectedFaculty);
+      setRooms(roomsRes.data);
+    } catch (e: any) {
+      if (Platform.OS === 'web') window.alert(e?.response?.data?.detail || 'خطأ في الاستيراد');
+    } finally {
+      setImportingRooms(false);
+    }
   };
 
   const handleSaveSlots = async () => {
@@ -486,9 +507,38 @@ export default function WeeklySchedulePage() {
                   </>
                 ) : null}
               </View>
-              <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32', marginTop: 10, alignSelf: 'flex-start' }]} onPress={handleAddRoom}>
-                <Ionicons name="add" size={16} color="#fff" /><Text style={st.btnText}>إضافة</Text>
-              </TouchableOpacity>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
+                <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32' }]} onPress={handleAddRoom}>
+                  <Ionicons name="add" size={16} color="#fff" /><Text style={st.btnText}>إضافة</Text>
+                </TouchableOpacity>
+                {Platform.OS === 'web' && (
+                  <>
+                    <a href={`${(api.defaults as any).baseURL}/rooms/template/excel`} target="_blank" style={{ textDecoration: 'none' }}>
+                      <View style={[st.btn, { backgroundColor: '#1565c0' }]}>
+                        <Ionicons name="download-outline" size={16} color="#fff" />
+                        <Text style={st.btnText}>تحميل القالب</Text>
+                      </View>
+                    </a>
+                    <TouchableOpacity
+                      style={[st.btn, { backgroundColor: '#e65100', opacity: importingRooms ? 0.6 : 1 }]}
+                      disabled={importingRooms}
+                      onPress={() => {
+                        const input = document.createElement('input');
+                        input.type = 'file';
+                        input.accept = '.xlsx,.xls';
+                        input.onchange = (e: any) => {
+                          const file = e.target.files?.[0];
+                          if (file) handleImportRooms(file);
+                        };
+                        input.click();
+                      }}
+                    >
+                      {importingRooms ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="cloud-upload-outline" size={16} color="#fff" />}
+                      <Text style={st.btnText}>{importingRooms ? 'جاري الاستيراد...' : 'استيراد Excel'}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
             )}
 

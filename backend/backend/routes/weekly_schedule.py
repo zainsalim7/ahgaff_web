@@ -122,6 +122,122 @@ async def create_room(data: RoomCreate, current_user: dict = Depends(get_current
     return {"id": str(result.inserted_id), "message": "تم إضافة القاعة بنجاح"}
 
 
+@router.get("/rooms/template/excel")
+async def download_rooms_template(current_user: dict = Depends(get_current_user)):
+    """تحميل قالب Excel لاستيراد القاعات"""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill
+    from io import BytesIO
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "القاعات"
+    ws.sheet_view.rightToLeft = True
+
+    headers = ['اسم القاعة', 'السعة', 'المبنى', 'الطابق']
+    hfill = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = hfill
+        cell.font = Font(bold=True, color='FFFFFF')
+        cell.alignment = Alignment(horizontal='center')
+
+    # أمثلة
+    examples = [
+        ['ق101', 50, 'المبنى الرئيسي', 'الأول'],
+        ['ق202', 40, 'المبنى الرئيسي', 'الثاني'],
+        ['معمل حاسوب 1', 30, 'مبنى المعامل', 'الأول'],
+    ]
+    for i, row in enumerate(examples, 2):
+        for col, val in enumerate(row, 1):
+            ws.cell(row=i, column=col, value=val)
+
+    for col, w in enumerate([18, 10, 22, 12], 1):
+        ws.column_dimensions[chr(64 + col)].width = w
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return StreamingResponse(output, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers={"Content-Disposition": "attachment; filename=rooms_template.xlsx"})
+
+
+@router.post("/rooms/import")
+async def import_rooms(
+    faculty_id: str,
+    file: bytes = Depends(lambda: None),
+    current_user: dict = Depends(get_current_user),
+):
+    """استيراد قاعات من ملف Excel"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    from fastapi import UploadFile, File as FastAPIFile
+    raise HTTPException(status_code=400, detail="استخدم /api/rooms/import/upload")
+
+
+from fastapi import UploadFile, File as FastAPIFile
+
+@router.post("/rooms/import/upload")
+async def import_rooms_upload(
+    faculty_id: str,
+    file: UploadFile = FastAPIFile(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """استيراد قاعات من ملف Excel"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    import openpyxl
+    from io import BytesIO
+
+    db = get_db()
+    content = await file.read()
+    wb = openpyxl.load_workbook(BytesIO(content))
+    ws = wb.active
+
+    created = 0
+    skipped = 0
+    errors = []
+
+    for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+        if not row or not row[0]:
+            continue
+        name = str(row[0]).strip()
+        capacity = int(row[1]) if row[1] else 30
+        building = str(row[2]).strip() if row[2] else ""
+        floor = str(row[3]).strip() if row[3] else ""
+
+        if not name:
+            errors.append(f"سطر {row_num}: اسم القاعة فارغ")
+            continue
+
+        existing = await db.rooms.find_one({"name": name, "faculty_id": faculty_id})
+        if existing:
+            skipped += 1
+            continue
+
+        await db.rooms.insert_one({
+            "name": name,
+            "faculty_id": faculty_id,
+            "capacity": capacity,
+            "building": building,
+            "floor": floor,
+            "room_type": "lecture",
+            "is_active": True,
+            "created_at": datetime.now(timezone.utc),
+        })
+        created += 1
+
+    return {
+        "message": f"تم إضافة {created} قاعة جديدة، {skipped} موجودة مسبقاً",
+        "created": created,
+        "skipped": skipped,
+        "errors": errors,
+    }
+
+
+
 @router.put("/rooms/{room_id}")
 async def update_room(room_id: str, data: RoomUpdate, current_user: dict = Depends(get_current_user)):
     if not can_manage_schedule(current_user):

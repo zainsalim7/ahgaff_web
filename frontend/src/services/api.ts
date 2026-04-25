@@ -572,6 +572,8 @@ export const scheduleAPI = {
   createRoom: (data: any) => api.post('/rooms', data),
   updateRoom: (id: string, data: any) => api.put(`/rooms/${id}`, data),
   deleteRoom: (id: string) => api.delete(`/rooms/${id}`),
+  importRooms: (facultyId: string, file: FormData) =>
+    api.post(`/rooms/import/upload?faculty_id=${facultyId}`, file, { headers: { 'Content-Type': 'multipart/form-data' } }),
   // الإعدادات
   getSettings: () => api.get('/schedule-settings'),
   saveTimeSlots: (slots: any[]) => api.post('/schedule-settings/time-slots', slots),
