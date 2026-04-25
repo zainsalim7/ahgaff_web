@@ -103,17 +103,20 @@ export default function WeeklySchedulePage() {
     })();
   }, []);
 
-  // Load departments and rooms when faculty changes
+  // Load departments, rooms, and settings when faculty changes
   useEffect(() => {
     if (!selectedFaculty) { setDepartments([]); setRooms([]); return; }
     (async () => {
       try {
-        const [deptRes, roomRes] = await Promise.all([
+        const [deptRes, roomRes, settRes] = await Promise.all([
           departmentsAPI.getAll(),
           scheduleAPI.getRooms(selectedFaculty),
+          scheduleAPI.getSettings(selectedFaculty),
         ]);
         setDepartments(deptRes.data.filter((d: any) => d.faculty_id === selectedFaculty));
         setRooms(roomRes.data);
+        setTimeSlots(settRes.data.time_slots || []);
+        setEditSlots(settRes.data.time_slots || []);
       } catch (e) { console.error(e); }
     })();
   }, [selectedFaculty]);
@@ -247,9 +250,9 @@ export default function WeeklySchedulePage() {
   const handleSaveSlots = async () => {
     setSavingSlots(true);
     try {
-      await scheduleAPI.saveTimeSlots(editSlots);
+      await scheduleAPI.saveTimeSlots(editSlots, selectedFaculty || undefined);
       setTimeSlots(editSlots);
-      if (Platform.OS === 'web') window.alert('تم حفظ الفترات');
+      if (Platform.OS === 'web') window.alert('تم حفظ الفترات الزمنية');
     } catch {}
     finally { setSavingSlots(false); }
   };
@@ -574,6 +577,19 @@ export default function WeeklySchedulePage() {
 
         {/* ====== TAB: SETTINGS ====== */}
         {activeTab === 'settings' && (
+          <>
+            <View style={st.card}>
+              <Text style={st.label}>الكلية</Text>
+              <View style={st.pickerWrap}>
+                <Picker selectedValue={selectedFaculty} onValueChange={v => { setSelectedFaculty(v); setSelectedDept(''); }} style={{ height: 40 }}>
+                  <Picker.Item label="-- اختر الكلية (أو عام) --" value="" />
+                  {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                </Picker>
+              </View>
+              <Text style={{ fontSize: 11, color: '#888', marginTop: 4, textAlign: 'right' }}>
+                {selectedFaculty ? 'فترات خاصة بالكلية المختارة' : 'فترات عامة لكل الكليات (افتراضي)'}
+              </Text>
+            </View>
           <View style={st.card}>
             <Text style={[st.label, { fontSize: 15, marginBottom: 12 }]}>الفترات الزمنية</Text>
             {editSlots.map((s, i) => (
@@ -598,6 +614,7 @@ export default function WeeklySchedulePage() {
               </TouchableOpacity>
             </View>
           </View>
+          </>
         )}
 
         {/* ====== TAB: PREFS ====== */}

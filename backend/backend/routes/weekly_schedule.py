@@ -262,24 +262,31 @@ async def delete_room(room_id: str, current_user: dict = Depends(get_current_use
 # ===== الفترات الزمنية =====
 
 @router.get("/schedule-settings")
-async def get_schedule_settings(current_user: dict = Depends(get_current_user)):
+async def get_schedule_settings(
+    faculty_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     db = get_db()
-    settings = await db.schedule_settings.find_one({"_id": "global"})
+    settings_id = f"faculty_{faculty_id}" if faculty_id else "global"
+    settings = await db.schedule_settings.find_one({"_id": settings_id})
     if not settings:
-        # القيم الافتراضية
-        default = {
-            "_id": "global",
-            "time_slots": [
-                {"slot_number": 1, "name": "المحاضرة الأولى", "start_time": "08:00", "end_time": "09:30"},
-                {"slot_number": 2, "name": "المحاضرة الثانية", "start_time": "09:45", "end_time": "11:15"},
-                {"slot_number": 3, "name": "المحاضرة الثالثة", "start_time": "11:30", "end_time": "13:00"},
-                {"slot_number": 4, "name": "المحاضرة الرابعة", "start_time": "13:15", "end_time": "14:45"},
-                {"slot_number": 5, "name": "المحاضرة الخامسة", "start_time": "15:00", "end_time": "16:30"},
-            ],
-            "working_days": ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"],
+        # جلب الإعدادات العامة كقيمة افتراضية
+        global_settings = await db.schedule_settings.find_one({"_id": "global"})
+        default_slots = [
+            {"slot_number": 1, "name": "المحاضرة الأولى", "start_time": "08:00", "end_time": "09:30"},
+            {"slot_number": 2, "name": "المحاضرة الثانية", "start_time": "09:45", "end_time": "11:15"},
+            {"slot_number": 3, "name": "المحاضرة الثالثة", "start_time": "11:30", "end_time": "13:00"},
+            {"slot_number": 4, "name": "المحاضرة الرابعة", "start_time": "13:15", "end_time": "14:45"},
+            {"slot_number": 5, "name": "المحاضرة الخامسة", "start_time": "15:00", "end_time": "16:30"},
+        ]
+        default_days = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
+        if global_settings:
+            default_slots = global_settings.get("time_slots", default_slots)
+            default_days = global_settings.get("working_days", default_days)
+        settings = {
+            "time_slots": default_slots,
+            "working_days": default_days,
         }
-        await db.schedule_settings.insert_one(default)
-        settings = default
     return {
         "time_slots": settings.get("time_slots", []),
         "working_days": settings.get("working_days", []),
@@ -308,14 +315,16 @@ async def update_schedule_settings(
 @router.post("/schedule-settings/time-slots")
 async def save_time_slots(
     slots: List[TimeSlotCreate],
+    faculty_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
+    settings_id = f"faculty_{faculty_id}" if faculty_id else "global"
     slots_data = [s.dict() for s in slots]
     await db.schedule_settings.update_one(
-        {"_id": "global"},
+        {"_id": settings_id},
         {"$set": {"time_slots": slots_data}},
         upsert=True
     )
@@ -612,8 +621,10 @@ async def auto_generate_schedule(
 
     db = get_db()
 
-    # Get settings
-    settings = await db.schedule_settings.find_one({"_id": "global"})
+    # Get settings (faculty-specific or global)
+    settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"})
     if not settings:
         raise HTTPException(status_code=400, detail="يرجى إعداد الفترات الزمنية أولاً")
 

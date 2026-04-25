@@ -575,8 +575,8 @@ export const scheduleAPI = {
   importRooms: (facultyId: string, file: FormData) =>
     api.post(`/rooms/import/upload?faculty_id=${facultyId}`, file, { headers: { 'Content-Type': 'multipart/form-data' } }),
   // الإعدادات
-  getSettings: () => api.get('/schedule-settings'),
-  saveTimeSlots: (slots: any[]) => api.post('/schedule-settings/time-slots', slots),
+  getSettings: (facultyId?: string) => api.get('/schedule-settings', { params: { faculty_id: facultyId } }),
+  saveTimeSlots: (slots: any[], facultyId?: string) => api.post(`/schedule-settings/time-slots${facultyId ? `?faculty_id=${facultyId}` : ''}`, slots),
   // تفضيلات المعلمين
   getTeacherPrefs: (id: string) => api.get(`/teacher-preferences/${id}`),
   saveTeacherPrefs: (id: string, data: any) => api.put(`/teacher-preferences/${id}`, data),
