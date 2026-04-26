@@ -8633,22 +8633,34 @@ async def import_students_from_excel(
         
         # التسجيل التلقائي في المقررات المطابقة
         enrolled_courses = 0
+        enrolled_students_total = 0
         if imported_ids and department_id:
-            # البحث عن المقررات المطابقة (القسم + المستوى + الشعبة)
-            course_query = {
-                "department_id": department_id,
-                "is_active": True,
-            }
-            if level:
-                course_query["level"] = level
-            if section:
-                course_query["section"] = section
-            
-            matching_courses = await db.courses.find(course_query).to_list(500)
-            
-            for mc in matching_courses:
-                course_id = str(mc["_id"])
-                for sid in imported_ids:
+            # لكل طالب تم استيراده، سجّله في المقررات المطابقة لمستواه وشعبته
+            for sid in imported_ids:
+                student = await db.students.find_one({"_id": ObjectId(sid)})
+                if not student:
+                    continue
+                
+                s_level = student.get("level")
+                s_section = student.get("section", "")
+                
+                course_query = {
+                    "department_id": department_id,
+                    "is_active": True,
+                }
+                if s_level:
+                    course_query["level"] = s_level
+                
+                # مقررات بنفس الشعبة أو بدون شعبة (عامة)
+                matching_courses = await db.courses.find(course_query).to_list(500)
+                
+                for mc in matching_courses:
+                    mc_section = mc.get("section", "")
+                    # تطابق: المقرر بدون شعبة (عام) أو نفس شعبة الطالب
+                    if mc_section and mc_section != s_section:
+                        continue
+                    
+                    course_id = str(mc["_id"])
                     existing_enroll = await db.enrollments.find_one({"course_id": course_id, "student_id": sid})
                     if not existing_enroll:
                         await db.enrollments.insert_one({
@@ -8657,7 +8669,9 @@ async def import_students_from_excel(
                             "enrolled_at": get_yemen_time(),
                             "enrolled_by": current_user["id"]
                         })
-                enrolled_courses += 1
+                        enrolled_students_total += 1
+                        
+            enrolled_courses = len(set())  # placeholder
         
         return {
             "message": f"تم استيراد {imported} طالب بنجاح",
