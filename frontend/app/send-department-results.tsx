@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
+import { Picker } from '@react-native-picker/picker';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { API_URL } from '../src/services/api';
@@ -159,33 +160,49 @@ export default function SendDepartmentResultsScreen() {
             </Text>
           </View>
 
-          {/* Step 1: Department selection */}
+          {/* Step 1: Department selection (dropdown) */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>1. اختر القسم</Text>
             {departments.length === 0 ? (
-              <Text style={styles.emptyText}>لا توجد أقسام متاحة</Text>
+              <View style={styles.emptyBox}>
+                <Ionicons name="alert-circle" size={20} color="#999" />
+                <Text style={styles.emptyText}>
+                  لا توجد أقسام مسموح لك بالوصول إليها
+                </Text>
+              </View>
             ) : (
-              departments.map((d) => {
-                const active = selectedDept?.id === d.id;
-                return (
-                  <TouchableOpacity
-                    key={d.id}
-                    style={[styles.deptCard, active && styles.deptCardActive]}
-                    onPress={() => setSelectedDept(d)}
-                    testID={`dept-card-${d.code}`}
-                  >
-                    <View style={{ flex: 1 }}>
-                      <Text style={[styles.deptName, active && { color: '#fff' }]}>
-                        {d.name}
-                      </Text>
-                      <Text style={[styles.deptCode, active && { color: '#e3f2fd' }]}>
-                        {d.code}
-                      </Text>
-                    </View>
-                    {active && <Ionicons name="checkmark-circle" size={22} color="#fff" />}
-                  </TouchableOpacity>
-                );
-              })
+              <View style={styles.pickerWrap}>
+                <Picker
+                  selectedValue={selectedDept?.id || ''}
+                  onValueChange={(val) => {
+                    if (!val) {
+                      setSelectedDept(null);
+                      return;
+                    }
+                    const found = departments.find((d) => d.id === val);
+                    setSelectedDept(found || null);
+                  }}
+                  style={styles.picker}
+                  testID="dept-picker"
+                >
+                  <Picker.Item label="-- اختر القسم --" value="" />
+                  {departments.map((d) => (
+                    <Picker.Item
+                      key={d.id}
+                      label={`${d.name}${d.code ? ` (${d.code})` : ''}`}
+                      value={d.id}
+                    />
+                  ))}
+                </Picker>
+              </View>
+            )}
+            {selectedDept && (
+              <View style={styles.selectedBox}>
+                <Ionicons name="checkmark-circle" size={18} color="#2e7d32" />
+                <Text style={styles.selectedText}>
+                  تم اختيار: {selectedDept.name}
+                </Text>
+              </View>
             )}
           </View>
 
@@ -303,7 +320,41 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: 'right',
   },
-  emptyText: { color: '#999', textAlign: 'center', padding: 16 },
+  emptyText: { color: '#999', textAlign: 'center', padding: 8 },
+  emptyBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#fafafa',
+    padding: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  pickerWrap: {
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: '#cfd8dc',
+    overflow: 'hidden',
+  },
+  picker: {
+    height: 50,
+    paddingHorizontal: 8,
+    color: '#212121',
+    backgroundColor: '#fff',
+  },
+  selectedBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e8f5e9',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  selectedText: { color: '#2e7d32', fontSize: 13, fontWeight: '600' },
   deptCard: {
     flexDirection: 'row',
     alignItems: 'center',
