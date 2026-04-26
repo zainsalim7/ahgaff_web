@@ -118,6 +118,7 @@ export default function AdminScreen() {
       groupColor: '#ff9800',
       items: [
         { title: 'إرسال إشعار', icon: 'send', color: '#4caf50', bg: '#e8f5e9', route: '/send-notification', permission: 'send_notifications' },
+        { title: 'إرسال نتائج القسم', icon: 'ribbon', color: '#7b1fa2', bg: '#f3e5f5', route: '/send-department-results', permission: 'send_notifications' },
         { title: 'سجل الإشعارات', icon: 'notifications', color: '#1565c0', bg: '#e3f2fd', route: '/manage-notifications', permission: 'send_notifications' },
       ],
     },

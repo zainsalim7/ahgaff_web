@@ -54,6 +54,13 @@
 - `POST /api/courses/{course_id}/send-final-results`
 - `POST /api/courses/{course_id}/send-final-results/upload`
 - `GET /api/template/final-results`
+- `POST /api/departments/{department_id}/send-final-results/upload` (نتائج على مستوى القسم)
+- `GET /api/template/department-final-results` (نموذج عمودين فقط: رقم القيد + النتيجة)
+
+### القيم المسموحة في عمود "النتيجة" لنتائج القسم
+- `ناجح`
+- `دور ثان` (أو `دور ثاني`)
+- `راجع التسجيل`
 
 ## بيانات الاختبار
 - مدير: admin / admin123

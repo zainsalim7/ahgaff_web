@@ -2356,6 +2356,200 @@ async def send_final_results_upload(
     return await _send_final_results_to_students(course_id, items, current_user)
 
 
+# ==================== النتائج على مستوى القسم - Department-Level Results ====================
+
+DEPT_RESULT_VALUES = {
+    "ناجح": "ناجح",
+    "ناجحة": "ناجح",
+    "نجاح": "ناجح",
+    "pass": "ناجح",
+    "passed": "ناجح",
+    "p": "ناجح",
+    "دور ثان": "دور ثان",
+    "دور ثاني": "دور ثان",
+    "دور 2": "دور ثان",
+    "second": "دور ثان",
+    "second_round": "دور ثان",
+    "second round": "دور ثان",
+    "راجع التسجيل": "راجع التسجيل",
+    "راجع شؤون الطلاب": "راجع التسجيل",
+    "راجع التسجيل والقبول": "راجع التسجيل",
+    "review": "راجع التسجيل",
+    "review_registration": "راجع التسجيل",
+}
+
+
+def _normalize_dept_result(value: str) -> Optional[str]:
+    if not value:
+        return None
+    v = str(value).strip().lower()
+    # Build lowercased lookup
+    for k, mapped in DEPT_RESULT_VALUES.items():
+        if v == k.lower():
+            return mapped
+    return None
+
+
+@api_router.get("/template/department-final-results")
+async def get_department_final_results_template(current_user: dict = Depends(get_current_user)):
+    """تحميل نموذج Excel لإرسال النتائج على مستوى القسم"""
+    if not _can_send_final_results(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    data = {
+        "رقم القيد": ["12345", "12346", "12347"],
+        "النتيجة": ["ناجح", "دور ثان", "راجع التسجيل"],
+    }
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine="openpyxl")
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=department_final_results_template.xlsx"},
+    )
+
+
+@api_router.post("/departments/{department_id}/send-final-results/upload")
+async def send_department_final_results_upload(
+    department_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """إرسال النتيجة النهائية لطلاب قسم كامل من ملف Excel/CSV (عمودان: رقم القيد، النتيجة)"""
+    if not _can_send_final_results(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بإرسال النتائج")
+
+    try:
+        dept_oid = ObjectId(department_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="القسم غير موجود")
+
+    department = await db.departments.find_one({"_id": dept_oid})
+    if not department:
+        raise HTTPException(status_code=404, detail="القسم غير موجود")
+    department_name = department.get("name", "")
+
+    contents = await file.read()
+    filename = (file.filename or "").lower()
+    try:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(BytesIO(contents))
+        else:
+            df = pd.read_excel(BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
+
+    # Resolve column names (Arabic or English)
+    student_col = None
+    result_col = None
+    for c in df.columns:
+        cl = str(c).strip().lower()
+        if cl in ("رقم القيد", "student_number", "student_id", "رقم_القيد", "id"):
+            student_col = c
+        elif cl in ("النتيجة", "result", "status", "الحالة"):
+            result_col = c
+    if student_col is None or result_col is None:
+        raise HTTPException(
+            status_code=400,
+            detail="الأعمدة المطلوبة غير موجودة. يجب توفر: 'رقم القيد' و 'النتيجة'",
+        )
+
+    # Build rows
+    rows: List[dict] = []
+    for _, row in df.iterrows():
+        sn = row.get(student_col)
+        rs = row.get(result_col)
+        if pd.isna(sn) or pd.isna(rs):
+            continue
+        if isinstance(sn, float) and sn.is_integer():
+            sn = str(int(sn))
+        rows.append({"student_number": str(sn).strip(), "result": str(rs).strip()})
+
+    if not rows:
+        raise HTTPException(status_code=400, detail="الملف لا يحتوي على بيانات صالحة")
+
+    # Fetch all students in this department keyed by student_id (رقم القيد)
+    student_numbers = list({r["student_number"] for r in rows if r["student_number"]})
+    students_cursor = db.students.find({
+        "department_id": department_id,
+        "student_id": {"$in": student_numbers},
+    })
+    students_by_number: dict = {}
+    async for s in students_cursor:
+        students_by_number[str(s.get("student_id", "")).strip()] = s
+
+    sent = 0
+    push_sent = 0
+    failed: List[dict] = []
+    from services.firebase_service import send_notification_to_many
+
+    for r in rows:
+        sn = r["student_number"]
+        result_norm = _normalize_dept_result(r["result"])
+        if result_norm is None:
+            failed.append({"student_number": sn, "reason": f"نتيجة غير صالحة: {r['result']}"})
+            continue
+        student = students_by_number.get(sn)
+        if not student:
+            failed.append({"student_number": sn, "reason": "الطالب غير موجود في هذا القسم"})
+            continue
+
+        title = f"النتيجة النهائية - {department_name}"
+        message = f"رقم القيد: {sn} | القسم: {department_name} | النتيجة: {result_norm}"
+
+        student_db_id = str(student["_id"])
+        notification = {
+            "student_id": student_db_id,
+            "user_id": student.get("user_id"),
+            "title": title,
+            "message": message,
+            "type": NotificationType.INFO.value,
+            "department_id": department_id,
+            "department_name": department_name,
+            "is_read": False,
+            "is_manual": True,
+            "is_final_result": True,
+            "is_department_result": True,
+            "final_result": result_norm,
+            "sent_by": current_user["id"],
+            "sent_by_name": current_user.get("full_name", ""),
+            "created_at": get_yemen_time(),
+        }
+        await db.notifications.insert_one(notification)
+        sent += 1
+
+        try:
+            user_id = student.get("user_id")
+            if user_id:
+                tokens_docs = await db.fcm_tokens.find({"user_id": user_id}).to_list(100)
+                tokens = [doc["token"] for doc in tokens_docs if doc.get("token")]
+                if tokens:
+                    await send_notification_to_many(tokens, title, message)
+                    push_sent += 1
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Department final result push failed for {sn}: {e}")
+
+    await log_activity(
+        user=current_user,
+        action="send_department_final_results",
+        entity_type="department",
+        entity_id=department_id,
+        entity_name=department_name,
+        details={"sent": sent, "failed_count": len(failed)},
+    )
+
+    return {
+        "message": f"تم إرسال {sent} إشعار نتيجة نهائية",
+        "department_name": department_name,
+        "sent": sent,
+        "failed_count": len(failed),
+        "failed": failed,
+        "push_sent": push_sent,
+    }
+
+
 @api_router.get("/template/final-results")
 async def get_final_results_template(current_user: dict = Depends(get_current_user)):
     """تحميل نموذج Excel لإدخال النتائج النهائية"""
