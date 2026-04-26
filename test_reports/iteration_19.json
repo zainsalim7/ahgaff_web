@@ -1,0 +1,53 @@
+{
+  "summary": "Tested both new features: (1) Lecture deletion bug fix - DELETE /api/lectures cleans orphaned attendance records correctly. (2) Send final results notifications feature (JSON, Excel, template, permissions) - all working. Backend: 12/12 pytest cases PASS. Frontend: send-final-results page renders correctly, all flows work (select all/clear/per-student/search/template download/navigation from course-students). Found 2 minor backend issues + 1 testability issue.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/courses/{invalid-id}/send-final-results", "issue": "Throws 500 (bson.errors.InvalidId) when course_id is not a valid ObjectId hex string. Should validate format and return 400/404. server.py:2163 calls ObjectId(course_id) without try/except.", "priority": "MEDIUM"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "send-final-results.tsx + course-students.tsx", "issue": "data-testid attributes are NOT rendered to DOM (only 1 of 11+ found). React Native Web requires testID prop, not data-testid. Currently selectors data-testid='mark-all-pass-btn', 'send-final-results-nav-btn', 'count-pass', etc. don't exist in DOM. Functionally everything works via text selectors, but automated tests cannot use data-testid.", "selector": "all data-testid in send-final-results.tsx", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "course-students page load", "issue": "Console error: 'TypeError: lecturesList is not iterable' in calculateStudentStats. Doesn't break UI but pollutes console.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_lecture_and_final_results_pytest.py",
+    "/app/backend/tests/test_lecture_deletion.py",
+    "/app/backend/tests/test_final_results.py",
+    "/app/test_reports/pytest/lecture_finalresults_results.xml"
+  ],
+  "action_items": [
+    "Replace data-testid={...} with testID={...} in /app/frontend/app/send-final-results.tsx and /app/frontend/app/course-students.tsx. React Native Web converts testID to data-testid automatically; raw data-testid props are stripped.",
+    "Add ObjectId format validation in server.py _send_final_results_to_students (~line 2163): wrap ObjectId(course_id) in try/except to return 404 on InvalidId rather than 500.",
+    "Fix lecturesList iteration error in course-students.tsx calculateStudentStats - ensure lecturesList is defaulted to [] when API returns non-array."
+  ],
+  "critical_code_review_comments": [
+    "Backend send_final_results endpoint correctly validates result values (pass/fail/ناجح/راسب), persists notifications with is_final_result=true, and returns failed list for invalid student numbers.",
+    "DELETE /api/lectures correctly removes attendance records (verified before/after counts).",
+    "Permissions enforced correctly: teacher180156 returns 403, unauthenticated returns 401/403.",
+    "Excel upload correctly accepts Arabic column names (رقم القيد, النتيجة, الدرجة, ملاحظات).",
+    "Notification message contains student_number and result keyword as required.",
+    "Frontend test IDs not rendered in DOM - this is a React Native Web prop convention issue (use testID, not data-testid)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_lecture_and_final_results_pytest.py (new - 12 pytest cases)"
+  ],
+  "success_rate": {
+    "backend": "100% (12/12 pytest passed; 1 known minor issue around invalid ObjectId returning 500)",
+    "frontend": "95% (all functional flows work; data-testid attributes not rendered - testability issue)"
+  },
+  "test_credentials": {
+    "admin": {"username": "admin", "password": "admin123"},
+    "teacher": {"username": "teacher180156", "password": "teacher123"}
+  },
+  "seed_data_creation": "Sent multiple final-result notifications to students enrolled in course 698f0000d803b27aab0120af (دراسات حضرموت) during testing. Student محمد أحمد علي (12345) now has 8+ final-result notifications.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both lecture-deletion bug fix and send-final-results feature are working end-to-end. Backend pytest at /app/backend/tests/test_lecture_and_final_results_pytest.py covers: lecture deletion cleans attendance, attendance endpoint filters deleted lectures, template download, JSON send (Arabic + English keywords), Excel upload, invalid student handling, invalid result value, teacher permission denial, unauthenticated denial, course not found, invalid ObjectId format. Frontend uses Expo Router; login: fill 2 inputs then click 'تسجيل الدخول' via get_by_text. Direct URL navigation works after login. Important: the dev used `data-testid` props but React Native Web requires `testID` prop (which RNW maps to data-testid for native HTML elements). On <View>/<Text> components data-testid is dropped. Use text-based selectors for now.",
+  "rca_of_issues": "1) Invalid ObjectId 500: server.py:2163 calls ObjectId(course_id) without exception handling; raises bson.errors.InvalidId (uncaught). Fix: wrap in try/except InvalidId -> raise HTTPException(404). 2) data-testid not in DOM: React Native Web only forwards specific props; testID is recognized and converted to data-testid. Plain HTML attributes like data-testid are filtered out for RN components. Fix: rename all `data-testid=` to `testID=` in .tsx files."
+}

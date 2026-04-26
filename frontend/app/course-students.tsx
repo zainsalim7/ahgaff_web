@@ -945,6 +945,15 @@ export default function CourseStudentsScreen() {
                 </>
               )}
             </Pressable>
+
+            <TouchableOpacity
+              data-testid="send-final-results-nav-btn"
+              style={[styles.actionBtn, { backgroundColor: '#7b1fa2' }]}
+              onPress={() => router.push({ pathname: '/send-final-results', params: { courseId } })}
+            >
+              <Ionicons name="ribbon" size={20} color="#fff" />
+              <Text style={styles.actionBtnText}>إرسال النتائج النهائية</Text>
+            </TouchableOpacity>
           </View>
         )}
 

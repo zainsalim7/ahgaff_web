@@ -2130,6 +2130,250 @@ async def create_manual_notification(
         "notification_id": str(result.inserted_id)
     }
 
+
+# ==================== النتائج النهائية - Final Results ====================
+
+class FinalResultItem(BaseModel):
+    student_number: str  # رقم القيد
+    result: str  # "pass" | "fail" | "ناجح" | "راسب"
+    grade: Optional[str] = None  # درجة اختيارية
+    notes: Optional[str] = None
+
+
+class FinalResultsPayload(BaseModel):
+    results: List[FinalResultItem]
+
+
+def _normalize_result(value: str) -> Optional[str]:
+    """تحويل قيمة النتيجة إلى 'pass' أو 'fail'"""
+    if not value:
+        return None
+    v = str(value).strip().lower()
+    pass_keywords = {"pass", "passed", "p", "ناجح", "ناجحة", "نجاح", "✓", "yes", "y", "1", "true"}
+    fail_keywords = {"fail", "failed", "f", "راسب", "راسبة", "رسوب", "✗", "no", "n", "0", "false"}
+    if v in pass_keywords:
+        return "pass"
+    if v in fail_keywords:
+        return "fail"
+    return None
+
+
+async def _send_final_results_to_students(course_id: str, items: List[dict], current_user: dict) -> dict:
+    """إنشاء إشعارات النتيجة النهائية وإرسال Push للطلاب"""
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    course_name = course.get("name", "")
+    course_code = course.get("code", "")
+
+    # خريطة طلاب المقرر برقم القيد
+    student_numbers = list({str(it.get("student_number", "")).strip() for it in items if it.get("student_number")})
+    students_cursor = db.students.find({"student_id": {"$in": student_numbers}})
+    students_by_number = {}
+    async for s in students_cursor:
+        students_by_number[str(s.get("student_id", "")).strip()] = s
+
+    sent = 0
+    failed: List[dict] = []
+    push_sent = 0
+
+    from services.firebase_service import send_notification_to_many
+
+    for it in items:
+        student_number = str(it.get("student_number", "")).strip()
+        result_value = _normalize_result(it.get("result", ""))
+        grade = it.get("grade")
+        notes = it.get("notes")
+
+        if not student_number:
+            failed.append({"student_number": student_number, "reason": "رقم القيد مفقود"})
+            continue
+        if result_value not in ("pass", "fail"):
+            failed.append({"student_number": student_number, "reason": "النتيجة غير صالحة (يجب أن تكون ناجح/راسب)"})
+            continue
+
+        student = students_by_number.get(student_number)
+        if not student:
+            failed.append({"student_number": student_number, "reason": "الطالب غير موجود"})
+            continue
+
+        result_ar = "ناجح" if result_value == "pass" else "راسب"
+        title = f"النتيجة النهائية - {course_name}"
+        message_parts = [f"رقم القيد: {student_number}", f"المقرر: {course_name}"]
+        if course_code:
+            message_parts.append(f"الرمز: {course_code}")
+        message_parts.append(f"النتيجة: {result_ar}")
+        if grade:
+            message_parts.append(f"الدرجة: {grade}")
+        if notes:
+            message_parts.append(f"ملاحظات: {notes}")
+        message = " | ".join(message_parts)
+
+        student_db_id = str(student["_id"])
+        notification = {
+            "student_id": student_db_id,
+            "user_id": student.get("user_id"),
+            "title": title,
+            "message": message,
+            "type": NotificationType.INFO.value,
+            "course_id": course_id,
+            "course_name": course_name,
+            "is_read": False,
+            "is_manual": True,
+            "is_final_result": True,
+            "final_result": result_value,
+            "final_grade": grade,
+            "sent_by": current_user["id"],
+            "sent_by_name": current_user.get("full_name", ""),
+            "created_at": get_yemen_time(),
+        }
+        await db.notifications.insert_one(notification)
+        sent += 1
+
+        # إرسال Push عبر Firebase
+        try:
+            user_id = student.get("user_id")
+            if user_id:
+                tokens_docs = await db.fcm_tokens.find({"user_id": user_id}).to_list(100)
+                tokens = [doc["token"] for doc in tokens_docs if doc.get("token")]
+                if tokens:
+                    await send_notification_to_many(tokens, title, message)
+                    push_sent += 1
+        except Exception as e:
+            logging.getLogger(__name__).error(f"Final result push failed for {student_number}: {e}")
+
+    await log_activity(
+        user=current_user,
+        action="send_final_results",
+        entity_type="course",
+        entity_id=course_id,
+        entity_name=course_name,
+        details={"sent": sent, "failed_count": len(failed)},
+    )
+
+    return {
+        "message": f"تم إرسال {sent} إشعار نتيجة نهائية",
+        "sent": sent,
+        "failed_count": len(failed),
+        "failed": failed,
+        "push_sent": push_sent,
+    }
+
+
+def _can_send_final_results(current_user: dict) -> bool:
+    if current_user.get("role") == UserRole.ADMIN:
+        return True
+    return (
+        has_permission(current_user, "send_notifications")
+        or has_permission(current_user, "manage_courses")
+        or has_permission(current_user, "manage_grades")
+    )
+
+
+@api_router.post("/courses/{course_id}/send-final-results")
+async def send_final_results_json(
+    course_id: str,
+    payload: FinalResultsPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """إرسال النتيجة النهائية (ناجح/راسب) لطلاب المقرر عبر الإشعارات (JSON)"""
+    if not _can_send_final_results(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بإرسال النتائج النهائية")
+
+    items = [item.dict() for item in payload.results]
+    if not items:
+        raise HTTPException(status_code=400, detail="لا توجد نتائج للإرسال")
+
+    return await _send_final_results_to_students(course_id, items, current_user)
+
+
+@api_router.post("/courses/{course_id}/send-final-results/upload")
+async def send_final_results_upload(
+    course_id: str,
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """إرسال النتيجة النهائية لطلاب المقرر من ملف Excel/CSV"""
+    if not _can_send_final_results(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بإرسال النتائج النهائية")
+
+    contents = await file.read()
+    filename = (file.filename or "").lower()
+    try:
+        if filename.endswith(".csv"):
+            df = pd.read_csv(BytesIO(contents))
+        else:
+            df = pd.read_excel(BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
+
+    # قبول أعمدة عربية أو إنجليزية
+    column_map_candidates = {
+        "student_number": ["student_number", "رقم القيد", "رقم_القيد", "الرقم", "id", "student_id", "رقم الطالب"],
+        "result": ["result", "النتيجة", "النتيجه", "status", "الحالة"],
+        "grade": ["grade", "الدرجة", "الدرجه", "score", "الدرجة النهائية"],
+        "notes": ["notes", "ملاحظات", "ملاحظه", "ملاحظة"],
+    }
+
+    cols_lower = {c: str(c).strip() for c in df.columns}
+    resolved = {}
+    for key, candidates in column_map_candidates.items():
+        for c, original in cols_lower.items():
+            if original in candidates or original.lower() in [x.lower() for x in candidates]:
+                resolved[key] = c
+                break
+
+    if "student_number" not in resolved or "result" not in resolved:
+        raise HTTPException(
+            status_code=400,
+            detail="الأعمدة المطلوبة غير موجودة. يجب توفر: 'رقم القيد' و 'النتيجة'",
+        )
+
+    items = []
+    for _, row in df.iterrows():
+        sn = row.get(resolved["student_number"])
+        rs = row.get(resolved["result"])
+        if pd.isna(sn) or pd.isna(rs):
+            continue
+        # الأرقام قد تأتي كـ float — تحويلها إلى string نظيفة
+        if isinstance(sn, float) and sn.is_integer():
+            sn = str(int(sn))
+        items.append({
+            "student_number": str(sn).strip(),
+            "result": str(rs).strip(),
+            "grade": (None if "grade" not in resolved or pd.isna(row.get(resolved["grade"])) else str(row.get(resolved["grade"])).strip()),
+            "notes": (None if "notes" not in resolved or pd.isna(row.get(resolved["notes"])) else str(row.get(resolved["notes"])).strip()),
+        })
+
+    if not items:
+        raise HTTPException(status_code=400, detail="الملف لا يحتوي على بيانات صالحة")
+
+    return await _send_final_results_to_students(course_id, items, current_user)
+
+
+@api_router.get("/template/final-results")
+async def get_final_results_template(current_user: dict = Depends(get_current_user)):
+    """تحميل نموذج Excel لإدخال النتائج النهائية"""
+    if not _can_send_final_results(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    data = {
+        "رقم القيد": ["12345", "12346", "12347"],
+        "النتيجة": ["ناجح", "راسب", "ناجح"],
+        "الدرجة": ["85", "45", "90"],
+        "ملاحظات": ["", "", ""],
+    }
+    df = pd.DataFrame(data)
+    output = BytesIO()
+    df.to_excel(output, index=False, engine="openpyxl")
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=final_results_template.xlsx"},
+    )
+
 @api_router.get("/students/{student_id}/notifications")
 async def get_student_notifications(
     student_id: str,
@@ -5382,10 +5626,10 @@ async def delete_lecture(
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
-    # حذف سجلات الحضور المرتبطة
+    # حذف سجلات الحضور المرتبطة (بالـ lecture_id أو بالتاريخ والمقرر)
     await db.attendance.delete_many({"lecture_id": lecture_id})
     
-    return {"message": "تم حذف المحاضرة بنجاح"}
+    return {"message": "تم حذف المحاضرة وسجلات حضورها بنجاح"}
 
 @api_router.put("/lectures/{lecture_id}/reschedule")
 async def reschedule_lecture(
@@ -6214,7 +6458,19 @@ async def get_course_attendance(
     date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
+    # جلب المحاضرات النشطة فقط
+    active_lecture_ids = await get_active_lecture_ids(course_id)
+    
     query = {"course_id": course_id}
+    
+    # فلتر: فقط سجلات الحضور المرتبطة بمحاضرات نشطة أو بدون lecture_id
+    if active_lecture_ids:
+        active_ids_str = [str(lid) for lid in active_lecture_ids]
+        query["$or"] = [
+            {"lecture_id": {"$in": active_ids_str}},
+            {"lecture_id": None},
+            {"lecture_id": {"$exists": False}},
+        ]
     
     if date:
         date_obj = datetime.fromisoformat(date)
