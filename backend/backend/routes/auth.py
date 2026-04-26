@@ -61,11 +61,23 @@ async def login(user_data: UserLogin, request: Request):
     # منع المعلمين والطلاب من دخول الويب - لهم تطبيق خاص
     user_agent = request.headers.get("user-agent", "").lower()
     platform = request.headers.get("x-platform", "").lower()
+    origin = request.headers.get("origin", "")
+    referer = request.headers.get("referer", "")
     user_role = user.get("role", "")
     
-    # نمنع فقط إذا كان الطلب من متصفح ويب
+    # المواقع المسموح بها للطلاب
+    ALLOWED_STUDENT_WEB_ORIGINS = [
+        "https://ahgaff-student-web.vercel.app",
+    ]
+    
+    is_allowed_web = (
+        origin in ALLOWED_STUDENT_WEB_ORIGINS
+        or any(referer.startswith(o) for o in ALLOWED_STUDENT_WEB_ORIGINS)
+    )
+    
+    # نمنع فقط إذا كان الطلب من متصفح ويب وليس من المواقع المسموحة
     is_web_browser = any(b in user_agent for b in ["mozilla", "chrome", "safari", "firefox", "edge", "opera"]) and platform not in ["ios", "android", "mobile"]
-    if user_role in ["teacher", "student"] and is_web_browser:
+    if user_role in ["teacher", "student"] and is_web_browser and not is_allowed_web:
         record_login_attempt(client_ip, False)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
