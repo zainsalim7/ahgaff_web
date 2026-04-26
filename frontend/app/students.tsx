@@ -684,6 +684,15 @@ export default function StudentsScreen() {
         <Text style={styles.itemDetail}>
           {getDepartmentName(item.department_id)} | م{item.level} {item.section ? `| ${item.section}` : ''}
         </Text>
+        {item.enrolled_courses && item.enrolled_courses.length > 0 && (
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
+            {item.enrolled_courses.map((c: any, idx: number) => (
+              <View key={idx} style={{ backgroundColor: '#e3f2fd', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
+                <Text style={{ fontSize: 10, color: '#1565c0' }}>{c.name}</Text>
+              </View>
+            ))}
+          </View>
+        )}
       </View>
       {!selectionMode && (
         <View style={styles.actionButtons}>
