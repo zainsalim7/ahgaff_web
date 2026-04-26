@@ -3936,23 +3936,35 @@ async def auto_enroll_all_courses(
             student_query["section"] = course["section"]
         
         students = await db.students.find(student_query, {"_id": 1}).to_list(10000)
+        if not students:
+            courses_processed += 1
+            continue
         
-        enrolled = 0
-        already = 0
-        for s in students:
-            sid = str(s["_id"])
-            existing = await db.enrollments.find_one({"course_id": cid, "student_id": sid})
-            if existing:
-                already += 1
-                continue
-            await db.enrollments.insert_one({
+        student_ids = [str(s["_id"]) for s in students]
+        
+        # Batch: جلب كل التسجيلات الموجودة دفعة واحدة
+        existing_enrollments = await db.enrollments.find(
+            {"course_id": cid, "student_id": {"$in": student_ids}},
+            {"student_id": 1}
+        ).to_list(10000)
+        already_enrolled_ids = {e["student_id"] for e in existing_enrollments}
+        
+        # فلتر الطلاب الجدد فقط
+        new_ids = [sid for sid in student_ids if sid not in already_enrolled_ids]
+        already = len(already_enrolled_ids)
+        
+        # Batch insert
+        if new_ids:
+            now = get_yemen_time()
+            docs = [{
                 "course_id": cid,
                 "student_id": sid,
-                "enrolled_at": get_yemen_time(),
+                "enrolled_at": now,
                 "enrolled_by": current_user["id"]
-            })
-            enrolled += 1
+            } for sid in new_ids]
+            await db.enrollments.insert_many(docs)
         
+        enrolled = len(new_ids)
         total_enrolled += enrolled
         total_already += already
         courses_processed += 1
@@ -8631,47 +8643,50 @@ async def import_students_from_excel(
             except Exception as e:
                 errors.append(f"خطأ في الصف {index + 2}: {str(e)}")
         
-        # التسجيل التلقائي في المقررات المطابقة
+        # التسجيل التلقائي في المقررات المطابقة (batch)
         enrolled_courses = 0
         enrolled_students_total = 0
         if imported_ids and department_id:
-            # لكل طالب تم استيراده، سجّله في المقررات المطابقة لمستواه وشعبته
-            for sid in imported_ids:
-                student = await db.students.find_one({"_id": ObjectId(sid)})
-                if not student:
+            all_courses = await db.courses.find({
+                "department_id": department_id, "is_active": True
+            }).to_list(500)
+            
+            # جلب بيانات الطلاب المستوردين دفعة واحدة
+            imported_students = await db.students.find(
+                {"_id": {"$in": [ObjectId(sid) for sid in imported_ids]}},
+                {"_id": 1, "level": 1, "section": 1}
+            ).to_list(10000)
+            
+            for mc in all_courses:
+                cid = str(mc["_id"])
+                mc_level = mc.get("level")
+                mc_section = mc.get("section", "")
+                
+                matching_sids = []
+                for st in imported_students:
+                    if mc_level and st.get("level") != mc_level:
+                        continue
+                    if mc_section and st.get("section", "") != mc_section:
+                        continue
+                    matching_sids.append(str(st["_id"]))
+                
+                if not matching_sids:
                     continue
                 
-                s_level = student.get("level")
-                s_section = student.get("section", "")
+                existing = await db.enrollments.find(
+                    {"course_id": cid, "student_id": {"$in": matching_sids}},
+                    {"student_id": 1}
+                ).to_list(10000)
+                already_set = {e["student_id"] for e in existing}
+                new_sids = [s for s in matching_sids if s not in already_set]
                 
-                course_query = {
-                    "department_id": department_id,
-                    "is_active": True,
-                }
-                if s_level:
-                    course_query["level"] = s_level
-                
-                # مقررات بنفس الشعبة أو بدون شعبة (عامة)
-                matching_courses = await db.courses.find(course_query).to_list(500)
-                
-                for mc in matching_courses:
-                    mc_section = mc.get("section", "")
-                    # تطابق: المقرر بدون شعبة (عام) أو نفس شعبة الطالب
-                    if mc_section and mc_section != s_section:
-                        continue
-                    
-                    course_id = str(mc["_id"])
-                    existing_enroll = await db.enrollments.find_one({"course_id": course_id, "student_id": sid})
-                    if not existing_enroll:
-                        await db.enrollments.insert_one({
-                            "course_id": course_id,
-                            "student_id": sid,
-                            "enrolled_at": get_yemen_time(),
-                            "enrolled_by": current_user["id"]
-                        })
-                        enrolled_students_total += 1
-                        
-            enrolled_courses = len(set())  # placeholder
+                if new_sids:
+                    now = get_yemen_time()
+                    await db.enrollments.insert_many([{
+                        "course_id": cid, "student_id": s,
+                        "enrolled_at": now, "enrolled_by": current_user["id"]
+                    } for s in new_sids])
+                    enrolled_students_total += len(new_sids)
         
         return {
             "message": f"تم استيراد {imported} طالب بنجاح",
