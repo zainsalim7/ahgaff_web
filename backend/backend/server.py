@@ -3940,6 +3940,69 @@ async def auto_enroll_matching_students(course_id: str, current_user: dict = Dep
     }
 
 
+
+@api_router.get("/courses/diagnose-enrollment")
+async def diagnose_enrollment(
+    department_id: str,
+    course_code: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """تشخيص مشكلة التسجيل التلقائي"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    result = {}
+    
+    # 1. المقررات
+    c_query = {"department_id": department_id, "is_active": True}
+    if course_code:
+        c_query["code"] = {"$regex": course_code, "$options": "i"}
+    courses = await db.courses.find(c_query).to_list(500)
+    result["courses_count"] = len(courses)
+    result["courses"] = []
+    
+    for c in courses[:20]:
+        cid = str(c["_id"])
+        c_section = (c.get("section") or "").strip()
+        c_level = c.get("level")
+        
+        # طلاب مطابقين بالضبط
+        sq = {"department_id": department_id, "level": c_level, "is_active": True}
+        if c_section:
+            sq["section"] = c_section
+        exact_count = await db.students.count_documents(sq)
+        
+        # طلاب بنفس المستوى (كل الشعب)
+        all_level = await db.students.count_documents({"department_id": department_id, "level": c_level, "is_active": True})
+        
+        # تسجيلات حالية
+        enroll_count = await db.enrollments.count_documents({"course_id": cid})
+        
+        # الشعب الموجودة لهذا المستوى
+        pipeline = [
+            {"$match": {"department_id": department_id, "level": c_level, "is_active": True}},
+            {"$group": {"_id": "$section", "count": {"$sum": 1}}}
+        ]
+        sections = await db.students.aggregate(pipeline).to_list(20)
+        
+        result["courses"].append({
+            "name": c.get("name", ""),
+            "code": c.get("code", ""),
+            "level": c_level,
+            "section": repr(c.get("section")),
+            "section_stripped": repr(c_section),
+            "exact_match_students": exact_count,
+            "all_level_students": all_level,
+            "current_enrollments": enroll_count,
+            "available_sections": [{
+                "section": repr(s["_id"]),
+                "count": s["count"]
+            } for s in sections]
+        })
+    
+    return result
+
+
 @api_router.post("/courses/auto-enroll-all")
 async def auto_enroll_all_courses(
     department_id: Optional[str] = None,
@@ -3965,13 +4028,19 @@ async def auto_enroll_all_courses(
     
     for course in courses:
         cid = str(course["_id"])
+        c_section = (course.get("section") or "").strip()
         student_query = {
             "department_id": course.get("department_id"),
             "level": course.get("level"),
             "is_active": True,
         }
-        if course.get("section"):
-            student_query["section"] = course["section"]
+        if c_section:
+            # مطابقة مرنة: trim المسافات
+            student_query["$or"] = [
+                {"section": c_section},
+                {"section": c_section + " "},
+                {"section": " " + c_section},
+            ]
         
         students = await db.students.find(student_query, {"_id": 1}).to_list(10000)
         if not students:
