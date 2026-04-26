@@ -249,7 +249,7 @@ export default function SendFinalResultsScreen() {
         >
           {/* Header card */}
           <View style={styles.headerCard}>
-            <Text style={styles.courseTitle} data-testid="final-results-course-name">
+            <Text style={styles.courseTitle} testID="final-results-course-name">
               {course?.name || 'المقرر'}
             </Text>
             {course?.code ? <Text style={styles.courseCode}>{course.code}</Text> : null}
@@ -261,7 +261,7 @@ export default function SendFinalResultsScreen() {
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnPass]}
               onPress={() => markAll('pass')}
-              data-testid="mark-all-pass-btn"
+              testID="mark-all-pass-btn"
             >
               <Ionicons name="checkmark-done" size={18} color="#fff" />
               <Text style={styles.actionBtnText}>تحديد الكل ناجح</Text>
@@ -269,7 +269,7 @@ export default function SendFinalResultsScreen() {
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnFail]}
               onPress={() => markAll('fail')}
-              data-testid="mark-all-fail-btn"
+              testID="mark-all-fail-btn"
             >
               <Ionicons name="close-circle" size={18} color="#fff" />
               <Text style={styles.actionBtnText}>تحديد الكل راسب</Text>
@@ -277,7 +277,7 @@ export default function SendFinalResultsScreen() {
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnNeutral]}
               onPress={() => markAll(null)}
-              data-testid="clear-all-btn"
+              testID="clear-all-btn"
             >
               <Ionicons name="refresh" size={18} color="#1565c0" />
               <Text style={[styles.actionBtnText, { color: '#1565c0' }]}>مسح التحديدات</Text>
@@ -288,7 +288,7 @@ export default function SendFinalResultsScreen() {
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnAlt]}
               onPress={downloadTemplate}
-              data-testid="download-template-btn"
+              testID="download-template-btn"
             >
               <Ionicons name="download" size={18} color="#1565c0" />
               <Text style={[styles.actionBtnText, { color: '#1565c0' }]}>تحميل نموذج Excel</Text>
@@ -296,7 +296,7 @@ export default function SendFinalResultsScreen() {
             <TouchableOpacity
               style={[styles.actionBtn, styles.actionBtnAlt]}
               onPress={uploadExcel}
-              data-testid="upload-excel-btn"
+              testID="upload-excel-btn"
             >
               <Ionicons name="cloud-upload" size={18} color="#1565c0" />
               <Text style={[styles.actionBtnText, { color: '#1565c0' }]}>رفع نتائج من Excel</Text>
@@ -312,19 +312,19 @@ export default function SendFinalResultsScreen() {
               placeholderTextColor="#999"
               value={search}
               onChangeText={setSearch}
-              data-testid="final-results-search"
+              testID="final-results-search"
             />
           </View>
 
           {/* Counts */}
           <View style={styles.countsRow}>
-            <Text style={styles.countText} data-testid="count-pass">
+            <Text style={styles.countText} testID="count-pass">
               ناجح: {counts.passN}
             </Text>
-            <Text style={styles.countText} data-testid="count-fail">
+            <Text style={styles.countText} testID="count-fail">
               راسب: {counts.failN}
             </Text>
-            <Text style={styles.countText} data-testid="count-total">
+            <Text style={styles.countText} testID="count-total">
               إجمالي: {counts.totalSet}/{students.length}
             </Text>
           </View>
@@ -354,7 +354,7 @@ export default function SendFinalResultsScreen() {
                     <TouchableOpacity
                       style={[styles.pill, r === 'pass' && styles.pillPassActive]}
                       onPress={() => setResultFor(s.id, 'pass')}
-                      data-testid={`result-pass-${s.student_id}`}
+                      testID={`result-pass-${s.student_id}`}
                     >
                       <Text style={[styles.pillText, r === 'pass' && styles.pillTextActive]}>
                         ناجح
@@ -363,7 +363,7 @@ export default function SendFinalResultsScreen() {
                     <TouchableOpacity
                       style={[styles.pill, r === 'fail' && styles.pillFailActive]}
                       onPress={() => setResultFor(s.id, 'fail')}
-                      data-testid={`result-fail-${s.student_id}`}
+                      testID={`result-fail-${s.student_id}`}
                     >
                       <Text style={[styles.pillText, r === 'fail' && styles.pillTextActive]}>
                         راسب
@@ -376,7 +376,7 @@ export default function SendFinalResultsScreen() {
                       keyboardType="numeric"
                       value={grades[s.id] || ''}
                       onChangeText={(t) => setGradeFor(s.id, t)}
-                      data-testid={`grade-input-${s.student_id}`}
+                      testID={`grade-input-${s.student_id}`}
                     />
                   </View>
                 </View>
@@ -393,7 +393,7 @@ export default function SendFinalResultsScreen() {
             ]}
             disabled={sending || counts.totalSet === 0}
             onPress={submit}
-            data-testid="send-final-results-btn"
+            testID="send-final-results-btn"
           >
             {sending ? (
               <ActivityIndicator color="#fff" />

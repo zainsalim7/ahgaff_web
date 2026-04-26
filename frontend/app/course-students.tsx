@@ -948,6 +948,7 @@ export default function CourseStudentsScreen() {
 
             <TouchableOpacity
               data-testid="send-final-results-nav-btn"
+              testID="send-final-results-nav-btn"
               style={[styles.actionBtn, { backgroundColor: '#7b1fa2' }]}
               onPress={() => router.push({ pathname: '/send-final-results', params: { courseId } })}
             >

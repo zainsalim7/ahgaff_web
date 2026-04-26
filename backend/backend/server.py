@@ -2160,7 +2160,11 @@ def _normalize_result(value: str) -> Optional[str]:
 
 async def _send_final_results_to_students(course_id: str, items: List[dict], current_user: dict) -> dict:
     """إنشاء إشعارات النتيجة النهائية وإرسال Push للطلاب"""
-    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    try:
+        course_oid = ObjectId(course_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    course = await db.courses.find_one({"_id": course_oid})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
 
