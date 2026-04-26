@@ -193,14 +193,34 @@ async def import_rooms_upload(
 
     db = get_db()
     content = await file.read()
-    wb = openpyxl.load_workbook(BytesIO(content))
-    ws = wb.active
+    filename = file.filename or ""
+
+    rows_data = []
+    if filename.endswith('.csv'):
+        import csv
+        import io
+        text = content.decode('utf-8-sig')
+        reader = csv.reader(io.StringIO(text))
+        for row in reader:
+            rows_data.append(row)
+        rows_data = rows_data[1:]  # skip header
+    elif filename.endswith('.xls'):
+        import xlrd
+        book = xlrd.open_workbook(file_contents=content)
+        sheet = book.sheet_by_index(0)
+        for i in range(1, sheet.nrows):
+            rows_data.append([sheet.cell_value(i, j) for j in range(sheet.ncols)])
+    else:
+        wb = openpyxl.load_workbook(BytesIO(content))
+        ws = wb.active
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            rows_data.append(list(row))
 
     created = 0
     skipped = 0
     errors = []
 
-    for row_num, row in enumerate(ws.iter_rows(min_row=2, values_only=True), 2):
+    for row_num, row in enumerate(rows_data, 2):
         if not row or not row[0]:
             continue
         name = str(row[0]).strip()

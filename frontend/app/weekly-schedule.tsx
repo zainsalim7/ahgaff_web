@@ -543,7 +543,7 @@ export default function WeeklySchedulePage() {
                       onPress={() => {
                         const input = document.createElement('input');
                         input.type = 'file';
-                        input.accept = '.xlsx,.xls';
+                        input.accept = '.xlsx,.xls,.csv';
                         input.onchange = (e: any) => {
                           const file = e.target.files?.[0];
                           if (file) handleImportRooms(file);

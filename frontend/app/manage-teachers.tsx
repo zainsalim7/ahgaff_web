@@ -336,7 +336,7 @@ export default function ManageTeachersScreen() {
     
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.xlsx,.xls';
+    input.accept = '.xlsx,.xls,.csv';
     
     input.onchange = async (e: any) => {
       const file = e.target.files[0];
