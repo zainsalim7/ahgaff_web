@@ -119,6 +119,8 @@ async def get_teaching_loads(
             "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
             "course_section": course.get("section", ""),
+            "course_level": course.get("level", 1),
+            "course_credit_hours": course.get("credit_hours", 3),
             "weekly_hours": wh,
             "semester_id": load.get("semester_id"),
             "notes": load.get("notes", ""),
