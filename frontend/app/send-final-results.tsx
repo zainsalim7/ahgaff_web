@@ -170,7 +170,7 @@ export default function SendFinalResultsScreen() {
   const downloadTemplate = async () => {
     try {
       const token = await AsyncStorage.getItem('token');
-      const url = `${API_URL}/template/final-results`;
+      const url = `${API_URL}/api/template/final-results`;
       if (Platform.OS === 'web') {
         const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
         const blob = await res.blob();
