@@ -4971,11 +4971,25 @@ async def get_lesson_completion_report(
         completed_lectures = await db.lectures.find({
             "course_id": cid,
             "status": LectureStatus.COMPLETED
-        }).to_list(500)
+        }).sort("date", 1).to_list(500)
         
         total_lectures = await db.lectures.count_documents({"course_id": cid})
         completed_count = len(completed_lectures)
         lessons_with_title = sum(1 for l in completed_lectures if l.get("lesson_title"))
+
+        # قائمة الدروس المنجزة فعلاً (بالعناوين والتواريخ)
+        completed_lessons_list = []
+        for lec in completed_lectures:
+            title = lec.get("lesson_title")
+            if title:
+                d = lec.get("date", "")
+                if hasattr(d, "strftime"):
+                    d = d.strftime("%Y-%m-%d")
+                completed_lessons_list.append({
+                    "lesson_title": title,
+                    "date": str(d),
+                    "plan_topic_id": lec.get("plan_topic_id"),
+                })
         
         # جلب اسم المعلم
         teacher_name = "غير محدد"
@@ -5001,6 +5015,7 @@ async def get_lesson_completion_report(
             "lessons_with_title": lessons_with_title,
             "lessons_without_title": completed_count - lessons_with_title,
             "completion_percent": completion_percent,
+            "completed_lessons": completed_lessons_list,  # قائمة الدروس المنجزة فعلاً
         })
     
     return report
@@ -5094,6 +5109,94 @@ async def export_lesson_completion_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": "attachment; filename=lesson_completion_report.xlsx"}
     )
+
+@api_router.get("/reports/lesson-completion/{course_id}/comparison")
+async def get_lesson_completion_comparison(course_id: str, current_user: dict = Depends(get_current_user)):
+    """مقارنة جنباً لجنب: الخطة المخططة vs الدروس المنجزة فعلاً لمقرر واحد"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.REPORT_LESSON_COMPLETION):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    try:
+        course_oid = ObjectId(course_id)
+    except Exception:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    course = await db.courses.find_one({"_id": course_oid})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # الخطة الدراسية
+    plan = await db.study_plans.find_one({"course_id": course_id})
+    plan_topics = []
+    if plan:
+        for week in plan.get("weeks", []):
+            for topic in week.get("topics", []):
+                plan_topics.append({
+                    "id": topic.get("id"),
+                    "week_number": week.get("week_number"),
+                    "title": topic.get("title", ""),
+                })
+
+    # المحاضرات المكتملة
+    completed_lectures = await db.lectures.find({
+        "course_id": course_id,
+        "status": LectureStatus.COMPLETED,
+    }).sort("date", 1).to_list(500)
+
+    completed_lessons = []
+    matched_topic_ids = set()
+    for lec in completed_lectures:
+        d = lec.get("date", "")
+        if hasattr(d, "strftime"):
+            d = d.strftime("%Y-%m-%d")
+        topic_id = lec.get("plan_topic_id")
+        if topic_id:
+            matched_topic_ids.add(topic_id)
+        completed_lessons.append({
+            "date": str(d),
+            "lesson_title": lec.get("lesson_title", ""),
+            "plan_topic_id": topic_id,
+            "notes": lec.get("notes", ""),
+        })
+
+    # بناء المقارنة: كل موضوع مخطط + هل تم إنجازه + العنوان الذي كتبه الأستاذ
+    comparison = []
+    for topic in plan_topics:
+        matched = None
+        for lesson in completed_lessons:
+            if lesson.get("plan_topic_id") == topic["id"]:
+                matched = lesson
+                break
+        comparison.append({
+            "week_number": topic["week_number"],
+            "topic_id": topic["id"],
+            "planned_title": topic["title"],
+            "completed": matched is not None,
+            "actual_title": matched["lesson_title"] if matched else None,
+            "actual_date": matched["date"] if matched else None,
+        })
+
+    # الدروس المنجزة التي لا ترتبط بأي موضوع من الخطة
+    unlinked_lessons = [l for l in completed_lessons if not l.get("plan_topic_id")]
+
+    teacher_name = "غير محدد"
+    if course.get("teacher_id"):
+        teacher = await db.teachers.find_one({"_id": ObjectId(course["teacher_id"])})
+        if teacher:
+            teacher_name = teacher["full_name"]
+
+    return {
+        "course_id": course_id,
+        "course_name": course["name"],
+        "course_code": course.get("code", ""),
+        "teacher_name": teacher_name,
+        "total_planned": len(plan_topics),
+        "total_completed": len(completed_lessons),
+        "matched_count": len(matched_topic_ids),
+        "unmatched_count": len(unlinked_lessons),
+        "comparison": comparison,
+        "unlinked_lessons": unlinked_lessons,
+    }
+
 
 # ==================== Lecture Routes (المحاضرات/الحصص) ====================
 

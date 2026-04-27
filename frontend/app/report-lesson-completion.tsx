@@ -29,6 +29,28 @@ interface CourseCompletion {
   lessons_with_title: number;
   lessons_without_title: number;
   completion_percent: number;
+  completed_lessons?: Array<{ lesson_title: string; date: string; plan_topic_id?: string }>;
+}
+
+interface ComparisonRow {
+  week_number?: number;
+  topic_id: string;
+  planned_title: string;
+  completed: boolean;
+  actual_title?: string | null;
+  actual_date?: string | null;
+}
+
+interface ComparisonData {
+  course_name: string;
+  course_code: string;
+  teacher_name: string;
+  total_planned: number;
+  total_completed: number;
+  matched_count: number;
+  unmatched_count: number;
+  comparison: ComparisonRow[];
+  unlinked_lessons: Array<{ date: string; lesson_title: string; notes?: string }>;
 }
 
 export default function LessonCompletionReport() {
@@ -41,6 +63,8 @@ export default function LessonCompletionReport() {
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [planData, setPlanData] = useState<any>(null);
   const [planCourseName, setPlanCourseName] = useState('');
+  const [comparisonModal, setComparisonModal] = useState<ComparisonData | null>(null);
+  const [loadingCompare, setLoadingCompare] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -97,6 +121,18 @@ export default function LessonCompletionReport() {
       setPlanData({ weeks: [] });
       setPlanCourseName(courseName);
       setShowPlanModal(true);
+    }
+  };
+
+  const openComparison = async (courseId: string) => {
+    try {
+      setLoadingCompare(true);
+      const res = await api.get(`/reports/lesson-completion/${courseId}/comparison`);
+      setComparisonModal(res.data);
+    } catch (e) {
+      alert('تعذر تحميل المقارنة');
+    } finally {
+      setLoadingCompare(false);
     }
   };
 
@@ -202,14 +238,45 @@ export default function LessonCompletionReport() {
                 <Text style={styles.courseCode}>{course.course_code} - {course.teacher_name}</Text>
               </View>
               {course.has_plan && (
-                <TouchableOpacity
-                  style={{ backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
-                  onPress={() => viewPlan(course.course_id, course.course_name)}
-                >
-                  <Text style={{ color: '#4caf50', fontSize: 12, fontWeight: '600' }}>عرض الخطة</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 6 }}>
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#ede7f6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                    onPress={() => openComparison(course.course_id)}
+                  >
+                    <Text style={{ color: '#673ab7', fontSize: 12, fontWeight: '600' }}>📊 مقارنة</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
+                    onPress={() => viewPlan(course.course_id, course.course_name)}
+                  >
+                    <Text style={{ color: '#4caf50', fontSize: 12, fontWeight: '600' }}>عرض الخطة</Text>
+                  </TouchableOpacity>
+                </View>
               )}
             </View>
+
+            {/* الدروس المنجزة فعلاً */}
+            {course.completed_lessons && course.completed_lessons.length > 0 && (
+              <View style={{ marginTop: 10, backgroundColor: '#f9fafb', padding: 10, borderRadius: 8 }}>
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565c0', marginBottom: 6, textAlign: 'right' }}>
+                  ✍️ الدروس المنجزة (حسب عناوين الأستاذ):
+                </Text>
+                {course.completed_lessons.slice(0, 5).map((ls, i) => (
+                  <View key={i} style={{ flexDirection: 'row', gap: 6, marginBottom: 3, alignItems: 'flex-start' }}>
+                    <Ionicons name={ls.plan_topic_id ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={ls.plan_topic_id ? '#4caf50' : '#ff9800'} />
+                    <Text style={{ flex: 1, fontSize: 12, color: '#333', textAlign: 'right' }}>
+                      <Text style={{ color: '#666', fontSize: 11 }}>{ls.date} • </Text>
+                      {ls.lesson_title}
+                    </Text>
+                  </View>
+                ))}
+                {course.completed_lessons.length > 5 && (
+                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' }}>
+                    ...و {course.completed_lessons.length - 5} درس آخر (اضغط "مقارنة")
+                  </Text>
+                )}
+              </View>
+            )}
             
             {/* شريط التقدم */}
             <View style={{ marginTop: 12 }}>
@@ -304,6 +371,98 @@ export default function LessonCompletionReport() {
           </View>
         </View>
       </Modal>
+
+      {/* نافذة المقارنة: الخطة vs المنجز */}
+      <Modal visible={!!comparisonModal} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '95%', maxWidth: 900, maxHeight: '90%' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <TouchableOpacity onPress={() => setComparisonModal(null)}>
+                <Ionicons name="close" size={24} color="#666" />
+              </TouchableOpacity>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#333' }}>مقارنة: الخطة vs المنجز</Text>
+              <View style={{ width: 24 }} />
+            </View>
+            {comparisonModal && (
+              <>
+                <Text style={{ fontSize: 14, color: '#1565c0', fontWeight: '700', textAlign: 'center' }}>
+                  {comparisonModal.course_name}
+                </Text>
+                <Text style={{ fontSize: 12, color: '#888', textAlign: 'center', marginBottom: 12 }}>
+                  {comparisonModal.teacher_name}
+                </Text>
+
+                {/* عدادات */}
+                <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+                  <View style={{ flex: 1, backgroundColor: '#e3f2fd', padding: 8, borderRadius: 8, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#1565c0' }}>{comparisonModal.total_planned}</Text>
+                    <Text style={{ fontSize: 11, color: '#555' }}>مخطط</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#e8f5e9', padding: 8, borderRadius: 8, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#2e7d32' }}>{comparisonModal.matched_count}</Text>
+                    <Text style={{ fontSize: 11, color: '#555' }}>منجز مُرتبط</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#fff3e0', padding: 8, borderRadius: 8, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#ef6c00' }}>{comparisonModal.unmatched_count}</Text>
+                    <Text style={{ fontSize: 11, color: '#555' }}>منجز غير مُرتبط</Text>
+                  </View>
+                  <View style={{ flex: 1, backgroundColor: '#ffebee', padding: 8, borderRadius: 8, alignItems: 'center' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '800', color: '#c62828' }}>{comparisonModal.total_planned - comparisonModal.matched_count}</Text>
+                    <Text style={{ fontSize: 11, color: '#555' }}>غير منجز</Text>
+                  </View>
+                </View>
+
+                <ScrollView style={{ maxHeight: 400 }}>
+                  {/* عناوين الأعمدة */}
+                  <View style={{ flexDirection: 'row', backgroundColor: '#f5f5f5', padding: 8, borderRadius: 6, gap: 8 }}>
+                    <Text style={{ width: 40, fontWeight: '700', fontSize: 12, color: '#666' }}>الأسبوع</Text>
+                    <Text style={{ flex: 1, fontWeight: '700', fontSize: 12, color: '#1565c0', textAlign: 'right' }}>الخطة (مطلوب)</Text>
+                    <Text style={{ flex: 1, fontWeight: '700', fontSize: 12, color: '#2e7d32', textAlign: 'right' }}>المنجز (الأستاذ)</Text>
+                    <Text style={{ width: 50, fontWeight: '700', fontSize: 12, color: '#666', textAlign: 'center' }}>الحالة</Text>
+                  </View>
+                  {comparisonModal.comparison.map((row, i) => (
+                    <View key={i} style={{ flexDirection: 'row', padding: 8, gap: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', alignItems: 'flex-start' }}>
+                      <Text style={{ width: 40, fontSize: 11, color: '#888' }}>{row.week_number}</Text>
+                      <Text style={{ flex: 1, fontSize: 12, color: '#333', textAlign: 'right' }}>{row.planned_title}</Text>
+                      <Text style={{ flex: 1, fontSize: 12, color: row.completed ? '#2e7d32' : '#c62828', textAlign: 'right' }}>
+                        {row.completed ? `${row.actual_title}${row.actual_date ? ` (${row.actual_date})` : ''}` : '—'}
+                      </Text>
+                      <View style={{ width: 50, alignItems: 'center' }}>
+                        {row.completed ? (
+                          <Ionicons name="checkmark-circle" size={20} color="#4caf50" />
+                        ) : (
+                          <Ionicons name="close-circle" size={20} color="#f44336" />
+                        )}
+                      </View>
+                    </View>
+                  ))}
+
+                  {/* دروس غير مرتبطة بأي موضوع مخطط */}
+                  {comparisonModal.unlinked_lessons.length > 0 && (
+                    <View style={{ marginTop: 16, padding: 10, backgroundColor: '#fff3e0', borderRadius: 8 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: '#ef6c00', marginBottom: 6 }}>
+                        ⚠️ دروس منجزة لم تُربط بأي موضوع من الخطة ({comparisonModal.unlinked_lessons.length})
+                      </Text>
+                      {comparisonModal.unlinked_lessons.map((l, i) => (
+                        <Text key={i} style={{ fontSize: 11, color: '#444', marginBottom: 2, textAlign: 'right' }}>
+                          • {l.date}: {l.lesson_title}
+                        </Text>
+                      ))}
+                    </View>
+                  )}
+                </ScrollView>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* مؤشر تحميل المقارنة */}
+      {loadingCompare && (
+        <View style={{ position: 'absolute', inset: 0 as any, backgroundColor: 'rgba(0,0,0,0.4)', justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" color="#fff" />
+        </View>
+      )}
     </SafeAreaView>
   );
 }
