@@ -6094,7 +6094,14 @@ async def reschedule_lecture(
         "rescheduled": True,
         "rescheduled_at": get_yemen_time().isoformat(),
         "rescheduled_by": current_user["id"],
+        # حقول جديدة لعرض الملاحظة في بطاقة المحاضرة
+        "last_rescheduled_from": old_date,
+        "last_rescheduled_at": get_yemen_time(),
+        "rescheduled_by_name": current_user.get("full_name", ""),
     }
+    # احفظ التاريخ الأصلي مرة واحدة فقط (عند أول إعادة جدولة)
+    if not lecture.get("original_date"):
+        update_data["original_date"] = old_date
     if new_start_time:
         update_data["start_time"] = new_start_time
     if new_end_time:
