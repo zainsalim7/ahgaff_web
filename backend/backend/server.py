@@ -5829,6 +5829,64 @@ async def delete_lecture(
     
     return {"message": "تم حذف المحاضرة وسجلات حضورها بنجاح"}
 
+
+@api_router.post("/admin/cleanup-orphan-attendance")
+async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_user)):
+    """
+    تنظيف سجلات الحضور المرتبطة بمحاضرات محذوفة (Orphans).
+    يستخدم لإصلاح البيانات الموروثة من قبل تطبيق إصلاح حذف المحاضرات.
+    صلاحية المدير فقط.
+    """
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    # جلب IDs جميع المحاضرات الموجودة فعلياً
+    existing_lecture_ids = set()
+    async for lec in db.lectures.find({}, {"_id": 1}):
+        existing_lecture_ids.add(str(lec["_id"]))
+
+    # حساب وحذف السجلات اليتيمة
+    total_attendance = await db.attendance.count_documents({})
+    orphan_ids = []
+    no_lecture_id_count = 0
+    async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1}):
+        lec_id = r.get("lecture_id")
+        if not lec_id:
+            no_lecture_id_count += 1
+            continue
+        if str(lec_id) not in existing_lecture_ids:
+            orphan_ids.append(r["_id"])
+
+    deleted = 0
+    if orphan_ids:
+        # حذف على دفعات لتجنب حدود MongoDB
+        batch_size = 1000
+        for i in range(0, len(orphan_ids), batch_size):
+            batch = orphan_ids[i:i + batch_size]
+            res = await db.attendance.delete_many({"_id": {"$in": batch}})
+            deleted += res.deleted_count
+
+    await log_activity(
+        user=current_user,
+        action="cleanup_orphan_attendance",
+        entity_type="attendance",
+        entity_id=None,
+        entity_name="Orphan attendance cleanup",
+        details={
+            "total_before": total_attendance,
+            "orphans_deleted": deleted,
+            "no_lecture_id": no_lecture_id_count,
+        },
+    )
+
+    return {
+        "message": f"تم حذف {deleted} سجل حضور يتيم (لمحاضرات محذوفة)",
+        "total_attendance_before": total_attendance,
+        "orphans_deleted": deleted,
+        "records_without_lecture_id": no_lecture_id_count,
+        "active_lectures": len(existing_lecture_ids),
+    }
+
 @api_router.put("/lectures/{lecture_id}/reschedule")
 async def reschedule_lecture(
     lecture_id: str,
@@ -6763,9 +6821,17 @@ async def get_student_attendance(
     query = {"student_id": student_id}
     if course_id:
         query["course_id"] = course_id
-    
+
     records = await db.attendance.find(query).sort("date", -1).to_list(1000)
-    
+
+    # فلترة سجلات الحضور لاستبعاد المحاضرات المحذوفة/الملغاة
+    active_lecture_ids = await get_active_lecture_ids(course_id)
+    active_ids_str = {str(lid) for lid in active_lecture_ids}
+    records = [
+        r for r in records
+        if not r.get("lecture_id") or str(r.get("lecture_id")) in active_ids_str
+    ]
+
     result = []
     for r in records:
         course = await db.courses.find_one({"_id": ObjectId(r["course_id"])})
