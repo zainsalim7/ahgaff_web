@@ -33,6 +33,14 @@ interface Lecture {
   room: string;
   status: string;
   notes: string;
+  // ملاحظات الإلغاء وإعادة الجدولة
+  original_date?: string | null;
+  last_rescheduled_from?: string | null;
+  last_rescheduled_at?: string | null;
+  rescheduled_by_name?: string | null;
+  cancellation_reason?: string | null;
+  cancelled_at?: string | null;
+  cancelled_by_name?: string | null;
 }
 
 const DAYS = [
@@ -617,9 +625,29 @@ export default function CourseLecturesScreen() {
   };
 
   const handleCancelLecture = async (lectureId: string) => {
-    if (!confirm('هل أنت متأكد من إلغاء هذه المحاضرة؟')) return;
+    let reason = '';
+    if (Platform.OS === 'web') {
+      const r = window.prompt('أدخل سبب إلغاء المحاضرة (سيظهر في التقارير):', '');
+      if (r === null) return; // المستخدم ضغط إلغاء
+      reason = r.trim();
+    } else {
+      // على الموبايل نستخدم نافذة تأكيد بسيطة
+      const ok = await new Promise<boolean>((resolve) => {
+        Alert.alert(
+          'إلغاء المحاضرة',
+          'هل أنت متأكد من إلغاء هذه المحاضرة؟ يمكنك إضافة السبب من تعديل المحاضرة لاحقاً.',
+          [
+            { text: 'تراجع', style: 'cancel', onPress: () => resolve(false) },
+            { text: 'تأكيد الإلغاء', style: 'destructive', onPress: () => resolve(true) },
+          ],
+        );
+      });
+      if (!ok) return;
+    }
     try {
-      await lecturesAPI.update(lectureId, { status: 'cancelled' });
+      const payload: any = { status: 'cancelled' };
+      if (reason) payload.cancellation_reason = reason;
+      await lecturesAPI.update(lectureId, payload);
       showNotification('success', 'تم إلغاء المحاضرة');
       fetchData(1);
     } catch (error: any) {
@@ -713,6 +741,41 @@ export default function CourseLecturesScreen() {
               </View>
             )}
           </View>
+
+          {/* ملاحظة: تاريخ سابق عند إعادة الجدولة */}
+          {item.last_rescheduled_from && (
+            <View style={styles.noteBoxInfo}>
+              <Ionicons name="swap-horizontal" size={14} color="#1565c0" />
+              <Text style={styles.noteText}>
+                تمت إعادة الجدولة من تاريخ:{' '}
+                <Text style={{ fontWeight: '700' }}>
+                  {formatGregorianDate(parseDate(item.last_rescheduled_from), { includeYear: false })}
+                </Text>
+                {item.original_date && item.original_date !== item.last_rescheduled_from ? (
+                  <Text style={{ color: '#666', fontSize: 11 }}>
+                    {' '}(الأصلي: {formatGregorianDate(parseDate(item.original_date), { includeYear: false })})
+                  </Text>
+                ) : null}
+                {item.rescheduled_by_name ? (
+                  <Text style={{ color: '#666', fontSize: 11 }}> • بواسطة {item.rescheduled_by_name}</Text>
+                ) : null}
+              </Text>
+            </View>
+          )}
+
+          {/* ملاحظة: سبب الإلغاء */}
+          {(item.status === 'cancelled' || item.status === 'absent') && item.cancellation_reason ? (
+            <View style={styles.noteBoxDanger}>
+              <Ionicons name="alert-circle" size={14} color="#c62828" />
+              <Text style={styles.noteText}>
+                <Text style={{ fontWeight: '700' }}>سبب الإلغاء: </Text>
+                {item.cancellation_reason}
+                {item.cancelled_by_name ? (
+                  <Text style={{ color: '#666', fontSize: 11 }}> • بواسطة {item.cancelled_by_name}</Text>
+                ) : null}
+              </Text>
+            </View>
+          ) : null}
           
           {!selectionMode && (
             <View style={styles.lectureActions}>
@@ -1616,6 +1679,35 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 14,
     color: '#666',
+  },
+  noteBoxInfo: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#e3f2fd',
+    borderLeftWidth: 3,
+    borderLeftColor: '#1565c0',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  noteBoxDanger: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#ffebee',
+    borderLeftWidth: 3,
+    borderLeftColor: '#c62828',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 8,
+  },
+  noteText: {
+    flex: 1,
+    fontSize: 12,
+    color: '#333',
+    lineHeight: 18,
+    textAlign: 'right',
   },
   lectureActions: {
     flexDirection: 'row',

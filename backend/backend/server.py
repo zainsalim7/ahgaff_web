@@ -5423,7 +5423,15 @@ async def get_course_lectures(
             "room": lecture.get("room", ""),
             "status": lecture.get("status", LectureStatus.SCHEDULED),
             "notes": lecture.get("notes", ""),
-            "created_at": lecture["created_at"]
+            "created_at": lecture["created_at"],
+            # ملاحظات الإلغاء وإعادة الجدولة
+            "original_date": lecture.get("original_date"),
+            "last_rescheduled_from": lecture.get("last_rescheduled_from"),
+            "last_rescheduled_at": lecture.get("last_rescheduled_at"),
+            "rescheduled_by_name": lecture.get("rescheduled_by_name"),
+            "cancellation_reason": lecture.get("cancellation_reason"),
+            "cancelled_at": lecture.get("cancelled_at"),
+            "cancelled_by_name": lecture.get("cancelled_by_name"),
         })
     
     return {
@@ -5610,6 +5618,7 @@ async def update_lecture_status(lecture_id: str, request: Request, current_user:
     
     data = await request.json()
     new_status = data.get("status")
+    cancellation_reason = (data.get("cancellation_reason") or "").strip()
     valid = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.CANCELLED, LectureStatus.ABSENT]
     if new_status not in valid:
         raise HTTPException(status_code=400, detail=f"حالة غير صالحة. الحالات المتاحة: {valid}")
@@ -5618,10 +5627,33 @@ async def update_lecture_status(lecture_id: str, request: Request, current_user:
     if not lecture:
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
-    await db.lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": {"status": new_status, "status_override": True}})
+    update_fields = {"status": new_status, "status_override": True}
+
+    # عند الإلغاء أو غياب الأستاذ، احفظ سبب الإلغاء (إن وُجد)
+    if new_status in (LectureStatus.CANCELLED, LectureStatus.ABSENT):
+        if cancellation_reason:
+            update_fields["cancellation_reason"] = cancellation_reason
+        update_fields["cancelled_at"] = get_yemen_time()
+        update_fields["cancelled_by"] = current_user["id"]
+        update_fields["cancelled_by_name"] = current_user.get("full_name", "")
+    elif new_status == LectureStatus.SCHEDULED:
+        # عند إعادة المحاضرة لمجدولة، أزل بيانات الإلغاء
+        update_fields["cancellation_reason"] = ""
+        update_fields["cancelled_at"] = None
+        update_fields["cancelled_by"] = None
+        update_fields["cancelled_by_name"] = ""
+
+    await db.lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": update_fields})
     
     status_names = {"scheduled": "مجدولة", "completed": "منعقدة", "cancelled": "ملغاة", "absent": "غائب"}
-    await log_activity(current_user, "override_lecture_status", "lecture", lecture_id, None, {"old_status": lecture.get("status", ""), "new_status": new_status})
+    await log_activity(
+        current_user, "override_lecture_status", "lecture", lecture_id, None,
+        {
+            "old_status": lecture.get("status", ""),
+            "new_status": new_status,
+            "cancellation_reason": cancellation_reason or None,
+        },
+    )
     return {"message": f"تم تغيير حالة المحاضرة إلى: {status_names.get(new_status, new_status)}"}
 
 @api_router.post("/lectures/generate")
@@ -5801,7 +5833,26 @@ async def update_lecture(
     new_end = update_data.get("end_time", lecture.get("end_time", ""))
     if new_start and new_end and new_end <= new_start:
         raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
-    
+
+    # عند إعادة الجدولة (تغيير التاريخ): احفظ التاريخ الأصلي
+    new_date = update_data.get("date")
+    old_date = lecture.get("date")
+    if new_date and old_date and new_date != old_date:
+        # نحفظ أول تاريخ أصلي فقط (لا نُحدّث original_date في كل تعديل)
+        if not lecture.get("original_date"):
+            update_data["original_date"] = old_date
+        update_data["last_rescheduled_at"] = get_yemen_time()
+        update_data["last_rescheduled_from"] = old_date
+        update_data["rescheduled_by_name"] = current_user.get("full_name", "")
+
+    # عند تغيير الحالة لـ cancelled، احفظ السبب
+    new_status = update_data.get("status")
+    if new_status in (LectureStatus.CANCELLED, LectureStatus.ABSENT):
+        if update_data.get("cancellation_reason"):
+            update_data["cancelled_at"] = get_yemen_time()
+            update_data["cancelled_by"] = current_user["id"]
+            update_data["cancelled_by_name"] = current_user.get("full_name", "")
+
     if update_data:
         await db.lectures.update_one(
             {"_id": ObjectId(lecture_id)},
