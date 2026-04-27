@@ -140,10 +140,12 @@ function TeacherList({ data, currentPage, setCurrentPage, styles }: { data: Teac
 export default function TeacherWorkloadReport() {
   const router = useRouter();
   const { user } = useAuth();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [data, setData] = useState<TeacherWorkload[]>([]);
+  // تجميع حسب الشهر: عند الفترة متعددة الأشهر
+  const [monthlyData, setMonthlyData] = useState<{ label: string; teachers: TeacherWorkload[]; summary: any; }[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
@@ -152,13 +154,44 @@ export default function TeacherWorkloadReport() {
   const [endDate, setEndDate] = useState('');
   const [summary, setSummary] = useState<any>(null);
   const [exportingPDF, setExportingPDF] = useState(false);
-  const [filtersApplied, setFiltersApplied] = useState(false);
+  const [reportRun, setReportRun] = useState(false);
+  const [splitByMonth, setSplitByMonth] = useState(false);
 
   // Pagination
   const PAGE_SIZE = 10;
   const [currentPage, setCurrentPage] = useState(1);
 
   const isTeacher = user?.role === 'teacher';
+
+  // هل الفترة تشمل أكثر من شهر؟
+  const isMultiMonth = (() => {
+    if (!startDate || !endDate) return false;
+    const s = new Date(startDate);
+    const e = new Date(endDate);
+    return s.getFullYear() !== e.getFullYear() || s.getMonth() !== e.getMonth();
+  })();
+
+  // قسّم الفترة إلى أشهر
+  const splitToMonths = (sStr: string, eStr: string) => {
+    const months: { start: string; end: string; label: string }[] = [];
+    const s = new Date(sStr);
+    const e = new Date(eStr);
+    let cur = new Date(s.getFullYear(), s.getMonth(), 1);
+    while (cur <= e) {
+      const monthStart = new Date(cur);
+      const next = new Date(cur.getFullYear(), cur.getMonth() + 1, 1);
+      const monthEnd = new Date(next.getTime() - 86400000);
+      const actualStart = monthStart < s ? s : monthStart;
+      const actualEnd = monthEnd > e ? e : monthEnd;
+      months.push({
+        start: actualStart.toISOString().split('T')[0],
+        end: actualEnd.toISOString().split('T')[0],
+        label: `${cur.getFullYear()}-${String(cur.getMonth() + 1).padStart(2, '0')}`,
+      });
+      cur = next;
+    }
+    return months;
+  };
 
   // دالة تصدير PDF
   const handleExportPDF = async () => {
@@ -179,31 +212,42 @@ export default function TeacherWorkloadReport() {
     }
   };
 
-  // دالة تصدير Excel
+  // دالة تصدير Excel - تصدّر التقرير المعروض حالياً (الفلاتر المُطبَّقة)
   const exportToExcel = async () => {
+    if (!reportRun) {
+      Alert.alert('تنبيه', 'يرجى تنفيذ التقرير أولاً');
+      return;
+    }
     try {
       setExporting(true);
       const params: any = {};
       if (selectedTeacher) params.teacher_id = selectedTeacher;
+      if (selectedDept) params.department_id = selectedDept;
       if (startDate) params.start_date = startDate;
       if (endDate) params.end_date = endDate;
+      // إذا كانت الفترة متعددة الأشهر والمستخدم اختار التجميع، صدِّر sheet لكل شهر
+      if (isMultiMonth && splitByMonth) params.monthly = true;
 
       const response = await reportsAPI.exportTeacherWorkloadExcel(params);
-      
+
+      const filename = (isMultiMonth && splitByMonth)
+        ? 'teacher_workload_monthly.xlsx'
+        : 'teacher_workload.xlsx';
+
       if (Platform.OS === 'web') {
         const blob = new Blob([response.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'teacher_workload.xlsx';
+        a.download = filename;
         a.click();
       } else {
-        const filename = `${FileSystem.documentDirectory}teacher_workload.xlsx`;
+        const filepath = `${FileSystem.documentDirectory}${filename}`;
         const base64 = btoa(
           new Uint8Array(response.data).reduce((data, byte) => data + String.fromCharCode(byte), '')
         );
-        await FileSystem.writeAsStringAsync(filename, base64, { encoding: FileSystem.EncodingType.Base64 });
-        await Sharing.shareAsync(filename);
+        await FileSystem.writeAsStringAsync(filepath, base64, { encoding: FileSystem.EncodingType.Base64 });
+        await Sharing.shareAsync(filepath);
       }
       Alert.alert('نجاح', 'تم تصدير التقرير بنجاح');
     } catch (error) {
@@ -214,58 +258,87 @@ export default function TeacherWorkloadReport() {
     }
   };
 
-  const fetchData = useCallback(async () => {
+  // تنفيذ التقرير (يدوياً)
+  const runReport = async () => {
     try {
-      // المعلم: لا نجلب قوائم المعلمين والأقسام - فقط تقريره
-      if (!isTeacher) {
-        const [teachersRes, deptsRes] = await Promise.all([
-          teachersAPI.getAll(),
-          departmentsAPI.getAll(),
-        ]);
-        setTeachers(teachersRes.data);
-        setDepartments(deptsRes.data);
-      }
-      
-      // لا نجلب التقرير حتى يختار المستخدم فلتر (للمدير فقط)
-      if (!isTeacher && !filtersApplied) {
-        setLoading(false);
-        return;
-      }
+      setLoading(true);
+      setReportRun(false);
+      setMonthlyData([]);
 
-      // جلب التقرير
-      const params: any = {};
-      if (selectedTeacher) params.teacher_id = selectedTeacher;
-      if (startDate) params.start_date = startDate;
-      if (endDate) params.end_date = endDate;
-      
-      const reportRes = await reportsAPI.getTeacherWorkload(params);
-      
-      let reportData = reportRes.data.teachers || [];
-      
-      // فلترة حسب القسم في الفرونت (للمدير فقط)
-      if (selectedDept && !isTeacher) {
-        reportData = reportData.filter((t: TeacherWorkload) => t.department_id === selectedDept);
+      const filterDept = (arr: TeacherWorkload[]) =>
+        selectedDept && !isTeacher ? arr.filter((t) => t.department_id === selectedDept) : arr;
+
+      // وضع التجميع الشهري
+      if (isMultiMonth && splitByMonth && startDate && endDate) {
+        const months = splitToMonths(startDate, endDate);
+        const monthly: { label: string; teachers: TeacherWorkload[]; summary: any; }[] = [];
+        let combinedTeachers: TeacherWorkload[] = [];
+        for (const m of months) {
+          const params: any = { start_date: m.start, end_date: m.end };
+          if (selectedTeacher) params.teacher_id = selectedTeacher;
+          const r = await reportsAPI.getTeacherWorkload(params);
+          monthly.push({
+            label: m.label,
+            teachers: filterDept(r.data.teachers || []),
+            summary: r.data.summary,
+          });
+          combinedTeachers = combinedTeachers.concat(r.data.teachers || []);
+        }
+        setMonthlyData(monthly);
+        setData(filterDept(combinedTeachers));
+        // ملخص مُجمّع
+        setSummary({
+          total_teachers: monthly[0]?.summary?.total_teachers || 0,
+          total_required_hours: monthly.reduce((s, m) => s + (m.summary?.total_required_hours || 0), 0).toFixed(2),
+          total_actual_hours: monthly.reduce((s, m) => s + (m.summary?.total_actual_hours || 0), 0).toFixed(2),
+          total_difference_hours: monthly.reduce((s, m) => s + (m.summary?.total_difference_hours || 0), 0).toFixed(2),
+        });
+      } else {
+        const params: any = {};
+        if (selectedTeacher) params.teacher_id = selectedTeacher;
+        if (startDate) params.start_date = startDate;
+        if (endDate) params.end_date = endDate;
+        const r = await reportsAPI.getTeacherWorkload(params);
+        setData(filterDept(r.data.teachers || []));
+        setSummary(r.data.summary);
       }
-      
-      setData(reportData);
-      setSummary(reportRes.data.summary);
       setCurrentPage(1);
+      setReportRun(true);
     } catch (error) {
       console.error('Error fetching data:', error);
+      Alert.alert('خطأ', 'فشل في تنفيذ التقرير');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedTeacher, selectedDept, startDate, endDate, filtersApplied]);
+  };
 
-  // تحميل القوائم فقط عند أول مرة
+  // تحميل القوائم فقط (المعلمون والأقسام) - بدون تنفيذ التقرير
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    (async () => {
+      if (isTeacher) {
+        // المعلم: نفّذ تقريره مباشرة (لأنه لا يحتاج فلاتر)
+        await runReport();
+      } else {
+        try {
+          const [teachersRes, deptsRes] = await Promise.all([
+            teachersAPI.getAll(),
+            departmentsAPI.getAll(),
+          ]);
+          setTeachers(teachersRes.data);
+          setDepartments(deptsRes.data);
+        } catch (e) {
+          console.error('init error', e);
+        }
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onRefresh = () => {
+    if (!reportRun) return;
     setRefreshing(true);
-    fetchData();
+    runReport();
   };
 
   // تحديد تواريخ الشهر الحالي
@@ -275,7 +348,6 @@ export default function TeacherWorkloadReport() {
     const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(lastDay.toISOString().split('T')[0]);
-    setFiltersApplied(true);
   };
 
   // تحديد تواريخ الشهر السابق
@@ -285,7 +357,6 @@ export default function TeacherWorkloadReport() {
     const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(lastDay.toISOString().split('T')[0]);
-    setFiltersApplied(true);
   };
 
   // تحديد تواريخ الشهر الأسبق (قبل شهرين)
@@ -295,7 +366,6 @@ export default function TeacherWorkloadReport() {
     const lastDay = new Date(now.getFullYear(), now.getMonth() - 1, 0);
     setStartDate(firstDay.toISOString().split('T')[0]);
     setEndDate(lastDay.toISOString().split('T')[0]);
-    setFiltersApplied(true);
   };
 
   // تحديد تواريخ الأسبوع الحالي
@@ -308,7 +378,6 @@ export default function TeacherWorkloadReport() {
     endOfWeek.setDate(startOfWeek.getDate() + 6);
     setStartDate(startOfWeek.toISOString().split('T')[0]);
     setEndDate(endOfWeek.toISOString().split('T')[0]);
-    setFiltersApplied(true);
   };
 
   if (loading) {
@@ -373,7 +442,7 @@ export default function TeacherWorkloadReport() {
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={selectedDept}
-                onValueChange={(v) => { setSelectedDept(v); if (v) setFiltersApplied(true); }}
+                onValueChange={(v) => setSelectedDept(v)}
                 style={styles.picker}
               >
                 <Picker.Item label="جميع الأقسام" value="" />
@@ -390,7 +459,7 @@ export default function TeacherWorkloadReport() {
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={selectedTeacher}
-                onValueChange={(v) => { setSelectedTeacher(v); if (v) setFiltersApplied(true); }}
+                onValueChange={(v) => setSelectedTeacher(v)}
                 style={styles.picker}
               >
                 <Picker.Item label="جميع المدرسين" value="" />
@@ -431,7 +500,7 @@ export default function TeacherWorkloadReport() {
                 <input
                   type="date"
                   value={startDate}
-                  onChange={(e: any) => { setStartDate(e.target.value); setFiltersApplied(true); }}
+                  onChange={(e: any) => setStartDate(e.target.value)}
                   style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
                   data-testid="custom-start-date"
                 />
@@ -441,7 +510,7 @@ export default function TeacherWorkloadReport() {
                 <input
                   type="date"
                   value={endDate}
-                  onChange={(e: any) => { setEndDate(e.target.value); setFiltersApplied(true); }}
+                  onChange={(e: any) => setEndDate(e.target.value)}
                   style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14 }}
                   data-testid="custom-end-date"
                 />
@@ -449,10 +518,28 @@ export default function TeacherWorkloadReport() {
             </View>
           )}
 
+          {/* خيار التجميع الشهري - يظهر فقط إذا كانت الفترة متعددة الأشهر */}
+          {isMultiMonth && (
+            <TouchableOpacity
+              style={[styles.monthlyToggle, splitByMonth && styles.monthlyToggleActive]}
+              onPress={() => setSplitByMonth((v) => !v)}
+              testID="split-by-month-toggle"
+            >
+              <Ionicons
+                name={splitByMonth ? 'checkbox' : 'square-outline'}
+                size={20}
+                color={splitByMonth ? '#1565c0' : '#666'}
+              />
+              <Text style={[styles.monthlyToggleText, splitByMonth && { color: '#1565c0', fontWeight: '700' }]}>
+                تقسيم النتيجة حسب الأشهر (تقرير منفصل لكل شهر)
+              </Text>
+            </TouchableOpacity>
+          )}
+
           <View style={[styles.periodBtns, { marginTop: 12 }]}>
             <TouchableOpacity 
               style={[styles.periodBtn, { backgroundColor: '#ffebee' }]} 
-              onPress={() => { setStartDate(''); setEndDate(''); setSelectedTeacher(''); setSelectedDept(''); setFiltersApplied(false); setData([]); setSummary(null); }}
+              onPress={() => { setStartDate(''); setEndDate(''); setSelectedTeacher(''); setSelectedDept(''); setReportRun(false); setData([]); setMonthlyData([]); setSummary(null); setSplitByMonth(false); }}
             >
               <Ionicons name="refresh" size={16} color="#c62828" />
               <Text style={[styles.periodBtnText, { color: '#c62828' }]}>مسح الفلاتر</Text>
@@ -467,6 +554,23 @@ export default function TeacherWorkloadReport() {
               </Text>
             </View>
           )}
+
+          {/* زر تنفيذ التقرير */}
+          <TouchableOpacity
+            style={[styles.runBtn, loading && { opacity: 0.6 }]}
+            onPress={runReport}
+            disabled={loading}
+            testID="run-report-btn"
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" size="small" />
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={styles.runBtnText}>تنفيذ التقرير</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
         )}
 
@@ -496,11 +600,31 @@ export default function TeacherWorkloadReport() {
         )}
 
         {/* قائمة المدرسين */}
-        {!filtersApplied && !isTeacher ? (
+        {!reportRun && !isTeacher ? (
           <View style={styles.emptyCard}>
             <Ionicons name="filter-outline" size={56} color="#bbb" />
-            <Text style={styles.emptyText}>اختر فترة أو قسم أو معلم لعرض النصاب</Text>
+            <Text style={styles.emptyText}>اختر الفلاتر ثم اضغط "تنفيذ التقرير" لعرض النتائج</Text>
           </View>
+        ) : monthlyData.length > 0 ? (
+          // عرض مجمّع حسب الشهر
+          monthlyData.map((m, idx) => (
+            <View key={m.label} style={{ marginBottom: 16 }}>
+              <View style={styles.monthHeader}>
+                <Ionicons name="calendar" size={18} color="#fff" />
+                <Text style={styles.monthHeaderText}>تقرير شهر {m.label}</Text>
+                <Text style={styles.monthHeaderSub}>
+                  {m.summary?.total_actual_hours || 0} ساعة منفذة / {m.summary?.total_required_hours || 0} مطلوبة
+                </Text>
+              </View>
+              {m.teachers.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyText}>لا توجد بيانات لهذا الشهر</Text>
+                </View>
+              ) : (
+                <TeacherList data={m.teachers} currentPage={1} setCurrentPage={() => {}} styles={styles} />
+              )}
+            </View>
+          ))
         ) : data.length === 0 ? (
           <View style={styles.emptyCard}>
             <Ionicons name="document-text-outline" size={48} color="#ccc" />
@@ -529,6 +653,42 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666',
   },
+  runBtn: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#1565c0',
+    paddingVertical: 14,
+    borderRadius: 10,
+  },
+  runBtnText: { color: '#fff', fontWeight: '700', fontSize: 15 },
+  monthlyToggle: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f5f7fb',
+    padding: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  monthlyToggleActive: { borderColor: '#1565c0', backgroundColor: '#e3f2fd' },
+  monthlyToggleText: { flex: 1, fontSize: 13, color: '#444', textAlign: 'right' },
+  monthHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1565c0',
+    padding: 10,
+    borderRadius: 8,
+    marginHorizontal: 16,
+    marginTop: 12,
+  },
+  monthHeaderText: { color: '#fff', fontWeight: '700', fontSize: 14, flex: 1, textAlign: 'right' },
+  monthHeaderSub: { color: '#e3f2fd', fontSize: 11 },
   header: {
     flexDirection: 'row',
     alignItems: 'center',

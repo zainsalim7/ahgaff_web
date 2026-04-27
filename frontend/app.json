@@ -36,7 +36,8 @@
           "androidMode": "default",
           "androidCollapsedTitle": "نظام الحضور"
         }
-      ]
+      ],
+      "expo-web-browser"
     ]
   }
 }

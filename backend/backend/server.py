@@ -8424,54 +8424,98 @@ async def export_teacher_workload_excel(
     teacher_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    department_id: Optional[str] = None,
+    monthly: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
-    """تصدير تقرير نصاب المدرسين إلى Excel"""
+    """تصدير تقرير نصاب المدرسين إلى Excel
+    - إذا monthly=true والفترة تشمل أكثر من شهر، يُصدّر كل شهر في sheet منفصل
+    - يدعم فلتر القسم
+    """
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    report = await get_teacher_workload_report(teacher_id, start_date, end_date, current_user)
-    
-    # تحويل البيانات
-    data = []
-    for teacher in report["teachers"]:
-        for course in teacher["courses"]:
-            data.append({
-                "الرقم الوظيفي": teacher["teacher_id"],
-                "اسم المدرس": teacher["teacher_name"],
-                "المقرر": course["course_name"],
-                "رمز المقرر": course["course_code"],
-                "المحاضرات المجدولة": course["scheduled_lectures"],
-                "المحاضرات المنفذة": course["executed_lectures"],
-                "الساعات المجدولة": course["scheduled_hours"],
-                "الساعات المنفذة": course["actual_hours"]
-            })
-        # صف ملخص للمدرس
-        data.append({
-            "الرقم الوظيفي": teacher["teacher_id"],
-            "اسم المدرس": teacher["teacher_name"],
-            "المقرر": "*** الإجمالي ***",
-            "رمز المقرر": "",
-            "المحاضرات المجدولة": "",
-            "المحاضرات المنفذة": "",
-            "الساعات المجدولة": teacher["summary"]["total_scheduled_hours"],
-            "الساعات المنفذة": teacher["summary"]["total_actual_hours"],
-            "الساعات الزائدة": teacher["summary"]["extra_hours"],
-            "نسبة الإنجاز %": teacher["summary"]["completion_rate"]
-        })
-    
-    if not data:
-        data = [{"ملاحظة": "لا توجد بيانات"}]
-    
-    df = pd.DataFrame(data)
+
     output = BytesIO()
-    df.to_excel(output, index=False, engine='openpyxl')
+
+    def teacher_rows(teachers_list, dept_filter):
+        rows = []
+        for teacher in teachers_list:
+            if dept_filter and teacher.get("department_id") != dept_filter:
+                continue
+            for course in teacher["courses"]:
+                rows.append({
+                    "الرقم الوظيفي": teacher.get("teacher_id", ""),
+                    "اسم المدرس": teacher.get("teacher_name", ""),
+                    "المقرر": course["course_name"],
+                    "رمز المقرر": course.get("course_code", ""),
+                    "المحاضرات المجدولة": course["scheduled_lectures"],
+                    "المحاضرات المنفذة": course["executed_lectures"],
+                    "الساعات المجدولة": course["scheduled_hours"],
+                    "الساعات المنفذة": course["actual_hours"],
+                })
+            s = teacher.get("summary", {})
+            rows.append({
+                "الرقم الوظيفي": teacher.get("teacher_id", ""),
+                "اسم المدرس": teacher.get("teacher_name", ""),
+                "المقرر": "*** الإجمالي ***",
+                "رمز المقرر": "",
+                "المحاضرات المجدولة": "",
+                "المحاضرات المنفذة": "",
+                "الساعات المجدولة": s.get("total_scheduled_hours", 0),
+                "الساعات المنفذة": s.get("total_actual_hours", 0),
+                "النصاب المطلوب": s.get("required_hours", 0),
+                "الفرق": s.get("difference_hours", 0),
+                "نسبة الإنجاز %": s.get("completion_rate", 0),
+            })
+        return rows
+
+    # تحديد ما إذا كانت الفترة متعددة الأشهر
+    months_to_export = []
+    if monthly and start_date and end_date:
+        try:
+            from datetime import datetime as _dt
+            s = _dt.fromisoformat(start_date)
+            e = _dt.fromisoformat(end_date)
+            cur = _dt(s.year, s.month, 1)
+            while cur <= e:
+                month_start = cur
+                next_month = _dt(cur.year + (1 if cur.month == 12 else 0), 1 if cur.month == 12 else cur.month + 1, 1)
+                month_end = next_month - timedelta(days=1)
+                # حد بداية الشهر بـ start_date و نهايته بـ end_date
+                actual_start = max(month_start, s)
+                actual_end = min(month_end, e)
+                months_to_export.append((actual_start.strftime("%Y-%m-%d"), actual_end.strftime("%Y-%m-%d"), cur.strftime("%Y-%m")))
+                cur = next_month
+        except Exception:
+            months_to_export = []
+
+    if not months_to_export:
+        # Sheet واحد للفترة كاملة
+        report = await get_teacher_workload_report(teacher_id, start_date, end_date, current_user)
+        data = teacher_rows(report["teachers"], department_id)
+        if not data:
+            data = [{"ملاحظة": "لا توجد بيانات"}]
+        df = pd.DataFrame(data)
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="نصاب المدرسين")
+    else:
+        # عدة Sheets - واحد لكل شهر
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            for s_str, e_str, label in months_to_export:
+                report = await get_teacher_workload_report(teacher_id, s_str, e_str, current_user)
+                data = teacher_rows(report["teachers"], department_id)
+                if not data:
+                    data = [{"ملاحظة": "لا توجد بيانات لهذا الشهر"}]
+                df = pd.DataFrame(data)
+                # اسم Sheet: YYYY-MM
+                df.to_excel(writer, index=False, sheet_name=label[:31])
+
     output.seek(0)
-    
+    filename = "teacher_workload_monthly.xlsx" if months_to_export else "teacher_workload.xlsx"
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename=teacher_workload.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 @api_router.get("/export/report/daily/excel")

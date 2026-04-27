@@ -333,7 +333,7 @@ export const reportsAPI = {
     api.get('/export/report/warnings/excel', { params, responseType: 'blob' }),
   exportAbsentStudentsExcel: (params?: { department_id?: string; course_id?: string; min_absence_rate?: number }) =>
     api.get('/export/report/absent-students/excel', { params, responseType: 'blob' }),
-  exportTeacherWorkloadExcel: (params?: { teacher_id?: string; start_date?: string; end_date?: string }) =>
+  exportTeacherWorkloadExcel: (params?: { teacher_id?: string; start_date?: string; end_date?: string; department_id?: string; monthly?: boolean }) =>
     api.get('/export/report/teacher-workload/excel', { params, responseType: 'blob' }),
   exportTeacherSummaryExcel: (params?: { teacher_id?: string }) =>
     api.get('/export/report/teacher-summary/excel', { params, responseType: 'blob' }),
