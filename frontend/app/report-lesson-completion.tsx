@@ -55,11 +55,15 @@ interface ComparisonData {
 
 export default function LessonCompletionReport() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<CourseCompletion[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [selectedDept, setSelectedDept] = useState('');
+  const [coursesInDept, setCoursesInDept] = useState<any[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState('');
+  const [loadingCourses, setLoadingCourses] = useState(false);
+  const [reportRun, setReportRun] = useState(false);
   const [showPlanModal, setShowPlanModal] = useState(false);
   const [planData, setPlanData] = useState<any>(null);
   const [planCourseName, setPlanCourseName] = useState('');
@@ -69,16 +73,26 @@ export default function LessonCompletionReport() {
   const fetchData = useCallback(async () => {
     try {
       const params: any = {};
-      if (selectedDept) params.department_id = selectedDept;
+      if (selectedCourse) {
+        params.course_id = selectedCourse;
+      } else if (selectedDept) {
+        params.department_id = selectedDept;
+      } else {
+        // لا شيء محدد - لا نُنفّذ التقرير
+        setData([]);
+        return;
+      }
       const res = await api.get('/reports/lesson-completion', { params });
       setData(res.data);
+      setReportRun(true);
     } catch (error) {
       console.error('Error fetching lesson completion:', error);
+      alert('فشل في تحميل التقرير');
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [selectedDept]);
+  }, [selectedDept, selectedCourse]);
 
   const fetchDepartments = async () => {
     try {
@@ -88,14 +102,53 @@ export default function LessonCompletionReport() {
   };
 
   useEffect(() => { fetchDepartments(); }, []);
-  useEffect(() => { setLoading(true); fetchData(); }, [fetchData]);
 
-  const onRefresh = () => { setRefreshing(true); fetchData(); };
+  // عند تغيير القسم: جلب مقرراته + مسح التقرير
+  useEffect(() => {
+    setSelectedCourse('');
+    setData([]);
+    setReportRun(false);
+    if (!selectedDept) {
+      setCoursesInDept([]);
+      return;
+    }
+    (async () => {
+      try {
+        setLoadingCourses(true);
+        const res = await api.get('/courses', { params: { department_id: selectedDept } });
+        setCoursesInDept(res.data || []);
+      } catch {
+        setCoursesInDept([]);
+      } finally {
+        setLoadingCourses(false);
+      }
+    })();
+  }, [selectedDept]);
+
+  const onRefresh = () => {
+    if (!selectedDept && !selectedCourse) return;
+    setRefreshing(true);
+    fetchData();
+  };
+
+  const runReport = () => {
+    if (!selectedDept && !selectedCourse) {
+      alert('يرجى اختيار القسم ثم المقرر');
+      return;
+    }
+    setLoading(true);
+    fetchData();
+  };
 
   const exportExcel = async () => {
+    if (!reportRun) {
+      alert('يرجى تنفيذ التقرير أولاً');
+      return;
+    }
     try {
       const params: any = {};
-      if (selectedDept) params.department_id = selectedDept;
+      if (selectedCourse) params.course_id = selectedCourse;
+      else if (selectedDept) params.department_id = selectedDept;
       const res = await api.get('/export/report/lesson-completion/excel', { params, responseType: 'blob' });
       if (Platform.OS === 'web') {
         const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
@@ -150,21 +203,8 @@ export default function LessonCompletionReport() {
     return '#f44336';
   };
 
-  if (loading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="رجوع">
-            <Ionicons name="arrow-forward" size={24} color="#333" />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>تقرير إنجاز الدروس</Text>
-          <View style={{ width: 40 }} />
-        </View>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" color="#4caf50" />
-        </View>
-      </SafeAreaView>
-    );
+  if (loading && !refreshing && !reportRun) {
+    // لا نعرض spinner في البداية، فقط أثناء تنفيذ التقرير
   }
 
   return (
@@ -187,21 +227,64 @@ export default function LessonCompletionReport() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
         contentContainerStyle={{ padding: 16 }}
       >
-        {/* فلتر القسم */}
+        {/* فلتر القسم + المقرر */}
         <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 16 }}>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 6 }}>تصفية حسب القسم</Text>
+          <Text style={{ fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 6 }}>1. اختر القسم</Text>
           <View style={{ backgroundColor: '#f5f5f5', borderRadius: 8, overflow: 'hidden' }}>
             <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 45 }}>
-              <Picker.Item label="جميع الأقسام" value="" />
+              <Picker.Item label="-- اختر القسم --" value="" />
               {departments.map(d => (
                 <Picker.Item key={d.id} label={d.name} value={d.id} />
               ))}
             </Picker>
           </View>
-          {Platform.OS === 'web' && (
+
+          {/* المقرر (يظهر بعد اختيار القسم) */}
+          {selectedDept && (
+            <>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 6, marginTop: 12 }}>
+                2. اختر المقرر
+              </Text>
+              {loadingCourses ? (
+                <ActivityIndicator size="small" color="#4caf50" />
+              ) : (
+                <View style={{ backgroundColor: '#f5f5f5', borderRadius: 8, overflow: 'hidden' }}>
+                  <Picker selectedValue={selectedCourse} onValueChange={setSelectedCourse} style={{ height: 45 }}>
+                    <Picker.Item label={`-- اختر المقرر (${coursesInDept.length} مقرر) --`} value="" />
+                    {coursesInDept.map((c: any) => (
+                      <Picker.Item key={c.id} label={`${c.name}${c.code ? ` (${c.code})` : ''}`} value={c.id} />
+                    ))}
+                  </Picker>
+                </View>
+              )}
+            </>
+          )}
+
+          {/* زر تنفيذ التقرير */}
+          <TouchableOpacity
+            onPress={runReport}
+            disabled={!selectedCourse || loading}
+            style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+              marginTop: 12, padding: 12, borderRadius: 8,
+              backgroundColor: !selectedCourse || loading ? '#b0bec5' : '#1565c0',
+            }}
+            testID="run-lesson-completion-btn"
+          >
+            {loading ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>تنفيذ التقرير</Text>
+              </>
+            )}
+          </TouchableOpacity>
+
+          {Platform.OS === 'web' && reportRun && (
             <TouchableOpacity
               onPress={exportExcel}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, backgroundColor: '#4caf50', padding: 10, borderRadius: 8 }}
+              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, backgroundColor: '#4caf50', padding: 10, borderRadius: 8 }}
             >
               <Ionicons name="download-outline" size={20} color="#fff" />
               <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>تصدير Excel</Text>
@@ -328,8 +411,19 @@ export default function LessonCompletionReport() {
 
         {data.length === 0 && (
           <View style={{ alignItems: 'center', padding: 40 }}>
-            <Ionicons name="document-text-outline" size={48} color="#ccc" />
-            <Text style={{ color: '#999', marginTop: 12, fontSize: 15 }}>لا توجد بيانات</Text>
+            {reportRun ? (
+              <>
+                <Ionicons name="document-text-outline" size={48} color="#ccc" />
+                <Text style={{ color: '#999', marginTop: 12, fontSize: 15 }}>لا توجد بيانات لهذا المقرر</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="filter-outline" size={56} color="#bbb" />
+                <Text style={{ color: '#999', marginTop: 12, fontSize: 14, textAlign: 'center' }}>
+                  اختر القسم ثم المقرر ثم اضغط "تنفيذ التقرير"
+                </Text>
+              </>
+            )}
           </View>
         )}
       </ScrollView>

@@ -4939,6 +4939,7 @@ async def update_study_plan(
 async def get_lesson_completion_report(
     department_id: Optional[str] = None,
     faculty_id: Optional[str] = None,
+    course_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير إنجاز الدروس - المخطط مقابل المنجز"""
@@ -4947,7 +4948,12 @@ async def get_lesson_completion_report(
     
     # جلب المقررات
     course_query = {"is_active": True}
-    if department_id:
+    if course_id:
+        try:
+            course_query["_id"] = ObjectId(course_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
+    elif department_id:
         course_query["department_id"] = department_id
     elif faculty_id:
         depts = await db.departments.find({"faculty_id": faculty_id}).to_list(100)
@@ -5024,6 +5030,7 @@ async def get_lesson_completion_report(
 async def export_lesson_completion_excel(
     department_id: Optional[str] = None,
     faculty_id: Optional[str] = None,
+    course_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير تقرير إنجاز الدروس كملف Excel"""
@@ -5032,7 +5039,12 @@ async def export_lesson_completion_excel(
     
     # جلب المقررات
     course_query = {"is_active": True}
-    if department_id:
+    if course_id:
+        try:
+            course_query["_id"] = ObjectId(course_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
+    elif department_id:
         course_query["department_id"] = department_id
     elif faculty_id:
         depts = await db.departments.find({"faculty_id": faculty_id}).to_list(100)
