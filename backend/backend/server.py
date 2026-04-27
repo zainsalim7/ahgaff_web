@@ -5830,6 +5830,36 @@ async def delete_lecture(
     return {"message": "تم حذف المحاضرة وسجلات حضورها بنجاح"}
 
 
+@api_router.get("/admin/cleanup-orphan-attendance/preview")
+async def preview_orphan_attendance(current_user: dict = Depends(get_current_user)):
+    """معاينة عدد السجلات اليتيمة قبل الحذف (آمن - لا يُغيّر شيئاً)"""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    existing_lecture_ids = set()
+    async for lec in db.lectures.find({}, {"_id": 1}):
+        existing_lecture_ids.add(str(lec["_id"]))
+
+    total_attendance = await db.attendance.count_documents({})
+    orphan_count = 0
+    no_lecture_id_count = 0
+    async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1}):
+        lec_id = r.get("lecture_id")
+        if not lec_id:
+            no_lecture_id_count += 1
+            continue
+        if str(lec_id) not in existing_lecture_ids:
+            orphan_count += 1
+
+    return {
+        "total_attendance": total_attendance,
+        "orphans_count": orphan_count,
+        "records_without_lecture_id": no_lecture_id_count,
+        "active_lectures": len(existing_lecture_ids),
+        "needs_cleanup": orphan_count > 0,
+    }
+
+
 @api_router.post("/admin/cleanup-orphan-attendance")
 async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_user)):
     """
