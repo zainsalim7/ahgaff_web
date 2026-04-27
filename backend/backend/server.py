@@ -5836,14 +5836,21 @@ async def preview_orphan_attendance(current_user: dict = Depends(get_current_use
     if current_user.get("role") != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
-    # جلب IDs المحاضرات النشطة فقط (غير الملغاة وغير المحذوفة)
+    # IDs المحاضرات النشطة (سيتم الإبقاء على سجلاتها)
     active_lecture_ids = set()
+    # خريطة: (course_id, date_str) -> True إذا وجدت محاضرة نشطة
+    active_course_date_map = set()
     async for lec in db.lectures.find(
-        {"status": {"$in": ACTIVE_LECTURE_STATUSES}}, {"_id": 1}
+        {"status": {"$in": ACTIVE_LECTURE_STATUSES}},
+        {"_id": 1, "course_id": 1, "date": 1},
     ):
         active_lecture_ids.add(str(lec["_id"]))
+        cid = str(lec.get("course_id", ""))
+        d = lec.get("date", "")
+        if cid and d:
+            active_course_date_map.add((cid, str(d)))
 
-    # IDs جميع المحاضرات الموجودة (نشطة + ملغاة) لتمييز المحذوفة من الملغاة
+    # IDs المحاضرات الموجودة كلياً (لتمييز ملغاة من محذوفة)
     all_lecture_ids = set()
     cancelled_lecture_ids = set()
     async for lec in db.lectures.find({}, {"_id": 1, "status": 1}):
@@ -5853,13 +5860,27 @@ async def preview_orphan_attendance(current_user: dict = Depends(get_current_use
             cancelled_lecture_ids.add(lid)
 
     total_attendance = await db.attendance.count_documents({})
-    deleted_lecture_orphans = 0  # محاضرة محذوفة كلياً
-    cancelled_lecture_orphans = 0  # محاضرة موجودة لكن ملغاة
-    no_lecture_id_count = 0
-    async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1}):
+    deleted_lecture_orphans = 0
+    cancelled_lecture_orphans = 0
+    no_lecture_id_total = 0
+    no_lecture_id_orphans = 0  # بلا lecture_id ولا توجد محاضرة نشطة في تاريخه
+    no_lecture_id_valid = 0  # بلا lecture_id لكن توجد محاضرة نشطة في نفس التاريخ
+
+    async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1, "course_id": 1, "date": 1}):
         lec_id = r.get("lecture_id")
         if not lec_id:
-            no_lecture_id_count += 1
+            no_lecture_id_total += 1
+            cid = str(r.get("course_id", ""))
+            d = r.get("date", "")
+            # date في MongoDB قد يكون datetime - نحاول مطابقتها بسلسلة
+            if hasattr(d, "strftime"):
+                d_str = d.strftime("%Y-%m-%d")
+            else:
+                d_str = str(d)[:10] if d else ""
+            if cid and d_str and (cid, d_str) in active_course_date_map:
+                no_lecture_id_valid += 1
+            else:
+                no_lecture_id_orphans += 1
             continue
         sid = str(lec_id)
         if sid in cancelled_lecture_ids:
@@ -5867,14 +5888,16 @@ async def preview_orphan_attendance(current_user: dict = Depends(get_current_use
         elif sid not in all_lecture_ids:
             deleted_lecture_orphans += 1
 
-    total_orphans = deleted_lecture_orphans + cancelled_lecture_orphans
+    total_orphans = deleted_lecture_orphans + cancelled_lecture_orphans + no_lecture_id_orphans
 
     return {
         "total_attendance": total_attendance,
         "orphans_count": total_orphans,
         "deleted_lecture_orphans": deleted_lecture_orphans,
         "cancelled_lecture_orphans": cancelled_lecture_orphans,
-        "records_without_lecture_id": no_lecture_id_count,
+        "records_without_lecture_id": no_lecture_id_total,
+        "no_lecture_id_orphans": no_lecture_id_orphans,
+        "no_lecture_id_valid": no_lecture_id_valid,
         "active_lectures": len(active_lecture_ids),
         "needs_cleanup": total_orphans > 0,
     }
@@ -5883,31 +5906,49 @@ async def preview_orphan_attendance(current_user: dict = Depends(get_current_use
 @api_router.post("/admin/cleanup-orphan-attendance")
 async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_user)):
     """
-    تنظيف سجلات الحضور:
-    - السجلات المرتبطة بمحاضرات محذوفة كلياً
-    - السجلات المرتبطة بمحاضرات ملغاة (cancelled / absent)
+    تنظيف سجلات الحضور اليتيمة:
+    1. سجلات لمحاضرات محذوفة كلياً
+    2. سجلات لمحاضرات ملغاة (cancelled / absent)
+    3. سجلات بدون lecture_id لا توجد محاضرة نشطة لها بنفس course_id + date
     صلاحية المدير فقط.
     """
     if current_user.get("role") != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
-    # IDs المحاضرات النشطة (سيتم الإبقاء عليها)
+    # IDs المحاضرات النشطة + خريطة (course_id, date)
     active_lecture_ids = set()
+    active_course_date_map = set()
     async for lec in db.lectures.find(
-        {"status": {"$in": ACTIVE_LECTURE_STATUSES}}, {"_id": 1}
+        {"status": {"$in": ACTIVE_LECTURE_STATUSES}},
+        {"_id": 1, "course_id": 1, "date": 1},
     ):
         active_lecture_ids.add(str(lec["_id"]))
+        cid = str(lec.get("course_id", ""))
+        d = lec.get("date", "")
+        if cid and d:
+            active_course_date_map.add((cid, str(d)))
 
     total_attendance = await db.attendance.count_documents({})
 
-    # حذف السجلات التي lecture_id الخاص بها ليس في قائمة النشطة
-    # (هذا يشمل: محاضرات محذوفة + محاضرات ملغاة)
     orphan_ids = []
-    async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1}):
+    async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1, "course_id": 1, "date": 1}):
         lec_id = r.get("lecture_id")
-        if not lec_id:
+        if lec_id:
+            # حذف إذا lecture_id لا يطابق محاضرة نشطة (محذوفة أو ملغاة)
+            if str(lec_id) not in active_lecture_ids:
+                orphan_ids.append(r["_id"])
             continue
-        if str(lec_id) not in active_lecture_ids:
+
+        # سجل بدون lecture_id - تحقق من التطابق بـ course_id + date
+        cid = str(r.get("course_id", ""))
+        d = r.get("date", "")
+        if hasattr(d, "strftime"):
+            d_str = d.strftime("%Y-%m-%d")
+        else:
+            d_str = str(d)[:10] if d else ""
+
+        # إذا لا توجد محاضرة نشطة في نفس التاريخ والمقرر → يتيم
+        if not (cid and d_str and (cid, d_str) in active_course_date_map):
             orphan_ids.append(r["_id"])
 
     deleted = 0
@@ -5931,7 +5972,7 @@ async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_use
     )
 
     return {
-        "message": f"تم حذف {deleted} سجل حضور (محاضرات محذوفة أو ملغاة)",
+        "message": f"تم حذف {deleted} سجل حضور يتيم",
         "total_attendance_before": total_attendance,
         "orphans_deleted": deleted,
         "active_lectures": len(active_lecture_ids),
@@ -6877,10 +6918,36 @@ async def get_student_attendance(
     # فلترة سجلات الحضور لاستبعاد المحاضرات المحذوفة/الملغاة
     active_lecture_ids = await get_active_lecture_ids(course_id)
     active_ids_str = {str(lid) for lid in active_lecture_ids}
-    records = [
-        r for r in records
-        if not r.get("lecture_id") or str(r.get("lecture_id")) in active_ids_str
-    ]
+
+    # خريطة (course_id, date) -> active، لمعالجة السجلات بدون lecture_id
+    active_course_date = set()
+    lec_query = {"status": {"$in": ACTIVE_LECTURE_STATUSES}}
+    if course_id:
+        lec_query["course_id"] = course_id
+    async for lec in db.lectures.find(lec_query, {"course_id": 1, "date": 1}):
+        cid = str(lec.get("course_id", ""))
+        d = lec.get("date", "")
+        if hasattr(d, "strftime"):
+            d_str = d.strftime("%Y-%m-%d")
+        else:
+            d_str = str(d)[:10] if d else ""
+        if cid and d_str:
+            active_course_date.add((cid, d_str))
+
+    def _is_valid(r):
+        lid = r.get("lecture_id")
+        if lid:
+            return str(lid) in active_ids_str
+        # سجل بدون lecture_id - تحقق من تطابق course_id + date مع محاضرة نشطة
+        cid = str(r.get("course_id", ""))
+        d = r.get("date", "")
+        if hasattr(d, "strftime"):
+            d_str = d.strftime("%Y-%m-%d")
+        else:
+            d_str = str(d)[:10] if d else ""
+        return bool(cid and d_str and (cid, d_str) in active_course_date)
+
+    records = [r for r in records if _is_valid(r)]
 
     result = []
     for r in records:
