@@ -68,6 +68,7 @@ async def login(user_data: UserLogin, request: Request):
     # المواقع المسموح بها للطلاب
     ALLOWED_STUDENT_WEB_ORIGINS = [
         "https://ahgaff-student-web.vercel.app",
+        "https://ahgaffstudent-web-production.up.railway.app",
     ]
     
     is_allowed_web = (
