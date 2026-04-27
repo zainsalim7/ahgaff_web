@@ -5836,60 +5836,82 @@ async def preview_orphan_attendance(current_user: dict = Depends(get_current_use
     if current_user.get("role") != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
-    existing_lecture_ids = set()
-    async for lec in db.lectures.find({}, {"_id": 1}):
-        existing_lecture_ids.add(str(lec["_id"]))
+    # جلب IDs المحاضرات النشطة فقط (غير الملغاة وغير المحذوفة)
+    active_lecture_ids = set()
+    async for lec in db.lectures.find(
+        {"status": {"$in": ACTIVE_LECTURE_STATUSES}}, {"_id": 1}
+    ):
+        active_lecture_ids.add(str(lec["_id"]))
+
+    # IDs جميع المحاضرات الموجودة (نشطة + ملغاة) لتمييز المحذوفة من الملغاة
+    all_lecture_ids = set()
+    cancelled_lecture_ids = set()
+    async for lec in db.lectures.find({}, {"_id": 1, "status": 1}):
+        lid = str(lec["_id"])
+        all_lecture_ids.add(lid)
+        if lec.get("status") not in ACTIVE_LECTURE_STATUSES:
+            cancelled_lecture_ids.add(lid)
 
     total_attendance = await db.attendance.count_documents({})
-    orphan_count = 0
+    deleted_lecture_orphans = 0  # محاضرة محذوفة كلياً
+    cancelled_lecture_orphans = 0  # محاضرة موجودة لكن ملغاة
     no_lecture_id_count = 0
     async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1}):
         lec_id = r.get("lecture_id")
         if not lec_id:
             no_lecture_id_count += 1
             continue
-        if str(lec_id) not in existing_lecture_ids:
-            orphan_count += 1
+        sid = str(lec_id)
+        if sid in cancelled_lecture_ids:
+            cancelled_lecture_orphans += 1
+        elif sid not in all_lecture_ids:
+            deleted_lecture_orphans += 1
+
+    total_orphans = deleted_lecture_orphans + cancelled_lecture_orphans
 
     return {
         "total_attendance": total_attendance,
-        "orphans_count": orphan_count,
+        "orphans_count": total_orphans,
+        "deleted_lecture_orphans": deleted_lecture_orphans,
+        "cancelled_lecture_orphans": cancelled_lecture_orphans,
         "records_without_lecture_id": no_lecture_id_count,
-        "active_lectures": len(existing_lecture_ids),
-        "needs_cleanup": orphan_count > 0,
+        "active_lectures": len(active_lecture_ids),
+        "needs_cleanup": total_orphans > 0,
     }
 
 
 @api_router.post("/admin/cleanup-orphan-attendance")
 async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_user)):
     """
-    تنظيف سجلات الحضور المرتبطة بمحاضرات محذوفة (Orphans).
-    يستخدم لإصلاح البيانات الموروثة من قبل تطبيق إصلاح حذف المحاضرات.
+    تنظيف سجلات الحضور:
+    - السجلات المرتبطة بمحاضرات محذوفة كلياً
+    - السجلات المرتبطة بمحاضرات ملغاة (cancelled / absent)
     صلاحية المدير فقط.
     """
     if current_user.get("role") != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
-    # جلب IDs جميع المحاضرات الموجودة فعلياً
-    existing_lecture_ids = set()
-    async for lec in db.lectures.find({}, {"_id": 1}):
-        existing_lecture_ids.add(str(lec["_id"]))
+    # IDs المحاضرات النشطة (سيتم الإبقاء عليها)
+    active_lecture_ids = set()
+    async for lec in db.lectures.find(
+        {"status": {"$in": ACTIVE_LECTURE_STATUSES}}, {"_id": 1}
+    ):
+        active_lecture_ids.add(str(lec["_id"]))
 
-    # حساب وحذف السجلات اليتيمة
     total_attendance = await db.attendance.count_documents({})
+
+    # حذف السجلات التي lecture_id الخاص بها ليس في قائمة النشطة
+    # (هذا يشمل: محاضرات محذوفة + محاضرات ملغاة)
     orphan_ids = []
-    no_lecture_id_count = 0
     async for r in db.attendance.find({}, {"_id": 1, "lecture_id": 1}):
         lec_id = r.get("lecture_id")
         if not lec_id:
-            no_lecture_id_count += 1
             continue
-        if str(lec_id) not in existing_lecture_ids:
+        if str(lec_id) not in active_lecture_ids:
             orphan_ids.append(r["_id"])
 
     deleted = 0
     if orphan_ids:
-        # حذف على دفعات لتجنب حدود MongoDB
         batch_size = 1000
         for i in range(0, len(orphan_ids), batch_size):
             batch = orphan_ids[i:i + batch_size]
@@ -5905,16 +5927,14 @@ async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_use
         details={
             "total_before": total_attendance,
             "orphans_deleted": deleted,
-            "no_lecture_id": no_lecture_id_count,
         },
     )
 
     return {
-        "message": f"تم حذف {deleted} سجل حضور يتيم (لمحاضرات محذوفة)",
+        "message": f"تم حذف {deleted} سجل حضور (محاضرات محذوفة أو ملغاة)",
         "total_attendance_before": total_attendance,
         "orphans_deleted": deleted,
-        "records_without_lecture_id": no_lecture_id_count,
-        "active_lectures": len(existing_lecture_ids),
+        "active_lectures": len(active_lecture_ids),
     }
 
 @api_router.put("/lectures/{lecture_id}/reschedule")

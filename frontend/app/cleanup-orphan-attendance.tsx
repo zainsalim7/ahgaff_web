@@ -18,6 +18,8 @@ import { useAuth } from '../src/contexts/AuthContext';
 interface PreviewData {
   total_attendance: number;
   orphans_count: number;
+  deleted_lecture_orphans?: number;
+  cancelled_lecture_orphans?: number;
   records_without_lecture_id: number;
   active_lectures: number;
   needs_cleanup: boolean;
@@ -169,6 +171,13 @@ export default function CleanupOrphanAttendanceScreen() {
                   >
                     سجلات يتيمة (للحذف)
                   </Text>
+                  {(preview.deleted_lecture_orphans !== undefined ||
+                    preview.cancelled_lecture_orphans !== undefined) && (
+                    <Text style={styles.statSubLabel}>
+                      محذوفة: {preview.deleted_lecture_orphans ?? 0} | ملغاة:{' '}
+                      {preview.cancelled_lecture_orphans ?? 0}
+                    </Text>
+                  )}
                 </View>
                 <View style={styles.statCard}>
                   <Text style={styles.statValue}>
@@ -333,6 +342,7 @@ const styles = StyleSheet.create({
   statCardDanger: { borderColor: '#ef5350', backgroundColor: '#ffebee' },
   statValue: { fontSize: 24, fontWeight: '800', color: '#212121' },
   statLabel: { fontSize: 11, color: '#666', marginTop: 4, textAlign: 'center' },
+  statSubLabel: { fontSize: 10, color: '#888', marginTop: 4, textAlign: 'center' },
   emptyText: { color: '#999', textAlign: 'center', padding: 16 },
   btn: {
     flexDirection: 'row',
