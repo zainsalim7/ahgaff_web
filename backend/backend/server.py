@@ -5210,6 +5210,76 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
     }
 
 
+@api_router.get("/admin/backfill-sections/preview")
+async def preview_backfill_sections(current_user: dict = Depends(get_current_user)):
+    """فحص المقررات التي اسمها يحتوي شعبة بين قوسين لكن حقل section فارغ"""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="للمدير فقط")
+    import re
+    pattern = re.compile(r"\(([^)]+)\)\s*$")
+    candidates = []
+    total_courses = 0
+    async for c in db.courses.find({}):
+        total_courses += 1
+        name = c.get("name", "")
+        current_section = c.get("section", "") or ""
+        if current_section.strip():
+            continue
+        m = pattern.search(name)
+        if m:
+            extracted = m.group(1).strip()
+            # تجاهل المحتوى الطويل أو الذي ليس حرفاً عربياً/إنجليزياً قصيراً
+            if 1 <= len(extracted) <= 10:
+                candidates.append({
+                    "course_id": str(c["_id"]),
+                    "current_name": name,
+                    "extracted_section": extracted,
+                })
+    return {
+        "total_courses": total_courses,
+        "candidates_count": len(candidates),
+        "candidates": candidates[:50],
+        "truncated": len(candidates) > 50,
+    }
+
+
+@api_router.post("/admin/backfill-sections")
+async def backfill_sections(current_user: dict = Depends(get_current_user)):
+    """استخراج الشعبة من اسم المقرر (إذا كانت بين قوسين) وحفظها في حقل section"""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="للمدير فقط")
+    import re
+    pattern = re.compile(r"\(([^)]+)\)\s*$")
+    updated = 0
+    async for c in db.courses.find({}):
+        name = c.get("name", "")
+        current_section = c.get("section", "") or ""
+        if current_section.strip():
+            continue
+        m = pattern.search(name)
+        if m:
+            extracted = m.group(1).strip()
+            if 1 <= len(extracted) <= 10:
+                await db.courses.update_one(
+                    {"_id": c["_id"]},
+                    {"$set": {"section": extracted}}
+                )
+                updated += 1
+
+    await log_activity(
+        user=current_user,
+        action="backfill_sections",
+        entity_type="course",
+        entity_id=None,
+        entity_name="Backfill sections from name",
+        details={"updated": updated},
+    )
+    return {
+        "message": f"تم تحديث الشعبة في {updated} مقرر",
+        "updated": updated,
+    }
+
+
 # ==================== Lecture Routes (المحاضرات/الحصص) ====================
 
 @api_router.get("/lectures/today")

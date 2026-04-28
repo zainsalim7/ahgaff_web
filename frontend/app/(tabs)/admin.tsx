@@ -132,6 +132,7 @@ export default function AdminScreen() {
         { title: 'الأدوار', icon: 'shield-checkmark', color: '#ff5722', bg: '#fbe9e7', route: '/manage-roles', permission: 'manage_roles', adminOnly: true },
         { title: 'سجل النشاط', icon: 'list', color: '#3f51b5', bg: '#e8eaf6', route: '/activity-logs', permission: null, adminOnly: true },
         { title: 'تنظيف سجلات الحضور اليتيمة', icon: 'trash-bin', color: '#c62828', bg: '#ffebee', route: '/cleanup-orphan-attendance', permission: null, adminOnly: true },
+        { title: 'تعبئة شُعب المقررات', icon: 'construct', color: '#7b1fa2', bg: '#f3e5f5', route: '/backfill-sections', permission: null, adminOnly: true },
       ],
     },
   ];
