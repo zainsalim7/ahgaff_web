@@ -387,6 +387,7 @@ async def search_courses_for_load(
             "section": c.get("section", ""),
             "level": c.get("level", 1),
             "credit_hours": c.get("credit_hours", 3),
+            "department_id": c.get("department_id", ""),
             "current_teacher_name": teacher_name,
         })
     return result

@@ -45,11 +45,12 @@ interface LoadItem {
   notes: string;
 }
 
-function TeacherSearch({ teachers, selectedId, onSelect }: { teachers: any[], selectedId: string, onSelect: (id: string) => void }) {
+function TeacherSearch({ teachers, selectedId, onSelect, departments = [] }: { teachers: any[], selectedId: string, onSelect: (id: string) => void, departments?: any[] }) {
   const [q, setQ] = React.useState('');
   const [open, setOpen] = React.useState(false);
   const name = teachers.find(t => t.id === selectedId)?.full_name || '';
   const filtered = q ? teachers.filter(t => t.full_name?.includes(q) || t.teacher_id?.includes(q)) : teachers;
+  const getDeptName = (deptId: string) => departments.find(d => d.id === deptId)?.name || '';
 
   return (
     <div style={{ position: 'relative', direction: 'rtl' }}>
@@ -67,12 +68,16 @@ function TeacherSearch({ teachers, selectedId, onSelect }: { teachers: any[], se
       </div>
       {open && (
         <div style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
-          {filtered.map((t: any) => (
-            <div key={t.id} onClick={() => { onSelect(t.id); setQ(''); setOpen(false); }}
-              style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', backgroundColor: t.id === selectedId ? '#e3f2fd' : '#fff', textAlign: 'right' }}>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{t.full_name}</div>
-            </div>
-          ))}
+          {filtered.map((t: any) => {
+            const deptName = getDeptName(t.department_id);
+            return (
+              <div key={t.id} onClick={() => { onSelect(t.id); setQ(''); setOpen(false); }}
+                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', backgroundColor: t.id === selectedId ? '#e3f2fd' : '#fff', textAlign: 'right' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{t.full_name}</div>
+                {deptName && <div style={{ fontSize: 11, color: '#1565c0', marginTop: 2 }}>🏢 {deptName}</div>}
+              </div>
+            );
+          })}
           {filtered.length === 0 && <div style={{ padding: 16, color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
         </div>
       )}
@@ -122,9 +127,11 @@ export default function TeachingLoadPage() {
     })();
   }, []);
 
-  // Load teachers when department changes
+  const [crossDept, setCrossDept] = useState(false); // عرض أساتذة ومقررات من كل الأقسام
+
+  // Load teachers when department changes or cross-dept toggled
   useEffect(() => {
-    if (!selectedDept) {
+    if (!selectedDept && !crossDept) {
       setTeachers([]);
       setSelectedTeacher('');
       return;
@@ -132,7 +139,9 @@ export default function TeachingLoadPage() {
     (async () => {
       setLoadingTeachers(true);
       try {
-        const res = await teachersAPI.getAll({ department_id: selectedDept });
+        // إذا فعّل "كل الأقسام": احضر كل الأساتذة بدون فلتر قسم
+        const params = crossDept ? {} : { department_id: selectedDept };
+        const res = await teachersAPI.getAll(params);
         setTeachers(res.data);
       } catch (e) {
         console.error('Error loading teachers:', e);
@@ -140,7 +149,7 @@ export default function TeachingLoadPage() {
         setLoadingTeachers(false);
       }
     })();
-  }, [selectedDept]);
+  }, [selectedDept, crossDept]);
 
   // Load existing teacher loads when teacher changes
   const [loadingExisting, setLoadingExisting] = useState(false);
@@ -195,7 +204,9 @@ export default function TeachingLoadPage() {
     searchTimeout.current = setTimeout(async () => {
       setSearching(true);
       try {
-        const res = await teachingLoadAPI.searchCourses(text, selectedDept || undefined);
+        // إذا "كل الأقسام" مفعّل: ابحث في كل المقررات بدون تقييد بالقسم
+        const deptParam = crossDept ? undefined : (selectedDept || undefined);
+        const res = await teachingLoadAPI.searchCourses(text, deptParam);
         const filtered = res.data.filter((c: CourseLoad) => !selectedCourses.some(s => s.course_id === c.course_id));
         setSearchResults(filtered);
         setShowResults(true);
@@ -400,6 +411,7 @@ export default function TeachingLoadPage() {
               selectedValue={selectedDept}
               onValueChange={(v) => { setSelectedDept(v); setSelectedTeacher(''); }}
               style={styles.picker}
+              enabled={!crossDept}
               data-testid="teaching-load-dept-picker"
             >
               <Picker.Item label="-- اختر القسم --" value="" />
@@ -408,18 +420,49 @@ export default function TeachingLoadPage() {
               ))}
             </Picker>
           </View>
+
+          {/* Cross-department toggle */}
+          <TouchableOpacity
+            onPress={() => {
+              const next = !crossDept;
+              setCrossDept(next);
+              if (next) setSelectedDept('');
+              setSelectedTeacher('');
+              setSearchResults([]);
+              setSearchQuery('');
+            }}
+            style={{
+              marginTop: 10,
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 8,
+              padding: 10,
+              borderRadius: 8,
+              borderWidth: 1,
+              borderColor: crossDept ? '#1565c0' : '#e0e0e0',
+              backgroundColor: crossDept ? '#e3f2fd' : '#fff',
+            }}
+            testID="cross-dept-toggle"
+          >
+            <Ionicons name={crossDept ? 'checkbox' : 'square-outline'} size={20} color={crossDept ? '#1565c0' : '#888'} />
+            <Text style={{ fontSize: 13, color: crossDept ? '#1565c0' : '#444', fontWeight: crossDept ? '700' : '500', flex: 1, textAlign: 'right' }}>
+              عرض أساتذة ومقررات من جميع الأقسام (للإسناد العابر للأقسام)
+            </Text>
+          </TouchableOpacity>
         </View>
 
         {viewMode === 'assign' && (
           <>
             {/* Teacher Picker */}
-            {selectedDept && (
+            {(selectedDept || crossDept) && (
               <View style={styles.filterCard}>
-                <Text style={[styles.filterLabel, { textAlign: 'right' }]}>المعلم</Text>
+                <Text style={[styles.filterLabel, { textAlign: 'right' }]}>
+                  المعلم {crossDept ? '(جميع الأقسام)' : ''}
+                </Text>
                 {loadingTeachers ? (
                   <ActivityIndicator size="small" color="#1565c0" />
                 ) : Platform.OS === 'web' ? (
-                  <TeacherSearch teachers={teachers} selectedId={selectedTeacher} onSelect={setSelectedTeacher} />
+                  <TeacherSearch teachers={teachers} selectedId={selectedTeacher} onSelect={setSelectedTeacher} departments={departments} />
                 ) : (
                   <View style={styles.pickerWrapper}>
                     <Picker
@@ -428,9 +471,11 @@ export default function TeachingLoadPage() {
                       style={styles.picker}
                     >
                       <Picker.Item label="-- اختر المعلم --" value="" />
-                      {teachers.map(t => (
-                        <Picker.Item key={t.id} label={t.full_name} value={t.id} />
-                      ))}
+                      {teachers.map(t => {
+                        const dept = departments.find((d: any) => d.id === t.department_id);
+                        const label = dept ? `${t.full_name} • ${dept.name}` : t.full_name;
+                        return <Picker.Item key={t.id} label={label} value={t.id} />;
+                      })}
                     </Picker>
                   </View>
                 )}
@@ -465,7 +510,9 @@ export default function TeachingLoadPage() {
                     {/* Search Results Dropdown */}
                     {showResults && searchResults.length > 0 && (
                       <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', zIndex: 1000, maxHeight: 280, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', direction: 'rtl' }}>
-                        {searchResults.map(c => (
+                        {searchResults.map(c => {
+                          const cDeptName = departments.find((d: any) => d.id === c.department_id)?.name;
+                          return (
                           <TouchableOpacity
                             key={c.course_id}
                             style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}
@@ -475,11 +522,13 @@ export default function TeachingLoadPage() {
                             <View style={{ flex: 1 }}>
                               <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', textAlign: 'right' }}>{c.course_name}</Text>
                               <Text style={{ fontSize: 12, color: '#888', textAlign: 'right' }}>{c.course_code} - م{c.level} {c.section ? `(${c.section})` : ''}</Text>
+                              {cDeptName ? <Text style={{ fontSize: 11, color: '#1565c0', textAlign: 'right' }}>🏢 {cDeptName}</Text> : null}
                               {c.current_teacher_name ? <Text style={{ fontSize: 11, color: '#e65100', textAlign: 'right' }}>مسند لـ: {c.current_teacher_name}</Text> : null}
                             </View>
                             <Ionicons name="add-circle" size={26} color="#4caf50" style={{ marginLeft: 12 }} />
                           </TouchableOpacity>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                     {showResults && searchQuery.length > 0 && searchResults.length === 0 && !searching && (
