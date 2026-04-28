@@ -25,6 +25,7 @@ interface CourseLoad {
   section: string;
   level: number;
   credit_hours: number;
+  department_id?: string;
   current_teacher_name: string;
   existing_load_id: string | null;
   existing_weekly_hours: number | null;
@@ -191,6 +192,7 @@ export default function TeachingLoadPage() {
           section: i.course_section || '',
           level: i.course_level || 0,
           credit_hours: i.course_credit_hours || 3,
+          department_id: i.course_department_id || '',
           current_teacher_name: '',
           existing_load_id: i.id,
           existing_weekly_hours: i.weekly_hours,
@@ -323,13 +325,36 @@ export default function TeachingLoadPage() {
     }
     try {
       await teachingLoadAPI.delete(loadId);
-      Alert.alert('نجاح', 'تم الحذف');
-      if (viewMode === 'summary') loadSummary();
-      else if (selectedTeacher) {
-        const res = await teachingLoadAPI.getTeacherCourses(selectedTeacher, selectedDept || undefined);
-        setCourses(res.data);
+      // أزله فوراً من القائمة المحلية
+      const removed = selectedCourses.find(c => c.existing_load_id === loadId);
+      if (removed) {
+        setSelectedCourses(prev => prev.filter(c => c.existing_load_id !== loadId));
+        setHoursMap(prev => { const m = { ...prev }; delete m[removed.course_id]; return m; });
+      }
+      if (Platform.OS === 'web') window.alert('تم الحذف ✓');
+      else Alert.alert('نجاح', 'تم الحذف');
+      // أعد التحميل من الخادم للتحديث الكامل
+      if (viewMode === 'summary') {
+        await loadSummary();
+      } else if (selectedTeacher) {
+        const refreshRes = await teachingLoadAPI.getAll({ teacher_id: selectedTeacher });
+        const refreshItems = refreshRes.data.items || [];
+        const existing: CourseLoad[] = refreshItems.map((i: any) => ({
+          course_id: i.course_id,
+          course_name: i.course_name,
+          course_code: i.course_code,
+          section: i.course_section || '',
+          level: i.course_level || 0,
+          credit_hours: i.course_credit_hours || 0,
+          department_id: i.course_department_id || '',
+          current_teacher_name: '',
+          existing_load_id: i.id,
+          existing_weekly_hours: i.weekly_hours,
+          existing_notes: i.notes || '',
+        }));
+        setSelectedCourses(existing);
         const map: Record<string, string> = {};
-        for (const c of res.data) {
+        for (const c of existing) {
           map[c.course_id] = c.existing_weekly_hours != null ? String(c.existing_weekly_hours) : '';
         }
         setHoursMap(map);
@@ -561,14 +586,32 @@ export default function TeachingLoadPage() {
                 {selectedCourses.length > 0 && (
                   <View style={{ marginTop: 4 }}>
                     <Text style={[styles.tableTitle, { textAlign: 'right' }]}>المقررات المختارة ({selectedCourses.length})</Text>
-                    {selectedCourses.map((c) => (
+                    {selectedCourses.map((c) => {
+                      const cDept = departments.find((d: any) => d.id === (c as any).department_id)?.name;
+                      const isOtherTeacher = c.current_teacher_name && c.current_teacher_name !== teachers.find(t => t.id === selectedTeacher)?.full_name;
+                      return (
                       <View key={c.course_id} style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 12, marginBottom: 8, backgroundColor: c.existing_load_id ? '#f1f8e9' : '#fafafa', borderRadius: 10, borderWidth: 1, borderColor: c.existing_load_id ? '#c8e6c9' : '#eee' }}>
                         {/* Course Info */}
                         <View style={{ flex: 1, marginLeft: 12 }}>
                           <Text style={{ fontSize: 15, fontWeight: '600', color: '#333', textAlign: 'right' }}>{c.course_name}</Text>
                           <Text style={{ fontSize: 12, color: '#888', textAlign: 'right', marginTop: 2 }}>
-                            {c.course_code} - م{c.level} {c.section ? `| ${c.section}` : ''}
+                            {c.course_code} - م{c.level} {c.section ? `| الشعبة ${c.section}` : ''}
                           </Text>
+                          {cDept ? (
+                            <Text style={{ fontSize: 11, color: '#1565c0', textAlign: 'right', marginTop: 2 }}>
+                              🏢 {cDept}
+                            </Text>
+                          ) : null}
+                          {/* حالة الإسناد */}
+                          {c.existing_load_id ? (
+                            <Text style={{ fontSize: 11, color: '#2e7d32', textAlign: 'right', marginTop: 2, fontWeight: '600' }}>
+                              ✓ مسند للمعلم الحالي
+                            </Text>
+                          ) : isOtherTeacher ? (
+                            <Text style={{ fontSize: 11, color: '#e65100', textAlign: 'right', marginTop: 2, fontWeight: '600' }}>
+                              ⚠️ مسند حالياً لـ: {c.current_teacher_name}
+                            </Text>
+                          ) : null}
                         </View>
                         {/* Hours Input */}
                         <View style={{ width: 100, marginHorizontal: 8 }}>
@@ -604,7 +647,8 @@ export default function TeachingLoadPage() {
                           <Ionicons name={c.existing_load_id ? "trash-outline" : "close-circle"} size={22} color="#e53935" />
                         </TouchableOpacity>
                       </View>
-                    ))}
+                      );
+                    })}
 
                     {/* Total */}
                     <View style={[styles.totalRow, { flexDirection: 'row-reverse' }]}>
