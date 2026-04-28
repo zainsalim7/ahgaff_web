@@ -701,6 +701,20 @@ export default function AddCourseScreen() {
         <Text style={styles.itemDetail}>{item.code}</Text>
         <Text style={styles.itemDetail}>
           {getDepartmentName(item.department_id)} | م{item.level}{item.section ? ` | ${item.section}` : ''}
+          {canEdit ? (
+            <Text
+              onPress={() => {
+                const v = typeof window !== 'undefined'
+                  ? window.prompt('اسم الشعبة الجديد (اترك فارغاً للحذف):', item.section || '')
+                  : item.section;
+                if (v === null) return;
+                coursesAPI.update(item.id, { section: v.trim() }).then(() => { fetchCourses(); }).catch(() => alert('فشل تحديث الشعبة'));
+              }}
+              style={{ color: '#1565c0', fontWeight: '600', marginRight: 6 }}
+            >
+              {' '}{item.section ? '✏️' : '+ شعبة'}
+            </Text>
+          ) : null}
         </Text>
         <Text style={styles.itemDetail}>المعلم: {item.teacher_name || getTeacherName(item.teacher_id)}</Text>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
