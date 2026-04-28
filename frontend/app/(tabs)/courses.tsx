@@ -750,7 +750,7 @@ export default function AddCourseScreen() {
               style={styles.studyPlanBtn}
               onPress={() => router.push({ pathname: '/manage-study-plan', params: { courseId: item.id, courseName: item.name } })}
               accessibilityLabel="الخطة الدراسية"
-              data-testid={`study-plan-btn-${item.id}`}
+              testID={`study-plan-btn-${item.id}`}
             >
               <Ionicons name="book" size={20} color="#2e7d32" />
             </TouchableOpacity>

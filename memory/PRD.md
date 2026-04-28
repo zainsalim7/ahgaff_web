@@ -1,5 +1,23 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 28 أبريل 2026
+
+### Phase 1 - استيراد ونسخ الخطة الدراسية (مكتمل Backend + Frontend)
+- [x] Backend (موجود مسبقاً من جلسة سابقة):
+  - `GET /api/template/study-plan` — تحميل قالب Excel
+  - `POST /api/courses/{course_id}/study-plan/upload?replace=bool` — رفع/استيراد Excel
+  - `POST /api/courses/{course_id}/study-plan/clone-from` — نسخ من مقرر مصدر
+- [x] Frontend جديد: `/app/frontend/app/manage-study-plan.tsx`
+  - Header مع اسم المقرر + إحصائيات (أسابيع/مواضيع/% الإنجاز)
+  - شريط أدوات: تحميل القالب + استيراد Excel + نسخ من مقرر + إضافة أسبوع
+  - محرر يدوي للأسابيع والمواضيع (إضافة/تعديل/حذف) + زر "حفظ الخطة"
+  - Modal الاستيراد: toggle استبدال/دمج + رفع ملف
+  - Modal النسخ: قائمة مقررات قابلة للبحث + radio + toggle استبدال/دمج + تأكيد
+- [x] زر أخضر بأيقونة كتاب في بطاقة المقرر بـ `/(tabs)/courses.tsx` ينقل لشاشة الإدارة
+- [x] تسجيل المسار في `_layout.tsx`
+- [x] اختبار E2E بواسطة testing agent v3 (success_rate frontend: 100% functional)
+- [x] إصلاح: استبدال `data-testid` بـ `testID` لتوافق React Native Web
+
 ## ما تم إنجازه - جلسة 26 فبراير 2026
 
 ### إصلاح bug سجلات الحضور للمحاضرات المحذوفة (مكتمل)
@@ -43,7 +61,9 @@
 ## المهام المعلقة
 
 ### P1
-- [ ] تقسيم `server.py` (>11.7k سطر) إلى `/app/backend/backend/routes/`
+- [ ] **Phase 2-4 من تكامل الخطة الدراسية**: مطالبة المعلم بتحديد الموضوع بعد المحاضرة، تقارير أسبوعية للمواضيع غير المغطاة، توصيات ذكية
+- [ ] **توليد الرقم المرجعي للطالب تلقائياً** — بانتظار قواعد العمل من المستخدم (مثلاً FAC-DEPT-XXXX)
+- [ ] تقسيم `server.py` (>12.8k سطر) إلى `/app/backend/backend/routes/`
 - [ ] إصلاح خطأ `lecturesList is not iterable` في `course-students.tsx > calculateStudentStats`
 
 ### P2/P3

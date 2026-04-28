@@ -310,7 +310,7 @@ export default function ManageStudyPlanScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Ionicons name="book" size={28} color="#fff" />
-            <Text style={styles.headerTitle} data-testid="study-plan-course-name">
+            <Text style={styles.headerTitle} testID="study-plan-course-name">
               {course?.name || courseName || 'الخطة الدراسية'}
             </Text>
             {course?.code && <Text style={styles.headerSub}>{course.code}</Text>}
@@ -335,7 +335,7 @@ export default function ManageStudyPlanScreen() {
             <TouchableOpacity
               style={[styles.toolBtn, { backgroundColor: '#2e7d32' }]}
               onPress={handleDownloadTemplate}
-              data-testid="download-study-plan-template-btn"
+              testID="download-study-plan-template-btn"
             >
               <Ionicons name="download" size={16} color="#fff" />
               <Text style={styles.toolBtnText}>تحميل القالب</Text>
@@ -343,7 +343,7 @@ export default function ManageStudyPlanScreen() {
             <TouchableOpacity
               style={[styles.toolBtn, { backgroundColor: '#1565c0' }]}
               onPress={() => { setShowImportModal(true); setImportResult(null); setImportReplace(false); }}
-              data-testid="import-study-plan-btn"
+              testID="import-study-plan-btn"
             >
               <Ionicons name="cloud-upload" size={16} color="#fff" />
               <Text style={styles.toolBtnText}>استيراد Excel</Text>
@@ -351,7 +351,7 @@ export default function ManageStudyPlanScreen() {
             <TouchableOpacity
               style={[styles.toolBtn, { backgroundColor: '#7b1fa2' }]}
               onPress={openCloneModal}
-              data-testid="clone-study-plan-btn"
+              testID="clone-study-plan-btn"
             >
               <Ionicons name="copy" size={16} color="#fff" />
               <Text style={styles.toolBtnText}>نسخ من مقرر</Text>
@@ -359,7 +359,7 @@ export default function ManageStudyPlanScreen() {
             <TouchableOpacity
               style={[styles.toolBtn, { backgroundColor: '#ef6c00' }]}
               onPress={addWeek}
-              data-testid="add-week-btn"
+              testID="add-week-btn"
             >
               <Ionicons name="add-circle" size={16} color="#fff" />
               <Text style={styles.toolBtnText}>إضافة أسبوع</Text>
@@ -378,7 +378,7 @@ export default function ManageStudyPlanScreen() {
               </View>
             ) : (
               plan.weeks.map((week, weekIdx) => (
-                <View key={weekIdx} style={styles.weekCard} data-testid={`week-card-${week.week_number}`}>
+                <View key={weekIdx} style={styles.weekCard} testID={`week-card-${week.week_number}`}>
                   <View style={styles.weekHeader}>
                     <View style={styles.weekHeaderLeft}>
                       <Text style={styles.weekLabel}>الأسبوع</Text>
@@ -439,7 +439,7 @@ export default function ManageStudyPlanScreen() {
                   <TouchableOpacity
                     style={styles.addTopicBtn}
                     onPress={() => addTopic(weekIdx)}
-                    data-testid={`add-topic-week-${week.week_number}`}
+                    testID={`add-topic-week-${week.week_number}`}
                   >
                     <Ionicons name="add" size={16} color="#1565c0" />
                     <Text style={styles.addTopicText}>إضافة موضوع</Text>
@@ -456,7 +456,7 @@ export default function ManageStudyPlanScreen() {
             style={[styles.saveBtn, saving && { opacity: 0.6 }]}
             onPress={handleSave}
             disabled={saving}
-            data-testid="save-study-plan-btn"
+            testID="save-study-plan-btn"
           >
             {saving ? (
               <ActivityIndicator color="#fff" />
@@ -490,7 +490,7 @@ export default function ManageStudyPlanScreen() {
               <TouchableOpacity
                 style={styles.checkboxRow}
                 onPress={() => setImportReplace(!importReplace)}
-                data-testid="import-replace-toggle"
+                testID="import-replace-toggle"
               >
                 <Ionicons
                   name={importReplace ? 'checkbox' : 'square-outline'}
@@ -511,7 +511,7 @@ export default function ManageStudyPlanScreen() {
                 style={[styles.modalPrimaryBtn, importing && { opacity: 0.6 }]}
                 onPress={handleImportExcel}
                 disabled={importing}
-                data-testid="import-study-plan-confirm-btn"
+                testID="import-study-plan-confirm-btn"
               >
                 {importing ? (
                   <ActivityIndicator color="#fff" />
@@ -557,7 +557,7 @@ export default function ManageStudyPlanScreen() {
                 onChangeText={setCloneSearch}
                 placeholder="بحث بالاسم أو الكود..."
                 placeholderTextColor="#bbb"
-                data-testid="clone-search-input"
+                testID="clone-search-input"
               />
 
               <ScrollView style={styles.cloneList} nestedScrollEnabled>
@@ -574,7 +574,7 @@ export default function ManageStudyPlanScreen() {
                         cloneSourceId === c.id && styles.cloneRowSelected,
                       ]}
                       onPress={() => setCloneSourceId(c.id)}
-                      data-testid={`clone-source-${c.id}`}
+                      testID={`clone-source-${c.id}`}
                     >
                       <Ionicons
                         name={cloneSourceId === c.id ? 'radio-button-on' : 'radio-button-off'}
@@ -595,7 +595,7 @@ export default function ManageStudyPlanScreen() {
               <TouchableOpacity
                 style={styles.checkboxRow}
                 onPress={() => setCloneReplace(!cloneReplace)}
-                data-testid="clone-replace-toggle"
+                testID="clone-replace-toggle"
               >
                 <Ionicons
                   name={cloneReplace ? 'checkbox' : 'square-outline'}
@@ -616,7 +616,7 @@ export default function ManageStudyPlanScreen() {
                 style={[styles.modalPrimaryBtn, { backgroundColor: '#7b1fa2' }, (cloning || !cloneSourceId) && { opacity: 0.6 }]}
                 onPress={handleClone}
                 disabled={cloning || !cloneSourceId}
-                data-testid="clone-confirm-btn"
+                testID="clone-confirm-btn"
               >
                 {cloning ? (
                   <ActivityIndicator color="#fff" />
