@@ -48,40 +48,58 @@ interface LoadItem {
 function TeacherSearch({ teachers, selectedId, onSelect, departments = [] }: { teachers: any[], selectedId: string, onSelect: (id: string) => void, departments?: any[] }) {
   const [q, setQ] = React.useState('');
   const [open, setOpen] = React.useState(false);
-  const name = teachers.find(t => t.id === selectedId)?.full_name || '';
+  const selectedTeacher = teachers.find(t => t.id === selectedId);
   const filtered = q ? teachers.filter(t => t.full_name?.includes(q) || t.teacher_id?.includes(q)) : teachers;
   const getDeptName = (deptId: string) => departments.find(d => d.id === deptId)?.name || '';
 
+  // إذا معلم مختار، اعرض بطاقته فقط مع زر تغيير
+  if (selectedId && !open) {
+    return (
+      <div style={{ direction: 'rtl' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #1565c0', borderRadius: 8, backgroundColor: '#e3f2fd' }}>
+          <div style={{ flex: 1, textAlign: 'right' }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: '#1565c0' }}>✓ {selectedTeacher?.full_name}</div>
+            {selectedTeacher && getDeptName(selectedTeacher.department_id) ? (
+              <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>🏢 {getDeptName(selectedTeacher.department_id)}</div>
+            ) : null}
+          </div>
+          <button onClick={() => { onSelect(''); setQ(''); setOpen(true); }} style={{ background: 'none', border: '1px solid #1565c0', color: '#1565c0', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
+            تغيير
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div style={{ position: 'relative', direction: 'rtl' }}>
+    <div style={{ direction: 'rtl' }}>
       <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
         <input
           type="text"
-          value={open ? q : name}
+          value={q}
           onChange={(e: any) => { setQ(e.target.value); setOpen(true); }}
           onFocus={() => setOpen(true)}
           placeholder="ابحث عن المعلم بالاسم..."
           style={{ flex: 1, padding: '10px 12px', border: 'none', background: 'transparent', fontSize: 14, outline: 'none', textAlign: 'right' }}
           data-testid="teaching-load-teacher-search"
         />
-        {selectedId && <button onClick={() => { onSelect(''); setQ(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px', color: '#e53935', fontSize: 16 }}>x</button>}
       </div>
+      {/* قائمة المعلمين inline (تدفع التخطيط لأسفل) */}
       {open && (
-        <div style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <div style={{ marginTop: 4, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 260, overflowY: 'auto' }}>
+          {filtered.length === 0 && <div style={{ padding: 16, color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
           {filtered.map((t: any) => {
             const deptName = getDeptName(t.department_id);
             return (
               <div key={t.id} onClick={() => { onSelect(t.id); setQ(''); setOpen(false); }}
-                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', backgroundColor: t.id === selectedId ? '#e3f2fd' : '#fff', textAlign: 'right' }}>
+                style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{t.full_name}</div>
                 {deptName && <div style={{ fontSize: 11, color: '#1565c0', marginTop: 2 }}>🏢 {deptName}</div>}
               </div>
             );
           })}
-          {filtered.length === 0 && <div style={{ padding: 16, color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
         </div>
       )}
-      {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} />}
     </div>
   );
 }
