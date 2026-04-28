@@ -39,6 +39,14 @@ interface StudyPlan {
   total_topics?: number;
   completed_topics?: number;
   completion_percent?: number;
+  approved?: boolean;
+  approved_by?: string;
+  approved_date?: string;
+  has_pending?: boolean;
+  pending_weeks?: Week[];
+  pending_submitted_by?: string;
+  pending_submitted_at?: string;
+  pending_mode?: string;
 }
 
 const showAlert = (title: string, msg: string) => {
@@ -61,11 +69,16 @@ export default function ManageStudyPlanScreen() {
   const { courseId, courseName } = useLocalSearchParams<{ courseId: string; courseName?: string }>();
   const currentUser = useAuthStore((s) => s.user);
   const isTeacher = currentUser?.role === 'teacher';
+  const isAdmin = currentUser?.role === 'admin';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [plan, setPlan] = useState<StudyPlan>({ course_id: courseId || '', weeks: [] });
   const [course, setCourse] = useState<any>(null);
+
+  // Approval actions
+  const [approving, setApproving] = useState(false);
+  const [showPendingModal, setShowPendingModal] = useState(false);
 
   // Import modal
   const [showImportModal, setShowImportModal] = useState(false);
@@ -172,13 +185,78 @@ export default function ManageStudyPlanScreen() {
 
     try {
       setSaving(true);
-      await api.put(`/courses/${courseId}/study-plan`, { weeks: cleaned });
-      showAlert('تم', 'تم حفظ الخطة الدراسية بنجاح');
+      const res = await api.put(`/courses/${courseId}/study-plan`, { weeks: cleaned });
+      const isPending = res?.data?.pending === true;
+      showAlert(
+        'تم',
+        isPending
+          ? 'تم حفظ تعديلاتك بانتظار اعتماد الأدمن. لن تظهر للطلاب حتى يعتمدها.'
+          : 'تم حفظ الخطة الدراسية بنجاح'
+      );
       await fetchPlan();
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'فشل حفظ الخطة');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // ---------- Approval actions (admin only) ----------
+  const handleApprove = async () => {
+    const hasPending = !!plan.has_pending;
+    const ok = await askConfirm(
+      'تأكيد الاعتماد',
+      hasPending
+        ? 'سيتم استبدال الخطة الحالية بتعديلات المعلم المعلّقة واعتمادها. هل تريد المتابعة؟'
+        : 'سيتم اعتماد الخطة الحالية. بعد الاعتماد لن يستطيع المعلم حذف/تعديل المواضيع الموجودة، لكن يمكنه إضافة مواضيع جديدة بانتظار اعتمادها.'
+    );
+    if (!ok) return;
+    try {
+      setApproving(true);
+      const res = await api.post(`/courses/${courseId}/study-plan/approve`);
+      showAlert('تم', res.data?.message || 'تم اعتماد الخطة');
+      await fetchPlan();
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'فشل الاعتماد');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleUnapprove = async () => {
+    const ok = await askConfirm(
+      'إلغاء الاعتماد',
+      'سيتم إلغاء اعتماد الخطة. سيُسمح للمعلم بالتعديل والحذف بحرية. هل تريد المتابعة؟'
+    );
+    if (!ok) return;
+    try {
+      setApproving(true);
+      const res = await api.post(`/courses/${courseId}/study-plan/unapprove`);
+      showAlert('تم', res.data?.message || 'تم إلغاء الاعتماد');
+      await fetchPlan();
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'فشل إلغاء الاعتماد');
+    } finally {
+      setApproving(false);
+    }
+  };
+
+  const handleRejectPending = async () => {
+    const ok = await askConfirm(
+      'رفض التعديلات',
+      'سيتم رفض تعديلات المعلم المعلّقة بشكل نهائي. الخطة المعتمدة الحالية ستبقى كما هي. هل تريد المتابعة؟'
+    );
+    if (!ok) return;
+    try {
+      setApproving(true);
+      const res = await api.post(`/courses/${courseId}/study-plan/reject-pending`);
+      showAlert('تم', res.data?.message || 'تم رفض التعديلات');
+      setShowPendingModal(false);
+      await fetchPlan();
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'فشل رفض التعديلات');
+    } finally {
+      setApproving(false);
     }
   };
 
@@ -317,6 +395,13 @@ export default function ManageStudyPlanScreen() {
               {course?.name || courseName || 'الخطة الدراسية'}
             </Text>
             {course?.code && <Text style={styles.headerSub}>{course.code}</Text>}
+            {/* Approval badge */}
+            {plan.approved && (
+              <View style={styles.approvedBadge} testID="study-plan-approved-badge">
+                <Ionicons name="shield-checkmark" size={14} color="#fff" />
+                <Text style={styles.approvedBadgeText}>الخطة معتمدة</Text>
+              </View>
+            )}
             <View style={styles.statsRow}>
               <View style={styles.statBox}>
                 <Text style={styles.statValue}>{plan.weeks.length}</Text>
@@ -332,6 +417,95 @@ export default function ManageStudyPlanScreen() {
               </View>
             </View>
           </View>
+
+          {/* Pending banner (admin sees pending review actions; teacher sees waiting) */}
+          {plan.has_pending && (
+            <View style={[styles.banner, styles.bannerWarning]} testID="study-plan-pending-banner">
+              <Ionicons name="time" size={18} color="#ef6c00" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.bannerTitle}>
+                  {isAdmin ? 'تعديلات المعلم بانتظار مراجعتك' : 'تعديلاتك بانتظار اعتماد الأدمن'}
+                </Text>
+                <Text style={styles.bannerSub}>
+                  {isAdmin
+                    ? `قدم المعلم ${plan.pending_weeks?.length || 0} أسبوع للاعتماد. راجعها ثم اعتمد أو ارفض.`
+                    : 'لن تظهر التعديلات على الخطة الرسمية حتى يعتمدها الأدمن.'}
+                </Text>
+              </View>
+              {isAdmin && (
+                <TouchableOpacity
+                  style={styles.bannerLink}
+                  onPress={() => setShowPendingModal(true)}
+                  testID="view-pending-btn"
+                >
+                  <Text style={styles.bannerLinkText}>عرض التفاصيل</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
+          {/* Approved info banner (for teacher) */}
+          {plan.approved && isTeacher && !plan.has_pending && (
+            <View style={[styles.banner, styles.bannerSuccess]}>
+              <Ionicons name="lock-closed" size={18} color="#2e7d32" />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.bannerTitle, { color: '#2e7d32' }]}>
+                  الخطة معتمدة من الأدمن
+                </Text>
+                <Text style={[styles.bannerSub, { color: '#2e7d32' }]}>
+                  لا يمكن تعديل أو حذف المواضيع المعتمدة. يمكنك إضافة مواضيع جديدة فقط، وستحتاج اعتماد الأدمن.
+                </Text>
+              </View>
+            </View>
+          )}
+
+          {/* Admin approval actions */}
+          {isAdmin && plan.weeks.length > 0 && (
+            <View style={styles.approvalRow}>
+              {!plan.approved ? (
+                <TouchableOpacity
+                  style={[styles.approveBtn, approving && { opacity: 0.6 }]}
+                  onPress={handleApprove}
+                  disabled={approving}
+                  testID="approve-plan-btn"
+                >
+                  {approving ? <ActivityIndicator color="#fff" /> : (
+                    <>
+                      <Ionicons name="shield-checkmark" size={18} color="#fff" />
+                      <Text style={styles.approveBtnText}>اعتماد الخطة</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <>
+                  {plan.has_pending && (
+                    <TouchableOpacity
+                      style={[styles.approveBtn, approving && { opacity: 0.6 }]}
+                      onPress={handleApprove}
+                      disabled={approving}
+                      testID="approve-pending-btn"
+                    >
+                      {approving ? <ActivityIndicator color="#fff" /> : (
+                        <>
+                          <Ionicons name="checkmark-done" size={18} color="#fff" />
+                          <Text style={styles.approveBtnText}>اعتماد التعديلات الجديدة</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                  <TouchableOpacity
+                    style={[styles.unapproveBtn, approving && { opacity: 0.6 }]}
+                    onPress={handleUnapprove}
+                    disabled={approving}
+                    testID="unapprove-plan-btn"
+                  >
+                    <Ionicons name="lock-open" size={16} color="#c62828" />
+                    <Text style={styles.unapproveBtnText}>إلغاء الاعتماد</Text>
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          )}
 
           {/* Toolbar */}
           <View style={styles.toolbar}>
@@ -401,30 +575,42 @@ export default function ManageStudyPlanScreen() {
                         </View>
                       )}
                     </View>
-                    <TouchableOpacity onPress={() => deleteWeek(weekIdx)} style={styles.iconBtn}>
-                      <Ionicons name="trash-outline" size={18} color="#c62828" />
+                    <TouchableOpacity
+                      onPress={() => deleteWeek(weekIdx)}
+                      style={styles.iconBtn}
+                      disabled={isTeacher && !!plan.approved}
+                    >
+                      <Ionicons
+                        name={isTeacher && plan.approved ? 'lock-closed' : 'trash-outline'}
+                        size={18}
+                        color={isTeacher && plan.approved ? '#bdbdbd' : '#c62828'}
+                      />
                     </TouchableOpacity>
                   </View>
 
-                  {week.topics.map((topic, topicIdx) => (
+                  {week.topics.map((topic, topicIdx) => {
+                    const topicLocked = isTeacher && !!plan.approved && !!topic.id;
+                    return (
                     <View key={topicIdx} style={[styles.topicRow, topic.completed && styles.topicRowCompleted]}>
                       <View style={styles.topicNumber}>
                         <Text style={styles.topicNumberText}>{topicIdx + 1}</Text>
                       </View>
                       <View style={{ flex: 1 }}>
                         <TextInput
-                          style={styles.topicTitleInput}
+                          style={[styles.topicTitleInput, topicLocked && { color: '#555', backgroundColor: '#f5f5f5' }]}
                           value={topic.title}
                           onChangeText={(v) => updateTopic(weekIdx, topicIdx, 'title', v)}
                           placeholder="عنوان الموضوع"
                           placeholderTextColor="#bbb"
+                          editable={!topicLocked}
                         />
                         <TextInput
-                          style={styles.topicNotesInput}
+                          style={[styles.topicNotesInput, topicLocked && { color: '#777', backgroundColor: '#f5f5f5' }]}
                           value={topic.notes || ''}
                           onChangeText={(v) => updateTopic(weekIdx, topicIdx, 'notes', v)}
                           placeholder="ملاحظات (اختياري)"
                           placeholderTextColor="#bbb"
+                          editable={!topicLocked}
                         />
                         {topic.completed && (
                           <View style={styles.completedRow}>
@@ -435,11 +621,18 @@ export default function ManageStudyPlanScreen() {
                           </View>
                         )}
                       </View>
-                      <TouchableOpacity onPress={() => deleteTopic(weekIdx, topicIdx)} style={styles.iconBtn}>
-                        <Ionicons name="close-circle" size={20} color="#999" />
-                      </TouchableOpacity>
+                      {topicLocked ? (
+                        <View style={styles.iconBtn}>
+                          <Ionicons name="lock-closed" size={18} color="#bdbdbd" />
+                        </View>
+                      ) : (
+                        <TouchableOpacity onPress={() => deleteTopic(weekIdx, topicIdx)} style={styles.iconBtn}>
+                          <Ionicons name="close-circle" size={20} color="#999" />
+                        </TouchableOpacity>
+                      )}
                     </View>
-                  ))}
+                  );
+                  })}
 
                   <TouchableOpacity
                     style={styles.addTopicBtn}
@@ -632,6 +825,75 @@ export default function ManageStudyPlanScreen() {
                   </>
                 )}
               </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Pending Review Modal (Admin only) */}
+        <Modal visible={showPendingModal} transparent animationType="fade">
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modalCard, { maxHeight: '85%' }]}>
+              <View style={styles.modalHeader}>
+                <Text style={styles.modalTitle}>تعديلات المعلم بانتظار المراجعة</Text>
+                <TouchableOpacity onPress={() => setShowPendingModal(false)}>
+                  <Ionicons name="close" size={22} color="#999" />
+                </TouchableOpacity>
+              </View>
+
+              <View style={[styles.banner, styles.bannerWarning, { marginBottom: 12 }]}>
+                <Ionicons name="information-circle" size={18} color="#ef6c00" />
+                <Text style={styles.bannerSub}>
+                  راجع المواضيع التي اقترحها المعلم. إذا اعتمدت ستحل محل الخطة الحالية. وإذا رفضت ستبقى الخطة المعتمدة كما هي.
+                </Text>
+              </View>
+
+              <ScrollView style={styles.cloneList} nestedScrollEnabled>
+                {(plan.pending_weeks || []).length === 0 ? (
+                  <Text style={styles.emptySmall}>لا توجد تعديلات معلّقة</Text>
+                ) : (
+                  (plan.pending_weeks || []).map((w, wi) => (
+                    <View key={wi} style={{ padding: 10, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}>
+                      <Text style={{ fontWeight: '700', color: '#1565c0', fontSize: 13, textAlign: 'right', marginBottom: 4 }}>
+                        الأسبوع {w.week_number} ({w.topics?.length || 0} موضوع)
+                      </Text>
+                      {(w.topics || []).map((t, ti) => (
+                        <View key={ti} style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 6, paddingVertical: 4 }}>
+                          <Text style={{ color: '#666', fontSize: 12 }}>•</Text>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 13, color: '#212121', textAlign: 'right' }}>{t.title}</Text>
+                            {t.notes ? <Text style={{ fontSize: 11, color: '#777', textAlign: 'right' }}>{t.notes}</Text> : null}
+                          </View>
+                        </View>
+                      ))}
+                    </View>
+                  ))
+                )}
+              </ScrollView>
+
+              <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.modalPrimaryBtn, { backgroundColor: '#2e7d32', flex: 1 }, approving && { opacity: 0.6 }]}
+                  onPress={async () => { await handleApprove(); setShowPendingModal(false); }}
+                  disabled={approving}
+                  testID="pending-approve-btn"
+                >
+                  {approving ? <ActivityIndicator color="#fff" /> : (
+                    <>
+                      <Ionicons name="checkmark-done" size={18} color="#fff" />
+                      <Text style={styles.modalPrimaryBtnText}>اعتماد</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalPrimaryBtn, { backgroundColor: '#c62828', flex: 1 }, approving && { opacity: 0.6 }]}
+                  onPress={handleRejectPending}
+                  disabled={approving}
+                  testID="pending-reject-btn"
+                >
+                  <Ionicons name="close-circle" size={18} color="#fff" />
+                  <Text style={styles.modalPrimaryBtnText}>رفض</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
@@ -905,4 +1167,77 @@ const styles = StyleSheet.create({
   cloneName: { fontSize: 13, fontWeight: '600', color: '#212121', textAlign: 'right' },
   cloneCode: { fontSize: 11, color: '#777', marginTop: 2, textAlign: 'right' },
   emptySmall: { textAlign: 'center', color: '#999', padding: 20, fontSize: 13 },
+
+  // Approval / pending styles
+  approvedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#2e7d32',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginTop: 8,
+  },
+  approvedBadgeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginHorizontal: 12,
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 10,
+  },
+  bannerWarning: {
+    backgroundColor: '#fff3e0',
+    borderWidth: 1,
+    borderColor: '#ffb74d',
+  },
+  bannerSuccess: {
+    backgroundColor: '#e8f5e9',
+    borderWidth: 1,
+    borderColor: '#a5d6a7',
+  },
+  bannerTitle: { fontSize: 13, fontWeight: '700', color: '#ef6c00', textAlign: 'right' },
+  bannerSub: { fontSize: 12, color: '#bf360c', marginTop: 4, textAlign: 'right', flex: 1, lineHeight: 18 },
+  bannerLink: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    backgroundColor: '#ef6c00',
+    borderRadius: 6,
+  },
+  bannerLinkText: { color: '#fff', fontSize: 11, fontWeight: '700' },
+
+  approvalRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: 12,
+    marginTop: 12,
+  },
+  approveBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#2e7d32',
+    paddingVertical: 12,
+    borderRadius: 10,
+  },
+  approveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  unapproveBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#c62828',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  unapproveBtnText: { color: '#c62828', fontSize: 13, fontWeight: '700' },
 });

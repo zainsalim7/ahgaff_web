@@ -2,6 +2,30 @@
 
 ## ما تم إنجازه - جلسة 28 أبريل 2026
 
+### Phase 1.5 - نظام اعتماد الخطة الدراسية (مكتمل Backend + Frontend)
+- [x] Backend — حقول جديدة في `study_plans`:
+  - `approved`, `approved_by`, `approved_date`
+  - `pending_weeks`, `pending_submitted_by`, `pending_submitted_at`, `pending_mode`
+  - على كل topic: `confirmed`, `confirmed_date`, `was_taught`, `confirmed_by`
+- [x] Backend — Endpoints جديدة:
+  - `POST /api/courses/{id}/study-plan/approve` (admin) — يعتمد ويستبدل بالـ pending إن وُجد
+  - `POST /api/courses/{id}/study-plan/unapprove` (admin)
+  - `POST /api/courses/{id}/study-plan/reject-pending` (admin)
+  - `POST /api/courses/{id}/study-plan/confirm-topics` (teacher) — تأكيد قائمة `[{topic_id, was_taught}]`
+- [x] Backend — منطق PUT/Upload للمعلم بعد الاعتماد: يُحفظ في `pending_weeks` (لا يستبدل)
+- [x] Frontend `manage-study-plan.tsx`:
+  - شارة "الخطة معتمدة" خضراء
+  - بانر "تعديلات بانتظار المراجعة" (للأدمن) مع زر "عرض التفاصيل"
+  - بانر "بانتظار اعتماد الأدمن" (للمعلم بعد تقديم تعديلات)
+  - بانر "الخطة معتمدة" (للمعلم - توضيح القفل)
+  - أزرار: "اعتماد الخطة" / "اعتماد التعديلات الجديدة" / "إلغاء الاعتماد" (للأدمن)
+  - Modal مراجعة الـ pending (عرض الأسابيع/المواضيع المقترحة + اعتماد/رفض)
+  - **قفل تلقائي للمواضيع الموجودة** للمعلم بعد الاعتماد (read-only + lock icon بدل trash)
+- [x] اختبار E2E عبر curl لـ7 سيناريوهات:
+  ✓ approve مباشر | ✓ teacher PUT بعد الاعتماد → pending | ✓ approve مع pending → استبدال
+  ✓ teacher upload Excel بعد الاعتماد → pending | ✓ reject-pending | ✓ unapprove | ✓ confirm-topics
+- [x] TypeScript: 0 أخطاء
+
 ### Phase 1 - استيراد ونسخ الخطة الدراسية (مكتمل Backend + Frontend)
 - [x] Backend (موجود مسبقاً من جلسة سابقة):
   - `GET /api/template/study-plan` — تحميل قالب Excel (متاح للأدمن والمعلم)
