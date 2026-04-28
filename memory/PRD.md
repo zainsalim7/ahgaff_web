@@ -2,6 +2,19 @@
 
 ## ما تم إنجازه - جلسة 28 أبريل 2026
 
+### Phase 1 - تقسيم server.py (مرحلة 1 - مكتملة)
+- [x] إنشاء `/app/backend/backend/routes/study_plans.py` (594 سطر)
+- [x] نقل 10 endpoints للخطة الدراسية من server.py:
+  - GET/PUT `/courses/{id}/study-plan`
+  - GET `/template/study-plan`
+  - POST `/courses/{id}/study-plan/upload`
+  - POST `/courses/{id}/study-plan/clone-from`
+  - POST `/courses/{id}/study-plan/approve` / `unapprove` / `reject-pending` / `confirm-topics`
+- [x] تسجيل الـ router في server.py
+- [x] حذف 543 سطر من server.py: **12895 → 12589 سطر**
+- [x] اختبار regression بعد التقسيم: 7 سيناريوهات نجحت 100% (template, GET, approve, teacher PUT pending, reject, confirm-topics, unapprove)
+- [x] إصلاح bug إضافي: `$ne` مكرر استبدل بـ `$nin` (كان bug أصلي في server.py)
+
 ### Phase 1.5 - نظام اعتماد الخطة الدراسية (مكتمل Backend + Frontend)
 - [x] Backend — حقول جديدة في `study_plans`:
   - `approved`, `approved_by`, `approved_date`
