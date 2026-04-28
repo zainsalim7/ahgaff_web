@@ -5212,29 +5212,83 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
 
 @api_router.get("/admin/backfill-sections/preview")
 async def preview_backfill_sections(current_user: dict = Depends(get_current_user)):
-    """فحص المقررات التي اسمها يحتوي شعبة بين قوسين لكن حقل section فارغ"""
+    """فحص المقررات التي اسمها يحتوي شعبة بين قوسين لكن حقل section فارغ.
+    + يكتشف المقررات بدون شعبة في القاعدة لكن لها أخوات بنفس الاسم/المستوى/القسم بشُعب أ ب ج → يقترح الحرف التالي."""
     if current_user.get("role") != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="للمدير فقط")
     import re
     pattern = re.compile(r"\(([^)]+)\)\s*$")
+    SECTION_LETTERS = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"]
+
     candidates = []
     total_courses = 0
-    async for c in db.courses.find({}):
-        total_courses += 1
+    # اجمع أولاً كل المقررات لتحليل الأخوة
+    all_courses = await db.courses.find({}).to_list(5000)
+    total_courses = len(all_courses)
+
+    # خريطة: (department_id, level, base_name) -> {existing_sections: set, courses_no_section: list}
+    siblings_map: dict = {}
+
+    def base_name_of(name: str) -> str:
+        # أزل اللواحق "(...)" من الاسم
+        return pattern.sub("", name).strip()
+
+    for c in all_courses:
         name = c.get("name", "")
-        current_section = c.get("section", "") or ""
-        if current_section.strip():
+        section_val = (c.get("section") or "").strip()
+        key = (
+            str(c.get("department_id", "")),
+            int(c.get("level", 1) or 1),
+            base_name_of(name),
+        )
+        if key not in siblings_map:
+            siblings_map[key] = {"existing_sections": set(), "courses_no_section": []}
+        if section_val:
+            siblings_map[key]["existing_sections"].add(section_val)
+        else:
+            siblings_map[key]["courses_no_section"].append(c)
+
+    # الآن نمر على المقررات بدون شعبة ونقترح
+    for c in all_courses:
+        section_val = (c.get("section") or "").strip()
+        if section_val:
             continue
+        name = c.get("name", "")
+        # طريقة 1: استخراج من قوسين في الاسم
         m = pattern.search(name)
+        suggested = None
+        reason = None
         if m:
             extracted = m.group(1).strip()
-            # تجاهل المحتوى الطويل أو الذي ليس حرفاً عربياً/إنجليزياً قصيراً
             if 1 <= len(extracted) <= 10:
-                candidates.append({
-                    "course_id": str(c["_id"]),
-                    "current_name": name,
-                    "extracted_section": extracted,
-                })
+                suggested = extracted
+                reason = "من قوسين الاسم"
+
+        # طريقة 2: اقتراح من الأخوة (نفس الاسم بدون قوسين/المستوى/القسم)
+        if not suggested:
+            key = (
+                str(c.get("department_id", "")),
+                int(c.get("level", 1) or 1),
+                base_name_of(name),
+            )
+            sibs = siblings_map.get(key, {})
+            existing = sibs.get("existing_sections", set())
+            if existing:
+                # اقترح أول حرف غير مستخدم
+                for letter in SECTION_LETTERS:
+                    if letter not in existing:
+                        suggested = letter
+                        reason = f"المقررات الأخرى لها شُعب: {', '.join(sorted(existing))}"
+                        break
+
+        if suggested:
+            candidates.append({
+                "course_id": str(c["_id"]),
+                "current_name": name,
+                "extracted_section": suggested,
+                "reason": reason,
+            })
+
     return {
         "total_courses": total_courses,
         "candidates_count": len(candidates),
@@ -5245,33 +5299,71 @@ async def preview_backfill_sections(current_user: dict = Depends(get_current_use
 
 @api_router.post("/admin/backfill-sections")
 async def backfill_sections(current_user: dict = Depends(get_current_user)):
-    """استخراج الشعبة من اسم المقرر (إذا كانت بين قوسين) وحفظها في حقل section"""
+    """تعبئة الشعبة من اسم المقرر أو من أخوته.
+    - الأولوية للقوسين في الاسم
+    - وإلا: اقتراح الحرف الناقص بناءً على أخوة المقرر"""
     if current_user.get("role") != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="للمدير فقط")
     import re
     pattern = re.compile(r"\(([^)]+)\)\s*$")
+    SECTION_LETTERS = ["أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي"]
+
+    all_courses = await db.courses.find({}).to_list(5000)
+    siblings_map: dict = {}
+
+    def base_name_of(name: str) -> str:
+        return pattern.sub("", name).strip()
+
+    for c in all_courses:
+        section_val = (c.get("section") or "").strip()
+        key = (
+            str(c.get("department_id", "")),
+            int(c.get("level", 1) or 1),
+            base_name_of(c.get("name", "")),
+        )
+        if key not in siblings_map:
+            siblings_map[key] = set()
+        if section_val:
+            siblings_map[key].add(section_val)
+
     updated = 0
-    async for c in db.courses.find({}):
-        name = c.get("name", "")
-        current_section = c.get("section", "") or ""
-        if current_section.strip():
+    for c in all_courses:
+        if (c.get("section") or "").strip():
             continue
+        name = c.get("name", "")
+        suggested = None
         m = pattern.search(name)
         if m:
             extracted = m.group(1).strip()
             if 1 <= len(extracted) <= 10:
-                await db.courses.update_one(
-                    {"_id": c["_id"]},
-                    {"$set": {"section": extracted}}
-                )
-                updated += 1
+                suggested = extracted
+        if not suggested:
+            key = (
+                str(c.get("department_id", "")),
+                int(c.get("level", 1) or 1),
+                base_name_of(name),
+            )
+            existing = siblings_map.get(key, set())
+            if existing:
+                for letter in SECTION_LETTERS:
+                    if letter not in existing:
+                        suggested = letter
+                        # احجز الحرف لتجنب تكراره في مقررات أخوة بنفس الـkey
+                        existing.add(letter)
+                        break
+        if suggested:
+            await db.courses.update_one(
+                {"_id": c["_id"]},
+                {"$set": {"section": suggested}}
+            )
+            updated += 1
 
     await log_activity(
         user=current_user,
         action="backfill_sections",
         entity_type="course",
         entity_id=None,
-        entity_name="Backfill sections from name",
+        entity_name="Backfill sections (smart)",
         details={"updated": updated},
     )
     return {

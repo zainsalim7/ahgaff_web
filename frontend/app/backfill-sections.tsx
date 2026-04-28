@@ -119,7 +119,10 @@ export default function BackfillSectionsScreen() {
                   {preview.candidates.map((c: any) => (
                     <View key={c.course_id} style={styles.row}>
                       <Text style={styles.rowName}>{c.current_name}</Text>
-                      <Text style={styles.rowSection}>← الشعبة: <Text style={{ fontWeight: '700', color: '#1565c0' }}>{c.extracted_section}</Text></Text>
+                      <Text style={styles.rowSection}>
+                        ← الشعبة: <Text style={{ fontWeight: '700', color: '#1565c0' }}>{c.extracted_section}</Text>
+                        {c.reason ? <Text style={{ fontSize: 10, color: '#888' }}>  ({c.reason})</Text> : null}
+                      </Text>
                     </View>
                   ))}
                   {preview.truncated && (
