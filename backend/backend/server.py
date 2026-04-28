@@ -4935,6 +4935,218 @@ async def update_study_plan(
     
     return {"message": "تم حفظ الخطة الدراسية", "weeks": weeks}
 
+
+@api_router.get("/template/study-plan")
+async def get_study_plan_template(current_user: dict = Depends(get_current_user)):
+    """تحميل نموذج Excel للخطة الدراسية"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    df = pd.DataFrame({
+        "رقم الأسبوع": [1, 1, 2, 2, 3],
+        "عنوان الموضوع": [
+            "مقدمة في المقرر",
+            "المفاهيم الأساسية",
+            "الوحدة الأولى - الجزء 1",
+            "الوحدة الأولى - الجزء 2",
+            "الوحدة الثانية - مقدمة",
+        ],
+        "ملاحظات": ["", "", "", "", ""],
+    })
+    output = BytesIO()
+    df.to_excel(output, index=False, engine="openpyxl")
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=study_plan_template.xlsx"},
+    )
+
+
+@api_router.post("/courses/{course_id}/study-plan/upload")
+async def upload_study_plan_excel(
+    course_id: str,
+    file: UploadFile = File(...),
+    replace: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """رفع الخطة الدراسية من ملف Excel/CSV
+    - replace=true: استبدال الخطة الكاملة
+    - replace=false: دمج (إضافة المواضيع للأسابيع الموجودة)
+    أعمدة مطلوبة: 'رقم الأسبوع', 'عنوان الموضوع'
+    """
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    try:
+        ObjectId(course_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    contents = await file.read()
+    fname = (file.filename or "").lower()
+    try:
+        if fname.endswith(".csv"):
+            df = pd.read_csv(BytesIO(contents))
+        else:
+            df = pd.read_excel(BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
+
+    week_col = None
+    title_col = None
+    notes_col = None
+    for c in df.columns:
+        cl = str(c).strip()
+        if cl in ("رقم الأسبوع", "الأسبوع", "week", "week_number"):
+            week_col = c
+        elif cl in ("عنوان الموضوع", "الموضوع", "topic", "title"):
+            title_col = c
+        elif cl in ("ملاحظات", "ملاحظة", "notes"):
+            notes_col = c
+    if week_col is None or title_col is None:
+        raise HTTPException(status_code=400, detail="الأعمدة المطلوبة: 'رقم الأسبوع' و 'عنوان الموضوع'")
+
+    # جمع المواضيع حسب الأسبوع
+    weeks_data: dict = {}
+    for _, row in df.iterrows():
+        wk = row.get(week_col)
+        title = row.get(title_col)
+        if pd.isna(wk) or pd.isna(title):
+            continue
+        try:
+            wk_num = int(float(wk))
+        except Exception:
+            continue
+        title_str = str(title).strip()
+        if not title_str:
+            continue
+        notes = ""
+        if notes_col is not None and not pd.isna(row.get(notes_col)):
+            notes = str(row.get(notes_col)).strip()
+        if wk_num not in weeks_data:
+            weeks_data[wk_num] = []
+        weeks_data[wk_num].append({"title": title_str, "notes": notes})
+
+    if not weeks_data:
+        raise HTTPException(status_code=400, detail="الملف لا يحتوي على بيانات صالحة")
+
+    # بناء الخطة
+    import uuid
+    new_weeks = []
+    if replace:
+        # استبدال كامل
+        for wk_num in sorted(weeks_data.keys()):
+            new_weeks.append({
+                "week_number": wk_num,
+                "topics": [
+                    {"id": str(uuid.uuid4())[:8], "title": t["title"], "notes": t["notes"]}
+                    for t in weeks_data[wk_num]
+                ],
+            })
+    else:
+        # دمج مع الموجود
+        existing = await db.study_plans.find_one({"course_id": course_id})
+        existing_weeks = (existing or {}).get("weeks", [])
+        weeks_map = {w["week_number"]: w for w in existing_weeks}
+        for wk_num, topics in weeks_data.items():
+            if wk_num not in weeks_map:
+                weeks_map[wk_num] = {"week_number": wk_num, "topics": []}
+            for t in topics:
+                weeks_map[wk_num]["topics"].append({
+                    "id": str(uuid.uuid4())[:8],
+                    "title": t["title"],
+                    "notes": t["notes"],
+                })
+        new_weeks = sorted(weeks_map.values(), key=lambda x: x["week_number"])
+
+    plan_data = {
+        "course_id": course_id,
+        "weeks": new_weeks,
+        "updated_at": get_yemen_time().isoformat(),
+        "updated_by": current_user["id"],
+    }
+    await db.study_plans.update_one(
+        {"course_id": course_id}, {"$set": plan_data}, upsert=True
+    )
+
+    total_topics = sum(len(w["topics"]) for w in new_weeks)
+    return {
+        "message": f"تم رفع الخطة بنجاح: {len(new_weeks)} أسبوع و {total_topics} موضوع",
+        "weeks_count": len(new_weeks),
+        "total_topics": total_topics,
+        "mode": "replace" if replace else "merge",
+    }
+
+
+@api_router.post("/courses/{course_id}/study-plan/clone-from")
+async def clone_study_plan(
+    course_id: str,
+    payload: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """نسخ الخطة الدراسية من مقرر مصدر إلى مقرر هدف.
+    Body: {source_course_id: str, replace: bool}
+    """
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    source_id = payload.get("source_course_id")
+    replace = bool(payload.get("replace", False))
+    if not source_id:
+        raise HTTPException(status_code=400, detail="مطلوب source_course_id")
+    if source_id == course_id:
+        raise HTTPException(status_code=400, detail="المقرر المصدر والهدف متطابقان")
+
+    source = await db.study_plans.find_one({"course_id": source_id}, {"_id": 0})
+    if not source or not source.get("weeks"):
+        raise HTTPException(status_code=404, detail="المقرر المصدر لا يحتوي خطة دراسية")
+
+    import uuid
+    # توليد IDs جديدة لكل موضوع لتفادي التعارض في الربط
+    new_weeks = []
+    for w in source.get("weeks", []):
+        new_weeks.append({
+            "week_number": w.get("week_number"),
+            "topics": [
+                {
+                    "id": str(uuid.uuid4())[:8],
+                    "title": t.get("title", ""),
+                    "notes": t.get("notes", ""),
+                }
+                for t in w.get("topics", [])
+            ],
+        })
+
+    if not replace:
+        existing = await db.study_plans.find_one({"course_id": course_id})
+        if existing and existing.get("weeks"):
+            # دمج
+            weeks_map = {w["week_number"]: w for w in existing["weeks"]}
+            for w in new_weeks:
+                if w["week_number"] not in weeks_map:
+                    weeks_map[w["week_number"]] = w
+                else:
+                    weeks_map[w["week_number"]]["topics"].extend(w["topics"])
+            new_weeks = sorted(weeks_map.values(), key=lambda x: x["week_number"])
+
+    plan_data = {
+        "course_id": course_id,
+        "weeks": new_weeks,
+        "updated_at": get_yemen_time().isoformat(),
+        "updated_by": current_user["id"],
+        "cloned_from": source_id,
+    }
+    await db.study_plans.update_one(
+        {"course_id": course_id}, {"$set": plan_data}, upsert=True
+    )
+    total_topics = sum(len(w["topics"]) for w in new_weeks)
+    return {
+        "message": f"تم النسخ: {len(new_weeks)} أسبوع و {total_topics} موضوع",
+        "weeks_count": len(new_weeks),
+        "total_topics": total_topics,
+    }
+
 @api_router.get("/reports/lesson-completion")
 async def get_lesson_completion_report(
     department_id: Optional[str] = None,
