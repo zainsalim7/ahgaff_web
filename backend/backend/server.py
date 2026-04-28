@@ -4842,7 +4842,15 @@ async def get_study_plan(course_id: str, current_user: dict = Depends(get_curren
     """جلب الخطة الدراسية لمقرر مع حالة إكمال المواضيع"""
     plan = await db.study_plans.find_one({"course_id": course_id}, {"_id": 0})
     if not plan:
-        return {"course_id": course_id, "weeks": [], "total_topics": 0, "completed_topics": 0, "completion_percent": 0}
+        return {
+            "course_id": course_id,
+            "weeks": [],
+            "total_topics": 0,
+            "completed_topics": 0,
+            "completion_percent": 0,
+            "approved": False,
+            "has_pending": False,
+        }
     
     # جلب المحاضرات المكتملة التي لها plan_topic_id
     completed_lectures = await db.lectures.find({
@@ -4886,7 +4894,11 @@ async def get_study_plan(course_id: str, current_user: dict = Depends(get_curren
     plan["total_topics"] = total_topics
     plan["completed_topics"] = completed_count
     plan["completion_percent"] = round((completed_count / total_topics) * 100) if total_topics > 0 else 0
-    
+
+    # حقول الاعتماد و pending
+    plan["approved"] = bool(plan.get("approved", False))
+    plan["has_pending"] = bool(plan.get("pending_weeks"))
+
     return plan
 
 @api_router.put("/courses/{course_id}/study-plan")
@@ -4920,19 +4932,47 @@ async def update_study_plan(
             if not topic.get("id"):
                 topic["id"] = str(uuid.uuid4())[:8]
     
+    # جلب الخطة الحالية للحفاظ على حقول الاعتماد
+    existing_plan = await db.study_plans.find_one({"course_id": course_id}) or {}
+    is_approved = bool(existing_plan.get("approved", False))
+    is_teacher = current_user["role"] == UserRole.TEACHER
+    now_iso = get_yemen_time().isoformat()
+
+    # إذا الخطة معتمدة والمستخدم معلم → حفظ في pending_weeks بدلاً من الاستبدال
+    if is_approved and is_teacher:
+        await db.study_plans.update_one(
+            {"course_id": course_id},
+            {"$set": {
+                "pending_weeks": weeks,
+                "pending_submitted_by": current_user["id"],
+                "pending_submitted_at": now_iso,
+                "pending_mode": "edit",
+            }},
+            upsert=True,
+        )
+        return {
+            "message": "تم حفظ تعديلاتك بانتظار اعتماد الأدمن",
+            "weeks": weeks,
+            "pending": True,
+        }
+
     plan_data = {
         "course_id": course_id,
         "weeks": weeks,
-        "updated_at": get_yemen_time().isoformat(),
-        "updated_by": current_user["id"]
+        "updated_at": now_iso,
+        "updated_by": current_user["id"],
     }
-    
+
+    # عند تعديل الأدمن للخطة المعتمدة، لا نلغي الاعتماد تلقائياً
+    # لكن أي pending سابق يُمسح
+    update_doc = {"$set": plan_data, "$unset": {"pending_weeks": "", "pending_submitted_by": "", "pending_submitted_at": "", "pending_mode": ""}}
+
     await db.study_plans.update_one(
         {"course_id": course_id},
-        {"$set": plan_data},
-        upsert=True
+        update_doc,
+        upsert=True,
     )
-    
+
     return {"message": "تم حفظ الخطة الدراسية", "weeks": weeks}
 
 
@@ -5084,8 +5124,37 @@ async def upload_study_plan_excel(
         "updated_at": get_yemen_time().isoformat(),
         "updated_by": current_user["id"],
     }
+
+    # التحقق من حالة الاعتماد
+    existing_plan_doc = await db.study_plans.find_one({"course_id": course_id}) or {}
+    is_approved = bool(existing_plan_doc.get("approved", False))
+    is_teacher = current_user["role"] == UserRole.TEACHER
+
+    # المعلم لا يستطيع استبدال خطة معتمدة → يُحفظ الرفع كـ pending
+    if is_approved and is_teacher:
+        await db.study_plans.update_one(
+            {"course_id": course_id},
+            {"$set": {
+                "pending_weeks": new_weeks,
+                "pending_submitted_by": current_user["id"],
+                "pending_submitted_at": get_yemen_time().isoformat(),
+                "pending_mode": "replace" if replace else "merge",
+            }},
+            upsert=True,
+        )
+        total_topics = sum(len(w["topics"]) for w in new_weeks)
+        return {
+            "message": f"تم رفع الخطة بانتظار اعتماد الأدمن: {len(new_weeks)} أسبوع و {total_topics} موضوع",
+            "weeks_count": len(new_weeks),
+            "total_topics": total_topics,
+            "mode": "replace" if replace else "merge",
+            "pending": True,
+        }
+
     await db.study_plans.update_one(
-        {"course_id": course_id}, {"$set": plan_data}, upsert=True
+        {"course_id": course_id},
+        {"$set": plan_data, "$unset": {"pending_weeks": "", "pending_submitted_by": "", "pending_submitted_at": "", "pending_mode": ""}},
+        upsert=True,
     )
 
     total_topics = sum(len(w["topics"]) for w in new_weeks)
@@ -5163,6 +5232,155 @@ async def clone_study_plan(
         "weeks_count": len(new_weeks),
         "total_topics": total_topics,
     }
+
+
+@api_router.post("/courses/{course_id}/study-plan/approve")
+async def approve_study_plan(course_id: str, current_user: dict = Depends(get_current_user)):
+    """اعتماد الخطة الدراسية (أدمن فقط).
+    إذا كان هناك pending_weeks، يحل محل الخطة الحالية ثم يُعتمد.
+    """
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    try:
+        ObjectId(course_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
+
+    plan = await db.study_plans.find_one({"course_id": course_id})
+    if not plan:
+        raise HTTPException(status_code=404, detail="لا توجد خطة دراسية لهذا المقرر")
+
+    now_iso = get_yemen_time().isoformat()
+    update_set = {
+        "approved": True,
+        "approved_by": current_user["id"],
+        "approved_date": now_iso,
+    }
+    update_unset = {}
+
+    pending = plan.get("pending_weeks")
+    if pending:
+        update_set["weeks"] = pending
+        update_set["updated_at"] = now_iso
+        update_set["updated_by"] = current_user["id"]
+        update_unset = {
+            "pending_weeks": "",
+            "pending_submitted_by": "",
+            "pending_submitted_at": "",
+            "pending_mode": "",
+        }
+
+    update_doc = {"$set": update_set}
+    if update_unset:
+        update_doc["$unset"] = update_unset
+
+    await db.study_plans.update_one({"course_id": course_id}, update_doc)
+    return {
+        "message": "تم اعتماد الخطة الدراسية" + (" واستبدالها بالنسخة الجديدة" if pending else ""),
+        "approved": True,
+        "applied_pending": bool(pending),
+    }
+
+
+@api_router.post("/courses/{course_id}/study-plan/unapprove")
+async def unapprove_study_plan(course_id: str, current_user: dict = Depends(get_current_user)):
+    """إلغاء اعتماد الخطة (أدمن فقط)"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    plan = await db.study_plans.find_one({"course_id": course_id})
+    if not plan:
+        raise HTTPException(status_code=404, detail="لا توجد خطة دراسية لهذا المقرر")
+    await db.study_plans.update_one(
+        {"course_id": course_id},
+        {"$set": {"approved": False}, "$unset": {"approved_by": "", "approved_date": ""}},
+    )
+    return {"message": "تم إلغاء اعتماد الخطة", "approved": False}
+
+
+@api_router.post("/courses/{course_id}/study-plan/reject-pending")
+async def reject_pending_study_plan(course_id: str, current_user: dict = Depends(get_current_user)):
+    """رفض الخطة المعلّقة (pending) من المعلم (أدمن فقط)"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    plan = await db.study_plans.find_one({"course_id": course_id})
+    if not plan or not plan.get("pending_weeks"):
+        raise HTTPException(status_code=404, detail="لا توجد خطة معلّقة")
+    await db.study_plans.update_one(
+        {"course_id": course_id},
+        {"$unset": {
+            "pending_weeks": "",
+            "pending_submitted_by": "",
+            "pending_submitted_at": "",
+            "pending_mode": "",
+        }},
+    )
+    return {"message": "تم رفض الخطة المعلّقة"}
+
+
+@api_router.post("/courses/{course_id}/study-plan/confirm-topics")
+async def confirm_study_plan_topics(
+    course_id: str,
+    payload: dict,
+    current_user: dict = Depends(get_current_user),
+):
+    """تأكيد مواضيع ماضية يدوياً من قبل المعلم.
+    Body: { confirmations: [ { topic_id: str, was_taught: bool } ] }
+    """
+    if current_user["role"] != UserRole.ADMIN and current_user["role"] != UserRole.TEACHER and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    try:
+        ObjectId(course_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
+
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # المعلم يؤكد مواضيع مقرراته فقط
+    if current_user["role"] == UserRole.TEACHER:
+        teacher_user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        teacher_record_id = (
+            teacher_user.get("teacher_record_id", current_user["id"]) if teacher_user else current_user["id"]
+        )
+        if course.get("teacher_id") != teacher_record_id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتأكيد مواضيع هذا المقرر")
+
+    confirmations = payload.get("confirmations") or []
+    if not isinstance(confirmations, list) or not confirmations:
+        raise HTTPException(status_code=400, detail="يجب إرسال قائمة confirmations غير فارغة")
+
+    plan = await db.study_plans.find_one({"course_id": course_id})
+    if not plan:
+        raise HTTPException(status_code=404, detail="لا توجد خطة دراسية لهذا المقرر")
+
+    today_iso = get_yemen_time().isoformat()
+    confirmations_map = {c.get("topic_id"): bool(c.get("was_taught", True)) for c in confirmations if c.get("topic_id")}
+
+    weeks = plan.get("weeks", [])
+    confirmed_count = 0
+    for week in weeks:
+        for topic in week.get("topics", []):
+            tid = topic.get("id")
+            if tid and tid in confirmations_map:
+                topic["confirmed"] = True
+                topic["confirmed_date"] = today_iso
+                topic["was_taught"] = confirmations_map[tid]
+                topic["confirmed_by"] = current_user["id"]
+                confirmed_count += 1
+
+    await db.study_plans.update_one(
+        {"course_id": course_id},
+        {"$set": {"weeks": weeks, "updated_at": today_iso}},
+    )
+
+    return {
+        "message": f"تم تأكيد {confirmed_count} موضوع",
+        "confirmed_count": confirmed_count,
+        "submitted_count": len(confirmations_map),
+    }
+
+
 
 @api_router.get("/reports/lesson-completion")
 async def get_lesson_completion_report(
