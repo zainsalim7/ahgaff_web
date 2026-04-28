@@ -130,13 +130,35 @@ export default function AddLectureModal({
       return;
     }
 
+    // التحقق من أن التاريخ ليس في الماضي
+    try {
+      const picked = new Date(formData.date + 'T00:00:00');
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      if (picked.getTime() < today.getTime()) {
+        showAlert(
+          'تاريخ غير صالح',
+          'لا يمكن إنشاء محاضرة بتاريخ ماضٍ.\nاختر تاريخ اليوم أو تاريخاً مستقبلياً.'
+        );
+        return;
+      }
+    } catch (_) {
+      // ignore date parsing errors and let the backend handle them
+    }
+
     setSaving(true);
     try {
       await onSave(formData);
       onClose();
     } catch (error: any) {
       console.error('Error saving lecture:', error);
-      // رسالة الخطأ تُعرض من المكون الأب (course-lectures)
+      const detail = error?.response?.data?.detail || '';
+      const status = error?.response?.status;
+      // رسالة خطأ واضحة عند رفض التاريخ من الخادم (احتياطي)
+      if (status === 400 && typeof detail === 'string' && detail.includes('ماضي')) {
+        showAlert('تاريخ غير صالح', detail);
+      }
+      // باقي رسائل الخطأ تُعرض من المكون الأب (course-lectures)
     } finally {
       setSaving(false);
     }
