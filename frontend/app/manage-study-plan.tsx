@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import api, { coursesAPI } from '../src/services/api';
+import { useAuthStore } from '../src/store/authStore';
 
 interface Topic {
   id?: string;
@@ -58,6 +59,8 @@ const askConfirm = async (title: string, msg: string): Promise<boolean> => {
 export default function ManageStudyPlanScreen() {
   const router = useRouter();
   const { courseId, courseName } = useLocalSearchParams<{ courseId: string; courseName?: string }>();
+  const currentUser = useAuthStore((s) => s.user);
+  const isTeacher = currentUser?.role === 'teacher';
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -348,14 +351,16 @@ export default function ManageStudyPlanScreen() {
               <Ionicons name="cloud-upload" size={16} color="#fff" />
               <Text style={styles.toolBtnText}>استيراد Excel</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.toolBtn, { backgroundColor: '#7b1fa2' }]}
-              onPress={openCloneModal}
-              testID="clone-study-plan-btn"
-            >
-              <Ionicons name="copy" size={16} color="#fff" />
-              <Text style={styles.toolBtnText}>نسخ من مقرر</Text>
-            </TouchableOpacity>
+            {!isTeacher && (
+              <TouchableOpacity
+                style={[styles.toolBtn, { backgroundColor: '#7b1fa2' }]}
+                onPress={openCloneModal}
+                testID="clone-study-plan-btn"
+              >
+                <Ionicons name="copy" size={16} color="#fff" />
+                <Text style={styles.toolBtnText}>نسخ من مقرر</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               style={[styles.toolBtn, { backgroundColor: '#ef6c00' }]}
               onPress={addWeek}

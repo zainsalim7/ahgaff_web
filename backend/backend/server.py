@@ -4939,7 +4939,11 @@ async def update_study_plan(
 @api_router.get("/template/study-plan")
 async def get_study_plan_template(current_user: dict = Depends(get_current_user)):
     """تحميل نموذج Excel للخطة الدراسية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if (
+        current_user["role"] != UserRole.ADMIN
+        and current_user["role"] != UserRole.TEACHER
+        and not has_permission(current_user, "manage_courses")
+    ):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     df = pd.DataFrame({
         "رقم الأسبوع": [1, 1, 2, 2, 3],
@@ -4974,7 +4978,11 @@ async def upload_study_plan_excel(
     - replace=false: دمج (إضافة المواضيع للأسابيع الموجودة)
     أعمدة مطلوبة: 'رقم الأسبوع', 'عنوان الموضوع'
     """
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if (
+        current_user["role"] != UserRole.ADMIN
+        and current_user["role"] != UserRole.TEACHER
+        and not has_permission(current_user, "manage_courses")
+    ):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     try:
         ObjectId(course_id)
@@ -4983,6 +4991,15 @@ async def upload_study_plan_excel(
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # المعلم لا يرفع إلا على مقرراته
+    if current_user["role"] == UserRole.TEACHER:
+        teacher_user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        teacher_record_id = (
+            teacher_user.get("teacher_record_id", current_user["id"]) if teacher_user else current_user["id"]
+        )
+        if course.get("teacher_id") != teacher_record_id:
+            raise HTTPException(status_code=403, detail="غير مصرح لك برفع خطة هذا المقرر")
 
     contents = await file.read()
     fname = (file.filename or "").lower()

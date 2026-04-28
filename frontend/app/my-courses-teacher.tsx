@@ -233,6 +233,18 @@ export default function TeacherCoursesScreen() {
           <Ionicons name="people" size={18} color="#ff9800" />
           <Text style={[styles.actionText, { color: '#ff9800' }]}>الطلاب</Text>
         </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.actionBtn, styles.studyPlanBtn]}
+          onPress={() => router.push({
+            pathname: '/manage-study-plan',
+            params: { courseId: item.id, courseName: item.name }
+          })}
+          testID={`teacher-study-plan-btn-${item.id}`}
+        >
+          <Ionicons name="book" size={18} color="#2e7d32" />
+          <Text style={[styles.actionText, { color: '#2e7d32' }]}>الخطة الدراسية</Text>
+        </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
@@ -589,6 +601,9 @@ const styles = StyleSheet.create({
   },
   studentsBtn: {
     backgroundColor: '#fff3e0',
+  },
+  studyPlanBtn: {
+    backgroundColor: '#e8f5e9',
   },
   actionText: {
     fontSize: 12,

@@ -4,18 +4,21 @@
 
 ### Phase 1 - استيراد ونسخ الخطة الدراسية (مكتمل Backend + Frontend)
 - [x] Backend (موجود مسبقاً من جلسة سابقة):
-  - `GET /api/template/study-plan` — تحميل قالب Excel
-  - `POST /api/courses/{course_id}/study-plan/upload?replace=bool` — رفع/استيراد Excel
-  - `POST /api/courses/{course_id}/study-plan/clone-from` — نسخ من مقرر مصدر
+  - `GET /api/template/study-plan` — تحميل قالب Excel (متاح للأدمن والمعلم)
+  - `POST /api/courses/{course_id}/study-plan/upload?replace=bool` — رفع/استيراد Excel (متاح للمعلم على مقرراته فقط)
+  - `POST /api/courses/{course_id}/study-plan/clone-from` — نسخ من مقرر مصدر (أدمن فقط)
 - [x] Frontend جديد: `/app/frontend/app/manage-study-plan.tsx`
   - Header مع اسم المقرر + إحصائيات (أسابيع/مواضيع/% الإنجاز)
-  - شريط أدوات: تحميل القالب + استيراد Excel + نسخ من مقرر + إضافة أسبوع
+  - شريط أدوات: تحميل القالب + استيراد Excel + نسخ من مقرر (مخفي للمعلم) + إضافة أسبوع
   - محرر يدوي للأسابيع والمواضيع (إضافة/تعديل/حذف) + زر "حفظ الخطة"
   - Modal الاستيراد: toggle استبدال/دمج + رفع ملف
   - Modal النسخ: قائمة مقررات قابلة للبحث + radio + toggle استبدال/دمج + تأكيد
-- [x] زر أخضر بأيقونة كتاب في بطاقة المقرر بـ `/(tabs)/courses.tsx` ينقل لشاشة الإدارة
-- [x] تسجيل المسار في `_layout.tsx`
+- [x] زر أخضر بأيقونة كتاب في بطاقة المقرر بـ `/(tabs)/courses.tsx` (للأدمن) ينقل لشاشة الإدارة
+- [x] زر "الخطة الدراسية" (أخضر) في بطاقة المعلم بـ `my-courses-teacher.tsx` ينقل لنفس الشاشة
+- [x] صلاحيات Backend للمعلم: تحرير + رفع Excel على مقرراته فقط (الإمكانيات تُتحقق على مستوى الـ API)
+- [x] إخفاء زر "نسخ من مقرر" تلقائياً عند تسجيل دخول المعلم
 - [x] اختبار E2E بواسطة testing agent v3 (success_rate frontend: 100% functional)
+- [x] اختبار Backend بـ curl: المعلم يرفع على مقرراته (200) ويُرفض على مقرر آخر (403)
 - [x] إصلاح: استبدال `data-testid` بـ `testID` لتوافق React Native Web
 
 ## ما تم إنجازه - جلسة 26 فبراير 2026
