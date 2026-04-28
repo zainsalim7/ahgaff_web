@@ -747,6 +747,16 @@ export default function AddCourseScreen() {
           </TouchableOpacity>
           {canEdit && (
             <TouchableOpacity
+              style={styles.studyPlanBtn}
+              onPress={() => router.push({ pathname: '/manage-study-plan', params: { courseId: item.id, courseName: item.name } })}
+              accessibilityLabel="الخطة الدراسية"
+              data-testid={`study-plan-btn-${item.id}`}
+            >
+              <Ionicons name="book" size={20} color="#2e7d32" />
+            </TouchableOpacity>
+          )}
+          {canEdit && (
+            <TouchableOpacity
               style={styles.editBtn}
               onPress={() => handleEdit(item)}
               accessibilityLabel="تعديل"
@@ -1531,6 +1541,11 @@ const styles = StyleSheet.create({
   lecturesBtn: {
     padding: 8,
     backgroundColor: '#f3e5f5',
+    borderRadius: 8,
+  },
+  studyPlanBtn: {
+    padding: 8,
+    backgroundColor: '#e8f5e9',
     borderRadius: 8,
   },
   emptyContainer: {

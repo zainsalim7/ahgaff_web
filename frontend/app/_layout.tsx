@@ -144,6 +144,7 @@ export default function RootLayout() {
           <Stack.Screen name="teaching-load-report" options={{ title: 'تقارير العبء التدريسي' }} />
           <Stack.Screen name="weekly-schedule" options={{ title: 'الجدول الأسبوعي' }} />
           <Stack.Screen name="course-students" options={{ title: 'طلاب المقرر' }} />
+          <Stack.Screen name="manage-study-plan" options={{ title: 'إدارة الخطة الدراسية' }} />
           <Stack.Screen name="notifications" options={{ title: 'الإشعارات' }} />
         </Stack>
 

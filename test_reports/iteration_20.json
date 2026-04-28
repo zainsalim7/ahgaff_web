@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only testing of Study Plan Excel Import & Cloning UI. All 7 requested flows verified END-TO-END as working: study-plan button on courses card, navigation to /manage-study-plan, header+stats, toolbar, template download (.xlsx), add-week + add-topic + save-plan with persistence after reload, import modal opens with replace toggle + upload button, clone modal opens with source course list + working search filter + radio selection + replace toggle + confirm button. Found 1 environment gotcha (Metro CI mode = no hot reload, fixed by restart) and 1 testability issue (data-testid props not in DOM).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "manage-study-plan.tsx + courses.tsx (study-plan-btn)", "issue": "All `data-testid` props on TouchableOpacity / Pressable / View / Text components are stripped by React Native Web. Only the 2 native HTML elements (<select>, <button> floating-menu-btn) actually render data-testid in DOM. Functionality works via aria-label / text selectors; automated tests cannot use the documented data-testid selectors (study-plan-btn-{id}, download-study-plan-template-btn, import-study-plan-btn, clone-study-plan-btn, add-week-btn, save-study-plan-btn, import-replace-toggle, import-study-plan-confirm-btn, clone-search-input, clone-source-{id}, clone-replace-toggle, clone-confirm-btn, week-card-{n}, add-topic-week-{n}, study-plan-course-name).", "selector": "all data-testid in manage-study-plan.tsx and the new study-plan-btn in courses.tsx", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Replace `data-testid={...}` with `testID={...}` in /app/frontend/app/manage-study-plan.tsx (14 occurrences) and the new study-plan button in /app/frontend/app/(tabs)/courses.tsx line 753. React Native Web maps testID -> data-testid automatically, but data-testid props are filtered out for RN components.",
+    "Optional: investigate why expo is launched with `CI=true` (Metro runs in CI mode, hot reload disabled). After any code change, expo must be manually restarted (sudo supervisorctl restart expo) for the change to be visible. This affected this very iteration — the new study-plan button was invisible until restart."
+  ],
+  "critical_code_review_comments": [
+    "manage-study-plan.tsx (903 lines) is borderline large; consider extracting WeekEditor, ImportModal, CloneModal into separate components.",
+    "Save plan correctly invokes PUT /api/courses/{id}/study-plan and persists data — verified by reload showing saved topic title.",
+    "Clone modal correctly excludes the current course from source list (prevents self-clone).",
+    "Search filter on clone source list works client-side instantly.",
+    "Empty-state UX is good (book icon + 'لا توجد خطة دراسية بعد' + suggestion text).",
+    "Header stats (weeks/topics/completion%) update reactively after add-week / save."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend-only request)", "frontend": "100% on functional flows, 0% on data-testid selector availability"},
+  "test_credentials": {"admin": {"username": "admin", "password": "admin123"}},
+  "seed_data_creation": "Created a study plan on course 'مقرر اختبار 180156' (id=698f671431cfba92c49a550d): 1 week with topic 'موضوع تجريبي 1'. Persisted in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Expo runs with CI=true (Metro CI mode — hot reload DISABLED). After any frontend code change you MUST run `sudo supervisorctl restart expo` and wait ~15s. Login flow: fill 2 inputs (admin/admin123), click 'تسجيل الدخول', click 'المقررات' tab, then select a department from the data-testid='filter-dept-picker' <select> (e.g. value='698e500997fef774e66e93a8' = الشريعة والقانون) — courses appear only after department selection. The new study-plan button reachable via `[aria-label=\"الخطة الدراسية\"]`. data-testid props on RN components don't render — use text or aria-label selectors. /manage-study-plan reads ?courseId=&courseName= query params, allows direct deep-link navigation. Tested: template download (study_plan_template.xlsx), add-week (auto adds 1 default empty topic), topic input placeholders 'عنوان الموضوع' & 'ملاحظات (اختياري)', save plan (alert 'تم - تم حفظ الخطة الدراسية بنجاح'), reload-persistence OK, import modal title 'استيراد الخطة من Excel' with replace checkbox + 'اختيار ملف ورفعه' file button, clone modal title 'نسخ الخطة من مقرر آخر' with search 'بحث بالاسم أو الكود...' + radio source list (excludes current course) + replace checkbox + 'تنفيذ النسخ' confirm.",
+  "rca_of_issues": "Issue: data-testid not in DOM — React Native Web (used by Expo Router) only forwards a curated list of props to the underlying HTML element (testID is one of them and gets mapped to data-testid). Plain HTML attributes like `data-testid` passed to <TouchableOpacity>/<View>/<Text> are dropped by the prop sanitiser. Fix: rename every `data-testid=` to `testID=` in /app/frontend/app/manage-study-plan.tsx and the new button in /app/frontend/app/(tabs)/courses.tsx line 753."
+}
