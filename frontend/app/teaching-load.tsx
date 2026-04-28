@@ -147,6 +147,7 @@ export default function TeachingLoadPage() {
   }, []);
 
   const [crossDept, setCrossDept] = useState(false); // عرض أساتذة ومقررات من كل الأقسام
+  const [hideAssignedToOthers, setHideAssignedToOthers] = useState(true); // إخفاء المقررات المسندة لمعلمين آخرين
 
   // Load teachers when department changes or cross-dept toggled
   useEffect(() => {
@@ -227,7 +228,16 @@ export default function TeachingLoadPage() {
         // إذا "كل الأقسام" مفعّل: ابحث في كل المقررات بدون تقييد بالقسم
         const deptParam = crossDept ? undefined : (selectedDept || undefined);
         const res = await teachingLoadAPI.searchCourses(text, deptParam);
-        const filtered = res.data.filter((c: CourseLoad) => !selectedCourses.some(s => s.course_id === c.course_id));
+        const selectedTeacherName = teachers.find(t => t.id === selectedTeacher)?.full_name;
+        const filtered = res.data.filter((c: CourseLoad) => {
+          // استبعد المقررات المختارة بالفعل (في القائمة)
+          if (selectedCourses.some(s => s.course_id === c.course_id)) return false;
+          // إذا الإخفاء مفعّل: استبعد المسندة لمعلم آخر
+          if (hideAssignedToOthers && c.current_teacher_name && c.current_teacher_name !== selectedTeacherName) {
+            return false;
+          }
+          return true;
+        });
         setSearchResults(filtered);
         setShowResults(true);
       } catch (e) {
@@ -536,6 +546,37 @@ export default function TeachingLoadPage() {
               <View style={styles.tableCard}>
                 {/* Search Box */}
                 <Text style={[styles.filterLabel, { textAlign: 'right' }]}>بحث عن مقرر لإضافته</Text>
+
+                {/* خيار إخفاء المقررات المسندة لمعلمين آخرين */}
+                <TouchableOpacity
+                  onPress={() => {
+                    setHideAssignedToOthers(v => !v);
+                    // إعادة تشغيل البحث الحالي إن وُجد
+                    if (searchQuery && searchQuery.length >= 1) handleSearch(searchQuery);
+                  }}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    borderWidth: 1,
+                    borderColor: hideAssignedToOthers ? '#1565c0' : '#e0e0e0',
+                    backgroundColor: hideAssignedToOthers ? '#e3f2fd' : '#fafafa',
+                    marginBottom: 10,
+                  }}
+                  testID="hide-assigned-to-others-toggle"
+                >
+                  <Ionicons
+                    name={hideAssignedToOthers ? 'checkbox' : 'square-outline'}
+                    size={18}
+                    color={hideAssignedToOthers ? '#1565c0' : '#666'}
+                  />
+                  <Text style={{ flex: 1, fontSize: 12, color: hideAssignedToOthers ? '#1565c0' : '#444', textAlign: 'right', fontWeight: hideAssignedToOthers ? '600' : '400' }}>
+                    إخفاء المقررات المسندة لمعلمين آخرين من نتائج البحث
+                  </Text>
+                </TouchableOpacity>
                 {Platform.OS === 'web' ? (
                   <View style={{ position: 'relative', marginBottom: 16, zIndex: 100 }}>
                     <div style={{ display: 'flex', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 10, border: '1px solid #ddd', padding: '0 12px', direction: 'rtl' }}>
