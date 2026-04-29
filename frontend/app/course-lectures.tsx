@@ -931,6 +931,19 @@ export default function CourseLecturesScreen() {
           </View>
         </View>
 
+        {/* بانر الفصل الدراسي المُفعَّل */}
+        {(serverStats?.semester_name || serverStats?.semester_start_date) && (
+          <View style={styles.semesterBanner} data-testid="lectures-semester-banner">
+            <Ionicons name="calendar" size={14} color="#1565c0" />
+            <Text style={styles.semesterBannerText}>
+              إحصائيات {serverStats.semester_name || 'الفصل الحالي'}
+              {serverStats.semester_start_date && serverStats.semester_end_date
+                ? ` (من ${serverStats.semester_start_date} إلى ${serverStats.semester_end_date})`
+                : ''}
+            </Text>
+          </View>
+        )}
+
         {/* إحصائيات سريعة */}
         <View style={{ flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: 12, borderRadius: 12, overflow: 'hidden' }} data-testid="lectures-stats-bar">
           {[
@@ -2024,6 +2037,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#bdbdbd',
   },
   // === Stats Bar ===
+  semesterBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginHorizontal: 16,
+    marginTop: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#1565c0',
+  },
+  semesterBannerText: {
+    flex: 1,
+    color: '#1565c0',
+    fontSize: 12,
+    fontWeight: '700' as const,
+    textAlign: 'right' as const,
+  },
   statsBar: {
     flexDirection: 'row' as const,
     display: 'flex' as any,

@@ -5625,6 +5625,8 @@ async def get_course_lectures(
     if active_sem:
         stats["semester_id"] = active_sem["id"]
         stats["semester_name"] = active_sem["name"]
+        stats["semester_start_date"] = active_sem.get("start_date")
+        stats["semester_end_date"] = active_sem.get("end_date")
 
     # نُحدّث total ليتوافق مع query (الذي قد يحوي فلتر حالة + فصل)
     total = await db.lectures.count_documents(query)
