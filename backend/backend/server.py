@@ -1639,6 +1639,7 @@ async def get_departments_stats(current_user: dict = Depends(get_current_user)):
             "description": dept.get("description", ""),
             "faculty_id": dept.get("faculty_id"),
             "faculty_name": faculty_name,
+            "default_program_code": dept.get("default_program_code", ""),
             "students_count": len(student_ids),
             "courses_count": len(courses)
         })
