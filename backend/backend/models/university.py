@@ -9,6 +9,7 @@ class UniversityBase(BaseModel):
     """نموذج الجامعة"""
     name: str
     code: str
+    short_code: Optional[str] = None
     description: Optional[str] = None
     logo_url: Optional[str] = None
     address: Optional[str] = None
@@ -21,6 +22,7 @@ class UniversityCreate(UniversityBase):
 
 class UniversityUpdate(BaseModel):
     name: Optional[str] = None
+    short_code: Optional[str] = None
     description: Optional[str] = None
     logo_url: Optional[str] = None
     address: Optional[str] = None
@@ -37,6 +39,7 @@ class FacultyBase(BaseModel):
     """نموذج الكلية"""
     name: str
     code: str
+    numeric_code: Optional[str] = None
     description: Optional[str] = None
     dean_id: Optional[str] = None
     levels_count: Optional[int] = 5
@@ -50,6 +53,7 @@ class FacultyCreate(FacultyBase):
 class FacultyUpdate(BaseModel):
     name: Optional[str] = None
     code: Optional[str] = None
+    numeric_code: Optional[str] = None
     description: Optional[str] = None
     dean_id: Optional[str] = None
     levels_count: Optional[int] = None

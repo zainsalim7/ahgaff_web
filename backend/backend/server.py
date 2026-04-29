@@ -9723,6 +9723,11 @@ async def import_students_from_excel(
             'الإيميل': 'email',
             # إضافة "رقم الطالب" كبديل لـ "رقم القيد"
             'رقم الطالب': 'student_id',
+            # حقول الرقم المرجعي
+            'البرنامج': 'program_code',
+            'رمز البرنامج': 'program_code',
+            'سنة الالتحاق': 'enrollment_year',
+            'العام': 'enrollment_year',
         }
         
         # إعادة تسمية الأعمدة
@@ -9775,7 +9780,46 @@ async def import_students_from_excel(
                     "is_active": True,
                     "user_id": None
                 }
-                
+
+                # برنامج الطالب: من Excel، أو من القسم، أو يُترك فارغاً
+                if 'program_code' in df.columns and pd.notna(row.get('program_code')):
+                    pc = str(row.get('program_code')).strip().upper()
+                    if pc in ("B", "M", "D", "E", "P"):
+                        student_data["program_code"] = pc
+                if not student_data.get("program_code"):
+                    try:
+                        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+                        if dept and dept.get("default_program_code"):
+                            student_data["program_code"] = dept["default_program_code"]
+                    except Exception:
+                        pass
+
+                # سنة الالتحاق: من Excel، أو محسوبة من المستوى
+                if 'enrollment_year' in df.columns and pd.notna(row.get('enrollment_year')):
+                    ey_raw = str(row.get('enrollment_year')).strip()
+                    # 2025 → 25
+                    if len(ey_raw) == 4 and ey_raw.isdigit():
+                        student_data["enrollment_year"] = ey_raw[-2:]
+                    elif len(ey_raw) == 2 and ey_raw.isdigit():
+                        student_data["enrollment_year"] = ey_raw
+                if not student_data.get("enrollment_year"):
+                    try:
+                        from routes.admin_tools import compute_enrollment_year_from_level, generate_reference_for_new_student
+                        ey = await compute_enrollment_year_from_level(db, student_level)
+                        if ey:
+                            student_data["enrollment_year"] = ey
+                    except Exception:
+                        pass
+
+                # توليد الرقم المرجعي
+                try:
+                    from routes.admin_tools import generate_reference_for_new_student
+                    ref = await generate_reference_for_new_student(db, student_data)
+                    if ref:
+                        student_data["reference_number"] = ref
+                except Exception:
+                    pass
+
                 result = await db.students.insert_one(student_data)
                 imported_ids.append(str(result.inserted_id))
                 imported += 1
@@ -10606,10 +10650,12 @@ async def get_students_template(current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.IMPORT_DATA):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
-    # الحقول المطلوبة فقط: رقم القيد واسم الطالب
+    # الحقول: رقم القيد، اسم الطالب، البرنامج (اختياري)، سنة الالتحاق (اختياري)
     data = {
         "رقم القيد": ["12345", "12346", "12347"],
         "اسم الطالب": ["محمد أحمد علي", "أحمد محمد سعيد", "خالد سالم"],
+        "البرنامج": ["B", "B", "M"],
+        "سنة الالتحاق": ["25", "25", "24"],
     }
     
     df = pd.DataFrame(data)
@@ -11828,6 +11874,7 @@ async def get_university(current_user: dict = Depends(get_current_user)):
         "id": str(university["_id"]),
         "name": university.get("name", ""),
         "code": university.get("code", ""),
+        "short_code": university.get("short_code"),
         "description": university.get("description", ""),
         "logo_url": university.get("logo_url"),
         "address": university.get("address"),
@@ -11854,6 +11901,7 @@ async def create_or_update_university(
     university_doc = {
         "name": university_data.name,
         "code": university_data.code,
+        "short_code": university_data.short_code,
         "description": university_data.description,
         "logo_url": university_data.logo_url,
         "address": university_data.address,
@@ -11998,6 +12046,7 @@ async def get_faculties(current_user: dict = Depends(get_current_user)):
             "id": str(faculty["_id"]),
             "name": faculty["name"],
             "code": faculty["code"],
+            "numeric_code": faculty.get("numeric_code"),
             "description": faculty.get("description", ""),
             "dean_id": faculty.get("dean_id"),
             "dean_name": dean_name,

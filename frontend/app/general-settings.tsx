@@ -107,6 +107,7 @@ export default function GeneralSettingsScreen() {
   const [universityForm, setUniversityForm] = useState({
     name: '',
     code: '',
+    short_code: '',
     description: '',
     address: '',
     phone: '',
@@ -116,6 +117,7 @@ export default function GeneralSettingsScreen() {
   const [facultyForm, setFacultyForm] = useState({
     name: '',
     code: '',
+    numeric_code: '',
     description: '',
   });
   
@@ -217,6 +219,7 @@ export default function GeneralSettingsScreen() {
         setUniversityForm({
           name: uniRes.data.name || '',
           code: uniRes.data.code || '',
+          short_code: uniRes.data.short_code || '',
           description: uniRes.data.description || '',
           address: uniRes.data.address || '',
           phone: uniRes.data.phone || '',
@@ -339,7 +342,7 @@ export default function GeneralSettingsScreen() {
       }
       setShowFacultyForm(false);
       setEditingFaculty(null);
-      setFacultyForm({ name: '', code: '', description: '' });
+      setFacultyForm({ name: '', code: '', numeric_code: '', description: '' });
       fetchData();
     } catch (error: any) {
       showMessage('خطأ', error.response?.data?.detail || 'حدث خطأ');
@@ -365,6 +368,7 @@ export default function GeneralSettingsScreen() {
     setFacultyForm({
       name: faculty.name,
       code: faculty.code,
+      numeric_code: (faculty as any).numeric_code || '',
       description: faculty.description || '',
     });
     setShowFacultyForm(true);
@@ -593,6 +597,22 @@ export default function GeneralSettingsScreen() {
               placeholder="مثال: AHGAFF"
             />
 
+            <Text style={styles.label}>الرمز المختصر للأرقام المرجعية</Text>
+            <TextInput
+              style={styles.input}
+              value={universityForm.short_code}
+              onChangeText={(text) =>
+                setUniversityForm({ ...universityForm, short_code: text.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 3) })
+              }
+              placeholder="مثال: AU (حرفان أو ثلاثة)"
+              autoCapitalize="characters"
+              maxLength={3}
+              testID="university-short-code-input"
+            />
+            <Text style={styles.helpText}>
+              يُستخدم في توليد الأرقام المرجعية للطلاب (مثال: AU{'B25 01001'})
+            </Text>
+
             <Text style={styles.label}>الوصف</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
@@ -722,7 +742,7 @@ export default function GeneralSettingsScreen() {
             style={styles.addBtn}
             onPress={() => {
               setEditingFaculty(null);
-              setFacultyForm({ name: '', code: '', description: '' });
+              setFacultyForm({ name: '', code: '', numeric_code: '', description: '' });
               setShowFacultyForm(true);
             }}
           >
@@ -1741,6 +1761,13 @@ const styles = StyleSheet.create({
   textArea: {
     minHeight: 80,
     textAlignVertical: 'top',
+  },
+  helpText: {
+    fontSize: 11,
+    color: '#777',
+    marginTop: -8,
+    marginBottom: 12,
+    textAlign: 'right',
   },
   // Button styles
   saveBtn: {
