@@ -116,6 +116,8 @@ export default function StudentsScreen() {
     email: '',
     level: '1',
     section: '',
+    program_code: '',
+    enrollment_year: '',
   });
 
   // إرسال إنذار يدوي
@@ -525,6 +527,8 @@ export default function StudentsScreen() {
       email: student.email || '',
       level: student.level || '1',
       section: student.section || '',
+      program_code: (student as any).program_code || '',
+      enrollment_year: (student as any).enrollment_year || '',
     });
     setShowEditModal(true);
   };
@@ -1056,6 +1060,14 @@ export default function StudentsScreen() {
                   <Text style={styles.detailLabel}>رقم الطالب:</Text>
                   <Text style={styles.detailValue}>{selectedStudent.student_id}</Text>
                 </View>
+                {(selectedStudent as any).reference_number && (
+                  <View style={[styles.detailRow, { backgroundColor: '#e8f5e9', paddingVertical: 8, paddingHorizontal: 8, borderRadius: 8, marginVertical: 4 }]}>
+                    <Text style={[styles.detailLabel, { color: '#2e7d32', fontWeight: '700' as const }]}>الرقم المرجعي:</Text>
+                    <Text style={[styles.detailValue, { color: '#2e7d32', fontWeight: '700' as const, fontSize: 14, letterSpacing: 1 }]}>
+                      {(selectedStudent as any).reference_number}
+                    </Text>
+                  </View>
+                )}
                 <View style={styles.detailRow}>
                   <Text style={styles.detailLabel}>القسم:</Text>
                   <Text style={styles.detailValue}>{getDepartmentName(selectedStudent.department_id)}</Text>
@@ -1162,6 +1174,37 @@ export default function StudentsScreen() {
                   onChangeText={(text) => setEditFormData(prev => ({ ...prev, section: text }))}
                   placeholder="الشعبة (اختياري)"
                   placeholderTextColor="#999"
+                />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>البرنامج</Text>
+                <View style={styles.pickerContainer}>
+                  <Picker
+                    selectedValue={editFormData.program_code}
+                    onValueChange={(v) => setEditFormData(prev => ({ ...prev, program_code: v }))}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="(غير محدد)" value="" />
+                    <Picker.Item label="بكالوريوس (B)" value="B" />
+                    <Picker.Item label="ماجستير (M)" value="M" />
+                    <Picker.Item label="دكتوراه (D)" value="D" />
+                    <Picker.Item label="دبلوم (P)" value="P" />
+                    <Picker.Item label="عن بُعد (E)" value="E" />
+                  </Picker>
+                </View>
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>سنة الالتحاق (مثال: 25)</Text>
+                <TextInput
+                  style={styles.input}
+                  value={editFormData.enrollment_year}
+                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, enrollment_year: text.replace(/[^0-9]/g, '').slice(0, 2) }))}
+                  placeholder="25 / 26 / 27"
+                  placeholderTextColor="#999"
+                  keyboardType="number-pad"
+                  maxLength={2}
                 />
               </View>
               
