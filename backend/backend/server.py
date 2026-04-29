@@ -5854,7 +5854,13 @@ async def create_lecture(
         "created_at": get_yemen_time(),
         "created_by": current_user["id"]
     }
-    
+
+    # ربط المحاضرة الجديدة بالفصل الدراسي المُفعَّل
+    active_sem_for_lec = await get_active_semester_with_dates(db)
+    if active_sem_for_lec:
+        lecture["semester_id"] = active_sem_for_lec["id"]
+        lecture["semester_name"] = active_sem_for_lec["name"]
+
     result = await db.lectures.insert_one(lecture)
     
     # إرسال تنبيه تلقائي للمعلم وطلاب المقرر
