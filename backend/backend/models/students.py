@@ -14,6 +14,8 @@ class StudentBase(BaseModel):
     section: str
     phone: Optional[str] = None
     email: Optional[str] = None
+    program_code: Optional[str] = None  # B/M/D/E/P
+    enrollment_year: Optional[str] = None  # 25, 26, 27...
 
 class StudentCreate(StudentBase):
     password: Optional[str] = None
@@ -24,3 +26,4 @@ class StudentResponse(StudentBase):
     qr_code: str
     created_at: datetime
     is_active: bool = True
+    reference_number: Optional[str] = None

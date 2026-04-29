@@ -2707,10 +2707,20 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     
     student_dict["user_id"] = user_id
     del student_dict["password"]
-    
+
+    # توليد الرقم المرجعي تلقائياً إن أمكن
+    try:
+        from routes.admin_tools import generate_reference_for_new_student
+        ref = await generate_reference_for_new_student(db, student_dict)
+        if ref:
+            student_dict["reference_number"] = ref
+    except Exception as _e:
+        # عدم كسر إنشاء الطالب إذا فشل توليد الرقم
+        pass
+
     result = await db.students.insert_one(student_dict)
     student_dict["id"] = str(result.inserted_id)
-    
+
     return student_dict
 
 @api_router.get("/students", response_model=List[StudentResponse])
