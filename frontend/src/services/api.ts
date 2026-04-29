@@ -442,9 +442,9 @@ export const exportAPI = {
   getStudentsTemplate: () => 
     api.get('/template/students', { responseType: 'blob' }),
   
-  exportStudents: (departmentId?: string) => 
+  exportStudents: (params?: { department_id?: string; level?: number; section?: string }) =>
     api.get('/export/students', { 
-      params: departmentId ? { department_id: departmentId } : {},
+      params: params || {},
       responseType: 'blob' 
     }),
   

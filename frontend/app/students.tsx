@@ -17,7 +17,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
-import { departmentsAPI, studentsAPI, attendanceAPI, notificationsAPI } from '../src/services/api';
+import { departmentsAPI, studentsAPI, attendanceAPI, notificationsAPI, exportAPI } from '../src/services/api';
 import api from '../src/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Department, Student } from '../src/types';
@@ -447,6 +447,43 @@ export default function StudentsScreen() {
     input.click();
   };
 
+  // تصدير الطلاب إلى Excel حسب الفلاتر الحالية
+  const handleExportStudents = async () => {
+    try {
+      setRestoringStudent(true); // إعادة استخدام نفس الحالة للتحميل
+      const params: { department_id?: string; level?: number; section?: string } = {};
+      if (selectedDeptFilter) params.department_id = selectedDeptFilter;
+      if (selectedLevelFilter) params.level = parseInt(selectedLevelFilter);
+      if (selectedSectionFilter) params.section = selectedSectionFilter;
+      
+      const res = await exportAPI.exportStudents(params);
+      
+      // إنشاء رابط تنزيل
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      // اسم ملف ذكي حسب الفلاتر
+      const deptName = selectedDeptFilter
+        ? (departments.find(d => d.id === selectedDeptFilter)?.name || 'all').replace(/\s+/g, '_')
+        : 'all';
+      const levelPart = selectedLevelFilter ? `_L${selectedLevelFilter}` : '';
+      const sectionPart = selectedSectionFilter ? `_${selectedSectionFilter}` : '';
+      a.download = `students_${deptName}${levelPart}${sectionPart}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+      showMessage('نجاح', 'تم تصدير الطلاب بنجاح');
+    } catch (err: any) {
+      showMessage('خطأ', err.response?.data?.detail || 'فشل التصدير');
+    } finally {
+      setRestoringStudent(false);
+    }
+  };
+
   // تحميل قالب الطلاب
   const handleDownloadTemplate = async () => {
     try {
@@ -685,6 +722,22 @@ export default function StudentsScreen() {
       <View style={styles.itemInfo}>
         <Text style={styles.itemName}>{item.full_name}</Text>
         <Text style={styles.itemDetail}>{item.student_id}</Text>
+        {(item as any).reference_number && (
+          <Text style={{
+            fontSize: 12,
+            color: '#2e7d32',
+            fontWeight: '700',
+            backgroundColor: '#e8f5e9',
+            alignSelf: 'flex-start',
+            paddingHorizontal: 6,
+            paddingVertical: 2,
+            borderRadius: 6,
+            marginTop: 2,
+            letterSpacing: 0.5,
+          }} testID={`student-ref-${item.id}`}>
+            {(item as any).reference_number}
+          </Text>
+        )}
         <Text style={styles.itemDetail}>
           {getDepartmentName(item.department_id)} | م{item.level} {item.section ? `| ${item.section}` : ''}
         </Text>
@@ -766,6 +819,21 @@ export default function StudentsScreen() {
             <Ionicons name="document-text" size={20} color="#fff" />
             <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 8 }}>
               استيراد طلاب من Excel (مع التسجيل التلقائي في المقررات)
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {/* زر تصدير الطلاب إلى Excel - حسب الفلاتر الحالية */}
+        {canManageStudents && Platform.OS === 'web' && (
+          <TouchableOpacity
+            style={{ flexDirection: 'row', backgroundColor: '#f57c00', marginHorizontal: 16, marginTop: 8, marginBottom: 4, padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}
+            onPress={handleExportStudents}
+            data-testid="export-students-btn"
+          >
+            <Ionicons name="download" size={20} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 8 }}>
+              تصدير الطلاب إلى Excel
+              {(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter) ? ' (حسب الفلاتر)' : ' (الكل)'}
             </Text>
           </TouchableOpacity>
         )}

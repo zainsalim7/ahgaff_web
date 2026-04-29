@@ -2821,6 +2821,9 @@ async def get_students(
         "qr_code": s["qr_code"],
         "created_at": s["created_at"],
         "is_active": s.get("is_active", True),
+        "reference_number": s.get("reference_number"),
+        "program_code": s.get("program_code"),
+        "enrollment_year": s.get("enrollment_year"),
         "enrolled_courses": [
             {"name": courses_map.get(cid, {}).get("name", ""), "code": courses_map.get(cid, {}).get("code", "")}
             for cid in student_course_ids.get(str(s["_id"]), [])
@@ -10419,33 +10422,45 @@ async def import_teachers_from_excel(
 async def export_students_to_excel(
     department_id: Optional[str] = None,
     level: Optional[int] = None,
+    section: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Export students to Excel file"""
+    """Export students to Excel file - يدعم التصفية بالقسم/المستوى/الشعبة"""
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "export_reports"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
-    query = {"is_active": True}
+    query: dict = {"is_active": True}
     if department_id:
         query["department_id"] = department_id
     if level:
         query["level"] = level
+    if section:
+        query["section"] = section
     
-    students = await db.students.find(query).to_list(10000)
-    departments = await db.departments.find().to_list(100)
-    dept_map = {str(d["_id"]): d["name"] for d in departments}
+    students = await db.students.find(query).sort([("level", 1), ("section", 1), ("full_name", 1)]).to_list(10000)
+    departments = await db.departments.find().to_list(200)
+    dept_map = {str(d["_id"]): d for d in departments}
+    faculties = await db.faculties.find().to_list(200)
+    fac_map = {str(f["_id"]): f.get("name", "") for f in faculties}
     
     data = []
     for s in students:
+        dept = dept_map.get(s.get("department_id", ""), {})
+        dept_name = dept.get("name", "غير محدد")
+        fac_name = fac_map.get(dept.get("faculty_id", ""), "") if dept else ""
         data.append({
-            "رقم الطالب": s["student_id"],
-            "الاسم الكامل": s["full_name"],
-            "القسم": dept_map.get(s["department_id"], "غير محدد"),
-            "المستوى": s["level"],
-            "الشعبة": s["section"],
+            "الرقم المرجعي": s.get("reference_number") or "",
+            "رقم الطالب": s.get("student_id", ""),
+            "الاسم الكامل": s.get("full_name", ""),
+            "الكلية": fac_name,
+            "القسم": dept_name,
+            "المستوى": s.get("level", ""),
+            "الشعبة": s.get("section", ""),
+            "البرنامج": s.get("program_code", ""),
+            "سنة الالتحاق": s.get("enrollment_year", ""),
             "الهاتف": s.get("phone", ""),
             "البريد": s.get("email", ""),
-            "رمز QR": s["qr_code"]
+            "نشط": "نعم" if s.get("is_active", True) else "لا",
         })
     
     df = pd.DataFrame(data)
@@ -10453,10 +10468,20 @@ async def export_students_to_excel(
     df.to_excel(output, index=False, engine='openpyxl')
     output.seek(0)
     
+    # اسم ملف ديناميكي حسب الفلاتر
+    filename_parts = ["students"]
+    if department_id and department_id in dept_map:
+        filename_parts.append(dept_map[department_id].get("code", "dept"))
+    if level:
+        filename_parts.append(f"L{level}")
+    if section:
+        filename_parts.append(section)
+    filename = "_".join(filename_parts) + ".xlsx"
+    
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=students.xlsx"}
+        headers={"Content-Disposition": f"attachment; filename={filename}"}
     )
 
 @api_router.get("/export/attendance/{course_id}")
