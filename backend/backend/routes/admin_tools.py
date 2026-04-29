@@ -179,6 +179,40 @@ PROGRAM_LABELS = {
 }
 
 
+async def compute_enrollment_year_from_level(db_inst, level: int) -> Optional[str]:
+    """يحسب سنة الالتحاق المتوقعة من المستوى الحالي.
+    يأخذ بداية الفصل المُفعَّل كمرجع للسنة الأكاديمية الحالية.
+    مثال: لو الفصل بدأ 2025-12-20 → السنة الأكاديمية = 2025
+    طالب م1 → 2025 → "25"
+    طالب م2 → 2024 → "24"
+    """
+    if not level or level < 1:
+        return None
+    sem = await db_inst.semesters.find_one({
+        "$or": [{"status": "active"}, {"is_active": True}]
+    })
+    base_year = None
+    if sem:
+        sd = sem.get("start_date") or ""
+        # يحاول استخراج السنة من D-M-YYYY أو YYYY-MM-DD
+        try:
+            parts = str(sd).split("-")
+            if len(parts) == 3:
+                # YYYY-MM-DD
+                if len(parts[0]) == 4:
+                    base_year = int(parts[0])
+                # D-M-YYYY
+                elif len(parts[2]) == 4:
+                    base_year = int(parts[2])
+        except Exception:
+            base_year = None
+    if not base_year:
+        from datetime import datetime
+        base_year = datetime.now().year
+    enrollment = base_year - (int(level) - 1)
+    return f"{enrollment % 100:02d}"
+
+
 def _format_year(year_val) -> Optional[str]:
     """تحويل سنة (مثل 2025 أو '25' أو '2025') إلى رمز خانتين '25'."""
     if year_val is None:
@@ -397,5 +431,115 @@ async def execute_student_refs(current_user: dict = Depends(get_current_user)):
         "skipped_missing_data": skipped_missing_data,
         "message": f"تم توليد {updated} رقم مرجعي",
         "sample_details": details[:10],
+    }
+
+
+
+# ==================== Auto-fill enrollment_year + program_code ====================
+@router.get("/admin/student-autofill/preview")
+async def preview_student_autofill(current_user: dict = Depends(get_current_user)):
+    """معاينة الطلاب الذين سيُملأ لهم enrollment_year و/أو program_code تلقائياً.
+    enrollment_year من المستوى. program_code من القسم.
+    """
+    _ensure_admin(current_user)
+    db = get_db()
+    students = await db.students.find({}, {
+        "level": 1,
+        "department_id": 1,
+        "enrollment_year": 1,
+        "program_code": 1,
+    }).to_list(20000)
+
+    # خرائط الأقسام والافتراضي
+    depts = await db.departments.find({}, {"default_program_code": 1}).to_list(500)
+    dept_program = {str(d["_id"]): d.get("default_program_code") for d in depts}
+
+    will_fill_year = 0
+    will_fill_program = 0
+    no_dept_program = 0
+    by_level = {}
+
+    for s in students:
+        level = s.get("level")
+        if not s.get("enrollment_year") and level:
+            will_fill_year += 1
+            key = str(level)
+            by_level[key] = by_level.get(key, 0) + 1
+        if not s.get("program_code"):
+            dept_id = s.get("department_id")
+            if dept_id and dept_program.get(dept_id):
+                will_fill_program += 1
+            else:
+                no_dept_program += 1
+
+    # احسب enrollment لكل مستوى للعرض
+    sample_year_per_level = {}
+    for lvl_str in by_level.keys():
+        try:
+            sample_year_per_level[lvl_str] = await compute_enrollment_year_from_level(db, int(lvl_str))
+        except Exception:
+            pass
+
+    return {
+        "total_students": len(students),
+        "will_fill_enrollment_year": will_fill_year,
+        "will_fill_program_code": will_fill_program,
+        "missing_dept_default_program": no_dept_program,
+        "by_level": [
+            {
+                "level": int(k),
+                "count": v,
+                "computed_year": sample_year_per_level.get(k),
+            }
+            for k, v in sorted(by_level.items(), key=lambda x: int(x[0]))
+        ],
+    }
+
+
+@router.post("/admin/student-autofill/execute")
+async def execute_student_autofill(current_user: dict = Depends(get_current_user)):
+    """ينفّذ ملء enrollment_year و program_code تلقائياً للطلاب الذين تنقصهم."""
+    _ensure_admin(current_user)
+    db = get_db()
+
+    depts = await db.departments.find({}, {"default_program_code": 1}).to_list(500)
+    dept_program = {str(d["_id"]): d.get("default_program_code") for d in depts}
+
+    # كاش لـ enrollment_year حسب المستوى لتجنب الحساب المتكرر
+    year_cache = {}
+
+    students = await db.students.find({
+        "$or": [
+            {"enrollment_year": {"$in": [None, ""]}},
+            {"enrollment_year": {"$exists": False}},
+            {"program_code": {"$in": [None, ""]}},
+            {"program_code": {"$exists": False}},
+        ]
+    }).to_list(20000)
+
+    updated_year = 0
+    updated_program = 0
+    for s in students:
+        update_doc = {}
+        if not s.get("enrollment_year") and s.get("level"):
+            lvl = int(s["level"])
+            if lvl not in year_cache:
+                year_cache[lvl] = await compute_enrollment_year_from_level(db, lvl)
+            ey = year_cache[lvl]
+            if ey:
+                update_doc["enrollment_year"] = ey
+                updated_year += 1
+        if not s.get("program_code"):
+            dept_id = s.get("department_id")
+            if dept_id and dept_program.get(dept_id):
+                update_doc["program_code"] = dept_program[dept_id]
+                updated_program += 1
+        if update_doc:
+            await db.students.update_one({"_id": s["_id"]}, {"$set": update_doc})
+
+    return {
+        "updated_enrollment_year": updated_year,
+        "updated_program_code": updated_program,
+        "message": f"تم ملء {updated_year} سنة التحاق و {updated_program} رمز برنامج",
     }
 

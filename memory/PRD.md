@@ -1,5 +1,24 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 28-29 أبريل 2026
+
+### Phase 1.7 - الرقم المرجعي + الملء الذكي للطلاب (مكتمل)
+- [x] Backend models: `program_code`, `enrollment_year`, `reference_number` على الطالب، `default_program_code` على القسم
+- [x] صيغة: `AUB2501001` (جامعة+برنامج+سنة+كلية+تسلسل)
+- [x] 4 Endpoints في `routes/admin_tools.py` (references + autofill)
+- [x] `create_student`: ملء تلقائي للبرنامج من القسم، السنة من المستوى، توليد الرقم
+- [x] حساب enrollment_year = بداية الفصل المُفعَّل - (المستوى - 1)
+- [x] Frontend: شاشتا أدمن جديدتان + حقول جديدة في تعديل الطالب والقسم
+- [x] اختبار E2E: إنشاء طالب بدون حقول → كل شيء يُملأ تلقائياً + رقم مرجعي
+
+### Phase 1.6 - فلترة المحاضرات حسب الفصل المُفعَّل (مكتمل)
+- [x] helper `get_active_semester_with_dates()` يدعم status='active' و is_active=True
+- [x] `normalize_semester_date()` لتحويل D-M-YYYY إلى YYYY-MM-DD
+- [x] إحصائيات `GET /api/lectures/{id}` مفلترة بالفصل المفعل
+- [x] `POST /api/lectures` يحفظ semester_id + semester_name تلقائياً
+- [x] أداة Backfill للمحاضرات القديمة (`/admin/backfill-lecture-semesters`)
+- [x] بانر "إحصائيات الفصل الثاني (من ... إلى ...)" في شاشة محاضرات المقرر
+
 ## ما تم إنجازه - جلسة 28 أبريل 2026
 
 ### Phase 1 - تقسيم server.py (مرحلة 1 - مكتملة)

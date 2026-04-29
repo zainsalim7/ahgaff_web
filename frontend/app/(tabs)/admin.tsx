@@ -135,6 +135,7 @@ export default function AdminScreen() {
         { title: 'تعبئة شُعب المقررات', icon: 'construct', color: '#7b1fa2', bg: '#f3e5f5', route: '/backfill-sections', permission: null, adminOnly: true },
         { title: 'إصلاح فصول المحاضرات', icon: 'calendar-outline', color: '#7b1fa2', bg: '#f3e5f5', route: '/backfill-lecture-semesters', permission: null, adminOnly: true },
         { title: 'توليد الأرقام المرجعية للطلاب', icon: 'finger-print', color: '#1565c0', bg: '#e3f2fd', route: '/student-references', permission: null, adminOnly: true },
+        { title: 'ملء بيانات الطلاب تلقائياً', icon: 'sparkles', color: '#ef6c00', bg: '#fff3e0', route: '/student-autofill', permission: null, adminOnly: true },
       ],
     },
   ];

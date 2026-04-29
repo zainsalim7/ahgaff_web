@@ -92,6 +92,7 @@ export default function AddDepartmentScreen() {
     code: '',
     description: '',
     faculty_id: '',
+    default_program_code: '',
   });
 
   const fetchData = useCallback(async () => {
@@ -211,7 +212,7 @@ export default function AddDepartmentScreen() {
   };
 
   const resetForm = () => {
-    setFormData({ name: '', code: '', description: '', faculty_id: '' });
+    setFormData({ name: '', code: '', description: '', faculty_id: '', default_program_code: '' });
   };
 
   const handleEdit = (dept: DeptStats) => {
@@ -221,6 +222,7 @@ export default function AddDepartmentScreen() {
       code: dept.code,
       description: dept.description || '',
       faculty_id: dept.faculty_id || '',
+      default_program_code: (dept as any).default_program_code || '',
     });
     setShowForm(true);
   };
@@ -510,6 +512,40 @@ export default function AddDepartmentScreen() {
               multiline
               numberOfLines={3}
             />
+
+            <Text style={styles.label}>البرنامج الافتراضي للطلاب</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+              {[
+                { v: '', l: 'غير محدد' },
+                { v: 'B', l: 'بكالوريوس' },
+                { v: 'M', l: 'ماجستير' },
+                { v: 'D', l: 'دكتوراه' },
+                { v: 'P', l: 'دبلوم' },
+                { v: 'E', l: 'عن بُعد' },
+              ].map((opt) => (
+                <TouchableOpacity
+                  key={opt.v || 'none'}
+                  onPress={() => setFormData({ ...formData, default_program_code: opt.v })}
+                  style={{
+                    paddingVertical: 6,
+                    paddingHorizontal: 12,
+                    borderRadius: 16,
+                    borderWidth: 1,
+                    borderColor: formData.default_program_code === opt.v ? '#1565c0' : '#ddd',
+                    backgroundColor: formData.default_program_code === opt.v ? '#e3f2fd' : '#fff',
+                  }}
+                  testID={`program-code-${opt.v || 'none'}`}
+                >
+                  <Text style={{
+                    color: formData.default_program_code === opt.v ? '#1565c0' : '#666',
+                    fontWeight: formData.default_program_code === opt.v ? '700' : '400',
+                    fontSize: 12,
+                  }}>
+                    {opt.l}{opt.v ? ` (${opt.v})` : ''}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
 
             <View style={styles.formButtons}>
               <TouchableOpacity

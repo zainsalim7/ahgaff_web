@@ -2688,6 +2688,25 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     # تعبئة faculty_id تلقائياً من القسم
     if student_dict.get("department_id"):
         student_dict["faculty_id"] = await _resolve_faculty_id(student_dict["department_id"])
+
+    # تعبئة program_code تلقائياً من القسم إن لم يكن محدداً
+    if not student_dict.get("program_code") and student_dict.get("department_id"):
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(student_dict["department_id"])})
+            if dept and dept.get("default_program_code"):
+                student_dict["program_code"] = dept["default_program_code"]
+        except Exception:
+            pass
+
+    # تعبئة enrollment_year تلقائياً من المستوى إن لم تكن محددة
+    if not student_dict.get("enrollment_year") and student_dict.get("level"):
+        try:
+            from routes.admin_tools import compute_enrollment_year_from_level
+            ey = await compute_enrollment_year_from_level(db, int(student_dict["level"]))
+            if ey:
+                student_dict["enrollment_year"] = ey
+        except Exception:
+            pass
     
     # Create user account for student if password provided
     user_id = None

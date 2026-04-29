@@ -10,6 +10,7 @@ class DepartmentBase(BaseModel):
     code: str
     description: Optional[str] = None
     faculty_id: Optional[str] = None
+    default_program_code: Optional[str] = None  # B/M/D/E/P
 
 class DepartmentCreate(DepartmentBase):
     pass

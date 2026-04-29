@@ -147,6 +147,7 @@ export default function RootLayout() {
           <Stack.Screen name="manage-study-plan" options={{ title: 'إدارة الخطة الدراسية' }} />
           <Stack.Screen name="backfill-lecture-semesters" options={{ title: 'إصلاح فصول المحاضرات' }} />
           <Stack.Screen name="student-references" options={{ title: 'الأرقام المرجعية للطلاب' }} />
+          <Stack.Screen name="student-autofill" options={{ title: 'ملء بيانات الطلاب' }} />
           <Stack.Screen name="notifications" options={{ title: 'الإشعارات' }} />
         </Stack>
 
