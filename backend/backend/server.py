@@ -10447,12 +10447,19 @@ async def export_students_to_excel(
     for s in students:
         dept = dept_map.get(s.get("department_id", ""), {})
         dept_name = dept.get("name", "غير محدد")
-        fac_name = fac_map.get(dept.get("faculty_id", ""), "") if dept else ""
+        # الأولوية لـ faculty_id الموجود في سجل الطالب (لأن الرقم المرجعي مولّد بناءً عليه)
+        # في حال عدم وجوده، نستخدم faculty_id الخاص بالقسم
+        student_fac_id = s.get("faculty_id") or (dept.get("faculty_id") if dept else None)
+        fac_name = fac_map.get(student_fac_id or "", "")
+        # الكلية الأكاديمية للقسم (قد تختلف عن كلية قيد الطالب)
+        dept_fac_id = dept.get("faculty_id") if dept else None
+        dept_fac_name = fac_map.get(dept_fac_id or "", "") if dept_fac_id else ""
         data.append({
             "الرقم المرجعي": s.get("reference_number") or "",
             "رقم الطالب": s.get("student_id", ""),
             "الاسم الكامل": s.get("full_name", ""),
             "الكلية": fac_name,
+            "كلية القسم": dept_fac_name if dept_fac_name and dept_fac_name != fac_name else "",
             "القسم": dept_name,
             "المستوى": s.get("level", ""),
             "الشعبة": s.get("section", ""),
