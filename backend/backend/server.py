@@ -34,6 +34,46 @@ def get_yemen_date_start():
     now = get_yemen_time()
     return now.replace(hour=0, minute=0, second=0, microsecond=0)
 
+
+def normalize_semester_date(d):
+    """تحويل تاريخ الفصل من D-M-YYYY (أو DD-MM-YYYY) إلى YYYY-MM-DD لمقارنته بـ lectures.date.
+    يدعم أيضاً صيغة YYYY-MM-DD إذا كانت محفوظة هكذا.
+    """
+    if not d or not isinstance(d, str):
+        return None
+    s = d.strip()
+    # YYYY-MM-DD
+    if len(s) == 10 and s[4] == '-' and s[7] == '-':
+        return s
+    # D-M-YYYY أو DD-MM-YYYY
+    parts = s.split('-')
+    if len(parts) == 3:
+        try:
+            day, month, year = int(parts[0]), int(parts[1]), int(parts[2])
+            return f"{year:04d}-{month:02d}-{day:02d}"
+        except Exception:
+            return None
+    return None
+
+
+async def get_active_semester_with_dates(db_inst):
+    """جلب الفصل الدراسي المفعّل مع تواريخ مُحوَّلة لصيغة YYYY-MM-DD.
+    يبحث في كلا الحقلين status='active' و is_active=True ضماناً.
+    Returns: dict {id, name, start_date, end_date} أو None
+    """
+    sem = await db_inst.semesters.find_one({
+        "$or": [{"status": "active"}, {"is_active": True}]
+    })
+    if not sem:
+        return None
+    return {
+        "id": str(sem["_id"]),
+        "name": sem.get("name"),
+        "start_date": normalize_semester_date(sem.get("start_date")),
+        "end_date": normalize_semester_date(sem.get("end_date")),
+    }
+
+
 # PDF imports
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -5545,8 +5585,35 @@ async def get_course_lectures(
     # عدد المحاضرات الإجمالي (مع الفلتر)
     total = await db.lectures.count_documents(query)
     
-    # إحصائيات ثابتة (بدون فلتر) - تبقى دائماً ثابتة
+    # إحصائيات حسب الفصل الدراسي المُفعَّل (إن وُجد)
     base_query = {"course_id": course_id}
+    active_sem = await get_active_semester_with_dates(db)
+    if active_sem:
+        sem_id = active_sem["id"]
+        sd = active_sem["start_date"]
+        ed = active_sem["end_date"]
+        # نقبل: محاضرة بنفس semester_id، أو محاضرة قديمة بدون semester_id لكن ضمن نطاق التاريخ
+        date_range = {}
+        if sd:
+            date_range["$gte"] = sd
+        if ed:
+            date_range["$lte"] = ed
+        or_clauses = [{"semester_id": sem_id}]
+        if date_range:
+            or_clauses.append({
+                "$and": [
+                    {"$or": [
+                        {"semester_id": {"$exists": False}},
+                        {"semester_id": None},
+                        {"semester_id": ""},
+                    ]},
+                    {"date": date_range},
+                ]
+            })
+        base_query["$or"] = or_clauses
+        # كذلك نطبق نفس الفلتر على query (لقائمة المحاضرات المعروضة)
+        query["$or"] = or_clauses
+
     stats = {
         "total": await db.lectures.count_documents(base_query),
         "scheduled": await db.lectures.count_documents({**base_query, "status": "scheduled"}),
@@ -5554,6 +5621,12 @@ async def get_course_lectures(
         "cancelled": await db.lectures.count_documents({**base_query, "status": "cancelled"}),
         "absent": await db.lectures.count_documents({**base_query, "status": "absent"}),
     }
+    if active_sem:
+        stats["semester_id"] = active_sem["id"]
+        stats["semester_name"] = active_sem["name"]
+
+    # نُحدّث total ليتوافق مع query (الذي قد يحوي فلتر حالة + فصل)
+    total = await db.lectures.count_documents(query)
     
     # تحديث جماعي: المحاضرات المجدولة التي انتهى وقتها → غائب
     now = get_yemen_time()
