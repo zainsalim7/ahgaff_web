@@ -16,7 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
 import { useOfflineStore } from '../../src/store/offlineStore';
-import { reportsAPI, attendanceAPI, studentsAPI, departmentsAPI, settingsAPI, coursesAPI, enrollmentAPI, lecturesAPI } from '../../src/services/api';
+import { reportsAPI, attendanceAPI, studentsAPI, departmentsAPI, settingsAPI, coursesAPI, enrollmentAPI, lecturesAPI, dashboardAPI } from '../../src/services/api';
 import api from '../../src/services/api';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import QRCode from 'react-native-qrcode-svg';
@@ -133,126 +133,46 @@ export default function HomeScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      // جلب عدد الإشعارات غير المقروءة لجميع الأدوار
-      try {
-        const notifRes = await api.get('/notifications/count');
-        setNotifCount(notifRes.data?.count || 0);
-      } catch (e) {}
-
       if (user?.role === 'admin') {
-        const response = await reportsAPI.getSummary();
-        setSummary(response.data);
+        // نداء واحد موحّد بدلاً من 2 (notifications + summary)
+        const res = await dashboardAPI.admin();
+        const data = res.data;
+        setNotifCount(data.notif_count || 0);
+        setSummary(data.summary);
       } else if (user?.role === 'student') {
-        // جلب بيانات الطالب
+        // نداء واحد موحّد بدلاً من 6+ نداءات متتابعة
         try {
-          const studentRes = await studentsAPI.getMe();
-          setStudentInfo(studentRes.data);
-          
-          // جلب اسم القسم
-          if (studentRes.data?.department_id) {
-            const deptsRes = await departmentsAPI.getAll();
-            const dept = deptsRes.data.find((d: any) => d.id === studentRes.data.department_id);
-            if (dept) {
-              setDepartmentName(dept.name);
-            }
-          }
-          
-          // جلب إعدادات النظام
-          const settingsRes = await settingsAPI.get();
-          const maxAbsence = settingsRes.data?.max_absence_percent || 25;
-          setMaxAbsencePercent(maxAbsence);
-          
-          // جلب اسم الكلية من بيانات المستخدم أو الإعدادات
-          if (user?.faculty_name) {
-            setCollegeName(user.faculty_name);
-          } else if (settingsRes.data?.college_name) {
-            setCollegeName(settingsRes.data.college_name);
-          }
-          
-          // جلب المقررات وإحصائيات كل مقرر على حدة
-          if (studentRes.data?.id) {
-            const coursesRes = await coursesAPI.getAll();
-            console.log('Total courses from API:', coursesRes.data.length);
-            const studentCourses = coursesRes.data.filter((c: any) => 
-              c.department_id === studentRes.data.department_id &&
-              c.level === studentRes.data.level &&
-              (!c.section || c.section === studentRes.data.section)
-            );
-            console.log('Filtered student courses:', studentCourses.length);
-            
-            const statsPromises = studentCourses.map(async (course: any) => {
-              try {
-                const statsRes = await attendanceAPI.getStudentStats(studentRes.data.id, course.id);
-                const stats = statsRes.data;
-                const totalSessions = stats.total_sessions || 0;
-                const attendanceRate = totalSessions > 0 ? (stats.attendance_rate || 0) : 100;
-                
-                // تحديد الحالة بناءً على نسبة الغياب
-                let status: 'excellent' | 'warning' | 'danger' = 'excellent';
-                if (totalSessions > 0) {
-                  if (attendanceRate < (100 - maxAbsence)) {
-                    status = 'danger'; // محروم
-                  } else if (attendanceRate < (100 - maxAbsence / 2)) {
-                    status = 'warning'; // تحذير
-                  }
-                }
-                
-                return {
-                  course_id: course.id,
-                  course_name: course.name,
-                  course_code: course.code,
-                  total_sessions: totalSessions,
-                  present_count: stats.present_count || 0,
-                  absent_count: stats.absent_count || 0,
-                  late_count: stats.late_count || 0,
-                  excused_count: stats.excused_count || 0,
-                  attendance_rate: attendanceRate,
-                  status,
-                } as CourseStats;
-              } catch {
-                // إذا فشل جلب الإحصائيات، نُظهر المقرر بدون إحصائيات
-                return {
-                  course_id: course.id,
-                  course_name: course.name,
-                  course_code: course.code,
-                  total_sessions: 0,
-                  present_count: 0,
-                  absent_count: 0,
-                  late_count: 0,
-                  excused_count: 0,
-                  attendance_rate: 100,
-                  status: 'excellent' as const,
-                } as CourseStats;
-              }
-            });
-            
-            const results = await Promise.all(statsPromises);
-            setCoursesStats(results as CourseStats[]);
-          }
+          const res = await dashboardAPI.student();
+          const data = res.data;
+          setNotifCount(data.notif_count || 0);
+          setStudentInfo(data.student);
+          setDepartmentName(data.department_name || '');
+          setCollegeName(data.college_name || user?.faculty_name || '');
+          setMaxAbsencePercent(data.max_absence_percent || 25);
+          setCoursesStats(data.courses_stats || []);
         } catch (e) {
-          console.log('Error fetching student info:', e);
+          console.log('Error fetching student dashboard:', e);
         }
       } else if (user?.role === 'teacher') {
-        // جلب بيانات المعلم - محاضرات اليوم والشهر وإعدادات الفصل
+        // نداء واحد موحّد بدلاً من 4 نداءات متوازية
         try {
-          const [todayRes, monthRes, settingsRes] = await Promise.all([
-            lecturesAPI.getToday(),
-            lecturesAPI.getMonth(currentMonth.getFullYear(), currentMonth.getMonth() + 1),
-            settingsAPI.get()
-          ]);
-          setTodayLectures(todayRes.data || []);
-          setMonthLectures(monthRes.data || { dates: [], lectures_by_date: {}, total_lectures: 0 });
-          
-          // حفظ تواريخ الفصل الدراسي
-          if (settingsRes.data) {
+          const res = await dashboardAPI.teacher(
+            currentMonth.getMonth() + 1,
+            currentMonth.getFullYear()
+          );
+          const data = res.data;
+          setNotifCount(data.notif_count || 0);
+          setTodayLectures(data.today_lectures || []);
+          setMonthLectures(data.month_lectures || { dates: [], lectures_by_date: {}, total_lectures: 0 });
+          if (data.semester) {
             setSemesterDates({
-              start: settingsRes.data.semester_start_date,
-              end: settingsRes.data.semester_end_date,
-              name: settingsRes.data.current_semester
+              start: data.semester.start,
+              end: data.semester.end,
+              name: data.semester.name,
             });
           }
         } catch (e) {
-          console.log('Error fetching teacher data:', e);
+          console.log('Error fetching teacher dashboard:', e);
         }
       }
     } catch (error) {

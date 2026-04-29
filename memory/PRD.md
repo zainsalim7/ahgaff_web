@@ -1,5 +1,24 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 29 أبريل 2026 (تابع)
+
+### Phase 1.8 - تسريع الأداء (Performance Pass #1) ✅
+- [x] `routes/dashboard.py` جديد: 3 endpoints موحّدة تجمع كل بيانات الصفحة الرئيسية في نداء واحد
+  - `GET /api/dashboard/admin` (1 نداء بدل 2) — ~100ms
+  - `GET /api/dashboard/student` (1 نداء بدل 6+) — ~130ms (مقابل 600ms+ قديماً = **4-5x أسرع**)
+  - `GET /api/dashboard/teacher` (1 نداء بدل 4) — ~140ms
+- [x] استخدام `asyncio.gather` للتوازي على مستوى DB داخل كل endpoint
+- [x] فهارس MongoDB إضافية: `attendance(student_id,course_id)`, `notifications(recipient_id,is_read)`, `students.user_id`, `teachers.user_id`, `courses(department_id,level)`
+- [x] `(tabs)/index.tsx`: إعادة كتابة `fetchData` لاستخدام dashboardAPI الموحّدة
+- [x] `src/services/api.ts`: in-memory cache (3 دقائق TTL) للبيانات الثابتة (`/faculties`, `/departments`, `/university`, `/settings`, `/my-scope`, `/roles`, `/permissions/*`)
+  - إبطال تلقائي عند POST/PUT/DELETE/PATCH على نفس الـ prefix
+  - إبطال كامل عند logout (`clearMemCache`)
+- [x] `src/services/cache.ts`: أداة عامة `getOrFetch()` / `getCached()` / `invalidate()` للاستخدام في صفحات أخرى عند الحاجة
+
+### إصلاحات صغيرة (نفس الجلسة)
+- [x] حقل "الرمز الرقمي للكلية" (`numeric_code`) — كان موجوداً في state لكن لم يُضَف كحقل إدخال في `general-settings.tsx`
+- [x] استجابة `/api/departments/stats` أصبحت تُعيد `default_program_code` (كانت تُحفظ ولا تُرجَع فيبدو في Edit كـ "غير محدد")
+
 ## ما تم إنجازه - جلسة 28-29 أبريل 2026
 
 ### Phase 1.7 - الرقم المرجعي + الملء الذكي للطلاب (مكتمل)

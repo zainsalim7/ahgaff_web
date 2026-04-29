@@ -102,15 +102,99 @@ const shouldCache = (url: string) => {
   return CACHEABLE_PATHS.some(path => url?.includes(path));
 };
 
+// =============================
+// In-memory cache للبيانات الثابتة (تتغيّر نادراً) - يقلل تكرار النداءات عبر الصفحات.
+// TTL افتراضي 3 دقائق. يمكن إبطاله بعد POST/PUT/DELETE تلقائياً.
+// =============================
+type MemCacheEntry = { data: any; expiresAt: number };
+const memCache = new Map<string, MemCacheEntry>();
+const memInflight = new Map<string, Promise<any>>();
+const MEM_TTL_MS = 3 * 60 * 1000;
+
+// URLs ثابتة نسبياً (كليات، أقسام، جامعة، إعدادات، أدوار، نطاق)
+const MEM_CACHEABLE = [
+  '/faculties',
+  '/departments',
+  '/university',
+  '/settings',
+  '/my-scope',
+  '/permissions/available',
+  '/permissions/all',
+  '/roles',
+];
+
+// مسارات لا يجب تخزينها رغم مطابقة الـ prefix
+const MEM_CACHE_EXCLUDE = [
+  '/departments/dashboard',
+  '/departments/stats',
+  '/settings/academic-years',
+];
+
+const memCacheKey = (config: any): string | null => {
+  if (config.method !== 'get') return null;
+  const url: string = config.url || '';
+  if (MEM_CACHE_EXCLUDE.some(p => url.includes(p))) return null;
+  if (!MEM_CACHEABLE.some(p => url === p || url.startsWith(p + '?') || url.startsWith(p + '/'))) {
+    return null;
+  }
+  const params = config.params ? JSON.stringify(config.params) : '';
+  return `${url}|${params}`;
+};
+
+const invalidateMemCache = (urlPrefix: string) => {
+  for (const key of Array.from(memCache.keys())) {
+    if (key.startsWith(urlPrefix)) memCache.delete(key);
+  }
+};
+
+// Request interceptor للـ memory cache — يُعيد نسخة مخزّنة إذا وُجدت
+api.interceptors.request.use(async (config) => {
+  const key = memCacheKey(config);
+  if (key) {
+    const entry = memCache.get(key);
+    if (entry && Date.now() < entry.expiresAt) {
+      // نُرجع الاستجابة مباشرة عبر adapter مخصّص
+      (config as any).adapter = () => Promise.resolve({
+        data: entry.data,
+        status: 200,
+        statusText: 'OK (mem-cache)',
+        headers: {},
+        config,
+        request: null,
+      } as any);
+    }
+  }
+  return config;
+}, undefined, { synchronous: false });
+
 api.interceptors.response.use(
   async (response) => {
-    // حفظ في الكاش إذا كان GET وقابل للتخزين
+    // حفظ في الكاش إذا كان GET وقابل للتخزين (AsyncStorage - أوفلاين)
     if (response.config.method === 'get' && shouldCache(response.config.url || '')) {
       const cacheKey = `cache_${response.config.url}`;
       try {
         await AsyncStorage.setItem(cacheKey, JSON.stringify(response.data));
       } catch (e) {}
     }
+
+    // حفظ في الـ memory cache للبيانات الثابتة
+    const memKey = memCacheKey(response.config as any);
+    if (memKey && response.statusText !== 'OK (mem-cache)') {
+      memCache.set(memKey, { data: response.data, expiresAt: Date.now() + MEM_TTL_MS });
+    }
+
+    // إبطال الـ memory cache عند تعديل البيانات
+    const method = response.config.method;
+    const url = response.config.url || '';
+    if (method && ['post', 'put', 'delete', 'patch'].includes(method)) {
+      // إبطال كل الـ prefix المطابقة (مثال: تعديل /faculties/123 يبطل /faculties)
+      for (const prefix of MEM_CACHEABLE) {
+        if (url.startsWith(prefix)) {
+          invalidateMemCache(prefix);
+        }
+      }
+    }
+
     return response;
   },
   async (error) => {
@@ -127,6 +211,12 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// تصدير دالة لإبطال الـ memory cache يدوياً عند الحاجة
+export const clearMemCache = () => {
+  memCache.clear();
+  memInflight.clear();
+};
 
 // Auth API
 export const authAPI = {
@@ -625,6 +715,14 @@ export const facultiesAPI = {
     api.put(`/faculties/${id}`, data),
   delete: (id: string) => api.delete(`/faculties/${id}`),
   updateSettings: (id: string, data: any) => api.put(`/faculties/${id}/settings`, data),
+};
+
+// Dashboard API - endpoints موحّدة لتسريع الصفحة الرئيسية (نداء واحد بدلاً من 5-7)
+export const dashboardAPI = {
+  student: () => api.get('/dashboard/student'),
+  teacher: (month?: number, year?: number) =>
+    api.get('/dashboard/teacher', { params: { month, year } }),
+  admin: () => api.get('/dashboard/admin'),
 };
 
 export default api;

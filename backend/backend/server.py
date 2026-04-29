@@ -161,6 +161,7 @@ from routes.teaching_load import router as teaching_load_router
 from routes.weekly_schedule import router as weekly_schedule_router
 from routes.study_plans import router as study_plans_router
 from routes.admin_tools import router as admin_tools_router
+from routes.dashboard import router as dashboard_router
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -12657,6 +12658,7 @@ app.include_router(teaching_load_router, prefix="/api")
 app.include_router(weekly_schedule_router, prefix="/api")
 app.include_router(study_plans_router, prefix="/api")
 app.include_router(admin_tools_router, prefix="/api")
+app.include_router(dashboard_router, prefix="/api")
 
 
 @app.on_event("startup")
@@ -12699,10 +12701,16 @@ async def create_indexes():
         await db.attendance.create_index("lecture_id")
         await db.attendance.create_index("student_id")
         await db.attendance.create_index([("lecture_id", 1), ("student_id", 1)])
+        await db.attendance.create_index([("student_id", 1), ("course_id", 1)])  # لتسريع dashboard الطالب
         await db.enrollments.create_index("course_id")
         await db.enrollments.create_index("student_id")
         await db.enrollments.create_index([("course_id", 1), ("student_id", 1)])
         await db.roles.create_index("system_key")
+        # فهارس إضافية لتسريع الاستعلامات المتكررة
+        await db.notifications.create_index([("recipient_id", 1), ("is_read", 1)])
+        await db.students.create_index("user_id")
+        await db.teachers.create_index("user_id")
+        await db.courses.create_index([("department_id", 1), ("level", 1)])
         logging.info("MongoDB indexes created successfully")
     except Exception as e:
         logging.warning(f"Index creation warning: {e}")
