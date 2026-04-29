@@ -773,6 +773,22 @@ export default function GeneralSettingsScreen() {
               placeholder="مثال: LAW"
             />
 
+            <Text style={styles.label}>الرمز الرقمي/الحرف للأرقام المرجعية</Text>
+            <TextInput
+              style={styles.input}
+              value={facultyForm.numeric_code}
+              onChangeText={(text) =>
+                setFacultyForm({ ...facultyForm, numeric_code: text.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 2) })
+              }
+              placeholder="مثال: B لإدارة الأعمال، E للهندسة، 1 للشريعة"
+              autoCapitalize="characters"
+              maxLength={2}
+              testID="faculty-numeric-code-input"
+            />
+            <Text style={styles.helpText}>
+              يُستخدم لتمييز الكلية داخل الرقم المرجعي للطالب (حرف أو رقم أو اثنان كحد أقصى)
+            </Text>
+
             <Text style={styles.label}>الوصف</Text>
             <TextInput
               style={[styles.input, styles.textArea]}
