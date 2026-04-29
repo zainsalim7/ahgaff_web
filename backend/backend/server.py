@@ -1603,46 +1603,65 @@ async def get_department_details(dept_id: str, current_user: dict = Depends(get_
 
 @api_router.get("/departments/stats")
 async def get_departments_stats(current_user: dict = Depends(get_current_user)):
-    """Get all departments with student counts"""
+    """Get all departments with student counts (مُحسَّن: استعلامات مُجمَّعة بدلاً من N+1)"""
     # تطبيق فلتر النطاق بناءً على دور المستخدم
     scope_filter = await get_user_scope_filter(current_user, "departments")
     
     depts = await db.departments.find(scope_filter).to_list(100)
+    if not depts:
+        return []
+    
+    dept_ids = [str(d["_id"]) for d in depts]
+    
+    # استعلامات مُجمَّعة (3 استعلامات إجمالاً بدلاً من 1 + N + N*M)
+    # 1) عدد الطلاب لكل قسم مباشرة من جدول students
+    students_pipeline = [
+        {"$match": {"department_id": {"$in": dept_ids}}},
+        {"$group": {"_id": "$department_id", "count": {"$sum": 1}}}
+    ]
+    students_counts = {}
+    async for row in db.students.aggregate(students_pipeline):
+        students_counts[row["_id"]] = row["count"]
+    
+    # 2) عدد المقررات لكل قسم
+    courses_pipeline = [
+        {"$match": {"department_id": {"$in": dept_ids}}},
+        {"$group": {"_id": "$department_id", "count": {"$sum": 1}}}
+    ]
+    courses_counts = {}
+    async for row in db.courses.aggregate(courses_pipeline):
+        courses_counts[row["_id"]] = row["count"]
+    
+    # 3) أسماء الكليات دفعة واحدة
+    fac_ids_set = set()
+    for d in depts:
+        if d.get("faculty_id"):
+            try:
+                fac_ids_set.add(ObjectId(d["faculty_id"]))
+            except Exception:
+                pass
+    
+    faculty_names = {}
+    if fac_ids_set:
+        async for f in db.faculties.find(
+            {"_id": {"$in": list(fac_ids_set)}},
+            {"name": 1}
+        ):
+            faculty_names[str(f["_id"])] = f.get("name")
     
     result = []
     for dept in depts:
         dept_id = str(dept["_id"])
-        
-        # Get courses in this department
-        courses = await db.courses.find({"department_id": dept_id}).to_list(100)
-        course_ids = [str(c["_id"]) for c in courses]
-        
-        # Get unique students from enrollments
-        student_ids = set()
-        for course_id in course_ids:
-            enrollments = await db.enrollments.find({"course_id": course_id}).to_list(1000)
-            for e in enrollments:
-                student_ids.add(e["student_id"])
-        
-        # جلب اسم الكلية
-        faculty_name = None
-        if dept.get("faculty_id"):
-            try:
-                faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
-                faculty_name = faculty["name"] if faculty else None
-            except:
-                pass
-        
         result.append({
             "id": dept_id,
             "name": dept["name"],
             "code": dept.get("code", ""),
             "description": dept.get("description", ""),
             "faculty_id": dept.get("faculty_id"),
-            "faculty_name": faculty_name,
+            "faculty_name": faculty_names.get(dept.get("faculty_id", "")),
             "default_program_code": dept.get("default_program_code", ""),
-            "students_count": len(student_ids),
-            "courses_count": len(courses)
+            "students_count": students_counts.get(dept_id, 0),
+            "courses_count": courses_counts.get(dept_id, 0),
         })
     
     return result
