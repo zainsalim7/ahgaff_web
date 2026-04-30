@@ -82,6 +82,7 @@ async def get_study_plan(course_id: str, current_user: dict = Depends(get_curren
             completed_topic_ids[tid] = {
                 "date": lec.get("date", ""),
                 "lesson_title": lec.get("lesson_title", ""),
+                "source": "lecture",
             }
 
     total_topics = 0
@@ -94,14 +95,24 @@ async def get_study_plan(course_id: str, current_user: dict = Depends(get_curren
             total_topics += 1
             week_total += 1
             topic_id = topic.get("id", "")
+            # 1) محاضرة مرتبطة بالموضوع
             if topic_id in completed_topic_ids:
                 topic["completed"] = True
                 topic["completed_date"] = completed_topic_ids[topic_id].get("date", "")
+                topic["completed_source"] = "lecture"
+                completed_count += 1
+                week_completed += 1
+            # 2) المعلم أكّد الموضوع يدوياً (بدون محاضرة) عبر /confirm-topics
+            elif topic.get("confirmed") and topic.get("was_taught", True):
+                topic["completed"] = True
+                topic["completed_date"] = topic.get("confirmed_date", "")
+                topic["completed_source"] = "manual_confirm"
                 completed_count += 1
                 week_completed += 1
             else:
                 topic["completed"] = False
                 topic["completed_date"] = ""
+                topic["completed_source"] = ""
         week["total_topics"] = week_total
         week["completed_topics"] = week_completed
         week["completion_percent"] = (
