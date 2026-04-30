@@ -4965,12 +4965,19 @@ async def get_lesson_completion_report(
     for course in courses:
         cid = str(course["_id"])
         
-        # جلب الخطة الدراسية
+        # جلب الخطة الدراسية (ومعها التأكيدات اليدوية)
         plan = await db.study_plans.find_one({"course_id": cid})
         planned_topics = 0
+        manually_confirmed_count = 0
+        confirmed_topic_ids = set()
         if plan:
             for week in plan.get("weeks", []):
-                planned_topics += len(week.get("topics", []))
+                for topic in week.get("topics", []):
+                    planned_topics += 1
+                    if topic.get("confirmed") and topic.get("was_taught", True):
+                        manually_confirmed_count += 1
+                        if topic.get("id"):
+                            confirmed_topic_ids.add(topic["id"])
         
         # جلب المحاضرات المكتملة مع عنوان الدرس
         completed_lectures = await db.lectures.find({
@@ -4984,16 +4991,20 @@ async def get_lesson_completion_report(
 
         # قائمة الدروس المنجزة فعلاً (بالعناوين والتواريخ)
         completed_lessons_list = []
+        linked_topic_ids = set()
         for lec in completed_lectures:
             title = lec.get("lesson_title")
             if title:
                 d = lec.get("date", "")
                 if hasattr(d, "strftime"):
                     d = d.strftime("%Y-%m-%d")
+                topic_id = lec.get("plan_topic_id")
+                if topic_id:
+                    linked_topic_ids.add(topic_id)
                 completed_lessons_list.append({
                     "lesson_title": title,
                     "date": str(d),
-                    "plan_topic_id": lec.get("plan_topic_id"),
+                    "plan_topic_id": topic_id,
                 })
         
         # جلب اسم المعلم
@@ -5003,10 +5014,13 @@ async def get_lesson_completion_report(
             if teacher:
                 teacher_name = teacher["full_name"]
         
-        # حساب نسبة الإنجاز
+        # حساب المواضيع المُنجَزة الفعلية = (محاضرة مرتبطة) ∪ (تأكيد يدوي)
+        topics_completed = len(linked_topic_ids | confirmed_topic_ids)
+
+        # حساب نسبة الإنجاز (المواضيع المنجزة / المواضيع المخططة)
         completion_percent = 0
         if planned_topics > 0:
-            completion_percent = round((lessons_with_title / planned_topics) * 100, 1)
+            completion_percent = round((topics_completed / planned_topics) * 100, 1)
         
         report.append({
             "course_id": cid,
@@ -5019,6 +5033,9 @@ async def get_lesson_completion_report(
             "completed_lectures": completed_count,
             "lessons_with_title": lessons_with_title,
             "lessons_without_title": completed_count - lessons_with_title,
+            "topics_completed": topics_completed,
+            "topics_linked_via_lecture": len(linked_topic_ids),
+            "topics_manually_confirmed": manually_confirmed_count,
             "completion_percent": completion_percent,
             "completed_lessons": completed_lessons_list,  # قائمة الدروس المنجزة فعلاً
         })
@@ -5135,7 +5152,7 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
 
-    # الخطة الدراسية
+    # الخطة الدراسية (نحتاج كامل بيانات الـ topic لمعرفة الـ confirmed يدوياً)
     plan = await db.study_plans.find_one({"course_id": course_id})
     plan_topics = []
     if plan:
@@ -5145,6 +5162,10 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
                     "id": topic.get("id"),
                     "week_number": week.get("week_number"),
                     "title": topic.get("title", ""),
+                    # تأكيد يدوي من المعلم (عبر /confirm-topics)
+                    "confirmed": bool(topic.get("confirmed")),
+                    "was_taught": bool(topic.get("was_taught", True)),
+                    "confirmed_date": topic.get("confirmed_date", ""),
                 })
 
     # المحاضرات المكتملة
@@ -5177,17 +5198,27 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
             if lesson.get("plan_topic_id") == topic["id"]:
                 matched = lesson
                 break
+        # Manual confirmation fallback
+        manually_confirmed = topic.get("confirmed") and topic.get("was_taught", True)
+        is_completed = matched is not None or manually_confirmed
         comparison.append({
             "week_number": topic["week_number"],
             "topic_id": topic["id"],
             "planned_title": topic["title"],
-            "completed": matched is not None,
-            "actual_title": matched["lesson_title"] if matched else None,
-            "actual_date": matched["date"] if matched else None,
+            "completed": is_completed,
+            "actual_title": matched["lesson_title"] if matched else (topic["title"] if manually_confirmed else None),
+            "actual_date": matched["date"] if matched else (topic.get("confirmed_date", "")[:10] if manually_confirmed else None),
+            "source": "lecture" if matched else ("manual_confirm" if manually_confirmed else None),
         })
 
     # الدروس المنجزة التي لا ترتبط بأي موضوع من الخطة
     unlinked_lessons = [l for l in completed_lessons if not l.get("plan_topic_id")]
+
+    # احسب أيضاً "مؤكَّد يدوياً" — المواضيع التي أُكدت يدوياً بدون محاضرة مرتبطة
+    manually_confirmed_count = sum(
+        1 for t in plan_topics
+        if t.get("confirmed") and t.get("was_taught", True) and t["id"] not in matched_topic_ids
+    )
 
     teacher_name = "غير محدد"
     if course.get("teacher_id"):
@@ -5203,6 +5234,7 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
         "total_planned": len(plan_topics),
         "total_completed": len(completed_lessons),
         "matched_count": len(matched_topic_ids),
+        "manually_confirmed_count": manually_confirmed_count,
         "unmatched_count": len(unlinked_lessons),
         "comparison": comparison,
         "unlinked_lessons": unlinked_lessons,

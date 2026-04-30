@@ -28,6 +28,9 @@ interface CourseCompletion {
   completed_lectures: number;
   lessons_with_title: number;
   lessons_without_title: number;
+  topics_completed?: number;
+  topics_linked_via_lecture?: number;
+  topics_manually_confirmed?: number;
   completion_percent: number;
   completed_lessons?: Array<{ lesson_title: string; date: string; plan_topic_id?: string }>;
 }
@@ -387,8 +390,18 @@ export default function LessonCompletionReport() {
               </View>
               <View style={styles.detailBadge}>
                 <Ionicons name="checkmark-circle" size={14} color="#4caf50" />
-                <Text style={styles.detailText}>منجز: {course.lessons_with_title}</Text>
+                <Text style={styles.detailText}>
+                  منجز: {course.topics_completed ?? course.lessons_with_title}
+                </Text>
               </View>
+              {(course.topics_manually_confirmed ?? 0) > 0 && (
+                <View style={[styles.detailBadge, { backgroundColor: '#e3f2fd' }]}>
+                  <Ionicons name="hand-right" size={14} color="#1565c0" />
+                  <Text style={[styles.detailText, { color: '#1565c0' }]}>
+                    مؤكَّد يدوياً: {course.topics_manually_confirmed}
+                  </Text>
+                </View>
+              )}
               <View style={styles.detailBadge}>
                 <Ionicons name="school" size={14} color="#ff9800" />
                 <Text style={styles.detailText}>محاضرات: {course.completed_lectures}/{course.total_lectures}</Text>
