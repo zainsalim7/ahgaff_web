@@ -718,28 +718,30 @@ export default function CourseLecturesScreen() {
         )}
         
         <View style={selectionMode ? styles.lectureContentWithCheckbox : styles.lectureContentFull}>
-          <View style={styles.lectureHeader}>
-            <View>
+          {/* الصف العلوي: التاريخ + الوقت + المكان + الحالة، كل شيء في سطر واحد */}
+          <View style={styles.lectureRow}>
+            <View style={styles.lectureDateBlock}>
               <Text style={styles.lectureDay}>{WEEKDAYS_AR[parseDate(item.date).getDay()]}</Text>
               <Text style={styles.lectureDate}>{formatGregorianDate(parseDate(item.date), { includeYear: false })}</Text>
               <Text style={styles.lectureHijri}>{formatHijriDate(parseDate(item.date), { includeYear: false })}</Text>
             </View>
+
+            <View style={styles.lectureMetaInline}>
+              <View style={styles.detailRowInline}>
+                <Ionicons name="time-outline" size={14} color="#666" />
+                <Text style={styles.detailText}>{item.start_time} - {item.end_time}</Text>
+              </View>
+              {item.room && (
+                <View style={styles.detailRowInline}>
+                  <Ionicons name="location-outline" size={14} color="#666" />
+                  <Text style={styles.detailText}>{item.room}</Text>
+                </View>
+              )}
+            </View>
+
             <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
               <Text style={styles.statusText}>{statusInfo.label}</Text>
             </View>
-          </View>
-          
-          <View style={styles.lectureDetails}>
-            <View style={styles.detailRow}>
-              <Ionicons name="time-outline" size={16} color="#666" />
-              <Text style={styles.detailText}>{item.start_time} - {item.end_time}</Text>
-            </View>
-            {item.room && (
-              <View style={styles.detailRow}>
-                <Ionicons name="location-outline" size={16} color="#666" />
-                <Text style={styles.detailText}>{item.room}</Text>
-              </View>
-            )}
           </View>
 
           {/* ملاحظة: تاريخ سابق عند إعادة الجدولة */}
@@ -887,45 +889,47 @@ export default function CourseLecturesScreen() {
             <Text style={{ color: '#fff', marginLeft: 8, fontWeight: '600', fontSize: 15 }}>{notification.message}</Text>
           </TouchableOpacity>
         )}
-        {/* Course Info */}
+        {/* Course Info - مدمج */}
         <View style={styles.courseInfo}>
-          <Text style={styles.courseName}>{course?.name}</Text>
-          <Text style={styles.courseCode}>{course?.code}</Text>
+          <View style={styles.courseTitleRow}>
+            <Text style={styles.courseName}>{course?.name}</Text>
+            {course?.code ? <Text style={styles.courseCode}>· {course.code}</Text> : null}
+          </View>
           <View style={styles.courseDetailsRow}>
             {course?.teacher_name && (
               <View style={styles.courseDetailChip}>
-                <Ionicons name="person" size={13} color="rgba(255,255,255,0.9)" />
+                <Ionicons name="person" size={11} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.courseDetailText}>{course.teacher_name}</Text>
               </View>
             )}
             {course?.department_name && (
               <View style={styles.courseDetailChip}>
-                <Ionicons name="business" size={13} color="rgba(255,255,255,0.9)" />
+                <Ionicons name="business" size={11} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.courseDetailText}>{course.department_name}</Text>
               </View>
             )}
             {course?.level && (
               <View style={styles.courseDetailChip}>
-                <Ionicons name="layers" size={13} color="rgba(255,255,255,0.9)" />
+                <Ionicons name="layers" size={11} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.courseDetailText}>م{course.level}</Text>
               </View>
             )}
             {course?.section ? (
               <View style={styles.courseDetailChip}>
-                <Ionicons name="git-branch" size={13} color="rgba(255,255,255,0.9)" />
+                <Ionicons name="git-branch" size={11} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.courseDetailText}>{course.section}</Text>
               </View>
             ) : null}
             {course?.students_count != null && (
               <View style={styles.courseDetailChip}>
-                <Ionicons name="people" size={13} color="rgba(255,255,255,0.9)" />
+                <Ionicons name="people" size={11} color="rgba(255,255,255,0.9)" />
                 <Text style={styles.courseDetailText}>{course.students_count} طالب</Text>
               </View>
             )}
             {course?.credit_hours && (
               <View style={styles.courseDetailChip}>
-                <Ionicons name="time" size={13} color="rgba(255,255,255,0.9)" />
-                <Text style={styles.courseDetailText}>{course.credit_hours} ساعات معتمدة</Text>
+                <Ionicons name="time" size={11} color="rgba(255,255,255,0.9)" />
+                <Text style={styles.courseDetailText}>{course.credit_hours} س</Text>
               </View>
             )}
           </View>
@@ -1538,21 +1542,27 @@ const styles = StyleSheet.create({
   },
   courseInfo: {
     backgroundColor: '#1565c0',
-    paddingHorizontal: 16,
-    paddingTop: 10,
-    paddingBottom: 10,
+    paddingHorizontal: 14,
+    paddingTop: 8,
+    paddingBottom: 8,
     alignItems: 'center',
   },
+  courseTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginBottom: 4,
+  },
   courseName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
     color: '#fff',
-    marginBottom: 2,
   },
   courseCode: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.85)',
-    marginBottom: 4,
   },
   courseDetailsRow: {
     flexDirection: 'row',
@@ -1647,57 +1657,82 @@ const styles = StyleSheet.create({
   },
   lectureCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
   },
   lectureHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 12,
+    marginBottom: 6,
+  },
+  lectureRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  lectureDateBlock: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 6,
+    flexShrink: 1,
+  },
+  lectureMetaInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  detailRowInline: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   lectureDay: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#1565c0',
     fontWeight: '600',
   },
   lectureDate: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#333',
   },
   lectureHijri: {
     fontSize: 11,
     color: '#888',
-    marginTop: 2,
   },
   statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 10,
   },
   statusText: {
     color: '#fff',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
   },
   lectureDetails: {
-    marginBottom: 12,
+    marginBottom: 6,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
+    gap: 6,
+    marginBottom: 2,
   },
   detailText: {
-    fontSize: 14,
+    fontSize: 12,
     color: '#666',
   },
   noteBoxInfo: {
