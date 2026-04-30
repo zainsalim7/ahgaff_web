@@ -720,36 +720,34 @@ export default function StudentsScreen() {
         </TouchableOpacity>
       )}
       <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.full_name}</Text>
-        <Text style={styles.itemDetail}>{item.student_id}</Text>
-        {(item as any).reference_number && (
-          <Text style={{
-            fontSize: 12,
-            color: '#2e7d32',
-            fontWeight: '700',
-            backgroundColor: '#e8f5e9',
-            alignSelf: 'flex-start',
-            paddingHorizontal: 6,
-            paddingVertical: 2,
-            borderRadius: 6,
-            marginTop: 2,
-            letterSpacing: 0.5,
-          }} testID={`student-ref-${item.id}`}>
-            {(item as any).reference_number}
+        {/* الصف العلوي: الاسم + رقم القيد + الرقم المرجعي */}
+        <View style={styles.itemTopRow}>
+          <Text style={styles.itemName} numberOfLines={1}>{item.full_name}</Text>
+          <Text style={styles.itemMutedSm}>· {item.student_id}</Text>
+          {(item as any).reference_number && (
+            <Text style={styles.refBadge} testID={`student-ref-${item.id}`}>
+              {(item as any).reference_number}
+            </Text>
+          )}
+        </View>
+        {/* الصف السفلي: قسم/مستوى/شعبة + المقررات إن وُجدت */}
+        <View style={styles.itemBottomRow}>
+          <Text style={styles.itemMutedSm}>
+            {getDepartmentName(item.department_id)} · م{item.level}{item.section ? ` · ${item.section}` : ''}
           </Text>
-        )}
-        <Text style={styles.itemDetail}>
-          {getDepartmentName(item.department_id)} | م{item.level} {item.section ? `| ${item.section}` : ''}
-        </Text>
-        {item.enrolled_courses && item.enrolled_courses.length > 0 && (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 3, marginTop: 4 }}>
-            {item.enrolled_courses.map((c: any, idx: number) => (
-              <View key={idx} style={{ backgroundColor: '#e3f2fd', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8 }}>
-                <Text style={{ fontSize: 10, color: '#1565c0' }}>{c.name}</Text>
-              </View>
-            ))}
-          </View>
-        )}
+          {item.enrolled_courses && item.enrolled_courses.length > 0 && (
+            <View style={styles.courseChipsRow}>
+              {item.enrolled_courses.slice(0, 4).map((c: any, idx: number) => (
+                <View key={idx} style={styles.courseChip}>
+                  <Text style={styles.courseChipText}>{c.name}</Text>
+                </View>
+              ))}
+              {item.enrolled_courses.length > 4 && (
+                <Text style={styles.itemMutedSm}>+{item.enrolled_courses.length - 4}</Text>
+              )}
+            </View>
+          )}
+        </View>
       </View>
       {!selectionMode && (
         <View style={styles.actionButtons}>
@@ -802,55 +800,48 @@ export default function StudentsScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-forward" size={24} color="#fff" />
+          <Ionicons name="arrow-forward" size={14} color="#fff" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>الطلاب</Text>
         <View style={{ width: 40 }} />
       </View>
 
       <View style={styles.content}>
-        {/* زر استيراد الطلاب من Excel */}
+        {/* شريط أزرار التحكم - كلها في صف واحد */}
         {canManageStudents && Platform.OS === 'web' && (
-          <TouchableOpacity
-            style={{ flexDirection: 'row', backgroundColor: '#2e7d32', marginHorizontal: 16, marginTop: 12, marginBottom: 4, padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}
-            onPress={() => { setImportDept(''); setImportLevel(''); setImportSection(''); setShowImportModal(true); }}
-            data-testid="import-students-btn"
-          >
-            <Ionicons name="document-text" size={20} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 8 }}>
-              استيراد طلاب من Excel (مع التسجيل التلقائي في المقررات)
-            </Text>
-          </TouchableOpacity>
-        )}
+          <View style={{ flexDirection: 'row', gap: 6, marginHorizontal: 16, marginTop: 8, flexWrap: 'wrap' }}>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#2e7d32', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center', gap: 4 }}
+              onPress={() => { setImportDept(''); setImportLevel(''); setImportSection(''); setShowImportModal(true); }}
+              data-testid="import-students-btn"
+            >
+              <Ionicons name="document-text" size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>استيراد Excel</Text>
+            </TouchableOpacity>
 
-        {/* زر تصدير الطلاب إلى Excel - حسب الفلاتر الحالية */}
-        {canManageStudents && Platform.OS === 'web' && (
-          <TouchableOpacity
-            style={{ flexDirection: 'row', backgroundColor: '#f57c00', marginHorizontal: 16, marginTop: 8, marginBottom: 4, padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}
-            onPress={handleExportStudents}
-            data-testid="export-students-btn"
-          >
-            <Ionicons name="download" size={20} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 8 }}>
-              تصدير الطلاب إلى Excel
-              {(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter) ? ' (حسب الفلاتر)' : ' (الكل)'}
-            </Text>
-          </TouchableOpacity>
-        )}
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#f57c00', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center', gap: 4 }}
+              onPress={handleExportStudents}
+              data-testid="export-students-btn"
+            >
+              <Ionicons name="download" size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                تصدير{(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter) ? ' (مفلتر)' : ''}
+              </Text>
+            </TouchableOpacity>
 
-        {/* زر استعادة */}
-        {canManageStudents && Platform.OS === 'web' && (
-          <TouchableOpacity
-            style={{ flexDirection: 'row', backgroundColor: '#1565c0', marginHorizontal: 16, marginTop: 12, marginBottom: 4, padding: 12, borderRadius: 10, justifyContent: 'center', alignItems: 'center' }}
-            onPress={handleRestoreStudent}
-            disabled={restoringStudent}
-            data-testid="restore-student-btn"
-          >
-            <Ionicons name="cloud-upload" size={20} color="#fff" />
-            <Text style={{ color: '#fff', fontSize: 14, fontWeight: '600', marginLeft: 8 }}>
-              {restoringStudent ? 'جاري الاستعادة...' : 'استعادة طالب من نسخة احتياطية'}
-            </Text>
-          </TouchableOpacity>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#1565c0', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center', gap: 4 }}
+              onPress={handleRestoreStudent}
+              disabled={restoringStudent}
+              data-testid="restore-student-btn"
+            >
+              <Ionicons name="cloud-upload" size={14} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
+                {restoringStudent ? 'جاري الاستعادة...' : 'استعادة'}
+              </Text>
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* شريط البحث */}
@@ -1407,7 +1398,7 @@ export default function StudentsScreen() {
                   <ActivityIndicator size="small" color="#fff" />
                 ) : (
                   <>
-                    <Ionicons name="send" size={20} color="#fff" />
+                    <Ionicons name="send" size={14} color="#fff" />
                     <Text style={styles.sendWarningBtnText}>إرسال الإنذار</Text>
                   </>
                 )}
@@ -1650,35 +1641,77 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
+    borderRadius: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    marginBottom: 4,
     flexDirection: 'row',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e0e0e0',
+    borderColor: '#e8e8e8',
   },
   itemCardSelected: {
     borderColor: '#1565c0',
     backgroundColor: '#e3f2fd',
   },
   checkbox: {
-    marginLeft: 8,
+    marginLeft: 6,
   },
   itemInfo: {
     flex: 1,
+    gap: 2,
+  },
+  itemTopRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  itemBottomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
     textAlign: 'right',
   },
+  itemMutedSm: {
+    fontSize: 11,
+    color: '#777',
+  },
   itemDetail: {
-    fontSize: 12,
-    color: '#666',
+    fontSize: 11,
+    color: '#777',
     textAlign: 'right',
-    marginTop: 2,
+  },
+  refBadge: {
+    fontSize: 11,
+    color: '#2e7d32',
+    fontWeight: '700',
+    backgroundColor: '#e8f5e9',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+    letterSpacing: 0.3,
+  },
+  courseChipsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 3,
+  },
+  courseChip: {
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  courseChipText: {
+    fontSize: 10,
+    color: '#1565c0',
   },
   actionButtons: {
     flexDirection: 'row',

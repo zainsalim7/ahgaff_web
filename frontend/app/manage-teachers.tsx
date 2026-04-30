@@ -457,40 +457,46 @@ export default function ManageTeachersScreen() {
             <Text style={styles.avatarText}>{getTeacherName(item).charAt(0)}</Text>
           </View>
           <View style={styles.teacherDetails}>
-            <Text style={styles.teacherName}>{getTeacherName(item)}</Text>
-            {item.academic_title && (
-              <Text style={styles.academicTitle}>{item.academic_title}</Text>
-            )}
-            <Text style={styles.teacherId}>رقم الجوال: {getTeacherId(item)}</Text>
-            <Text style={styles.teacherDept}>{getDepartmentName(item.department_id)}</Text>
-            {item.specialization && (
-              <Text style={styles.teacherSpec}>التخصص: {item.specialization}</Text>
-            )}
-            {(item.weekly_hours || item.teaching_load) && (
-              <Text style={styles.teachingLoad}>النصاب الأسبوعي: {item.weekly_hours || item.teaching_load} ساعة</Text>
-            )}
+            {/* صف 1: الاسم + اللقب الأكاديمي + شارة الحساب */}
+            <View style={styles.teacherTopRow}>
+              <Text style={styles.teacherName} numberOfLines={1}>{getTeacherName(item)}</Text>
+              {item.academic_title && <Text style={styles.academicTitle}>· {item.academic_title}</Text>}
+              <View style={[styles.statusBadge, { backgroundColor: hasAccount ? '#e8f5e9' : '#fafafa' }]}>
+                <Ionicons
+                  name={hasAccount ? "checkmark-circle" : "close-circle"}
+                  size={11}
+                  color={hasAccount ? '#4caf50' : '#999'}
+                />
+                <Text style={[styles.statusText, { color: hasAccount ? '#4caf50' : '#999' }]}>
+                  {hasAccount ? 'مفعل' : 'غير مفعل'}
+                </Text>
+              </View>
+            </View>
+            {/* صف 2: القسم + التخصص + النصاب + رقم الجوال — مدمج */}
+            <View style={styles.teacherMetaRow}>
+              <Text style={styles.teacherMeta}>{getDepartmentName(item.department_id)}</Text>
+              {item.specialization && <Text style={styles.teacherMeta}>· {item.specialization}</Text>}
+              {(item.weekly_hours || item.teaching_load) && (
+                <Text style={styles.teacherMeta}>· نصاب: {item.weekly_hours || item.teaching_load} س</Text>
+              )}
+              <Text style={styles.teacherMeta}>· جوال: {getTeacherId(item)}</Text>
+            </View>
+            {/* صف 3: المقررات (chips متراصة) */}
             {item.assigned_courses && item.assigned_courses.length > 0 && (
-              <View style={{ marginTop: 6, flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-                {item.assigned_courses.map((c: any, idx: number) => (
-                  <View key={idx} style={{ backgroundColor: '#e3f2fd', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 12, flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <Ionicons name="book-outline" size={11} color="#1565c0" />
-                    <Text style={{ fontSize: 11, color: '#1565c0' }}>
-                      {c.name} ({c.code}){c.section ? ` - ${c.section}` : ''} م{c.level}
+              <View style={styles.teacherCoursesRow}>
+                {item.assigned_courses.slice(0, 6).map((c: any, idx: number) => (
+                  <View key={idx} style={styles.courseChipMini}>
+                    <Ionicons name="book-outline" size={9} color="#1565c0" />
+                    <Text style={styles.courseChipMiniText}>
+                      {c.name}{c.section ? ` ${c.section}` : ''} م{c.level}
                     </Text>
                   </View>
                 ))}
+                {item.assigned_courses.length > 6 && (
+                  <Text style={styles.teacherMeta}>+{item.assigned_courses.length - 6}</Text>
+                )}
               </View>
             )}
-            <View style={[styles.statusBadge, { backgroundColor: hasAccount ? '#e8f5e9' : '#fafafa' }]}>
-              <Ionicons 
-                name={hasAccount ? "checkmark-circle" : "close-circle"} 
-                size={14} 
-                color={hasAccount ? '#4caf50' : '#999'} 
-              />
-              <Text style={[styles.statusText, { color: hasAccount ? '#4caf50' : '#999' }]}>
-                {hasAccount ? 'حساب مفعل' : 'غير مفعل'}
-              </Text>
-            </View>
           </View>
         </View>
         
@@ -702,30 +708,30 @@ export default function ManageTeachersScreen() {
         ) : (
           <>
             {/* زر الإضافة */}
-            <View style={{ flexDirection: 'row', gap: 8, margin: 16, marginBottom: 8, flexWrap: 'wrap' }}>
+            <View style={{ flexDirection: 'row', gap: 6, marginHorizontal: 16, marginTop: 8, marginBottom: 6, flexWrap: 'wrap' }}>
               <TouchableOpacity
-                style={[styles.addButton, { flex: 1, margin: 0 }]}
+                style={styles.addButton}
                 onPress={() => setShowForm(true)}
               >
-                <Ionicons name="add-circle" size={24} color="#fff" />
+                <Ionicons name="add-circle" size={14} color="#fff" />
                 <Text style={styles.addButtonText}>إضافة معلم</Text>
               </TouchableOpacity>
               
               {Platform.OS === 'web' && (
                 <>
                   <TouchableOpacity
-                    style={[styles.addButton, { flex: 1, margin: 0, backgroundColor: '#4caf50' }]}
+                    style={[styles.addButton, { backgroundColor: '#4caf50' }]}
                     onPress={() => { setImportDeptId(''); setImportResult(null); setShowImportModal(true); }}
                   >
-                    <Ionicons name="cloud-download" size={22} color="#fff" />
+                    <Ionicons name="cloud-download" size={14} color="#fff" />
                     <Text style={styles.addButtonText}>استيراد Excel</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={[styles.addButton, { flex: 1, margin: 0, backgroundColor: '#1565c0' }]}
+                    style={[styles.addButton, { backgroundColor: '#1565c0' }]}
                     onPress={handleRestore}
                     disabled={restoring}
                   >
-                    <Ionicons name="cloud-upload" size={22} color="#fff" />
+                    <Ionicons name="cloud-upload" size={14} color="#fff" />
                     <Text style={styles.addButtonText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
                   </TouchableOpacity>
                 </>
@@ -984,34 +990,33 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: 'row',
     backgroundColor: '#1565c0',
-    margin: 16,
-    marginBottom: 8,
-    padding: 16,
-    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
   },
   addButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
-    marginLeft: 8,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     marginHorizontal: 16,
-    marginBottom: 8,
-    paddingHorizontal: 12,
-    borderRadius: 10,
+    marginBottom: 6,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
   searchInput: {
     flex: 1,
-    padding: 12,
-    fontSize: 14,
+    paddingVertical: 8,
+    fontSize: 13,
     textAlign: 'right',
   },
   filterScroll: {
@@ -1088,78 +1093,109 @@ const styles = StyleSheet.create({
   },
   teacherCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
   },
   teacherInfo: {
     flexDirection: 'row',
-    marginBottom: 12,
+    alignItems: 'center',
+    marginBottom: 0,
   },
   avatar: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
-    marginLeft: 12,
+    marginLeft: 10,
   },
   avatarText: {
-    fontSize: 20,
+    fontSize: 14,
     fontWeight: 'bold',
     color: '#fff',
   },
   teacherDetails: {
     flex: 1,
+    gap: 2,
+  },
+  teacherTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  teacherMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 4,
+  },
+  teacherMeta: {
+    fontSize: 11,
+    color: '#777',
+  },
+  teacherCoursesRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 3,
+    marginTop: 2,
+  },
+  courseChipMini: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+    gap: 2,
+  },
+  courseChipMiniText: {
+    fontSize: 10,
+    color: '#1565c0',
   },
   teacherName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
   },
   teacherId: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
+    fontSize: 11,
+    color: '#777',
   },
   teacherDept: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#1565c0',
-    marginTop: 2,
   },
   teacherSpec: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#999',
-    marginTop: 2,
   },
   academicTitle: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#4caf50',
     fontWeight: '600',
-    marginTop: 2,
   },
   teachingLoad: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#ff9800',
-    marginTop: 2,
   },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    marginTop: 6,
-    gap: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 8,
+    gap: 2,
   },
   statusText: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '500',
   },
   actionButtons: {

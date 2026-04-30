@@ -697,10 +697,10 @@ export default function AddCourseScreen() {
         </View>
       )}
       <View style={styles.itemInfo}>
-        <Text style={styles.itemName}>{item.name}</Text>
-        <Text style={styles.itemDetail}>{item.code}</Text>
-        <Text style={styles.itemDetail}>
-          {getDepartmentName(item.department_id)} | م{item.level}{item.section ? ` | ${item.section}` : ''}
+        {/* صف 1: اسم المقرر + الكود + شعبة inline */}
+        <View style={styles.courseTopRow}>
+          <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          <Text style={styles.itemMutedSm}>· {item.code}</Text>
           {canEdit ? (
             <Text
               onPress={() => {
@@ -710,23 +710,26 @@ export default function AddCourseScreen() {
                 if (v === null) return;
                 coursesAPI.update(item.id, { section: v.trim() }).then(() => { fetchCourses(); }).catch(() => alert('فشل تحديث الشعبة'));
               }}
-              style={{ color: '#1565c0', fontWeight: '600', marginRight: 6 }}
+              style={{ color: '#1565c0', fontWeight: '600', fontSize: 11 }}
             >
-              {' '}{item.section ? '✏️' : '+ شعبة'}
+              {item.section ? '✏️' : '+ شعبة'}
             </Text>
           ) : null}
-        </Text>
-        <Text style={styles.itemDetail}>المعلم: {item.teacher_name || getTeacherName(item.teacher_id)}</Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 }}>
-          <Ionicons name="people" size={14} color="#1565c0" />
-          <Text style={[styles.itemDetail, { color: '#1565c0', fontWeight: '600' }]}>
-            {item.students_count ?? 0} طالب
+        </View>
+        {/* صف 2: قسم/مستوى/شعبة + المعلم */}
+        <View style={styles.courseMetaRow}>
+          <Text style={styles.itemMutedSm}>
+            {getDepartmentName(item.department_id)} · م{item.level}{item.section ? ` · ${item.section}` : ''}
           </Text>
-          <Text style={[styles.itemDetail, { color: '#999', marginHorizontal: 4 }]}>|</Text>
-          <Ionicons name="calendar" size={14} color="#e65100" />
-          <Text style={[styles.itemDetail, { color: '#e65100', fontWeight: '600' }]}>
-            {(item as any).lectures_count ?? 0} محاضرة
-          </Text>
+          <Text style={styles.itemMutedSm}>· {item.teacher_name || getTeacherName(item.teacher_id)}</Text>
+          <View style={styles.courseStatChip}>
+            <Ionicons name="people" size={11} color="#1565c0" />
+            <Text style={styles.courseStatChipBlue}>{item.students_count ?? 0}</Text>
+          </View>
+          <View style={styles.courseStatChip}>
+            <Ionicons name="calendar" size={11} color="#e65100" />
+            <Text style={styles.courseStatChipOrange}>{(item as any).lectures_count ?? 0}</Text>
+          </View>
         </View>
       </View>
       {!selectionMode && (
@@ -962,7 +965,7 @@ export default function AddCourseScreen() {
                       onPress={() => setShowForm(true)}
                       data-testid="add-course-btn"
                     >
-                      <Ionicons name="add-circle" size={22} color="#fff" />
+                      <Ionicons name="add-circle" size={14} color="#fff" />
                       <Text style={styles.addButtonText}>إضافة مقرر</Text>
                     </TouchableOpacity>
                   )}
@@ -972,7 +975,7 @@ export default function AddCourseScreen() {
                       style={[styles.addButton, styles.selectButton]}
                       onPress={toggleSelectionMode}
                     >
-                      <Ionicons name="checkmark-circle" size={22} color="#fff" />
+                      <Ionicons name="checkmark-circle" size={14} color="#fff" />
                       <Text style={styles.addButtonText}>تحديد</Text>
                     </TouchableOpacity>
                   )}
@@ -983,7 +986,7 @@ export default function AddCourseScreen() {
                       onPress={handleRestore}
                       disabled={restoring}
                     >
-                      <Ionicons name="cloud-upload" size={22} color="#fff" />
+                      <Ionicons name="cloud-upload" size={14} color="#fff" />
                       <Text style={styles.addButtonText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
                     </TouchableOpacity>
                   )}
@@ -995,7 +998,7 @@ export default function AddCourseScreen() {
                         onPress={handleDownloadTemplate}
                         data-testid="download-courses-template-btn"
                       >
-                        <Ionicons name="download" size={22} color="#fff" />
+                        <Ionicons name="download" size={14} color="#fff" />
                         <Text style={styles.addButtonText}>نموذج مقررات</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -1003,7 +1006,7 @@ export default function AddCourseScreen() {
                         onPress={() => { setShowImportModal(true); setImportResult(null); }}
                         data-testid="import-courses-btn"
                       >
-                        <Ionicons name="document-attach" size={22} color="#fff" />
+                        <Ionicons name="document-attach" size={14} color="#fff" />
                         <Text style={styles.addButtonText}>استيراد مقررات</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -1011,7 +1014,7 @@ export default function AddCourseScreen() {
                         onPress={handleDownloadLecturesTemplate}
                         data-testid="download-lectures-template-btn"
                       >
-                        <Ionicons name="download" size={22} color="#fff" />
+                        <Ionicons name="download" size={14} color="#fff" />
                         <Text style={styles.addButtonText}>نموذج محاضرات</Text>
                       </TouchableOpacity>
                       <TouchableOpacity
@@ -1019,7 +1022,7 @@ export default function AddCourseScreen() {
                         onPress={() => { setShowImportLecturesModal(true); setImportLecturesResult(null); }}
                         data-testid="import-lectures-btn"
                       >
-                        <Ionicons name="calendar" size={22} color="#fff" />
+                        <Ionicons name="calendar" size={14} color="#fff" />
                         <Text style={styles.addButtonText}>استيراد محاضرات</Text>
                       </TouchableOpacity>
                       {filterDept && (
@@ -1052,7 +1055,7 @@ export default function AddCourseScreen() {
                           {enrollingAll ? (
                             <ActivityIndicator size="small" color="#fff" />
                           ) : (
-                            <Ionicons name="people" size={22} color="#fff" />
+                            <Ionicons name="people" size={14} color="#fff" />
                           )}
                           <Text style={styles.addButtonText}>{enrollingAll ? 'جاري التسجيل...' : 'تسجيل تلقائي للكل'}</Text>
                         </TouchableOpacity>
@@ -1066,7 +1069,7 @@ export default function AddCourseScreen() {
                     style={[styles.addButton, { backgroundColor: '#666' }]}
                     onPress={toggleSelectionMode}
                   >
-                    <Ionicons name="close" size={22} color="#fff" />
+                    <Ionicons name="close" size={14} color="#fff" />
                     <Text style={styles.addButtonText}>إلغاء</Text>
                   </TouchableOpacity>
                   <TouchableOpacity
@@ -1093,7 +1096,7 @@ export default function AddCourseScreen() {
                     {deleting ? (
                       <ActivityIndicator size="small" color="#fff" />
                     ) : (
-                      <Ionicons name="trash" size={22} color="#fff" />
+                      <Ionicons name="trash" size={14} color="#fff" />
                     )}
                     <Text style={styles.addButtonText}>حذف ({selectedIds.size})</Text>
                   </TouchableOpacity>
@@ -1434,17 +1437,17 @@ const styles = StyleSheet.create({
   addButton: {
     flexDirection: 'row',
     backgroundColor: '#ff9800',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 6,
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
   },
   addButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 12,
     fontWeight: '600',
-    marginLeft: 8,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -1496,57 +1499,93 @@ const styles = StyleSheet.create({
   },
   itemCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginBottom: 6,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 0.06,
     shadowRadius: 2,
-    elevation: 2,
+    elevation: 1,
   },
   itemInfo: {
     flex: 1,
+    gap: 2,
+  },
+  courseTopRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  courseMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  itemMutedSm: {
+    fontSize: 11,
+    color: '#777',
+  },
+  courseStatChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 4,
+  },
+  courseStatChipBlue: {
+    fontSize: 11,
+    color: '#1565c0',
+    fontWeight: '700',
+  },
+  courseStatChipOrange: {
+    fontSize: 11,
+    color: '#e65100',
+    fontWeight: '700',
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#222',
   },
   itemDetail: {
-    fontSize: 14,
+    fontSize: 11,
     color: '#666',
-    marginTop: 4,
   },
   deleteBtn: {
-    padding: 8,
+    padding: 6,
   },
   actionButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: 4,
   },
   editBtn: {
-    padding: 8,
+    padding: 6,
     backgroundColor: '#fff3e0',
-    borderRadius: 8,
+    borderRadius: 6,
   },
   studentsBtn: {
-    padding: 8,
+    padding: 6,
     backgroundColor: '#e3f2fd',
-    borderRadius: 8,
+    borderRadius: 6,
   },
   lecturesBtn: {
-    padding: 8,
+    padding: 6,
     backgroundColor: '#f3e5f5',
-    borderRadius: 8,
+    borderRadius: 6,
   },
   studyPlanBtn: {
-    padding: 8,
+    padding: 6,
     backgroundColor: '#e8f5e9',
-    borderRadius: 8,
+    borderRadius: 6,
   },
   emptyContainer: {
     alignItems: 'center',
