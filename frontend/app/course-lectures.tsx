@@ -945,7 +945,7 @@ export default function CourseLecturesScreen() {
         )}
 
         {/* إحصائيات سريعة */}
-        <View style={{ flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: 12, borderRadius: 12, overflow: 'hidden' }} data-testid="lectures-stats-bar">
+        <View style={{ flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: 8, borderRadius: 10, overflow: 'hidden' }} data-testid="lectures-stats-bar">
           {[
             { key: null, label: 'الكل', count: getStats().total, color: '#333', bgActive: '#e3f2fd' },
             { key: 'scheduled', label: 'مجدولة', count: getStats().scheduled, color: '#2196f3', bgActive: '#e3f2fd' },
@@ -960,14 +960,14 @@ export default function CourseLecturesScreen() {
               style={{
                 flex: 1,
                 alignItems: 'center',
-                paddingVertical: 12,
+                paddingVertical: 6,
                 borderRightWidth: 1,
                 borderRightColor: '#f0f0f0',
                 backgroundColor: selectedStatus === stat.key || (!selectedStatus && stat.key === null) ? stat.bgActive : 'transparent',
               }}
             >
-              <Text style={{ fontSize: 20, fontWeight: 'bold', color: stat.color }}>{stat.count}</Text>
-              <Text style={{ fontSize: 12, color: '#666', marginTop: 2 }}>{stat.label}</Text>
+              <Text style={{ fontSize: 15, fontWeight: 'bold', color: stat.color }}>{stat.count}</Text>
+              <Text style={{ fontSize: 10, color: '#666', marginTop: 1 }}>{stat.label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -1014,7 +1014,7 @@ export default function CourseLecturesScreen() {
               style={styles.actionBtn}
               onPress={() => setShowAddModal(true)}
             >
-              <Ionicons name="add" size={20} color="#fff" />
+              <Ionicons name="add" size={14} color="#fff" />
               <Text style={styles.actionBtnText}>إضافة</Text>
             </TouchableOpacity>
             
@@ -1022,7 +1022,7 @@ export default function CourseLecturesScreen() {
               style={[styles.actionBtn, styles.generateBtnStyle]}
               onPress={openGenerateModal}
             >
-              <Ionicons name="flash" size={20} color="#fff" />
+              <Ionicons name="flash" size={14} color="#fff" />
               <Text style={styles.actionBtnText}>توليد</Text>
             </TouchableOpacity>
 
@@ -1031,7 +1031,7 @@ export default function CourseLecturesScreen() {
                 style={[styles.actionBtn, selectionMode ? styles.selectionActiveBtn : styles.selectionBtn]}
                 onPress={toggleSelectionMode}
               >
-                <Ionicons name={selectionMode ? "close" : "checkbox-outline"} size={20} color="#fff" />
+                <Ionicons name={selectionMode ? "close" : "checkbox-outline"} size={14} color="#fff" />
                 <Text style={styles.actionBtnText}>{selectionMode ? "إلغاء" : "تحديد"}</Text>
               </TouchableOpacity>
             )}
@@ -1538,61 +1538,64 @@ const styles = StyleSheet.create({
   },
   courseInfo: {
     backgroundColor: '#1565c0',
-    padding: 20,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 10,
     alignItems: 'center',
   },
   courseName: {
-    fontSize: 20,
-    fontWeight: 'bold',
+    fontSize: 16,
+    fontWeight: '700',
     color: '#fff',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   courseCode: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.8)',
-    marginBottom: 8,
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    marginBottom: 4,
   },
   courseDetailsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 6,
-    marginTop: 8,
+    gap: 4,
+    marginTop: 4,
   },
   courseDetailChip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: 3,
     backgroundColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 16,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    borderRadius: 12,
   },
   courseDetailText: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#fff',
     fontWeight: '500',
   },
   lectureCount: {
-    fontSize: 16,
+    fontSize: 13,
     color: '#fff',
     backgroundColor: 'rgba(255,255,255,0.2)',
-    paddingHorizontal: 16,
-    paddingVertical: 6,
-    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+    borderRadius: 16,
   },
   semesterInfo: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#e8f5e9',
-    margin: 16,
-    marginBottom: 0,
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 6,
   },
   semesterInfoText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#2e7d32',
     flex: 1,
   },
@@ -1600,21 +1603,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff3e0',
-    margin: 16,
-    marginBottom: 0,
-    padding: 12,
-    borderRadius: 8,
-    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    gap: 6,
   },
   semesterWarningText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#e65100',
     flex: 1,
   },
   actions: {
     flexDirection: 'row',
-    padding: 16,
-    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 6,
+    gap: 8,
   },
   actionBtn: {
     flex: 1,
@@ -1622,17 +1627,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#4caf50',
-    padding: 14,
-    borderRadius: 10,
-    gap: 8,
+    height: 32,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    gap: 4,
   },
   generateBtnStyle: {
     backgroundColor: '#9c27b0',
   },
   actionBtnText: {
     color: '#fff',
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
+    lineHeight: 16,
   },
   listContent: {
     padding: 16,
@@ -2040,21 +2047,21 @@ const styles = StyleSheet.create({
   semesterBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: 4,
     marginHorizontal: 16,
-    marginTop: 12,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
+    marginTop: 6,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
     backgroundColor: '#e3f2fd',
-    borderRadius: 10,
-    borderLeftWidth: 3,
+    borderRadius: 6,
+    borderLeftWidth: 2,
     borderLeftColor: '#1565c0',
   },
   semesterBannerText: {
     flex: 1,
     color: '#1565c0',
-    fontSize: 12,
-    fontWeight: '700' as const,
+    fontSize: 11,
+    fontWeight: '600' as const,
     textAlign: 'right' as const,
   },
   statsBar: {
@@ -2062,14 +2069,14 @@ const styles = StyleSheet.create({
     display: 'flex' as any,
     backgroundColor: '#fff',
     marginHorizontal: 16,
-    marginTop: 12,
-    borderRadius: 12,
+    marginTop: 8,
+    borderRadius: 10,
     overflow: 'hidden',
   },
   statItem: {
     width: '25%' as any,
     alignItems: 'center' as const,
-    paddingVertical: 12,
+    paddingVertical: 6,
     borderRightWidth: 1,
     borderRightColor: '#f0f0f0',
   },
@@ -2086,32 +2093,32 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffebee',
   },
   statNumber: {
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: 'bold',
     color: '#333',
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 10,
     color: '#666',
-    marginTop: 2,
+    marginTop: 1,
   },
   // === Month Filter ===
   monthsFilter: {
-    marginTop: 12,
-    minHeight: 44,
-    maxHeight: 44,
+    marginTop: 6,
+    minHeight: 32,
+    maxHeight: 32,
     zIndex: 5,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   monthsFilterContent: {
     paddingHorizontal: 16,
-    gap: 8,
+    gap: 6,
   },
   monthChip: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: '#fff',
-    borderRadius: 20,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: '#e0e0e0',
   },
@@ -2120,7 +2127,7 @@ const styles = StyleSheet.create({
     borderColor: '#1565c0',
   },
   monthChipText: {
-    fontSize: 13,
+    fontSize: 11,
     color: '#666',
   },
   monthChipTextActive: {
