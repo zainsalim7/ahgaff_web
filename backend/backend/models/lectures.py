@@ -32,6 +32,8 @@ class LectureUpdate(BaseModel):
     notes: Optional[str] = None
     cancellation_reason: Optional[str] = None  # سبب الإلغاء (يُستخدم عند تحويل الحالة إلى cancelled)
     reschedule_note: Optional[str] = None  # ملاحظة عند إعادة الجدولة (اختياري)
+    lesson_title: Optional[str] = None  # عنوان الدرس المُنجز (لربط الخطة الدراسية)
+    plan_topic_id: Optional[str] = None  # معرف موضوع من الخطة الدراسية
 
 class LectureResponse(BaseModel):
     id: str

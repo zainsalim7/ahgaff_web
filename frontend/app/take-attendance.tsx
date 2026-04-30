@@ -9,11 +9,15 @@ import {
   Alert,
   ActivityIndicator,
   Platform,
+  Modal,
+  TextInput,
+  ScrollView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { enrollmentAPI, attendanceAPI, lecturesAPI } from '../src/services/api';
+import api from '../src/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOfflineSyncStore } from '../src/store/offlineSyncStore';
 import { useAuthStore } from '../src/store/authStore';
@@ -89,6 +93,13 @@ export default function TakeAttendanceScreen() {
   const [saving, setSaving] = useState(false);
   const [attendanceRecorded, setAttendanceRecorded] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
+
+  // === ربط الخطة الدراسية ===
+  const [showLessonModal, setShowLessonModal] = useState(false);
+  const [lessonTitle, setLessonTitle] = useState('');
+  const [planTopicId, setPlanTopicId] = useState<string | null>(null);
+  const [studyPlan, setStudyPlan] = useState<any>(null);
+  const [savingLesson, setSavingLesson] = useState(false);
   
   // بدء مراقبة الاتصال عند تحميل الصفحة
   useEffect(() => {
@@ -346,6 +357,34 @@ export default function TakeAttendanceScreen() {
     });
   };
 
+  // جلب الخطة الدراسية أول مرة لاستخدامها في modal الموضوع
+  const fetchStudyPlan = useCallback(async () => {
+    if (!course?.id && !courseId) return;
+    try {
+      const cid = course?.id || (courseId as string);
+      const res = await api.get(`/courses/${cid}/study-plan`);
+      setStudyPlan(res.data);
+    } catch {
+      setStudyPlan(null);
+    }
+  }, [course?.id, courseId]);
+
+  useEffect(() => {
+    if (course?.id) fetchStudyPlan();
+  }, [course?.id, fetchStudyPlan]);
+
+  // فتح modal اختيار الموضوع قبل حفظ الحضور
+  const promptForLessonAndSave = () => {
+    if (Object.keys(attendance).length === 0) {
+      const msg = 'يرجى تسجيل الحضور لجميع الطلاب أولاً';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تنبيه', msg);
+      return;
+    }
+    setLessonTitle('');
+    setPlanTopicId(null);
+    setShowLessonModal(true);
+  };
+
   const saveAttendance = async () => {
     setSaving(true);
     try {
@@ -360,7 +399,9 @@ export default function TakeAttendanceScreen() {
           await attendanceAPI.recordSession({
             lecture_id: lectureId as string,
             records,
-          });
+            lesson_title: lessonTitle.trim() || undefined,
+            plan_topic_id: planTopicId || undefined,
+          } as any);
         }
         
         // تحديث الكاش بالحضور المحفوظ
@@ -664,7 +705,7 @@ export default function TakeAttendanceScreen() {
         {students.length > 0 && ((canRecordAttendance && canTakeAttendanceNow) || canEditAttendance) && (
           <TouchableOpacity
             style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            onPress={saveAttendance}
+            onPress={promptForLessonAndSave}
             disabled={saving}
           >
             {saving ? (
@@ -709,10 +750,240 @@ export default function TakeAttendanceScreen() {
             <Text style={styles.noPermissionText}>عرض فقط - ليس لديك صلاحية تسجيل الحضور</Text>
           </View>
         )}
+
+        {/* Modal اختيار موضوع الدرس من الخطة الدراسية */}
+        <Modal visible={showLessonModal} transparent animationType="slide">
+          <View style={modalStyles.overlay}>
+            <View style={modalStyles.card}>
+              <Text style={modalStyles.title}>تأكيد إنجاز الدرس</Text>
+              <Text style={modalStyles.subtitle}>
+                ما الموضوع الذي تم تدريسه في هذه المحاضرة؟ (اختياري لكن مهم لتحديث الخطة الدراسية)
+              </Text>
+
+              <Text style={modalStyles.label}>عنوان الدرس</Text>
+              <TextInput
+                style={modalStyles.input}
+                value={lessonTitle}
+                onChangeText={setLessonTitle}
+                placeholder="مثال: الباب الأول - مقدمة"
+                placeholderTextColor="#aaa"
+                testID="lesson-title-input"
+              />
+
+              {studyPlan?.weeks && studyPlan.weeks.length > 0 && (
+                <>
+                  <Text style={modalStyles.label}>أو اختر من الخطة الدراسية:</Text>
+                  <ScrollView style={modalStyles.topicsScroll}>
+                    {studyPlan.weeks.map((week: any, wi: number) => (
+                      <View key={wi} style={modalStyles.weekBlock}>
+                        <Text style={modalStyles.weekTitle}>
+                          الأسبوع {week.week_number}{week.completion_percent === 100 ? ' ✓' : ''}
+                        </Text>
+                        {week.topics?.map((topic: any, ti: number) => {
+                          const isSelected = planTopicId === topic.id;
+                          const isCompleted = topic.completed;
+                          return (
+                            <TouchableOpacity
+                              key={ti}
+                              style={[
+                                modalStyles.topicRow,
+                                isSelected && modalStyles.topicRowSelected,
+                                isCompleted && modalStyles.topicRowCompleted,
+                              ]}
+                              onPress={() => {
+                                setPlanTopicId(topic.id);
+                                setLessonTitle(topic.title || '');
+                              }}
+                              disabled={isCompleted && !isSelected}
+                              testID={`topic-option-${topic.id}`}
+                            >
+                              <Ionicons
+                                name={isSelected ? 'radio-button-on' : isCompleted ? 'checkmark-circle' : 'radio-button-off'}
+                                size={16}
+                                color={isCompleted ? '#4caf50' : isSelected ? '#1565c0' : '#999'}
+                              />
+                              <Text style={[
+                                modalStyles.topicText,
+                                isCompleted && { color: '#4caf50', textDecorationLine: 'line-through' as any },
+                              ]}>
+                                {topic.title}
+                              </Text>
+                            </TouchableOpacity>
+                          );
+                        })}
+                      </View>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
+              <View style={modalStyles.actions}>
+                <TouchableOpacity
+                  style={modalStyles.cancelBtn}
+                  onPress={() => setShowLessonModal(false)}
+                  disabled={savingLesson}
+                >
+                  <Text style={modalStyles.cancelBtnText}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={modalStyles.skipBtn}
+                  onPress={async () => {
+                    setShowLessonModal(false);
+                    setLessonTitle('');
+                    setPlanTopicId(null);
+                    await saveAttendance();
+                  }}
+                  disabled={savingLesson}
+                >
+                  <Text style={modalStyles.skipBtnText}>تخطّي</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={modalStyles.confirmBtn}
+                  onPress={async () => {
+                    setSavingLesson(true);
+                    setShowLessonModal(false);
+                    await saveAttendance();
+                    setSavingLesson(false);
+                  }}
+                  disabled={savingLesson}
+                  testID="confirm-lesson-save"
+                >
+                  <Text style={modalStyles.confirmBtnText}>{savingLesson ? 'جاري الحفظ...' : 'تأكيد وحفظ'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
 }
+
+const modalStyles = StyleSheet.create({
+  overlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  card: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 18,
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '85%',
+  },
+  title: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1565c0',
+    textAlign: 'center',
+    marginBottom: 4,
+  },
+  subtitle: {
+    fontSize: 12,
+    color: '#666',
+    textAlign: 'center',
+    marginBottom: 12,
+  },
+  label: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#333',
+    marginTop: 6,
+    marginBottom: 4,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    textAlign: 'right',
+  },
+  topicsScroll: {
+    maxHeight: 240,
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: '#eee',
+    borderRadius: 8,
+    padding: 6,
+  },
+  weekBlock: {
+    marginBottom: 8,
+  },
+  weekTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#1565c0',
+    marginBottom: 4,
+  },
+  topicRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    borderRadius: 6,
+  },
+  topicRowSelected: {
+    backgroundColor: '#e3f2fd',
+  },
+  topicRowCompleted: {
+    opacity: 0.7,
+  },
+  topicText: {
+    fontSize: 12,
+    color: '#333',
+    flex: 1,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 14,
+  },
+  cancelBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#999',
+    alignItems: 'center',
+  },
+  cancelBtnText: {
+    color: '#666',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  skipBtn: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#f5f5f5',
+    alignItems: 'center',
+  },
+  skipBtnText: {
+    color: '#888',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  confirmBtn: {
+    flex: 1.4,
+    paddingVertical: 8,
+    borderRadius: 8,
+    backgroundColor: '#1565c0',
+    alignItems: 'center',
+  },
+  confirmBtnText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '700',
+  },
+});
 
 const styles = StyleSheet.create({
   container: {

@@ -100,10 +100,16 @@ async def record_attendance_session(
             if record.status == AttendanceStatus.ABSENT:
                 await check_and_create_absence_notifications(record.student_id, lecture["course_id"])
     
-    # Update lecture status to completed
+    # Update lecture status to completed (with plan topic linking)
+    lecture_update = {"status": LectureStatus.COMPLETED}
+    if session.lesson_title:
+        lecture_update["lesson_title"] = session.lesson_title
+    if session.plan_topic_id:
+        lecture_update["plan_topic_id"] = session.plan_topic_id
+
     await db.lectures.update_one(
         {"_id": ObjectId(session.lecture_id)},
-        {"$set": {"status": LectureStatus.COMPLETED}}
+        {"$set": lecture_update}
     )
     
     return {"message": f"تم تسجيل حضور {len(attendance_records)} طالب بنجاح"}
