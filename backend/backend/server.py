@@ -5069,29 +5069,45 @@ async def export_lesson_completion_excel(
     
     courses = await db.courses.find(course_query).to_list(500)
     
-    rows = []
+    # تصدير تفصيلي: صف لكل موضوع من الخطة + صف لكل درس منجز غير مرتبط
+    detail_rows = []
+    summary_rows = []
+
     for course in courses:
         cid = str(course["_id"])
         
+        # جلب الخطة الدراسية (مع التأكيدات اليدوية)
         plan = await db.study_plans.find_one({"course_id": cid})
-        planned_topics = 0
-        planned_titles = []
-        if plan:
-            for week in plan.get("weeks", []):
-                for topic in week.get("topics", []):
-                    planned_topics += 1
-                    planned_titles.append(f"أسبوع {week.get('week_number', '?')}: {topic.get('title', '')}")
         
+        # جلب المحاضرات المكتملة
         completed_lectures = await db.lectures.find({
             "course_id": cid,
             "status": LectureStatus.COMPLETED
-        }).to_list(500)
+        }).sort("date", 1).to_list(500)
         
         total_lectures = await db.lectures.count_documents({"course_id": cid})
         completed_count = len(completed_lectures)
-        lessons_with_title = sum(1 for l in completed_lectures if l.get("lesson_title"))
-        lesson_titles = [l.get("lesson_title", "-") for l in completed_lectures if l.get("lesson_title")]
         
+        # خريطة: plan_topic_id -> معلومات المحاضرة المرتبطة
+        lecture_by_topic = {}
+        unlinked_lectures = []
+        for lec in completed_lectures:
+            d = lec.get("date", "")
+            if hasattr(d, "strftime"):
+                d = d.strftime("%Y-%m-%d")
+            tid = lec.get("plan_topic_id")
+            if tid:
+                lecture_by_topic[tid] = {
+                    "title": lec.get("lesson_title", "") or "-",
+                    "date": str(d),
+                }
+            elif lec.get("lesson_title"):
+                unlinked_lectures.append({
+                    "title": lec.get("lesson_title", ""),
+                    "date": str(d),
+                })
+        
+        # اسم المعلم والقسم
         teacher_name = "غير محدد"
         dept_name = "غير محدد"
         if course.get("teacher_id"):
@@ -5103,33 +5119,146 @@ async def export_lesson_completion_excel(
             if dept:
                 dept_name = dept["name"]
         
-        completion_percent = 0
-        if planned_topics > 0:
-            completion_percent = round((lessons_with_title / planned_topics) * 100, 1)
+        planned_topics = 0
+        topics_completed = 0
+        manually_confirmed_count = 0
         
-        rows.append({
+        # ===== صفوف تفصيلية: كل موضوع من الخطة = صف واحد =====
+        if plan:
+            for week in plan.get("weeks", []):
+                week_num = week.get("week_number", "?")
+                for topic in week.get("topics", []):
+                    planned_topics += 1
+                    tid = topic.get("id", "")
+                    planned_title = topic.get("title", "")
+                    
+                    # فحص المصدر
+                    linked_lecture = lecture_by_topic.get(tid)
+                    manually_confirmed = topic.get("confirmed") and topic.get("was_taught", True)
+                    
+                    if linked_lecture:
+                        status = "منجز (محاضرة)"
+                        actual_title = linked_lecture["title"]
+                        actual_date = linked_lecture["date"]
+                        topics_completed += 1
+                    elif manually_confirmed:
+                        status = "منجز (تأكيد يدوي)"
+                        actual_title = planned_title  # الأستاذ أكّد الموضوع بالعنوان نفسه
+                        actual_date = (topic.get("confirmed_date", "") or "")[:10]
+                        topics_completed += 1
+                        manually_confirmed_count += 1
+                    else:
+                        status = "غير منجز"
+                        actual_title = "-"
+                        actual_date = "-"
+                    
+                    detail_rows.append({
+                        "القسم": dept_name,
+                        "المقرر": course["name"],
+                        "رمز المقرر": course.get("code", ""),
+                        "المعلم": teacher_name,
+                        "الأسبوع": week_num,
+                        "الخطة (مطلوب)": planned_title,
+                        "المنجز (الأستاذ)": actual_title,
+                        "التاريخ": actual_date,
+                        "الحالة": status,
+                    })
+        
+        # ===== صفوف إضافية: الدروس المنجزة غير المرتبطة بأي موضوع =====
+        for lec in unlinked_lectures:
+            detail_rows.append({
+                "القسم": dept_name,
+                "المقرر": course["name"],
+                "رمز المقرر": course.get("code", ""),
+                "المعلم": teacher_name,
+                "الأسبوع": "-",
+                "الخطة (مطلوب)": "(خارج الخطة)",
+                "المنجز (الأستاذ)": lec["title"],
+                "التاريخ": lec["date"],
+                "الحالة": "منجز خارج الخطة",
+            })
+        
+        # ===== ملخص المقرر =====
+        completion_percent = round((topics_completed / planned_topics) * 100, 1) if planned_topics > 0 else 0
+        summary_rows.append({
             "القسم": dept_name,
             "المقرر": course["name"],
             "رمز المقرر": course.get("code", ""),
             "المعلم": teacher_name,
             "المواضيع المخططة": planned_topics,
+            "المواضيع المُنجَزة": topics_completed,
+            "  - منجز بمحاضرة": len(lecture_by_topic),
+            "  - مؤكَّد يدوياً": manually_confirmed_count,
             "المحاضرات الكلية": total_lectures,
             "المحاضرات المنعقدة": completed_count,
-            "دروس بعنوان": lessons_with_title,
-            "دروس بدون عنوان": completed_count - lessons_with_title,
+            "دروس خارج الخطة": len(unlinked_lectures),
             "نسبة الإنجاز (%)": completion_percent,
-            "الخطة الدراسية": "\n".join(planned_titles) if planned_titles else "لا توجد خطة",
-            "الدروس المنجزة": "\n".join(lesson_titles) if lesson_titles else "-",
         })
-    
-    df = pd.DataFrame(rows)
+
+    # بناء ملف Excel بشيتين: ملخص + تفصيلي
     output = BytesIO()
     with pd.ExcelWriter(output, engine='openpyxl') as writer:
-        df.to_excel(writer, index=False, sheet_name='إنجاز الدروس')
-        worksheet = writer.sheets['إنجاز الدروس']
-        for col in worksheet.columns:
-            max_length = max(len(str(cell.value or '')) for cell in col)
-            worksheet.column_dimensions[col[0].column_letter].width = min(max_length + 2, 40)
+        # Sheet 1: ملخص (صف لكل مقرر)
+        df_summary = pd.DataFrame(summary_rows)
+        df_summary.to_excel(writer, index=False, sheet_name='ملخص المقررات')
+        ws = writer.sheets['ملخص المقررات']
+        for col in ws.columns:
+            max_length = max((len(str(cell.value or '')) for cell in col), default=10)
+            ws.column_dimensions[col[0].column_letter].width = min(max_length + 2, 40)
+        
+        # Sheet 2: تفصيلي (صف لكل موضوع)
+        if detail_rows:
+            df_detail = pd.DataFrame(detail_rows)
+            df_detail.to_excel(writer, index=False, sheet_name='تفصيلي المواضيع')
+            ws2 = writer.sheets['تفصيلي المواضيع']
+            # تلوين الصفوف حسب الحالة
+            from openpyxl.styles import PatternFill, Alignment
+            header_fill = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
+            from openpyxl.styles import Font
+            header_font = Font(color='FFFFFF', bold=True)
+            for cell in ws2[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(horizontal='center', vertical='center')
+            
+            green_fill = PatternFill(start_color='E8F5E9', end_color='E8F5E9', fill_type='solid')
+            blue_fill = PatternFill(start_color='E3F2FD', end_color='E3F2FD', fill_type='solid')
+            red_fill = PatternFill(start_color='FFEBEE', end_color='FFEBEE', fill_type='solid')
+            orange_fill = PatternFill(start_color='FFF3E0', end_color='FFF3E0', fill_type='solid')
+            
+            status_col_idx = None
+            for idx, cell in enumerate(ws2[1], 1):
+                if cell.value == 'الحالة':
+                    status_col_idx = idx
+                    break
+            
+            if status_col_idx:
+                for row_idx in range(2, ws2.max_row + 1):
+                    status_val = ws2.cell(row=row_idx, column=status_col_idx).value
+                    fill = None
+                    if status_val == 'منجز (محاضرة)':
+                        fill = green_fill
+                    elif status_val == 'منجز (تأكيد يدوي)':
+                        fill = blue_fill
+                    elif status_val == 'غير منجز':
+                        fill = red_fill
+                    elif status_val == 'منجز خارج الخطة':
+                        fill = orange_fill
+                    if fill:
+                        for col_idx in range(1, ws2.max_column + 1):
+                            ws2.cell(row=row_idx, column=col_idx).fill = fill
+            
+            # عرض الأعمدة
+            col_widths = {
+                'القسم': 18, 'المقرر': 20, 'رمز المقرر': 12, 'المعلم': 22,
+                'الأسبوع': 8, 'الخطة (مطلوب)': 50, 'المنجز (الأستاذ)': 50,
+                'التاريخ': 12, 'الحالة': 18,
+            }
+            for idx, cell in enumerate(ws2[1], 1):
+                name = cell.value
+                if name in col_widths:
+                    ws2.column_dimensions[cell.column_letter].width = col_widths[name]
+    
     output.seek(0)
     
     return StreamingResponse(
