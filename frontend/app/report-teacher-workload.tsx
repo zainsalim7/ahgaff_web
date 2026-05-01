@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Platform,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -149,6 +150,8 @@ export default function TeacherWorkloadReport() {
   const [teachers, setTeachers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
+  const [teacherQuery, setTeacherQuery] = useState('');
+  const [showTeacherList, setShowTeacherList] = useState(false);
   const [selectedDept, setSelectedDept] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -453,21 +456,79 @@ export default function TeacherWorkloadReport() {
             </View>
           </View>
 
-          {/* معلم */}
+          {/* معلم - مع البحث */}
           <View style={styles.filterRow}>
             <Text style={styles.filterLabel}>المدرس</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={selectedTeacher}
-                onValueChange={(v) => setSelectedTeacher(v)}
-                style={styles.picker}
-              >
-                <Picker.Item label="جميع المدرسين" value="" />
-                {teachers.map(t => (
-                  <Picker.Item key={t.id} label={t.full_name} value={t.id} />
-                ))}
-              </Picker>
-            </View>
+            <TouchableOpacity
+              onPress={() => setShowTeacherList(!showTeacherList)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 }}
+              testID="teacher-input"
+            >
+              <Ionicons name="person-outline" size={16} color="#666" />
+              <Text style={{ flex: 1, fontSize: 13, color: selectedTeacher ? '#333' : '#999', textAlign: 'right' }}>
+                {selectedTeacher
+                  ? (teachers.find((t: any) => t.id === selectedTeacher)?.full_name || 'المدرس المختار')
+                  : 'جميع المدرسين (اضغط للبحث)'}
+              </Text>
+              {selectedTeacher && (
+                <TouchableOpacity onPress={(e: any) => { e.stopPropagation?.(); setSelectedTeacher(''); setTeacherQuery(''); }} testID="clear-teacher-btn">
+                  <Ionicons name="close-circle" size={16} color="#f44336" />
+                </TouchableOpacity>
+              )}
+              <Ionicons name={showTeacherList ? 'chevron-up' : 'chevron-down'} size={16} color="#666" />
+            </TouchableOpacity>
+
+            {showTeacherList && (
+              <View style={{ marginTop: 6, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', maxHeight: 280 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fafafa' }}>
+                  <Ionicons name="search" size={14} color="#999" />
+                  <TextInput
+                    value={teacherQuery}
+                    onChangeText={setTeacherQuery}
+                    placeholder="ابحث بالاسم أو الرقم..."
+                    placeholderTextColor="#aaa"
+                    style={{ flex: 1, fontSize: 13, textAlign: 'right', padding: 4 }}
+                    autoFocus
+                    testID="teacher-search-input"
+                  />
+                </View>
+                <ScrollView style={{ maxHeight: 220 }} keyboardShouldPersistTaps="handled">
+                  {/* خيار "جميع المدرسين" */}
+                  <TouchableOpacity
+                    onPress={() => { setSelectedTeacher(''); setShowTeacherList(false); setTeacherQuery(''); }}
+                    style={{ paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', backgroundColor: !selectedTeacher ? '#e3f2fd' : '#fff' }}
+                  >
+                    <Text style={{ fontSize: 13, color: '#1565c0', textAlign: 'right', fontWeight: '700' }}>جميع المدرسين</Text>
+                  </TouchableOpacity>
+                  {(() => {
+                    const q = teacherQuery.trim().toLowerCase();
+                    const filtered = q
+                      ? teachers.filter((t: any) =>
+                          (t.full_name || '').toLowerCase().includes(q) ||
+                          (t.username || '').toLowerCase().includes(q) ||
+                          (t.teacher_id || '').toLowerCase().includes(q)
+                        )
+                      : teachers;
+                    if (filtered.length === 0) {
+                      return <Text style={{ padding: 16, textAlign: 'center', color: '#999', fontSize: 12 }}>لا توجد نتائج</Text>;
+                    }
+                    return filtered.slice(0, 100).map((t: any) => (
+                      <TouchableOpacity
+                        key={t.id}
+                        onPress={() => { setSelectedTeacher(t.id); setShowTeacherList(false); setTeacherQuery(''); }}
+                        style={{ paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', backgroundColor: selectedTeacher === t.id ? '#e3f2fd' : '#fff' }}
+                        testID={`teacher-option-${t.id}`}
+                      >
+                        <Text style={{ fontSize: 13, color: '#333', textAlign: 'right', fontWeight: selectedTeacher === t.id ? '700' : '400' }}>{t.full_name}</Text>
+                        {(t.teacher_id || t.username) ? (
+                          <Text style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{t.teacher_id || t.username}</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    ));
+                  })()}
+                </ScrollView>
+              </View>
+            )}
           </View>
 
           {/* أزرار الفترة */}
