@@ -66,6 +66,11 @@ export default function WeeklySchedulePage() {
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
+  const [viewMode, setViewMode] = useState<'section' | 'department' | 'course' | 'teacher'>('section');
+  const [scheduleTeacher, setScheduleTeacher] = useState('');
+  const [scheduleCourse, setScheduleCourse] = useState('');
+  const [allTeachers, setAllTeachers] = useState<any[]>([]);
+  const [allCourses, setAllCourses] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<any[]>([]);
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
@@ -81,7 +86,7 @@ export default function WeeklySchedulePage() {
   // Prefs state
   const [teachers, setTeachers] = useState<any[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
-  const [prefs, setPrefs] = useState<any>({ unavailable_days: [], unavailable_slots: [], max_daily_lectures: 5 });
+  const [prefs, setPrefs] = useState<any>({ unavailable_days: [], unavailable_slots: [], max_daily_lectures: 2, allow_consecutive_lectures: false });
   const [savingPrefs, setSavingPrefs] = useState(false);
   // Add slot modal
   const [showAddSlot, setShowAddSlot] = useState(false);
@@ -127,18 +132,29 @@ export default function WeeklySchedulePage() {
     setLoading(true);
     try {
       const params: any = { faculty_id: selectedFaculty };
-      if (selectedDept) params.department_id = selectedDept;
-      if (selectedLevel) params.level = parseInt(selectedLevel);
-      if (selectedSection) params.section = selectedSection;
+      if (viewMode === 'section') {
+        if (selectedDept) params.department_id = selectedDept;
+        if (selectedLevel) params.level = parseInt(selectedLevel);
+        if (selectedSection) params.section = selectedSection;
+      } else if (viewMode === 'department') {
+        if (selectedDept) params.department_id = selectedDept;
+      } else if (viewMode === 'course') {
+        if (scheduleCourse) params.course_id = scheduleCourse;
+        else { setSchedule([]); setLoading(false); return; }
+      } else if (viewMode === 'teacher') {
+        if (scheduleTeacher) params.teacher_id = scheduleTeacher;
+        else { setSchedule([]); setLoading(false); return; }
+        if (selectedDept) params.department_id = selectedDept; // قيد اختياري لجدول المعلم داخل قسم
+      }
       const res = await scheduleAPI.getSchedule(params);
       setSchedule(res.data);
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
-  }, [selectedFaculty, selectedDept, selectedLevel, selectedSection]);
+  }, [selectedFaculty, selectedDept, selectedLevel, selectedSection, viewMode, scheduleCourse, scheduleTeacher]);
 
   useEffect(() => { if (selectedFaculty) loadSchedule(); }, [loadSchedule]);
 
-  // Load teachers for prefs/add
+  // Load teachers for prefs/add (by department)
   useEffect(() => {
     if (selectedDept) {
       (async () => {
@@ -153,6 +169,26 @@ export default function WeeklySchedulePage() {
       })();
     }
   }, [selectedDept]);
+
+  // Load all teachers + courses in the faculty (for schedule view modes: teacher/course)
+  useEffect(() => {
+    if (!selectedFaculty) { setAllTeachers([]); setAllCourses([]); return; }
+    (async () => {
+      try {
+        const deptIds = departments.map((d: any) => d.id);
+        if (!deptIds.length) return;
+        // get all teachers and courses for all departments of this faculty (in parallel)
+        const [tRes, cRes] = await Promise.all([
+          teachersAPI.getAll({}),
+          coursesAPI.getAll({}),
+        ]);
+        const teachersInFaculty = (tRes.data || []).filter((t: any) => deptIds.includes(t.department_id));
+        const coursesInFaculty = (cRes.data || []).filter((c: any) => deptIds.includes(c.department_id));
+        setAllTeachers(teachersInFaculty);
+        setAllCourses(coursesInFaculty);
+      } catch {}
+    })();
+  }, [selectedFaculty, departments]);
 
   // Load teacher prefs
   useEffect(() => {
@@ -340,55 +376,160 @@ export default function WeeklySchedulePage() {
         {/* ====== TAB: SCHEDULE ====== */}
         {activeTab === 'schedule' && (
           <>
+            {/* View mode selector */}
+            <View style={st.card}>
+              <Text style={st.label}>نمط العرض</Text>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                {[
+                  { key: 'section', label: 'بالشعبة', icon: 'layers' },
+                  { key: 'department', label: 'بالقسم', icon: 'school' },
+                  { key: 'course', label: 'بالمقرر', icon: 'book' },
+                  { key: 'teacher', label: 'بالأستاذ', icon: 'person' },
+                ].map(m => (
+                  <TouchableOpacity
+                    key={m.key}
+                    onPress={() => setViewMode(m.key as any)}
+                    style={{
+                      flexDirection: 'row', alignItems: 'center', gap: 4,
+                      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
+                      backgroundColor: viewMode === m.key ? '#1565c0' : '#f0f0f0',
+                    }}
+                    testID={`view-mode-${m.key}`}
+                  >
+                    <Ionicons name={m.icon as any} size={14} color={viewMode === m.key ? '#fff' : '#333'} />
+                    <Text style={{ color: viewMode === m.key ? '#fff' : '#333', fontSize: 13, fontWeight: '600' }}>{m.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             {/* Filters */}
             <View style={st.card}>
               <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
                 <View style={{ flex: 1, minWidth: 150 }}>
                   <Text style={st.label}>الكلية</Text>
                   <View style={st.pickerWrap}>
-                    <Picker selectedValue={selectedFaculty} onValueChange={v => { setSelectedFaculty(v); setSelectedDept(''); }} style={{ height: 40 }}>
+                    <Picker selectedValue={selectedFaculty} onValueChange={v => { setSelectedFaculty(v); setSelectedDept(''); setScheduleTeacher(''); setScheduleCourse(''); }} style={{ height: 40 }}>
                       <Picker.Item label="-- الكلية --" value="" />
                       {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
                     </Picker>
                   </View>
                 </View>
-                <View style={{ flex: 1, minWidth: 150 }}>
-                  <Text style={st.label}>القسم (اختياري)</Text>
-                  <View style={st.pickerWrap}>
-                    <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
-                      <Picker.Item label="-- الكل --" value="" />
-                      {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
-                    </Picker>
+
+                {/* Section mode: dept + level + section */}
+                {viewMode === 'section' && (
+                  <>
+                    <View style={{ flex: 1, minWidth: 150 }}>
+                      <Text style={st.label}>القسم (اختياري)</Text>
+                      <View style={st.pickerWrap}>
+                        <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
+                          <Picker.Item label="-- الكل --" value="" />
+                          {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                        </Picker>
+                      </View>
+                    </View>
+                    <View style={{ flex: 0.5, minWidth: 80 }}>
+                      <Text style={st.label}>المستوى</Text>
+                      <View style={st.pickerWrap}>
+                        <Picker selectedValue={selectedLevel} onValueChange={setSelectedLevel} style={{ height: 40 }}>
+                          <Picker.Item label="الكل" value="" />
+                          {[1,2,3,4,5,6].map(l => <Picker.Item key={l} label={`م${l}`} value={String(l)} />)}
+                        </Picker>
+                      </View>
+                    </View>
+                  </>
+                )}
+
+                {/* Department mode: pick one department */}
+                {viewMode === 'department' && (
+                  <View style={{ flex: 2, minWidth: 200 }}>
+                    <Text style={st.label}>القسم *</Text>
+                    <View style={st.pickerWrap}>
+                      <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
+                        <Picker.Item label="-- اختر القسم --" value="" />
+                        {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                      </Picker>
+                    </View>
                   </View>
-                </View>
-                <View style={{ flex: 0.5, minWidth: 80 }}>
-                  <Text style={st.label}>المستوى</Text>
-                  <View style={st.pickerWrap}>
-                    <Picker selectedValue={selectedLevel} onValueChange={setSelectedLevel} style={{ height: 40 }}>
-                      <Picker.Item label="الكل" value="" />
-                      {[1,2,3,4,5,6].map(l => <Picker.Item key={l} label={`م${l}`} value={String(l)} />)}
-                    </Picker>
-                  </View>
-                </View>
+                )}
+
+                {/* Course mode: pick one course */}
+                {viewMode === 'course' && (
+                  <>
+                    <View style={{ flex: 1, minWidth: 150 }}>
+                      <Text style={st.label}>القسم (لتصفية المقررات)</Text>
+                      <View style={st.pickerWrap}>
+                        <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
+                          <Picker.Item label="-- كل الأقسام --" value="" />
+                          {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                        </Picker>
+                      </View>
+                    </View>
+                    <View style={{ flex: 2, minWidth: 200 }}>
+                      <Text style={st.label}>المقرر *</Text>
+                      <View style={st.pickerWrap}>
+                        <Picker selectedValue={scheduleCourse} onValueChange={setScheduleCourse} style={{ height: 40 }}>
+                          <Picker.Item label="-- اختر المقرر --" value="" />
+                          {allCourses.filter((c: any) => !selectedDept || c.department_id === selectedDept).map((c: any) => (
+                            <Picker.Item key={c.id} label={`${c.name}${c.section ? ` (${c.section})` : ''} - م${c.level || 1}`} value={c.id} />
+                          ))}
+                        </Picker>
+                      </View>
+                    </View>
+                  </>
+                )}
+
+                {/* Teacher mode: pick one teacher (optionally dept) */}
+                {viewMode === 'teacher' && (
+                  <>
+                    <View style={{ flex: 1, minWidth: 150 }}>
+                      <Text style={st.label}>القسم (اختياري)</Text>
+                      <View style={st.pickerWrap}>
+                        <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
+                          <Picker.Item label="-- كل الأقسام --" value="" />
+                          {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                        </Picker>
+                      </View>
+                    </View>
+                    <View style={{ flex: 2, minWidth: 220 }}>
+                      <Text style={st.label}>الأستاذ *</Text>
+                      <TeacherSearchBox
+                        teachers={allTeachers.filter((t: any) => !selectedDept || t.department_id === selectedDept)}
+                        selectedId={scheduleTeacher}
+                        onSelect={setScheduleTeacher}
+                        placeholder="ابحث عن الأستاذ..."
+                      />
+                    </View>
+                  </>
+                )}
               </View>
 
               {/* Actions */}
               {selectedFaculty && (
-                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
-                  <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32' }]} onPress={handleGenerate} disabled={generating}>
-                    {generating ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="flash" size={16} color="#fff" />}
-                    <Text style={st.btnText}>{generating ? 'جاري...' : 'توليد تلقائي'}</Text>
-                  </TouchableOpacity>
-                  {selectedDept && (
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  {viewMode === 'section' && (
+                    <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32' }]} onPress={handleGenerate} disabled={generating} testID="auto-generate-btn">
+                      {generating ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="flash" size={16} color="#fff" />}
+                      <Text style={st.btnText}>{generating ? 'جاري...' : 'توليد تلقائي'}</Text>
+                    </TouchableOpacity>
+                  )}
+                  {viewMode === 'section' && selectedDept && (
                     <TouchableOpacity style={[st.btn, { backgroundColor: '#1565c0' }]} onPress={() => setShowAddSlot(true)}>
                       <Ionicons name="add" size={16} color="#fff" />
                       <Text style={st.btnText}>إضافة يدوية</Text>
                     </TouchableOpacity>
                   )}
-                  <TouchableOpacity style={[st.btn, { backgroundColor: '#e53935' }]} onPress={handleClearSchedule}>
-                    <Ionicons name="trash" size={16} color="#fff" />
-                    <Text style={st.btnText}>مسح</Text>
-                  </TouchableOpacity>
+                  {viewMode === 'section' && (
+                    <TouchableOpacity style={[st.btn, { backgroundColor: '#e53935' }]} onPress={handleClearSchedule}>
+                      <Ionicons name="trash" size={16} color="#fff" />
+                      <Text style={st.btnText}>مسح</Text>
+                    </TouchableOpacity>
+                  )}
+                  {schedule.length > 0 && (
+                    <View style={{ marginLeft: 'auto', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#e3f2fd', borderRadius: 6 }}>
+                      <Text style={{ fontSize: 12, color: '#1565c0', fontWeight: '600' }}>إجمالي المحاضرات: {schedule.length}</Text>
+                    </View>
+                  )}
                 </View>
               )}
             </View>
@@ -664,12 +805,39 @@ export default function WeeklySchedulePage() {
                   })}
                 </View>
 
-                <Text style={st.miniLabel}>أقصى محاضرات يومياً</Text>
+                <Text style={st.miniLabel}>أقصى محاضرات يومياً (افتراضي: 2)</Text>
                 {Platform.OS === 'web' ? (
-                  <input type="number" min="1" max="8" value={prefs.max_daily_lectures || 5}
-                    onChange={(e: any) => setPrefs((p: any) => ({ ...p, max_daily_lectures: parseInt(e.target.value) || 5 }))}
-                    style={{ width: 80, padding: 8, borderRadius: 8, border: '1px solid #ddd', textAlign: 'center', fontSize: 14 }} />
+                  <input type="number" min="1" max="8" value={prefs.max_daily_lectures ?? 2}
+                    onChange={(e: any) => setPrefs((p: any) => ({ ...p, max_daily_lectures: parseInt(e.target.value) || 2 }))}
+                    style={{ width: 80, padding: 8, borderRadius: 8, border: '1px solid #ddd', textAlign: 'center', fontSize: 14 }}
+                    data-testid="max-daily-lectures-input" />
                 ) : null}
+
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 14, padding: 10, backgroundColor: '#f8f9fa', borderRadius: 8 }}>
+                  <TouchableOpacity
+                    onPress={() => setPrefs((p: any) => ({ ...p, allow_consecutive_lectures: !p.allow_consecutive_lectures }))}
+                    style={{
+                      width: 44, height: 24, borderRadius: 12,
+                      backgroundColor: prefs.allow_consecutive_lectures ? '#2e7d32' : '#ccc',
+                      justifyContent: 'center',
+                      padding: 2,
+                    }}
+                    testID="consecutive-toggle"
+                  >
+                    <View style={{
+                      width: 20, height: 20, borderRadius: 10, backgroundColor: '#fff',
+                      alignSelf: prefs.allow_consecutive_lectures ? 'flex-end' : 'flex-start',
+                    }} />
+                  </TouchableOpacity>
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', textAlign: 'right' }}>السماح بمحاضرات متتالية</Text>
+                    <Text style={{ fontSize: 11, color: '#888', textAlign: 'right', marginTop: 2 }}>
+                      {prefs.allow_consecutive_lectures
+                        ? 'يمكن جدولة محاضرتين للأستاذ في فترتين متتاليتين'
+                        : 'الافتراضي: لا يُسمح بوضع محاضرتين متتاليتين (فترة بينهما)'}
+                    </Text>
+                  </View>
+                </View>
 
                 <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32', marginTop: 16 }]} onPress={handleSavePrefs} disabled={savingPrefs}>
                   <Ionicons name="save" size={16} color="#fff" />

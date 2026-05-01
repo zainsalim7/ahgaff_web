@@ -57,7 +57,8 @@ class TimeSlotCreate(BaseModel):
 class TeacherPreferenceUpdate(BaseModel):
     unavailable_days: List[str] = []  # ["الثلاثاء", "الأربعاء"]
     unavailable_slots: List[int] = []  # [1, 5] = الأولى والأخيرة
-    max_daily_lectures: int = 5
+    max_daily_lectures: int = 2
+    allow_consecutive_lectures: bool = False  # افتراضياً لا نسمح بمحاضرتين متتاليتين لنفس الأستاذ
 
 
 class ScheduleSlotCreate(BaseModel):
@@ -358,12 +359,13 @@ async def get_teacher_preferences(teacher_id: str, current_user: dict = Depends(
     db = get_db()
     pref = await db.teacher_preferences.find_one({"teacher_id": teacher_id})
     if not pref:
-        return {"teacher_id": teacher_id, "unavailable_days": [], "unavailable_slots": [], "max_daily_lectures": 5}
+        return {"teacher_id": teacher_id, "unavailable_days": [], "unavailable_slots": [], "max_daily_lectures": 2, "allow_consecutive_lectures": False}
     return {
         "teacher_id": teacher_id,
         "unavailable_days": pref.get("unavailable_days", []),
         "unavailable_slots": pref.get("unavailable_slots", []),
-        "max_daily_lectures": pref.get("max_daily_lectures", 5),
+        "max_daily_lectures": pref.get("max_daily_lectures", 2),
+        "allow_consecutive_lectures": pref.get("allow_consecutive_lectures", False),
     }
 
 
@@ -383,6 +385,7 @@ async def update_teacher_preferences(
             "unavailable_days": data.unavailable_days,
             "unavailable_slots": data.unavailable_slots,
             "max_daily_lectures": data.max_daily_lectures,
+            "allow_consecutive_lectures": data.allow_consecutive_lectures,
             "updated_at": datetime.now(timezone.utc),
         }},
         upsert=True
@@ -399,6 +402,7 @@ async def get_weekly_schedule(
     level: Optional[int] = None,
     section: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    course_id: Optional[str] = None,
     room_id: Optional[str] = None,
     semester_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
@@ -417,6 +421,8 @@ async def get_weekly_schedule(
         query["section"] = section
     if teacher_id:
         query["teacher_id"] = teacher_id
+    if course_id:
+        query["course_id"] = course_id
     if room_id:
         query["room_id"] = room_id
 
@@ -675,6 +681,7 @@ async def auto_generate_schedule(
     room_occupied = {}     # (day, slot) -> set of room_ids
     section_occupied = {}  # (dept_id, level, section, day, slot) -> True
     teacher_daily_count = {}  # (teacher_id, day) -> count
+    teacher_day_slots = {}  # (teacher_id, day) -> set of slot_numbers (to detect consecutive)
 
     # Load existing schedule to avoid conflicts
     existing = await db.weekly_schedule.find({"faculty_id": faculty_id}).to_list(5000)
@@ -686,6 +693,7 @@ async def auto_generate_schedule(
         section_occupied[sk] = True
         dk = (e["teacher_id"], e["day"])
         teacher_daily_count[dk] = teacher_daily_count.get(dk, 0) + 1
+        teacher_day_slots.setdefault(dk, set()).add(e["slot_number"])
 
     created = 0
     skipped = 0
@@ -731,7 +739,8 @@ async def auto_generate_schedule(
                 pref = prefs_map.get(tid, {})
                 unavail_days = pref.get("unavailable_days", [])
                 unavail_slots = pref.get("unavailable_slots", [])
-                max_daily = pref.get("max_daily_lectures", 5)
+                max_daily = pref.get("max_daily_lectures", 2)
+                allow_consecutive = pref.get("allow_consecutive_lectures", False)
 
                 placed = 0
                 for day in working_days:
@@ -759,6 +768,11 @@ async def auto_generate_schedule(
                         dk = (tid, day)
                         if teacher_daily_count.get(dk, 0) >= max_daily:
                             continue
+                        # Check consecutive slots (unless teacher allows)
+                        if not allow_consecutive:
+                            taken_slots = teacher_day_slots.get(dk, set())
+                            if (sn - 1) in taken_slots or (sn + 1) in taken_slots:
+                                continue
 
                         # Find free room
                         busy_rooms = room_occupied.get(key_ts, set())
@@ -794,6 +808,7 @@ async def auto_generate_schedule(
                         room_occupied.setdefault(key_ts, set()).add(rid)
                         section_occupied[sk] = True
                         teacher_daily_count[dk] = teacher_daily_count.get(dk, 0) + 1
+                        teacher_day_slots.setdefault(dk, set()).add(sn)
 
                         created += 1
                         placed += 1
