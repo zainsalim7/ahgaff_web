@@ -80,6 +80,51 @@ export default function LessonCompletionReport() {
   const [linkingLessonId, setLinkingLessonId] = useState<string | null>(null);
   const [showLinkModal, setShowLinkModal] = useState(false);
 
+  // تعديل عنوان درس منجز خارج الخطة
+  const editLessonTitle = async (lectureId: string, oldTitle: string) => {
+    if (typeof window === 'undefined') return;
+    const newTitle = window.prompt('تعديل عنوان الدرس:', oldTitle);
+    if (newTitle === null) return; // ألغى
+    try {
+      await api.put(`/lectures/${lectureId}`, { lesson_title: newTitle.trim() });
+      if (comparisonModal) {
+        const courseId = data.find(d => d.course_name === comparisonModal.course_name)?.course_id;
+        if (courseId) {
+          const res = await api.get(`/reports/lesson-completion/${courseId}/comparison`);
+          setComparisonModal(res.data);
+        }
+      }
+      await fetchData();
+      window.alert('تم تحديث العنوان ✓');
+    } catch (err: any) {
+      window.alert('فشل التحديث: ' + (err?.response?.data?.detail || 'خطأ'));
+    }
+  };
+
+  // مسح عنوان الدرس (يُفرغ الحقل - تجعل المحاضرة بدون عنوان)
+  const clearLessonTitle = async (lectureId: string) => {
+    if (typeof window === 'undefined') return;
+    if (!window.confirm('هل تريد مسح عنوان هذا الدرس؟ سيصبح الدرس "بدون عنوان".')) return;
+    try {
+      await api.put(`/lectures/${lectureId}`, { lesson_title: '' });
+      if (comparisonModal) {
+        const courseId = data.find(d => d.course_name === comparisonModal.course_name)?.course_id;
+        if (courseId) {
+          const res = await api.get(`/reports/lesson-completion/${courseId}/comparison`);
+          setComparisonModal(res.data);
+        }
+      }
+      await fetchData();
+    } catch (err: any) {
+      window.alert('فشل: ' + (err?.response?.data?.detail || 'خطأ'));
+    }
+  };
+
+  // ذهاب مباشر لصفحة المحاضرات (للحذف/التعديل الشامل)
+  const goToLectures = (courseId: string) => {
+    router.push(`/course-lectures?courseId=${courseId}`);
+  };
+
   // ربط درس غير مربوط بموضوع معين
   const linkLessonToTopic = async (lectureId: string, topicId: string) => {
     if (!comparisonModal) return;
@@ -618,34 +663,69 @@ export default function LessonCompletionReport() {
                       <Text style={{ fontSize: 13, fontWeight: '700', color: '#ef6c00', marginBottom: 6 }}>
                         ⚠️ دروس منجزة لم تُربط بأي موضوع من الخطة ({comparisonModal.unlinked_lessons.length})
                       </Text>
-                      {comparisonModal.unlinked_lessons.map((l, i) => (
-                        <View key={i} style={{
-                          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                          paddingVertical: 6, paddingHorizontal: 4, borderBottomWidth: i < comparisonModal.unlinked_lessons.length-1 ? 1 : 0,
-                          borderBottomColor: '#ffd8a8'
-                        }}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', fontWeight: '600' }}>
-                              {l.lesson_title}
-                            </Text>
-                            <Text style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{l.date}</Text>
+                      <Text style={{ fontSize: 10, color: '#888', marginBottom: 8 }}>
+                        هذه محاضرات مكتملة بعناوين لكن غير مرتبطة بالخطة. يمكنك ربطها أو تعديل عنوانها أو فتح شاشة المحاضرات لحذفها.
+                      </Text>
+                      {comparisonModal.unlinked_lessons.map((l, i) => {
+                        const courseId = data.find(d => d.course_name === comparisonModal.course_name)?.course_id;
+                        return (
+                          <View key={i} style={{
+                            paddingVertical: 6, paddingHorizontal: 4,
+                            borderBottomWidth: i < comparisonModal.unlinked_lessons.length-1 ? 1 : 0,
+                            borderBottomColor: '#ffd8a8'
+                          }}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', fontWeight: '600' }}>
+                                  {l.lesson_title}
+                                </Text>
+                                <Text style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>
+                                  تاريخ المحاضرة: {l.date}
+                                </Text>
+                              </View>
+                            </View>
+                            {/* شريط الإجراءات */}
+                            {l.lecture_id && (
+                              <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                                <TouchableOpacity
+                                  onPress={() => { setLinkingLessonId(l.lecture_id!); setShowLinkModal(true); }}
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#1565c0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 }}
+                                  testID={`link-lesson-${l.lecture_id}`}
+                                >
+                                  <Ionicons name="link" size={11} color="#fff" />
+                                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>ربط</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => editLessonTitle(l.lecture_id!, l.lesson_title)}
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#ff9800', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 }}
+                                  testID={`edit-lesson-${l.lecture_id}`}
+                                >
+                                  <Ionicons name="create" size={11} color="#fff" />
+                                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>تعديل العنوان</Text>
+                                </TouchableOpacity>
+                                <TouchableOpacity
+                                  onPress={() => clearLessonTitle(l.lecture_id!)}
+                                  style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#757575', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 }}
+                                  testID={`clear-lesson-${l.lecture_id}`}
+                                >
+                                  <Ionicons name="remove-circle" size={11} color="#fff" />
+                                  <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>مسح العنوان</Text>
+                                </TouchableOpacity>
+                                {courseId && (
+                                  <TouchableOpacity
+                                    onPress={() => { setComparisonModal(null); goToLectures(courseId); }}
+                                    style={{ flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: '#c62828', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 5 }}
+                                    testID={`goto-lectures-${l.lecture_id}`}
+                                  >
+                                    <Ionicons name="open" size={11} color="#fff" />
+                                    <Text style={{ color: '#fff', fontSize: 10, fontWeight: '600' }}>فتح المحاضرات (للحذف)</Text>
+                                  </TouchableOpacity>
+                                )}
+                              </View>
+                            )}
                           </View>
-                          {l.lecture_id && (
-                            <TouchableOpacity
-                              onPress={() => { setLinkingLessonId(l.lecture_id!); setShowLinkModal(true); }}
-                              style={{
-                                flexDirection: 'row', alignItems: 'center', gap: 4,
-                                backgroundColor: '#1565c0', paddingHorizontal: 10, paddingVertical: 5,
-                                borderRadius: 6,
-                              }}
-                              testID={`link-lesson-${l.lecture_id}`}
-                            >
-                              <Ionicons name="link" size={12} color="#fff" />
-                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>ربط بموضوع</Text>
-                            </TouchableOpacity>
-                          )}
-                        </View>
-                      ))}
+                        );
+                      })}
                     </View>
                   )}
                 </ScrollView>

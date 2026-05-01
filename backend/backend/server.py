@@ -5105,6 +5105,7 @@ async def export_lesson_completion_excel(
                 unlinked_lectures.append({
                     "title": lec.get("lesson_title", ""),
                     "date": str(d),
+                    "lecture_id": str(lec["_id"]),
                 })
         
         # اسم المعلم والقسم
@@ -5176,6 +5177,8 @@ async def export_lesson_completion_excel(
                 "المنجز (الأستاذ)": lec["title"],
                 "التاريخ": lec["date"],
                 "الحالة": "منجز خارج الخطة",
+                "معرّف المحاضرة": lec.get("lecture_id", ""),
+                "الإجراء المقترح": "افتح تقرير إنجاز الدروس ← اضغط المقرر ← اربط الدرس أو امسح العنوان",
             })
         
         # ===== ملخص المقرر =====
