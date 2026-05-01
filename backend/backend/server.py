@@ -11190,28 +11190,60 @@ async def export_attendance_pdf(
     
     # Calculate column widths (RTL)
     col_widths = [30, 35, 35] + [28] * len(display_dates) + [90, 55, 25]
-    
-    table = Table(data, colWidths=col_widths)
-    table.setStyle(TableStyle([
+
+    table = Table(data, colWidths=col_widths, repeatRows=1)
+    table_style = [
+        # Header
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
         ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE', (0, 0), (-1, 0), 9),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 9),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        # All cells
         ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
         ('FONTNAME', (0, 0), (-1, -1), ARABIC_FONT),
-        ('FONTSIZE', (0, 0), (-1, 0), 8),
-        ('FONTSIZE', (0, 1), (-1, -1), 8),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 8),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-    ]))
-    
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        # Name column (3rd from end) محاذاة يمين
+        ('ALIGN', (-3, 1), (-3, -1), 'RIGHT'),
+        # Borders - softer
+        ('LINEBELOW', (0, 0), (-1, 0), 1.2, colors.HexColor('#0d47a1')),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#cfd8dc')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#90a4ae')),
+        # Alternating row colors
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f9ff')]),
+        # Padding
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 1), (-1, -1), 5),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 5),
+    ]
+
+    # Color-code attendance rates (% column = first col, 0)
+    for row_idx in range(1, len(data)):
+        try:
+            rate_val = int(data[row_idx][0])
+        except (ValueError, IndexError):
+            continue
+        if rate_val >= 75:
+            table_style.append(('BACKGROUND', (0, row_idx), (0, row_idx), colors.HexColor('#c8e6c9')))
+            table_style.append(('TEXTCOLOR', (0, row_idx), (0, row_idx), colors.HexColor('#1b5e20')))
+        elif rate_val >= 50:
+            table_style.append(('BACKGROUND', (0, row_idx), (0, row_idx), colors.HexColor('#fff9c4')))
+            table_style.append(('TEXTCOLOR', (0, row_idx), (0, row_idx), colors.HexColor('#f57f17')))
+        else:
+            table_style.append(('BACKGROUND', (0, row_idx), (0, row_idx), colors.HexColor('#ffcdd2')))
+            table_style.append(('TEXTCOLOR', (0, row_idx), (0, row_idx), colors.HexColor('#b71c1c')))
+
+    table.setStyle(TableStyle(table_style))
+
     elements.append(table)
-    
-    # Summary
-    elements.append(Spacer(1, 15))
-    elements.append(Paragraph(arabic_text(f"إجمالي الطلاب: {len(students)} | عدد المحاضرات: {len(dates)}"), 
-                             ParagraphStyle('Summary', fontName=ARABIC_FONT, fontSize=10, alignment=TA_RIGHT)))
-    elements.append(Paragraph(arabic_text(f"تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M')}"), 
-                             ParagraphStyle('Date', fontName=ARABIC_FONT, fontSize=9, alignment=TA_RIGHT)))
+
+    # Summary box
+    elements.append(Spacer(1, 18))
+    summary_style = ParagraphStyle('Summary', fontName=ARABIC_FONT, fontSize=11, alignment=TA_RIGHT, textColor=colors.HexColor('#1565c0'), spaceAfter=4)
+    elements.append(Paragraph(arabic_text(f"إجمالي الطلاب: {len(students)}    |    عدد المحاضرات: {len(dates)}    |    تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M')}"),
+                             summary_style))
     
     doc.build(elements)
     output.seek(0)

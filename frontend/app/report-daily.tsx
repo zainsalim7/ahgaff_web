@@ -25,6 +25,8 @@ import { exportToPDF, prepareDailyReportData } from '../src/utils/pdfExport';
 export default function DailyReport() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [lectures, setLectures] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -84,32 +86,42 @@ export default function DailyReport() {
     }
   };
 
-  const fetchData = useCallback(async () => {
+  // تحميل الأقسام فقط عند الفتح
+  useEffect(() => {
+    (async () => {
+      try {
+        const deptsRes = await departmentsAPI.getAll();
+        setDepartments(deptsRes.data);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
+  // تنفيذ التقرير
+  const runReport = useCallback(async () => {
+    setExecuting(true);
     try {
-      const deptsRes = await departmentsAPI.getAll();
-      setDepartments(deptsRes.data);
-      
       const params: any = { date: selectedDate };
       if (selectedDept) params.department_id = selectedDept;
-      
+
       const reportRes = await reportsAPI.getDailyReport(params);
       setLectures(reportRes.data.lectures || []);
       setSummary(reportRes.data.summary);
+      setHasRun(true);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error running report:', error);
+      if (Platform.OS === 'web') window.alert('فشل في تنفيذ التقرير');
+      else Alert.alert('خطأ', 'فشل في تنفيذ التقرير');
     } finally {
-      setLoading(false);
+      setExecuting(false);
       setRefreshing(false);
     }
   }, [selectedDept, selectedDate]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const onRefresh = () => {
+    if (!hasRun) return;
     setRefreshing(true);
-    fetchData();
+    runReport();
   };
 
   const changeDate = (days: number) => {
@@ -209,7 +221,35 @@ export default function DailyReport() {
               ))}
             </Picker>
           </View>
+
+          {/* زر التنفيذ */}
+          <TouchableOpacity
+            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 12 }, executing && { opacity: 0.7 }]}
+            onPress={runReport}
+            disabled={executing}
+            testID="run-report-btn"
+          >
+            {executing ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>جاري التنفيذ...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
+
+        {/* قبل التنفيذ: رسالة إرشادية */}
+        {!hasRun && !executing && (
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 32, alignItems: 'center', marginBottom: 12 }}>
+            <Ionicons name="information-circle-outline" size={48} color="#90a4ae" />
+            <Text style={{ marginTop: 10, fontSize: 15, fontWeight: '600', color: '#455a64', textAlign: 'center' }}>اختر التاريخ والقسم ثم اضغط "تنفيذ التقرير"</Text>
+          </View>
+        )}
 
         {/* ملخص اليوم */}
         {summary && (

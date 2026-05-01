@@ -22,7 +22,9 @@ import { exportToPDF, prepareWarningsData } from '../src/utils/pdfExport';
 
 export default function WarningsReport() {
   const router = useRouter();
-  const [loading, setLoading] = useState(true);
+  const [metaLoading, setMetaLoading] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [warnings, setWarnings] = useState<any[]>([]);
   const [deprivations, setDeprivations] = useState<any[]>([]);
@@ -85,43 +87,56 @@ export default function WarningsReport() {
     }
   };
 
-  const fetchData = useCallback(async () => {
+  // جلب الأقسام فقط (بدون تنفيذ تلقائي للتقرير)
+  useEffect(() => {
+    (async () => {
+      try {
+        const deptsRes = await departmentsAPI.getAll();
+        setDepartments(deptsRes.data);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setMetaLoading(false);
+      }
+    })();
+  }, []);
+
+  // تنفيذ التقرير (بضغط زر التنفيذ)
+  const runReport = useCallback(async () => {
+    setExecuting(true);
     try {
-      const deptsRes = await departmentsAPI.getAll();
-      setDepartments(deptsRes.data);
-      
       const params: any = {
         warning_threshold: warningThreshold,
         deprivation_threshold: deprivationThreshold,
       };
       if (selectedDept) params.department_id = selectedDept;
-      
+
       const reportRes = await reportsAPI.getWarningsReport(params);
       setWarnings(reportRes.data.warnings || []);
       setDeprivations(reportRes.data.deprivations || []);
       setSummary(reportRes.data.summary);
+      setHasRun(true);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error running report:', error);
+      if (Platform.OS === 'web') window.alert('فشل في تنفيذ التقرير');
+      else Alert.alert('خطأ', 'فشل في تنفيذ التقرير');
     } finally {
-      setLoading(false);
+      setExecuting(false);
       setRefreshing(false);
     }
   }, [selectedDept, warningThreshold, deprivationThreshold]);
 
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
-
   const onRefresh = () => {
+    if (!hasRun) return;
     setRefreshing(true);
-    fetchData();
+    runReport();
   };
 
-  if (loading) {
+  if (metaLoading) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#ff9800" />
-        <Text style={styles.loadingText}>جاري تحميل التقرير...</Text>
+        <Text style={styles.loadingText}>جاري تحميل الفلاتر...</Text>
       </View>
     );
   }
@@ -202,10 +217,39 @@ export default function WarningsReport() {
               </View>
             </View>
           </View>
+
+          {/* زر التنفيذ */}
+          <TouchableOpacity
+            style={[styles.runBtn, executing && styles.runBtnDisabled]}
+            onPress={runReport}
+            disabled={executing}
+            testID="run-report-btn"
+          >
+            {executing ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={styles.runBtnText}>جاري التنفيذ...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={styles.runBtnText}>{hasRun ? 'إعادة تنفيذ التقرير' : 'تنفيذ التقرير'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
+        {/* قبل التنفيذ: رسالة إرشادية */}
+        {!hasRun && !executing && (
+          <View style={styles.introCard}>
+            <Ionicons name="information-circle-outline" size={48} color="#90a4ae" />
+            <Text style={styles.introTitle}>اختر الفلاتر ثم اضغط "تنفيذ التقرير"</Text>
+            <Text style={styles.introSub}>سيعرض التقرير الطلاب الذين يستحقون إنذاراً أو حرماناً</Text>
+          </View>
+        )}
+
         {/* ملخص */}
-        {summary && (
+        {hasRun && summary && (
           <View style={styles.summaryCard}>
             <View style={styles.summaryRow}>
               <View style={[styles.summaryItem, styles.warningBg]}>
@@ -223,6 +267,7 @@ export default function WarningsReport() {
         )}
 
         {/* التبويبات */}
+        {hasRun && (<>
         <View style={styles.tabsContainer}>
           <TouchableOpacity
             style={[styles.tab, activeTab === 'warnings' && styles.tabActive]}
@@ -302,6 +347,7 @@ export default function WarningsReport() {
             </View>
           ))
         )}
+        </>)}
       </ScrollView>
     </SafeAreaView>
   );
@@ -356,6 +402,15 @@ const styles = StyleSheet.create({
     padding: 16,
     marginBottom: 16,
   },
+  runBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 12,
+  },
+  runBtnDisabled: { opacity: 0.7 },
+  runBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
+  introCard: { backgroundColor: '#fff', borderRadius: 12, padding: 32, alignItems: 'center', marginBottom: 12 },
+  introTitle: { marginTop: 10, fontSize: 15, fontWeight: '600', color: '#455a64', textAlign: 'center' },
+  introSub: { marginTop: 6, fontSize: 12, color: '#90a4ae', textAlign: 'center' },
   filterRow: {
     marginBottom: 12,
   },

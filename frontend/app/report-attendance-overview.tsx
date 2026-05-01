@@ -25,6 +25,8 @@ export default function AttendanceOverviewReport() {
   const router = useRouter();
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [courses, setCourses] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -86,34 +88,51 @@ export default function AttendanceOverviewReport() {
 
   const isTeacher = user?.role === 'teacher';
 
-  const fetchData = useCallback(async () => {
+  // تحميل الأقسام فقط عند فتح الصفحة
+  useEffect(() => {
+    (async () => {
+      try {
+        if (!isTeacher) {
+          const deptsRes = await departmentsAPI.getAll();
+          setDepartments(deptsRes.data);
+        }
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    })();
+  }, [isTeacher]);
+
+  // تنفيذ التقرير بالضغط على الزر
+  const runReport = useCallback(async () => {
+    setExecuting(true);
     try {
-      if (!isTeacher) {
-        const deptsRes = await departmentsAPI.getAll();
-        setDepartments(deptsRes.data);
-      }
-      
       const params: any = {};
       if (selectedDept) params.department_id = selectedDept;
-      
+
       const reportRes = await reportsAPI.getAttendanceOverview(params);
       setCourses(reportRes.data.courses || []);
       setSummary(reportRes.data.summary);
+      setHasRun(true);
     } catch (error) {
-      console.error('Error fetching data:', error);
+      console.error('Error running report:', error);
+      if (Platform.OS === 'web') window.alert('فشل في تنفيذ التقرير');
+      else Alert.alert('خطأ', 'فشل في تنفيذ التقرير');
     } finally {
-      setLoading(false);
+      setExecuting(false);
       setRefreshing(false);
     }
   }, [selectedDept]);
 
+  // للمعلم: تحميل تلقائي (ليس له فلاتر)
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (isTeacher && !hasRun && !loading) {
+      runReport();
+    }
+  }, [isTeacher, hasRun, loading, runReport]);
 
   const onRefresh = () => {
+    if (!hasRun) return;
     setRefreshing(true);
-    fetchData();
+    runReport();
   };
 
   const sortedCourses = [...courses].sort((a, b) => {
@@ -215,7 +234,36 @@ export default function AttendanceOverviewReport() {
               </Text>
             </TouchableOpacity>
           </View>
+
+          {/* زر التنفيذ */}
+          <TouchableOpacity
+            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 12 }, executing && { opacity: 0.7 }]}
+            onPress={runReport}
+            disabled={executing}
+            testID="run-report-btn"
+          >
+            {executing ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>جاري التنفيذ...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{hasRun ? 'إعادة تنفيذ التقرير' : 'تنفيذ التقرير'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
+        )}
+
+        {/* قبل التنفيذ: رسالة إرشادية (للمدير) */}
+        {!isTeacher && !hasRun && !executing && (
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 32, alignItems: 'center', marginBottom: 12 }}>
+            <Ionicons name="information-circle-outline" size={48} color="#90a4ae" />
+            <Text style={{ marginTop: 10, fontSize: 15, fontWeight: '600', color: '#455a64', textAlign: 'center' }}>اختر الفلاتر ثم اضغط "تنفيذ التقرير"</Text>
+            <Text style={{ marginTop: 6, fontSize: 12, color: '#90a4ae', textAlign: 'center' }}>سيعرض التقرير نظرة شاملة على حضور جميع المقررات</Text>
+          </View>
         )}
 
         {/* ملخص */}
