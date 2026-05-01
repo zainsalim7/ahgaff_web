@@ -5313,6 +5313,7 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
         if topic_id:
             matched_topic_ids.add(topic_id)
         completed_lessons.append({
+            "lecture_id": str(lec["_id"]),
             "date": str(d),
             "lesson_title": lec.get("lesson_title", ""),
             "plan_topic_id": topic_id,
@@ -5338,6 +5339,7 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
             "actual_title": matched["lesson_title"] if matched else (topic["title"] if manually_confirmed else None),
             "actual_date": matched["date"] if matched else (topic.get("confirmed_date", "")[:10] if manually_confirmed else None),
             "source": "lecture" if matched else ("manual_confirm" if manually_confirmed else None),
+            "lecture_id": matched.get("lecture_id") if matched else None,
         })
 
     # الدروس المنجزة التي لا ترتبط بأي موضوع من الخطة

@@ -42,6 +42,8 @@ interface ComparisonRow {
   completed: boolean;
   actual_title?: string | null;
   actual_date?: string | null;
+  source?: string | null;
+  lecture_id?: string | null;
 }
 
 interface ComparisonData {
@@ -51,9 +53,10 @@ interface ComparisonData {
   total_planned: number;
   total_completed: number;
   matched_count: number;
+  manually_confirmed_count?: number;
   unmatched_count: number;
   comparison: ComparisonRow[];
-  unlinked_lessons: Array<{ date: string; lesson_title: string; notes?: string }>;
+  unlinked_lessons: Array<{ lecture_id?: string; date: string; lesson_title: string; notes?: string }>;
 }
 
 export default function LessonCompletionReport() {
@@ -72,6 +75,54 @@ export default function LessonCompletionReport() {
   const [planCourseName, setPlanCourseName] = useState('');
   const [comparisonModal, setComparisonModal] = useState<ComparisonData | null>(null);
   const [loadingCompare, setLoadingCompare] = useState(false);
+
+  // ربط درس غير مربوط بموضوع من الخطة
+  const [linkingLessonId, setLinkingLessonId] = useState<string | null>(null);
+  const [showLinkModal, setShowLinkModal] = useState(false);
+
+  // ربط درس غير مربوط بموضوع معين
+  const linkLessonToTopic = async (lectureId: string, topicId: string) => {
+    if (!comparisonModal) return;
+    try {
+      await api.put(`/lectures/${lectureId}`, { plan_topic_id: topicId });
+      setShowLinkModal(false);
+      setLinkingLessonId(null);
+      // إعادة تحميل المقارنة
+      const courseId = data.find(d => d.course_name === comparisonModal.course_name)?.course_id;
+      if (courseId) {
+        const res = await api.get(`/reports/lesson-completion/${courseId}/comparison`);
+        setComparisonModal(res.data);
+      }
+      // إعادة تحميل التقرير الرئيسي
+      await fetchData();
+      if (typeof window !== 'undefined') {
+        window.alert('تم الربط بنجاح ✓');
+      }
+    } catch (err: any) {
+      if (typeof window !== 'undefined') {
+        window.alert('فشل الربط: ' + (err?.response?.data?.detail || 'خطأ'));
+      }
+    }
+  };
+
+  // فك ربط موضوع مربوط (لتغييره)
+  const unlinkTopic = async (lectureId: string) => {
+    if (!comparisonModal) return;
+    if (typeof window !== 'undefined' && !window.confirm('هل تريد فك ربط هذا الدرس عن الموضوع؟')) return;
+    try {
+      await api.put(`/lectures/${lectureId}`, { plan_topic_id: null });
+      const courseId = data.find(d => d.course_name === comparisonModal.course_name)?.course_id;
+      if (courseId) {
+        const res = await api.get(`/reports/lesson-completion/${courseId}/comparison`);
+        setComparisonModal(res.data);
+      }
+      await fetchData();
+    } catch (err: any) {
+      if (typeof window !== 'undefined') {
+        window.alert('فشل فك الربط: ' + (err?.response?.data?.detail || 'خطأ'));
+      }
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -531,12 +582,29 @@ export default function LessonCompletionReport() {
                     <View key={i} style={{ flexDirection: 'row', padding: 8, gap: 8, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', alignItems: 'flex-start' }}>
                       <Text style={{ width: 40, fontSize: 11, color: '#888' }}>{row.week_number}</Text>
                       <Text style={{ flex: 1, fontSize: 12, color: '#333', textAlign: 'right' }}>{row.planned_title}</Text>
-                      <Text style={{ flex: 1, fontSize: 12, color: row.completed ? '#2e7d32' : '#c62828', textAlign: 'right' }}>
-                        {row.completed ? `${row.actual_title}${row.actual_date ? ` (${row.actual_date})` : ''}` : '—'}
-                      </Text>
+                      <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 12, color: row.completed ? '#2e7d32' : '#c62828', textAlign: 'right' }}>
+                          {row.completed ? `${row.actual_title}${row.actual_date ? ` (${row.actual_date})` : ''}` : '—'}
+                        </Text>
+                        {row.source === 'manual_confirm' && (
+                          <Text style={{ fontSize: 9, color: '#1565c0', textAlign: 'right', marginTop: 1 }}>
+                            (تأكيد يدوي)
+                          </Text>
+                        )}
+                        {row.source === 'lecture' && row.lecture_id && (
+                          <TouchableOpacity
+                            onPress={() => unlinkTopic(row.lecture_id!)}
+                            style={{ alignSelf: 'flex-end', marginTop: 2 }}
+                          >
+                            <Text style={{ fontSize: 10, color: '#ff9800', textDecorationLine: 'underline' }}>
+                              فك الربط / تغيير
+                            </Text>
+                          </TouchableOpacity>
+                        )}
+                      </View>
                       <View style={{ width: 50, alignItems: 'center' }}>
                         {row.completed ? (
-                          <Ionicons name="checkmark-circle" size={20} color="#4caf50" />
+                          <Ionicons name="checkmark-circle" size={20} color={row.source === 'manual_confirm' ? '#1565c0' : '#4caf50'} />
                         ) : (
                           <Ionicons name="close-circle" size={20} color="#f44336" />
                         )}
@@ -551,15 +619,84 @@ export default function LessonCompletionReport() {
                         ⚠️ دروس منجزة لم تُربط بأي موضوع من الخطة ({comparisonModal.unlinked_lessons.length})
                       </Text>
                       {comparisonModal.unlinked_lessons.map((l, i) => (
-                        <Text key={i} style={{ fontSize: 11, color: '#444', marginBottom: 2, textAlign: 'right' }}>
-                          • {l.date}: {l.lesson_title}
-                        </Text>
+                        <View key={i} style={{
+                          flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+                          paddingVertical: 6, paddingHorizontal: 4, borderBottomWidth: i < comparisonModal.unlinked_lessons.length-1 ? 1 : 0,
+                          borderBottomColor: '#ffd8a8'
+                        }}>
+                          <View style={{ flex: 1 }}>
+                            <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', fontWeight: '600' }}>
+                              {l.lesson_title}
+                            </Text>
+                            <Text style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{l.date}</Text>
+                          </View>
+                          {l.lecture_id && (
+                            <TouchableOpacity
+                              onPress={() => { setLinkingLessonId(l.lecture_id!); setShowLinkModal(true); }}
+                              style={{
+                                flexDirection: 'row', alignItems: 'center', gap: 4,
+                                backgroundColor: '#1565c0', paddingHorizontal: 10, paddingVertical: 5,
+                                borderRadius: 6,
+                              }}
+                              testID={`link-lesson-${l.lecture_id}`}
+                            >
+                              <Ionicons name="link" size={12} color="#fff" />
+                              <Text style={{ color: '#fff', fontSize: 11, fontWeight: '600' }}>ربط بموضوع</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       ))}
                     </View>
                   )}
                 </ScrollView>
               </>
             )}
+          </View>
+        </View>
+      </Modal>
+
+      {/* Modal اختيار موضوع للربط */}
+      <Modal visible={showLinkModal} transparent animationType="slide">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, width: '100%', maxWidth: 520, maxHeight: '85%' }}>
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <Text style={{ fontSize: 15, fontWeight: '700', color: '#1565c0' }}>اختر الموضوع للربط</Text>
+              <TouchableOpacity onPress={() => { setShowLinkModal(false); setLinkingLessonId(null); }}>
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 11, color: '#666', marginBottom: 12 }}>
+              اختر الموضوع الذي يمثل هذا الدرس من الخطة الدراسية:
+            </Text>
+            <ScrollView style={{ maxHeight: 400 }}>
+              {comparisonModal?.comparison
+                .filter(t => !t.completed)
+                .map((t) => (
+                  <TouchableOpacity
+                    key={t.topic_id}
+                    onPress={() => linkingLessonId && linkLessonToTopic(linkingLessonId, t.topic_id)}
+                    style={{
+                      padding: 10, marginBottom: 6, borderRadius: 8,
+                      borderWidth: 1, borderColor: '#ddd', flexDirection: 'row',
+                      alignItems: 'center', gap: 8,
+                    }}
+                    testID={`link-target-${t.topic_id}`}
+                  >
+                    <View style={{ backgroundColor: '#e3f2fd', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
+                      <Text style={{ fontSize: 10, color: '#1565c0', fontWeight: '700' }}>أ{t.week_number}</Text>
+                    </View>
+                    <Text style={{ flex: 1, fontSize: 12, color: '#333', textAlign: 'right' }}>
+                      {t.planned_title}
+                    </Text>
+                    <Ionicons name="arrow-back" size={16} color="#1565c0" />
+                  </TouchableOpacity>
+                ))}
+              {comparisonModal?.comparison.filter(t => !t.completed).length === 0 && (
+                <Text style={{ textAlign: 'center', padding: 20, color: '#999', fontSize: 12 }}>
+                  لا توجد مواضيع غير منجزة في الخطة للربط
+                </Text>
+              )}
+            </ScrollView>
           </View>
         </View>
       </Modal>
