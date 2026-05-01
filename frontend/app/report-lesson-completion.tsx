@@ -115,6 +115,7 @@ export default function LessonCompletionReport() {
         }
       }
       await fetchData();
+      window.alert('تم مسح العنوان ✓');
     } catch (err: any) {
       window.alert('فشل: ' + (err?.response?.data?.detail || 'خطأ'));
     }
@@ -676,8 +677,8 @@ export default function LessonCompletionReport() {
                           }}>
                             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
                               <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', fontWeight: '600' }}>
-                                  {l.lesson_title}
+                                <Text style={{ fontSize: 12, color: l.lesson_title ? '#444' : '#aaa', textAlign: 'right', fontWeight: '600', fontStyle: l.lesson_title ? 'normal' : 'italic' }}>
+                                  {l.lesson_title || '(بدون عنوان)'}
                                 </Text>
                                 <Text style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>
                                   تاريخ المحاضرة: {l.date}
