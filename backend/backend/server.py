@@ -11069,15 +11069,35 @@ async def export_students_pdf(
 @api_router.get("/export/attendance/{course_id}/pdf")
 async def export_attendance_pdf(
     course_id: str,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """Export course attendance to PDF"""
+    """Export course attendance to PDF (optional date range: YYYY-MM-DD)"""
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     
-    # Get attendance records
-    records = await db.attendance.find({"course_id": course_id}).sort("date", 1).to_list(50000)
+    # Get attendance records with optional date filter
+    att_query = {"course_id": course_id}
+    if date_from or date_to:
+        date_filter = {}
+        if date_from:
+            try:
+                date_filter["$gte"] = datetime.strptime(date_from, "%Y-%m-%d")
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                # include full day
+                dt_to = datetime.strptime(date_to, "%Y-%m-%d").replace(hour=23, minute=59, second=59)
+                date_filter["$lte"] = dt_to
+            except ValueError:
+                pass
+        if date_filter:
+            att_query["date"] = date_filter
+
+    records = await db.attendance.find(att_query).sort("date", 1).to_list(50000)
     
     # Get enrolled students
     enrollments = await db.enrollments.find({"course_id": course_id}).to_list(10000)
@@ -11100,11 +11120,20 @@ async def export_attendance_pdf(
     section_text = course.get('section', '') or ''
     elements.append(Paragraph(arabic_text(f"المستوى {course['level']} - الشعبة {section_text}"), 
                              ParagraphStyle('Info', fontName=ARABIC_FONT, fontSize=10, alignment=TA_CENTER)))
+
+    # Date range subtitle (if provided)
+    if date_from or date_to:
+        df = date_from or "البداية"
+        dt = date_to or "النهاية"
+        elements.append(Paragraph(
+            arabic_text(f"الفترة: من {df} إلى {dt}"),
+            ParagraphStyle('DateRange', fontName=ARABIC_FONT, fontSize=10, alignment=TA_CENTER, textColor=colors.HexColor('#1565c0'))
+        ))
     elements.append(Spacer(1, 15))
     
     # Table header (RTL - from right to left)
-    # Add date columns (show last 10 dates max for readability)
-    display_dates = dates[-10:] if len(dates) > 10 else dates
+    # Show ALL dates in range (if range is set), else last 10
+    display_dates = dates if (date_from or date_to) else (dates[-10:] if len(dates) > 10 else dates)
 
     # Legend - شرح الرموز
     legend_style = ParagraphStyle('Legend', fontName=ARABIC_FONT, fontSize=10, alignment=TA_RIGHT, spaceAfter=6)

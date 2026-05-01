@@ -20,7 +20,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { departmentsAPI, coursesAPI, reportsAPI, exportAPI, API_URL } from '../src/services/api';
+import { departmentsAPI, coursesAPI, reportsAPI, exportAPI, facultiesAPI, API_URL } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { Department, Course } from '../src/types';
@@ -195,11 +195,19 @@ export default function ReportsScreen() {
   const user = useAuthStore((state) => state.user);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [courses, setCourses] = useState<Course[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
   const [summary, setSummary] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
   const [selectedDept, setSelectedDept] = useState<string | null>(null);
   const [selectedCourse, setSelectedCourse] = useState<string | null>(null);
+
+  // Attendance export - نظام تصنيفي: كلية → قسم → مقرر + فترة تاريخية
+  const [attFaculty, setAttFaculty] = useState<string>('');
+  const [attDept, setAttDept] = useState<string>('');
+  const [attCourse, setAttCourse] = useState<string>('');
+  const [attDateFrom, setAttDateFrom] = useState<string>('');
+  const [attDateTo, setAttDateTo] = useState<string>('');
   
   // Advanced Export Filters
   const [exportLevel, setExportLevel] = useState<string>('');
@@ -217,14 +225,16 @@ export default function ReportsScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [deptsRes, coursesRes, summaryRes] = await Promise.all([
+      const [deptsRes, coursesRes, summaryRes, facsRes] = await Promise.all([
         departmentsAPI.getAll(),
         coursesAPI.getAll(),
         reportsAPI.getSummary(),
+        facultiesAPI.getAll(),
       ]);
       setDepartments(deptsRes.data);
       setCourses(coursesRes.data);
       setSummary(summaryRes.data);
+      setFaculties(facsRes.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -305,17 +315,19 @@ export default function ReportsScreen() {
   };
 
   const handleExportAttendance = async () => {
-    if (!selectedCourse) {
+    if (!attCourse) {
       Alert.alert('تنبيه', 'اختر مقرراً أولاً');
       return;
     }
     
     setExporting('attendance');
     try {
-      const course = courses.find(c => c.id === selectedCourse);
+      const course = courses.find(c => c.id === attCourse);
       const filename = `attendance_${course?.code || 'course'}.xlsx`;
-      
-      const response = await exportAPI.exportAttendance(selectedCourse);
+      const params: any = {};
+      if (attDateFrom) params.date_from = attDateFrom;
+      if (attDateTo) params.date_to = attDateTo;
+      const response = await exportAPI.exportAttendance(attCourse, params);
       await downloadBlob(response.data, filename);
       Alert.alert('نجاح', 'تم تصدير سجل الحضور');
     } catch (error) {
@@ -364,17 +376,19 @@ export default function ReportsScreen() {
   };
 
   const handleExportAttendancePDF = async () => {
-    if (!selectedCourse) {
+    if (!attCourse) {
       Alert.alert('تنبيه', 'اختر مقرراً أولاً');
       return;
     }
     
     setExporting('attendance_pdf');
     try {
-      const course = courses.find(c => c.id === selectedCourse);
+      const course = courses.find(c => c.id === attCourse);
       const filename = `attendance_${course?.code || 'course'}.pdf`;
-      
-      const response = await exportAPI.exportAttendancePDF(selectedCourse);
+      const params: any = {};
+      if (attDateFrom) params.date_from = attDateFrom;
+      if (attDateTo) params.date_to = attDateTo;
+      const response = await exportAPI.exportAttendancePDF(attCourse, params);
       await downloadBlob(response.data, filename);
       Alert.alert('نجاح', 'تم تصدير سجل الحضور كـ PDF');
     } catch (error) {
@@ -850,29 +864,109 @@ export default function ReportsScreen() {
         {canViewReports && canExportReports && (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 تصدير سجل الحضور</Text>
-          <Text style={styles.hintText}>اختر المقرر:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.coursesList}>
-            {courses.length === 0 ? (
-              <Text style={styles.noCourses}>لا توجد مقررات</Text>
-            ) : (
-              courses.map(course => (
-                <TouchableOpacity
-                  key={course.id}
-                  style={[styles.courseBtn, selectedCourse === course.id && styles.courseBtnActive]}
-                  onPress={() => setSelectedCourse(course.id)}
-                >
-                  <Text style={[styles.courseText, selectedCourse === course.id && styles.courseTextActive]}>
-                    {course.name}
-                  </Text>
-                </TouchableOpacity>
-              ))
+
+          {/* Cascading filters: Faculty → Department → Course */}
+          <View style={styles.cascadeRow}>
+            <Dropdown
+              label="الكلية"
+              value={attFaculty}
+              placeholder="اختر الكلية"
+              options={faculties.map((f: any) => ({ id: f.id, name: f.name }))}
+              onSelect={(v) => { setAttFaculty(v); setAttDept(''); setAttCourse(''); }}
+              required
+            />
+          </View>
+          <View style={styles.cascadeRow}>
+            <Dropdown
+              label="القسم"
+              value={attDept}
+              placeholder={attFaculty ? 'اختر القسم' : 'اختر الكلية أولاً'}
+              options={departments
+                .filter((d: any) => !attFaculty || d.faculty_id === attFaculty)
+                .map((d: any) => ({ id: d.id, name: d.name }))}
+              onSelect={(v) => { setAttDept(v); setAttCourse(''); }}
+              required
+              disabled={!attFaculty}
+            />
+          </View>
+          <View style={styles.cascadeRow}>
+            <Dropdown
+              label="المقرر"
+              value={attCourse}
+              placeholder={attDept ? 'اختر المقرر' : 'اختر القسم أولاً'}
+              options={courses
+                .filter((c: any) => !attDept || c.department_id === attDept)
+                .map((c: any) => ({
+                  id: c.id,
+                  name: `${c.name} (${c.code})${c.section ? ` - ${c.section}` : ''}${c.level ? ` - م${c.level}` : ''}`
+                }))}
+              onSelect={setAttCourse}
+              required
+              disabled={!attDept}
+            />
+          </View>
+
+          {/* Date Range Picker */}
+          <Text style={[styles.hintText, { marginTop: 8, fontWeight: '600' }]}>فترة التقرير (اختياري):</Text>
+          <View style={styles.dateRangeRow}>
+            <View style={styles.dateInputWrap}>
+              <Text style={styles.dateInputLabel}>من تاريخ</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="date"
+                  value={attDateFrom}
+                  onChange={(e: any) => setAttDateFrom(e.target.value)}
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14, fontFamily: 'inherit' }}
+                  data-testid="att-date-from"
+                />
+              ) : (
+                <TextInput
+                  value={attDateFrom}
+                  onChangeText={setAttDateFrom}
+                  placeholder="YYYY-MM-DD"
+                  style={styles.dateInput}
+                />
+              )}
+            </View>
+            <View style={styles.dateInputWrap}>
+              <Text style={styles.dateInputLabel}>إلى تاريخ</Text>
+              {Platform.OS === 'web' ? (
+                <input
+                  type="date"
+                  value={attDateTo}
+                  onChange={(e: any) => setAttDateTo(e.target.value)}
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 14, fontFamily: 'inherit' }}
+                  data-testid="att-date-to"
+                />
+              ) : (
+                <TextInput
+                  value={attDateTo}
+                  onChangeText={setAttDateTo}
+                  placeholder="YYYY-MM-DD"
+                  style={styles.dateInput}
+                />
+              )}
+            </View>
+            {(attDateFrom || attDateTo) && (
+              <TouchableOpacity
+                onPress={() => { setAttDateFrom(''); setAttDateTo(''); }}
+                style={styles.clearDatesBtn}
+                testID="clear-dates-btn"
+              >
+                <Ionicons name="close-circle" size={22} color="#f44336" />
+              </TouchableOpacity>
             )}
-          </ScrollView>
+          </View>
+          <Text style={{ fontSize: 11, color: '#999', marginTop: 4, marginBottom: 10 }}>
+            إذا لم تحدد فترة، سيتم تصدير آخر 10 محاضرات فقط.
+          </Text>
+
           <View style={styles.exportRow}>
             <TouchableOpacity
-              style={[styles.exportBtn, styles.excelBtn, { backgroundColor: '#4caf50' }, (!selectedCourse || exporting !== null) && styles.btnDisabled]}
+              style={[styles.exportBtn, styles.excelBtn, { backgroundColor: '#4caf50' }, (!attCourse || exporting !== null) && styles.btnDisabled]}
               onPress={handleExportAttendance}
-              disabled={!selectedCourse || exporting !== null}
+              disabled={!attCourse || exporting !== null}
+              testID="export-attendance-excel"
             >
               {exporting === 'attendance' ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -882,9 +976,10 @@ export default function ReportsScreen() {
               <Text style={styles.exportBtnText}>Excel</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.exportBtn, styles.pdfBtn, (!selectedCourse || exporting !== null) && styles.btnDisabled]}
+              style={[styles.exportBtn, styles.pdfBtn, (!attCourse || exporting !== null) && styles.btnDisabled]}
               onPress={handleExportAttendancePDF}
-              disabled={!selectedCourse || exporting !== null}
+              disabled={!attCourse || exporting !== null}
+              testID="export-attendance-pdf"
             >
               {exporting === 'attendance_pdf' ? (
                 <ActivityIndicator size="small" color="#fff" />
@@ -1215,6 +1310,36 @@ const styles = StyleSheet.create({
   noCourses: {
     color: '#999',
     fontSize: 14,
+  },
+  cascadeRow: {
+    marginBottom: 10,
+  },
+  dateRangeRow: {
+    flexDirection: 'row',
+    gap: 10,
+    alignItems: 'flex-end',
+    marginTop: 6,
+  },
+  dateInputWrap: {
+    flex: 1,
+  },
+  dateInputLabel: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+    textAlign: 'right',
+  },
+  dateInput: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    textAlign: 'right',
+  },
+  clearDatesBtn: {
+    marginBottom: 4,
+    padding: 4,
   },
   exportRow: {
     flexDirection: 'row',

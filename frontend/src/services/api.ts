@@ -454,11 +454,11 @@ export const exportAPI = {
       responseType: 'blob' 
     }),
   
-  exportAttendance: (courseId: string) => 
-    api.get(`/export/attendance/${courseId}`, { responseType: 'blob' }),
+  exportAttendance: (courseId: string, params?: { date_from?: string; date_to?: string }) => 
+    api.get(`/export/attendance/${courseId}`, { params, responseType: 'blob' }),
   
-  exportAttendancePDF: (courseId: string) => 
-    api.get(`/export/attendance/${courseId}/pdf`, { responseType: 'blob' }),
+  exportAttendancePDF: (courseId: string, params?: { date_from?: string; date_to?: string }) => 
+    api.get(`/export/attendance/${courseId}/pdf`, { params, responseType: 'blob' }),
   
   exportDeptReport: (deptId: string) => 
     api.get(`/export/report/${deptId}`, { responseType: 'blob' }),
