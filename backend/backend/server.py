@@ -7864,7 +7864,14 @@ async def get_absent_students_report(
             return {"students": [], "total_count": 0, "min_absence_rate_filter": min_absence_rate}
     
     courses = await db.courses.find(course_query).to_list(100)
-    
+
+    # جلب جميع الأقسام مرة واحدة لربط الاسم
+    dept_ids = list({c.get("department_id") for c in courses if c.get("department_id")})
+    depts_map = {}
+    if dept_ids:
+        async for d in db.departments.find({"_id": {"$in": [ObjectId(x) for x in dept_ids]}}):
+            depts_map[str(d["_id"])] = d.get("name", "")
+
     result = []
     for course in courses:
         cid = str(course["_id"])
@@ -7890,22 +7897,45 @@ async def get_absent_students_report(
             }).to_list(1000)
             
             absent_count = sum(1 for r in attendance_records if r.get("status") == AttendanceStatus.ABSENT)
+            late_count = sum(1 for r in attendance_records if r.get("status") == AttendanceStatus.LATE)
+            present_count = sum(1 for r in attendance_records if r.get("status") == AttendanceStatus.PRESENT)
             absence_rate = (absent_count / total_lectures) * 100
-            
+
             if absence_rate >= min_absence_rate:
                 try:
                     student = await db.students.find_one({"_id": ObjectId(student_id)})
                 except Exception:
                     continue
                 if student:
+                    # آخر تاريخ غياب
+                    last_absent_date = ""
+                    for r in sorted(
+                        [x for x in attendance_records if x.get("status") == AttendanceStatus.ABSENT],
+                        key=lambda x: x.get("date", ""),
+                        reverse=True,
+                    ):
+                        last_absent_date = str(r.get("date", ""))
+                        break
+
+                    dept_name = depts_map.get(course.get("department_id", ""), "")
+                    presence_rate = (present_count / total_lectures) * 100 if total_lectures else 0
+
                     result.append({
                         "student_id": student.get("student_id", ""),
                         "student_name": student.get("full_name", ""),
+                        "student_phone": student.get("phone", ""),
+                        "department_name": dept_name,
+                        "level": course.get("level", student.get("level", "")),
+                        "section": course.get("section", student.get("section", "")),
                         "course_name": course.get("name", ""),
                         "course_code": course.get("code", ""),
                         "total_lectures": total_lectures,
                         "absent_count": absent_count,
-                        "absence_rate": round(absence_rate, 2)
+                        "late_count": late_count,
+                        "present_count": present_count,
+                        "absence_rate": round(absence_rate, 2),
+                        "presence_rate": round(presence_rate, 2),
+                        "last_absent_date": last_absent_date,
                     })
     
     # ترتيب حسب نسبة الغياب (الأعلى أولاً)
