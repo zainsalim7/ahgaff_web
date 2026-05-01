@@ -10939,19 +10939,33 @@ async def get_students_template(current_user: dict = Depends(get_current_user)):
 
 # Register Arabic font
 import os
-FONT_PATH = '/app/backend/fonts/Amiri-Regular.ttf'
-if os.path.exists(FONT_PATH):
+from pathlib import Path as _Path
+
+# مسار ديناميكي — يعمل محلياً وعلى الإنتاج (Railway/Docker)
+_CANDIDATE_FONT_PATHS = [
+    str(_Path(__file__).parent / "fonts" / "Amiri-Regular.ttf"),
+    "/app/backend/backend/fonts/Amiri-Regular.ttf",
+    "/app/backend/fonts/Amiri-Regular.ttf",
+]
+FONT_PATH = next((p for p in _CANDIDATE_FONT_PATHS if os.path.exists(p)), None)
+
+if FONT_PATH:
     try:
         pdfmetrics.registerFont(TTFont('Arabic', FONT_PATH))
         ARABIC_FONT = 'Arabic'
-    except:
+        logger.info(f"PDF Arabic font loaded from: {FONT_PATH}")
+    except Exception as e:
+        logger.error(f"Failed to register Arabic font: {e}")
         ARABIC_FONT = 'Helvetica'
 else:
+    # محاولة أخيرة: FreeSans (غالباً لا يدعم العربية - للسلامة فقط)
     try:
         pdfmetrics.registerFont(TTFont('Arabic', '/usr/share/fonts/truetype/freefont/FreeSans.ttf'))
         ARABIC_FONT = 'Arabic'
-    except:
+        logger.warning("Using FreeSans fallback — Arabic may not render correctly!")
+    except Exception:
         ARABIC_FONT = 'Helvetica'
+        logger.error("No Arabic font found — PDFs will be garbled!")
 
 def arabic_text(text):
     """Reshape Arabic text for PDF display"""
