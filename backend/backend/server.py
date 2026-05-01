@@ -133,10 +133,27 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # Security
 security = HTTPBearer()
 
-# MongoDB connection - with error handling
+# MongoDB connection - مُحسَّن للإنتاج على Railway
+# - maxPoolSize كبير لخدمة نداءات متوازية كثيرة
+# - minPoolSize = 5: إبقاء 5 اتصالات جاهزة دائماً (تقضي على latency الأول)
+# - compressors = 'zstd,snappy': ضغط البيانات بين السيرفر وقاعدة البيانات
+# - retryWrites: إعادة المحاولة تلقائياً عند أخطاء الشبكة العابرة
+# - socketTimeoutMS: منع تعليق الاتصالات الميتة
 mongo_url = os.environ.get('MONGO_URL', 'mongodb://localhost:27017')
 try:
-    client = AsyncIOMotorClient(mongo_url, serverSelectionTimeoutMS=5000)
+    client = AsyncIOMotorClient(
+        mongo_url,
+        serverSelectionTimeoutMS=5000,
+        maxPoolSize=100,
+        minPoolSize=5,
+        maxIdleTimeMS=60000,
+        socketTimeoutMS=30000,
+        connectTimeoutMS=5000,
+        retryWrites=True,
+        retryReads=True,
+        compressors='zstd,snappy,zlib',
+        appname='ahgaff-attendance',
+    )
     db = client[os.environ.get('DB_NAME', 'ahgaff_attendance')]
 except Exception as e:
     print(f"Warning: MongoDB connection failed: {e}")
