@@ -71,15 +71,20 @@ function createPrintableHTML(reportData: ReportData): string {
     <head>
       <meta charset="UTF-8">
       <title>${reportData.title}</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@400;500;700;800&family=Cairo:wght@400;600;700&display=swap" rel="stylesheet">
       <style>
         @page { size: A4; margin: 15mm; }
         @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+        * { font-family: 'Tajawal', 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif; }
         body {
-          font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+          font-family: 'Tajawal', 'Cairo', 'Segoe UI', Tahoma, Arial, sans-serif;
           direction: rtl;
           margin: 0;
           padding: 15px;
           background: white;
+          font-size: 12px;
         }
         .header {
           display: flex;
@@ -98,11 +103,11 @@ function createPrintableHTML(reportData: ReportData): string {
         .header-text {
           text-align: center;
         }
-        .header-text h1 { color: #1565c0; margin: 0 0 5px 0; font-size: 22px; }
-        .header-text p { color: #666; margin: 0; font-size: 11px; }
+        .header-text h1 { color: #1565c0; margin: 0 0 5px 0; font-size: 22px; font-weight: 800; }
+        .header-text p { color: #666; margin: 0; font-size: 12px; }
         .title { text-align: center; margin-bottom: 15px; }
-        .title h2 { color: #333; margin: 0 0 6px 0; font-size: 16px; }
-        .title p { color: #666; margin: 0; font-size: 11px; }
+        .title h2 { color: #333; margin: 0 0 6px 0; font-size: 17px; font-weight: 700; }
+        .title p { color: #666; margin: 0; font-size: 12px; }
         .date-info {
           display: flex;
           justify-content: space-between;
@@ -111,7 +116,7 @@ function createPrintableHTML(reportData: ReportData): string {
           background: #f5f5f5;
           border-radius: 6px;
         }
-        .date-info span { font-size: 11px; }
+        .date-info span { font-size: 12px; }
         .summary {
           display: flex;
           justify-content: space-around;
@@ -121,30 +126,33 @@ function createPrintableHTML(reportData: ReportData): string {
           padding: 12px;
         }
         .summary-item { text-align: center; padding: 8px; }
-        .summary-value { font-size: 18px; font-weight: bold; color: #1565c0; }
-        .summary-label { font-size: 10px; color: #666; margin-top: 4px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 8px; }
+        .summary-value { font-size: 20px; font-weight: 800; color: #1565c0; }
+        .summary-label { font-size: 11px; color: #666; margin-top: 4px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 8px; direction: rtl; }
         th {
           background: linear-gradient(135deg, #1565c0 0%, #1976d2 100%);
           color: white;
-          padding: 8px 5px;
-          text-align: center;
-          font-size: 10px;
+          padding: 9px 6px;
+          text-align: right;
+          font-size: 11px;
+          font-weight: 700;
           border: 1px solid #1565c0;
         }
         td {
-          padding: 6px 5px;
-          text-align: center;
-          font-size: 9px;
+          padding: 7px 6px;
+          text-align: right;
+          font-size: 11px;
           border: 1px solid #ddd;
+          color: #333;
         }
+        /* الأعمدة الرقمية محاذاة وسط */
+        td.num, th.num { text-align: center; }
         tr:nth-child(even) { background: #f9f9f9; }
-        tr:hover { background: #e8f4fc; }
         .footer {
           margin-top: 20px;
           text-align: center;
           color: #999;
-          font-size: 9px;
+          font-size: 10px;
           border-top: 1px solid #eee;
           padding-top: 12px;
         }
@@ -204,15 +212,30 @@ function createSummaryHTMLPrint(summary: { label: string; value: string | number
 
 /**
  * إنشاء HTML للجدول (للطباعة)
+ * - العمود الأول (#) والأعمدة الرقمية: محاذاة وسط
+ * - باقي الأعمدة (النصوص العربية): محاذاة يمين
  */
 function createTableHTMLPrint(columns: string[], rows: (string | number)[][]): string {
   if (rows.length === 0) {
     return '<p class="no-data">لا توجد بيانات</p>';
   }
 
-  const headerCells = columns.map(col => `<th>${col}</th>`).join('');
+  const isNumeric = (val: any) => {
+    if (val === null || val === undefined) return false;
+    const s = String(val).trim();
+    return /^[\d.,%\s-]+$/.test(s);
+  };
+
+  const headerCells = columns.map((col, i) => {
+    const cls = i === 0 ? 'num' : '';
+    return `<th${cls ? ` class="${cls}"` : ''}>${col}</th>`;
+  }).join('');
+
   const bodyRows = rows.map(row => {
-    const cells = row.map(cell => `<td>${cell}</td>`).join('');
+    const cells = row.map((cell, idx) => {
+      const cls = idx === 0 || isNumeric(cell) ? 'num' : '';
+      return `<td${cls ? ` class="${cls}"` : ''}>${cell ?? '-'}</td>`;
+    }).join('');
     return `<tr>${cells}</tr>`;
   }).join('');
 
@@ -261,15 +284,25 @@ export function prepareAbsentStudentsData(
   return {
     title: 'تقرير الطلاب المتغيبين',
     subtitle: courseName || 'جميع المقررات',
-    columns: ['#', 'اسم الطالب', 'الرقم الأكاديمي', 'المقرر', 'الغياب', 'النسبة'],
+    columns: ['#', 'اسم الطالب', 'رقم القيد', 'القسم', 'المستوى/الشعبة', 'المقرر', 'المحاضرات', 'الحضور', 'الغياب', 'التأخير', 'نسبة الغياب', 'آخر غياب'],
     rows: students.map((student, index) => [
       index + 1,
-      student.name || '-',
+      student.student_name || student.name || '-',
       student.student_id || '-',
-      student.course_name || '-',
-      student.absences || 0,
+      student.department_name || '-',
+      student.level ? `م${student.level}${student.section ? ` (${student.section})` : ''}` : '-',
+      `${student.course_name || '-'}${student.course_code ? ` (${student.course_code})` : ''}`,
+      student.total_lectures ?? 0,
+      student.present_count ?? 0,
+      student.absent_count ?? student.absences ?? 0,
+      student.late_count ?? 0,
       `${student.absence_rate || 0}%`,
+      student.last_absent_date ? String(student.last_absent_date).substring(0, 10) : '-',
     ]),
+    summary: [
+      { label: 'إجمالي الطلاب المتغيبين', value: students.length },
+      { label: 'طلاب فريدون', value: new Set(students.map((s: any) => s.student_id)).size },
+    ],
   };
 }
 
