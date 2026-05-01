@@ -11105,6 +11105,14 @@ async def export_attendance_pdf(
     # Table header (RTL - from right to left)
     # Add date columns (show last 10 dates max for readability)
     display_dates = dates[-10:] if len(dates) > 10 else dates
+
+    # Legend - شرح الرموز
+    legend_style = ParagraphStyle('Legend', fontName=ARABIC_FONT, fontSize=10, alignment=TA_RIGHT, spaceAfter=6)
+    elements.append(Paragraph(
+        arabic_text("الرموز:  ح = حاضر    غ = غائب    ت = متأخر    ع = معذور    — = لا توجد محاضرة"),
+        legend_style
+    ))
+    elements.append(Spacer(1, 8))
     
     # Build headers RTL
     headers = [arabic_text("%"), arabic_text("غياب"), arabic_text("حضور")]
@@ -11126,14 +11134,17 @@ async def export_attendance_pdf(
             record = next((r for r in student_records if r["date"].strftime("%Y-%m-%d") == date), None)
             if record:
                 if record["status"] == "present":
-                    date_cols.append("✓")
+                    date_cols.append(arabic_text("ح"))
                     total_present += 1
                 elif record["status"] == "absent":
-                    date_cols.append("✗")
+                    date_cols.append(arabic_text("غ"))
                     total_absent += 1
                 elif record["status"] == "excused":
-                    date_cols.append("E")
+                    date_cols.append(arabic_text("ع"))
                     total_present += 0.5  # Count excused as half present
+                elif record["status"] == "late":
+                    date_cols.append(arabic_text("ت"))
+                    total_present += 1
                 else:
                     date_cols.append("-")
             else:
