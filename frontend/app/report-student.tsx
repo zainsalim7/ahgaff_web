@@ -189,14 +189,19 @@ export default function StudentReport() {
     }
   };
 
-  // عند تغيير الطالب المحدد
+  // عند تغيير الطالب المحدد - لا نُنفذ التقرير تلقائياً، فقط نُحدّث الاختيار
   const handleStudentChange = (studentId: string) => {
     setSelectedStudent(studentId);
-    if (studentId) {
-      fetchStudentReport(studentId);
-    } else {
-      setStudentData(null);
+    setStudentData(null); // مسح البيانات الحالية حتى يضغط المستخدم "تنفيذ التقرير"
+  };
+
+  // تنفيذ التقرير (بضغط الزر)
+  const runReport = () => {
+    if (!selectedStudent) {
+      Alert.alert('تنبيه', 'اختر الطالب أولاً');
+      return;
     }
+    fetchStudentReport(selectedStudent);
   };
 
   // دالة تصدير PDF
@@ -396,6 +401,28 @@ export default function StudentReport() {
                 </View>
               </View>
             </>
+          )}
+
+          {/* زر التنفيذ - للأدمن فقط */}
+          {!isStudent && (
+            <TouchableOpacity
+              style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#9c27b0', paddingVertical: 10, borderRadius: 8, marginTop: 8 }, (loading || !selectedStudent) && { opacity: 0.6 }]}
+              onPress={runReport}
+              disabled={loading || !selectedStudent}
+              testID="run-report-btn"
+            >
+              {loading ? (
+                <>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>جاري التنفيذ...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="play" size={16} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{studentData ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
           )}
         </View>
         )}

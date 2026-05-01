@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Platform,
   Alert,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -60,10 +61,14 @@ export default function ReportTeacherSummary() {
   const { user, token } = useAuth();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [report, setReport] = useState<TeacherSummaryReport | null>(null);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState<string>('');
+  const [teacherQuery, setTeacherQuery] = useState('');
+  const [showTeacherList, setShowTeacherList] = useState(false);
   const [exporting, setExporting] = useState(false);
 
   const isAdmin = user?.role === 'admin' || user?.permissions?.includes('view_reports');
@@ -81,40 +86,52 @@ export default function ReportTeacherSummary() {
 
   const fetchReport = useCallback(async (teacherId?: string) => {
     try {
-      setLoading(true);
+      setExecuting(true);
       const params: any = {};
       if (teacherId) params.teacher_id = teacherId;
       const res = await reportsAPI.getTeacherSummary(params);
       setReport(res.data);
+      setHasRun(true);
     } catch (error: any) {
       console.error('Error fetching report:', error);
       if (error?.response?.status === 400 && isAdmin && !selectedTeacher) {
-        // Admin needs to select a teacher first
         setReport(null);
       } else {
         Alert.alert('خطأ', error?.response?.data?.detail || 'حدث خطأ في تحميل التقرير');
       }
     } finally {
-      setLoading(false);
+      setExecuting(false);
       setRefreshing(false);
     }
   }, [isAdmin, selectedTeacher]);
 
+  // التحميل الأولي: للمعلم تنفيذ تلقائي، للمدير فقط جلب قائمة المعلمين
   useEffect(() => {
+    (async () => {
+      if (isAdmin) {
+        await fetchTeachers();
+        setLoading(false);
+      } else {
+        await fetchReport();
+        setLoading(false);
+      }
+    })();
+  }, []);
+
+  const runReport = () => {
     if (isAdmin) {
-      fetchTeachers();
+      if (!selectedTeacher) {
+        Alert.alert('تنبيه', 'اختر المعلم أولاً');
+        return;
+      }
+      fetchReport(selectedTeacher);
     } else {
       fetchReport();
     }
-  }, []);
-
-  useEffect(() => {
-    if (isAdmin && selectedTeacher) {
-      fetchReport(selectedTeacher);
-    }
-  }, [selectedTeacher]);
+  };
 
   const onRefresh = useCallback(() => {
+    if (!hasRun) return;
     setRefreshing(true);
     if (isAdmin && selectedTeacher) {
       fetchReport(selectedTeacher);
@@ -123,7 +140,17 @@ export default function ReportTeacherSummary() {
     } else {
       setRefreshing(false);
     }
-  }, [isAdmin, selectedTeacher]);
+  }, [isAdmin, selectedTeacher, hasRun, fetchReport]);
+
+  // قائمة المعلمين المُفلتَرة بالبحث
+  const filteredTeachers = teacherQuery.trim()
+    ? teachers.filter((t: any) => {
+        const q = teacherQuery.trim().toLowerCase();
+        return (t.full_name || '').toLowerCase().includes(q) || (t.username || '').toLowerCase().includes(q);
+      })
+    : teachers;
+
+  const selectedTeacherObj = teachers.find((t: any) => t.id === selectedTeacher);
 
   const handleExportExcel = async () => {
     try {
@@ -192,23 +219,78 @@ export default function ReportTeacherSummary() {
         {/* Teacher Selector for Admin */}
         {isAdmin && (
           <View style={styles.selectorCard} data-testid="teacher-selector">
-            <Text style={styles.selectorLabel}>اختر المعلم:</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={selectedTeacher}
-                onValueChange={(value) => setSelectedTeacher(value)}
-                style={styles.picker}
-              >
-                <Picker.Item label="-- اختر معلم --" value="" />
-                {teachers.map(t => (
-                  <Picker.Item key={t.id} label={`${t.full_name} (${t.teacher_id || ''})`} value={t.id} />
-                ))}
-              </Picker>
-            </View>
+            <Text style={[styles.selectorLabel, { fontSize: 13 }]}>المعلم</Text>
+
+            {/* Compact searchable input */}
+            <TouchableOpacity
+              onPress={() => setShowTeacherList(!showTeacherList)}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8f9fa', borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }}
+              testID="teacher-input"
+            >
+              <Ionicons name="person-outline" size={16} color="#666" />
+              <Text style={{ flex: 1, fontSize: 13, color: selectedTeacherObj ? '#333' : '#999', textAlign: 'right' }}>
+                {selectedTeacherObj ? `${selectedTeacherObj.full_name}${selectedTeacherObj.teacher_id ? ` (${selectedTeacherObj.teacher_id})` : ''}` : 'ابحث عن معلم...'}
+              </Text>
+              <Ionicons name={showTeacherList ? 'chevron-up' : 'chevron-down'} size={16} color="#666" />
+            </TouchableOpacity>
+
+            {showTeacherList && (
+              <View style={{ marginTop: 8, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', maxHeight: 280 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fafafa' }}>
+                  <Ionicons name="search" size={14} color="#999" />
+                  <TextInput
+                    value={teacherQuery}
+                    onChangeText={setTeacherQuery}
+                    placeholder="ابحث بالاسم أو الرقم..."
+                    placeholderTextColor="#aaa"
+                    style={{ flex: 1, fontSize: 13, textAlign: 'right', padding: 4 }}
+                    autoFocus
+                    testID="teacher-search-input"
+                  />
+                </View>
+                <ScrollView style={{ maxHeight: 220 }}>
+                  {filteredTeachers.length === 0 ? (
+                    <Text style={{ padding: 16, textAlign: 'center', color: '#999', fontSize: 12 }}>لا توجد نتائج</Text>
+                  ) : (
+                    filteredTeachers.slice(0, 50).map((t: any) => (
+                      <TouchableOpacity
+                        key={t.id}
+                        onPress={() => { setSelectedTeacher(t.id); setShowTeacherList(false); setTeacherQuery(''); setReport(null); setHasRun(false); }}
+                        style={{ paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', backgroundColor: selectedTeacher === t.id ? '#e3f2fd' : '#fff' }}
+                        testID={`teacher-option-${t.id}`}
+                      >
+                        <Text style={{ fontSize: 13, color: '#333', textAlign: 'right', fontWeight: selectedTeacher === t.id ? '700' : '400' }}>{t.full_name}</Text>
+                        {t.teacher_id ? <Text style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{t.teacher_id}</Text> : null}
+                      </TouchableOpacity>
+                    ))
+                  )}
+                </ScrollView>
+              </View>
+            )}
+
+            {/* زر التنفيذ */}
+            <TouchableOpacity
+              style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 10, borderRadius: 8, marginTop: 8 }, (executing || !selectedTeacher) && { opacity: 0.6 }]}
+              onPress={runReport}
+              disabled={executing || !selectedTeacher}
+              testID="run-report-btn"
+            >
+              {executing ? (
+                <>
+                  <ActivityIndicator size="small" color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>جاري التنفيذ...</Text>
+                </>
+              ) : (
+                <>
+                  <Ionicons name="play" size={16} color="#fff" />
+                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+                </>
+              )}
+            </TouchableOpacity>
           </View>
         )}
 
-        {loading && (isTeacher || selectedTeacher) ? (
+        {executing ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#1565c0" />
             <Text style={styles.loadingText}>جاري تحميل التقرير...</Text>
@@ -217,7 +299,7 @@ export default function ReportTeacherSummary() {
           <View style={styles.emptyContainer} data-testid="empty-state">
             <Ionicons name="clipboard-outline" size={64} color="#ccc" />
             <Text style={styles.emptyText}>
-              {isAdmin ? 'اختر معلم لعرض الملخص' : 'لا توجد بيانات'}
+              {isAdmin ? (selectedTeacher ? 'اضغط "تنفيذ التقرير" لعرض البيانات' : 'اختر المعلم أولاً') : 'لا توجد بيانات'}
             </Text>
           </View>
         ) : (

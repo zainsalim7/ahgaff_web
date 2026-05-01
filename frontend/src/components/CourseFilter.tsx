@@ -173,6 +173,7 @@ interface CourseFilterProps {
   onCourseChange: (id: string) => void;
   showCourse?: boolean; // إذا false: فقط الكلية والقسم
   required?: boolean;
+  horizontal?: boolean; // افتراضي true — صف أفقي مدمج
 }
 
 /** فلتر مركّب: كلية → قسم → مقرر */
@@ -188,6 +189,7 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
   onCourseChange,
   showCourse = true,
   required = true,
+  horizontal = true,
 }) => {
   const filteredDepts = useMemo(
     () => departments.filter((d) => !facultyId || d.faculty_id === facultyId),
@@ -198,6 +200,70 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
     () => courses.filter((c) => !departmentId || c.department_id === departmentId),
     [courses, departmentId]
   );
+
+  if (horizontal) {
+    // صف أفقي مدمج — كل فلتر يأخذ مساحة مرنة
+    return (
+      <View style={s.row}>
+        <View style={s.cell}>
+          <SearchableDropdown
+            label="الكلية"
+            value={facultyId}
+            placeholder="اختر الكلية"
+            options={faculties.map((f) => ({ id: f.id, name: f.name }))}
+            onSelect={(v) => {
+              onFacultyChange(v);
+              onDepartmentChange('');
+              onCourseChange('');
+            }}
+            required={required}
+            searchable={faculties.length > 5}
+            testID="course-filter-faculty"
+          />
+        </View>
+        <View style={s.cell}>
+          <SearchableDropdown
+            label="القسم"
+            value={departmentId}
+            placeholder={facultyId ? 'اختر القسم' : 'اختر الكلية'}
+            options={filteredDepts.map((d) => ({ id: d.id, name: d.name }))}
+            onSelect={(v) => {
+              onDepartmentChange(v);
+              onCourseChange('');
+            }}
+            required={required}
+            disabled={!facultyId}
+            searchable={filteredDepts.length > 5}
+            testID="course-filter-department"
+          />
+        </View>
+        {showCourse && (
+          <View style={[s.cell, { flex: 1.5 }]}>
+            <SearchableDropdown
+              label="المقرر"
+              value={courseId}
+              placeholder={departmentId ? 'ابحث واختر...' : 'اختر القسم'}
+              options={filteredCourses.map((c) => ({
+                id: c.id,
+                name: `${c.name}${c.code ? ` (${c.code})` : ''}`,
+                subtitle: [
+                  c.level ? `المستوى ${c.level}` : '',
+                  c.section ? `شعبة ${c.section}` : '',
+                ]
+                  .filter(Boolean)
+                  .join(' • '),
+              }))}
+              onSelect={onCourseChange}
+              required={required}
+              disabled={!departmentId}
+              searchable
+              testID="course-filter-course"
+            />
+          </View>
+        )}
+      </View>
+    );
+  }
 
   return (
     <>
@@ -256,8 +322,12 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
 };
 
 const s = StyleSheet.create({
-  container: { marginBottom: 12 },
-  label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, textAlign: 'right' },
+  // Layout
+  row: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 },
+  cell: { flex: 1, minWidth: 140, marginBottom: 0 },
+  // Field
+  container: { marginBottom: 10 },
+  label: { fontSize: 12, fontWeight: '600', color: '#555', marginBottom: 4, textAlign: 'right' },
   selector: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -265,13 +335,13 @@ const s = StyleSheet.create({
     backgroundColor: '#f8f9fa',
     borderWidth: 1,
     borderColor: '#e0e0e0',
-    borderRadius: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   disabled: { opacity: 0.5 },
-  selectorText: { fontSize: 14, color: '#333', flex: 1, textAlign: 'right' },
-  placeholder: { color: '#999' },
+  selectorText: { fontSize: 13, color: '#333', flex: 1, textAlign: 'right' },
+  placeholder: { color: '#999', fontSize: 12 },
   overlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.5)',

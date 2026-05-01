@@ -10977,6 +10977,59 @@ def arabic_text(text):
     except:
         return str(text)
 
+
+def get_pro_table_style(extra: list = None, num_cols: list = None, name_cols: list = None):
+    """
+    أسلوب موحّد محترف للجداول في PDFs
+    - num_cols: قائمة بالأعمدة الرقمية (محاذاة وسط)
+    - name_cols: قائمة بأعمدة الأسماء العربية (محاذاة يمين)
+    """
+    style = [
+        # Header
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 9),
+        ('TOPPADDING', (0, 0), (-1, 0), 8),
+        # Body
+        ('FONTNAME', (0, 0), (-1, -1), ARABIC_FONT),
+        ('FONTSIZE', (0, 1), (-1, -1), 9),
+        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        # Borders (soft gray)
+        ('LINEBELOW', (0, 0), (-1, 0), 1.2, colors.HexColor('#0d47a1')),
+        ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#cfd8dc')),
+        ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#90a4ae')),
+        # Alternating rows
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f9ff')]),
+        # Padding
+        ('LEFTPADDING', (0, 0), (-1, -1), 5),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 5),
+        ('TOPPADDING', (0, 1), (-1, -1), 6),
+        ('BOTTOMPADDING', (0, 1), (-1, -1), 6),
+    ]
+    # Right-align name columns (Arabic)
+    if name_cols:
+        for col in name_cols:
+            style.append(('ALIGN', (col, 1), (col, -1), 'RIGHT'))
+    if extra:
+        style.extend(extra)
+    return TableStyle(style)
+
+
+def add_pdf_header(elements, title: str, subtitle: str = None, date_range: str = None):
+    """رأس PDF موحَّد: عنوان + معلومات الجامعة + الفترة الزمنية"""
+    title_style = ParagraphStyle('Title', fontName=ARABIC_FONT, fontSize=17, alignment=TA_CENTER, spaceAfter=4, textColor=colors.HexColor('#1565c0'))
+    elements.append(Paragraph(arabic_text("جامعة الأحقاف"), ParagraphStyle('Univ', fontName=ARABIC_FONT, fontSize=13, alignment=TA_CENTER, spaceAfter=2, textColor=colors.HexColor('#666666'))))
+    elements.append(Paragraph(arabic_text(title), title_style))
+    if subtitle:
+        elements.append(Paragraph(arabic_text(subtitle), ParagraphStyle('Sub', fontName=ARABIC_FONT, fontSize=11, alignment=TA_CENTER, textColor=colors.HexColor('#555'))))
+    if date_range:
+        elements.append(Paragraph(arabic_text(date_range), ParagraphStyle('DR', fontName=ARABIC_FONT, fontSize=10, alignment=TA_CENTER, textColor=colors.HexColor('#1565c0'))))
+    elements.append(Paragraph(arabic_text(f"تاريخ التقرير: {datetime.now().strftime('%Y-%m-%d %H:%M')}"),
+                              ParagraphStyle('Date', fontName=ARABIC_FONT, fontSize=9, alignment=TA_CENTER, textColor=colors.HexColor('#888'))))
+    elements.append(Spacer(1, 14))
+
 @api_router.get("/export/students/pdf")
 async def export_students_pdf(
     department_id: Optional[str] = None,
@@ -10998,20 +11051,9 @@ async def export_students_pdf(
     doc = SimpleDocTemplate(output, pagesize=A4, rightMargin=30, leftMargin=30, topMargin=30, bottomMargin=30)
     
     elements = []
-    
-    # Title
-    title_style = ParagraphStyle(
-        'Title',
-        fontName=ARABIC_FONT,
-        fontSize=18,
-        alignment=TA_CENTER,
-        spaceAfter=20,
-    )
-    elements.append(Paragraph(arabic_text("كشف الطلاب"), title_style))
-    elements.append(Paragraph(arabic_text(f"التاريخ: {datetime.now().strftime('%Y-%m-%d')}"), 
-                             ParagraphStyle('Date', fontName=ARABIC_FONT, fontSize=10, alignment=TA_CENTER)))
-    elements.append(Spacer(1, 20))
-    
+
+    add_pdf_header(elements, "كشف الطلاب", subtitle=(arabic_text(dept_map.get(department_id, "")) if department_id else None))
+
     # Table header (RTL - from right to left)
     headers = [
         arabic_text("الشعبة"),
@@ -11035,20 +11077,11 @@ async def export_students_pdf(
         ]
         data.append(row)
     
-    # Create table
-    table = Table(data, colWidths=[30, 70, 120, 100, 50, 50])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, -1), ARABIC_FONT),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
-        ('BACKGROUND', (0, 1), (-1, -1), colors.white),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-    ]))
+    # Create table - col widths in RTL order: [م, رقم, الاسم, القسم, مستوى, شعبة]
+    # Note: data is built reversed in RTL fashion - last col in array is leftmost
+    table = Table(data, colWidths=[40, 70, 110, 95, 50, 50], repeatRows=1)
+    # Name col index in array = 2 (الاسم), dept col = 3 (القسم)
+    table.setStyle(get_pro_table_style(name_cols=[2, 3]))
     
     elements.append(table)
     
@@ -11317,16 +11350,25 @@ async def export_department_report_pdf(
         ]
         data.append(row)
     
-    table = Table(data, colWidths=[80, 50, 50, 130, 70, 30])
-    table.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('FONTNAME', (0, 0), (-1, -1), ARABIC_FONT),
-        ('FONTSIZE', (0, 0), (-1, -1), 9),
-        ('GRID', (0, 0), (-1, -1), 1, colors.black),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-    ]))
+    table = Table(data, colWidths=[60, 50, 50, 140, 75, 35], repeatRows=1)
+    # Add color-coding for attendance rate (col 0 = first in array = % column)
+    extra_styles = []
+    for row_idx in range(1, len(data)):
+        try:
+            rate_val = float(data[row_idx][0].replace('%', ''))
+        except Exception:
+            continue
+        if rate_val >= 75:
+            extra_styles.append(('BACKGROUND', (0, row_idx), (0, row_idx), colors.HexColor('#c8e6c9')))
+            extra_styles.append(('TEXTCOLOR', (0, row_idx), (0, row_idx), colors.HexColor('#1b5e20')))
+        elif rate_val >= 50:
+            extra_styles.append(('BACKGROUND', (0, row_idx), (0, row_idx), colors.HexColor('#fff9c4')))
+            extra_styles.append(('TEXTCOLOR', (0, row_idx), (0, row_idx), colors.HexColor('#f57f17')))
+        else:
+            extra_styles.append(('BACKGROUND', (0, row_idx), (0, row_idx), colors.HexColor('#ffcdd2')))
+            extra_styles.append(('TEXTCOLOR', (0, row_idx), (0, row_idx), colors.HexColor('#b71c1c')))
+    # name col index in array = 3 (الاسم)
+    table.setStyle(get_pro_table_style(extra=extra_styles, name_cols=[3]))
     
     elements.append(table)
     
