@@ -29,6 +29,8 @@ export default function TeacherDelaysReport() {
   const router = useRouter();
   const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [executing, setExecuting] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [teachers, setTeachers] = useState<TeacherDelay[]>([]);
   const [summary, setSummary] = useState({ total_teachers: 0, total_delayed_teachers: 0, total_delay_incidents: 0 });
   const [departments, setDepartments] = useState<any[]>([]);
@@ -36,27 +38,32 @@ export default function TeacherDelaysReport() {
   const [expandedTeacher, setExpandedTeacher] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
+  // تحميل الأقسام فقط
+  useEffect(() => {
+    (async () => {
+      try {
+        const dRes = await departmentsAPI.getAll();
+        setDepartments(dRes.data || []);
+      } catch (e) { console.error(e); }
+      finally { setLoading(false); }
+    })();
+  }, []);
+
   const fetchData = useCallback(async () => {
-    setLoading(true);
+    setExecuting(true);
     try {
       const params = new URLSearchParams();
       if (filterDept) params.append('department_id', filterDept);
-      
-      const [reportRes, deptsRes] = await Promise.all([
-        api.get(`/reports/teacher-delays?${params.toString()}`),
-        departmentsAPI.getAll(),
-      ]);
+      const reportRes = await api.get(`/reports/teacher-delays?${params.toString()}`);
       setTeachers(reportRes.data.teachers || []);
       setSummary(reportRes.data.summary || {});
-      setDepartments(deptsRes.data || []);
+      setHasRun(true);
     } catch (error) {
       console.error('Error:', error);
     } finally {
-      setLoading(false);
+      setExecuting(false);
     }
   }, [filterDept]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
 
   const handleExport = async () => {
     setExporting(true);
@@ -232,9 +239,36 @@ export default function TeacherDelaysReport() {
         </Picker>
       </View>
 
+      {/* زر التنفيذ */}
+      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
+        <TouchableOpacity
+          style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10 }, executing && { opacity: 0.7 }]}
+          onPress={fetchData}
+          disabled={executing}
+          testID="run-report-btn"
+        >
+          {executing ? (
+            <>
+              <ActivityIndicator size="small" color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>جاري التنفيذ...</Text>
+            </>
+          ) : (
+            <>
+              <Ionicons name="play" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+            </>
+          )}
+        </TouchableOpacity>
+      </View>
+
       {/* القائمة */}
-      {loading ? (
+      {loading || executing ? (
         <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 40 }} />
+      ) : !hasRun ? (
+        <View style={styles.emptyState}>
+          <Ionicons name="information-circle-outline" size={60} color="#90a4ae" />
+          <Text style={styles.emptyText}>اضغط "تنفيذ التقرير" لعرض البيانات</Text>
+        </View>
       ) : teachers.length === 0 ? (
         <View style={styles.emptyState}>
           <Ionicons name="checkmark-circle" size={60} color="#4caf50" />

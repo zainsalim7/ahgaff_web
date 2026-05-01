@@ -21,6 +21,7 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { departmentsAPI, coursesAPI, reportsAPI, exportAPI, facultiesAPI, API_URL } from '../src/services/api';
+import { CourseFilter } from '../src/components/CourseFilter';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { Department, Course } from '../src/types';
@@ -865,46 +866,18 @@ export default function ReportsScreen() {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>📊 تصدير سجل الحضور</Text>
 
-          {/* Cascading filters: Faculty → Department → Course */}
-          <View style={styles.cascadeRow}>
-            <Dropdown
-              label="الكلية"
-              value={attFaculty}
-              placeholder="اختر الكلية"
-              options={faculties.map((f: any) => ({ id: f.id, name: f.name }))}
-              onSelect={(v) => { setAttFaculty(v); setAttDept(''); setAttCourse(''); }}
-              required
-            />
-          </View>
-          <View style={styles.cascadeRow}>
-            <Dropdown
-              label="القسم"
-              value={attDept}
-              placeholder={attFaculty ? 'اختر القسم' : 'اختر الكلية أولاً'}
-              options={departments
-                .filter((d: any) => !attFaculty || d.faculty_id === attFaculty)
-                .map((d: any) => ({ id: d.id, name: d.name }))}
-              onSelect={(v) => { setAttDept(v); setAttCourse(''); }}
-              required
-              disabled={!attFaculty}
-            />
-          </View>
-          <View style={styles.cascadeRow}>
-            <Dropdown
-              label="المقرر"
-              value={attCourse}
-              placeholder={attDept ? 'اختر المقرر' : 'اختر القسم أولاً'}
-              options={courses
-                .filter((c: any) => !attDept || c.department_id === attDept)
-                .map((c: any) => ({
-                  id: c.id,
-                  name: `${c.name} (${c.code})${c.section ? ` - ${c.section}` : ''}${c.level ? ` - م${c.level}` : ''}`
-                }))}
-              onSelect={setAttCourse}
-              required
-              disabled={!attDept}
-            />
-          </View>
+          {/* Cascading filters with search: Faculty → Department → Course */}
+          <CourseFilter
+            faculties={faculties}
+            departments={departments as any}
+            courses={courses as any}
+            facultyId={attFaculty}
+            departmentId={attDept}
+            courseId={attCourse}
+            onFacultyChange={setAttFaculty}
+            onDepartmentChange={setAttDept}
+            onCourseChange={setAttCourse}
+          />
 
           {/* Date Range Picker */}
           <Text style={[styles.hintText, { marginTop: 8, fontWeight: '600' }]}>فترة التقرير (اختياري):</Text>

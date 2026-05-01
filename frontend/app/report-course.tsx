@@ -17,16 +17,23 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { reportsAPI, coursesAPI } from '../src/services/api';
+import { reportsAPI, coursesAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
 import { formatGregorianDate, GREGORIAN_MONTHS_AR } from '../src/utils/dateUtils';
 import { exportToPDF, prepareCourseReportData } from '../src/utils/pdfExport';
+import { CourseFilter } from '../src/components/CourseFilter';
 
 export default function CourseDetailedReport() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [executing, setExecuting] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [courses, setCourses] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
+  const [selectedDept, setSelectedDept] = useState('');
   const [selectedCourse, setSelectedCourse] = useState((params.courseId || params.id || '') as string);
   const [reportData, setReportData] = useState<any>(null);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -91,46 +98,64 @@ export default function CourseDetailedReport() {
 
   const fetchCourses = useCallback(async () => {
     try {
-      const res = await coursesAPI.getAll();
-      setCourses(res.data);
+      const [cRes, dRes, fRes] = await Promise.all([
+        coursesAPI.getAll(),
+        departmentsAPI.getAll(),
+        facultiesAPI.getAll(),
+      ]);
+      setCourses(cRes.data);
+      setDepartments(dRes.data || []);
+      setFaculties(fRes.data || []);
+      // pre-fill faculty/dept if course came from URL
+      if (selectedCourse) {
+        const c = cRes.data.find((x: any) => x.id === selectedCourse);
+        if (c) {
+          const d = (dRes.data || []).find((x: any) => x.id === c.department_id);
+          if (d) {
+            setSelectedDept(d.id);
+            setSelectedFaculty(d.faculty_id || '');
+          }
+        }
+      }
     } catch (error) {
-      console.error('Error fetching courses:', error);
+      console.error('Error fetching:', error);
+    } finally {
+      setLoading(false);
     }
-  }, []);
+  }, [selectedCourse]);
 
   const fetchReport = useCallback(async () => {
-    if (!selectedCourse) {
-      setLoading(false);
-      return;
-    }
-    
+    if (!selectedCourse) return;
+    setExecuting(true);
     try {
       setReportError(null);
       setReportData(null);
       const res = await reportsAPI.getCourseDetailedReport(selectedCourse);
       setReportData(res.data);
+      setHasRun(true);
     } catch (error: any) {
       console.error('Error fetching report:', error);
       const msg = error?.response?.data?.detail || 'فشل في تحميل التقرير. حاول مرة أخرى';
       setReportError(msg);
     } finally {
-      setLoading(false);
+      setExecuting(false);
       setRefreshing(false);
     }
   }, [selectedCourse]);
 
   useEffect(() => {
     fetchCourses();
-  }, []);
+  }, [fetchCourses]);
 
+  // إذا تم تمرير المقرر عبر URL -> تنفيذ تلقائي
   useEffect(() => {
-    if (selectedCourse) {
-      setLoading(true);
+    if ((params.courseId || params.id) && selectedCourse && !hasRun && !loading) {
       fetchReport();
     }
-  }, [selectedCourse, fetchReport]);
+  }, [params.courseId, params.id, selectedCourse, hasRun, loading, fetchReport]);
 
   const onRefresh = () => {
+    if (!hasRun) return;
     setRefreshing(true);
     fetchReport();
   };
@@ -177,32 +202,50 @@ export default function CourseDetailedReport() {
         style={styles.scrollView}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-        {/* اختيار المقرر */}
+        {/* اختيار المقرر مع البحث */}
         <View style={styles.selectorCard}>
-          <Text style={styles.selectorLabel}>اختر المقرر</Text>
-          <View style={styles.pickerWrapper}>
-            <Picker
-              selectedValue={selectedCourse}
-              onValueChange={setSelectedCourse}
-              style={styles.picker}
-            >
-              <Picker.Item label="-- اختر المقرر --" value="" />
-              {courses.map(c => (
-                <Picker.Item key={c.id} label={`${c.name} (${c.code})`} value={c.id} />
-              ))}
-            </Picker>
-          </View>
+          <CourseFilter
+            faculties={faculties}
+            departments={departments}
+            courses={courses}
+            facultyId={selectedFaculty}
+            departmentId={selectedDept}
+            courseId={selectedCourse}
+            onFacultyChange={setSelectedFaculty}
+            onDepartmentChange={setSelectedDept}
+            onCourseChange={(v) => { setSelectedCourse(v); setReportData(null); setHasRun(false); }}
+          />
+
+          {/* زر التنفيذ */}
+          <TouchableOpacity
+            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 8 }, (executing || !selectedCourse) && { opacity: 0.6 }]}
+            onPress={fetchReport}
+            disabled={executing || !selectedCourse}
+            testID="run-report-btn"
+          >
+            {executing ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>جاري التنفيذ...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
-        {loading && selectedCourse ? (
+        {executing ? (
           <View style={styles.loadingCard}>
             <ActivityIndicator size="large" color="#00bcd4" />
             <Text style={styles.loadingText}>جاري تحميل التقرير...</Text>
           </View>
-        ) : !selectedCourse ? (
+        ) : !selectedCourse || !hasRun ? (
           <View style={styles.emptyCard}>
-            <Ionicons name="book-outline" size={64} color="#e0e0e0" />
-            <Text style={styles.emptyText}>اختر مقرراً لعرض تقريره</Text>
+            <Ionicons name="information-circle-outline" size={64} color="#90a4ae" />
+            <Text style={styles.emptyText}>{!selectedCourse ? 'اختر مقرراً ثم اضغط "تنفيذ التقرير"' : 'اضغط "تنفيذ التقرير" لعرض البيانات'}</Text>
           </View>
         ) : reportError ? (
           <View style={styles.emptyCard}>
@@ -210,7 +253,7 @@ export default function CourseDetailedReport() {
             <Text style={[styles.emptyText, { color: '#f44336' }]}>{reportError}</Text>
             <TouchableOpacity
               style={{ marginTop: 16, backgroundColor: '#1565c0', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }}
-              onPress={() => { setLoading(true); fetchReport(); }}
+              onPress={() => { fetchReport(); }}
               data-testid="retry-report-btn"
             >
               <Text style={{ color: '#fff', fontWeight: '700' }}>إعادة المحاولة</Text>

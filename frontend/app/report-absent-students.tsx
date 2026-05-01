@@ -16,8 +16,9 @@ import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
-import { reportsAPI, departmentsAPI, coursesAPI } from '../src/services/api';
+import { reportsAPI, departmentsAPI, coursesAPI, facultiesAPI } from '../src/services/api';
 import { exportToPDF, prepareAbsentStudentsData } from '../src/utils/pdfExport';
+import { CourseFilter } from '../src/components/CourseFilter';
 
 export default function AbsentStudentsReport() {
   const router = useRouter();
@@ -28,6 +29,8 @@ export default function AbsentStudentsReport() {
   const [students, setStudents] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
   const [minAbsenceRate, setMinAbsenceRate] = useState(25);
@@ -36,16 +39,18 @@ export default function AbsentStudentsReport() {
   const [exporting, setExporting] = useState(false);
   const [exportingPDF, setExportingPDF] = useState(false);
 
-  // جلب بيانات الفلاتر فقط (الأقسام + المقررات) — بدون تنفيذ التقرير تلقائياً
+  // جلب بيانات الفلاتر فقط (الكليات + الأقسام + المقررات) — بدون تنفيذ التقرير تلقائياً
   useEffect(() => {
     (async () => {
       try {
-        const [deptsRes, coursesRes] = await Promise.all([
+        const [deptsRes, coursesRes, facsRes] = await Promise.all([
           departmentsAPI.getAll(),
           coursesAPI.getAll(),
+          facultiesAPI.getAll(),
         ]);
         setDepartments(deptsRes.data || []);
         setCourses(coursesRes.data || []);
+        setFaculties(facsRes.data || []);
       } catch (e) {
         console.error('Error loading filters:', e);
       } finally {
@@ -122,9 +127,7 @@ export default function AbsentStudentsReport() {
     }
   };
 
-  const filteredCourses = selectedDept
-    ? courses.filter(c => c.department_id === selectedDept)
-    : courses;
+  const toggleExpand = (i: number) => setExpanded(prev => ({ ...prev, [i]: !prev[i] }));
 
   if (metaLoading) {
     return (
@@ -134,8 +137,6 @@ export default function AbsentStudentsReport() {
       </View>
     );
   }
-
-  const toggleExpand = (i: number) => setExpanded(prev => ({ ...prev, [i]: !prev[i] }));
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -172,33 +173,18 @@ export default function AbsentStudentsReport() {
       <ScrollView style={styles.scrollView}>
         {/* الفلاتر */}
         <View style={styles.filtersCard}>
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>القسم</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={selectedDept}
-                onValueChange={(value) => { setSelectedDept(value); setSelectedCourse(''); }}
-                style={styles.picker}
-              >
-                <Picker.Item label="جميع الأقسام" value="" />
-                {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
-              </Picker>
-            </View>
-          </View>
-
-          <View style={styles.filterRow}>
-            <Text style={styles.filterLabel}>المقرر</Text>
-            <View style={styles.pickerWrapper}>
-              <Picker
-                selectedValue={selectedCourse}
-                onValueChange={setSelectedCourse}
-                style={styles.picker}
-              >
-                <Picker.Item label="جميع المقررات" value="" />
-                {filteredCourses.map(c => <Picker.Item key={c.id} label={`${c.name} (${c.code})`} value={c.id} />)}
-              </Picker>
-            </View>
-          </View>
+          <CourseFilter
+            faculties={faculties}
+            departments={departments}
+            courses={courses}
+            facultyId={selectedFaculty}
+            departmentId={selectedDept}
+            courseId={selectedCourse}
+            onFacultyChange={setSelectedFaculty}
+            onDepartmentChange={setSelectedDept}
+            onCourseChange={setSelectedCourse}
+            required={false}
+          />
 
           <View style={styles.thresholdSection}>
             <Text style={styles.filterLabel}>الحد الأدنى لنسبة الغياب</Text>

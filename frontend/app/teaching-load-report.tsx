@@ -17,6 +17,7 @@ export default function TeachingLoadReport() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [selectedDept, setSelectedDept] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hasRun, setHasRun] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'comparison' | 'unassigned_courses' | 'idle_teachers'>('comparison');
 
@@ -26,17 +27,16 @@ export default function TeachingLoadReport() {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!selectedDept) { setReport(null); return; }
-    (async () => {
-      setLoading(true);
-      try {
-        const res = await teachingLoadAPI.advancedReport({ department_id: selectedDept });
-        setReport(res.data);
-      } catch (e) { console.error(e); }
-      finally { setLoading(false); }
-    })();
-  }, [selectedDept]);
+  const runReport = async () => {
+    if (!selectedDept) return;
+    setLoading(true);
+    try {
+      const res = await teachingLoadAPI.advancedReport({ department_id: selectedDept });
+      setReport(res.data);
+      setHasRun(true);
+    } catch (e) { console.error(e); }
+    finally { setLoading(false); }
+  };
 
   const s = report?.summary;
 
@@ -53,17 +53,35 @@ export default function TeachingLoadReport() {
         <View style={st.card}>
           <Text style={st.label}>القسم</Text>
           <View style={st.pickerWrap}>
-            <Picker selectedValue={selectedDept} onValueChange={v => setSelectedDept(v)} style={{ height: 45 }}>
+            <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); setReport(null); setHasRun(false); }} style={{ height: 45 }}>
               <Picker.Item label="-- اختر القسم --" value="" />
               {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
             </Picker>
           </View>
+          <TouchableOpacity
+            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 12 }, (loading || !selectedDept) && { opacity: 0.6 }]}
+            onPress={runReport}
+            disabled={loading || !selectedDept}
+            testID="run-report-btn"
+          >
+            {loading ? (
+              <>
+                <ActivityIndicator size="small" color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>جاري التنفيذ...</Text>
+              </>
+            ) : (
+              <>
+                <Ionicons name="play" size={18} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+              </>
+            )}
+          </TouchableOpacity>
         </View>
 
         {loading && <View style={st.emptyCard}><ActivityIndicator size="large" color="#1565c0" /><Text style={st.emptyText}>جاري التحميل...</Text></View>}
 
-        {!loading && !report && selectedDept === '' && (
-          <View style={st.emptyCard}><Ionicons name="bar-chart-outline" size={48} color="#ccc" /><Text style={st.emptyText}>اختر القسم لعرض التقرير</Text></View>
+        {!loading && !report && (
+          <View style={st.emptyCard}><Ionicons name="bar-chart-outline" size={48} color="#ccc" /><Text style={st.emptyText}>{selectedDept ? 'اضغط "تنفيذ التقرير" لعرض البيانات' : 'اختر القسم أولاً'}</Text></View>
         )}
 
         {!loading && report && (
