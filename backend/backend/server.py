@@ -2997,6 +2997,53 @@ async def get_student_by_qr(qr_code: str, current_user: dict = Depends(get_curre
         "is_active": student.get("is_active", True)
     }
 
+@api_router.post("/admin/cleanup-orphan-enrollments")
+async def cleanup_orphan_enrollments(current_user: dict = Depends(get_current_user)):
+    """
+    تنظيف التسجيلات (enrollments) التي تشير لطلاب محذوفين مسبقاً (ghost enrollments).
+    يُصحّح أعداد الطلاب على بطاقات المقررات.
+    """
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    # جلب جميع IDs الطلاب الموجودين فعلياً
+    valid_student_ids = set()
+    async for s in db.students.find({}, {"_id": 1}):
+        valid_student_ids.add(str(s["_id"]))
+
+    # جلب جميع enrollments والتحقق من كل واحدة
+    orphan_ids = []
+    async for e in db.enrollments.find({}, {"_id": 1, "student_id": 1}):
+        if e.get("student_id") not in valid_student_ids:
+            orphan_ids.append(e["_id"])
+
+    deleted = 0
+    if orphan_ids:
+        res = await db.enrollments.delete_many({"_id": {"$in": orphan_ids}})
+        deleted = res.deleted_count
+
+    # كذلك نظّف سجلات الحضور المعزولة
+    orphan_attendance_ids = []
+    async for a in db.attendance.find({}, {"_id": 1, "student_id": 1}):
+        if a.get("student_id") not in valid_student_ids:
+            orphan_attendance_ids.append(a["_id"])
+    deleted_attendance = 0
+    if orphan_attendance_ids:
+        res = await db.attendance.delete_many({"_id": {"$in": orphan_attendance_ids}})
+        deleted_attendance = res.deleted_count
+
+    await log_activity(current_user, "cleanup_orphan_enrollments", "system", "", "", {
+        "enrollments_deleted": deleted,
+        "attendance_deleted": deleted_attendance,
+    })
+
+    return {
+        "message": f"تم حذف {deleted} تسجيل و {deleted_attendance} سجل حضور غير صالحين",
+        "enrollments_deleted": deleted,
+        "attendance_deleted": deleted_attendance,
+    }
+
+
 @api_router.delete("/students/{student_id}")
 async def delete_student(student_id: str, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
@@ -3006,15 +3053,28 @@ async def delete_student(student_id: str, current_user: dict = Depends(get_curre
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
     
-    # Delete associated user account if exists
+    # حذف التسجيلات في المقررات (لمنع ghost enrollments)
+    enrollments_deleted = await db.enrollments.delete_many({"student_id": student_id})
+    # حذف سجلات الحضور
+    attendance_deleted = await db.attendance.delete_many({"student_id": student_id})
+    # حذف حساب المستخدم إن وُجد
     if student.get("user_id"):
         await db.users.delete_one({"_id": ObjectId(student["user_id"])})
-    
+    # حذف الطالب نهائياً
     await db.students.delete_one({"_id": ObjectId(student_id)})
     
-    await log_activity(current_user, "delete_student", "student", student_id, student.get("full_name", ""))
+    await log_activity(current_user, "delete_student", "student", student_id, student.get("full_name", ""), {
+        "enrollments_deleted": enrollments_deleted.deleted_count,
+        "attendance_deleted": attendance_deleted.deleted_count,
+    })
     
-    return {"message": "تم حذف الطالب بنجاح"}
+    return {
+        "message": "تم حذف الطالب بنجاح",
+        "deleted": {
+            "enrollments": enrollments_deleted.deleted_count,
+            "attendance": attendance_deleted.deleted_count,
+        }
+    }
 
 @api_router.get("/students/{student_id}/backup-info")
 async def get_student_backup_info(student_id: str, current_user: dict = Depends(get_current_user)):

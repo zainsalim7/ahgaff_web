@@ -1390,6 +1390,22 @@ export default function GeneralSettingsScreen() {
               <Ionicons name="trash" size={18} color="#fff" />
               <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>تنظيف الأدوار المكررة</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              style={{ flexDirection: 'row', backgroundColor: '#1565c0', padding: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 }}
+              onPress={async () => {
+                if (Platform.OS === 'web' && !window.confirm('سيتم حذف جميع التسجيلات وسجلات الحضور التي تشير لطلاب محذوفين. متابعة؟')) return;
+                try {
+                  const res = await api.post('/admin/cleanup-orphan-enrollments');
+                  const msg = res.data?.message || 'تم التنظيف';
+                  Platform.OS === 'web' ? window.alert(msg) : Alert.alert('تم', msg);
+                } catch { Platform.OS === 'web' ? window.alert('فشل') : Alert.alert('خطأ', 'فشل'); }
+              }}
+              data-testid="cleanup-orphan-enrollments-btn"
+            >
+              <Ionicons name="bandage-outline" size={18} color="#fff" />
+              <Text style={{ color: '#fff', fontWeight: '600', fontSize: 13 }}>تصحيح أعداد المقررات (تنظيف الطلاب المحذوفين)</Text>
+            </TouchableOpacity>
             
             <Text style={{ fontSize: 11, color: '#999', marginTop: 8, textAlign: 'center' }}>استخدم هذه الأدوات مرة واحدة بعد التحديث لإصلاح البيانات القديمة</Text>
           </View>
