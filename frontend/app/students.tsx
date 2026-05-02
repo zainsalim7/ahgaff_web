@@ -450,22 +450,45 @@ export default function StudentsScreen() {
   // تصدير الطلاب إلى Excel حسب الفلاتر الحالية
   const handleExportStudents = async () => {
     try {
-      setRestoringStudent(true); // إعادة استخدام نفس الحالة للتحميل
+      setRestoringStudent(true);
+
+      // إذا كان وضع التحديد مفعّلاً وهناك طلاب مختارون → نصدّرهم فقط
+      if (selectionMode && selectedIds.size > 0) {
+        const selectedStudents = students.filter(s => selectedIds.has(s.id));
+        // بناء CSV/Excel بسيط من المختارين عبر API الـ admin
+        // الحل البديل: نستخدم عميل JS لتوليد Excel من المختارين
+        const XLSX = await import('xlsx');
+        const rows = selectedStudents.map(s => ({
+          'رقم الطالب': s.student_id || '',
+          'الاسم الكامل': s.full_name || '',
+          'القسم': departments.find(d => d.id === s.department_id)?.name || '',
+          'المستوى': s.level || '',
+          'الشعبة': s.section || '',
+          'البرنامج': s.program_code || '',
+          'الهاتف': s.phone || '',
+          'البريد': s.email || '',
+        }));
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, 'الطلاب المحددون');
+        XLSX.writeFile(wb, `selected_students_${selectedStudents.length}.xlsx`);
+        return;
+      }
+
+      // تصدير حسب الفلاتر النشطة (قسم/مستوى/شعبة)
       const params: { department_id?: string; level?: number; section?: string } = {};
       if (selectedDeptFilter) params.department_id = selectedDeptFilter;
       if (selectedLevelFilter) params.level = parseInt(selectedLevelFilter);
       if (selectedSectionFilter) params.section = selectedSectionFilter;
-      
+
       const res = await exportAPI.exportStudents(params);
-      
-      // إنشاء رابط تنزيل
+
       const blob = new Blob([res.data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      // اسم ملف ذكي حسب الفلاتر
       const deptName = selectedDeptFilter
         ? (departments.find(d => d.id === selectedDeptFilter)?.name || 'all').replace(/\s+/g, '_')
         : 'all';
@@ -807,105 +830,126 @@ export default function StudentsScreen() {
       </View>
 
       <View style={styles.content}>
-        {/* شريط أزرار التحكم - كلها في صف واحد */}
-        {canManageStudents && Platform.OS === 'web' && (
-          <View style={{ flexDirection: 'row', gap: 6, marginHorizontal: 16, marginTop: 8, flexWrap: 'wrap' }}>
-            <TouchableOpacity
-              style={{ flexDirection: 'row', backgroundColor: '#2e7d32', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center', gap: 4 }}
-              onPress={() => { setImportDept(''); setImportLevel(''); setImportSection(''); setShowImportModal(true); }}
-              data-testid="import-students-btn"
-            >
-              <Ionicons name="document-text" size={14} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>استيراد Excel</Text>
-            </TouchableOpacity>
+        {/* شريط مدمج: بحث + فلاتر + أزرار في صف واحد */}
+        <View style={styles.compactBar}>
+          {/* البحث */}
+          <View style={styles.searchSlim}>
+            <Ionicons name="search" size={16} color="#999" />
+            <TextInput
+              style={styles.searchSlimInput}
+              placeholder="بحث..."
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholderTextColor="#aaa"
+              testID="search-input"
+            />
+            {searchQuery ? (
+              <TouchableOpacity onPress={() => setSearchQuery('')}>
+                <Ionicons name="close-circle" size={16} color="#999" />
+              </TouchableOpacity>
+            ) : null}
+          </View>
 
-            <TouchableOpacity
-              style={{ flexDirection: 'row', backgroundColor: '#f57c00', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center', gap: 4 }}
-              onPress={handleExportStudents}
-              data-testid="export-students-btn"
+          {/* القسم */}
+          <View style={styles.compactSelect}>
+            <Picker
+              selectedValue={selectedDeptFilter}
+              onValueChange={(v) => { setSelectedDeptFilter(v); setCurrentPage(1); }}
+              style={styles.pickerSlim}
             >
-              <Ionicons name="download" size={14} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                تصدير{(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter) ? ' (مفلتر)' : ''}
-              </Text>
-            </TouchableOpacity>
+              <Picker.Item label="كل الأقسام" value="" />
+              {departments.map(dept => (
+                <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
+              ))}
+            </Picker>
+          </View>
 
-            <TouchableOpacity
-              style={{ flexDirection: 'row', backgroundColor: '#1565c0', paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, alignItems: 'center', gap: 4 }}
-              onPress={handleRestoreStudent}
-              disabled={restoringStudent}
-              data-testid="restore-student-btn"
+          {/* المستوى */}
+          <View style={[styles.compactSelect, { flex: 0, minWidth: 80 }]}>
+            <Picker
+              selectedValue={selectedLevelFilter}
+              onValueChange={(v) => { setSelectedLevelFilter(v); setCurrentPage(1); }}
+              style={styles.pickerSlim}
             >
-              <Ionicons name="cloud-upload" size={14} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 12, fontWeight: '600' }}>
-                {restoringStudent ? 'جاري الاستعادة...' : 'استعادة'}
-              </Text>
-            </TouchableOpacity>
+              <Picker.Item label="المستوى" value="" />
+              {LEVELS.map(level => (
+                <Picker.Item key={level} label={`م${level}`} value={level} />
+              ))}
+            </Picker>
+          </View>
+
+          {/* الشعبة */}
+          <TextInput
+            style={styles.compactSection}
+            placeholder="شعبة"
+            value={selectedSectionFilter}
+            onChangeText={setSelectedSectionFilter}
+            placeholderTextColor="#aaa"
+          />
+
+          {/* أزرار سريعة */}
+          {canManageStudents && Platform.OS === 'web' && (
+            <>
+              <TouchableOpacity
+                style={[styles.iconBtn, { backgroundColor: '#2e7d32' }]}
+                onPress={() => { setImportDept(''); setImportLevel(''); setImportSection(''); setShowImportModal(true); }}
+                data-testid="import-students-btn"
+                accessibilityLabel="استيراد"
+              >
+                <Ionicons name="cloud-upload" size={16} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.iconBtn,
+                  { backgroundColor: (selectionMode && selectedIds.size > 0) ? '#9c27b0' : '#f57c00' }
+                ]}
+                onPress={handleExportStudents}
+                data-testid="export-students-btn"
+                accessibilityLabel="تصدير"
+              >
+                <Ionicons name="download" size={16} color="#fff" />
+                {(selectionMode && selectedIds.size > 0) ? (
+                  <Text style={styles.iconBtnBadge}>{selectedIds.size}</Text>
+                ) : (selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || searchQuery) ? (
+                  <View style={styles.iconBtnDot} />
+                ) : null}
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[styles.iconBtn, { backgroundColor: '#1565c0' }]}
+                onPress={handleRestoreStudent}
+                disabled={restoringStudent}
+                data-testid="restore-student-btn"
+                accessibilityLabel="استعادة طالب"
+              >
+                <Ionicons name={restoringStudent ? 'hourglass' : 'refresh'} size={16} color="#fff" />
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+
+        {/* مؤشر السياق (يوضح ما يصدّر فعلاً) */}
+        {(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || searchQuery || (selectionMode && selectedIds.size > 0)) && (
+          <View style={styles.contextBar}>
+            <Ionicons name="funnel" size={12} color="#1565c0" />
+            <Text style={styles.contextText} numberOfLines={1}>
+              {selectionMode && selectedIds.size > 0
+                ? `سيتم تصدير ${selectedIds.size} طالب محدد فقط`
+                : `يعرض ${filteredStudents.length} من ${students.length} طالب`}
+            </Text>
+            {(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || searchQuery) && !selectionMode && (
+              <TouchableOpacity
+                onPress={() => {
+                  setSelectedDeptFilter(''); setSelectedLevelFilter(''); setSelectedSectionFilter(''); setSearchQuery('');
+                }}
+                testID="clear-filters-btn"
+              >
+                <Text style={styles.clearLink}>مسح الفلاتر</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
-
-        {/* شريط البحث */}
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={20} color="#999" />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="بحث بالاسم أو رقم الطالب..."
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-            placeholderTextColor="#999"
-          />
-          {searchQuery ? (
-            <TouchableOpacity onPress={() => setSearchQuery('')}>
-              <Ionicons name="close-circle" size={20} color="#999" />
-            </TouchableOpacity>
-          ) : null}
-        </View>
-
-        {/* الفلاتر */}
-        <View style={styles.filtersRow}>
-          <View style={styles.filterItem}>
-            <Text style={styles.filterLabel}>القسم</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={selectedDeptFilter}
-                onValueChange={(v) => { setSelectedDeptFilter(v); setCurrentPage(1); }}
-                style={styles.picker}
-              >
-                <Picker.Item label="الكل" value="" />
-                {departments.map(dept => (
-                  <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
-                ))}
-              </Picker>
-            </View>
-          </View>
-          
-          <View style={styles.filterItem}>
-            <Text style={styles.filterLabel}>المستوى</Text>
-            <View style={styles.pickerContainer}>
-              <Picker
-                selectedValue={selectedLevelFilter}
-                onValueChange={(v) => { setSelectedLevelFilter(v); setCurrentPage(1); }}
-                style={styles.picker}
-              >
-                <Picker.Item label="الكل" value="" />
-                {LEVELS.map(level => (
-                  <Picker.Item key={level} label={`م${level}`} value={level} />
-                ))}
-              </Picker>
-            </View>
-          </View>
-          
-          <View style={styles.filterItem}>
-            <Text style={styles.filterLabel}>الشعبة</Text>
-            <TextInput
-              style={styles.sectionInput}
-              placeholder="الكل"
-              value={selectedSectionFilter}
-              onChangeText={setSelectedSectionFilter}
-              placeholderTextColor="#999"
-            />
-          </View>
-        </View>
 
         {/* شريط التحديد */}
         {selectionMode && (
@@ -1514,6 +1558,92 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
   },
+  // Compact bar — كل الفلاتر والأزرار في صف واحد
+  compactBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eee',
+    flexWrap: 'wrap',
+  },
+  searchSlim: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flex: 1,
+    minWidth: 150,
+    height: 36,
+  },
+  searchSlimInput: { flex: 1, fontSize: 13, color: '#333', textAlign: 'right' },
+  compactSelect: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    overflow: 'hidden',
+    flex: 0.7,
+    minWidth: 100,
+    height: 36,
+    justifyContent: 'center',
+  },
+  pickerSlim: { height: 36, fontSize: 12 },
+  compactSection: {
+    backgroundColor: '#f5f5f5',
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    height: 36,
+    fontSize: 13,
+    color: '#333',
+    textAlign: 'center',
+    width: 70,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  iconBtnBadge: {
+    position: 'absolute',
+    top: -4,
+    left: -4,
+    backgroundColor: '#fff',
+    color: '#9c27b0',
+    fontSize: 10,
+    fontWeight: '700',
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    minWidth: 16,
+    textAlign: 'center',
+    overflow: 'hidden',
+  },
+  iconBtnDot: {
+    position: 'absolute',
+    top: 4,
+    left: 4,
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: '#fff',
+  },
+  contextBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 5,
+    backgroundColor: '#e3f2fd',
+  },
+  contextText: { flex: 1, fontSize: 11, color: '#1565c0', textAlign: 'right' },
+  clearLink: { fontSize: 11, color: '#1565c0', fontWeight: '700', textDecorationLine: 'underline' },
   header: {
     backgroundColor: '#1565c0',
     padding: 16,
