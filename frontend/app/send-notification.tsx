@@ -41,6 +41,7 @@ export default function SendNotification() {
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
+  const [metaLoading, setMetaLoading] = useState(true);
 
   // Selected cascading values
   const [selFaculty, setSelFaculty] = useState('');
@@ -80,6 +81,7 @@ export default function SendNotification() {
   // Load metadata
   useEffect(() => {
     (async () => {
+      setMetaLoading(true);
       try {
         const [fRes, dRes, cRes] = await Promise.all([
           facultiesAPI.getAll(),
@@ -90,6 +92,7 @@ export default function SendNotification() {
         setDepartments(dRes.data || []);
         setCourses(cRes.data || []);
       } catch (e) { console.error(e); }
+      finally { setMetaLoading(false); }
     })();
   }, []);
 
@@ -308,6 +311,7 @@ export default function SendNotification() {
               onCourseChange={() => {}}
               showCourse={false}
               required
+              loading={metaLoading}
             />
           </View>
         )}
@@ -326,6 +330,7 @@ export default function SendNotification() {
               onCourseChange={() => {}}
               showCourse={false}
               required
+              loading={metaLoading}
             />
           </View>
         )}
@@ -344,6 +349,7 @@ export default function SendNotification() {
               onCourseChange={() => {}}
               showCourse={false}
               required={false}
+              loading={metaLoading}
             />
             <Text style={[styles.fieldLabel, { marginTop: 8 }]}>المستوى</Text>
             <View style={styles.pillsWrap}>
@@ -391,6 +397,7 @@ export default function SendNotification() {
               onDepartmentChange={setSelDept}
               onCourseChange={setSelCourse}
               required
+              loading={metaLoading}
             />
           </View>
         )}

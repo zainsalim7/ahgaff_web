@@ -17,6 +17,7 @@ import {
   FlatList,
   TextInput,
   StyleSheet,
+  ActivityIndicator,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -40,6 +41,7 @@ interface SearchableProps {
   required?: boolean;
   disabled?: boolean;
   searchable?: boolean;
+  loading?: boolean;
   testID?: string;
 }
 
@@ -53,6 +55,7 @@ export const SearchableDropdown: React.FC<SearchableProps> = ({
   required,
   disabled,
   searchable = true,
+  loading = false,
   testID,
 }) => {
   const [visible, setVisible] = useState(false);
@@ -76,14 +79,21 @@ export const SearchableDropdown: React.FC<SearchableProps> = ({
         {required && <Text style={{ color: '#e53935' }}> *</Text>}
       </Text>
       <TouchableOpacity
-        style={[s.selector, disabled && s.disabled]}
-        onPress={() => !disabled && setVisible(true)}
-        disabled={disabled}
+        style={[s.selector, (disabled || loading) && s.disabled]}
+        onPress={() => !disabled && !loading && setVisible(true)}
+        disabled={disabled || loading}
         testID={testID}
       >
-        <Text style={[s.selectorText, !selected && s.placeholder]} numberOfLines={1}>
-          {selected ? selected.name : placeholder}
-        </Text>
+        {loading ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1 }}>
+            <ActivityIndicator size="small" color="#1565c0" />
+            <Text style={[s.selectorText, s.placeholder]}>جاري التحميل...</Text>
+          </View>
+        ) : (
+          <Text style={[s.selectorText, !selected && s.placeholder]} numberOfLines={1}>
+            {selected ? selected.name : placeholder}
+          </Text>
+        )}
         <Ionicons name="chevron-down" size={18} color="#666" />
       </TouchableOpacity>
 
@@ -174,6 +184,7 @@ interface CourseFilterProps {
   showCourse?: boolean; // إذا false: فقط الكلية والقسم
   required?: boolean;
   horizontal?: boolean; // افتراضي true — صف أفقي مدمج
+  loading?: boolean; // إظهار مؤشر تحميل أثناء جلب البيانات
 }
 
 /** فلتر مركّب: كلية → قسم → مقرر */
@@ -190,6 +201,7 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
   showCourse = true,
   required = true,
   horizontal = true,
+  loading = false,
 }) => {
   const filteredDepts = useMemo(
     () => departments.filter((d) => !facultyId || d.faculty_id === facultyId),
@@ -279,6 +291,7 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
         }}
         required={required}
         searchable={faculties.length > 5}
+        loading={loading}
         testID="course-filter-faculty"
       />
       <SearchableDropdown
@@ -293,6 +306,7 @@ export const CourseFilter: React.FC<CourseFilterProps> = ({
         required={required}
         disabled={!facultyId}
         searchable={filteredDepts.length > 5}
+        loading={loading && !!facultyId}
         testID="course-filter-department"
       />
       {showCourse && (
