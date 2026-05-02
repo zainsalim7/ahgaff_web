@@ -36,13 +36,18 @@ class RegisterTokenRequest(BaseModel):
 class SendNotificationRequest(BaseModel):
     title: str
     body: str
-    target_type: str = "all"  # all, role, student, course, teacher
+    target_type: str = "all"  # all, role, student, course, teacher, faculty, department, level, section
     target_role: Optional[str] = None
     user_ids: Optional[List[str]] = None
     student_user_id: Optional[str] = None
     student_name: Optional[str] = None
     course_id: Optional[str] = None
     teacher_user_id: Optional[str] = None
+    # Cascading filters
+    faculty_id: Optional[str] = None
+    department_id: Optional[str] = None
+    level: Optional[int] = None
+    section: Optional[str] = None
 
 
 
@@ -159,6 +164,31 @@ async def unregister_device_token(
     return {"message": "تم إلغاء تسجيل الجهاز"}
 
 
+async def _resolve_student_users(db, *, faculty_id=None, department_id=None, level=None, section=None) -> tuple[list, str]:
+    """يبني فلتراً للطلاب حسب (كلية/قسم/مستوى/شعبة) ويرجع (user_ids, وصف)"""
+    from bson import ObjectId
+    s_query = {"is_active": True}
+    parts = []
+    if faculty_id:
+        s_query["faculty_id"] = faculty_id
+        f = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
+        if f: parts.append(f"كلية {f.get('name','')}")
+    if department_id:
+        s_query["department_id"] = department_id
+        d = await db.departments.find_one({"_id": ObjectId(department_id)})
+        if d: parts.append(f"قسم {d.get('name','')}")
+    if level is not None:
+        s_query["level"] = int(level)
+        parts.append(f"المستوى {level}")
+    if section:
+        s_query["section"] = section
+        parts.append(f"الشعبة {section}")
+    students = await db.students.find(s_query, {"user_id": 1}).to_list(20000)
+    user_ids = [s.get("user_id") for s in students if s.get("user_id")]
+    desc = " - ".join(parts) if parts else "طلاب"
+    return user_ids, f"{desc} ({len(user_ids)} طالب)"
+
+
 @router.post("/notifications/send")
 async def send_notification_api(
     request: SendNotificationRequest,
@@ -203,6 +233,16 @@ async def send_notification_api(
     elif request.target_type == "users" and request.user_ids:
         query["user_id"] = {"$in": request.user_ids}
         target_desc = f"{len(request.user_ids)} مستخدم"
+    elif request.target_type in ("faculty", "department", "level", "section"):
+        # شجرة طلاب: كلية → قسم → مستوى → شعبة
+        user_ids, target_desc = await _resolve_student_users(
+            db,
+            faculty_id=request.faculty_id,
+            department_id=request.department_id,
+            level=request.level,
+            section=request.section,
+        )
+        query["user_id"] = {"$in": user_ids} if user_ids else {"$in": []}
 
     # جمع user_ids المستهدفين لحفظ الإشعارات داخل التطبيق
     target_user_ids = []
@@ -223,6 +263,14 @@ async def send_notification_api(
         target_user_ids = [str(u["_id"]) for u in all_users]
     elif request.target_type == "users" and request.user_ids:
         target_user_ids = request.user_ids
+    elif request.target_type in ("faculty", "department", "level", "section"):
+        target_user_ids, _ = await _resolve_student_users(
+            db,
+            faculty_id=request.faculty_id,
+            department_id=request.department_id,
+            level=request.level,
+            section=request.section,
+        )
 
     # حفظ الإشعار داخل التطبيق لكل مستخدم مستهدف
     in_app_notifications = []
