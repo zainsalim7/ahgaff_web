@@ -455,19 +455,29 @@ export default function StudentsScreen() {
       // إذا كان وضع التحديد مفعّلاً وهناك طلاب مختارون → نصدّرهم فقط
       if (selectionMode && selectedIds.size > 0) {
         const selectedStudents = students.filter(s => selectedIds.has(s.id));
-        // بناء CSV/Excel بسيط من المختارين عبر API الـ admin
-        // الحل البديل: نستخدم عميل JS لتوليد Excel من المختارين
+        const facsMap: any = {};
+        try {
+          const fRes = await api.get('/faculties');
+          (fRes.data || []).forEach((f: any) => { facsMap[f.id] = f.name; });
+        } catch {}
         const XLSX = await import('xlsx');
-        const rows = selectedStudents.map(s => ({
-          'رقم الطالب': s.student_id || '',
-          'الاسم الكامل': s.full_name || '',
-          'القسم': departments.find(d => d.id === s.department_id)?.name || '',
-          'المستوى': s.level || '',
-          'الشعبة': s.section || '',
-          'البرنامج': s.program_code || '',
-          'الهاتف': s.phone || '',
-          'البريد': s.email || '',
-        }));
+        const rows = selectedStudents.map(s => {
+          const dept = departments.find(d => d.id === s.department_id);
+          const facId = (s as any).faculty_id || (dept as any)?.faculty_id;
+          return {
+            'الرقم المرجعي': (s as any).reference_number || '',
+            'رقم الطالب': s.student_id || '',
+            'الاسم الكامل': s.full_name || '',
+            'الكلية': facId ? (facsMap[facId] || '') : '',
+            'القسم': dept?.name || '',
+            'المستوى': s.level || '',
+            'الشعبة': s.section || '',
+            'البرنامج': (s as any).program_code || '',
+            'سنة الالتحاق': (s as any).enrollment_year || '',
+            'الهاتف': (s as any).phone || '',
+            'البريد': (s as any).email || '',
+          };
+        });
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'الطلاب المحددون');
