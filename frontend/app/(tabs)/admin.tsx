@@ -207,7 +207,7 @@ export default function AdminScreen() {
                 <TouchableOpacity
                   key={ii}
                   style={styles.gridItem}
-                  onPress={() => router.replace(item.route as any)}
+                  onPress={() => router.push(item.route as any)}
                   activeOpacity={0.7}
                   data-testid={`admin-btn-${item.route.replace(/\//g, '-').slice(1)}`}
                 >
