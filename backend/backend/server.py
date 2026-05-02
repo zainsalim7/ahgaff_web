@@ -3223,6 +3223,12 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
     # التحقق من تفرد رقم القيد الجديد إذا تم تغييره
     new_sid = update_data.get("student_id")
     if new_sid and new_sid != student.get("student_id"):
+        # ✅ تعديل رقم القيد للمدير العام (admin) فقط
+        if current_user["role"] != UserRole.ADMIN:
+            raise HTTPException(
+                status_code=403,
+                detail="تغيير رقم القيد مسموح للمدير العام فقط"
+            )
         new_sid = new_sid.strip()
         exists = await db.students.find_one({
             "student_id": new_sid,
@@ -3248,6 +3254,9 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
                         {"_id": ObjectId(student["user_id"])},
                         {"$set": {"username": new_sid}}
                     )
+    elif new_sid and new_sid == student.get("student_id"):
+        # نفس القيمة - لا حاجة للتحقق ولا التحديث
+        update_data.pop("student_id", None)
     
     if update_data:
         await db.students.update_one(

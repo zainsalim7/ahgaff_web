@@ -1255,21 +1255,23 @@ export default function StudentsScreen() {
             </View>
             
             <ScrollView style={styles.modalBody}>
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>رقم القيد *</Text>
-                <TextInput
-                  style={[styles.input, { fontFamily: 'monospace', fontSize: 15, backgroundColor: '#fff9c4' }]}
-                  value={editFormData.student_id}
-                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, student_id: text.trim() }))}
-                  placeholder="رقم القيد (مثال: 1025037)"
-                  placeholderTextColor="#999"
-                  autoCapitalize="none"
-                  testID="edit-student-id-input"
-                />
-                <Text style={{ fontSize: 11, color: '#f57f17', marginTop: 4, textAlign: 'right' }}>
-                  ⚠️ تغيير رقم القيد سيؤثر على تسجيل الدخول (اسم المستخدم سيتحدّث تلقائياً)
-                </Text>
-              </View>
+              {user?.role === 'admin' && (
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>رقم القيد *</Text>
+                  <TextInput
+                    style={[styles.input, { fontFamily: 'monospace', fontSize: 15, backgroundColor: '#fff9c4' }]}
+                    value={editFormData.student_id}
+                    onChangeText={(text) => setEditFormData(prev => ({ ...prev, student_id: text.trim() }))}
+                    placeholder="رقم القيد (مثال: 1025037)"
+                    placeholderTextColor="#999"
+                    autoCapitalize="none"
+                    testID="edit-student-id-input"
+                  />
+                  <Text style={{ fontSize: 11, color: '#f57f17', marginTop: 4, textAlign: 'right' }}>
+                    ⚠️ تغيير رقم القيد سيؤثر على تسجيل الدخول (اسم المستخدم سيتحدّث تلقائياً) - متاح للمدير العام فقط
+                  </Text>
+                </View>
+              )}
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>اسم الطالب *</Text>
