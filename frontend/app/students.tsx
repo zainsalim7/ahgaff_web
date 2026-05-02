@@ -111,6 +111,7 @@ export default function StudentsScreen() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editFormData, setEditFormData] = useState({
+    student_id: '',
     full_name: '',
     phone: '',
     email: '',
@@ -592,6 +593,7 @@ export default function StudentsScreen() {
   const handleEdit = (student: Student) => {
     setEditingStudent(student);
     setEditFormData({
+      student_id: student.student_id || '',
       full_name: student.full_name,
       phone: student.phone || '',
       email: student.email || '',
@@ -1253,6 +1255,22 @@ export default function StudentsScreen() {
             </View>
             
             <ScrollView style={styles.modalBody}>
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>رقم القيد *</Text>
+                <TextInput
+                  style={[styles.input, { fontFamily: 'monospace', fontSize: 15, backgroundColor: '#fff9c4' }]}
+                  value={editFormData.student_id}
+                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, student_id: text.trim() }))}
+                  placeholder="رقم القيد (مثال: 1025037)"
+                  placeholderTextColor="#999"
+                  autoCapitalize="none"
+                  testID="edit-student-id-input"
+                />
+                <Text style={{ fontSize: 11, color: '#f57f17', marginTop: 4, textAlign: 'right' }}>
+                  ⚠️ تغيير رقم القيد سيؤثر على تسجيل الدخول (اسم المستخدم سيتحدّث تلقائياً)
+                </Text>
+              </View>
+
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>اسم الطالب *</Text>
                 <TextInput

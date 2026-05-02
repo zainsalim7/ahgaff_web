@@ -3201,6 +3201,7 @@ async def restore_student(request: Request, current_user: dict = Depends(get_cur
     }
 
 class StudentUpdate(BaseModel):
+    student_id: Optional[str] = None  # رقم القيد (قابل للتعديل)
     full_name: Optional[str] = None
     department_id: Optional[str] = None
     level: Optional[int] = None
@@ -3219,11 +3220,41 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     
+    # التحقق من تفرد رقم القيد الجديد إذا تم تغييره
+    new_sid = update_data.get("student_id")
+    if new_sid and new_sid != student.get("student_id"):
+        new_sid = new_sid.strip()
+        exists = await db.students.find_one({
+            "student_id": new_sid,
+            "_id": {"$ne": ObjectId(student_id)}
+        })
+        if exists:
+            raise HTTPException(
+                status_code=400,
+                detail=f"رقم القيد '{new_sid}' مستخدم بالفعل للطالب: {exists.get('full_name', '')}"
+            )
+        update_data["student_id"] = new_sid
+        # مزامنة اسم المستخدم في جدول users (إذا كان الاسم السابق = رقم القيد)
+        if student.get("user_id"):
+            user = await db.users.find_one({"_id": ObjectId(student["user_id"])})
+            if user and user.get("username") == student.get("student_id"):
+                # تأكد أن الرقم الجديد غير مستخدم كـ username
+                user_exists = await db.users.find_one({
+                    "username": new_sid,
+                    "_id": {"$ne": ObjectId(student["user_id"])}
+                })
+                if not user_exists:
+                    await db.users.update_one(
+                        {"_id": ObjectId(student["user_id"])},
+                        {"$set": {"username": new_sid}}
+                    )
+    
     if update_data:
         await db.students.update_one(
             {"_id": ObjectId(student_id)},
             {"$set": update_data}
         )
+        await log_activity(current_user, "update_student", "student", student_id, student.get("full_name", ""), update_data)
     
     updated = await db.students.find_one({"_id": ObjectId(student_id)})
     return {
