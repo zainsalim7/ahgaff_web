@@ -6453,6 +6453,26 @@ async def update_lecture(
             update_data["cancelled_by"] = current_user["id"]
             update_data["cancelled_by_name"] = current_user.get("full_name", "")
 
+    # 🔧 إصلاح "ghost completion": عند مسح عنوان الدرس، نُلغي إنجاز المحاضرة
+    # حتى لا يبقى محسوباً ضمن نسبة الإنجاز رغم عدم وجود درس فعلاً
+    if "lesson_title" in update_data and not (update_data.get("lesson_title") or "").strip():
+        old_topic_id = lecture.get("plan_topic_id")
+        # إعادة الحالة إلى scheduled إن لم تتغيّر صراحةً لشيء آخر
+        if "status" not in update_data and lecture.get("status") == LectureStatus.COMPLETED:
+            update_data["status"] = LectureStatus.SCHEDULED
+        update_data["lesson_title"] = ""
+        update_data["plan_topic_id"] = None
+        # إلغاء التأكيد اليدوي على الموضوع المرتبط (إن وُجد)
+        if old_topic_id:
+            await db.study_plans.update_one(
+                {"course_id": lecture.get("course_id"), "topics.id": old_topic_id},
+                {"$set": {
+                    "topics.$.confirmed": False,
+                    "topics.$.confirmed_date": None,
+                    "topics.$.confirmed_by": None,
+                }}
+            )
+
     if update_data:
         await db.lectures.update_one(
             {"_id": ObjectId(lecture_id)},
@@ -6470,14 +6490,39 @@ async def delete_lecture(
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "manage_courses"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
-    result = await db.lectures.delete_one({"_id": ObjectId(lecture_id)})
+    # 🔧 جلب المحاضرة قبل حذفها لإلغاء التأكيد اليدوي على الموضوع المرتبط
+    lecture = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
+    if not lecture:
+        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
+    topic_id = lecture.get("plan_topic_id")
+    course_id = lecture.get("course_id")
+
+    result = await db.lectures.delete_one({"_id": ObjectId(lecture_id)})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
-    # حذف سجلات الحضور المرتبطة (بالـ lecture_id أو بالتاريخ والمقرر)
+    # حذف سجلات الحضور المرتبطة
     await db.attendance.delete_many({"lecture_id": lecture_id})
-    
+
+    # إلغاء التأكيد اليدوي على الموضوع المرتبط (لمنع ghost completion)
+    if topic_id and course_id:
+        # نتأكد ألا توجد محاضرة أخرى مكتملة تربط بنفس الموضوع
+        other = await db.lectures.find_one({
+            "course_id": course_id,
+            "plan_topic_id": topic_id,
+            "status": LectureStatus.COMPLETED,
+        })
+        if not other:
+            await db.study_plans.update_one(
+                {"course_id": course_id, "topics.id": topic_id},
+                {"$set": {
+                    "topics.$.confirmed": False,
+                    "topics.$.confirmed_date": None,
+                    "topics.$.confirmed_by": None,
+                }}
+            )
+
     return {"message": "تم حذف المحاضرة وسجلات حضورها بنجاح"}
 
 
