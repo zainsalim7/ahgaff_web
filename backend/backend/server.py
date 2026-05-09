@@ -6674,6 +6674,121 @@ async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_use
         "active_lectures": len(active_lecture_ids),
     }
 
+
+@api_router.get("/admin/cleanup-ghost-completions/preview")
+async def preview_ghost_completions(current_user: dict = Depends(get_current_user)):
+    """معاينة الإنجازات الوهمية في الخطط الدراسية قبل التنظيف.
+
+    تشمل:
+    1) محاضرات بحالة COMPLETED لكن عنوان الدرس فارغ (إنجاز كاذب).
+    2) محاضرات بـ plan_topic_id لكن العنوان فارغ (ربط يتيم).
+    3) مواضيع مؤكدة يدوياً (confirmed=true) لا توجد لها أي محاضرة مكتملة بعنوان فعلي
+       تربطها بنفس course_id (تأكيد يتيم).
+    """
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    # 1) محاضرات COMPLETED بدون عنوان فعلي
+    ghost_completed_lectures = await db.lectures.count_documents({
+        "status": LectureStatus.COMPLETED,
+        "$or": [
+            {"lesson_title": {"$exists": False}},
+            {"lesson_title": None},
+            {"lesson_title": ""},
+        ],
+    })
+
+    # 2) محاضرات لها plan_topic_id لكن لا عنوان درس
+    orphan_topic_links = await db.lectures.count_documents({
+        "plan_topic_id": {"$ne": None},
+        "$or": [
+            {"lesson_title": {"$exists": False}},
+            {"lesson_title": None},
+            {"lesson_title": ""},
+        ],
+    })
+
+    # 3) تأكيدات يدوية يتيمة (لا توجد محاضرة مكتملة فعلية تربطها)
+    orphan_confirmations = 0
+    async for plan in db.study_plans.find({}, {"_id": 1, "course_id": 1, "topics": 1}):
+        cid = plan.get("course_id")
+        if not cid:
+            continue
+        for topic in plan.get("topics", []) or []:
+            if not topic.get("confirmed"):
+                continue
+            tid = topic.get("id")
+            if not tid:
+                continue
+            # هل توجد محاضرة مكتملة بعنوان فعلي مرتبطة بهذا الموضوع؟
+            real_lec = await db.lectures.find_one({
+                "course_id": cid,
+                "plan_topic_id": tid,
+                "status": LectureStatus.COMPLETED,
+                "lesson_title": {"$nin": [None, ""]},
+            })
+            if not real_lec:
+                orphan_confirmations += 1
+
+    return {
+        "ghost_completed_lectures": ghost_completed_lectures,
+        "orphan_topic_links": orphan_topic_links,
+        "orphan_manual_confirmations": orphan_confirmations,
+        "total_to_fix": ghost_completed_lectures + orphan_topic_links + orphan_confirmations,
+    }
+
+
+@api_router.post("/admin/cleanup-ghost-completions")
+async def cleanup_ghost_completions(current_user: dict = Depends(get_current_user)):
+    """تنظيف الإنجازات الوهمية وإعادة المحاضرات والمواضيع المؤكدة إلى وضعها الصحيح."""
+    if current_user.get("role") != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+
+    empty_title_query = {
+        "$or": [
+            {"lesson_title": {"$exists": False}},
+            {"lesson_title": None},
+            {"lesson_title": ""},
+        ],
+    }
+
+    # 1) إعادة حالة المحاضرات COMPLETED بدون عنوان إلى SCHEDULED
+    res1 = await db.lectures.update_many(
+        {"status": LectureStatus.COMPLETED, **empty_title_query},
+        {"$set": {"status": LectureStatus.SCHEDULED, "plan_topic_id": None}},
+    )
+
+    # 2) إزالة plan_topic_id من أي محاضرة بدون عنوان فعلي
+    res2 = await db.lectures.update_many(
+        {"plan_topic_id": {"$ne": None}, **empty_title_query},
+        {"$set": {"plan_topic_id": None}},
+    )
+
+    # ملاحظة: لا نلمس التأكيدات اليدوية تلقائياً لأنها قد تكون مشروعة
+    # (تأكيد المعلم بشكل مستقل عن وجود محاضرة). تُعرض فقط للمعاينة كإشعار للمسؤول.
+    unconfirmed_count = 0
+
+    await log_activity(
+        user=current_user,
+        action="cleanup_ghost_completions",
+        entity_type="study_plan",
+        entity_id=None,
+        entity_name="Ghost completions cleanup",
+        details={
+            "lectures_reverted_to_scheduled": res1.modified_count,
+            "lecture_topic_links_cleared": res2.modified_count,
+            "manual_confirmations_unconfirmed": unconfirmed_count,
+        },
+    )
+
+    return {
+        "message": "تم تنظيف الإنجازات الوهمية بنجاح",
+        "lectures_reverted_to_scheduled": res1.modified_count,
+        "lecture_topic_links_cleared": res2.modified_count,
+        "manual_confirmations_unconfirmed": unconfirmed_count,
+    }
+
+
 @api_router.put("/lectures/{lecture_id}/reschedule")
 async def reschedule_lecture(
     lecture_id: str,
