@@ -4234,6 +4234,62 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
         "is_active": course.get("is_active", True)
     }
 
+@api_router.get("/courses/{course_id}/lecture-stats")
+async def get_course_lecture_stats(
+    course_id: str,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """إحصائيات محاضرات مقرر معين (خفيف وسريع - بدون تحميل كامل المحاضرات).
+
+    يدعم فلتر اختياري بالفصل عبر `semester_id`.
+    """
+    try:
+        course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # تحقق الصلاحيات: المعلم على مقرراته فقط
+    if current_user["role"] == UserRole.TEACHER:
+        user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        teacher_record_id = (user or {}).get("teacher_record_id") or current_user["id"]
+        if str(course.get("teacher_id")) != str(teacher_record_id):
+            raise HTTPException(status_code=403, detail="هذا المقرر ليس ضمن مقرراتك")
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_lectures") and not has_permission(current_user, "manage_lectures"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    match: dict = {"course_id": course_id}
+    if semester_id:
+        match["semester_id"] = semester_id
+
+    pipeline = [
+        {"$match": match},
+        {"$group": {"_id": "$status", "count": {"$sum": 1}}},
+    ]
+    buckets = {
+        LectureStatus.SCHEDULED: 0,
+        LectureStatus.COMPLETED: 0,
+        LectureStatus.CANCELLED: 0,
+        LectureStatus.ABSENT: 0,
+    }
+    total = 0
+    async for row in db.lectures.aggregate(pipeline):
+        status = row.get("_id") or LectureStatus.SCHEDULED
+        count = int(row.get("count") or 0)
+        total += count
+        if status in buckets:
+            buckets[status] = count
+
+    return {
+        "total": total,
+        "scheduled": buckets[LectureStatus.SCHEDULED],
+        "completed": buckets[LectureStatus.COMPLETED],
+        "cancelled": buckets[LectureStatus.CANCELLED],
+        "absent": buckets[LectureStatus.ABSENT],
+    }
+
 @api_router.get("/courses/{course_id}/backup-info")
 async def get_course_backup_info(course_id: str, current_user: dict = Depends(get_current_user)):
     """معلومات المقرر قبل الحذف"""
