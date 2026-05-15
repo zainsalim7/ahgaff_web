@@ -8,6 +8,7 @@ from typing import List
 
 from models.attendance import AttendanceRecord, AttendanceResponse
 from .deps import security
+from redis_client import get_cached, set_cached, clear_cache_pattern
 
 router = APIRouter(tags=["الحضور"])
 db = None
@@ -112,6 +113,7 @@ async def record_attendance_session(
         {"$set": lecture_update}
     )
     
+    await clear_cache_pattern("attendance:*")
     return {"message": f"تم تسجيل حضور {len(attendance_records)} طالب بنجاح"}
 
 @router.post("/attendance/single")
@@ -156,6 +158,7 @@ async def record_single_attendance(
     
     await db.attendance.insert_one(att_record)
     
+    await clear_cache_pattern("attendance:*")
     return {"message": "تم تسجيل الحضور بنجاح", "student_name": student["full_name"]}
 
 @router.get("/attendance/course/{course_id}")
@@ -253,6 +256,11 @@ async def get_student_stats(
 
 @router.get("/attendance/stats/course/{course_id}")
 async def get_course_stats(course_id: str, current_user: dict = Depends(get_current_user)):
+    cache_key = f"attendance:stats:{course_id}"
+    cached = await get_cached(cache_key)
+    if cached:
+        return cached
+
     # Get all attendance records for this course
     records = await db.attendance.find({"course_id": course_id}).to_list(10000)
     
@@ -298,13 +306,15 @@ async def get_course_stats(course_id: str, current_user: dict = Depends(get_curr
             "attendance_rate": round(rate, 2)
         })
     
-    return {
+    result = {
         "course_id": course_id,
         "course_name": course["name"],
         "total_sessions": len(sessions),
         "total_students": len(students),
         "student_stats": student_stats
     }
+    await set_cached(cache_key, result, ttl=300)
+    return result
 
 # ==================== Offline Sync Routes ====================
 

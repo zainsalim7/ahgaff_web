@@ -8,6 +8,7 @@ from typing import List
 
 from models.lectures import LectureCreate, LectureUpdate, LectureResponse
 from .deps import security
+from redis_client import get_cached, set_cached, clear_cache_pattern
 
 router = APIRouter(tags=["المحاضرات"])
 db = None
@@ -153,6 +154,11 @@ async def get_course_lectures(
     current_user: dict = Depends(get_current_user)
 ):
     """الحصول على محاضرات مقرر"""
+    cache_key = f"lectures:course:{course_id}:{status}"
+    cached = await get_cached(cache_key)
+    if cached:
+        return cached
+
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
@@ -177,6 +183,7 @@ async def get_course_lectures(
             "created_at": lecture["created_at"]
         })
     
+    await set_cached(cache_key, result, ttl=300)
     return result
 
 @router.post("/lectures")
@@ -206,6 +213,7 @@ async def create_lecture(
     
     result = await db.lectures.insert_one(lecture)
     
+    await clear_cache_pattern("lectures:*")
     return {
         "id": str(result.inserted_id),
         "message": "تم إنشاء المحاضرة بنجاح"
@@ -256,6 +264,7 @@ async def generate_semester_lectures(
         lectures_created += 1
         current += timedelta(days=7)
     
+    await clear_cache_pattern("lectures:*")
     return {
         "message": f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي",
         "count": lectures_created
@@ -340,6 +349,7 @@ async def generate_semester_lectures_advanced(
             
             current += timedelta(days=7)
     
+    await clear_cache_pattern("lectures:*")
     return {
         "message": f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي",
         "lectures_created": lectures_created
@@ -367,6 +377,7 @@ async def update_lecture(
             {"$set": update_data}
         )
     
+    await clear_cache_pattern("lectures:*")
     return {"message": "تم تحديث المحاضرة بنجاح"}
 
 @router.delete("/lectures/{lecture_id}")
@@ -386,6 +397,7 @@ async def delete_lecture(
     # حذف سجلات الحضور المرتبطة
     await db.attendance.delete_many({"lecture_id": lecture_id})
     
+    await clear_cache_pattern("lectures:*")
     return {"message": "تم حذف المحاضرة بنجاح"}
 
 @router.get("/lectures/{lecture_id}/details")
