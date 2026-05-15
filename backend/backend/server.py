@@ -166,6 +166,7 @@ if db is not None:
     set_database(db)
 
 # استيراد الـ routes المنفصلة
+from redis_client import init_redis, close_redis
 from routes.auth import router as auth_router
 from routes.users import router as users_router
 from routes.roles import router as roles_router
@@ -13315,6 +13316,7 @@ app.include_router(dashboard_router, prefix="/api")
 
 @app.on_event("startup")
 async def startup_event():
+    await init_redis()
     from services.firebase_service import init_firebase
     init_firebase()
     # تهيئة خدمة التخزين
@@ -13408,4 +13410,5 @@ async def sync_default_roles():
 
 @app.on_event("shutdown")
 async def shutdown_db_client():
+    await close_redis()
     client.close()

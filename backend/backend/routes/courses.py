@@ -8,6 +8,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from .deps import get_db, get_current_user, has_permission
+from redis_client import get_cached, set_cached, clear_cache_pattern
 
 router = APIRouter(tags=["المقررات"])
 
@@ -35,6 +36,11 @@ async def get_courses(
         query["department_id"] = department_id
     if teacher_id:
         query["teacher_id"] = teacher_id
+    
+    cache_key = f"courses:all:{department_id}:{teacher_id}"
+    cached = await get_cached(cache_key)
+    if cached:
+        return cached
     
     courses = await db.courses.find(query).to_list(100)
     
@@ -75,6 +81,7 @@ async def get_courses(
             "created_at": c.get("created_at", datetime.utcnow())
         })
     
+    await set_cached(cache_key, result, ttl=300)
     return result
 
 
@@ -102,6 +109,7 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
     
     result = await db.courses.insert_one(course_doc)
     
+    await clear_cache_pattern("courses:*")
     return {
         "id": str(result.inserted_id),
         "message": "تم إنشاء المقرر بنجاح"
@@ -156,4 +164,5 @@ async def delete_course(course_id: str, current_user: dict = Depends(get_current
     await db.enrollments.delete_many({"course_id": course_id})
     await db.lectures.delete_many({"course_id": course_id})
     
+    await clear_cache_pattern("courses:*")
     return {"message": "تم حذف المقرر بنجاح"}

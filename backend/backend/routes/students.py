@@ -8,6 +8,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from .deps import get_db, get_current_user, get_password_hash
+from redis_client import get_cached, set_cached, clear_cache_pattern
 
 router = APIRouter(tags=["الطلاب"])
 
@@ -59,6 +60,11 @@ async def get_students(
             {"student_id": {"$regex": search, "$options": "i"}}
         ]
     
+    cache_key = f"students:all:{department_id}:{level}:{section}:{is_active}:{search}"
+    cached = await get_cached(cache_key)
+    if cached:
+        return cached
+    
     students = await db.students.find(query).to_list(1000)
     
     result = []
@@ -86,6 +92,7 @@ async def get_students(
             "created_at": s.get("created_at", datetime.utcnow())
         })
     
+    await set_cached(cache_key, result, ttl=300)
     return result
 
 
@@ -128,6 +135,7 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     }
     await db.users.insert_one(user_doc)
     
+    await clear_cache_pattern("students:*")
     return {
         "id": str(result.inserted_id),
         "message": "تم إنشاء الطالب بنجاح"
@@ -212,6 +220,7 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
                 {"$set": user_update}
             )
     
+    await clear_cache_pattern("students:*")
     return {"message": "تم تحديث بيانات الطالب بنجاح"}
 
 
@@ -238,4 +247,5 @@ async def delete_student(student_id: str, current_user: dict = Depends(get_curre
     # حذف التسجيلات
     await db.enrollments.delete_many({"student_id": student_id})
     
+    await clear_cache_pattern("students:*")
     return {"message": "تم حذف الطالب بنجاح"}

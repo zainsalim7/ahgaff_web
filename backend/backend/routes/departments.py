@@ -8,6 +8,7 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 from .deps import get_db, get_current_user, has_permission
+from redis_client import get_cached, set_cached, clear_cache_pattern
 
 router = APIRouter(tags=["الأقسام"])
 
@@ -31,6 +32,11 @@ async def get_departments(faculty_id: Optional[str] = None, current_user: dict =
     query = {}
     if faculty_id:
         query["faculty_id"] = faculty_id
+    
+    cache_key = f"departments:all:{faculty_id}"
+    cached = await get_cached(cache_key)
+    if cached:
+        return cached
     
     departments = await db.departments.find(query).to_list(100)
     
@@ -62,6 +68,7 @@ async def get_departments(faculty_id: Optional[str] = None, current_user: dict =
             "created_at": dept.get("created_at", datetime.utcnow())
         })
     
+    await set_cached(cache_key, result, ttl=300)
     return result
 
 
@@ -85,6 +92,7 @@ async def create_department(dept: DepartmentCreate, current_user: dict = Depends
     
     result = await db.departments.insert_one(dept_doc)
     
+    await clear_cache_pattern("departments:*")
     return {
         "id": str(result.inserted_id),
         "name": dept.name,
@@ -137,6 +145,7 @@ async def update_department(dept_id: str, data: DepartmentUpdate, current_user: 
         update_data["updated_at"] = datetime.utcnow()
         await db.departments.update_one({"_id": ObjectId(dept_id)}, {"$set": update_data})
     
+    await clear_cache_pattern("departments:*")
     return {"message": "تم تحديث القسم بنجاح"}
 
 
@@ -157,4 +166,5 @@ async def delete_department(dept_id: str, current_user: dict = Depends(get_curre
     
     await db.departments.delete_one({"_id": ObjectId(dept_id)})
     
+    await clear_cache_pattern("departments:*")
     return {"message": "تم حذف القسم بنجاح"}

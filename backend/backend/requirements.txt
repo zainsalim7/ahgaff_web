@@ -1,3 +1,4 @@
+aioredis==2.0.1
 aiohappyeyeballs==2.6.1
 aiohttp==3.13.3
 aiosignal==1.4.0
@@ -107,6 +108,7 @@ python-multipart==0.0.22
 pytokens==0.4.1
 PyYAML==6.0.3
 qrcode==8.2
+redis==5.0.1
 referencing==0.37.0
 regex==2026.1.15
 reportlab==4.4.9
