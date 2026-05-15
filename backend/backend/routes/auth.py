@@ -20,8 +20,12 @@ async def login(user_data: UserLogin, request: Request):
     """تسجيل الدخول مع حماية Rate Limiting"""
     db = get_db()
     
-    # Rate Limiting - فحص عدد المحاولات
-    client_ip = request.headers.get("x-forwarded-for", "").split(",")[0].strip() or (request.client.host if request.client else "unknown")
+    # Rate Limiting - فحص عدد المحاولات (يفضّل CF-Connecting-IP خلف Cloudflare)
+    client_ip = (
+        request.headers.get("cf-connecting-ip")
+        or request.headers.get("x-forwarded-for", "").split(",")[0].strip()
+        or (request.client.host if request.client else "unknown")
+    )
     
     if not check_rate_limit(client_ip):
         raise HTTPException(
