@@ -179,6 +179,7 @@ from routes.weekly_schedule import router as weekly_schedule_router
 from routes.study_plans import router as study_plans_router
 from routes.admin_tools import router as admin_tools_router
 from routes.dashboard import router as dashboard_router
+from routes.calendar_events import router as calendar_router
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -13367,6 +13368,7 @@ app.include_router(weekly_schedule_router, prefix="/api")
 app.include_router(study_plans_router, prefix="/api")
 app.include_router(admin_tools_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
+app.include_router(calendar_router, prefix="/api")
 
 
 @app.on_event("startup")
