@@ -123,6 +123,19 @@ export default function ProfileScreen() {
             <Ionicons name="chevron-back" size={20} color="#ccc" />
           </TouchableOpacity>
 
+          {/* University Calendar */}
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/calendar')}
+            data-testid="university-calendar-btn"
+          >
+            <View style={[styles.menuIcon, { backgroundColor: '#e3f2fd' }]}>
+              <Ionicons name="calendar-outline" size={22} color="#1565c0" />
+            </View>
+            <Text style={styles.menuText}>التقويم الجامعي</Text>
+            <Ionicons name="chevron-back" size={20} color="#ccc" />
+          </TouchableOpacity>
+
           {/* Student Card */}
           <TouchableOpacity
             style={styles.menuItem}
