@@ -6,7 +6,6 @@ import {
   ScrollView,
   ActivityIndicator,
   TouchableOpacity,
-  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,17 +52,27 @@ export default function CalendarPublicScreen() {
     })();
   }, []);
 
+  // عداد لكل نوع
+  const counts = useMemo(() => {
+    const result: Record<string, number> = { all: events.length };
+    Object.keys(TYPE_META).forEach((k) => {
+      result[k] = events.filter((e) => e.event_type === k).length;
+    });
+    return result;
+  }, [events]);
+
   // فرز وتجميع حسب الشهر الميلادي
   const grouped = useMemo(() => {
     const filtered = filterType === 'all' ? events : events.filter((e) => e.event_type === filterType);
     const map = new Map<string, CalendarEvent[]>();
     filtered.forEach((ev) => {
-      const key = ev.gregorian_date.substring(0, 7); // YYYY-MM
+      const key = ev.gregorian_date.substring(0, 7);
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(ev);
     });
-    const sortedKeys = Array.from(map.keys()).sort();
-    return sortedKeys.map((k) => ({ month: k, items: map.get(k)! }));
+    return Array.from(map.keys())
+      .sort()
+      .map((k) => ({ month: k, items: map.get(k)! }));
   }, [events, filterType]);
 
   const monthName = (key: string) => {
@@ -75,25 +84,25 @@ export default function CalendarPublicScreen() {
     return `${months[parseInt(m, 10) - 1]} ${y}`;
   };
 
-  // التحقق إن كان الحدث مستقبلي أو ماضي
   const isUpcoming = (dateStr: string) => {
     const today = new Date().toISOString().substring(0, 10);
     return dateStr >= today;
   };
 
-  // الحدث القادم القريب
   const nextEvent = useMemo(() => {
     const today = new Date().toISOString().substring(0, 10);
     return events.find((e) => e.gregorian_date >= today) || null;
   }, [events]);
 
-  const filters = [
-    { value: 'all', label: 'الكل', color: '#666' },
-    ...Object.entries(TYPE_META).map(([value, m]) => ({
-      value,
-      label: m.label,
-      color: m.color,
-    })),
+  // قائمة الفلاتر بترتيب مدروس
+  const filters: { value: string; label: string; color: string; icon: any }[] = [
+    { value: 'all', label: 'الكل', color: '#455a64', icon: 'apps' },
+    { value: 'semester_start', label: 'بداية فصل', color: '#6a1b9a', icon: 'play-circle' },
+    { value: 'semester_end', label: 'نهاية فصل', color: '#ef6c00', icon: 'stop-circle' },
+    { value: 'exam', label: 'امتحان', color: '#c62828', icon: 'document-text' },
+    { value: 'holiday', label: 'إجازة', color: '#2e7d32', icon: 'sunny' },
+    { value: 'registration', label: 'تسجيل', color: '#00838f', icon: 'create' },
+    { value: 'general', label: 'عام', color: '#1565c0', icon: 'information-circle' },
   ];
 
   return (
@@ -130,34 +139,60 @@ export default function CalendarPublicScreen() {
           </View>
         )}
 
-        {/* Filters */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filtersScroll}
-          contentContainerStyle={styles.filtersContainer}
-        >
-          {filters.map((f) => (
-            <TouchableOpacity
-              key={f.value}
-              style={[
-                styles.filterChip,
-                filterType === f.value && { backgroundColor: f.color, borderColor: f.color },
-              ]}
-              onPress={() => setFilterType(f.value)}
-              testID={`filter-${f.value}`}
-            >
-              <Text
-                style={[
-                  styles.filterChipText,
-                  filterType === f.value && { color: '#fff' },
-                ]}
-              >
-                {f.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
+        {/* فلاتر بشكل grid منظم */}
+        <View style={styles.filtersSection}>
+          <Text style={styles.filtersTitle}>تصفية حسب النوع</Text>
+          <View style={styles.filtersGrid}>
+            {filters.map((f) => {
+              const isActive = filterType === f.value;
+              const count = counts[f.value] || 0;
+              return (
+                <TouchableOpacity
+                  key={f.value}
+                  style={[
+                    styles.filterChip,
+                    isActive && { backgroundColor: f.color, borderColor: f.color },
+                    !isActive && { borderColor: f.color },
+                  ]}
+                  onPress={() => setFilterType(f.value)}
+                  testID={`filter-${f.value}`}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons
+                    name={f.icon}
+                    size={14}
+                    color={isActive ? '#fff' : f.color}
+                  />
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      { color: isActive ? '#fff' : f.color },
+                    ]}
+                  >
+                    {f.label}
+                  </Text>
+                  <View
+                    style={[
+                      styles.filterBadge,
+                      {
+                        backgroundColor: isActive ? 'rgba(255,255,255,0.25)' : f.color + '22',
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterBadgeText,
+                        { color: isActive ? '#fff' : f.color },
+                      ]}
+                    >
+                      {count}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </View>
 
         {/* Events list */}
         <ScrollView contentContainerStyle={{ paddingBottom: 40 }}>
@@ -240,6 +275,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: { color: '#fff', fontSize: 18, fontWeight: '700', marginTop: 8 },
   headerSub: { color: '#bbdefb', fontSize: 12, marginTop: 4 },
+
   nextCard: {
     marginHorizontal: 12,
     marginTop: 12,
@@ -254,21 +290,57 @@ const styles = StyleSheet.create({
   nextDates: { flexDirection: 'row', gap: 12, marginTop: 6, flexWrap: 'wrap' },
   nextDate: { fontSize: 12, color: '#333' },
   nextDateHijri: { fontSize: 12, color: '#6a1b9a', fontWeight: '600' },
-  filtersScroll: { marginVertical: 10 },
-  filtersContainer: { paddingHorizontal: 12, gap: 6, flexDirection: 'row' },
-  filterChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    backgroundColor: '#fff',
-    marginHorizontal: 3,
+
+  /* الفئات - تصميم جديد */
+  filtersSection: {
+    marginHorizontal: 12,
+    marginTop: 14,
+    marginBottom: 4,
   },
-  filterChipText: { fontSize: 12, fontWeight: '600', color: '#555' },
+  filtersTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#666',
+    marginBottom: 8,
+    textAlign: 'right',
+  },
+  filtersGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 18,
+    borderWidth: 1.5,
+    backgroundColor: '#fff',
+    minHeight: 32,
+  },
+  filterChipText: {
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  filterBadge: {
+    minWidth: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  filterBadgeText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+
   empty: { alignItems: 'center', padding: 40 },
   emptyText: { color: '#666', fontSize: 16, fontWeight: '600', marginTop: 12 },
   emptySub: { color: '#999', fontSize: 13, marginTop: 4 },
+
   monthHeader: {
     fontSize: 14,
     fontWeight: '700',
