@@ -416,6 +416,28 @@ def create_access_token(data: dict):
     encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
     return encoded_jwt
 
+
+def parse_fields(fields: Optional[str]) -> Optional[set]:
+    """يحلل قيمة ?fields=a,b,c إلى set من الأسماء.
+    يرجع None إذا لم تُحدَّد (= نُرجع كل الحقول كما هو حالياً).
+    "id" دائماً مضمَّن إن طُلب أي حقل."""
+    if not fields:
+        return None
+    parts = {p.strip() for p in fields.split(",") if p.strip()}
+    if not parts:
+        return None
+    parts.add("id")
+    return parts
+
+
+def apply_fields(items: list, allowed: Optional[set]) -> list:
+    """يُرجع نسخة من القائمة بحقول مختارة فقط (تخفيف حجم الاستجابة).
+    إذا كان allowed=None يُرجع القائمة كما هي."""
+    if not allowed:
+        return items
+    return [{k: v for k, v in (it or {}).items() if k in allowed} for it in items]
+
+
 # ==================== Activity Logging Function ====================
 
 # ترجمة أنواع الأنشطة إلى العربية
@@ -4083,10 +4105,11 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
     
     return response
 
-@api_router.get("/courses", response_model=List[CourseResponse])
+@api_router.get("/courses")
 async def get_courses(
     teacher_id: Optional[str] = None,
     department_id: Optional[str] = None,
+    fields: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     query = {"is_active": True}
@@ -4108,22 +4131,28 @@ async def get_courses(
         elif not query.get("department_id"):
             query["department_id"] = department_id
     
+    # تحليل ?fields= لاختصار الاستجابة
+    allowed = parse_fields(fields)
+    need_enrollment_count = (allowed is None) or ("students_count" in allowed)
+    need_lecture_count = (allowed is None) or ("lectures_count" in allowed)
+    need_teacher_name = (allowed is None) or ("teacher_name" in allowed)
+    need_semester_name = (allowed is None) or ("semester_name" in allowed)
+
     courses = await db.courses.find(query).to_list(None)
     
-    # جلب عدد الطلاب لكل مقرر دفعة واحدة
+    # جلب عدد الطلاب لكل مقرر دفعة واحدة (فقط إذا مطلوب)
     course_ids = [str(c["_id"]) for c in courses]
-    enrollment_counts = {}
-    lecture_counts = {}
-    if course_ids:
-        # عدد الطلاب
+    enrollment_counts: dict = {}
+    lecture_counts: dict = {}
+    if course_ids and need_enrollment_count:
         pipeline = [
             {"$match": {"course_id": {"$in": course_ids}}},
             {"$group": {"_id": "$course_id", "count": {"$sum": 1}}}
         ]
         counts = await db.enrollments.aggregate(pipeline).to_list(None)
         enrollment_counts = {item["_id"]: item["count"] for item in counts}
-        
-        # عدد المحاضرات
+
+    if course_ids and need_lecture_count:
         lec_pipeline = [
             {"$match": {"course_id": {"$in": course_ids}}},
             {"$group": {"_id": "$course_id", "count": {"$sum": 1}}}
@@ -4135,7 +4164,7 @@ async def get_courses(
     result = []
     for c in courses:
         teacher_name = None
-        if c.get("teacher_id"):
+        if need_teacher_name and c.get("teacher_id"):
             try:
                 # أولاً: البحث في collection المعلمين (الجديد)
                 teacher = await db.teachers.find_one({"_id": ObjectId(c["teacher_id"])})
@@ -4151,7 +4180,7 @@ async def get_courses(
         
         # اسم الفصل الدراسي
         semester_name = None
-        if c.get("semester_id"):
+        if need_semester_name and c.get("semester_id"):
             try:
                 sem = await db.semesters.find_one({"_id": ObjectId(c["semester_id"])})
                 if sem:
@@ -4181,7 +4210,7 @@ async def get_courses(
             "department_name": None
         })
     
-    return result
+    return apply_fields(result, allowed)
 
 @api_router.get("/courses/{course_id}")
 async def get_course(course_id: str, current_user: dict = Depends(get_current_user)):
@@ -4983,7 +5012,11 @@ async def import_enrollments_excel(
         raise HTTPException(status_code=400, detail=f"خطأ في قراءة الملف: {str(e)}")
 
 @api_router.get("/enrollments/{course_id}/students")
-async def get_enrolled_students_for_attendance(course_id: str, current_user: dict = Depends(get_current_user)):
+async def get_enrolled_students_for_attendance(
+    course_id: str,
+    fields: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     """الحصول على الطلاب المسجلين للحضور"""
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
@@ -5015,7 +5048,7 @@ async def get_enrolled_students_for_attendance(course_id: str, current_user: dic
             "qr_code": student.get("qr_code", "")
         })
     
-    return result
+    return apply_fields(result, parse_fields(fields))
 
 class CourseUpdate(BaseModel):
     name: Optional[str] = None
@@ -5714,7 +5747,10 @@ async def backfill_sections(current_user: dict = Depends(get_current_user)):
 # ==================== Lecture Routes (المحاضرات/الحصص) ====================
 
 @api_router.get("/lectures/today")
-async def get_today_lectures(current_user: dict = Depends(get_current_user)):
+async def get_today_lectures(
+    fields: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     """الحصول على محاضرات اليوم للمعلم"""
     today = get_yemen_time().strftime("%Y-%m-%d")
     
@@ -5766,15 +5802,20 @@ async def get_today_lectures(current_user: dict = Depends(get_current_user)):
                 pass
 
     result = []
+    allowed = parse_fields(fields)
+    need_attendance = (allowed is None) or ("attendance_count" in allowed) or ("total_enrolled" in allowed)
     for lecture in lectures:
         course = course_map.get(lecture["course_id"], {})
-        # حساب عدد الطلاب الحاضرين
-        attendance_count = await db.attendance.count_documents({
-            "lecture_id": str(lecture["_id"]),
-            "status": "present"
-        })
-        total_enrolled = await db.enrollments.count_documents({"course_id": lecture["course_id"]})
-        
+        # حساب عدد الطلاب الحاضرين (فقط إذا مطلوب)
+        attendance_count = 0
+        total_enrolled = 0
+        if need_attendance:
+            attendance_count = await db.attendance.count_documents({
+                "lecture_id": str(lecture["_id"]),
+                "status": "present"
+            })
+            total_enrolled = await db.enrollments.count_documents({"course_id": lecture["course_id"]})
+
         result.append({
             "id": str(lecture["_id"]),
             "course_id": lecture["course_id"],
@@ -5791,8 +5832,8 @@ async def get_today_lectures(current_user: dict = Depends(get_current_user)):
             "total_enrolled": total_enrolled,
             "created_at": lecture["created_at"]
         })
-    
-    return result
+
+    return apply_fields(result, allowed)
 
 
 @api_router.get("/lectures/all-schedule")
@@ -5870,7 +5911,12 @@ async def get_all_schedule_lectures(
 
 
 @api_router.get("/lectures/month/{year}/{month}")
-async def get_month_lectures(year: int, month: int, current_user: dict = Depends(get_current_user)):
+async def get_month_lectures(
+    year: int,
+    month: int,
+    fields: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     """الحصول على محاضرات شهر معين للمعلم - يرجع التواريخ التي فيها محاضرات"""
     
     # جلب مقررات المعلم
@@ -5955,7 +6001,7 @@ async def get_month_lectures(year: int, month: int, current_user: dict = Depends
     return {
         "dates": list(dates_with_lectures.keys()),
         "lectures_by_date": dates_with_lectures,
-        "lectures": lectures_list,
+        "lectures": apply_fields(lectures_list, parse_fields(fields)),
         "total_lectures": len(lectures_list)
     }
 
