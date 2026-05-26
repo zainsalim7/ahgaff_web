@@ -2917,7 +2917,10 @@ async def get_my_student_record(current_user: dict = Depends(get_current_user)):
     }
 
 @api_router.get("/students/me/courses")
-async def get_my_courses(current_user: dict = Depends(get_current_user)):
+async def get_my_courses(
+    fields: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
     """جلب مقررات الطالب الحالي من التسجيل"""
     if current_user["role"] != UserRole.STUDENT:
         raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
@@ -2954,27 +2957,53 @@ async def get_my_courses(current_user: dict = Depends(get_current_user)):
             except:
                 pass
     
+    allowed = parse_fields(fields)
+    need_teacher_name = (allowed is None) or ("teacher_name" in allowed)
+    need_semester_name = (allowed is None) or ("semester_name" in allowed)
+
     result = []
     for c in courses_list:
         teacher_name = "غير محدد"
-        if c.get("teacher_id"):
+        if need_teacher_name and c.get("teacher_id"):
             try:
-                teacher = await db.users.find_one({"_id": ObjectId(c["teacher_id"])})
+                # أولاً: ابحث في collection المعلمين (الجديد)
+                teacher = await db.teachers.find_one({"_id": ObjectId(c["teacher_id"])})
                 if teacher:
-                    teacher_name = teacher.get("full_name", teacher.get("username", "غير محدد"))
+                    teacher_name = teacher.get("full_name", "غير محدد")
+                else:
+                    # احتياط: collection users (القديم)
+                    user_doc = await db.users.find_one({"_id": ObjectId(c["teacher_id"])})
+                    if user_doc:
+                        teacher_name = user_doc.get("full_name", user_doc.get("username", "غير محدد"))
             except:
                 pass
+
+        semester_name = None
+        if need_semester_name and c.get("semester_id"):
+            try:
+                sem = await db.semesters.find_one({"_id": ObjectId(c["semester_id"])})
+                if sem:
+                    semester_name = sem.get("name")
+            except:
+                pass
+
         result.append({
             "id": str(c["_id"]),
             "name": c.get("name", ""),
             "code": c.get("code", ""),
             "department_id": c.get("department_id", ""),
+            "teacher_id": c.get("teacher_id"),
+            "teacher_name": teacher_name,
             "level": c.get("level"),
             "section": c.get("section", ""),
-            "teacher_name": teacher_name,
+            "credit_hours": c.get("credit_hours", 3),
+            "room": c.get("room", ""),
+            "semester_id": c.get("semester_id"),
+            "semester_name": semester_name,
+            "academic_year": c.get("academic_year"),
         })
-    
-    return result
+
+    return apply_fields(result, allowed)
 
 
 
