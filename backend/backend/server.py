@@ -3635,6 +3635,81 @@ async def create_teacher(request: Request, current_user: dict = Depends(get_curr
     
     return teacher_dict
 
+@api_router.get("/teachers/me")
+async def get_my_teacher_profile(current_user: dict = Depends(get_current_user)):
+    """جلب البروفايل الكامل للمعلم المسجل دخوله (للاستخدام في تطبيق المعلم).
+
+    يُرجع: البيانات الشخصية + أسماء الأقسام + الفصل الحالي.
+    """
+    if current_user["role"] != UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="هذا الـ endpoint للمعلمين فقط")
+
+    # ابحث في collection teachers عبر user_id أو teacher_record_id
+    teacher = None
+    user_record = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+    teacher_record_id = (user_record or {}).get("teacher_record_id")
+    if teacher_record_id:
+        try:
+            teacher = await db.teachers.find_one({"_id": ObjectId(teacher_record_id)})
+        except Exception:
+            pass
+    if not teacher:
+        teacher = await db.teachers.find_one({"user_id": current_user["id"]})
+
+    if not teacher:
+        raise HTTPException(status_code=404, detail="لم يتم العثور على سجل المعلم")
+
+    # جمع معرفات الأقسام (يدعم القديم single + الجديد multiple)
+    dept_ids = teacher.get("department_ids") or []
+    if not dept_ids and teacher.get("department_id"):
+        dept_ids = [teacher["department_id"]]
+
+    # جلب أسماء الأقسام
+    department_names: list = []
+    if dept_ids:
+        try:
+            obj_ids = [ObjectId(d) for d in dept_ids if d]
+            depts_cursor = db.departments.find({"_id": {"$in": obj_ids}})
+            async for d in depts_cursor:
+                department_names.append({
+                    "id": str(d["_id"]),
+                    "name": d.get("name", ""),
+                    "faculty_id": d.get("faculty_id"),
+                })
+        except Exception:
+            pass
+
+    # الفصل الدراسي الفعّال
+    current_semester = None
+    sem = await db.semesters.find_one({"status": "active"})
+    if sem:
+        current_semester = {
+            "id": str(sem["_id"]),
+            "name": sem.get("name"),
+            "academic_year": sem.get("academic_year"),
+        }
+
+    return {
+        "id": str(teacher["_id"]),
+        "user_id": teacher.get("user_id"),
+        "teacher_id": teacher.get("teacher_id", ""),
+        "full_name": teacher.get("full_name", ""),
+        "username": (user_record or {}).get("username", ""),
+        "email": teacher.get("email") or (user_record or {}).get("email"),
+        "phone": teacher.get("phone"),
+        "specialization": teacher.get("specialization"),
+        "academic_title": teacher.get("academic_title"),
+        "weekly_hours": teacher.get("weekly_hours", 12),
+        "teaching_load": teacher.get("teaching_load"),
+        "department_id": teacher.get("department_id"),
+        "department_ids": dept_ids,
+        "departments": department_names,
+        "current_semester": current_semester,
+        "is_active": teacher.get("is_active", True),
+        "created_at": teacher.get("created_at"),
+    }
+
+
 @api_router.get("/teachers/{teacher_id}")
 async def get_teacher(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """الحصول على معلم محدد"""
