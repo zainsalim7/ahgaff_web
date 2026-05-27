@@ -13,7 +13,8 @@ const getApiUrl = () => {
 
     if (origin.includes('localhost:3000')) return 'http://localhost:8001';
     if (origin.includes('preview.emergentagent.com')) return origin;
-    if (origin.includes('railway.app')) return 'https://ahgaffweb-production-c582.up.railway.app';
+    if (origin.includes('railway.app')) return 'https://api.ahgaff.net';
+    if (origin.includes('ahgaff.net')) return 'https://api.ahgaff.net';
     if (expoBackendUrl) return expoBackendUrl;
     return origin;
   }
@@ -58,6 +59,24 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
+    // 🔐 logout تلقائي عند انتهاء التوكن
+    const status = error.response?.status;
+    const url: string = error.config?.url || '';
+    const isAuthCall = url.includes('/auth/login') || url.includes('/auth/me') || url.includes('/init-admin');
+    if (status === 401 && !isAuthCall) {
+      try { await AsyncStorage.multiRemove(['token', 'user']); } catch {}
+      try {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          if (!window.location.pathname.includes('/login')) {
+            window.location.replace('/login');
+          }
+        } else {
+          const { router } = await import('expo-router');
+          router.replace('/login');
+        }
+      } catch {}
+    }
+
     if (!error.response && error.config?.method === 'get' && shouldCache(error.config.url || '')) {
       try {
         const cached = await AsyncStorage.getItem(`cache_${error.config.url}`);

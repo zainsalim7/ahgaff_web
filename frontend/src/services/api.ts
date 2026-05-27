@@ -30,7 +30,12 @@ const getApiUrl = () => {
     
     // إذا كنا على Railway (ahgaffweb)، استخدم Backend URL الثابت
     if (origin.includes('railway.app')) {
-      return 'https://ahgaffweb-production-c582.up.railway.app';
+      return 'https://api.ahgaff.net';
+    }
+
+    // إذا كنا على الدومين الرسمي (app.ahgaff.net أو ahgaff.net)، استخدم api.ahgaff.net
+    if (origin.includes('ahgaff.net')) {
+      return 'https://api.ahgaff.net';
     }
     
     // للمواقع الأخرى، استخدم الـ env variable
@@ -198,6 +203,39 @@ api.interceptors.response.use(
     return response;
   },
   async (error) => {
+    // 🔐 معالجة انتهاء صلاحية التوكن: تسجيل خروج تلقائي + توجيه لصفحة الدخول
+    const status = error.response?.status;
+    const url: string = error.config?.url || '';
+    const isAuthCall =
+      url.includes('/auth/login') ||
+      url.includes('/init-admin') ||
+      url.includes('/auth/me');
+
+    if (status === 401 && !isAuthCall) {
+      try {
+        // امسح بيانات الجلسة
+        await AsyncStorage.multiRemove(['token', 'user']);
+        memCache.clear();
+      } catch {}
+
+      // وجِّه للـ login (Web و Mobile)
+      try {
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          // تجنّب التوجيه المتكرر إن كنا على /login أصلاً
+          const path = window.location.pathname || '';
+          if (!path.includes('/login') && !path.endsWith('/')) {
+            window.location.replace('/login');
+          } else if (!path.includes('/login')) {
+            window.location.replace('/login');
+          }
+        } else {
+          // Mobile: استخدم expo-router
+          const { router } = await import('expo-router');
+          router.replace('/login');
+        }
+      } catch {}
+    }
+
     // إذا لا يوجد استجابة (أوفلاين) وكان GET، حاول جلب من الكاش
     if (!error.response && error.config?.method === 'get' && shouldCache(error.config.url || '')) {
       const cacheKey = `cache_${error.config.url}`;
