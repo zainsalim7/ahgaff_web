@@ -108,7 +108,15 @@ export default function GlobalSearch({ visible, onClose }: Props) {
 
   const handleSelect = (item: SearchItem) => {
     onClose();
-    setTimeout(() => router.push(item.route as any), 100);
+    // إغلاق الـ modal ثم التنقل (تأخير بسيط لضمان إغلاق الـ keyboard)
+    setTimeout(() => {
+      try {
+        // expo-router يدعم string path مع query params
+        router.push(item.route as any);
+      } catch (e) {
+        console.warn('Navigation failed:', e);
+      }
+    }, 150);
   };
 
   return (
