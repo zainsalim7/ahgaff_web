@@ -1,0 +1,19 @@
+# Files to ignore when deploying to Google Cloud
+.git/
+.gitignore
+.env
+.env.*
+node_modules/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.DS_Store
+*.log
+test_reports/
+tests/
+.emergent/
+.expo/
+README.md
+docs/
+*.md
