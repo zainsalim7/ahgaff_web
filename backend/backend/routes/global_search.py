@@ -16,6 +16,47 @@ from models.permissions import UserRole
 router = APIRouter(tags=["البحث الشامل"])
 
 
+def _normalize_arabic(text: str) -> str:
+    """تطبيع النص العربي للبحث الذكي:
+    - توحيد الألف (أ، إ، آ → ا)
+    - توحيد التاء المربوطة (ة → ه)
+    - توحيد الياء (ى → ي)
+    - إزالة التشكيل والمسافات الزائدة
+    """
+    if not text:
+        return ""
+    s = str(text)
+    # إزالة التشكيل
+    s = re.sub(r"[\u064B-\u0652\u0670\u0640]", "", s)
+    # توحيد الألف
+    s = re.sub(r"[إأآا]", "ا", s)
+    # توحيد التاء المربوطة والهاء
+    s = s.replace("ة", "ه")
+    # توحيد الياء والألف المقصورة
+    s = s.replace("ى", "ي").replace("ي", "ي")
+    # تنظيف المسافات
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
+
+
+def _build_smart_regex(text: str) -> dict:
+    """بناء regex ذكي للبحث العربي.
+    يبني pattern يطابق الكلمة سواء كُتبت بهمزة أو بدونها.
+    """
+    if not text:
+        return {"$regex": "", "$options": "i"}
+    s = _normalize_arabic(text)
+    # هروب الأحرف الخاصة
+    s = re.escape(s)
+    # اجعل كل ألف يطابق أي شكل من أشكالها
+    s = s.replace("ا", "[إأآا]")
+    # اجعل التاء المربوطة تطابق الهاء أيضاً
+    s = s.replace("ه", "[هة]")
+    # اجعل الياء تطابق الألف المقصورة أيضاً
+    s = s.replace("ي", "[يى]")
+    return {"$regex": s, "$options": "i"}
+
+
 def _esc(text: str) -> str:
     """تجهيز regex آمن (هروب الأحرف الخاصة)."""
     return re.escape(text or "")
@@ -53,7 +94,8 @@ async def global_search(
     is_teacher = role == UserRole.TEACHER
     is_student = role == UserRole.STUDENT
 
-    regex = {"$regex": _esc(q_clean), "$options": "i"}
+    regex = _build_smart_regex(q_clean)
+    code_regex = {"$regex": _esc(q_clean), "$options": "i"}  # للأكواد (لا تطبيع)
     results: dict = {}
     total = 0
 
@@ -65,8 +107,8 @@ async def global_search(
             "is_active": True,
             "$or": [
                 {"full_name": regex},
-                {"student_id": regex},
-                {"reference_number": regex},
+                {"student_id": code_regex},
+                {"reference_number": code_regex},
             ],
         }
         # المعلم لا يرى الطلاب من خلال البحث العام (يستخدم صفحات المقرر)
@@ -98,8 +140,8 @@ async def global_search(
             tq = {
                 "$or": [
                     {"full_name": regex},
-                    {"teacher_id": regex},
-                    {"email": regex},
+                    {"teacher_id": code_regex},
+                    {"email": code_regex},
                 ],
             }
             cursor = db.teachers.find(tq).limit(limit_per_type)
@@ -127,7 +169,7 @@ async def global_search(
             "is_active": True,
             "$or": [
                 {"name": regex},
-                {"code": regex},
+                {"code": code_regex},
             ],
         }
         # المعلم يرى مقرراته فقط
@@ -177,7 +219,7 @@ async def global_search(
     # 4) الأقسام
     # =========================================
     if "departments" in requested_types and (is_admin or is_teacher):
-        dq = {"$or": [{"name": regex}, {"code": regex}]}
+        dq = {"$or": [{"name": regex}, {"code": code_regex}]}
         cursor = db.departments.find(dq).limit(limit_per_type)
         items = []
         async for d in cursor:
@@ -197,7 +239,7 @@ async def global_search(
     # 5) الكليات
     # =========================================
     if "faculties" in requested_types and (is_admin or is_teacher):
-        fq = {"$or": [{"name": regex}, {"code": regex}]}
+        fq = {"$or": [{"name": regex}, {"code": code_regex}]}
         cursor = db.faculties.find(fq).limit(limit_per_type)
         items = []
         async for f in cursor:
@@ -224,7 +266,7 @@ async def global_search(
         else:
             # اربط بالمقررات التي تطابق
             course_match_cursor = db.courses.find(
-                {"$or": [{"name": regex}, {"code": regex}]}, {"_id": 1}
+                {"$or": [{"name": regex}, {"code": code_regex}]}, {"_id": 1}
             ).limit(20)
             matching_course_ids = []
             async for c in course_match_cursor:
