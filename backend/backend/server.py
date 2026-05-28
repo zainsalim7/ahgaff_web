@@ -180,6 +180,7 @@ from routes.study_plans import router as study_plans_router
 from routes.admin_tools import router as admin_tools_router
 from routes.dashboard import router as dashboard_router
 from routes.calendar_events import router as calendar_router
+from routes.global_search import router as global_search_router
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -13519,6 +13520,7 @@ app.include_router(study_plans_router, prefix="/api")
 app.include_router(admin_tools_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
+app.include_router(global_search_router, prefix="/api")
 
 
 @app.on_event("startup")

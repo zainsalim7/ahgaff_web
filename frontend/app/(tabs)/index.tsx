@@ -21,6 +21,7 @@ import api from '../../src/services/api';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import QRCode from 'react-native-qrcode-svg';
 import { formatGregorianDate, formatMonthYear, GREGORIAN_MONTHS_AR, WEEKDAYS_AR } from '../../src/utils/dateUtils';
+import GlobalSearch from '../../src/components/GlobalSearch';
 
 interface CourseStats {
   course_id: string;
@@ -68,6 +69,7 @@ export default function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [showQRModal, setShowQRModal] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
   const [notifCount, setNotifCount] = useState(0);
   
   // Teacher calendar states
@@ -266,6 +268,22 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
+
+        {/* 🔍 مربع البحث السريع */}
+        <TouchableOpacity
+          style={styles.searchBarTrigger}
+          onPress={() => setSearchOpen(true)}
+          activeOpacity={0.7}
+          testID="home-search-bar"
+        >
+          <Ionicons name="search" size={20} color="#1565c0" />
+          <Text style={styles.searchBarPlaceholder}>
+            بحث سريع: طالب، معلم، مقرر، قسم...
+          </Text>
+          <View style={styles.searchBarBadge}>
+            <Ionicons name="flash" size={12} color="#fff" />
+          </View>
+        </TouchableOpacity>
 
         {/* Sync Status */}
         {unsyncedCount > 0 && (
@@ -860,6 +878,9 @@ export default function HomeScreen() {
           </>
         )}
       </ScrollView>
+
+      {/* 🔍 Global Search Modal */}
+      <GlobalSearch visible={searchOpen} onClose={() => setSearchOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -871,6 +892,38 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
+  },
+  searchBarTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#fff',
+    marginHorizontal: 16,
+    marginTop: -6,
+    marginBottom: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#bbdefb',
+    elevation: 2,
+    shadowColor: '#1565c0',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  searchBarPlaceholder: {
+    flex: 1,
+    fontSize: 13,
+    color: '#888',
+    textAlign: 'right',
+  },
+  searchBarBadge: {
+    backgroundColor: '#1565c0',
+    width: 20, height: 20,
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   welcomeCard: {
     backgroundColor: '#fff',
