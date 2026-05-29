@@ -7,6 +7,7 @@ import { View, StyleSheet, I18nManager, TouchableOpacity, Platform } from 'react
 import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { SideMenu } from '../src/components/SideMenu';
+import GlobalSearch from '../src/components/GlobalSearch';
 
 // Enable RTL for Arabic
 I18nManager.allowRTL(true);
@@ -82,6 +83,7 @@ export default function RootLayout() {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const { loadFromStorage, startNetworkMonitoring } = useOfflineSyncStore();
   const [menuVisible, setMenuVisible] = useState(false);
+  const [searchVisible, setSearchVisible] = useState(false);
   const pathname = usePathname();
 
   useEffect(() => {
@@ -151,21 +153,37 @@ export default function RootLayout() {
           <Stack.Screen name="notifications" options={{ title: 'الإشعارات' }} />
         </Stack>
 
-        {/* زر القائمة العائم - يظهر في جميع الصفحات عند تسجيل الدخول */}
+        {/* الأزرار العائمة - تظهر في جميع الصفحات عند تسجيل الدخول */}
         {showMenu && (
-          <TouchableOpacity
-            onPress={() => setMenuVisible(true)}
-            testID="floating-menu-btn"
-            style={styles.floatingMenuBtn}
-          >
-            <Ionicons name="menu" size={20} color="#1565c0" />
-          </TouchableOpacity>
+          <View style={styles.floatingBtnsRow} pointerEvents="box-none">
+            <TouchableOpacity
+              onPress={() => setMenuVisible(true)}
+              testID="floating-menu-btn"
+              style={styles.floatingMenuBtn}
+            >
+              <Ionicons name="menu" size={20} color="#1565c0" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setSearchVisible(true)}
+              testID="floating-search-btn"
+              accessibilityLabel="بحث شامل"
+              style={styles.floatingSearchBtn}
+            >
+              <Ionicons name="search" size={20} color="#fff" />
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* القائمة الجانبية */}
         <SideMenu
           visible={menuVisible}
           onClose={() => setMenuVisible(false)}
+        />
+
+        {/* البحث الشامل */}
+        <GlobalSearch
+          visible={searchVisible}
+          onClose={() => setSearchVisible(false)}
         />
       </View>
     </AuthProvider>
@@ -177,11 +195,16 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1565c0',
   },
-  floatingMenuBtn: {
+  floatingBtnsRow: {
     position: 'absolute',
     top: Platform.OS === 'web' ? 8 : 50,
     left: 8,
     zIndex: 9999,
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  floatingMenuBtn: {
     backgroundColor: '#ffffff',
     width: 36,
     height: 36,
@@ -195,5 +218,20 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.1)',
+  },
+  floatingSearchBtn: {
+    backgroundColor: '#1565c0',
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
   },
 });
