@@ -153,7 +153,7 @@ async def global_search(
                     "title": t.get("full_name", ""),
                     "subtitle": f"رقم المعلم: {t.get('teacher_id', '')}"
                                 + (f" - {title}" if title else ""),
-                    "route": f"/manage-teachers?focus={str(t['_id'])}",
+                    "route": f"/teacher-details?teacherId={str(t['_id'])}",
                     "type": "teacher",
                     "icon": "school",
                 })
@@ -207,7 +207,7 @@ async def global_search(
                     "id": str(c["_id"]),
                     "title": c.get("name", ""),
                     "subtitle": " - ".join(subtitle_parts),
-                    "route": f"/course-lectures?courseId={str(c['_id'])}",
+                    "route": f"/course-details?courseId={str(c['_id'])}",
                     "type": "course",
                     "icon": "book",
                 })
@@ -227,7 +227,7 @@ async def global_search(
                 "id": str(d["_id"]),
                 "title": d.get("name", ""),
                 "subtitle": f"كود: {d.get('code', '')}",
-                "route": f"/students?department_id={str(d['_id'])}",
+                "route": f"/department-details?departmentId={str(d['_id'])}",
                 "type": "department",
                 "icon": "grid",
             })
@@ -247,7 +247,7 @@ async def global_search(
                 "id": str(f["_id"]),
                 "title": f.get("name", ""),
                 "subtitle": f"كود: {f.get('code', '')}",
-                "route": "/add-department",
+                "route": f"/faculty-details?facultyId={str(f['_id'])}",
                 "type": "faculty",
                 "icon": "business",
             })
