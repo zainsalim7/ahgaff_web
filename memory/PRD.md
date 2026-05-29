@@ -1,5 +1,28 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 29 مايو 2026 ✅
+
+### صفحات تفاصيل الكيانات للبحث الشامل (P0 - مكتمل)
+- [x] إنشاء `routes/entity_details.py` مع 4 endpoints جديدة (لا تمس endpoints التطبيقات الموجودة):
+  - `GET /api/teachers/{id}/full-profile` — ملف المعلم الكامل: بيانات + مقررات + إحصائيات
+  - `GET /api/courses/{id}/full-details` — تفاصيل المقرر: بيانات + معلم + قسم + طلاب مع نسب حضور + إحصائيات محاضرات + ملخص خطة دراسية
+  - `GET /api/departments/{id}/summary` — ملخص القسم: بيانات + كلية + رئيس + معلمين + مقررات + إحصائيات
+  - `GET /api/faculties/{id}/summary` — ملخص الكلية: بيانات + عميد + أقسام + إحصائيات مجمّعة
+- [x] تسجيل router في `server.py`
+- [x] تحديث `routes/global_search.py` ليوجّه نتائج البحث إلى الصفحات الجديدة:
+  - teachers → `/teacher-details?teacherId=...` (بدلاً من `/manage-teachers?focus=...`)
+  - courses → `/course-details?courseId=...` (بدلاً من `/course-lectures`)
+  - departments → `/department-details?departmentId=...`
+  - faculties → `/faculty-details?facultyId=...` (كان `/add-department` خطأ)
+- [x] إنشاء 4 صفحات frontend في `/app/frontend/app/`:
+  - `teacher-details.tsx` — ملف ملوّن بنفسجي + 3 بطاقات إحصائيات + قسم بيانات + قائمة مقررات قابلة للنقر
+  - `course-details.tsx` — header أخضر + 3 بطاقات + 3 تبويبات (نظرة عامة/الطلاب/المحاضرات) + روابط داخلية للمعلم والقسم + بار تقدّم الخطة الدراسية + بحث طلاب
+  - `department-details.tsx` — header برتقالي + 3 بطاقات + قسم معلمين + قسم مقررات
+  - `faculty-details.tsx` — header أحمر + 3 بطاقات + قائمة أقسام مع mini-stats
+- [x] تنقّل داخلي بين الصفحات (المقرر → المعلم/القسم، القسم → الكلية/المعلم/المقرر، الكلية → القسم)
+- [x] **اختبار شامل بـ testing_agent_v3_fork:** Backend 100% (18/18 pytest cases), Frontend 100% (login + كل الصفحات + التنقل + البحث الشامل). ملف الاختبار: `/app/backend/tests/test_entity_details.py`
+- [x] **لم يتم لمس أي endpoint قديم** (تطبيقات المعلم والطالب آمنة)
+
 ## ما تم إنجازه - جلسة 9 مايو 2026 ✅
 
 ### إصلاح Bug نسبة إكمال الخطة الدراسية (P0 - مكتمل)
