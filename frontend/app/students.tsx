@@ -27,6 +27,17 @@ import { formatGregorianDate } from '../src/utils/dateUtils';
 
 const LEVELS = ['1', '2', '3', '4', '5'];
 
+// حالات الطالب
+const STATUS_OPTIONS = [
+  { value: 'active', label: 'مستمر', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' as const },
+  { value: 'repeat', label: 'إعادة', color: '#ef6c00', bg: '#fff3e0', icon: 'refresh-circle' as const },
+  { value: 'graduated', label: 'متخرج', color: '#1565c0', bg: '#e3f2fd', icon: 'school' as const },
+  { value: 'expelled', label: 'مفصول', color: '#c62828', bg: '#ffebee', icon: 'close-circle' as const },
+  { value: 'frozen', label: 'مجمَّد', color: '#5e35b1', bg: '#ede7f6', icon: 'snow' as const },
+];
+const getStatusInfo = (s: string) => STATUS_OPTIONS.find(o => o.value === s) ||
+  { value: s || 'active', label: 'مستمر', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' as const };
+
 // دالة مساعدة للتأكيد
 const showConfirm = (
   title: string, 
@@ -142,6 +153,18 @@ export default function StudentsScreen() {
   const [showLevelModal, setShowLevelModal] = useState(false);
   const [changingLevel, setChangingLevel] = useState(false);
 
+  // تغيير الحالة (مدمج هنا - تخرج/إعادة/فصل/تجميد)
+  const [showStatusModal, setShowStatusModal] = useState(false);
+  const [statusToApply, setStatusToApply] = useState('repeat');
+  const [statusNewLevel, setStatusNewLevel] = useState('');
+  const [statusReason, setStatusReason] = useState('');
+  const [applyingStatus, setApplyingStatus] = useState(false);
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('');
+  // سجل التاريخ لطالب
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [historyData, setHistoryData] = useState<any[]>([]);
+  const [historyFor, setHistoryFor] = useState<any>(null);
+
   // استيراد الطلاب من Excel
   const [showImportModal, setShowImportModal] = useState(false);
   const [importDept, setImportDept] = useState('');
@@ -186,10 +209,12 @@ export default function StudentsScreen() {
       const matchesSearch = !searchQuery || 
         student.full_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         student.student_id.includes(searchQuery);
+      const studentStatus = (student as any).status || (student.is_active === false ? 'inactive' : 'active');
+      const matchesStatus = !selectedStatusFilter || studentStatus === selectedStatusFilter;
       
-      return matchesDept && matchesLevel && matchesSection && matchesSearch;
+      return matchesDept && matchesLevel && matchesSection && matchesSearch && matchesStatus;
     });
-  }, [students, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery]);
+  }, [students, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery, selectedStatusFilter]);
 
   // الشعب المتاحة
   const availableSections = useMemo(() => {
@@ -283,6 +308,49 @@ export default function StudentsScreen() {
       showMessage('خطأ', 'فشل في تغيير المستوى');
     } finally {
       setChangingLevel(false);
+    }
+  };
+
+  // ======== تغيير الحالة الجماعي (تخرج/إعادة/فصل/تجميد) ========
+  const handleBulkChangeStatus = async () => {
+    if (selectedIds.size === 0 || !statusToApply) return;
+    const so = getStatusInfo(statusToApply);
+    if (Platform.OS === 'web' && !window.confirm(
+      `تطبيق حالة "${so.label}" على ${selectedIds.size} طالب؟`
+    )) return;
+    setApplyingStatus(true);
+    try {
+      const body: any = {
+        student_ids: Array.from(selectedIds),
+        new_status: statusToApply,
+        reason: statusReason || '',
+      };
+      if (statusNewLevel) body.new_level = parseInt(statusNewLevel);
+      const res = await api.post('/student-status/bulk-change', body);
+      const data = res.data;
+      showMessage('تم', `${data.message}\nنجح: ${data.success_count} | فشل: ${data.failed_count}`);
+      setShowStatusModal(false);
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      setStatusReason('');
+      setStatusNewLevel('');
+      fetchData();
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل تغيير الحالة');
+    } finally {
+      setApplyingStatus(false);
+    }
+  };
+
+  // فتح سجل تاريخ الحالة لطالب
+  const openHistoryFor = async (student: any) => {
+    setHistoryFor(student);
+    setShowHistoryModal(true);
+    try {
+      const res = await api.get(`/student-status/${student.id}/history`);
+      setHistoryData(res.data?.items || []);
+    } catch {
+      setHistoryData([]);
     }
   };
 
@@ -755,7 +823,7 @@ export default function StudentsScreen() {
         </TouchableOpacity>
       )}
       <View style={styles.itemInfo}>
-        {/* الصف العلوي: الاسم + رقم القيد + الرقم المرجعي */}
+        {/* الصف العلوي: الاسم + رقم القيد + الرقم المرجعي + بادج الحالة */}
         <View style={styles.itemTopRow}>
           <Text style={styles.itemName} numberOfLines={1}>{item.full_name}</Text>
           <Text style={styles.itemMutedSm}>· {item.student_id}</Text>
@@ -764,6 +832,17 @@ export default function StudentsScreen() {
               {(item as any).reference_number}
             </Text>
           )}
+          {(() => {
+            const st = (item as any).status || (item.is_active === false ? 'inactive' : 'active');
+            if (st === 'active' || st === 'inactive') return null; // إخفاء البادج للحالة الاعتيادية
+            const si = getStatusInfo(st);
+            return (
+              <View style={[styles.statusInlineBadge, { backgroundColor: si.bg }]} testID={`status-${item.id}`}>
+                <Ionicons name={si.icon} size={10} color={si.color} />
+                <Text style={[styles.statusInlineBadgeText, { color: si.color }]}>{si.label}</Text>
+              </View>
+            );
+          })()}
         </View>
         {/* الصف السفلي: قسم/مستوى/شعبة + المقررات إن وُجدت */}
         <View style={styles.itemBottomRow}>
@@ -899,6 +978,20 @@ export default function StudentsScreen() {
             placeholderTextColor="#aaa"
           />
 
+          {/* الحالة */}
+          <View style={[styles.compactSelect, { flex: 0, minWidth: 110 }]}>
+            <Picker
+              selectedValue={selectedStatusFilter}
+              onValueChange={(v) => { setSelectedStatusFilter(v); setCurrentPage(1); }}
+              style={styles.pickerSlim}
+            >
+              <Picker.Item label="كل الحالات" value="" />
+              {STATUS_OPTIONS.map(o => (
+                <Picker.Item key={o.value} label={o.label} value={o.value} />
+              ))}
+            </Picker>
+          </View>
+
           {/* أزرار سريعة */}
           {canManageStudents && Platform.OS === 'web' && (
             <>
@@ -1006,6 +1099,14 @@ export default function StudentsScreen() {
                 >
                   <Ionicons name="trending-up" size={18} color="#fff" />
                   <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>تغيير المستوى</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#5e35b1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
+                  onPress={() => { setStatusToApply('repeat'); setStatusNewLevel(''); setStatusReason(''); setShowStatusModal(true); }}
+                  data-testid="bulk-change-status-btn"
+                >
+                  <Ionicons name="shuffle" size={18} color="#fff" />
+                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>تغيير الحالة</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={styles.bulkDeleteBtn} 
@@ -1522,6 +1623,169 @@ export default function StudentsScreen() {
         </View>
       </Modal>
 
+      {/* نافذة تغيير الحالة (تخرج/إعادة/فصل/تجميد) */}
+      <Modal visible={showStatusModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '95%', maxWidth: 440 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#ede7f6', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="shuffle" size={20} color="#5e35b1" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#222', textAlign: 'right' }}>
+                  تغيير حالة {selectedIds.size} طالب
+                </Text>
+                <Text style={{ fontSize: 11, color: '#888', textAlign: 'right' }}>
+                  اختر الحالة الجديدة (مع خيار نقل المستوى)
+                </Text>
+              </View>
+            </View>
+
+            <Text style={{ fontSize: 12, color: '#555', fontWeight: '700', marginBottom: 6, textAlign: 'right' }}>الحالة الجديدة:</Text>
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 12 }}>
+              {STATUS_OPTIONS.map(o => (
+                <TouchableOpacity
+                  key={o.value}
+                  data-testid={`status-opt-${o.value}`}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 5,
+                    paddingHorizontal: 12, paddingVertical: 9, borderRadius: 8,
+                    borderWidth: 1.5,
+                    borderColor: statusToApply === o.value ? o.color : '#e0e0e0',
+                    backgroundColor: statusToApply === o.value ? o.color : '#fafafa',
+                  }}
+                  onPress={() => setStatusToApply(o.value)}
+                >
+                  <Ionicons name={o.icon} size={15} color={statusToApply === o.value ? '#fff' : o.color} />
+                  <Text style={{ fontSize: 12, fontWeight: '700', color: statusToApply === o.value ? '#fff' : '#444' }}>
+                    {o.label}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <Text style={{ fontSize: 12, color: '#555', fontWeight: '700', marginBottom: 4, textAlign: 'right' }}>
+              المستوى الجديد (اختياري):
+            </Text>
+            <TextInput
+              data-testid="status-new-level"
+              style={{
+                borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8,
+                paddingHorizontal: 12, paddingVertical: 9, fontSize: 13,
+                textAlign: 'right', marginBottom: 4,
+              }}
+              placeholder="اتركه فارغاً للإبقاء على المستوى الحالي"
+              keyboardType="numeric"
+              value={statusNewLevel}
+              onChangeText={setStatusNewLevel}
+              placeholderTextColor="#aaa"
+            />
+            {statusToApply === 'repeat' && (
+              <Text style={{ fontSize: 10, color: '#5e35b1', marginBottom: 8, textAlign: 'right' }}>
+                💡 الإعادة: اتركه فارغاً ليبقى بنفس المستوى، أو اكتب رقم للنزول
+              </Text>
+            )}
+
+            <Text style={{ fontSize: 12, color: '#555', fontWeight: '700', marginBottom: 4, marginTop: 6, textAlign: 'right' }}>
+              السبب / ملاحظة (اختياري):
+            </Text>
+            <TextInput
+              data-testid="status-reason"
+              style={{
+                borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8,
+                paddingHorizontal: 12, paddingVertical: 9, fontSize: 13,
+                textAlign: 'right', minHeight: 50,
+              }}
+              placeholder="مثال: رسوب في 3 مقررات"
+              value={statusReason}
+              onChangeText={setStatusReason}
+              multiline
+              placeholderTextColor="#aaa"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 14 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 12, borderRadius: 10, alignItems: 'center' }}
+                onPress={() => setShowStatusModal(false)}
+              >
+                <Text style={{ color: '#666', fontWeight: '700' }}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                data-testid="apply-status-btn"
+                style={{ flex: 1, backgroundColor: getStatusInfo(statusToApply).color, padding: 12, borderRadius: 10, alignItems: 'center' }}
+                onPress={handleBulkChangeStatus}
+                disabled={applyingStatus}
+              >
+                {applyingStatus ? <ActivityIndicator color="#fff" /> : (
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>تطبيق</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* نافذة سجل تاريخ الحالة */}
+      <Modal visible={showHistoryModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 18, width: '95%', maxWidth: 480 }}>
+            <Text style={{ fontSize: 15, fontWeight: '800', color: '#222', marginBottom: 4, textAlign: 'right' }}>
+              سجل تغييرات الحالة
+            </Text>
+            <Text style={{ fontSize: 11, color: '#888', marginBottom: 12, textAlign: 'right' }}>
+              {historyFor?.full_name}
+            </Text>
+            {historyData.length === 0 ? (
+              <Text style={{ textAlign: 'center', color: '#aaa', padding: 20, fontSize: 12 }}>
+                لا يوجد سجل تغيير حالة سابق
+              </Text>
+            ) : (
+              <ScrollView style={{ maxHeight: 360 }}>
+                {historyData.map((h: any, i: number) => {
+                  const o = getStatusInfo(h.old_status);
+                  const n = getStatusInfo(h.new_status);
+                  return (
+                    <View key={i} style={{
+                      backgroundColor: '#fafafa', padding: 10, borderRadius: 8, marginBottom: 6,
+                      borderRightWidth: 3, borderRightColor: n.color,
+                    }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10, backgroundColor: o.bg }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: o.color }}>{o.label}</Text>
+                        </View>
+                        <Ionicons name="arrow-back" size={12} color="#888" />
+                        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 10, backgroundColor: n.bg }}>
+                          <Text style={{ fontSize: 10, fontWeight: '700', color: n.color }}>{n.label}</Text>
+                        </View>
+                        {h.old_level !== h.new_level && (
+                          <Text style={{ fontSize: 11, color: '#666', fontWeight: '700' }}>
+                            م{h.old_level} → م{h.new_level}
+                          </Text>
+                        )}
+                      </View>
+                      {h.reason ? (
+                        <Text style={{ fontSize: 11, color: '#555', marginTop: 5, textAlign: 'right' }}>
+                          📝 {h.reason}
+                        </Text>
+                      ) : null}
+                      <Text style={{ fontSize: 9, color: '#999', marginTop: 4, textAlign: 'right' }}>
+                        {h.changed_by_username || '—'} • {new Date(h.created_at || h.effective_date).toLocaleString('ar-EG')}
+                      </Text>
+                    </View>
+                  );
+                })}
+              </ScrollView>
+            )}
+            <TouchableOpacity
+              style={{ backgroundColor: '#f5f5f5', padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 10 }}
+              onPress={() => setShowHistoryModal(false)}
+            >
+              <Text style={{ color: '#666', fontWeight: '700' }}>إغلاق</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* نافذة الحذف الآمن للطالب */}
       <Modal visible={showSafeDeleteModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
@@ -1857,6 +2121,19 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 4,
     letterSpacing: 0.3,
+  },
+  statusInlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginRight: 4,
+  },
+  statusInlineBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
   },
   courseChipsRow: {
     flexDirection: 'row',

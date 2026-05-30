@@ -1,0 +1,37 @@
+{
+  "summary": "Tested integration of student-status feature into /students page (Frontend only per request). Visual UI works correctly: page loads, status filter Picker shows all 5 options + 'كل الحالات', selection-mode button ('تحديد') activates the bulk-action bar which contains both 'تغيير الحالة' (purple) and 'تغيير المستوى' (purple) buttons side-by-side, search works, status filter narrows results (graduated=0 confirms previous iteration's cleanup persisted), no SideMenu link to /student-status-manager, no console/page errors. HOWEVER, the new data-testid selectors required by the spec are NOT reachable in the DOM (bulk-change-status-btn, bulk-change-level-btn, enter-selection-mode-btn, status-opt-{value}, status-new-level, status-reason, apply-status-btn). Root cause: these were written as JSX prop `data-testid=...` on React-Native TouchableOpacity / TextInput components, but react-native-web only forwards the `testID` prop to the underlying DOM as `data-testid`. The existing working selectors (e.g. the badge at line 840 `testID={`status-${item.id}`}`) confirm this. As a result, automated tests using the spec selectors will fail even though the UI behaviour is correct.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "students.tsx bulk action bar", "issue": "Button uses prop `data-testid` instead of `testID` — attribute not rendered to DOM in react-native-web", "selector": "[data-testid=\"bulk-change-status-btn\"]", "priority": "HIGH"},
+      {"component": "students.tsx bulk action bar", "issue": "Same issue for bulk-change-level-btn", "selector": "[data-testid=\"bulk-change-level-btn\"]", "priority": "HIGH"},
+      {"component": "students.tsx header", "issue": "enter-selection-mode-btn not in DOM (data-testid vs testID)", "selector": "[data-testid=\"enter-selection-mode-btn\"]", "priority": "MEDIUM"},
+      {"component": "students.tsx status modal", "issue": "status-opt-{value}, status-new-level, status-reason, apply-status-btn likely all use `data-testid` instead of `testID` (lines 1649, 1671, 1693, 1714). Not verified in DOM because modal could not be opened via spec selector — but same pattern in source code.", "selector": "[data-testid=\"status-opt-*\"], [data-testid=\"status-new-level\"], [data-testid=\"status-reason\"], [data-testid=\"apply-status-btn\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/students top filter bar", "issues": ["شريط الفلاتر مرتب ونظيف؛ الـ status Picker الجديد يظهر بمحاذاة الأقسام والمستوى والشعبة بدون تكدّس."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_student_status.py (from prev iteration, untouched)"],
+  "action_items": [
+    "In /app/frontend/app/students.tsx, rename every JSX prop `data-testid=\"...\"` (on TouchableOpacity / TextInput / View) to `testID=\"...\"`. Specifically lines: 1001, 1013, 1028, 1098 (bulk-change-level-btn), 1106 (bulk-change-status-btn), 1144 (enter-selection-mode-btn), 1607 (select-level-{level}), 1649 (status-opt-{value}), 1671 (status-new-level), 1693 (status-reason), 1714 (apply-status-btn), 1826, 1834. The badge already uses `testID` correctly (line 840) and resolves to DOM.",
+    "After the rename, re-test the apply-status-btn → POST /api/student-status/bulk-change flow end-to-end."
+  ],
+  "critical_code_review_comments": [
+    "students.tsx is now ~2384 lines — clearly over the 700-line guideline. Consider splitting: filter bar component, bulk-actions bar, status modal, level modal, delete modal each into separate files under /app/frontend/src/components/students/.",
+    "STATUS_OPTIONS array is duplicated across pages; extract to /src/constants/studentStatus.ts and import in both students.tsx and any future consumer.",
+    "Mixing `data-testid` (HTML attribute) and `testID` (RN prop) inside the same RN component tree is the root cause of the missing selectors — adopt `testID` everywhere for consistency."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "not tested (skipped per request)", "frontend": "UI behaviour 100%, test-selector contract 30% (status-{id} works; new bulk/modal selectors do not appear in DOM)"},
+  "test_credentials": "admin / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Previous iteration's status changes were cleaned up — confirmed: graduated filter returns 0 students.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "After main agent replaces `data-testid` with `testID` in students.tsx, run the same flow: login admin → /students → pick faculty/dept → click 'تحديد' → click student row → expect [data-testid=bulk-change-status-btn] visible → click → modal opens with status-opt-{value} buttons + status-new-level + status-reason + apply-status-btn. POST /api/student-status/bulk-change should succeed and badge status-{studentId} appears for non-active statuses. Status filter Picker (3rd <select> on the page) already filters correctly server-side.",
+  "rca of the issue": "react-native-web maps RN's `testID` prop to the DOM attribute `data-testid`. JSX `data-testid` is treated as an unknown prop on RN components (TouchableOpacity, TextInput) and silently dropped — it does NOT reach the HTML output. The fix is purely mechanical: rename the prop to `testID`. The existing working selector `status-{item.id}` (line 840) uses `testID` correctly and is reachable in DOM."
+}
