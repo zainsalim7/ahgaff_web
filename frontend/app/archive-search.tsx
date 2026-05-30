@@ -67,7 +67,10 @@ export default function ArchiveSearchScreen() {
     }
   }, [q, filter]);
 
-  const go = (semesterId: string) => router.push(`/archive-details?semesterId=${semesterId}` as any);
+  const goSemester = (semesterId: string) => router.push(`/archive-details?semesterId=${semesterId}` as any);
+  const goStudent = (s: any) => router.push(`/archive-student-report?semesterId=${s.semester_id}&studentId=${s.id}` as any);
+  const goTeacher = (t: any) => router.push(`/archive-teacher-report?semesterId=${t.semester_id}&teacherId=${t.id}` as any);
+  const goCourse = (c: any) => router.push(`/archive-course-history?courseCode=${encodeURIComponent(c.code || '')}` as any);
 
   return (
     <>
@@ -154,7 +157,7 @@ export default function ArchiveSearchScreen() {
                     <TouchableOpacity
                       key={`s-${s.id}-${i}`}
                       style={styles.resultRow}
-                      onPress={() => go(s.semester_id)}
+                      onPress={() => goStudent(s)}
                       testID={`result-student-${s.id}`}
                     >
                       <View style={[styles.resIcon, { backgroundColor: '#1565c020' }]}>
@@ -176,7 +179,7 @@ export default function ArchiveSearchScreen() {
                     <TouchableOpacity
                       key={`t-${t.id}-${i}`}
                       style={styles.resultRow}
-                      onPress={() => go(t.semester_id)}
+                      onPress={() => goTeacher(t)}
                       testID={`result-teacher-${t.id}`}
                     >
                       <View style={[styles.resIcon, { backgroundColor: '#ef6c0020' }]}>
@@ -198,7 +201,7 @@ export default function ArchiveSearchScreen() {
                     <TouchableOpacity
                       key={`c-${c.id}-${i}`}
                       style={styles.resultRow}
-                      onPress={() => go(c.semester_id)}
+                      onPress={() => goCourse(c)}
                       testID={`result-course-${c.id}`}
                     >
                       <View style={[styles.resIcon, { backgroundColor: '#2e7d3220' }]}>

@@ -300,3 +300,249 @@ async def get_archive_teachers(semester_id: str, current_user: dict = Depends(ge
         result.append({**info, **w, "completion_pct": completion})
     result.sort(key=lambda x: -x.get("courses_count", 0))
     return {"semester_id": semester_id, "teachers": result, "total": len(result)}
+
+
+# ====================================================================
+# === تقارير فردية متعمقة من الأرشيف ==================================
+# ====================================================================
+
+def _attendance_stats(att_list):
+    """يحسب إحصائيات حضور موحّدة من قائمة سجلات الحضور."""
+    present = sum(1 for x in att_list if x.get("status") == "present")
+    absent = sum(1 for x in att_list if x.get("status") == "absent")
+    late = sum(1 for x in att_list if x.get("status") == "late")
+    excused = sum(1 for x in att_list if x.get("status") == "excused")
+    total = present + absent + late + excused
+    rate = round(((present + late) / total * 100) if total else 0, 1)
+    return {"present": present, "absent": absent, "late": late,
+            "excused": excused, "total": total, "attendance_pct": rate}
+
+
+@router.get("/archives/{semester_id}/students/{student_id}")
+async def get_archive_student_report(
+    semester_id: str, student_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """تقرير حضور طالب محدد في فصل مؤرشف:
+    - بيانات الطالب من snapshot
+    - كل مقرراته في الفصل + معلمها + إحصائيات حضوره فيها
+    - الملخص العام
+    """
+    _require_view(current_user)
+    db = get_db()
+    a = await _load_archive(db, semester_id)
+
+    students_map = {s["id"]: s for s in a.get("students_snapshot", [])}
+    student = students_map.get(student_id)
+    if not student:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود في أرشيف هذا الفصل")
+
+    enrollments = [e for e in a.get("enrollments", [])
+                   if str(e.get("student_id")) == student_id]
+    course_ids = {str(e.get("course_id")) for e in enrollments if e.get("course_id")}
+    courses_map = {c["id"]: c for c in a.get("courses", [])}
+    attendance = [att for att in a.get("attendance", [])
+                  if str(att.get("student_id")) == student_id]
+
+    # تجميع حضور الطالب لكل مقرر
+    courses_report = []
+    for cid in course_ids:
+        c = courses_map.get(cid)
+        if not c:
+            continue
+        c_att = [x for x in attendance if str(x.get("course_id")) == cid]
+        stats = _attendance_stats(c_att)
+        courses_report.append({
+            "course_id": cid,
+            "course_name": c.get("name"),
+            "course_code": c.get("code"),
+            "section": c.get("section"),
+            "teacher_id": c.get("teacher_id"),
+            "teacher_name": c.get("teacher_name"),
+            "credit_hours": c.get("credit_hours", 3),
+            "lectures_total": c.get("lectures_total", 0),
+            "lectures_completed": c.get("lectures_completed", 0),
+            **stats,
+        })
+    courses_report.sort(key=lambda x: x.get("course_name") or "")
+
+    overall = _attendance_stats(attendance)
+
+    return {
+        "semester_id": semester_id,
+        "semester_name": a.get("semester_name"),
+        "academic_year": a.get("academic_year"),
+        "student": student,
+        "courses": courses_report,
+        "courses_count": len(courses_report),
+        "overall": overall,
+    }
+
+
+@router.get("/archives/students/{student_id}/history")
+async def get_archive_student_history(
+    student_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """السجل الأكاديمي الكامل للطالب عبر كل الفصول المؤرشفة:
+    قائمة بالفصول التي درس فيها + ملخص لكل فصل.
+    """
+    _require_view(current_user)
+    db = get_db()
+    history = []
+    async for a in db.semester_archives.find({}).sort("archived_at", -1):
+        students_map = {s["id"]: s for s in a.get("students_snapshot", [])}
+        student = students_map.get(student_id)
+        if not student:
+            continue
+        enrollments = [e for e in a.get("enrollments", [])
+                       if str(e.get("student_id")) == student_id]
+        attendance = [att for att in a.get("attendance", [])
+                      if str(att.get("student_id")) == student_id]
+        overall = _attendance_stats(attendance)
+        history.append({
+            "semester_id": a.get("semester_id"),
+            "semester_name": a.get("semester_name"),
+            "academic_year": a.get("academic_year"),
+            "archived_at": a.get("archived_at"),
+            "courses_count": len({str(e.get("course_id")) for e in enrollments}),
+            "overall_attendance": overall,
+            "student_snapshot": student,
+        })
+    return {
+        "student_id": student_id,
+        "history": history,
+        "total_semesters": len(history),
+    }
+
+
+@router.get("/archives/{semester_id}/teachers/{teacher_id}")
+async def get_archive_teacher_report(
+    semester_id: str, teacher_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """نصاب معلم محدد في فصل مؤرشف:
+    - بيانات المعلم من snapshot
+    - كل مقرراته + شعبها + إحصائيات المحاضرات
+    - إجمالي النصاب (مقررات، طلاب، ساعات، نسبة الإنجاز)
+    """
+    _require_view(current_user)
+    db = get_db()
+    a = await _load_archive(db, semester_id)
+
+    teachers_map = {t["id"]: t for t in a.get("teachers_snapshot", [])}
+    teacher = teachers_map.get(teacher_id)
+    if not teacher:
+        raise HTTPException(status_code=404, detail="المعلم غير موجود في أرشيف هذا الفصل")
+
+    courses = [c for c in a.get("courses", []) if str(c.get("teacher_id")) == teacher_id]
+
+    total_credit = sum(int(c.get("credit_hours") or 0) for c in courses)
+    total_students = sum(int(c.get("students_count") or 0) for c in courses)
+    total_lectures = sum(int(c.get("lectures_total") or 0) for c in courses)
+    completed_lectures = sum(int(c.get("lectures_completed") or 0) for c in courses)
+    completion_pct = round((completed_lectures / total_lectures * 100) if total_lectures else 0, 1)
+
+    return {
+        "semester_id": semester_id,
+        "semester_name": a.get("semester_name"),
+        "academic_year": a.get("academic_year"),
+        "teacher": teacher,
+        "courses": courses,
+        "summary": {
+            "courses_count": len(courses),
+            "total_credit_hours": total_credit,
+            "total_students": total_students,
+            "total_lectures": total_lectures,
+            "completed_lectures": completed_lectures,
+            "completion_pct": completion_pct,
+        },
+    }
+
+
+@router.get("/archives/teachers/{teacher_id}/history")
+async def get_archive_teacher_history(
+    teacher_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """السجل التدريسي الكامل للمعلم عبر كل الفصول المؤرشفة."""
+    _require_view(current_user)
+    db = get_db()
+    history = []
+    grand_total = {"courses": 0, "students": 0, "credit_hours": 0,
+                   "lectures": 0, "completed": 0}
+    async for a in db.semester_archives.find({}).sort("archived_at", -1):
+        teachers_map = {t["id"]: t for t in a.get("teachers_snapshot", [])}
+        teacher = teachers_map.get(teacher_id)
+        if not teacher:
+            continue
+        courses = [c for c in a.get("courses", []) if str(c.get("teacher_id")) == teacher_id]
+        total_credit = sum(int(c.get("credit_hours") or 0) for c in courses)
+        total_students = sum(int(c.get("students_count") or 0) for c in courses)
+        total_lectures = sum(int(c.get("lectures_total") or 0) for c in courses)
+        completed_lectures = sum(int(c.get("lectures_completed") or 0) for c in courses)
+        completion_pct = round((completed_lectures / total_lectures * 100)
+                               if total_lectures else 0, 1)
+        grand_total["courses"] += len(courses)
+        grand_total["students"] += total_students
+        grand_total["credit_hours"] += total_credit
+        grand_total["lectures"] += total_lectures
+        grand_total["completed"] += completed_lectures
+        history.append({
+            "semester_id": a.get("semester_id"),
+            "semester_name": a.get("semester_name"),
+            "academic_year": a.get("academic_year"),
+            "archived_at": a.get("archived_at"),
+            "courses_count": len(courses),
+            "total_credit_hours": total_credit,
+            "total_students": total_students,
+            "total_lectures": total_lectures,
+            "completed_lectures": completed_lectures,
+            "completion_pct": completion_pct,
+            "teacher_snapshot": teacher,
+        })
+    grand_pct = round((grand_total["completed"] / grand_total["lectures"] * 100)
+                      if grand_total["lectures"] else 0, 1)
+    return {
+        "teacher_id": teacher_id,
+        "history": history,
+        "total_semesters": len(history),
+        "grand_total": {**grand_total, "completion_pct": grand_pct},
+    }
+
+
+@router.get("/archives/courses/{course_code}/history")
+async def get_archive_course_history(
+    course_code: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """تاريخ مقرر عبر الفصول المؤرشفة بناءً على كود المقرر.
+    يعرض كل مرة دُرّس فيها المقرر وبأي معلم وكم طالب."""
+    _require_view(current_user)
+    db = get_db()
+    instances = []
+    async for a in db.semester_archives.find({}).sort("archived_at", -1):
+        matches = [c for c in a.get("courses", [])
+                   if (c.get("code") or "").lower() == (course_code or "").lower()]
+        for c in matches:
+            instances.append({
+                "semester_id": a.get("semester_id"),
+                "semester_name": a.get("semester_name"),
+                "academic_year": a.get("academic_year"),
+                "course_id": c.get("id"),
+                "course_name": c.get("name"),
+                "course_code": c.get("code"),
+                "section": c.get("section"),
+                "teacher_id": c.get("teacher_id"),
+                "teacher_name": c.get("teacher_name"),
+                "department_name": c.get("department_name"),
+                "students_count": c.get("students_count"),
+                "lectures_total": c.get("lectures_total"),
+                "lectures_completed": c.get("lectures_completed"),
+                "completion_pct": c.get("completion_pct"),
+            })
+    return {
+        "course_code": course_code,
+        "instances": instances,
+        "total_instances": len(instances),
+    }

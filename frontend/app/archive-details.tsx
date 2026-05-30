@@ -231,7 +231,12 @@ export default function ArchiveDetailsScreen() {
               <Text style={styles.emptyText}>لا توجد نتائج</Text>
             ) : (
               filtered.courses.map((c: any) => (
-                <View key={c.id} style={styles.rowCard} testID={`archive-course-${c.id}`}>
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.rowCard}
+                  onPress={() => router.push(`/archive-course-history?courseCode=${encodeURIComponent(c.code || '')}` as any)}
+                  testID={`archive-course-${c.id}`}
+                >
                   <View style={[styles.rowIcon, { backgroundColor: '#2e7d3220' }]}>
                     <Ionicons name="book" size={18} color="#2e7d32" />
                   </View>
@@ -248,7 +253,8 @@ export default function ArchiveDetailsScreen() {
                       </Text>
                     </View>
                   </View>
-                </View>
+                  <Ionicons name="chevron-back" size={16} color="#bbb" />
+                </TouchableOpacity>
               ))
             )
           )}
@@ -258,7 +264,12 @@ export default function ArchiveDetailsScreen() {
               <Text style={styles.emptyText}>لا توجد نتائج</Text>
             ) : (
               filtered.students.map((st: any) => (
-                <View key={st.id} style={styles.rowCard} testID={`archive-student-${st.id}`}>
+                <TouchableOpacity
+                  key={st.id}
+                  style={styles.rowCard}
+                  onPress={() => router.push(`/archive-student-report?semesterId=${semesterId}&studentId=${st.id}` as any)}
+                  testID={`archive-student-${st.id}`}
+                >
                   <View style={[styles.rowIcon, { backgroundColor: '#1565c020' }]}>
                     <Ionicons name="person" size={18} color="#1565c0" />
                   </View>
@@ -271,7 +282,8 @@ export default function ArchiveDetailsScreen() {
                       {st.attendance_pct}%
                     </Text>
                   </View>
-                </View>
+                  <Ionicons name="chevron-back" size={14} color="#bbb" />
+                </TouchableOpacity>
               ))
             )
           )}
@@ -281,7 +293,12 @@ export default function ArchiveDetailsScreen() {
               <Text style={styles.emptyText}>لا توجد نتائج</Text>
             ) : (
               filtered.teachers.map((t: any) => (
-                <View key={t.id} style={styles.rowCard} testID={`archive-teacher-${t.id}`}>
+                <TouchableOpacity
+                  key={t.id}
+                  style={styles.rowCard}
+                  onPress={() => router.push(`/archive-teacher-report?semesterId=${semesterId}&teacherId=${t.id}` as any)}
+                  testID={`archive-teacher-${t.id}`}
+                >
                   <View style={[styles.rowIcon, { backgroundColor: '#ef6c0020' }]}>
                     <Ionicons name="school" size={18} color="#ef6c00" />
                   </View>
@@ -299,7 +316,8 @@ export default function ArchiveDetailsScreen() {
                   <Text style={[styles.pctText, { color: pctColor(t.completion_pct) }]}>
                     {t.completion_pct}%
                   </Text>
-                </View>
+                  <Ionicons name="chevron-back" size={14} color="#bbb" />
+                </TouchableOpacity>
               ))
             )
           )}
