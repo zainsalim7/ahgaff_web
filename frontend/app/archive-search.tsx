@@ -1,7 +1,7 @@
 /**
  * البحث في الأرشيف الدراسي - بحث شامل عبر كل الفصول المؤرشفة
  */
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Platform, TextInput,
