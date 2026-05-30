@@ -1,0 +1,46 @@
+{
+  "summary": "Tested 5 NEW archive reports endpoints + regression. Backend: 22/24 pytest passed, 1 legitimate skip (no archives in DB), 1 PRE-EXISTING 500 bug on /api/semesters/{id}/restore when invalid ObjectId is passed (unrelated to the 5 new endpoints). All 5 new archive report endpoints return correct status codes: 200 (admin), 403 (teacher), 404 (non-existent archive/student/teacher), and proper response shapes (history arrays, grand_total summary, case-insensitive course code matching). Frontend: All 5 new report pages render correctly with friendly Arabic empty/error states. Route wiring in archive-details and archive-search points to the correct new report pages.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/semesters/{id}/restore", "issue": "Returns 500 (InvalidId raw exception) when an invalid ObjectId is passed (e.g. 'NONEXISTENT_ID'). Should be wrapped in try/except and return 400/404 with friendly message. Pre-existing - not part of the 5 new endpoints. Code location: backend/server.py L12320 in restore_semester_from_archive."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All new archive report pages (/archive-student-report, /archive-teacher-report, /archive-student-history, /archive-teacher-history, /archive-course-history)", "issues": ["Header title appears as the raw route name (e.g. 'archive-student-report', 'archive-teacher-report') on the top app bar instead of the Arabic title configured via <Stack.Screen options={{ title: '...' }} />. The Stack.Screen title is set inside the component, but the bar still shows the file route name - likely because the title is rendered conditionally after data is loaded but the app-shell header reads the title once on mount. Repro: visit /archive-teacher-report?semesterId=N&teacherId=X -> top bar shows 'archive-teacher-report' instead of 'تقرير عبء معلم'. Fix: render <Stack.Screen options={{ title: '...' }} /> at the top of the component before the loading/error early-returns so the navigation header gets the title regardless of data state."]},
+      {"screen": "Header title clipping (pre-existing from iter 21 & 22)", "issues": ["Same header title clipping pattern observed across archive pages - left/right portions clipped on mobile width 390."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_archive_reports.py",
+    "/app/test_reports/pytest/archive_reports_results.xml"
+  ],
+  "action_items": [
+    "Move <Stack.Screen options={{ title: '...' }} /> above the loading/error early-returns in the 5 new archive report pages so the navigation header displays the Arabic title instead of the file-route name.",
+    "(Pre-existing, separate from this iteration) Wrap ObjectId(...) call in /api/semesters/{id}/restore with try/except InvalidId and return 400 with a friendly message instead of 500.",
+    "(Pre-existing carryover) Fix header title clipping across archive pages on narrow viewports."
+  ],
+  "critical_code_review_comments": [
+    "archives.py: Route ordering is correct - specific paths (/archives/search, /archives/students/{id}/history, /archives/teachers/{id}/history, /archives/courses/{code}/history) are declared BEFORE the generic /archives/{semester_id}/* paths. No collision risk.",
+    "archives.py L309 _attendance_stats: Cleanly extracted helper used across endpoints - good DRY.",
+    "archives.py L382-416 student history & L463-511 teacher history: Both iterate ALL semester_archives in DB. For tenants with many archived semesters this becomes O(N) per request; consider an index hint `{'teachers_snapshot.id': 1}` / `{'students_snapshot.id': 1}` for future scale.",
+    "archives.py L514-548 course history: Comparison is `(c.get('code') or '').lower() == (course_code or '').lower()` - case-insensitive but exact-match only (no partial match). This matches the spec but should be documented (e.g. 'CS' will NOT match 'CS101').",
+    "archives.py: All 5 new endpoints gate on _require_view(VIEW_ARCHIVE) - confirmed admin allowed, teacher 403. No SEARCH_ARCHIVE permission needed here - correct per spec.",
+    "archives.py L321-379 student report: Uses set(course_ids) so a student enrolled in the same course twice (shouldn't happen) won't be double-counted - safe.",
+    "Frontend new pages: All consume `?semesterId=`, `?studentId=`, `?teacherId=`, `?courseCode=` URL params via useLocalSearchParams - consistent with rest of codebase.",
+    "Frontend Stack.Screen title bug: Stack.Screen is rendered AFTER the loading/error early returns, so the navigation header shows the file route slug instead of the Arabic title - placement should be moved before the conditional returns (or duplicated in each branch)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_archive_reports.py"
+  ],
+  "success_rate": {"backend": "95.8% (22/23 active tests pass; 1 pre-existing 500 on /semesters/{id}/restore with invalid ObjectId)", "frontend": "95% (all 5 new pages load with correct empty/error states + correct navigation wiring; header title falls back to route slug due to Stack.Screen placement)"},
+  "test_credentials": "admin/admin123 (verified). teacher180156/teacher123 (verified - returns 403 on all archive endpoints as expected).",
+  "seed_data_creation": "None. semester_archives collection is empty. The success-path response shape was validated via empty arrays + grand_total field presence; cannot test actual archive content shape without a real archived semester.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_archive_reports.py. Run: REACT_APP_BACKEND_URL=https://schedule-hub-272.preview.emergentagent.com python -m pytest backend/tests/test_archive_reports.py -v. The skipped test (test_admin_existing_archive_student_404) will auto-activate once at least one archived semester exists in DB. The /api/semesters/{id}/restore 500 bug should be fixed independently (try/except InvalidId in server.py around L12320). Frontend pages all render in error/empty states only since no archives exist; full success-path UI (4 stat cards, 6 stat cards, courses table, instances list) was NOT visually verified because no seed data exists - main agent should create one archived semester in a staging environment to verify UI rendering of populated state.",
+  "rca of the issue": "Backend 500 on /semesters/{id}/restore: Unhandled bson.errors.InvalidId raised when ObjectId('NONEXISTENT_ID') is called. Stack trace in /var/log/supervisor/backend.err.log confirms this. Fix: wrap with `try: oid = ObjectId(semester_id) except InvalidId: raise HTTPException(404, 'الفصل غير موجود')`. Frontend Stack.Screen title regression: title falls back to route slug because <Stack.Screen options={{title:'...'}}/> is rendered AFTER `if (loading) return ...` and `if (error) return ...` early returns. Move it above conditionals."
+}
