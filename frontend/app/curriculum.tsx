@@ -169,6 +169,129 @@ export default function CurriculumScreen() {
     }
   };
 
+  // ===== مسح خطة القسم =====
+  const wipeDepartment = async () => {
+    if (!selectedDept) return;
+    const deptObj = departments.find((d: any) => (d.id || d._id) === selectedDept);
+    const deptName = deptObj?.name || 'القسم';
+    if (Platform.OS === 'web') {
+      const c1 = window.confirm(`⚠️ تحذير خطير\n\nستحذف كامل خطة قسم "${deptName}" نهائياً.\nهل أنت متأكد؟`);
+      if (!c1) return;
+      const c2 = window.prompt(`للتأكيد، اكتب اسم القسم بالضبط:\n"${deptName}"`);
+      if (c2 !== deptName) {
+        window.alert('الاسم غير مطابق - تم إلغاء العملية');
+        return;
+      }
+    }
+    try {
+      const res = await api.delete(`/curriculum/department/${selectedDept}/wipe`);
+      const r = res.data;
+      const msg = `${r.message}\nتم إلغاء ${r.assignments_cleared} إسناد معلم`;
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
+      fetchGrid();
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'فشل المسح';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
+    }
+  };
+
+  // ===== تحميل نموذج Excel =====
+  const downloadTemplate = async () => {
+    try {
+      const res = await api.get('/template/curriculum', { responseType: 'blob' as any });
+      if (Platform.OS === 'web') {
+        const url = window.URL.createObjectURL(new Blob([res.data]));
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'curriculum_template.xlsx';
+        a.click();
+        window.URL.revokeObjectURL(url);
+      } else {
+        Alert.alert('تم', 'تم تحميل النموذج');
+      }
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'فشل التحميل';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
+    }
+  };
+
+  // ===== رفع Excel - معاينة ثم تنفيذ =====
+  const [uploadPreview, setUploadPreview] = useState<any>(null);
+  const [uploadFile, setUploadFile] = useState<any>(null);
+  const [uploadMode, setUploadMode] = useState<'merge' | 'replace'>('merge');
+  const [showUpload, setShowUpload] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  const pickAndPreview = async () => {
+    if (Platform.OS !== 'web') {
+      Alert.alert('غير مدعوم', 'الرفع متاح حالياً عبر المتصفح فقط');
+      return;
+    }
+    if (!selectedDept) {
+      window.alert('اختر القسم أولاً');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls,.csv';
+    input.onchange = async (ev: any) => {
+      const f = ev.target.files?.[0];
+      if (!f) return;
+      setUploadFile(f);
+      setUploading(true);
+      try {
+        const fd = new FormData();
+        fd.append('file', f);
+        const res = await api.post(
+          `/curriculum/upload/preview?department_id=${selectedDept}`,
+          fd,
+          { headers: { 'Content-Type': 'multipart/form-data' } }
+        );
+        setUploadPreview(res.data);
+        setShowUpload(true);
+      } catch (e: any) {
+        window.alert(e?.response?.data?.detail || 'فشل معاينة الملف');
+      } finally {
+        setUploading(false);
+      }
+    };
+    input.click();
+  };
+
+  const executeUpload = async () => {
+    if (!uploadFile || !selectedDept) return;
+    if (uploadMode === 'replace') {
+      const ok = window.confirm('وضع الاستبدال سيمسح خطة القسم القديمة بالكامل قبل الرفع. متأكد؟');
+      if (!ok) return;
+    }
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', uploadFile);
+      const res = await api.post(
+        `/curriculum/upload?department_id=${selectedDept}&mode=${uploadMode}`,
+        fd,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+      );
+      const r = res.data;
+      window.alert(
+        `${r.message}\n` +
+        `• تم إنشاء: ${r.created}\n` +
+        `• تخطي مكرر: ${r.skipped_duplicates_or_existing}\n` +
+        `• خارج نطاق المستوى: ${r.out_of_level}` +
+        (r.wiped_in_replace_mode ? `\n• تم مسح ${r.wiped_in_replace_mode} قديم` : '')
+      );
+      setShowUpload(false);
+      setUploadFile(null);
+      setUploadPreview(null);
+      fetchGrid();
+    } catch (e: any) {
+      window.alert(e?.response?.data?.detail || 'فشل الرفع');
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: 'الخطة الدراسية', headerBackTitle: 'رجوع' }} />
@@ -209,6 +332,14 @@ export default function CurriculumScreen() {
             <Ionicons name="add-circle" size={16} color="#2e7d32" />
             <Text style={[styles.actBtnText, { color: '#2e7d32' }]}>إضافة مقرر</Text>
           </TouchableOpacity>
+          <TouchableOpacity style={styles.actBtn} onPress={downloadTemplate} testID="dl-template-btn">
+            <Ionicons name="download" size={16} color="#1565c0" />
+            <Text style={[styles.actBtnText, { color: '#1565c0' }]}>تحميل نموذج</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actBtn} onPress={pickAndPreview} disabled={uploading} testID="upload-excel-btn">
+            {uploading ? <ActivityIndicator size="small" color="#2e7d32" /> : <Ionicons name="cloud-upload" size={16} color="#2e7d32" />}
+            <Text style={[styles.actBtnText, { color: '#2e7d32' }]}>رفع من Excel</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.actBtn}
             onPress={() => generateOfferings()}
@@ -220,13 +351,9 @@ export default function CurriculumScreen() {
               توليد للفصل النشط
             </Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.actBtn} onPress={() => setShowImport(true)} testID="import-btn">
-            <Ionicons name="archive" size={16} color="#6a1b9a" />
-            <Text style={[styles.actBtnText, { color: '#6a1b9a' }]}>استيراد من الأرشيف</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actBtn} onPress={backfillFromActive} testID="backfill-btn">
-            <Ionicons name="git-merge" size={16} color="#ef6c00" />
-            <Text style={[styles.actBtnText, { color: '#ef6c00' }]}>بناء من المقررات النشطة</Text>
+          <TouchableOpacity style={[styles.actBtn, { backgroundColor: '#ffebee' }]} onPress={wipeDepartment} testID="wipe-dept-btn">
+            <Ionicons name="trash" size={16} color="#c62828" />
+            <Text style={[styles.actBtnText, { color: '#c62828' }]}>مسح خطة القسم</Text>
           </TouchableOpacity>
         </View>
 
@@ -361,6 +488,126 @@ export default function CurriculumScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* Modal معاينة رفع Excel */}
+        <Modal visible={showUpload} transparent animationType="fade" onRequestClose={() => setShowUpload(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modal, { maxWidth: 580 }]}>
+              <Text style={styles.modalTitle}>معاينة رفع الخطة من Excel</Text>
+              {uploadPreview && (
+                <ScrollView style={{ maxHeight: 400 }}>
+                  <View style={styles.previewSummary}>
+                    <Text style={styles.previewSummaryText}>
+                      📋 القسم: <Text style={{ fontWeight: '800' }}>{uploadPreview.department?.name}</Text>
+                    </Text>
+                    <Text style={styles.previewSummaryText}>
+                      📚 إجمالي الصفوف: {uploadPreview.total_rows_read}
+                    </Text>
+                  </View>
+
+                  <View style={styles.previewStats}>
+                    <View style={[styles.statBox, { backgroundColor: '#e8f5e9' }]}>
+                      <Text style={[styles.statNum, { color: '#2e7d32' }]}>{uploadPreview.valid_count}</Text>
+                      <Text style={styles.statText}>صالح</Text>
+                    </View>
+                    <View style={[styles.statBox, { backgroundColor: '#fff3e0' }]}>
+                      <Text style={[styles.statNum, { color: '#ef6c00' }]}>{uploadPreview.existing_in_db_count}</Text>
+                      <Text style={styles.statText}>موجود مسبقاً</Text>
+                    </View>
+                    <View style={[styles.statBox, { backgroundColor: '#ffebee' }]}>
+                      <Text style={[styles.statNum, { color: '#c62828' }]}>{uploadPreview.out_of_level_count}</Text>
+                      <Text style={styles.statText}>خارج النطاق</Text>
+                    </View>
+                    <View style={[styles.statBox, { backgroundColor: '#f3e5f5' }]}>
+                      <Text style={[styles.statNum, { color: '#6a1b9a' }]}>{uploadPreview.duplicates_in_file_count}</Text>
+                      <Text style={styles.statText}>مكرر في الملف</Text>
+                    </View>
+                  </View>
+
+                  {/* وضع الرفع */}
+                  <Text style={styles.previewSectionTitle}>وضع الرفع:</Text>
+                  <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
+                    <TouchableOpacity
+                      style={[styles.modeBtn, uploadMode === 'merge' && styles.modeBtnActive]}
+                      onPress={() => setUploadMode('merge')}
+                      testID="mode-merge"
+                    >
+                      <Text style={[styles.modeBtnText, uploadMode === 'merge' && { color: '#fff' }]}>دمج (إضافة فقط)</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.modeBtn, uploadMode === 'replace' && { backgroundColor: '#c62828' }]}
+                      onPress={() => setUploadMode('replace')}
+                      testID="mode-replace"
+                    >
+                      <Text style={[styles.modeBtnText, uploadMode === 'replace' && { color: '#fff' }]}>استبدال كامل</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* عينة من الصالح */}
+                  {uploadPreview.valid_sample?.length > 0 && (
+                    <>
+                      <Text style={styles.previewSectionTitle}>عينة من المقررات الصالحة:</Text>
+                      {uploadPreview.valid_sample.slice(0, 8).map((r: any, i: number) => (
+                        <View key={i} style={styles.previewItem}>
+                          <Text style={styles.previewItemText} numberOfLines={1}>
+                            {r.code} • {r.name} • م{r.level} ف{r.term} • {r.credit_hours} س.م
+                          </Text>
+                        </View>
+                      ))}
+                      {uploadPreview.valid_sample.length > 8 && (
+                        <Text style={styles.previewMore}>... و{uploadPreview.valid_count - 8} مقرر آخر</Text>
+                      )}
+                    </>
+                  )}
+
+                  {/* أخطاء التحليل */}
+                  {uploadPreview.parse_errors?.length > 0 && (
+                    <>
+                      <Text style={[styles.previewSectionTitle, { color: '#c62828' }]}>أخطاء:</Text>
+                      {uploadPreview.parse_errors.slice(0, 5).map((e: string, i: number) => (
+                        <Text key={i} style={styles.errorItem}>• {e}</Text>
+                      ))}
+                    </>
+                  )}
+
+                  {/* الموجود مسبقاً */}
+                  {uploadPreview.existing_in_db?.length > 0 && (
+                    <>
+                      <Text style={[styles.previewSectionTitle, { color: '#ef6c00' }]}>موجود مسبقاً (سيتم تخطيه):</Text>
+                      {uploadPreview.existing_in_db.slice(0, 5).map((r: any, i: number) => (
+                        <Text key={i} style={styles.warnItem}>• {r.code} - {r.name}</Text>
+                      ))}
+                    </>
+                  )}
+                </ScrollView>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 6, marginTop: 12 }}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: '#e0e0e0' }]}
+                  onPress={() => { setShowUpload(false); setUploadFile(null); setUploadPreview(null); }}
+                  testID="cancel-upload"
+                >
+                  <Text style={[styles.modalBtnText, { color: '#555' }]}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, {
+                    backgroundColor: uploadPreview?.valid_count > 0 ? '#2e7d32' : '#ccc',
+                  }]}
+                  onPress={executeUpload}
+                  disabled={uploading || !uploadPreview?.valid_count}
+                  testID="execute-upload"
+                >
+                  {uploading ? <ActivityIndicator size="small" color="#fff" /> : (
+                    <Text style={styles.modalBtnText}>
+                      تنفيذ الرفع ({uploadPreview?.valid_count || 0})
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
@@ -459,4 +706,20 @@ const styles = StyleSheet.create({
   },
   archiveItemName: { fontSize: 13, fontWeight: '700', color: '#222' },
   archiveItemMeta: { fontSize: 11, color: '#888', marginTop: 2 },
+  // Upload preview styles
+  previewSummary: { backgroundColor: '#f0f4f8', padding: 10, borderRadius: 8, marginBottom: 10 },
+  previewSummaryText: { fontSize: 12, color: '#333', marginBottom: 3, textAlign: 'right' },
+  previewStats: { flexDirection: 'row', gap: 6, marginBottom: 10 },
+  statBox: { flex: 1, padding: 8, borderRadius: 8, alignItems: 'center' },
+  statNum: { fontSize: 18, fontWeight: '800' },
+  statText: { fontSize: 10, color: '#555', marginTop: 2 },
+  previewSectionTitle: { fontSize: 12, fontWeight: '800', color: '#444', marginTop: 8, marginBottom: 4, textAlign: 'right' },
+  previewItem: { backgroundColor: '#f9f9f9', padding: 6, borderRadius: 4, marginBottom: 2 },
+  previewItemText: { fontSize: 11, color: '#333', textAlign: 'right' },
+  previewMore: { fontSize: 10, color: '#888', textAlign: 'center', marginTop: 4, fontStyle: 'italic' },
+  errorItem: { fontSize: 10, color: '#c62828', textAlign: 'right', marginBottom: 2 },
+  warnItem: { fontSize: 10, color: '#ef6c00', textAlign: 'right', marginBottom: 2 },
+  modeBtn: { flex: 1, paddingVertical: 8, borderRadius: 6, backgroundColor: '#f0f0f0', alignItems: 'center' },
+  modeBtnActive: { backgroundColor: '#2e7d32' },
+  modeBtnText: { fontSize: 12, fontWeight: '700', color: '#555' },
 });

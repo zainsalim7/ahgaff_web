@@ -6,9 +6,12 @@ Layer 3: courses (موجود) - الجلسات الفعلية في فصل أكا
 """
 from datetime import datetime, timezone
 from typing import Optional, List
+from io import BytesIO
 
+import pandas as pd
 from bson import ObjectId
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from .deps import get_current_user, get_db
@@ -755,4 +758,415 @@ async def import_curriculum_from_archive(
         "assignments_created": assignments_created,
         "from_semester": sem_name,
         "default_term_used": default_term,
+    }
+
+
+# ==================== Wipe Department Curriculum ====================
+
+@router.delete("/curriculum/department/{department_id}/wipe")
+async def wipe_department_curriculum(
+    department_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """مسح كامل لخطة قسم معين (حذف ناعم — يحفظ نسخة في trash للاسترجاع).
+    - يُعلّم كل curriculum_courses لذلك القسم بـ is_active=False
+    - يُلغي كل teacher_assignments المرتبطة
+    - يُسجَّل في activity_logs لإمكانية المراجعة
+    """
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="هذه العملية متاحة للأدمن فقط")
+    db = get_db()
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف القسم غير صحيح")
+    if not dept:
+        raise HTTPException(status_code=404, detail="القسم غير موجود")
+
+    # جلب الـ ids قبل التعليم لإلغاء الإسنادات
+    cc_ids = []
+    async for c in db.curriculum_courses.find({"department_id": department_id, "is_active": {"$ne": False}}, {"_id": 1}):
+        cc_ids.append(str(c["_id"]))
+
+    if not cc_ids:
+        return {"message": "لا توجد خطة لمسحها", "wiped": 0, "assignments_cleared": 0}
+
+    now = _now()
+    r1 = await db.curriculum_courses.update_many(
+        {"department_id": department_id, "is_active": {"$ne": False}},
+        {"$set": {"is_active": False, "deleted_at": now, "deleted_by": current_user.get("id"),
+                   "wiped_in_bulk": True}}
+    )
+    r2 = await db.teacher_assignments.update_many(
+        {"curriculum_course_id": {"$in": cc_ids}, "is_active": {"$ne": False}},
+        {"$set": {"is_active": False, "ended_at": now, "wiped_in_bulk": True}}
+    )
+
+    # سجل النشاط
+    try:
+        await db.activity_logs.insert_one({
+            "user_id": current_user.get("id"),
+            "username": current_user.get("username"),
+            "action": "wipe_curriculum",
+            "target_type": "department",
+            "target_id": department_id,
+            "details": f"مسح خطة قسم {dept.get('name')} - {r1.modified_count} مقرر",
+            "timestamp": now,
+        })
+    except Exception:
+        pass
+
+    return {
+        "message": f"تم مسح خطة قسم '{dept.get('name')}' - {r1.modified_count} مقرر",
+        "wiped": r1.modified_count,
+        "assignments_cleared": r2.modified_count,
+        "department_name": dept.get("name"),
+    }
+
+
+# ==================== Excel Template ====================
+
+@router.get("/template/curriculum")
+async def get_curriculum_template(current_user: dict = Depends(get_current_user)):
+    """تحميل نموذج Excel لرفع الخطة الدراسية لقسم.
+    أعمدة: رمز المقرر | اسم المقرر | الساعات المعتمدة | المستوى | الفصل
+    'الفصل' يقبل: 1 / 2 / الأول / الثاني / first / second
+    """
+    if not _has_manage(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    df = pd.DataFrame({
+        "رمز المقرر": ["FIB101", "FIB102", "ARB101", "NAH102", "AQD201"],
+        "اسم المقرر": [
+            "فقه عبادات (1)",
+            "فقه عبادات (2)",
+            "الكتابة العربية",
+            "النحو (2)",
+            "العقيدة الإسلامية",
+        ],
+        "الساعات المعتمدة": [3, 3, 3, 2, 3],
+        "المستوى": [1, 1, 1, 1, 2],
+        "الفصل": [1, 2, 1, 2, "الأول"],
+    })
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="الخطة الدراسية")
+        # تعديل عرض الأعمدة
+        ws = writer.sheets["الخطة الدراسية"]
+        widths = {"A": 18, "B": 35, "C": 18, "D": 12, "E": 12}
+        for col, w in widths.items():
+            ws.column_dimensions[col].width = w
+    output.seek(0)
+    return StreamingResponse(
+        output,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=curriculum_template.xlsx"},
+    )
+
+
+# ==================== Upload Helpers ====================
+
+def _normalize_term(value) -> Optional[int]:
+    """يحوّل القيمة إلى رقم فصل (1 أو 2) — يقبل النص والرقم."""
+    if value is None:
+        return None
+    s = str(value).strip().lower()
+    if not s or s in ("nan", "none"):
+        return None
+    # أرقام
+    if s in ("1", "1.0", "اول", "الأول", "الاول", "first", "1st"):
+        return 1
+    if s in ("2", "2.0", "ثاني", "الثاني", "second", "2nd"):
+        return 2
+    # محاولة كرقم
+    try:
+        n = int(float(s))
+        if n in (1, 2):
+            return n
+    except Exception:
+        pass
+    return None
+
+
+def _parse_curriculum_excel(contents: bytes, filename: str) -> tuple[list, list]:
+    """يقرأ ملف Excel/CSV ويُرجع (rows_صالحة, errors).
+    كل صف صالح: {code, name, credit_hours, level, term, prerequisites}
+    """
+    fname = (filename or "").lower()
+    try:
+        if fname.endswith(".csv"):
+            df = pd.read_csv(BytesIO(contents))
+        else:
+            df = pd.read_excel(BytesIO(contents))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
+
+    # mapping للأعمدة بمرونة
+    col_map = {}
+    for c in df.columns:
+        cl = str(c).strip().lower().replace("ـ", "").replace(" ", "")
+        if any(k in cl for k in ["رمز", "كود", "code"]):
+            col_map["code"] = c
+        elif any(k in cl for k in ["اسمالمقرر", "اسم", "name"]):
+            col_map["name"] = c
+        elif any(k in cl for k in ["ساعات", "ساعة", "credit", "hours"]):
+            col_map["credit_hours"] = c
+        elif any(k in cl for k in ["مستوى", "level"]):
+            col_map["level"] = c
+        elif any(k in cl for k in ["فصل", "term", "semester"]):
+            col_map["term"] = c
+        elif any(k in cl for k in ["متطلب", "prereq"]):
+            col_map["prerequisites"] = c
+
+    required = ["code", "name", "credit_hours", "level", "term"]
+    missing = [r for r in required if r not in col_map]
+    if missing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"الأعمدة المطلوبة مفقودة: {', '.join(missing)} - تأكد من النموذج"
+        )
+
+    rows = []
+    errors = []
+    for idx, row in df.iterrows():
+        line_num = idx + 2  # +2 لأن الصف الأول هو header و pandas يبدأ من 0
+        code = str(row[col_map["code"]] or "").strip()
+        name = str(row[col_map["name"]] or "").strip()
+        if not code or not name or code == "nan" or name == "nan":
+            continue  # صفوف فارغة - تخطي صامت
+        try:
+            credit_hours = int(float(row[col_map["credit_hours"]]))
+        except Exception:
+            errors.append(f"السطر {line_num}: ساعات معتمدة غير صحيحة")
+            continue
+        try:
+            level = int(float(row[col_map["level"]]))
+        except Exception:
+            errors.append(f"السطر {line_num}: المستوى غير صحيح")
+            continue
+        term = _normalize_term(row[col_map["term"]])
+        if term is None:
+            errors.append(f"السطر {line_num}: الفصل غير معروف (المقبول: 1 أو 2 أو الأول أو الثاني)")
+            continue
+
+        prereqs = []
+        if "prerequisites" in col_map:
+            pv = str(row[col_map["prerequisites"]] or "").strip()
+            if pv and pv != "nan":
+                prereqs = [x.strip() for x in pv.replace("،", ",").split(",") if x.strip()]
+
+        rows.append({
+            "code": code.upper(),
+            "name": name,
+            "credit_hours": credit_hours,
+            "level": level,
+            "term": term,
+            "prerequisites": prereqs,
+            "_line": line_num,
+        })
+    return rows, errors
+
+
+# ==================== Upload Preview ====================
+
+@router.post("/curriculum/upload/preview")
+async def preview_curriculum_upload(
+    department_id: str = Query(..., description="معرف القسم"),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """معاينة ملف الخطة قبل التنفيذ - لا يحفظ شيئاً."""
+    if not _has_manage(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف القسم غير صحيح")
+    if not dept:
+        raise HTTPException(status_code=404, detail="القسم غير موجود")
+
+    contents = await file.read()
+    rows, errors = _parse_curriculum_excel(contents, file.filename or "")
+
+    # فحص حد المستوى من الكلية
+    faculty = None
+    levels_count = 5
+    if dept.get("faculty_id"):
+        try:
+            faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
+            if faculty:
+                levels_count = int(faculty.get("levels_count") or 5)
+        except Exception:
+            pass
+
+    # فحص الموجود في الخطة
+    existing_codes = set()
+    async for c in db.curriculum_courses.find(
+        {"department_id": department_id, "is_active": {"$ne": False}}, {"code": 1}
+    ):
+        existing_codes.add(c.get("code"))
+
+    valid = []
+    duplicates_in_file = []
+    out_of_level = []
+    existing_in_db = []
+    seen_codes = set()
+    for r in rows:
+        if r["code"] in seen_codes:
+            duplicates_in_file.append(r)
+            continue
+        seen_codes.add(r["code"])
+        if r["level"] > levels_count or r["level"] < 1:
+            out_of_level.append({**r, "_reason": f"المستوى {r['level']} خارج نطاق الكلية (1-{levels_count})"})
+            continue
+        if r["code"] in existing_codes:
+            existing_in_db.append(r)
+            continue
+        valid.append(r)
+
+    return {
+        "department": {"id": department_id, "name": dept.get("name"), "levels_count": levels_count},
+        "total_rows_read": len(rows),
+        "valid_count": len(valid),
+        "duplicates_in_file_count": len(duplicates_in_file),
+        "existing_in_db_count": len(existing_in_db),
+        "out_of_level_count": len(out_of_level),
+        "parse_errors": errors,
+        "valid_sample": valid[:20],
+        "duplicates_in_file": duplicates_in_file[:10],
+        "existing_in_db": existing_in_db[:10],
+        "out_of_level": out_of_level[:10],
+    }
+
+
+# ==================== Upload Execute ====================
+
+@router.post("/curriculum/upload")
+async def upload_curriculum(
+    department_id: str = Query(..., description="معرف القسم"),
+    mode: str = Query("merge", description="merge=إضافة فقط، replace=استبدال كامل (يمسح القديم أولاً)"),
+    file: UploadFile = File(...),
+    current_user: dict = Depends(get_current_user),
+):
+    """رفع الخطة الدراسية لقسم من ملف Excel/CSV.
+    - mode=merge: يضيف الجديد فقط، يتخطى الموجود
+    - mode=replace: يمسح كل خطة القسم القديمة ثم يضيف الجديد
+    """
+    if not _has_manage(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if mode not in ("merge", "replace"):
+        raise HTTPException(status_code=400, detail="mode يجب أن يكون merge أو replace")
+    db = get_db()
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف القسم غير صحيح")
+    if not dept:
+        raise HTTPException(status_code=404, detail="القسم غير موجود")
+
+    contents = await file.read()
+    rows, errors = _parse_curriculum_excel(contents, file.filename or "")
+    if not rows:
+        raise HTTPException(status_code=400, detail="لم يتم العثور على بيانات صالحة في الملف")
+
+    # حد المستوى
+    faculty = None
+    levels_count = 5
+    faculty_id = dept.get("faculty_id")
+    if faculty_id:
+        try:
+            faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
+            if faculty:
+                levels_count = int(faculty.get("levels_count") or 5)
+        except Exception:
+            pass
+
+    now = _now()
+
+    # وضع الاستبدال - مسح القديم أولاً
+    wiped = 0
+    if mode == "replace":
+        cc_ids = []
+        async for c in db.curriculum_courses.find(
+            {"department_id": department_id, "is_active": {"$ne": False}}, {"_id": 1}
+        ):
+            cc_ids.append(str(c["_id"]))
+        if cc_ids:
+            r1 = await db.curriculum_courses.update_many(
+                {"department_id": department_id, "is_active": {"$ne": False}},
+                {"$set": {"is_active": False, "deleted_at": now, "deleted_by": current_user.get("id"),
+                          "wiped_in_bulk": True, "wipe_reason": "replace_upload"}}
+            )
+            wiped = r1.modified_count
+            await db.teacher_assignments.update_many(
+                {"curriculum_course_id": {"$in": cc_ids}, "is_active": {"$ne": False}},
+                {"$set": {"is_active": False, "ended_at": now, "wiped_in_bulk": True}}
+            )
+
+    # الموجود في الخطة (بعد المسح إن لزم)
+    existing_codes = set()
+    async for c in db.curriculum_courses.find(
+        {"department_id": department_id, "is_active": {"$ne": False}}, {"code": 1}
+    ):
+        existing_codes.add(c.get("code"))
+
+    created = 0
+    skipped = 0
+    out_of_level = 0
+    seen = set()
+    created_items = []
+    for r in rows:
+        if r["code"] in seen:
+            skipped += 1
+            continue
+        seen.add(r["code"])
+        if r["level"] > levels_count or r["level"] < 1:
+            out_of_level += 1
+            continue
+        if r["code"] in existing_codes:
+            skipped += 1
+            continue
+        doc = {
+            "code": r["code"],
+            "name": r["name"],
+            "credit_hours": r["credit_hours"],
+            "department_id": department_id,
+            "faculty_id": faculty_id,
+            "level": r["level"],
+            "term": r["term"],
+            "prerequisites": r.get("prerequisites") or [],
+            "is_active": True,
+            "created_at": now,
+            "created_by": current_user.get("id"),
+            "imported_from": "excel_upload",
+        }
+        res = await db.curriculum_courses.insert_one(doc)
+        existing_codes.add(r["code"])
+        created += 1
+        created_items.append({"id": str(res.inserted_id), "code": r["code"], "name": r["name"]})
+
+    # سجل النشاط
+    try:
+        await db.activity_logs.insert_one({
+            "user_id": current_user.get("id"),
+            "username": current_user.get("username"),
+            "action": "upload_curriculum",
+            "target_type": "department",
+            "target_id": department_id,
+            "details": f"رفع {created} مقرر لقسم {dept.get('name')} (mode={mode})",
+            "timestamp": now,
+        })
+    except Exception:
+        pass
+
+    return {
+        "message": f"تم رفع {created} مقرر إلى خطة '{dept.get('name')}'",
+        "created": created,
+        "skipped_duplicates_or_existing": skipped,
+        "out_of_level": out_of_level,
+        "wiped_in_replace_mode": wiped,
+        "parse_errors": errors,
+        "department_name": dept.get("name"),
+        "mode": mode,
+        "sample": created_items[:20],
     }
