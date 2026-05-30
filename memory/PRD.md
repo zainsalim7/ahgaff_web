@@ -1,5 +1,32 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 30 مايو 2026 (تكملة 4) ✅
+
+### دمج "حالات الطلاب" داخل صفحة /students (P0 - مكتمل)
+
+**القرار:** بدل صفحة منفصلة، دُمجت كل وظائف الحالات داخل الصفحة الأم لـ /students.
+
+#### التغييرات
+- [x] حذف `/app/frontend/app/student-status-manager.tsx` (الصفحة المنفصلة)
+- [x] حذف رابط `student-status` من SideMenu
+- [x] إضافة `STATUS_OPTIONS` ثابت في رأس `students.tsx` (5 حالات بألوان وأيقونات)
+- [x] State جديد: `showStatusModal`, `statusToApply`, `statusNewLevel`, `statusReason`, `selectedStatusFilter`, `historyData`, `historyFor`, `showHistoryModal`
+- [x] دالة `handleBulkChangeStatus()` تستدعي `/student-status/bulk-change`
+- [x] دالة `openHistoryFor(student)` تجلب سجل الطالب
+- [x] **Picker جديد للحالة** في شريط الفلاتر العلوي بجانب القسم/المستوى/الشعبة
+- [x] **زر "تغيير الحالة"** بنفسجي في شريط الإجراءات الجماعي بجانب "تغيير المستوى" الموجود سابقاً
+- [x] **Badge ملوّن للحالة** في صف كل طالب (يظهر فقط للحالات غير active/inactive)
+- [x] **Modal تغيير الحالة** مدمج بتصميم نظيف: 5 أزرار حالات + حقل مستوى اختياري + حقل سبب + زر تطبيق
+- [x] **Modal سجل التاريخ** مدمج بنفس النمط
+
+#### نتائج الاختبار
+- ✅ `testing_agent_v3_fork` (frontend only): UI behaviour **100%** صحيح
+  - الصفحة تُحمَّل بلا أخطاء، الفلاتر تعمل، شريط الإجراءات يظهر، الـ modal يفتح
+  - الـ status filter Picker يعمل و يفلتر القائمة
+  - لا يوجد رابط `/student-status-manager` في SideMenu
+- ✅ تم استبدال `data-testid` بـ `testID` على RN components للتوافق مع react-native-web
+- ✅ ملاحظة معمارية من الـ tester: `students.tsx` أصبح 2384 سطر، يستحق التقسيم إلى مكونات (بنود مستقبلية)
+
 ## ما تم إنجازه - جلسة 30 مايو 2026 (تكملة 3) ✅
 
 ### إدارة حالات الطلاب - 5 حالات + إجراءات جماعية (P0 - مكتمل)

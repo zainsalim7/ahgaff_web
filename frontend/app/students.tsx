@@ -1103,7 +1103,7 @@ export default function StudentsScreen() {
                 <TouchableOpacity 
                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#5e35b1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
                   onPress={() => { setStatusToApply('repeat'); setStatusNewLevel(''); setStatusReason(''); setShowStatusModal(true); }}
-                  data-testid="bulk-change-status-btn"
+                  testID="bulk-change-status-btn"
                 >
                   <Ionicons name="shuffle" size={18} color="#fff" />
                   <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>تغيير الحالة</Text>
@@ -1668,7 +1668,7 @@ export default function StudentsScreen() {
               المستوى الجديد (اختياري):
             </Text>
             <TextInput
-              data-testid="status-new-level"
+              testID="status-new-level"
               style={{
                 borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8,
                 paddingHorizontal: 12, paddingVertical: 9, fontSize: 13,
@@ -1690,7 +1690,7 @@ export default function StudentsScreen() {
               السبب / ملاحظة (اختياري):
             </Text>
             <TextInput
-              data-testid="status-reason"
+              testID="status-reason"
               style={{
                 borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8,
                 paddingHorizontal: 12, paddingVertical: 9, fontSize: 13,
@@ -1711,7 +1711,7 @@ export default function StudentsScreen() {
                 <Text style={{ color: '#666', fontWeight: '700' }}>إلغاء</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                data-testid="apply-status-btn"
+                testID="apply-status-btn"
                 style={{ flex: 1, backgroundColor: getStatusInfo(statusToApply).color, padding: 12, borderRadius: 10, alignItems: 'center' }}
                 onPress={handleBulkChangeStatus}
                 disabled={applyingStatus}
