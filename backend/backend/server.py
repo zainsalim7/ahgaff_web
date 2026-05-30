@@ -183,6 +183,7 @@ from routes.calendar_events import router as calendar_router
 from routes.global_search import router as global_search_router
 from routes.entity_details import router as entity_details_router
 from routes.archives import router as archives_router
+from routes.archive_pdf import router as archive_pdf_router
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -12317,7 +12318,12 @@ async def restore_semester_from_archive(
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بالاستعادة")
 
-    semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+    try:
+        sem_oid = ObjectId(semester_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرّف الفصل غير صحيح")
+
+    semester = await db.semesters.find_one({"_id": sem_oid})
     if not semester:
         raise HTTPException(status_code=404, detail="الفصل غير موجود")
 
@@ -12383,7 +12389,7 @@ async def restore_semester_from_archive(
 
     # ============== تحديث حالة الفصل إلى CLOSED ==============
     await db.semesters.update_one(
-        {"_id": ObjectId(semester_id)},
+        {"_id": sem_oid},
         {"$set": {"status": SemesterStatus.CLOSED},
          "$unset": {"archived_at": "", "archive_stats": ""}}
     )
@@ -13820,6 +13826,7 @@ app.include_router(calendar_router, prefix="/api")
 app.include_router(global_search_router, prefix="/api")
 app.include_router(entity_details_router, prefix="/api")
 app.include_router(archives_router, prefix="/api")
+app.include_router(archive_pdf_router, prefix="/api")
 
 
 @app.on_event("startup")

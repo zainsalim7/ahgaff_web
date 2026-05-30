@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import api from '../src/services/api';
+import { ReportActionsBar } from '../src/components/ReportActionsBar';
 
 export default function ArchiveCourseHistoryScreen() {
   const { courseCode } = useLocalSearchParams<{ courseCode: string }>();
@@ -34,18 +35,24 @@ export default function ArchiveCourseHistoryScreen() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   if (loading) return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.center}><ActivityIndicator size="large" color="#2e7d32" /></View>
-    </SafeAreaView>
+    <>
+      <Stack.Screen options={{ title: 'تاريخ المقرر', headerBackTitle: 'رجوع' }} />
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}><ActivityIndicator size="large" color="#2e7d32" /></View>
+      </SafeAreaView>
+    </>
   );
 
   if (error) return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.center}>
-        <Ionicons name="alert-circle-outline" size={48} color="#c62828" />
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
-    </SafeAreaView>
+    <>
+      <Stack.Screen options={{ title: 'تاريخ المقرر', headerBackTitle: 'رجوع' }} />
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle-outline" size={48} color="#c62828" />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </SafeAreaView>
+    </>
   );
 
   const instances = data?.instances || [];
@@ -55,6 +62,10 @@ export default function ArchiveCourseHistoryScreen() {
     <>
       <Stack.Screen options={{ title: 'تاريخ المقرر', headerBackTitle: 'رجوع' }} />
       <SafeAreaView style={styles.container} edges={['bottom']}>
+        <ReportActionsBar
+          pdfPath={`/archives/courses/${encodeURIComponent(courseCode || '')}/history/pdf`}
+          pdfFileName={`course-history-${courseCode}.pdf`}
+        />
         <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 30 }}>
           <View style={styles.header}>
             <View style={styles.iconBox}><Ionicons name="book" size={32} color="#fff" /></View>

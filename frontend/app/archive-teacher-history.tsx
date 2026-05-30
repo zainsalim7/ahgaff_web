@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import api from '../src/services/api';
+import { ReportActionsBar } from '../src/components/ReportActionsBar';
 
 export default function ArchiveTeacherHistoryScreen() {
   const { teacherId } = useLocalSearchParams<{ teacherId: string }>();
@@ -34,18 +35,24 @@ export default function ArchiveTeacherHistoryScreen() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   if (loading) return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.center}><ActivityIndicator size="large" color="#ef6c00" /></View>
-    </SafeAreaView>
+    <>
+      <Stack.Screen options={{ title: 'السجل التدريسي', headerBackTitle: 'رجوع' }} />
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}><ActivityIndicator size="large" color="#ef6c00" /></View>
+      </SafeAreaView>
+    </>
   );
 
   if (error) return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.center}>
-        <Ionicons name="alert-circle-outline" size={48} color="#c62828" />
-        <Text style={styles.errorText}>{error}</Text>
-      </View>
-    </SafeAreaView>
+    <>
+      <Stack.Screen options={{ title: 'السجل التدريسي', headerBackTitle: 'رجوع' }} />
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle-outline" size={48} color="#c62828" />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      </SafeAreaView>
+    </>
   );
 
   const history = data?.history || [];
@@ -56,6 +63,10 @@ export default function ArchiveTeacherHistoryScreen() {
     <>
       <Stack.Screen options={{ title: 'السجل التدريسي', headerBackTitle: 'رجوع' }} />
       <SafeAreaView style={styles.container} edges={['bottom']}>
+        <ReportActionsBar
+          pdfPath={`/archives/teachers/${teacherId}/history/pdf`}
+          pdfFileName={`teacher-history-${teacherId}.pdf`}
+        />
         <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 30 }}>
           <View style={styles.header}>
             <View style={styles.avatar}><Ionicons name="school" size={32} color="#fff" /></View>

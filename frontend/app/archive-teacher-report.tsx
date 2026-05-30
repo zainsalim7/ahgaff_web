@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import api from '../src/services/api';
+import { ReportActionsBar } from '../src/components/ReportActionsBar';
 
 export default function ArchiveTeacherReportScreen() {
   const { semesterId, teacherId } = useLocalSearchParams<{ semesterId: string; teacherId: string }>();
@@ -36,18 +37,24 @@ export default function ArchiveTeacherReportScreen() {
   useEffect(() => { fetchData(); }, [fetchData]);
 
   if (loading) return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.center}><ActivityIndicator size="large" color="#6a1b9a" /></View>
-    </SafeAreaView>
+    <>
+      <Stack.Screen options={{ title: 'نصاب معلم', headerBackTitle: 'رجوع' }} />
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}><ActivityIndicator size="large" color="#6a1b9a" /></View>
+      </SafeAreaView>
+    </>
   );
 
   if (error || !data) return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.center}>
-        <Ionicons name="alert-circle-outline" size={48} color="#c62828" />
-        <Text style={styles.errorText}>{error || 'لا توجد بيانات'}</Text>
-      </View>
-    </SafeAreaView>
+    <>
+      <Stack.Screen options={{ title: 'نصاب معلم', headerBackTitle: 'رجوع' }} />
+      <SafeAreaView style={styles.container}>
+        <View style={styles.center}>
+          <Ionicons name="alert-circle-outline" size={48} color="#c62828" />
+          <Text style={styles.errorText}>{error || 'لا توجد بيانات'}</Text>
+        </View>
+      </SafeAreaView>
+    </>
   );
 
   const s = data.summary || {};
@@ -60,6 +67,11 @@ export default function ArchiveTeacherReportScreen() {
           <Ionicons name="archive" size={14} color="#6a1b9a" />
           <Text style={styles.warningText}>نصاب من الأرشيف - {data.semester_name}</Text>
         </View>
+
+        <ReportActionsBar
+          pdfPath={`/archives/${semesterId}/teachers/${teacherId}/pdf`}
+          pdfFileName={`teacher-report-${data.teacher?.teacher_id || teacherId}.pdf`}
+        />
 
         <ScrollView
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />}
