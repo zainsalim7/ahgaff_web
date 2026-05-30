@@ -68,6 +68,10 @@ export const PERMISSIONS = {
   GENERATE_LECTURES: 'generate_lectures',
   VIEW_COURSES: 'view_courses',
   OVERRIDE_LECTURE_STATUS: 'override_lecture_status',
+  // صلاحيات الأرشيف
+  VIEW_ARCHIVE: 'view_archive',
+  SEARCH_ARCHIVE: 'search_archive',
+  EXPORT_ARCHIVE: 'export_archive',
 } as const;
 
 // متغير عام للتخزين المؤقت

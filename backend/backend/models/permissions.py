@@ -109,6 +109,11 @@ class Permission:
     # صلاحيات العبء التدريسي
     MANAGE_TEACHING_LOAD = "manage_teaching_load"
     VIEW_TEACHING_LOAD = "view_teaching_load"
+    
+    # صلاحيات الأرشيف
+    VIEW_ARCHIVE = "view_archive"
+    SEARCH_ARCHIVE = "search_archive"
+    EXPORT_ARCHIVE = "export_archive"
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -135,6 +140,9 @@ DEFAULT_PERMISSIONS = {
         Permission.MANAGE_NOTIFICATIONS,
         Permission.MANAGE_TEACHING_LOAD,
         Permission.VIEW_TEACHING_LOAD,
+        Permission.VIEW_ARCHIVE,
+        Permission.SEARCH_ARCHIVE,
+        Permission.EXPORT_ARCHIVE,
     ],
     UserRole.TEACHER: [
         Permission.RECORD_ATTENDANCE,
@@ -185,6 +193,9 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_LESSON_COMPLETION,
         Permission.MANAGE_TEACHING_LOAD,
         Permission.VIEW_TEACHING_LOAD,
+        Permission.VIEW_ARCHIVE,
+        Permission.SEARCH_ARCHIVE,
+        Permission.EXPORT_ARCHIVE,
     ],
     UserRole.DEPARTMENT_HEAD: [
         Permission.MANAGE_COURSES,
@@ -310,6 +321,9 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_SEMESTERS, "label": "إدارة الفصول الدراسية", "category": "النظام"},
     {"key": Permission.MANAGE_TEACHING_LOAD, "label": "إدارة العبء التدريسي", "category": "العبء التدريسي"},
     {"key": Permission.VIEW_TEACHING_LOAD, "label": "عرض العبء التدريسي", "category": "العبء التدريسي"},
+    {"key": Permission.VIEW_ARCHIVE, "label": "عرض الأرشيف", "category": "الأرشيف"},
+    {"key": Permission.SEARCH_ARCHIVE, "label": "البحث في الأرشيف", "category": "الأرشيف"},
+    {"key": Permission.EXPORT_ARCHIVE, "label": "تصدير من الأرشيف", "category": "الأرشيف"},
 ]
 
 # الصلاحيات الكاملة تشمل الصلاحيات الفرعية

@@ -1,0 +1,45 @@
+{
+  "summary": "End-to-end testing of the new Archived Semester Reports system. Backend: 17 passed / 2 legitimate skips / 1 unrelated pre-existing failure on /api/teachers/me for teacher180156 (no teacher record linked). All 6 new /api/archives* endpoints work correctly: list, search, summary, courses, students, teachers, course-details with proper permission gating (admin 200 / teacher 403 / unauthenticated 401). archive-creation endpoint correctly rejects ACTIVE semesters with 400. Frontend: /archives, /archive-search, /archive-details all render correctly in Arabic. SideMenu correctly shows the 'الأرشيف الدراسي' divider + two items for admin and hides them for teacher. Teacher visiting /archives directly is blocked with the friendly Arabic message 'ليست لديك صلاحية الوصول للأرشيف'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/teachers/me", "issue": "Returns 404 'لم يتم العثور على سجل المعلم' when logged in as teacher180156. This is pre-existing test-data issue (teacher account exists but no teacher record linked); not related to archive feature. Other teacher endpoints (/api/teachers, /api/teachers/{id}/full-profile) work normally."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All archive pages (/archives, /archive-search, /archive-details) headers", "issues": ["Header title text is partially clipped at the top of the screen (only 'الأرشيف' visible, rest cut). Same pattern as previous detail pages report (iteration_21). Container needs more horizontal space or shorter label."]},
+      {"screen": "/archive-search for teacher (no permission)", "issues": ["Direct visit to /archive-search by teacher still renders the full search UI (input, filter chips). The 403 surfaces only AFTER pressing 'بحث'. Suggest gating the page itself by checking SEARCH_ARCHIVE permission on mount and showing the same friendly lock card used on /archives ('ليست لديك صلاحية البحث في الأرشيف')."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_archives.py",
+    "/app/test_reports/pytest/archives_results.xml"
+  ],
+  "action_items": [
+    "(Optional polish) Gate /archive-search page on mount with SEARCH_ARCHIVE permission check (mirror /archives behavior) so unauthorized users see a locked-state card instead of an empty search UI.",
+    "(Optional polish) Fix header title clipping across archive pages (and previously-reported detail pages).",
+    "(Unrelated) Investigate why teacher180156 has no linked record in `teachers` collection causing /api/teachers/me 404 — separate pre-existing issue."
+  ],
+  "critical_code_review_comments": [
+    "archives.py: Route ordering is correct — `/archives/search` is declared BEFORE `/archives/{semester_id}` to avoid path collision. Good.",
+    "archives.py L186: `next((c for c in a.get('courses', []) if c.get('id') == course_id), None)` does a linear scan inside the snapshot. Fine for typical semester sizes; flag if courses-per-semester ever exceeds ~500.",
+    "archives.py L202-214: attendance aggregation inside Python loop with per-student filter — O(students * attendance). For very large semesters, consider pre-grouping attendance by student_id once at start of endpoint.",
+    "archives.py L18-21: `_has_archive_perm` shortcuts admin role check before reading user.permissions — correct. Dean and other roles correctly fall through to permission set check.",
+    "archives.py _norm_ar: Good Arabic normalization (strips tashkeel, normalizes alef variants, ة→ه, ى→ي). Search uses substring matching which is appropriate for the data sizes here.",
+    "Frontend: Empty states, loading states and 403 friendly Arabic messages are consistently shown on /archives. The same UX pattern should be applied to /archive-search and /archive-details pages.",
+    "POST /api/semesters/{id}/archive validation correctly rejects ACTIVE semester with 400 (verified). No archived semester currently exists in DB to verify the actual snapshot+delete flow — main agent should manually verify on a real CLOSED semester before production rollout, ensuring students/teachers/departments/faculties live collections are untouched."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_archives.py"
+  ],
+  "success_rate": {"backend": "95% (17/18 archive-relevant tests; 1 unrelated regression failure)", "frontend": "100% (all archive pages load, permission gating works)"},
+  "test_credentials": "admin/admin123 (admin, all archive perms) — verified. teacher180156/teacher123 (teacher, no archive perms) — verified that archive endpoints return 403 and SideMenu hides archive entries.",
+  "seed_data_creation": "None. DB has NO archived semesters yet, so `test_existing_archive_shape` and `test_archive_already_archived_400` are SKIPPED (legitimate). Real archival flow (POST /api/semesters/{id}/archive on a CLOSED semester) was intentionally NOT executed per request instructions.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_archives.py. Run with: `REACT_APP_BACKEND_URL=https://schedule-hub-272.preview.emergentagent.com pytest backend/tests/test_archives.py -v`. The 2 skipped tests will auto-activate once at least one CLOSED semester exists (to test rejection of already-archived) and once at least one ARCHIVED semester exists (to validate detail shape). The full archive-creation flow (POST /api/semesters/{id}/archive that snapshots + deletes operational data) was NOT exercised end-to-end on real data — should be tested in a staging environment with a copy of a CLOSED semester to verify: (a) snapshot fields populated, (b) live courses/lectures/attendance/enrollments/study_plans for that semester deleted, (c) live students/teachers/departments/faculties untouched, (d) semester status flipped CLOSED→ARCHIVED.",
+  "rca of the issue": "N/A — no blocking issues. Two minor polish items: (1) header title clipping is the same UI bug already reported in iteration_21 for other detail pages; (2) teacher visiting /archive-search sees the search UI before the 403 — should add permission gate on mount."
+}

@@ -182,6 +182,7 @@ from routes.dashboard import router as dashboard_router
 from routes.calendar_events import router as calendar_router
 from routes.global_search import router as global_search_router
 from routes.entity_details import router as entity_details_router
+from routes.archives import router as archives_router
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -12047,59 +12048,223 @@ async def close_semester(semester_id: str, current_user: dict = Depends(get_curr
 
 @api_router.post("/semesters/{semester_id}/archive")
 async def archive_semester(semester_id: str, current_user: dict = Depends(get_current_user)):
-    """أرشفة فصل دراسي (نسخ جميع البيانات للأرشيف)"""
+    """أرشفة فصل دراسي بشكل شامل:
+    - يحفظ snapshot كامل للعمليات (مقررات، محاضرات، حضور، تسجيلات، خطط)
+    - مع denormalized snapshot لأسماء الطلاب والمعلمين والأقسام وقت الأرشفة
+    - يحذف العمليات التشغيلية فقط بعد النسخ (لا يلمس students/teachers/departments/faculties)
+    """
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
+
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
     if not semester:
         raise HTTPException(status_code=404, detail="الفصل غير موجود")
-    
+
     if semester.get("status") == SemesterStatus.ACTIVE:
         raise HTTPException(status_code=400, detail="لا يمكن أرشفة فصل نشط. يرجى إغلاقه أولاً")
-    
+
     if semester.get("status") == SemesterStatus.ARCHIVED:
         raise HTTPException(status_code=400, detail="الفصل مؤرشف مسبقاً")
-    
-    # جمع إحصائيات الفصل قبل الأرشفة
-    courses = await db.courses.find({"semester_id": semester_id}).to_list(1000)
-    course_ids = [str(c["_id"]) for c in courses]
-    
-    # جمع سجلات الحضور للمقررات
-    attendance_records = await db.attendance.find({"course_id": {"$in": course_ids}}).to_list(100000)
-    
-    # إنشاء سجل الأرشيف
+
+    # ============== جمع كل البيانات التشغيلية ==============
+    courses_live = await db.courses.find({"semester_id": semester_id}).to_list(5000)
+    course_ids = [str(c["_id"]) for c in courses_live]
+
+    if not course_ids:
+        # فصل بلا مقررات - أرشفة فارغة
+        archive_record = {
+            "semester_id": semester_id,
+            "semester_name": semester["name"],
+            "academic_year": semester["academic_year"],
+            "semester_start": semester.get("start_date"),
+            "semester_end": semester.get("end_date"),
+            "archived_at": get_yemen_time(),
+            "archived_by": current_user["id"],
+            "archived_by_name": current_user.get("full_name") or current_user.get("username"),
+            "summary": {"total_courses": 0, "total_students": 0, "total_teachers": 0,
+                        "total_lectures": 0, "completed_lectures": 0,
+                        "total_attendance_records": 0, "overall_attendance_rate": 0},
+            "courses": [], "lectures": [], "attendance": [], "enrollments": [], "study_plans": [],
+            "students_snapshot": [], "teachers_snapshot": [],
+            "departments_snapshot": [], "faculties_snapshot": [],
+        }
+        await db.semester_archives.insert_one(archive_record)
+        await db.semesters.update_one(
+            {"_id": ObjectId(semester_id)},
+            {"$set": {"status": SemesterStatus.ARCHIVED, "archived_at": get_yemen_time(),
+                      "archive_stats": archive_record["summary"]}}
+        )
+        return {"message": "تم أرشفة الفصل (لا توجد بيانات تشغيلية)", "summary": archive_record["summary"]}
+
+    lectures_live = await db.lectures.find({"semester_id": semester_id}).to_list(50000)
+    if not lectures_live:
+        lectures_live = await db.lectures.find({"course_id": {"$in": course_ids}}).to_list(50000)
+    attendance_live = await db.attendance.find({"course_id": {"$in": course_ids}}).to_list(500000)
+    enrollments_live = await db.enrollments.find({"course_id": {"$in": course_ids}}).to_list(50000)
+    study_plans_live = await db.study_plans.find({"course_id": {"$in": course_ids}}).to_list(5000)
+
+    # ============== جمع snapshot للأسماء (denormalized) ==============
+    teacher_ids = list({c.get("teacher_id") for c in courses_live if c.get("teacher_id")})
+    student_ids = list({e.get("student_id") for e in enrollments_live if e.get("student_id")})
+    dept_ids = list({c.get("department_id") for c in courses_live if c.get("department_id")})
+
+    teachers_map, students_map, depts_map, faculties_map = {}, {}, {}, {}
+    if teacher_ids:
+        try:
+            tobj = [ObjectId(t) for t in teacher_ids if t]
+            async for t in db.teachers.find({"_id": {"$in": tobj}}):
+                teachers_map[str(t["_id"])] = {
+                    "id": str(t["_id"]), "full_name": t.get("full_name", ""),
+                    "teacher_id": t.get("teacher_id", ""),
+                    "academic_title": t.get("academic_title"),
+                    "specialization": t.get("specialization"),
+                }
+        except Exception:
+            pass
+    if student_ids:
+        try:
+            sobj = [ObjectId(s) for s in student_ids if s]
+            async for s in db.students.find({"_id": {"$in": sobj}}):
+                students_map[str(s["_id"])] = {
+                    "id": str(s["_id"]), "full_name": s.get("full_name", ""),
+                    "student_id": s.get("student_id", ""),
+                    "reference_number": s.get("reference_number"),
+                    "department_id": s.get("department_id"),
+                    "level": s.get("level"), "section": s.get("section"),
+                }
+        except Exception:
+            pass
+    if dept_ids:
+        try:
+            dobj = [ObjectId(d) for d in dept_ids if d]
+            async for d in db.departments.find({"_id": {"$in": dobj}}):
+                depts_map[str(d["_id"])] = {
+                    "id": str(d["_id"]), "name": d.get("name", ""), "code": d.get("code", ""),
+                    "faculty_id": d.get("faculty_id"),
+                }
+                if d.get("faculty_id"):
+                    try:
+                        f = await db.faculties.find_one({"_id": ObjectId(d["faculty_id"])})
+                        if f:
+                            faculties_map[str(f["_id"])] = {
+                                "id": str(f["_id"]), "name": f.get("name", ""), "code": f.get("code", ""),
+                            }
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # ============== إثراء المقررات بالأسماء + الإحصائيات ==============
+    courses_enriched = []
+    completed_lec_total = 0
+    for c in courses_live:
+        cid = str(c["_id"])
+        c_lecs = [l for l in lectures_live if str(l.get("course_id")) == cid]
+        c_completed = sum(1 for l in c_lecs if l.get("status") == "completed")
+        completed_lec_total += c_completed
+        c_students = sum(1 for e in enrollments_live if str(e.get("course_id")) == cid)
+        t_info = teachers_map.get(str(c.get("teacher_id"))) if c.get("teacher_id") else None
+        d_info = depts_map.get(str(c.get("department_id"))) if c.get("department_id") else None
+        courses_enriched.append({
+            "id": cid,
+            "name": c.get("name", ""), "code": c.get("code", ""),
+            "level": c.get("level"), "section": c.get("section", ""),
+            "credit_hours": c.get("credit_hours", 3),
+            "room": c.get("room", ""),
+            "teacher_id": c.get("teacher_id"),
+            "teacher_name": (t_info or {}).get("full_name"),
+            "department_id": c.get("department_id"),
+            "department_name": (d_info or {}).get("name"),
+            "students_count": c_students,
+            "lectures_total": len(c_lecs),
+            "lectures_completed": c_completed,
+            "completion_pct": round((c_completed / len(c_lecs) * 100) if c_lecs else 0, 1),
+        })
+
+    # ============== الملخص العام ==============
+    overall_rate = 0.0
+    if attendance_live:
+        present_count = sum(1 for a in attendance_live if a.get("status") in ("present", "late"))
+        overall_rate = round((present_count / len(attendance_live)) * 100, 2)
+
+    summary = {
+        "total_courses": len(courses_live),
+        "total_students": len(student_ids),
+        "total_teachers": len(teacher_ids),
+        "total_lectures": len(lectures_live),
+        "completed_lectures": completed_lec_total,
+        "total_attendance_records": len(attendance_live),
+        "overall_attendance_rate": overall_rate,
+    }
+
+    # ============== تحويل ObjectId لـ str وتنظيف ==============
+    def _clean(items, drop_id=True):
+        result = []
+        for x in items:
+            d = dict(x)
+            d["_archive_id"] = str(d.pop("_id"))
+            for k, v in list(d.items()):
+                if isinstance(v, ObjectId):
+                    d[k] = str(v)
+            result.append(d)
+        return result
+
     archive_record = {
         "semester_id": semester_id,
         "semester_name": semester["name"],
         "academic_year": semester["academic_year"],
-        "courses": courses,
-        "attendance_records": attendance_records,
-        "courses_count": len(courses),
-        "attendance_count": len(attendance_records),
+        "semester_start": semester.get("start_date"),
+        "semester_end": semester.get("end_date"),
         "archived_at": get_yemen_time(),
-        "archived_by": current_user["id"]
+        "archived_by": current_user["id"],
+        "archived_by_name": current_user.get("full_name") or current_user.get("username"),
+        "summary": summary,
+        # snapshots مُحسَّبة جاهزة للعرض
+        "courses": courses_enriched,
+        # raw data للتفاصيل
+        "lectures": _clean(lectures_live),
+        "attendance": _clean(attendance_live),
+        "enrollments": _clean(enrollments_live),
+        "study_plans": _clean(study_plans_live),
+        # snapshots للأسماء (denormalized لحماية الأرشيف من تغييرات لاحقة)
+        "students_snapshot": list(students_map.values()),
+        "teachers_snapshot": list(teachers_map.values()),
+        "departments_snapshot": list(depts_map.values()),
+        "faculties_snapshot": list(faculties_map.values()),
     }
-    
+
+    # ============== الإدراج في الأرشيف ==============
     await db.semester_archives.insert_one(archive_record)
-    
-    # تحديث حالة الفصل
+
+    # ============== حذف العمليات التشغيلية فقط ==============
+    # (لا نحذف: students, teachers, departments, faculties, users)
+    del_courses = await db.courses.delete_many({"semester_id": semester_id})
+    del_lectures_a = await db.lectures.delete_many({"semester_id": semester_id})
+    del_lectures_b = await db.lectures.delete_many({"course_id": {"$in": course_ids}})
+    del_attendance = await db.attendance.delete_many({"course_id": {"$in": course_ids}})
+    del_enrollments = await db.enrollments.delete_many({"course_id": {"$in": course_ids}})
+    del_plans = await db.study_plans.delete_many({"course_id": {"$in": course_ids}})
+
+    # ============== تحديث حالة الفصل ==============
     await db.semesters.update_one(
         {"_id": ObjectId(semester_id)},
         {"$set": {
             "status": SemesterStatus.ARCHIVED,
             "archived_at": get_yemen_time(),
-            "archive_stats": {
-                "courses_count": len(courses),
-                "attendance_count": len(attendance_records)
-            }
+            "archive_stats": summary,
         }}
     )
-    
+
     return {
-        "message": "تم أرشفة الفصل الدراسي بنجاح",
-        "archived_courses": len(courses),
-        "archived_attendance": len(attendance_records)
+        "message": f"تم أرشفة الفصل '{semester['name']}' بنجاح",
+        "summary": summary,
+        "deleted": {
+            "courses": del_courses.deleted_count,
+            "lectures": del_lectures_a.deleted_count + del_lectures_b.deleted_count,
+            "attendance": del_attendance.deleted_count,
+            "enrollments": del_enrollments.deleted_count,
+            "study_plans": del_plans.deleted_count,
+        },
     }
 
 @api_router.get("/semesters/{semester_id}/stats")
@@ -13523,6 +13688,7 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(global_search_router, prefix="/api")
 app.include_router(entity_details_router, prefix="/api")
+app.include_router(archives_router, prefix="/api")
 
 
 @app.on_event("startup")
