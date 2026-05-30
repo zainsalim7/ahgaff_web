@@ -1,5 +1,42 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 30 مايو 2026 (تابع) ✅
+
+### إعادة هيكلة الهيكل الأكاديمي - 3 طبقات (P0 - مكتمل 100%)
+
+**المشكلة:** أرشفة الفصل كانت تحذف المقررات نهائياً، فيختفي تعريف المقرر مع المعلم تاريخياً.
+
+**الحل:** فصل تعريف المقرر عن جلسات الفصل:
+- **Layer 1 - `curriculum_courses`:** تعريف ثابت للمقرر (الكود، الاسم، الساعات، القسم، المستوى، الفصل 1/2)
+- **Layer 2 - `teacher_assignments`:** ربط دائم بين معلم ومقرر من الخطة
+- **Layer 3 - `courses` (موجود):** جلسات فعلية في فصل أكاديمي محدد، مرتبطة بـ `curriculum_course_id`
+
+#### Backend (`routes/curriculum.py` - 750+ سطر)
+- [x] `GET /api/curriculum/courses` - قائمة مع فلاتر (قسم، كلية، مستوى، فصل)
+- [x] `GET /api/curriculum/by-department/{id}` - شبكة (مستوى × فصل) مع المعلمين المُسنَدين
+- [x] `GET /api/curriculum/courses/{id}` - تفاصيل + معلمون + إحصائيات
+- [x] `POST /api/curriculum/courses` - إنشاء (admin) مع فحص تكرار الكود
+- [x] `PUT /api/curriculum/courses/{id}` - تحديث
+- [x] `DELETE /api/curriculum/courses/{id}` - حذف ناعم (is_active=False)
+- [x] `GET /api/curriculum/assignments` - قائمة الإسنادات
+- [x] `POST /api/curriculum/assignments` - إسناد معلم لمقرر (مع فحص تكرار)
+- [x] `DELETE /api/curriculum/assignments/{id}` - إلغاء ناعم
+- [x] `POST /api/curriculum/generate-offerings?semester_id=X` - توليد Layer 3 من الخطة
+- [x] `POST /api/curriculum/backfill-from-active` - بناء الخطة من المقررات النشطة (idempotent، يربط `curriculum_course_id`)
+- [x] `POST /api/curriculum/import-from-archive/{semester_id}` - استيراد من فصل مؤرشف
+- [x] `server.py` - تعديل `activate_semester` لاستقبال `?auto_generate_from_curriculum=true` للتوليد التلقائي عند التفعيل
+
+#### Frontend
+- [x] `/curriculum` - شبكة (مستوى × فصل) لكل قسم، إضافة/حذف/توليد/استيراد/بناء من النشط
+- [x] `/teacher-assignments` - عرض الإسنادات مجمعة حسب المعلم، فلتر بالقسم، إسناد جديد بواجهة بحث
+- [x] روابط SideMenu: "الخطة الدراسية" + "إسناد المعلمين" مع صلاحيات MANAGE_COURSES / VIEW_COURSES
+
+#### الاختبار
+- [x] `testing_agent_v3_fork`: Backend 100% (19/19) + Frontend 100%
+- [x] ملف اختبار: `/app/backend/tests/test_curriculum.py` (19 حالة pytest)
+- [x] RBAC مؤكد: المعلم يحصل على 403 لكل POST/PUT/DELETE
+- [x] Backfill idempotent (المحاولة الثانية: created=0, skipped=8)
+
 ## ما تم إنجازه - جلسة 30 مايو 2026 ✅
 
 ### نظام الأرشيف الدراسي الشامل (P0 - مكتمل)
