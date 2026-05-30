@@ -55,6 +55,10 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'students', label: 'إدارة الطلاب', icon: 'people', path: '/students', permissions: [
     PERMISSIONS.MANAGE_STUDENTS, PERMISSIONS.MANAGE_ENROLLMENTS
   ]},
+
+  { id: 'student-status', label: 'حالات الطلاب', icon: 'shuffle', path: '/student-status-manager', permissions: [
+    PERMISSIONS.MANAGE_STUDENTS
+  ]},
   
   { id: 'teachers', label: 'إدارة المعلمين', icon: 'school', path: '/manage-teachers', permissions: [
     PERMISSIONS.MANAGE_TEACHERS

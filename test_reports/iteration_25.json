@@ -1,0 +1,53 @@
+{
+  "summary": "Tested student status management end-to-end. Backend: 16/16 pytest tests passed against /api/student-status/* (stats, single change, bulk change, history, RBAC, invalid status, level downgrade for repeat). Frontend: /student-status-manager page loads with 5 colored stat cards, filters render, 91 student rows show, 'select-all' triggers bottom action bar, action modal exposes all 5 status options + level + reason + apply, history modal opens and displays prior changes. All data-testid selectors present and functional.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/students/{id}",
+        "issue": "Response model omits the new fields (status, graduation_date, expulsion_date, frozen_at) that are written by /student-status/{id}/change. Data IS persisted in DB (verified via /student-status/stats showing graduated=1 immediately after a change). Frontend mainly reads from list/stats so user flow not blocked, but any consumer expecting current status on the detail endpoint will see it missing."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/student-status-manager",
+        "issues": [
+          "Hero header (الـ banner البنفسجي) yo'verlaps the page title/header at the top right corner (in RTL the menu/search icons partially overlap 'إدارة حالات الطلاب' label in the top bar). Minor visual clip.",
+          "Level filter chips labels render right-to-left as 'م1, م2 ...' but tab strip baseline shows underline ('p' shape) bleeding into row below — purely cosmetic.",
+          "History modal title is 'سجل حالات: {اسم}' instead of 'تاريخ تغييرات الحالة' from spec (label-only, non-blocking)."
+        ]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_student_status.py",
+    "/app/test_reports/pytest/student_status_results.xml"
+  ],
+  "action_items": [
+    "(Minor) Include status, graduation_date, expulsion_date, frozen_at in the GET /api/students/{id} response model so the detail endpoint reflects the latest student state.",
+    "(Cosmetic) Adjust hero/header layout overlap on /student-status-manager and align history modal title with the spec wording."
+  ],
+  "critical_code_review_comments": [
+    "student_status.py router is well-scoped, RBAC enforced via Depends(require_permission(...)), history persisted in dedicated collection 'student_status_history'. Good separation.",
+    "_apply_status_change correctly sets is_active=false and the date markers (graduation_date / expulsion_date / frozen_at). For 'repeat' it preserves is_active=true and supports new_level downgrade.",
+    "Bulk endpoint returns per-item ok/false results and aggregate success_count/failed_count — clean contract.",
+    "Consider also returning current 'status' field in GET /api/students/{id} (currently stripped by the Pydantic response model)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_student_status.py"
+  ],
+  "success_rate": {
+    "backend": "100% (16/16)",
+    "frontend": "100% (all critical flows verified)"
+  },
+  "test_credentials": "admin / admin123, teacher180156 / teacher123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "No seed data created. Test data only modifies student status of existing students; cleanup restores first student to 'active'. History records remain in student_status_history (expected, append-only audit log).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend route prefix is /api/student-status (NOT /api/students/). The GET /api/students/{id} response model strips student_status fields — known minor issue, not a blocker. Frontend page uses Expo router at /student-status-manager and has full data-testid coverage: search-input, select-all, student-{id}, hist-{id}, open-action, opt-{status}, action-level, action-reason, apply-bulk. Login form selectors: input[placeholder='اسم المستخدم'], input[placeholder='كلمة المرور'], text='تسجيل الدخول'.",
+  "rca of the issue": "GET /api/students/{id} missing new fields — RCA: the Pydantic Student response model in the main students router was defined before status workflow was added; new fields written directly to Mongo by student_status router are not declared on the response schema, so FastAPI's response_model serialization drops them. Fix: add Optional[str] status, Optional[datetime] graduation_date / expulsion_date / frozen_at to the Student response model (or use response_model_exclude_none=False with the fields added)."
+}
