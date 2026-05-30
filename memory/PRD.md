@@ -1,5 +1,46 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 30 مايو 2026 (تكملة 3) ✅
+
+### إدارة حالات الطلاب - 5 حالات + إجراءات جماعية (P0 - مكتمل)
+
+**الفلسفة:** بدل اعتماد is_active فقط، نحفظ حالة واضحة للطالب لمعرفة سبب خروجه من المستوى.
+
+#### الحالات الخمس
+| الحالة | الوصف | is_active | يتم النقل لمستوى؟ |
+|---|---|---|---|
+| `active` | مستمر في الدراسة | true | اختياري |
+| `repeat` | إعادة (راسب، ينتظر) | true | اختياري (نزول لمستوى أقل) |
+| `graduated` | متخرّج | false | لا (يحفظ graduation_date) |
+| `expelled` | مفصول | false | لا (يحفظ expulsion_date) |
+| `frozen` | مجمَّد مؤقتاً | false | لا (يحفظ frozen_at) |
+
+#### Backend (`routes/student_status.py`)
+- [x] `GET /api/student-status/stats` - إحصائيات لكل حالة (مع فلتر قسم/كلية)
+- [x] `POST /api/student-status/{student_id}/change` - تغيير فردي (new_status, new_level?, reason?, effective_date?)
+- [x] `POST /api/student-status/bulk-change` - تغيير جماعي (student_ids[], new_status, new_level?, reason?)
+- [x] `GET /api/student-status/{student_id}/history` - سجل التغييرات
+- [x] Collection جديدة: `student_status_history` (append-only audit log)
+- [x] تحديث `StudentResponse` ليشمل الحقول الجديدة (status, graduation_date, expulsion_date, frozen_at, graduated_from_level, status_reason)
+- [x] RBAC: admin أو MANAGE_STUDENTS فقط
+
+#### Frontend (`app/student-status-manager.tsx`)
+- [x] 5 بطاقات إحصائية ملونة (مستمر/إعادة/متخرج/مفصول/مجمَّد)
+- [x] 4 صفوف فلاتر (كلية / قسم / مستوى / حالة)
+- [x] بحث بالاسم / رقم الطالب / الرقم المرجعي
+- [x] Checkbox فردي + زر "تحديد كل المعروض"
+- [x] شريط إجراءات سفلي ديناميكي (يظهر عند التحديد)
+- [x] Modal إجراء: اختيار حالة + مستوى اختياري + سبب + تطبيق
+- [x] Modal تاريخ: يعرض كل تغيير حالة سابق مع badge قبل/بعد + التاريخ + المستخدم
+- [x] رابط "حالات الطلاب" في SideMenu
+
+#### الاختبار
+- [x] `testing_agent_v3_fork`: Backend **100% (16/16 pytest)** + Frontend **100%**
+- [x] ملف اختبار: `/app/backend/tests/test_student_status.py`
+- [x] RBAC مؤكد (teacher → 403)
+- [x] is_active يُضبط تلقائياً (graduated/expelled/frozen → false، active/repeat → true)
+- [x] تاريخ كامل لكل تغيير
+
 ## ما تم إنجازه - جلسة 30 مايو 2026 (تكملة 2) ✅
 
 ### رفع الخطة الدراسية عبر Excel + مسح خطة قسم (P0 - مكتمل)

@@ -27,3 +27,11 @@ class StudentResponse(StudentBase):
     created_at: datetime
     is_active: bool = True
     reference_number: Optional[str] = None
+    # حقول حالة الطالب (active/repeat/graduated/expelled/frozen)
+    status: Optional[str] = None
+    status_changed_at: Optional[str] = None
+    status_reason: Optional[str] = None
+    graduation_date: Optional[str] = None
+    graduated_from_level: Optional[int] = None
+    expulsion_date: Optional[str] = None
+    frozen_at: Optional[str] = None
