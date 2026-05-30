@@ -1,5 +1,52 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 30 مايو 2026 ✅
+
+### نظام الأرشيف الدراسي الشامل (P0 - مكتمل)
+
+**الفلسفة:** فصل البيانات إلى نوعين:
+- **بيانات ثابتة (Master Data):** students, teachers, departments, faculties, users — تبقى دائماً في المجموعات الحية بغض النظر عن الفصل.
+- **بيانات تشغيلية (Operational Data):** courses, lectures, attendance, enrollments, study_plans — تنتمي لفصل معيّن.
+
+عند أرشفة فصل:
+- ✅ يتم نسخ كل العمليات التشغيلية للفصل إلى `semester_archives` مع snapshot للأسماء (denormalized) لحماية الأرشيف من أي تعديلات لاحقة على الأسماء.
+- ✅ يتم **حذف** فقط العمليات التشغيلية الخاصة بالفصل من المجموعات الحية.
+- ❌ **لا يُحذف أبداً:** students, teachers, departments, faculties, users.
+
+#### Backend
+- [x] إعادة كتابة `POST /api/semesters/{id}/archive` في `server.py` بشكل شامل:
+  - يجمع courses + lectures + attendance + enrollments + study_plans
+  - يحسب summary (total_courses, total_students, total_teachers, total_lectures, completed_lectures, overall_attendance_rate)
+  - يأخذ snapshots للأسماء (students_snapshot, teachers_snapshot, departments_snapshot, faculties_snapshot)
+  - يثري المقررات بـ teacher_name + department_name + lectures stats + completion_pct
+  - يحذف البيانات التشغيلية بعد النسخ
+  - يحدّث الفصل إلى status=ARCHIVED
+- [x] إنشاء `routes/archives.py` بـ **6 endpoints جديدة** للقراءة + بحث:
+  - `GET /api/archives` - قائمة الفصول المؤرشفة
+  - `GET /api/archives/search?q=&type=&semester_id=` - بحث في الأرشيف
+  - `GET /api/archives/{semester_id}` - ملخص فصل مؤرشف
+  - `GET /api/archives/{semester_id}/courses` - قائمة المقررات
+  - `GET /api/archives/{semester_id}/courses/{course_id}` - تفاصيل مقرر + طلابه + نسب حضور
+  - `GET /api/archives/{semester_id}/students` - الطلاب وحضورهم العام
+  - `GET /api/archives/{semester_id}/teachers` - عبء المعلمين
+- [x] إضافة 3 صلاحيات في `models/permissions.py`: `VIEW_ARCHIVE`, `SEARCH_ARCHIVE`, `EXPORT_ARCHIVE`
+- [x] منحها افتراضياً لـ `Admin` و `Dean` فقط
+- [x] دعم Smart Arabic regex في البحث
+
+#### Frontend
+- [x] 3 صفحات جديدة:
+  - `/archives` - قائمة الفصول المؤرشفة مع 4 بطاقات إحصائيات سريعة لكل فصل
+  - `/archive-details?semesterId=...` - 4 تبويبات (نظرة عامة, مقررات, طلاب, معلمون) + بانر تحذيري بنفسجي "أنت تتصفح فصلاً مؤرشفاً"
+  - `/archive-search` - بحث شامل في كل الفصول المؤرشفة + فلاتر (الكل/طلاب/معلمون/مقررات) + فحص استباقي للصلاحية مع locked-state للمحظورين
+- [x] رابطان جديدان في SideMenu تحت قسم "الأرشيف الدراسي" مع التحقق من الصلاحية
+- [x] ثوابت الصلاحيات في `AuthContext.tsx`
+
+#### الاختبار
+- [x] `testing_agent_v3_fork`: Backend 95% (17/18) + Frontend 100%
+- [x] الصلاحيات تعمل: Admin 200، Teacher 403 (RBAC مُحكم)
+- [x] رسائل ودية بالعربية للمحظورين
+- [x] ملف اختبار pytest: `/app/backend/tests/test_archives.py`
+
 ## ما تم إنجازه - جلسة 29 مايو 2026 ✅
 
 ### صفحات تفاصيل الكيانات للبحث الشامل (P0 - مكتمل)

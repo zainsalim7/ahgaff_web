@@ -22,6 +22,25 @@ export default function ArchiveSearchScreen() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [permissionDenied, setPermissionDenied] = useState(false);
+  const [permCheckLoading, setPermCheckLoading] = useState(true);
+
+  // فحص الصلاحية عند فتح الصفحة
+  useEffect(() => {
+    (async () => {
+      try {
+        // أبسط طريقة للفحص: استدعاء بحث وهمي بطول كافٍ
+        await api.get('/archives/search', { params: { q: '__perm_check__' } });
+        setPermissionDenied(false);
+      } catch (e: any) {
+        if (e?.response?.status === 403) {
+          setPermissionDenied(true);
+        }
+      } finally {
+        setPermCheckLoading(false);
+      }
+    })();
+  }, []);
 
   const doSearch = useCallback(async () => {
     const query = q.trim();
@@ -59,7 +78,23 @@ export default function ArchiveSearchScreen() {
           <Text style={styles.headerSubtitle}>ابحث في كل الفصول المؤرشفة عن طالب، معلم، أو مقرر</Text>
         </View>
 
-        <View style={styles.searchBox}>
+        {permCheckLoading ? (
+          <View style={styles.placeholder}>
+            <ActivityIndicator size="large" color="#6a1b9a" />
+          </View>
+        ) : permissionDenied ? (
+          <View style={styles.placeholder}>
+            <Ionicons name="lock-closed" size={56} color="#bbb" />
+            <Text style={styles.placeholderText}>
+              ليست لديك صلاحية البحث في الأرشيف
+            </Text>
+            <Text style={[styles.placeholderText, { fontSize: 12, color: '#aaa', marginTop: 6 }]}>
+              يرجى التواصل مع المسؤول لمنحك الصلاحية المناسبة
+            </Text>
+          </View>
+        ) : (
+          <>
+            <View style={styles.searchBox}>
           <Ionicons name="search" size={18} color="#888" />
           <TextInput
             style={styles.searchInput}
@@ -183,6 +218,8 @@ export default function ArchiveSearchScreen() {
             </>
           )}
         </ScrollView>
+          </>
+        )}
       </SafeAreaView>
     </>
   );
