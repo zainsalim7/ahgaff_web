@@ -5,8 +5,13 @@ Archive PDF Reports - تصدير تقارير الأرشيف كملفات PDF
 """
 import io
 import os
+import hashlib
+import json as _json
+import uuid
+from datetime import datetime, timezone
 from typing import Optional
 
+import qrcode
 from bidi.algorithm import get_display
 import arabic_reshaper
 from fastapi import APIRouter, Depends, HTTPException
@@ -18,7 +23,7 @@ from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 from reportlab.platypus import (
-    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, PageBreak,
+    SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, Image,
 )
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
@@ -138,7 +143,149 @@ def _pdf_response(buf: io.BytesIO, filename: str) -> StreamingResponse:
     )
 
 
+# ============== التوقيع الرقمي للتقارير ==============
+
+# يُقرأ من env إن كان متوفراً، وإلا الافتراضي
+_VERIFY_BASE_URL = os.environ.get("REPORT_VERIFY_URL") or "https://app.ahgaff.net/verify-report"
+
+
+def _make_qr_image(data: str, box_size: int = 4) -> io.BytesIO:
+    """يولّد QR code كصورة PNG."""
+    qr = qrcode.QRCode(
+        version=None,
+        error_correction=qrcode.constants.ERROR_CORRECT_M,
+        box_size=box_size, border=1,
+    )
+    qr.add_data(data)
+    qr.make(fit=True)
+    img = qr.make_image(fill_color="black", back_color="white")
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    buf.seek(0)
+    return buf
+
+
+async def _sign_report(db, current_user: dict, report_type: str, identifiers: dict, payload_sample: dict) -> dict:
+    """يحفظ سجل توقيع التقرير ويُرجع معلومات التوقيع.
+    
+    Returns: {doc_id, hash, signed_by, signed_at, verify_url}
+    """
+    doc_id = uuid.uuid4().hex[:16].upper()
+    canonical = _json.dumps(
+        {"type": report_type, "ids": identifiers, "sample": payload_sample, "doc_id": doc_id},
+        ensure_ascii=False, sort_keys=True,
+    )
+    h = hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:16].upper()
+    signed_at = datetime.now(timezone.utc).isoformat()
+    record = {
+        "doc_id": doc_id,
+        "hash": h,
+        "report_type": report_type,
+        "identifiers": identifiers,
+        "payload_sample": payload_sample,
+        "signed_by_id": current_user.get("id"),
+        "signed_by_name": current_user.get("full_name") or current_user.get("username"),
+        "signed_by_role": current_user.get("role"),
+        "signed_at": signed_at,
+    }
+    await db.report_signatures.insert_one(record)
+    return {
+        "doc_id": doc_id, "hash": h, "signed_at": signed_at,
+        "signed_by_name": record["signed_by_name"],
+        "signed_by_role": record["signed_by_role"],
+        "verify_url": f"{_VERIFY_BASE_URL}?id={doc_id}",
+    }
+
+
+def _add_signature_footer(elements: list, sig: dict, institution_name: str = "جامعة الأحقاف"):
+    """يضيف ذيل التوقيع الرقمي + QR code في أسفل التقرير."""
+    elements.append(Spacer(1, 8 * mm))
+
+    # تنسيق التاريخ
+    try:
+        dt = datetime.fromisoformat(sig["signed_at"].replace("Z", "+00:00"))
+        date_str = dt.strftime("%Y-%m-%d %H:%M")
+    except Exception:
+        date_str = sig["signed_at"][:16]
+
+    # نص التوقيع
+    sig_style = ParagraphStyle(
+        "SigStyle", fontName=_FONT_NAME, fontSize=8, alignment=TA_RIGHT,
+        textColor=colors.HexColor("#666"), leading=12,
+    )
+    role_label = {"admin": "مدير النظام", "dean": "عميد",
+                  "department_head": "رئيس قسم", "registrar": "مسجل",
+                  "registration_manager": "مدير تسجيل"}.get(
+        sig.get("signed_by_role") or "", sig.get("signed_by_role") or "-")
+
+    signer_name = sig.get("signed_by_name") or "-"
+    doc_id = sig["doc_id"]
+    h = sig["hash"]
+
+    sig_text = (
+        f"<b>{ar('نظام الحضور الإلكتروني - ' + institution_name)}</b><br/>"
+        f"{ar('أُنشئ بواسطة: ' + signer_name + ' (' + role_label + ')')}<br/>"
+        f"{ar('تاريخ الإنشاء: ' + date_str)}<br/>"
+        f"{ar('معرّف التقرير: ' + doc_id + ' • التحقق (Hash): ' + h)}<br/>"
+        f"{ar('للتحقق امسح رمز QR أو زر الرابط:')} <font color='#1565c0'>{sig['verify_url']}</font>"
+    )
+
+    # QR code
+    qr_buf = _make_qr_image(sig["verify_url"])
+    qr_img = Image(qr_buf, width=28 * mm, height=28 * mm)
+
+    # جدول من خليتين: النص يميناً + QR يساراً
+    footer_table = Table(
+        [[qr_img, Paragraph(sig_text, sig_style)]],
+        colWidths=[32 * mm, 140 * mm],
+    )
+    footer_table.setStyle(TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#bbb")),
+        ("BACKGROUND", (0, 0), (-1, -1), colors.HexColor("#fafafa")),
+        ("LEFTPADDING", (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 8),
+        ("TOPPADDING", (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 8),
+    ]))
+    elements.append(footer_table)
+
+
 # ==================== Endpoints ====================
+
+
+@router.get("/verify-report/{doc_id}")
+async def verify_report_signature(doc_id: str):
+    """Endpoint عام (بلا مصادقة) للتحقق من توقيع تقرير PDF.
+    يستخدم عند مسح QR code من PDF التقرير.
+    """
+    db = get_db()
+    rec = await db.report_signatures.find_one({"doc_id": doc_id.upper()})
+    if not rec:
+        return {
+            "valid": False,
+            "message": "هذا المعرّف غير موجود في سجل التواقيع. التقرير غير معتمد أو مزوّر.",
+        }
+    type_label = {
+        "student_report": "تقرير حضور طالب",
+        "teacher_report": "تقرير نصاب معلم",
+        "student_history": "السجل الأكاديمي للطالب",
+        "teacher_history": "السجل التدريسي للمعلم",
+        "course_history": "تاريخ المقرر",
+    }.get(rec.get("report_type"), rec.get("report_type"))
+    return {
+        "valid": True,
+        "doc_id": rec.get("doc_id"),
+        "hash": rec.get("hash"),
+        "report_type": rec.get("report_type"),
+        "report_type_label": type_label,
+        "signed_by_name": rec.get("signed_by_name"),
+        "signed_by_role": rec.get("signed_by_role"),
+        "signed_at": rec.get("signed_at"),
+        "message": "تقرير موثَّق ومُعتمد من نظام جامعة الأحقاف.",
+    }
+
+
 
 @router.get("/archives/{semester_id}/students/{student_id}/pdf")
 async def archive_student_report_pdf(
@@ -237,6 +384,15 @@ async def archive_student_report_pdf(
         elements.append(t)
     else:
         elements.append(Paragraph(ar("لم يُسجل الطالب في أي مقرر بهذا الفصل."), norm))
+
+    # ============== التوقيع الرقمي ==============
+    sig = await _sign_report(db, current_user, "student_report",
+                              {"semester_id": semester_id, "student_id": student_id},
+                              {"name": student.get("full_name"),
+                               "sid": student.get("student_id"),
+                               "courses_count": len(course_ids),
+                               "overall_pct": overall["pct"]})
+    _add_signature_footer(elements, sig)
 
     buf = _build_pdf(elements)
     fname = f"student-report-{student.get('student_id') or student_id}.pdf"
@@ -341,6 +497,15 @@ async def archive_teacher_report_pdf(
     else:
         elements.append(Paragraph(ar("لم يُدرّس المعلم أي مقرر بهذا الفصل."), norm))
 
+    # ============== التوقيع الرقمي ==============
+    sig = await _sign_report(db, current_user, "teacher_report",
+                              {"semester_id": semester_id, "teacher_id": teacher_id},
+                              {"name": teacher.get("full_name"),
+                               "tid": teacher.get("teacher_id"),
+                               "courses_count": len(courses),
+                               "completion_pct": completion})
+    _add_signature_footer(elements, sig)
+
     buf = _build_pdf(elements)
     fname = f"teacher-report-{teacher.get('teacher_id') or teacher_id}.pdf"
     return _pdf_response(buf, fname)
@@ -410,6 +575,13 @@ async def archive_student_history_pdf(
             ("TOPPADDING", (0, 0), (-1, -1), 6), ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
         ]))
         elements.append(t)
+
+    # ============== التوقيع الرقمي ==============
+    sig = await _sign_report(db, current_user, "student_history",
+                              {"student_id": student_id},
+                              {"semesters_count": len(history),
+                               "name": (first_snap or {}).get("full_name")})
+    _add_signature_footer(elements, sig)
 
     buf = _build_pdf(elements)
     sid = (first_snap or {}).get("student_id") or student_id
@@ -507,6 +679,14 @@ async def archive_teacher_history_pdf(
         ]))
         elements.append(t)
 
+    # ============== التوقيع الرقمي ==============
+    sig = await _sign_report(db, current_user, "teacher_history",
+                              {"teacher_id": teacher_id},
+                              {"semesters_count": len(history),
+                               "name": (first_snap or {}).get("full_name"),
+                               "grand_pct": grand_pct})
+    _add_signature_footer(elements, sig)
+
     buf = _build_pdf(elements)
     tid = (first_snap or {}).get("teacher_id") or teacher_id
     return _pdf_response(buf, f"teacher-history-{tid}.pdf")
@@ -571,6 +751,12 @@ async def archive_course_history_pdf(
             ("TOPPADDING", (0, 0), (-1, -1), 5), ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
         ]))
         elements.append(t)
+
+    # ============== التوقيع الرقمي ==============
+    sig = await _sign_report(db, current_user, "course_history",
+                              {"course_code": course_code},
+                              {"name": course_name, "instances_count": len(instances)})
+    _add_signature_footer(elements, sig)
 
     buf = _build_pdf(elements)
     return _pdf_response(buf, f"course-history-{course_code}.pdf")
