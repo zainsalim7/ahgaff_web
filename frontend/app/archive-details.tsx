@@ -4,7 +4,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, RefreshControl, Platform, TextInput,
+  ActivityIndicator, RefreshControl, Platform, TextInput, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +26,7 @@ export default function ArchiveDetailsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [restoring, setRestoring] = useState(false);
 
   const fetchAll = useCallback(async () => {
     if (!semesterId) return;
@@ -55,6 +56,37 @@ export default function ArchiveDetailsScreen() {
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
   const onRefresh = () => { setRefreshing(true); fetchAll(); };
+
+  const doRestore = useCallback(async () => {
+    const confirmMsg = `هل أنت متأكد من استعادة الفصل "${summary?.semester_name}" من الأرشيف؟\n\n` +
+      `سيتم إعادة كل البيانات التشغيلية إلى الجداول الحية، وستتغير حالة الفصل إلى "مغلق"، وستُحذف وثيقة الأرشيف.`;
+    if (Platform.OS === 'web') {
+      // window.confirm فقط على الويب
+      // eslint-disable-next-line no-alert
+      if (!window.confirm(confirmMsg)) return;
+    } else {
+      const ok = await new Promise<boolean>((resolve) => {
+        Alert.alert('تأكيد الاستعادة', confirmMsg, [
+          { text: 'إلغاء', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'استعادة', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+      if (!ok) return;
+    }
+    setRestoring(true);
+    try {
+      const res = await api.post(`/semesters/${semesterId}/restore`);
+      const r = res.data?.restored || {};
+      const msg = `تمت الاستعادة بنجاح:\n• مقررات: ${r.courses || 0}\n• محاضرات: ${r.lectures || 0}\n• حضور: ${r.attendance || 0}\n• تسجيلات: ${r.enrollments || 0}\n• خطط: ${r.study_plans || 0}`;
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
+      router.replace('/archives' as any);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'فشلت الاستعادة';
+      if (Platform.OS === 'web') window.alert(`خطأ: ${msg}`); else Alert.alert('خطأ', msg);
+    } finally {
+      setRestoring(false);
+    }
+  }, [semesterId, summary?.semester_name, router]);
 
   const filtered = useMemo(() => {
     const q = search.trim();
@@ -163,6 +195,33 @@ export default function ArchiveDetailsScreen() {
                 <InfoRow label="سجلات الحضور" value={String(s.total_attendance_records || 0)} />
                 <InfoRow label="بداية الفصل" value={formatDate(summary.semester_start) || '-'} />
                 <InfoRow label="نهاية الفصل" value={formatDate(summary.semester_end) || '-'} />
+              </View>
+
+              {/* زر استعادة الفصل من الأرشيف */}
+              <View style={styles.restoreBox}>
+                <View style={styles.restoreHeader}>
+                  <Ionicons name="arrow-undo" size={18} color="#ef6c00" />
+                  <Text style={styles.restoreTitle}>استعادة الفصل من الأرشيف</Text>
+                </View>
+                <Text style={styles.restoreDesc}>
+                  يُعيد كل البيانات (مقررات، محاضرات، حضور، تسجيلات، خطط) إلى الجداول الحية
+                  ويغيّر حالة الفصل إلى &quot;مغلق&quot;. تُحذف وثيقة الأرشيف بعد الاستعادة.
+                </Text>
+                <TouchableOpacity
+                  style={[styles.restoreBtn, restoring && { opacity: 0.6 }]}
+                  onPress={doRestore}
+                  disabled={restoring}
+                  testID="restore-archive-btn"
+                >
+                  {restoring ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <Ionicons name="arrow-undo" size={16} color="#fff" />
+                  )}
+                  <Text style={styles.restoreBtnText}>
+                    {restoring ? 'جاري الاستعادة...' : 'استعادة الفصل'}
+                  </Text>
+                </TouchableOpacity>
               </View>
             </>
           )}
@@ -340,6 +399,18 @@ const styles = StyleSheet.create({
   bigStatLabel: { fontSize: 11, color: '#666', marginTop: 2 },
   section: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginTop: 4 },
   sectionTitle: { fontSize: 13, fontWeight: '700', color: '#333', marginBottom: 6, textAlign: 'right' },
+  restoreBox: {
+    backgroundColor: '#fff8e1', borderRadius: 10, padding: 14, marginTop: 10,
+    borderWidth: 1, borderColor: '#ffe0b2',
+  },
+  restoreHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 },
+  restoreTitle: { fontSize: 14, fontWeight: '700', color: '#ef6c00' },
+  restoreDesc: { fontSize: 12, color: '#666', lineHeight: 18, marginBottom: 10, textAlign: 'right' },
+  restoreBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: '#ef6c00', paddingVertical: 11, borderRadius: 8,
+  },
+  restoreBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
   infoRow: {
     flexDirection: 'row', paddingVertical: 8,
     borderBottomWidth: 1, borderBottomColor: '#f5f5f5', gap: 10,

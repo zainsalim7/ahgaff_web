@@ -12221,7 +12221,8 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
         "summary": summary,
         # snapshots مُحسَّبة جاهزة للعرض
         "courses": courses_enriched,
-        # raw data للتفاصيل
+        # raw data للتفاصيل والاستعادة
+        "courses_raw": _clean(courses_live),
         "lectures": _clean(lectures_live),
         "attendance": _clean(attendance_live),
         "enrollments": _clean(enrollments_live),
@@ -12234,7 +12235,37 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
     }
 
     # ============== الإدراج في الأرشيف ==============
-    await db.semester_archives.insert_one(archive_record)
+    insert_result = await db.semester_archives.insert_one(archive_record)
+    archive_doc_id = insert_result.inserted_id
+
+    # ============== ✅ التحقق من سلامة الأرشيف قبل الحذف ==============
+    saved = await db.semester_archives.find_one({"_id": archive_doc_id})
+    if not saved:
+        raise HTTPException(status_code=500, detail="فشل حفظ الأرشيف. لم يُحذف شيء.")
+
+    expected = {
+        "courses": len(courses_live),
+        "lectures": len(lectures_live),
+        "attendance": len(attendance_live),
+        "enrollments": len(enrollments_live),
+        "study_plans": len(study_plans_live),
+    }
+    actual = {
+        "courses": len(saved.get("courses", [])),
+        "lectures": len(saved.get("lectures", [])),
+        "attendance": len(saved.get("attendance", [])),
+        "enrollments": len(saved.get("enrollments", [])),
+        "study_plans": len(saved.get("study_plans", [])),
+    }
+    mismatches = [k for k in expected if expected[k] != actual[k]]
+    if mismatches:
+        # rollback: نحذف الأرشيف الفاشل ونرفض الأرشفة
+        await db.semester_archives.delete_one({"_id": archive_doc_id})
+        raise HTTPException(
+            status_code=500,
+            detail=f"فشل التحقق من سلامة الأرشيف ({', '.join(mismatches)}). "
+                   f"تم إلغاء العملية ولم يُحذف شيء من البيانات الحية."
+        )
 
     # ============== حذف العمليات التشغيلية فقط ==============
     # (لا نحذف: students, teachers, departments, faculties, users)
@@ -12256,8 +12287,9 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
     )
 
     return {
-        "message": f"تم أرشفة الفصل '{semester['name']}' بنجاح",
+        "message": f"تم أرشفة الفصل '{semester['name']}' بنجاح (تم التحقق من سلامة النسخ)",
         "summary": summary,
+        "verification": {"expected": expected, "actual": actual, "verified": True},
         "deleted": {
             "courses": del_courses.deleted_count,
             "lectures": del_lectures_a.deleted_count + del_lectures_b.deleted_count,
@@ -12265,7 +12297,106 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
             "enrollments": del_enrollments.deleted_count,
             "study_plans": del_plans.deleted_count,
         },
+        "restore_hint": f"يمكنك التراجع عبر: POST /api/semesters/{semester_id}/restore",
     }
+
+
+@api_router.post("/semesters/{semester_id}/restore")
+async def restore_semester_from_archive(
+    semester_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """استعادة فصل من الأرشيف:
+    - يُعيد كل البيانات التشغيلية (courses, lectures, attendance, enrollments, study_plans)
+      من collection `semester_archives` إلى الـ collections الحية.
+    - يُغيّر حالة الفصل من ARCHIVED إلى CLOSED.
+    - يحذف وثيقة الأرشيف بعد نجاح الاستعادة.
+    - الأسماء (students, teachers, departments, faculties) لم تُلمس أصلاً.
+    صلاحية مطلوبة: admin أو manage_courses.
+    """
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بالاستعادة")
+
+    semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+    if not semester:
+        raise HTTPException(status_code=404, detail="الفصل غير موجود")
+
+    if semester.get("status") != SemesterStatus.ARCHIVED:
+        raise HTTPException(status_code=400, detail="الفصل ليس مؤرشفاً")
+
+    archive = await db.semester_archives.find_one({"semester_id": semester_id})
+    if not archive:
+        raise HTTPException(status_code=500, detail="وثيقة الأرشيف غير موجودة! لا يمكن الاستعادة.")
+
+    # ============== رفض إذا كانت البيانات الحية تحوي شيئاً للفصل ==============
+    # (حماية إضافية: قد يكون أحد بدأ يستخدم الفصل من جديد بين الأرشفة والاستعادة)
+    live_courses = await db.courses.count_documents({"semester_id": semester_id})
+    if live_courses > 0:
+        raise HTTPException(
+            status_code=409,
+            detail=f"البيانات الحية تحوي {live_courses} مقرراً للفصل بالفعل. "
+                   f"الاستعادة قد تنتج تكراراً. يرجى مراجعة البيانات أولاً."
+        )
+
+    # ============== تحويل _archive_id إلى _id ==============
+    def _restore_ids(items):
+        result = []
+        for x in items:
+            d = dict(x)
+            if "_archive_id" in d:
+                try:
+                    d["_id"] = ObjectId(d.pop("_archive_id"))
+                except Exception:
+                    d.pop("_archive_id", None)
+            # تحويل الحقول التي تشبه ObjectId
+            for k in ("teacher_id", "department_id", "faculty_id", "course_id",
+                      "student_id", "semester_id", "lecture_id"):
+                if k in d and isinstance(d[k], str) and len(d[k]) == 24:
+                    # نتركها string كما كانت في النظام
+                    pass
+            result.append(d)
+        return result
+
+    courses_to_restore = _restore_ids(archive.get("courses_raw", []))
+    lectures_to_restore = _restore_ids(archive.get("lectures", []))
+    attendance_to_restore = _restore_ids(archive.get("attendance", []))
+    enrollments_to_restore = _restore_ids(archive.get("enrollments", []))
+    plans_to_restore = _restore_ids(archive.get("study_plans", []))
+
+    # ============== إعادة الإدراج ==============
+    inserted = {"courses": 0, "lectures": 0, "attendance": 0, "enrollments": 0, "study_plans": 0}
+    if courses_to_restore:
+        r = await db.courses.insert_many(courses_to_restore, ordered=False)
+        inserted["courses"] = len(r.inserted_ids)
+    if lectures_to_restore:
+        r = await db.lectures.insert_many(lectures_to_restore, ordered=False)
+        inserted["lectures"] = len(r.inserted_ids)
+    if attendance_to_restore:
+        r = await db.attendance.insert_many(attendance_to_restore, ordered=False)
+        inserted["attendance"] = len(r.inserted_ids)
+    if enrollments_to_restore:
+        r = await db.enrollments.insert_many(enrollments_to_restore, ordered=False)
+        inserted["enrollments"] = len(r.inserted_ids)
+    if plans_to_restore:
+        r = await db.study_plans.insert_many(plans_to_restore, ordered=False)
+        inserted["study_plans"] = len(r.inserted_ids)
+
+    # ============== تحديث حالة الفصل إلى CLOSED ==============
+    await db.semesters.update_one(
+        {"_id": ObjectId(semester_id)},
+        {"$set": {"status": SemesterStatus.CLOSED},
+         "$unset": {"archived_at": "", "archive_stats": ""}}
+    )
+
+    # ============== حذف وثيقة الأرشيف ==============
+    await db.semester_archives.delete_one({"semester_id": semester_id})
+
+    return {
+        "message": f"تم استعادة الفصل '{semester['name']}' من الأرشيف بنجاح",
+        "restored": inserted,
+        "new_status": "closed",
+    }
+
 
 @api_router.get("/semesters/{semester_id}/stats")
 async def get_semester_stats(semester_id: str, current_user: dict = Depends(get_current_user)):
