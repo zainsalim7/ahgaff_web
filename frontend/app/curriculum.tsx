@@ -152,6 +152,23 @@ export default function CurriculumScreen() {
     }
   };
 
+  const backfillFromActive = async () => {
+    const ok = Platform.OS === 'web'
+      ? window.confirm('بناء الخطة الدراسية من المقررات النشطة حالياً؟ (آمن، لن يكرر الموجود)')
+      : true;
+    if (!ok) return;
+    try {
+      const res = await api.post('/curriculum/backfill-from-active');
+      const r = res.data;
+      const msg = `تم إنشاء ${r.created} مقرر • تخطي ${r.skipped_existing} موجود • ربط ${r.linked_active_courses} مقرر فعلي • ${r.assignments_created} إسناد`;
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
+      fetchGrid();
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'فشل البناء';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
+    }
+  };
+
   return (
     <>
       <Stack.Screen options={{ title: 'الخطة الدراسية', headerBackTitle: 'رجوع' }} />
@@ -206,6 +223,10 @@ export default function CurriculumScreen() {
           <TouchableOpacity style={styles.actBtn} onPress={() => setShowImport(true)} testID="import-btn">
             <Ionicons name="archive" size={16} color="#6a1b9a" />
             <Text style={[styles.actBtnText, { color: '#6a1b9a' }]}>استيراد من الأرشيف</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.actBtn} onPress={backfillFromActive} testID="backfill-btn">
+            <Ionicons name="git-merge" size={16} color="#ef6c00" />
+            <Text style={[styles.actBtnText, { color: '#ef6c00' }]}>بناء من المقررات النشطة</Text>
           </TouchableOpacity>
         </View>
 

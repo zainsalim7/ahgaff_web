@@ -1,0 +1,52 @@
+{
+  "summary": "Comprehensive end-to-end testing of the new 3-layer Academic Curriculum architecture (curriculum_courses, teacher_assignments, courses). Created /app/backend/tests/test_curriculum.py with 19 pytest test cases covering all curriculum endpoints + RBAC + backfill idempotency. All 19 backend tests PASSED (100%). Frontend pages /curriculum and /teacher-assignments rendered successfully with full backend integration after restarting expo (file-system router needed restart to pick up new route files). Verified: department dropdown loads, grid (level × term) displays existing curriculum courses with teacher names, all 4 action buttons render (إضافة مقرر / توليد للفصل النشط / استيراد من الأرشيف / بناء من المقررات النشطة), TA page shows real stats (4 إسنادات، 3 معلم، 8 مقرر) grouped by teacher, 'إسناد جديد' modal opens and populates teacher + curriculum-course dropdowns from API. SideMenu correctly registers curriculum + teacher-assignments items for admin.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {
+        "screen": "/curriculum and /teacher-assignments header",
+        "issues": ["Top blue navigation bar still clips Arabic page title on the left edge (pre-existing global header issue noted in earlier iterations, not specific to these new pages)"]
+      },
+      {
+        "screen": "/curriculum grid card",
+        "issues": ["Course rows that have no assigned teacher display '👨‍🏫 (غير معروف)' which is fine for now, but a subtle warning color or 'إسناد معلم' inline action would improve UX"]
+      }
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_curriculum.py",
+    "/app/test_reports/pytest/curriculum_results.xml"
+  ],
+  "action_items": [
+    "No blocking issues. Optional: improve unassigned-course visual treatment on the curriculum grid (small UX polish).",
+    "Note: after dropping new files in /app/frontend/app/, Expo file-system router required `sudo supervisorctl restart expo` to register the new routes (/curriculum and /teacher-assignments). Until restart, they returned 'Unmatched Route'. This is normal Expo behavior but worth remembering for future page additions."
+  ],
+  "critical_code_review_comments": [
+    "routes/curriculum.py: All endpoints correctly enforce RBAC via _require_admin / _has_view helpers — teacher gets 403 on POST/PUT/DELETE as required.",
+    "backfill-from-active is properly idempotent — second call returned created=0 in pytest run.",
+    "Soft delete is properly implemented (is_active=False) and excluded from default listings.",
+    "Duplicate curriculum_course code returns 409 (conflict) — correct.",
+    "Duplicate (teacher_id, curriculum_course_id) assignment returns 409 — correct.",
+    "by-department/{id} validates id format and returns 400 for malformed IDs — good.",
+    "import-from-archive correctly returns 404 for nonexistent semester id.",
+    "generate-offerings validates semester_id and returns 400 if invalid; 200 with created/skipped counters when valid."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_curriculum.py (NEW)"
+  ],
+  "success_rate": {
+    "backend": "100% (19/19)",
+    "frontend": "100% (all 3 critical flows verified: curriculum page render, teacher-assignments render, new assignment modal opens & populates from backend)"
+  },
+  "test_credentials": "admin/admin123 and teacher180156/teacher123 (both work, from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Tests create a TEST_CUR_99 curriculum course and a temporary teacher assignment; both are soft-deleted/cleaned up within the same run. Backfill regenerates curriculum courses from existing active courses (8 created on first call, 0 on idempotent re-run).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The 3-layer curriculum architecture is fully working end-to-end. Backend endpoints are stable at /api/curriculum/*. Reuse /app/backend/tests/test_curriculum.py for regression. If new frontend pages are added under /app/frontend/app/, remember to restart expo so the file-system router registers them. The pre-existing Arabic header clipping issue at the top blue bar is global and unrelated to this iteration.",
+  "rca of the issue": "No bugs to RCA. One environmental note: Initial frontend test showed 'Unmatched Route' for /curriculum and /teacher-assignments. Root cause: Expo Router caches the route manifest; after files were added by the main agent, expo was still serving the old bundle. Mitigation: `sudo supervisorctl restart expo` then wait ~20s — routes register correctly and pages render fully."
+}

@@ -40,6 +40,13 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
     PERMISSIONS.VIEW_ATTENDANCE, PERMISSIONS.MANAGE_COURSES
   ]},
+
+  { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', permissions: [
+    PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_COURSES
+  ]},
+  { id: 'teacher-assignments', label: 'إسناد المعلمين', icon: 'people-circle', path: '/teacher-assignments', permissions: [
+    PERMISSIONS.MANAGE_COURSES, PERMISSIONS.MANAGE_TEACHERS
+  ]},
   
   { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', permissions: [
     PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_REPORTS

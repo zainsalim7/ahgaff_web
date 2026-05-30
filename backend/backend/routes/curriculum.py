@@ -514,6 +514,144 @@ async def generate_offerings_from_curriculum(
     }
 
 
+# ==================== Backfill from Active Courses ====================
+
+@router.post("/curriculum/backfill-from-active")
+async def backfill_curriculum_from_active_courses(
+    current_user: dict = Depends(get_current_user),
+):
+    """يبني الخطة الدراسية من المقررات الموجودة حالياً في collection `courses`.
+    - لكل مقرر مفرَد (code + department_id + level) يُنشَئ curriculum_course
+    - يُحدَّث المقرر الأصلي بـ curriculum_course_id ليرتبط بالخطة
+    - يُسجَّل teacher_assignment لكل مقرر له معلم
+    - لا يكرر الإدخال (skip_existing)
+    """
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="هذه العملية متاحة للأدمن فقط")
+    db = get_db()
+
+    # المقررات الموجودة في الخطة (لتجنّب التكرار)
+    existing = set()
+    async for cc in db.curriculum_courses.find({}, {"code": 1, "department_id": 1, "level": 1, "term": 1}):
+        existing.add((cc.get("code"), cc.get("department_id"), int(cc.get("level") or 0), int(cc.get("term") or 0)))
+
+    # تجميع المقررات الفعلية بحسب (code, dept, level, term)
+    grouped = {}
+    async for c in db.courses.find({}):
+        code = c.get("code")
+        dept = c.get("department_id")
+        lvl = int(c.get("level") or 1)
+        # محاولة تحديد term من بيانات المقرر أو الفصل النشط (افتراضي 1)
+        term = int(c.get("term") or 1)
+        if not code or not dept:
+            continue
+        key = (code, dept, lvl, term)
+        if key not in grouped:
+            grouped[key] = {"sample": c, "course_ids": []}
+        grouped[key]["course_ids"].append(str(c["_id"]))
+
+    created = 0
+    skipped = 0
+    assignments_created = 0
+    linked = 0
+
+    for key, val in grouped.items():
+        code, dept, lvl, term = key
+        c = val["sample"]
+        if key in existing:
+            skipped += 1
+            # حتى لو موجود، اربط الـ courses الأصلية بـ curriculum_course_id
+            cc_existing = await db.curriculum_courses.find_one({
+                "code": code, "department_id": dept,
+                "level": lvl, "term": term,
+            })
+            if cc_existing:
+                for cid in val["course_ids"]:
+                    try:
+                        await db.courses.update_one(
+                            {"_id": ObjectId(cid), "curriculum_course_id": {"$exists": False}},
+                            {"$set": {"curriculum_course_id": str(cc_existing["_id"])}}
+                        )
+                        linked += 1
+                    except Exception:
+                        pass
+            continue
+
+        # faculty من القسم
+        faculty_id = c.get("faculty_id")
+        if not faculty_id:
+            try:
+                d = await db.departments.find_one({"_id": ObjectId(dept)})
+                if d:
+                    faculty_id = d.get("faculty_id")
+            except Exception:
+                pass
+
+        doc = {
+            "code": code,
+            "name": c.get("name") or code,
+            "credit_hours": int(c.get("credit_hours") or 3),
+            "department_id": dept,
+            "faculty_id": faculty_id,
+            "level": lvl,
+            "term": term,
+            "is_active": True,
+            "created_at": _now(),
+            "created_by": current_user.get("id"),
+            "imported_from": "active_courses",
+        }
+        r = await db.curriculum_courses.insert_one(doc)
+        cc_id = str(r.inserted_id)
+        created += 1
+        existing.add(key)
+
+        # ربط كل المقررات الفعلية بهذا curriculum_course
+        for cid in val["course_ids"]:
+            try:
+                await db.courses.update_one(
+                    {"_id": ObjectId(cid)},
+                    {"$set": {"curriculum_course_id": cc_id}}
+                )
+                linked += 1
+            except Exception:
+                pass
+
+        # إنشاء teacher_assignment للمعلم المرتبط (من أحدث instance)
+        teachers_seen = set()
+        for cid in val["course_ids"]:
+            try:
+                cdoc = await db.courses.find_one({"_id": ObjectId(cid)})
+                tid = cdoc.get("teacher_id") if cdoc else None
+                if tid and tid not in teachers_seen:
+                    teachers_seen.add(tid)
+                    exists_a = await db.teacher_assignments.find_one({
+                        "teacher_id": tid, "curriculum_course_id": cc_id,
+                        "is_active": {"$ne": False},
+                    })
+                    if not exists_a:
+                        await db.teacher_assignments.insert_one({
+                            "teacher_id": tid,
+                            "curriculum_course_id": cc_id,
+                            "is_active": True,
+                            "assigned_at": _now(),
+                            "assigned_by": current_user.get("id"),
+                            "ended_at": None,
+                            "notes": "مستورد من المقررات النشطة",
+                        })
+                        assignments_created += 1
+            except Exception:
+                pass
+
+    return {
+        "message": f"تم إنشاء {created} مقرر في الخطة، تخطي {skipped}، ربط {linked} مقرر فعلي",
+        "created": created,
+        "skipped_existing": skipped,
+        "linked_active_courses": linked,
+        "assignments_created": assignments_created,
+        "total_groups": len(grouped),
+    }
+
+
 # ==================== Import from Archive ====================
 
 @router.post("/curriculum/import-from-archive/{semester_id}")

@@ -11982,8 +11982,10 @@ async def update_semester(semester_id: str, data: SemesterUpdate, current_user: 
     return {"message": "تم تحديث الفصل الدراسي بنجاح"}
 
 @api_router.post("/semesters/{semester_id}/activate")
-async def activate_semester(semester_id: str, current_user: dict = Depends(get_current_user)):
-    """تفعيل فصل دراسي (جعله الفصل الحالي)"""
+async def activate_semester(semester_id: str, auto_generate_from_curriculum: bool = False, current_user: dict = Depends(get_current_user)):
+    """تفعيل فصل دراسي (جعله الفصل الحالي)
+    - إذا auto_generate_from_curriculum=true: يُولّد المقررات تلقائياً من الخطة الدراسية
+    """
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
@@ -12026,7 +12028,55 @@ async def activate_semester(semester_id: str, current_user: dict = Depends(get_c
         upsert=True
     )
     
-    return {"message": f"تم تفعيل الفصل '{semester['name']}' بنجاح"}
+    # توليد تلقائي للمقررات من الخطة الدراسية (Layer 3 من Layer 1+2)
+    auto_gen_result = None
+    if auto_generate_from_curriculum:
+        try:
+            total_curriculum = await db.curriculum_courses.count_documents({"is_active": {"$ne": False}})
+            if total_curriculum > 0:
+                assignments_map = {}
+                async for a in db.teacher_assignments.find({"is_active": {"$ne": False}}):
+                    ccid = a.get("curriculum_course_id")
+                    if ccid and ccid not in assignments_map:
+                        assignments_map[ccid] = a.get("teacher_id")
+                created = 0
+                skipped = 0
+                async for cc in db.curriculum_courses.find({"is_active": {"$ne": False}}):
+                    cc_id = str(cc["_id"])
+                    exists = await db.courses.find_one({
+                        "semester_id": semester_id,
+                        "curriculum_course_id": cc_id,
+                    })
+                    if exists:
+                        skipped += 1
+                        continue
+                    doc = {
+                        "curriculum_course_id": cc_id,
+                        "semester_id": semester_id,
+                        "code": cc.get("code"),
+                        "name": cc.get("name"),
+                        "credit_hours": cc.get("credit_hours", 3),
+                        "department_id": cc.get("department_id"),
+                        "faculty_id": cc.get("faculty_id"),
+                        "level": cc.get("level"),
+                        "term": cc.get("term"),
+                        "section": "أ",
+                        "room": "",
+                        "teacher_id": assignments_map.get(cc_id),
+                        "created_at": get_yemen_time(),
+                        "created_by": current_user.get("id"),
+                        "auto_generated": True,
+                    }
+                    await db.courses.insert_one(doc)
+                    created += 1
+                auto_gen_result = {"created": created, "skipped": skipped, "total_curriculum": total_curriculum}
+        except Exception as e:
+            logger.warning(f"auto_generate_from_curriculum failed: {e}")
+    
+    msg = f"تم تفعيل الفصل '{semester['name']}' بنجاح"
+    if auto_gen_result:
+        msg += f" • تم توليد {auto_gen_result['created']} مقرر من الخطة"
+    return {"message": msg, "auto_generated": auto_gen_result}
 
 @api_router.post("/semesters/{semester_id}/close")
 async def close_semester(semester_id: str, current_user: dict = Depends(get_current_user)):
