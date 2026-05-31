@@ -131,63 +131,6 @@ export default function AddCourseScreen() {
 
   // استيراد محاضرات Excel
   const [showImportLecturesModal, setShowImportLecturesModal] = useState(false);
-
-  // إدارة الشُعب
-  const [showSectionsModal, setShowSectionsModal] = useState(false);
-  const [sectionsCourse, setSectionsCourse] = useState<Course | null>(null);
-  const [sectionsData, setSectionsData] = useState<any>(null);
-  const [loadingSections, setLoadingSections] = useState(false);
-  const [newSectionLabel, setNewSectionLabel] = useState('');
-  const [newSectionTeacher, setNewSectionTeacher] = useState('');
-  const [newSectionRoom, setNewSectionRoom] = useState('');
-  const [creatingSection, setCreatingSection] = useState(false);
-
-  const openSectionsModal = async (course: Course) => {
-    setSectionsCourse(course);
-    setShowSectionsModal(true);
-    setLoadingSections(true);
-    setNewSectionLabel('');
-    setNewSectionTeacher('');
-    setNewSectionRoom('');
-    try {
-      const res = await api.get(`/courses/${course.id}/sections`);
-      setSectionsData(res.data);
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || 'فشل التحميل';
-      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
-    } finally {
-      setLoadingSections(false);
-    }
-  };
-
-  const submitCloneSection = async () => {
-    if (!sectionsCourse) return;
-    const label = newSectionLabel.trim();
-    if (!label) {
-      if (Platform.OS === 'web') window.alert('اكتب حرف الشعبة (ب، ج، د...)');
-      return;
-    }
-    setCreatingSection(true);
-    try {
-      const body: any = { new_section: label };
-      if (newSectionTeacher) body.teacher_id = newSectionTeacher;
-      if (newSectionRoom) body.room = newSectionRoom;
-      await api.post(`/courses/${sectionsCourse.id}/clone-section`, body);
-      // إعادة تحميل
-      const res = await api.get(`/courses/${sectionsCourse.id}/sections`);
-      setSectionsData(res.data);
-      setNewSectionLabel('');
-      setNewSectionTeacher('');
-      setNewSectionRoom('');
-      // تحديث القائمة الرئيسية
-      fetchCourses();
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || 'فشل إنشاء الشعبة';
-      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
-    } finally {
-      setCreatingSection(false);
-    }
-  };
   const [importingLectures, setImportingLectures] = useState(false);
   const [importLecturesResult, setImportLecturesResult] = useState<any>(null);
 
@@ -224,6 +167,7 @@ export default function AddCourseScreen() {
     credit_hours: '3',
   });
   const [sectionCount, setSectionCount] = useState('');
+  const [extraSections, setExtraSections] = useState('');  // إضافة شُعب جديدة عند التعديل
   const SECTION_LABELS = ['أ', 'ب', 'ج', 'د', 'ه', 'و', 'ز', 'ح', 'ط', 'ي'];
 
   const [coursesLoading, setCoursesLoading] = useState(false);
@@ -295,6 +239,32 @@ export default function AddCourseScreen() {
         const res = await coursesAPI.update(editingCourse.id, baseData);
         let msg = 'تم تحديث المقرر بنجاح';
         if (res.data?.warning) msg += '\n\n' + res.data.warning;
+
+        // إنشاء شُعب إضافية (إن طُلبت)
+        const extra = parseInt(extraSections) || 0;
+        if (extra > 0) {
+          const currentLabel = formData.section || 'أ';
+          const currentIdx = SECTION_LABELS.indexOf(currentLabel);
+          const startIdx = currentIdx >= 0 ? currentIdx + 1 : 1;
+          let createdExtra = 0;
+          let errorsExtra: string[] = [];
+          // baseData يحتوي الشعبة الحالية، نُزيلها عند الاستنساخ
+          const cloneBase = { ...baseData };
+          delete (cloneBase as any).section;
+          for (let i = 0; i < extra && (startIdx + i) < SECTION_LABELS.length; i++) {
+            const sectionLabel = SECTION_LABELS[startIdx + i];
+            try {
+              await coursesAPI.create({ ...cloneBase, section: sectionLabel });
+              createdExtra++;
+            } catch (err: any) {
+              errorsExtra.push(`شعبة ${sectionLabel}: ${err.response?.data?.detail || 'خطأ'}`);
+            }
+          }
+          msg += `\n\nتم إضافة ${createdExtra} شعبة إضافية`;
+          if (errorsExtra.length > 0) msg += '\nأخطاء:\n' + errorsExtra.join('\n');
+        }
+        setExtraSections('');
+
         if (Platform.OS === 'web') window.alert(msg);
         else Alert.alert('نجاح', msg);
       } else {
@@ -818,16 +788,6 @@ export default function AddCourseScreen() {
           {canEdit && (
             <TouchableOpacity
               style={styles.editBtn}
-              onPress={() => openSectionsModal(item)}
-              accessibilityLabel="إدارة الشُعب"
-              testID={`sections-btn-${item.id}`}
-            >
-              <Ionicons name="layers" size={20} color="#9c27b0" />
-            </TouchableOpacity>
-          )}
-          {canEdit && (
-            <TouchableOpacity
-              style={styles.editBtn}
               onPress={() => handleEdit(item)}
               accessibilityLabel="تعديل"
             >
@@ -948,6 +908,38 @@ export default function AddCourseScreen() {
                   onChangeText={(text) => setFormData({ ...formData, section: text })}
                   placeholder="مثال: أ أو ب"
                 />
+                {/* إضافة شُعب جديدة لنفس المقرر */}
+                <Text style={[styles.label, { marginTop: 8 }]}>إضافة شُعب جديدة (اختياري)</Text>
+                <Text style={{ fontSize: 11, color: '#666', marginBottom: 6, textAlign: 'right' }}>
+                  💡 سيُنشئ شُعب جديدة بنفس بيانات المقرر بعد الترقيم الحالي
+                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <TextInput
+                    style={[styles.input, { flex: 1, marginBottom: 0 }]}
+                    value={extraSections}
+                    onChangeText={(text) => {
+                      const num = text.replace(/[^0-9]/g, '');
+                      if (parseInt(num) > 10) return;
+                      setExtraSections(num);
+                    }}
+                    placeholder="عدد الشُعب الإضافية (مثال: 2)"
+                    keyboardType="numeric"
+                    testID="extra-sections-input"
+                  />
+                </View>
+                {parseInt(extraSections) > 0 && (() => {
+                  const currentLabel = formData.section || 'أ';
+                  const currentIdx = SECTION_LABELS.indexOf(currentLabel);
+                  const startIdx = currentIdx >= 0 ? currentIdx + 1 : 1;
+                  const nextLabels = SECTION_LABELS.slice(startIdx, startIdx + parseInt(extraSections));
+                  return (
+                    <View style={{ backgroundColor: '#e8f5e9', padding: 10, borderRadius: 8, marginTop: 6, marginBottom: 8 }}>
+                      <Text style={{ fontSize: 12, color: '#2e7d32', fontWeight: '700', textAlign: 'center' }}>
+                        ستُضاف شُعب: {nextLabels.join('، ')}
+                      </Text>
+                    </View>
+                  );
+                })()}
               </>
             ) : (
               <>
@@ -1029,7 +1021,15 @@ export default function AddCourseScreen() {
                   {canEdit && (
                     <TouchableOpacity
                       style={styles.addButton}
-                      onPress={() => setShowForm(true)}
+                      onPress={() => {
+                        const proceed = Platform.OS !== 'web' ? true : window.confirm(
+                          '💡 ملاحظة:\n\n' +
+                          'في الغالب تُنشأ المقررات تلقائياً من "الخطة الدراسية" بالضغط على "توليد للفصل النشط".\n\n' +
+                          'استخدم هذه الميزة فقط لإضافة مقرر استثنائي خارج الخطة (مثلاً: مقرر تجريبي، صيفي، أو خاص).\n\n' +
+                          'هل تريد المتابعة؟'
+                        );
+                        if (proceed) setShowForm(true);
+                      }}
                       data-testid="add-course-btn"
                     >
                       <Ionicons name="add-circle" size={14} color="#fff" />
@@ -1488,153 +1488,6 @@ export default function AddCourseScreen() {
                   </View>
                 )}
               </View>
-            )}
-          </View>
-        </View>
-      </Modal>
-
-      {/* Modal إدارة الشُعب */}
-      <Modal visible={showSectionsModal} transparent animationType="fade" onRequestClose={() => setShowSectionsModal(false)}>
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '95%', maxWidth: 560 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 }}>
-              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#f3e5f5', alignItems: 'center', justifyContent: 'center' }}>
-                <Ionicons name="layers" size={20} color="#9c27b0" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={{ fontSize: 16, fontWeight: '800', color: '#222', textAlign: 'right' }}>
-                  إدارة الشُعب
-                </Text>
-                <Text style={{ fontSize: 11, color: '#888', textAlign: 'right' }} numberOfLines={1}>
-                  {sectionsData?.course_code} - {sectionsData?.course_name}
-                </Text>
-              </View>
-            </View>
-
-            {loadingSections ? (
-              <View style={{ paddingVertical: 30, alignItems: 'center' }}>
-                <ActivityIndicator size="large" color="#9c27b0" />
-              </View>
-            ) : (
-              <>
-                {/* الشُعب الحالية */}
-                <Text style={{ fontSize: 12, color: '#555', fontWeight: '700', marginBottom: 6, textAlign: 'right' }}>
-                  الشُعب الحالية ({sectionsData?.total_sections || 0}):
-                </Text>
-                <ScrollView style={{ maxHeight: 200, marginBottom: 12 }}>
-                  {(sectionsData?.sections || []).map((s: any) => (
-                    <View key={s.id} style={{
-                      flexDirection: 'row', alignItems: 'center', gap: 8,
-                      backgroundColor: s.is_primary ? '#fff8e1' : '#f9f9f9',
-                      padding: 10, borderRadius: 8, marginBottom: 5,
-                      borderRightWidth: 3, borderRightColor: s.is_primary ? '#ff9800' : '#9c27b0',
-                    }}>
-                      <View style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: '#9c27b0', alignItems: 'center', justifyContent: 'center' }}>
-                        <Text style={{ color: '#fff', fontSize: 14, fontWeight: '800' }}>{s.section}</Text>
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={{ fontSize: 12, fontWeight: '700', color: '#222', textAlign: 'right' }} numberOfLines={1}>
-                          {s.teacher_name || '— بدون معلم —'}
-                        </Text>
-                        <Text style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>
-                          {s.students_count} طالب {s.room ? `• قاعة ${s.room}` : ''}
-                        </Text>
-                      </View>
-                      {s.is_primary && (
-                        <View style={{ backgroundColor: '#ff9800', paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4 }}>
-                          <Text style={{ color: '#fff', fontSize: 9, fontWeight: '800' }}>الأصلية</Text>
-                        </View>
-                      )}
-                    </View>
-                  ))}
-                </ScrollView>
-
-                {/* نموذج إضافة شعبة */}
-                <View style={{ backgroundColor: '#f0f7ff', padding: 12, borderRadius: 10, marginBottom: 10 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '800', color: '#1565c0', marginBottom: 8, textAlign: 'right' }}>
-                    ➕ إضافة شعبة جديدة
-                  </Text>
-                  <Text style={{ fontSize: 11, color: '#666', marginBottom: 4, textAlign: 'right' }}>حرف الشعبة:</Text>
-                  <View style={{ flexDirection: 'row', gap: 5, marginBottom: 8, flexWrap: 'wrap' }}>
-                    {['ب','ج','د','هـ','و'].map(l => (
-                      <TouchableOpacity
-                        key={l}
-                        onPress={() => setNewSectionLabel(l)}
-                        style={{
-                          width: 36, height: 36, borderRadius: 8,
-                          backgroundColor: newSectionLabel === l ? '#9c27b0' : '#fff',
-                          borderWidth: 1.5, borderColor: newSectionLabel === l ? '#9c27b0' : '#ddd',
-                          alignItems: 'center', justifyContent: 'center',
-                        }}
-                        testID={`section-label-${l}`}
-                      >
-                        <Text style={{ fontSize: 14, fontWeight: '800', color: newSectionLabel === l ? '#fff' : '#444' }}>{l}</Text>
-                      </TouchableOpacity>
-                    ))}
-                    <TextInput
-                      style={{
-                        flex: 1, minWidth: 60,
-                        borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-                        paddingHorizontal: 10, paddingVertical: 7, fontSize: 13,
-                        textAlign: 'center', outlineWidth: 0 as any,
-                      }}
-                      placeholder="أو اكتب"
-                      value={newSectionLabel}
-                      onChangeText={setNewSectionLabel}
-                      maxLength={5}
-                      placeholderTextColor="#aaa"
-                      testID="section-label-input"
-                    />
-                  </View>
-
-                  <Text style={{ fontSize: 11, color: '#666', marginBottom: 4, textAlign: 'right' }}>المعلم (اختياري):</Text>
-                  <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, marginBottom: 8, backgroundColor: '#fff' }}>
-                    <Picker
-                      selectedValue={newSectionTeacher}
-                      onValueChange={setNewSectionTeacher}
-                      style={{ fontSize: 13 }}
-                    >
-                      <Picker.Item label="— بدون معلم الآن —" value="" />
-                      {teachers.map(t => (
-                        <Picker.Item key={t.id} label={t.full_name} value={t.id} />
-                      ))}
-                    </Picker>
-                  </View>
-
-                  <Text style={{ fontSize: 11, color: '#666', marginBottom: 4, textAlign: 'right' }}>القاعة (اختياري):</Text>
-                  <TextInput
-                    style={{
-                      borderWidth: 1, borderColor: '#ddd', borderRadius: 8,
-                      paddingHorizontal: 10, paddingVertical: 7, fontSize: 13,
-                      textAlign: 'right', backgroundColor: '#fff', outlineWidth: 0 as any,
-                    }}
-                    placeholder="مثال: 301"
-                    value={newSectionRoom}
-                    onChangeText={setNewSectionRoom}
-                    placeholderTextColor="#aaa"
-                    testID="section-room-input"
-                  />
-                </View>
-
-                <View style={{ flexDirection: 'row', gap: 8 }}>
-                  <TouchableOpacity
-                    style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 12, borderRadius: 10, alignItems: 'center' }}
-                    onPress={() => setShowSectionsModal(false)}
-                  >
-                    <Text style={{ color: '#666', fontWeight: '700' }}>إغلاق</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{ flex: 1, backgroundColor: '#9c27b0', padding: 12, borderRadius: 10, alignItems: 'center' }}
-                    onPress={submitCloneSection}
-                    disabled={creatingSection || !newSectionLabel.trim()}
-                    testID="submit-clone-section"
-                  >
-                    {creatingSection ? <ActivityIndicator color="#fff" /> : (
-                      <Text style={{ color: '#fff', fontWeight: '800' }}>إضافة الشعبة</Text>
-                    )}
-                  </TouchableOpacity>
-                </View>
-              </>
             )}
           </View>
         </View>
