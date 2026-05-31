@@ -1,5 +1,55 @@
 # نظام إدارة الحضور - جامعة الأحقاف
 
+## ما تم إنجازه - جلسة 31 مايو 2026 ✅
+
+### إدارة الشُعب في صفحة المقررات (P0 - مكتمل)
+
+**الفلسفة:** الخطة الدراسية تحوي مقرراً واحداً، والمقرر الفعلي في الفصل يُستنسخ لشُعب متعددة (أ/ب/ج/د) حسب عدد الطلاب — كل شعبة بمعلم وقاعة مستقلين.
+
+#### Backend (server.py)
+- [x] `POST /api/courses/{course_id}/clone-section` - استنساخ مقرر بشعبة جديدة
+  - body: `{new_section, teacher_id?, room?}`
+  - يحافظ على: code, name, department_id, level, semester_id, term, curriculum_course_id
+  - يضيف: cloned_from (مرجع للأصل), is_active=True, auto_generated=False
+  - يرفض التكرار (400) لنفس الشعبة في نفس الفصل + القسم + المستوى
+  - RBAC: admin أو manage_courses
+- [x] `GET /api/courses/{course_id}/sections` - جلب كل شُعب المقرر
+  - يُرجع: section, teacher_name, students_count, room, is_primary
+  - يجمع كل المقررات بنفس code + semester_id + department_id + level
+
+#### Frontend (`app/(tabs)/courses.tsx`)
+- [x] زر **layers بنفسجي** بجانب التعديل في كل صف مقرر (`testID=sections-btn-{id}`)
+- [x] Modal "إدارة الشُعب" بتصميم مرتب:
+  - قائمة الشُعب الحالية مع badge "الأصلية" برتقالي للشعبة الأم
+  - 5 أزرار سريعة (ب/ج/د/هـ/و) + حقل كتابة حرف مخصص
+  - Picker للمعلم (اختياري) + حقل قاعة (اختياري)
+  - زر "إضافة الشعبة" يستنسخ مباشرة
+- [x] التحديث التلقائي: بعد الاستنساخ، الشعبة الجديدة تظهر في Modal + في القائمة الرئيسية
+
+#### الاختبار
+- [x] `testing_agent_v3_fork`: Backend **100% (6/6 pytest)** + Frontend **100%** (E2E flow)
+- [x] ملف اختبار: `/app/backend/tests/test_clone_section.py`
+- [x] التحقق: شعبة جديدة 'غ' → عدد الشعب من 1 إلى 2 → عدد المقررات في القائمة من 12 إلى 13
+
+### إصلاحات هامة في نفس الجلسة ✅
+
+#### إصلاح 1: ظهور المقررات المُولّدة من الخطة
+**المشكلة:** 358 مقرر مُولّد كانوا مخفيين لأن `generate-offerings` نسي وضع `is_active=True` فلم تظهر في `GET /courses` (التي تفلتر بـ is_active).
+
+- [x] إصلاح كود `generate-offerings` ليضع `is_active: True` + `academic_year`
+- [x] `POST /api/curriculum/fix-auto-generated-visibility` - إصلاح فوري للبيانات الموجودة
+- [x] تم تشغيله على الإنتاج: أُصلح 358 مقرر، الآن كلها ظاهرة ✅
+
+#### إصلاح 2: تحديث CourseResponse
+**المشكلة:** `CourseResponse` كان يحذف الحقول `curriculum_course_id`, `auto_generated`, `term`, `room`, `faculty_id` لأنها ليست في الـ schema.
+
+- [x] إضافة كل الحقول إلى `CourseBase` في `models/courses.py`
+- [x] الآن المقررات المُولّدة تظهر بكامل معلوماتها في الواجهة
+
+#### إضافات Backend أخرى
+- [x] `GET /api/curriculum/auto-generated-courses` - عرض المقررات المولدة (مع فلتر قسم/فصل)
+- [x] `DELETE /api/curriculum/auto-generated-courses` - حذف المولدة (آمن، يتطلب فلتر)
+
 ## ما تم إنجازه - جلسة 30 مايو 2026 (تكملة 4) ✅
 
 ### دمج "حالات الطلاب" داخل صفحة /students (P0 - مكتمل)
