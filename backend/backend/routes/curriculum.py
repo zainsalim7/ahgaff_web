@@ -450,16 +450,26 @@ async def generate_offerings_from_curriculum(
     if not sem:
         raise HTTPException(status_code=404, detail="الفصل غير موجود")
 
-    # تحديد term من الفصل الأكاديمي تلقائياً
-    # الفصل الأول → term=1، الفصل الثاني → term=2
-    semester_name = (sem.get("name") or "").strip()
-    auto_term = None
-    if "الأول" in semester_name or "الاول" in semester_name or semester_name.endswith("1") or "first" in semester_name.lower():
-        auto_term = 1
-    elif "الثاني" in semester_name or "ثاني" in semester_name or semester_name.endswith("2") or "second" in semester_name.lower():
-        auto_term = 2
-    elif "صيف" in semester_name or "summer" in semester_name.lower():
-        auto_term = None  # الفصل الصيفي قد يحوي مقررات من الفصلين
+    # تحديد term: أولوية: query param → semester.term → استنتاج من اسم الفصل (fallback)
+    auto_term = sem.get("term")  # ← المصدر الموثوق (يُحدَّد عند إنشاء الفصل)
+    if auto_term is None:
+        # Fallback مؤقت للفصول القديمة قبل إضافة الحقل
+        semester_name = (sem.get("name") or "").strip()
+        if "الأول" in semester_name or "الاول" in semester_name or "first" in semester_name.lower():
+            auto_term = 1
+        elif "الثاني" in semester_name or "ثاني" in semester_name or "second" in semester_name.lower():
+            auto_term = 2
+        elif "صيف" in semester_name or "summer" in semester_name.lower():
+            auto_term = 3
+        # حفظ القيمة المستنتجة في الفصل ليصبح موثوقاً للمرات القادمة
+        if auto_term is not None:
+            try:
+                await db.semesters.update_one(
+                    {"_id": ObjectId(semester_id)},
+                    {"$set": {"term": auto_term}}
+                )
+            except Exception:
+                pass
 
     # الخطة المُختارة
     q = {"is_active": {"$ne": False}}
@@ -467,7 +477,8 @@ async def generate_offerings_from_curriculum(
         q["department_id"] = department_id
     # أولوية: term من الـ query (إن مُرّر صراحة)، ثم term المستنتج من اسم الفصل
     effective_term = term if term is not None else auto_term
-    if effective_term is not None:
+    # الفصل الصيفي (term=3) لا يفلتر بـ term لأن المقررات الصيفية قد تأتي من فصلين
+    if effective_term is not None and effective_term in (1, 2):
         q["term"] = effective_term
 
     curriculum_list = []

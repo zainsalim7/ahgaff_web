@@ -12195,17 +12195,29 @@ async def activate_semester(semester_id: str, auto_generate_from_curriculum: boo
     auto_gen_result = None
     if auto_generate_from_curriculum:
         try:
-            # تحديد term من اسم الفصل (الأول=1، الثاني=2)
-            sem_name = (semester.get("name") or "").strip()
-            auto_term = None
-            if "الأول" in sem_name or "الاول" in sem_name or "first" in sem_name.lower():
-                auto_term = 1
-            elif "الثاني" in sem_name or "ثاني" in sem_name or "second" in sem_name.lower():
-                auto_term = 2
-            # الصيفي: لا فلتر (يتولد كل المقررات الصيفية إن وُجدت)
+            # تحديد term: أولوية: semester.term (من الإعدادات) → استنتاج من الاسم (fallback)
+            auto_term = semester.get("term")
+            if auto_term is None:
+                sem_name = (semester.get("name") or "").strip()
+                if "الأول" in sem_name or "الاول" in sem_name or "first" in sem_name.lower():
+                    auto_term = 1
+                elif "الثاني" in sem_name or "ثاني" in sem_name or "second" in sem_name.lower():
+                    auto_term = 2
+                elif "صيف" in sem_name or "summer" in sem_name.lower():
+                    auto_term = 3
+                # حفظ القيمة المستنتجة للمرات القادمة
+                if auto_term is not None:
+                    try:
+                        await db.semesters.update_one(
+                            {"_id": ObjectId(semester_id)},
+                            {"$set": {"term": auto_term}}
+                        )
+                    except Exception:
+                        pass
 
             curr_filter = {"is_active": {"$ne": False}}
-            if auto_term is not None:
+            # الصيفي (3) لا يفلتر - يأخذ كل المقررات المعتمدة
+            if auto_term is not None and auto_term in (1, 2):
                 curr_filter["term"] = auto_term
 
             total_curriculum = await db.curriculum_courses.count_documents(curr_filter)
