@@ -1,0 +1,28 @@
+{
+  "summary": "End-to-end test of new 'إدارة الشُعب' (clone-section) feature on /courses for admin. Backend: 6/6 pytest cases passed (GET sections, clone success with cloned_from + is_active + appears in /courses list, empty rejected 400, >5 chars rejected 400, duplicate rejected 400, teacher RBAC → 403). Frontend: admin login → /courses (after picking 'الكل' dept) renders 10 sections-btn-{id}. Clicking opens 'إدارة الشُعب' modal which displays existing sections with 'الأصلية' badge for primary, all 5 section-label-{ب|ج|د|هـ|و} buttons, section-label-input, section-room-input, submit-clone-section button. Submitting (section='غ', room='R-UI-1') succeeded → modal counter went from 'الشُعب الحالية (1)' to '(2)', new section badge with 'R-UI-1' rendered, and the page-level course count went 12 → 13 confirming the new clone appears in the main /courses list with is_active=true. All data-testid contracts in the spec are reachable in the DOM (using testID prop correctly bridged by react-native-web).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_clone_section.py",
+    "/app/test_reports/pytest/clone_section_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 14,134 lines — extremely above 700-line guideline. clone-section endpoint should be moved to /app/backend/backend/routes/courses.py or similar router module along with related course endpoints.",
+    "Duplicate-check in clone_course_section uses an inline $or with a fallback {\"code\":\"_NEVER_MATCH_\"}; while it works, it would be cleaner to build the $or list conditionally in Python before passing to the query (more readable, avoids the magic-string sentinel).",
+    "courses.tsx file is also 2032 lines — sections modal (lines 1497-1641) is a good candidate to extract into a dedicated component <SectionsModal/> for maintainability.",
+    "The cloned course does NOT clone schedule/lectures (intentional per spec — independent teacher/room), and does NOT copy enrollments (verified students_count=0 on clone). This is correct behavior; just worth documenting in code comment near new_doc.",
+    "Activity log insertion is wrapped in try/except Exception: pass — silent failure. Consider at least a logger.warning so monitoring catches DB issues."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_clone_section.py (new)",
+    "/app/test_reports/pytest/clone_section_results.xml (new)"
+  ],
+  "success_rate": {"backend": "100% (6/6)", "frontend": "100% (modal + clone flow verified end-to-end)"},
+  "test_credentials": "admin/admin123, teacher180156/teacher123 (used from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Backend pytest created clones with section 'ز' for the first available course and cleaned them up in the module teardown fixture. Frontend test created a section 'غ' (room R-UI-1) on course 'دراسات حضرموت - Hdha' and was manually deleted via API after testing — verified clean.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature is fully working both server- and client-side. Re-running /app/backend/tests/test_clone_section.py is safe (uses rare label 'ز' and cleans up). For UI: after admin login, /courses requires selecting a department (or 'الكل') from the first <select> before any course rows render — selectors that depend on sections-btn-* will return 0 if this step is skipped.",
+  "rca of the issue": "N/A — no defects found."
+}

@@ -4131,6 +4131,158 @@ async def force_change_password(data: ForceChangePasswordRequest, current_user: 
 
 # ==================== Course Routes ====================
 
+
+# ==================== Clone Course Section ====================
+
+@api_router.post("/courses/{course_id}/clone-section")
+async def clone_course_section(
+    course_id: str,
+    new_section: str = Body(..., embed=True, description="حرف الشعبة الجديدة: ب، ج، د"),
+    teacher_id: Optional[str] = Body(None, embed=True, description="معلم الشعبة الجديدة (اختياري)"),
+    room: Optional[str] = Body(None, embed=True, description="قاعة الشعبة الجديدة (اختياري)"),
+    current_user: dict = Depends(get_current_user),
+):
+    """استنساخ مقرر بشعبة جديدة. يحافظ على نفس الكود الأم + يضيف لاحقة الشعبة.
+    مثال: TFS201 (شعبة أ) → TFS201 (شعبة ب) - مقرر مستقل بمعلم وطلاب جدد.
+    """
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+
+    new_section = (new_section or "").strip()
+    if not new_section:
+        raise HTTPException(status_code=400, detail="يرجى تحديد الشعبة الجديدة")
+    if len(new_section) > 5:
+        raise HTTPException(status_code=400, detail="حرف الشعبة طويل جداً")
+
+    try:
+        src = await db.courses.find_one({"_id": ObjectId(course_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرّف المقرر غير صحيح")
+    if not src:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # فحص عدم التكرار: نفس الكود الأساسي + نفس الشعبة + نفس الفصل
+    # ابحث عن أي مقرر بنفس قسم + مستوى + كود + شعبة + فصل
+    existing = await db.courses.find_one({
+        "department_id": src.get("department_id"),
+        "level": src.get("level"),
+        "section": new_section,
+        "semester_id": src.get("semester_id"),
+        "$or": [
+            {"code": src.get("code")},
+            {"curriculum_course_id": src.get("curriculum_course_id")} if src.get("curriculum_course_id") else {"code": "_NEVER_MATCH_"},
+        ],
+        "is_active": True,
+    })
+    if existing:
+        raise HTTPException(
+            status_code=400,
+            detail=f"الشعبة '{new_section}' موجودة بالفعل لهذا المقرر",
+        )
+
+    # بناء الـ doc الجديد - استنساخ مع تغيير الشعبة
+    new_doc = {
+        "code": src.get("code"),  # نفس الكود الأم
+        "name": src.get("name"),
+        "department_id": src.get("department_id"),
+        "faculty_id": src.get("faculty_id"),
+        "level": src.get("level"),
+        "credit_hours": src.get("credit_hours", 3),
+        "semester_id": src.get("semester_id"),
+        "academic_year": src.get("academic_year", ""),
+        "term": src.get("term"),
+        "curriculum_course_id": src.get("curriculum_course_id"),
+        "section": new_section,  # ← الشعبة الجديدة
+        "teacher_id": teacher_id if teacher_id is not None else None,
+        "room": room or "",
+        "is_active": True,
+        "auto_generated": False,  # ليست من توليد الخطة
+        "cloned_from": str(src["_id"]),  # مرجع للأصل
+        "created_at": get_yemen_time(),
+        "created_by": current_user.get("id"),
+    }
+    result = await db.courses.insert_one(new_doc)
+
+    # سجل النشاط
+    try:
+        await db.activity_logs.insert_one({
+            "user_id": current_user.get("id"),
+            "username": current_user.get("username"),
+            "action": "clone_course_section",
+            "target_type": "course",
+            "target_id": str(result.inserted_id),
+            "details": f"استنساخ {src.get('code')} شعبة {new_section} من {src.get('section') or 'أ'}",
+            "timestamp": get_yemen_time(),
+        })
+    except Exception:
+        pass
+
+    return {
+        "message": f"تم إنشاء شعبة '{new_section}' للمقرر {src.get('code')}",
+        "id": str(result.inserted_id),
+        "code": new_doc["code"],
+        "section": new_doc["section"],
+        "cloned_from": str(src["_id"]),
+        "teacher_id": new_doc["teacher_id"],
+    }
+
+
+@api_router.get("/courses/{course_id}/sections")
+async def get_course_sections(
+    course_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """جلب كل الشُعب لنفس المقرر (نفس الكود + نفس الفصل)."""
+    try:
+        src = await db.courses.find_one({"_id": ObjectId(course_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرّف غير صحيح")
+    if not src:
+        raise HTTPException(status_code=404, detail="غير موجود")
+
+    # كل المقررات بنفس الكود + الفصل + القسم + المستوى
+    q = {
+        "code": src.get("code"),
+        "semester_id": src.get("semester_id"),
+        "department_id": src.get("department_id"),
+        "level": src.get("level"),
+        "is_active": True,
+    }
+    sections = []
+    async for c in db.courses.find(q):
+        # عدد الطلاب
+        cnt = await db.enrollments.count_documents({"course_id": str(c["_id"])})
+        teacher_name = None
+        if c.get("teacher_id"):
+            try:
+                t = await db.teachers.find_one({"_id": ObjectId(c["teacher_id"])})
+                if t:
+                    teacher_name = t.get("full_name")
+                else:
+                    u = await db.users.find_one({"_id": ObjectId(c["teacher_id"])})
+                    if u:
+                        teacher_name = u.get("full_name")
+            except Exception:
+                pass
+        sections.append({
+            "id": str(c["_id"]),
+            "section": c.get("section") or "أ",
+            "teacher_id": c.get("teacher_id"),
+            "teacher_name": teacher_name,
+            "room": c.get("room") or "",
+            "students_count": cnt,
+            "is_primary": str(c["_id"]) == course_id,
+        })
+    sections.sort(key=lambda s: s["section"])
+    return {
+        "course_code": src.get("code"),
+        "course_name": src.get("name"),
+        "total_sections": len(sections),
+        "sections": sections,
+    }
+
+
+
 @api_router.post("/courses")
 async def create_course(course: CourseCreate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "add_course"):
