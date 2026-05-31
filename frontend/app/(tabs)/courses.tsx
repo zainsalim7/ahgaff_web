@@ -204,6 +204,10 @@ export default function AddCourseScreen() {
       if (deptId && deptId !== 'all') {
         params.department_id = deptId;
       }
+      // دائماً نعرض مقررات الفصل النشط فقط - الفصول المؤرشفة لها صفحة منفصلة في الأرشيف
+      if (activeSemester?.id) {
+        params.semester_id = activeSemester.id;
+      }
       const res = await coursesAPI.getAll(params);
       setCourses(res.data);
     } catch (error) {
@@ -211,7 +215,7 @@ export default function AddCourseScreen() {
     } finally {
       setCoursesLoading(false);
     }
-  }, []);
+  }, [activeSemester]);
 
   useEffect(() => {
     fetchBaseData();
@@ -1214,22 +1218,11 @@ export default function AddCourseScreen() {
                   ))}
                 </Picker>
               </View>
-              {/* فلتر الفصل - افتراضي: الفصل النشط */}
-              <View style={{ flex: 1, borderWidth: 1, borderColor: '#1565c0', borderRadius: 8, backgroundColor: '#e3f2fd' }}>
-                <Picker
-                  selectedValue={filterSemester}
-                  onValueChange={(val: string) => { setFilterSemester(val); setCurrentPage(1); }}
-                  style={{ height: 44 }}
-                  data-testid="filter-semester-picker"
-                >
-                  <Picker.Item label={`📅 ${activeSemester?.name || 'الفصل النشط'}`} value="" />
-                  <Picker.Item label="كل الفصول" value="all" />
-                  {allSemesters
-                    .filter((s: any) => s.id !== activeSemester?.id)
-                    .map((s: any) => (
-                      <Picker.Item key={s.id} label={s.name} value={s.id} />
-                    ))}
-                </Picker>
+              {/* عرض الفصل النشط فقط - الفصول المؤرشفة لها صفحة منفصلة في الأرشيف */}
+              <View style={{ flex: 1, borderWidth: 1, borderColor: '#1565c0', borderRadius: 8, backgroundColor: '#e3f2fd', justifyContent: 'center', paddingHorizontal: 12 }}>
+                <Text style={{ fontSize: 13, fontWeight: '700', color: '#1565c0', textAlign: 'center' }} numberOfLines={1}>
+                  📅 {activeSemester?.name || 'الفصل النشط'}
+                </Text>
               </View>
             </View>
 
