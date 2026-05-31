@@ -4371,6 +4371,8 @@ async def create_course(course: CourseCreate, current_user: dict = Depends(get_c
 async def get_courses(
     teacher_id: Optional[str] = None,
     department_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    level: Optional[int] = None,
     fields: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
@@ -4392,6 +4394,14 @@ async def get_courses(
                 query["department_id"] = department_id
         elif not query.get("department_id"):
             query["department_id"] = department_id
+
+    # فلتر الفصل الدراسي - مهم: يضمن أن المقررات مرتبطة بالفصل المطلوب فقط
+    if semester_id:
+        query["semester_id"] = semester_id
+
+    # فلتر المستوى
+    if level is not None:
+        query["level"] = level
     
     # تحليل ?fields= لاختصار الاستجابة
     allowed = parse_fields(fields)
