@@ -498,6 +498,8 @@ async def generate_offerings_from_curriculum(
             "section": "أ",  # افتراضي
             "room": "",
             "teacher_id": assignments_map.get(cc_id),
+            "is_active": True,  # ← مهم: حتى تظهر في GET /courses الذي يفلتر بـ is_active=True
+            "academic_year": sem.get("academic_year") or "",
             "created_at": _now(),
             "created_by": current_user.get("id"),
             "auto_generated": True,
@@ -517,7 +519,55 @@ async def generate_offerings_from_curriculum(
     }
 
 
-# ==================== Cleanup Auto-Generated Courses ====================
+@router.post("/curriculum/fix-auto-generated-visibility")
+async def fix_auto_generated_visibility(
+    current_user: dict = Depends(get_current_user),
+):
+    """إصلاح فوري: يضع is_active=True على كل المقررات المُولّدة تلقائياً.
+    سبب: نسخة سابقة من generate-offerings لم تضع is_active، فأخفاها فلتر GET /courses.
+    """
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="هذه العملية للأدمن فقط")
+    db = get_db()
+
+    # عدد المقررات قبل
+    total_auto = await db.courses.count_documents({"auto_generated": True})
+    hidden = await db.courses.count_documents({
+        "auto_generated": True,
+        "$or": [{"is_active": {"$exists": False}}, {"is_active": {"$ne": True}}],
+    })
+
+    # تحديث
+    result = await db.courses.update_many(
+        {
+            "auto_generated": True,
+            "$or": [{"is_active": {"$exists": False}}, {"is_active": {"$ne": True}}],
+        },
+        {"$set": {"is_active": True}},
+    )
+
+    # سجل
+    try:
+        await db.activity_logs.insert_one({
+            "user_id": current_user.get("id"),
+            "username": current_user.get("username"),
+            "action": "fix_auto_generated_visibility",
+            "target_type": "courses",
+            "details": f"إصلاح إظهار {result.modified_count} مقرر مولد كانت مخفية",
+            "timestamp": _now(),
+        })
+    except Exception:
+        pass
+
+    return {
+        "message": f"تم إصلاح {result.modified_count} مقرر — الآن ستظهر في صفحة المقررات",
+        "total_auto_generated": total_auto,
+        "was_hidden": hidden,
+        "now_fixed": result.modified_count,
+    }
+
+
+
 
 @router.get("/curriculum/auto-generated-courses")
 async def list_auto_generated_courses(
