@@ -15,6 +15,12 @@ class CourseBase(BaseModel):
     credit_hours: Optional[int] = 3
     semester_id: Optional[str] = None
     academic_year: Optional[str] = ""
+    # حقول الربط بالخطة الدراسية (Layer 1 → Layer 3)
+    curriculum_course_id: Optional[str] = None
+    faculty_id: Optional[str] = None
+    term: Optional[int] = None
+    room: Optional[str] = ""
+    auto_generated: Optional[bool] = False
 
 class CourseCreate(CourseBase):
     pass

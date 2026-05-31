@@ -517,6 +517,98 @@ async def generate_offerings_from_curriculum(
     }
 
 
+# ==================== Cleanup Auto-Generated Courses ====================
+
+@router.get("/curriculum/auto-generated-courses")
+async def list_auto_generated_courses(
+    semester_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """عرض المقررات المُولّدة تلقائياً من الخطة (للتنظيف/المراجعة)."""
+    if not _has_manage(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    q: dict = {"auto_generated": True}
+    if semester_id:
+        q["semester_id"] = semester_id
+    if department_id:
+        q["department_id"] = department_id
+    items = []
+    async for c in db.courses.find(q).limit(500):
+        items.append({
+            "id": str(c["_id"]),
+            "code": c.get("code"),
+            "name": c.get("name"),
+            "semester_id": c.get("semester_id"),
+            "department_id": c.get("department_id"),
+            "curriculum_course_id": c.get("curriculum_course_id"),
+            "level": c.get("level"),
+            "term": c.get("term"),
+            "section": c.get("section"),
+        })
+    return {"items": items, "total": len(items), "filter": q}
+
+
+@router.delete("/curriculum/auto-generated-courses")
+async def delete_auto_generated_courses(
+    semester_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """حذف المقررات المُولّدة تلقائياً (تنظيف بعد التوليد الخاطئ).
+    - يحذف فقط المقررات التي auto_generated=True
+    - يحترم فلاتر semester_id و department_id
+    - لا يحذف المقررات الأصلية اليدوية
+    """
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="هذه العملية للأدمن فقط")
+    db = get_db()
+    q: dict = {"auto_generated": True}
+    if semester_id:
+        q["semester_id"] = semester_id
+    if department_id:
+        q["department_id"] = department_id
+
+    # حماية: لازم يكون فلتر على الأقل
+    if not semester_id and not department_id:
+        raise HTTPException(
+            status_code=400,
+            detail="يجب تحديد semester_id أو department_id على الأقل لتجنب الحذف الشامل"
+        )
+
+    # سجل قبل الحذف
+    to_delete = []
+    async for c in db.courses.find(q, {"_id": 1, "code": 1, "name": 1}):
+        to_delete.append({"id": str(c["_id"]), "code": c.get("code"), "name": c.get("name")})
+
+    result = await db.courses.delete_many(q)
+
+    # سجل النشاط
+    try:
+        await db.activity_logs.insert_one({
+            "user_id": current_user.get("id"),
+            "username": current_user.get("username"),
+            "action": "cleanup_auto_generated_courses",
+            "target_type": "courses",
+            "details": f"حذف {result.deleted_count} مقرر مولد تلقائياً",
+            "filter": q,
+            "deleted_items": to_delete[:50],
+            "timestamp": _now(),
+        })
+    except Exception:
+        pass
+
+    return {
+        "message": f"تم حذف {result.deleted_count} مقرر مُولّد تلقائياً",
+        "deleted_count": result.deleted_count,
+        "deleted_items": to_delete,
+        "filter": q,
+    }
+
+
+
+
 # ==================== Backfill from Active Courses ====================
 
 @router.post("/curriculum/backfill-from-active")
