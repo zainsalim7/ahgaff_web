@@ -12195,7 +12195,20 @@ async def activate_semester(semester_id: str, auto_generate_from_curriculum: boo
     auto_gen_result = None
     if auto_generate_from_curriculum:
         try:
-            total_curriculum = await db.curriculum_courses.count_documents({"is_active": {"$ne": False}})
+            # تحديد term من اسم الفصل (الأول=1، الثاني=2)
+            sem_name = (semester.get("name") or "").strip()
+            auto_term = None
+            if "الأول" in sem_name or "الاول" in sem_name or "first" in sem_name.lower():
+                auto_term = 1
+            elif "الثاني" in sem_name or "ثاني" in sem_name or "second" in sem_name.lower():
+                auto_term = 2
+            # الصيفي: لا فلتر (يتولد كل المقررات الصيفية إن وُجدت)
+
+            curr_filter = {"is_active": {"$ne": False}}
+            if auto_term is not None:
+                curr_filter["term"] = auto_term
+
+            total_curriculum = await db.curriculum_courses.count_documents(curr_filter)
             if total_curriculum > 0:
                 assignments_map = {}
                 async for a in db.teacher_assignments.find({"is_active": {"$ne": False}}):
@@ -12204,7 +12217,7 @@ async def activate_semester(semester_id: str, auto_generate_from_curriculum: boo
                         assignments_map[ccid] = a.get("teacher_id")
                 created = 0
                 skipped = 0
-                async for cc in db.curriculum_courses.find({"is_active": {"$ne": False}}):
+                async for cc in db.curriculum_courses.find(curr_filter):
                     cc_id = str(cc["_id"])
                     exists = await db.courses.find_one({
                         "semester_id": semester_id,

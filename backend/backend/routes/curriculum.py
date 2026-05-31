@@ -450,12 +450,25 @@ async def generate_offerings_from_curriculum(
     if not sem:
         raise HTTPException(status_code=404, detail="الفصل غير موجود")
 
+    # تحديد term من الفصل الأكاديمي تلقائياً
+    # الفصل الأول → term=1، الفصل الثاني → term=2
+    semester_name = (sem.get("name") or "").strip()
+    auto_term = None
+    if "الأول" in semester_name or "الاول" in semester_name or semester_name.endswith("1") or "first" in semester_name.lower():
+        auto_term = 1
+    elif "الثاني" in semester_name or "ثاني" in semester_name or semester_name.endswith("2") or "second" in semester_name.lower():
+        auto_term = 2
+    elif "صيف" in semester_name or "summer" in semester_name.lower():
+        auto_term = None  # الفصل الصيفي قد يحوي مقررات من الفصلين
+
     # الخطة المُختارة
     q = {"is_active": {"$ne": False}}
     if department_id:
         q["department_id"] = department_id
-    if term is not None:
-        q["term"] = term
+    # أولوية: term من الـ query (إن مُرّر صراحة)، ثم term المستنتج من اسم الفصل
+    effective_term = term if term is not None else auto_term
+    if effective_term is not None:
+        q["term"] = effective_term
 
     curriculum_list = []
     async for c in db.curriculum_courses.find(q):
