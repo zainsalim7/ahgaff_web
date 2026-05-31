@@ -12052,6 +12052,7 @@ async def get_all_semesters(
             "start_date": sem.get("start_date"),
             "end_date": sem.get("end_date"),
             "status": sem.get("status", SemesterStatus.UPCOMING),
+            "term": sem.get("term"),
             "courses_count": courses_count,
             "created_at": sem.get("created_at", get_yemen_time()),
             "closed_at": sem.get("closed_at"),
@@ -12106,6 +12107,7 @@ async def get_current_semester(current_user: dict = Depends(get_current_user)):
         "start_date": semester.get("start_date"),
         "end_date": semester.get("end_date"),
         "status": semester.get("status"),
+        "term": semester.get("term"),
     }
 
 @api_router.put("/semesters/{semester_id}")

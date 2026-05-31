@@ -52,11 +52,24 @@ interface Semester {
   start_date?: string;
   end_date?: string;
   status: string;
+  term?: number | null;
   courses_count: number;
   created_at: string;
   closed_at?: string;
   archived_at?: string;
 }
+
+// خريطة الفصل (term): 1=أول، 2=ثاني، 3=صيفي
+const TERM_LABELS: Record<number, string> = {
+  1: 'الفصل الأول',
+  2: 'الفصل الثاني',
+  3: 'الفصل الصيفي',
+};
+const NAME_TO_TERM: Record<string, number> = {
+  'الفصل الأول': 1,
+  'الفصل الثاني': 2,
+  'الفصل الصيفي': 3,
+};
 
 interface Settings {
   college_name: string;
@@ -131,6 +144,7 @@ export default function GeneralSettingsScreen() {
     academic_year: '',
     start_date: '',
     end_date: '',
+    term: null as number | null,
   });
   
   // Settings states
@@ -382,6 +396,7 @@ export default function GeneralSettingsScreen() {
       academic_year: settings?.academic_year || '',
       start_date: '',
       end_date: '',
+      term: null,
     });
     setSelectedSemester(null);
     setShowSemesterModal(true);
@@ -394,6 +409,7 @@ export default function GeneralSettingsScreen() {
       academic_year: semester.academic_year,
       start_date: semester.start_date || '',
       end_date: semester.end_date || '',
+      term: (semester.term ?? NAME_TO_TERM[semester.name]) ?? null,
     });
     setSelectedSemester(semester);
     setShowSemesterModal(true);
@@ -402,6 +418,10 @@ export default function GeneralSettingsScreen() {
   const handleSaveSemester = async () => {
     if (!semesterForm.name.trim() || !semesterForm.academic_year.trim()) {
       showMessage('خطأ', 'يرجى ملء جميع الحقول المطلوبة');
+      return;
+    }
+    if (!semesterForm.term || ![1, 2, 3].includes(semesterForm.term)) {
+      showMessage('خطأ', 'يرجى اختيار نوع الفصل (الأول / الثاني / الصيفي) — هذا ضروري لتوليد المناهج بشكل صحيح');
       return;
     }
 
@@ -923,6 +943,22 @@ export default function GeneralSettingsScreen() {
                         {statusInfo.label}
                       </Text>
                     </View>
+                    {semester.term && (
+                      <View style={[styles.statusBadge, { backgroundColor: '#ede7f6' }]}>
+                        <Ionicons name="bookmarks" size={12} color="#5e35b1" />
+                        <Text style={[styles.statusText, { color: '#5e35b1' }]}>
+                          term={semester.term}
+                        </Text>
+                      </View>
+                    )}
+                    {!semester.term && (
+                      <View style={[styles.statusBadge, { backgroundColor: '#ffebee' }]}>
+                        <Ionicons name="warning" size={12} color="#c62828" />
+                        <Text style={[styles.statusText, { color: '#c62828' }]}>
+                          بدون term
+                        </Text>
+                      </View>
+                    )}
                   </View>
                   
                   <View style={styles.semesterStats}>
@@ -1482,26 +1518,50 @@ export default function GeneralSettingsScreen() {
             </View>
 
             <ScrollView style={styles.modalBody}>
-              <Text style={styles.inputLabel}>اسم الفصل *</Text>
+              <Text style={styles.inputLabel}>اسم الفصل / نوعه *</Text>
+              <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+                اختر نوع الفصل — هذا يحدد المقررات التي ستُولّد تلقائياً للخطة الدراسية
+              </Text>
               <View style={styles.semesterNames}>
-                {['الفصل الأول', 'الفصل الثاني', 'الفصل الصيفي'].map(name => (
-                  <TouchableOpacity
-                    key={name}
-                    style={[
-                      styles.nameBtn,
-                      semesterForm.name === name && styles.nameBtnActive
-                    ]}
-                    onPress={() => setSemesterForm(prev => ({ ...prev, name }))}
-                  >
-                    <Text style={[
-                      styles.nameBtnText,
-                      semesterForm.name === name && styles.nameBtnTextActive
-                    ]}>
-                      {name}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
+                {['الفصل الأول', 'الفصل الثاني', 'الفصل الصيفي'].map(name => {
+                  const termVal = NAME_TO_TERM[name];
+                  const isActive = semesterForm.name === name;
+                  return (
+                    <TouchableOpacity
+                      key={name}
+                      data-testid={`semester-term-btn-${termVal}`}
+                      style={[
+                        styles.nameBtn,
+                        isActive && styles.nameBtnActive
+                      ]}
+                      onPress={() => setSemesterForm(prev => ({ ...prev, name, term: termVal }))}
+                    >
+                      <Text style={[
+                        styles.nameBtnText,
+                        isActive && styles.nameBtnTextActive
+                      ]}>
+                        {name}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
+              {semesterForm.term && (
+                <View style={{
+                  backgroundColor: '#e8f5e9',
+                  borderRadius: 6,
+                  padding: 8,
+                  marginBottom: 12,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                }}>
+                  <Ionicons name="checkmark-circle" size={16} color="#2e7d32" />
+                  <Text style={{ color: '#2e7d32', fontSize: 13 }}>
+                    سيتم ربط هذا الفصل بمقررات: {TERM_LABELS[semesterForm.term]} (term={semesterForm.term})
+                  </Text>
+                </View>
+              )}
 
               <Text style={styles.inputLabel}>السنة الدراسية *</Text>
               <TextInput
