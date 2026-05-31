@@ -104,6 +104,9 @@ export default function AddCourseScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterDept, setFilterDept] = useState<string>('');
   const [filterLevel, setFilterLevel] = useState<string>('');
+  const [filterSemester, setFilterSemester] = useState<string>(''); // فلتر الفصل ('' = الفصل النشط, 'all' = كل الفصول)
+  const [activeSemester, setActiveSemester] = useState<any>(null);
+  const [allSemesters, setAllSemesters] = useState<any[]>([]);
   
   // Pagination
   const PAGE_SIZE = 10;
@@ -174,14 +177,19 @@ export default function AddCourseScreen() {
 
   const fetchBaseData = useCallback(async () => {
     try {
-      const [deptsRes, teachersRes, settingsRes] = await Promise.all([
+      const [deptsRes, teachersRes, settingsRes, semRes, semsRes] = await Promise.all([
         departmentsAPI.getAll(),
         teachersAPI.getAll(),
         settingsAPI.get(),
+        api.get('/semesters/current').catch(() => ({ data: null })),
+        api.get('/semesters').catch(() => ({ data: [] })),
       ]);
       setDepartments(deptsRes.data);
       setTeachers(teachersRes.data);
       setSettings(settingsRes.data);
+      setActiveSemester(semRes.data);
+      const sl = Array.isArray(semsRes.data) ? semsRes.data : (semsRes.data?.items || []);
+      setAllSemesters(sl);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -1188,9 +1196,9 @@ export default function AddCourseScreen() {
               )}
             </View>
 
-            {/* فلتر القسم - قائمة منسدلة */}
-            <View style={{ marginHorizontal: 12, marginVertical: 8 }}>
-              <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, backgroundColor: '#fff' }}>
+            {/* فلتر القسم + الفصل - قوائم منسدلة */}
+            <View style={{ flexDirection: 'row', gap: 8, marginHorizontal: 12, marginVertical: 8 }}>
+              <View style={{ flex: 2, borderWidth: 1, borderColor: '#ddd', borderRadius: 8, backgroundColor: '#fff' }}>
                 <Picker
                   selectedValue={filterDept}
                   onValueChange={(val: string) => { setFilterDept(val); setCurrentPage(1); }}
@@ -1204,6 +1212,23 @@ export default function AddCourseScreen() {
                   {departments.map(dept => (
                     <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
                   ))}
+                </Picker>
+              </View>
+              {/* فلتر الفصل - افتراضي: الفصل النشط */}
+              <View style={{ flex: 1, borderWidth: 1, borderColor: '#1565c0', borderRadius: 8, backgroundColor: '#e3f2fd' }}>
+                <Picker
+                  selectedValue={filterSemester}
+                  onValueChange={(val: string) => { setFilterSemester(val); setCurrentPage(1); }}
+                  style={{ height: 44 }}
+                  data-testid="filter-semester-picker"
+                >
+                  <Picker.Item label={`📅 ${activeSemester?.name || 'الفصل النشط'}`} value="" />
+                  <Picker.Item label="كل الفصول" value="all" />
+                  {allSemesters
+                    .filter((s: any) => s.id !== activeSemester?.id)
+                    .map((s: any) => (
+                      <Picker.Item key={s.id} label={s.name} value={s.id} />
+                    ))}
                 </Picker>
               </View>
             </View>
