@@ -301,6 +301,122 @@ async def root():
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
 
+# ==================== Deploy Guide Public Endpoint ====================
+from fastapi.responses import HTMLResponse, PlainTextResponse
+import os as _os_for_guide
+
+@api_router.get("/deploy-guide", response_class=HTMLResponse, include_in_schema=False)
+async def get_deploy_guide():
+    """عرض دليل النشر على Google Cloud (DEPLOY_GCP.md) كصفحة HTML."""
+    # ابحث عن الملف في عدة مسارات محتملة
+    candidates = [
+        "/app/DEPLOY_GCP.md",
+        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "..", "DEPLOY_GCP.md"),
+        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "DEPLOY_GCP.md"),
+        "./DEPLOY_GCP.md",
+    ]
+    content = None
+    for p in candidates:
+        try:
+            if _os_for_guide.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    content = f.read()
+                break
+        except Exception:
+            continue
+    if content is None:
+        return HTMLResponse(
+            "<h1>الدليل غير متوفر</h1><p>لم يتم العثور على ملف DEPLOY_GCP.md</p>",
+            status_code=404,
+        )
+
+    # تحويل بسيط من Markdown إلى HTML (بدون مكتبات خارجية)
+    import html as _html
+    escaped = _html.escape(content)
+    page = f"""<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>دليل نشر نظام أحقاف على Google Cloud Run</title>
+  <style>
+    body {{
+      font-family: 'Segoe UI', Tahoma, Arial, sans-serif;
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 32px 20px;
+      background: #f7f9fc;
+      color: #1a1a1a;
+      line-height: 1.75;
+    }}
+    .toolbar {{
+      position: sticky; top: 0; background: #1565c0; color: #fff;
+      padding: 12px 16px; border-radius: 8px; margin-bottom: 20px;
+      display: flex; gap: 12px; align-items: center; box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }}
+    .toolbar h2 {{ margin: 0; flex: 1; font-size: 18px; }}
+    .toolbar a, .toolbar button {{
+      background: #fff; color: #1565c0; padding: 8px 14px; border-radius: 6px;
+      text-decoration: none; font-weight: 600; border: none; cursor: pointer; font-size: 14px;
+    }}
+    pre {{
+      background: #1e1e2e; color: #cdd6f4; padding: 16px;
+      border-radius: 8px; overflow-x: auto; direction: ltr; text-align: left;
+      font-family: 'Courier New', monospace; font-size: 13px;
+    }}
+    .container {{
+      background: #fff; padding: 32px; border-radius: 12px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    }}
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <h2>📘 دليل نشر نظام أحقاف على Google Cloud Run</h2>
+    <button onclick="copyContent()">📋 نسخ كل الدليل</button>
+    <a href="/api/deploy-guide/raw" download="DEPLOY_GCP.md">⬇️ تحميل .md</a>
+  </div>
+  <div class="container">
+    <pre id="content">{escaped}</pre>
+  </div>
+  <script>
+    function copyContent() {{
+      const text = document.getElementById('content').innerText;
+      navigator.clipboard.writeText(text).then(() => {{
+        alert('✅ تم نسخ الدليل بالكامل إلى الحافظة');
+      }}).catch(() => {{
+        alert('❌ فشل النسخ. حدد النص يدوياً وانسخه.');
+      }});
+    }}
+  </script>
+</body>
+</html>"""
+    return HTMLResponse(content=page)
+
+
+@api_router.get("/deploy-guide/raw", response_class=PlainTextResponse, include_in_schema=False)
+async def get_deploy_guide_raw():
+    """تنزيل الدليل كملف Markdown خام."""
+    candidates = [
+        "/app/DEPLOY_GCP.md",
+        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "..", "DEPLOY_GCP.md"),
+        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "DEPLOY_GCP.md"),
+        "./DEPLOY_GCP.md",
+    ]
+    for p in candidates:
+        try:
+            if _os_for_guide.path.exists(p):
+                with open(p, "r", encoding="utf-8") as f:
+                    return PlainTextResponse(
+                        f.read(),
+                        media_type="text/markdown; charset=utf-8",
+                        headers={"Content-Disposition": "attachment; filename=DEPLOY_GCP.md"},
+                    )
+        except Exception:
+            continue
+    return PlainTextResponse("الدليل غير متوفر", status_code=404)
+
+
 # ==================== Trash Helper ====================
 async def save_to_trash(item_type: str, item_name: str, backup_data: dict, deleted_by: str):
     """حفظ عنصر محذوف في سلة المحذوفات"""
