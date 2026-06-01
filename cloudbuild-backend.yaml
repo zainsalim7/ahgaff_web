@@ -9,7 +9,7 @@ steps:
     args:
       - 'build'
       - '-t'
-      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$SHORT_SHA'
+      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$BUILD_ID'
       - '-t'
       - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest'
       - '-f'
@@ -32,7 +32,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'ahgaff-backend'
-      - '--image=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$SHORT_SHA'
+      - '--image=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$BUILD_ID'
       - '--region=me-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -48,7 +48,7 @@ steps:
       - '--update-secrets=MONGO_URL=mongo-url:latest,SECRET_KEY=jwt-secret:latest'
 
 images:
-  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$SHORT_SHA'
+  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$BUILD_ID'
   - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest'
 
 options:

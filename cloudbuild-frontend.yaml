@@ -15,7 +15,7 @@ steps:
       - '--build-arg'
       - 'EXPO_PUBLIC_BACKEND_URL=${_BACKEND_URL}'
       - '-t'
-      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$SHORT_SHA'
+      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$BUILD_ID'
       - '-t'
       - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:latest'
       - '-f'
@@ -38,7 +38,7 @@ steps:
       - 'run'
       - 'deploy'
       - 'ahgaff-frontend'
-      - '--image=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$SHORT_SHA'
+      - '--image=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$BUILD_ID'
       - '--region=me-central1'
       - '--platform=managed'
       - '--allow-unauthenticated'
@@ -51,7 +51,7 @@ steps:
       - '--concurrency=200'
 
 images:
-  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$SHORT_SHA'
+  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$BUILD_ID'
   - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:latest'
 
 options:
