@@ -1,0 +1,61 @@
+# Google Cloud Build - Frontend Deployment
+# يبني صورة Docker للـ frontend (Expo Web) وينشرها على Cloud Run
+# المهم: EXPO_PUBLIC_BACKEND_URL يُحقَن وقت البناء (مدمج داخل الـ JS bundle)
+
+substitutions:
+  # غيّر هذا فقط إذا كان لديك domain مختلف
+  _BACKEND_URL: 'https://api-gcp.ahgaff.net'
+
+steps:
+  # 1) بناء صورة Docker مع تمرير backend URL كـ build arg
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'build-frontend'
+    args:
+      - 'build'
+      - '--build-arg'
+      - 'EXPO_PUBLIC_BACKEND_URL=${_BACKEND_URL}'
+      - '-t'
+      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$SHORT_SHA'
+      - '-t'
+      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:latest'
+      - '-f'
+      - 'frontend/Dockerfile'
+      - 'frontend'
+
+  # 2) رفع الصورة
+  - name: 'gcr.io/cloud-builders/docker'
+    id: 'push-frontend'
+    args:
+      - 'push'
+      - '--all-tags'
+      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend'
+
+  # 3) النشر على Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    id: 'deploy-frontend'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'deploy'
+      - 'ahgaff-frontend'
+      - '--image=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$SHORT_SHA'
+      - '--region=me-central1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=3000'
+      - '--memory=512Mi'
+      - '--cpu=1'
+      - '--min-instances=0'
+      - '--max-instances=10'
+      - '--timeout=60'
+      - '--concurrency=200'
+
+images:
+  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:$SHORT_SHA'
+  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/frontend:latest'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
+
+timeout: 1800s
