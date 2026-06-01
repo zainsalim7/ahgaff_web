@@ -309,10 +309,12 @@ import os as _os_for_guide
 async def get_deploy_guide():
     """عرض دليل النشر على Google Cloud (DEPLOY_GCP.md) كصفحة HTML."""
     # ابحث عن الملف في عدة مسارات محتملة
+    _here = _os_for_guide.path.dirname(__file__)
     candidates = [
+        _os_for_guide.path.join(_here, "_deploy_guide_content.md"),  # ← مضمَّن مع الكود (يعمل في كل البيئات)
         "/app/DEPLOY_GCP.md",
-        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "..", "DEPLOY_GCP.md"),
-        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "DEPLOY_GCP.md"),
+        _os_for_guide.path.join(_here, "..", "..", "DEPLOY_GCP.md"),
+        _os_for_guide.path.join(_here, "..", "DEPLOY_GCP.md"),
         "./DEPLOY_GCP.md",
     ]
     content = None
@@ -397,10 +399,12 @@ async def get_deploy_guide():
 @api_router.get("/deploy-guide/raw", response_class=PlainTextResponse, include_in_schema=False)
 async def get_deploy_guide_raw():
     """تنزيل الدليل كملف Markdown خام."""
+    _here = _os_for_guide.path.dirname(__file__)
     candidates = [
+        _os_for_guide.path.join(_here, "_deploy_guide_content.md"),
         "/app/DEPLOY_GCP.md",
-        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "..", "DEPLOY_GCP.md"),
-        _os_for_guide.path.join(_os_for_guide.path.dirname(__file__), "..", "DEPLOY_GCP.md"),
+        _os_for_guide.path.join(_here, "..", "..", "DEPLOY_GCP.md"),
+        _os_for_guide.path.join(_here, "..", "DEPLOY_GCP.md"),
         "./DEPLOY_GCP.md",
     ]
     for p in candidates:
