@@ -424,23 +424,40 @@ async def remove_assignment(
 
 # ==================== Generate Offerings ====================
 
+SECTION_LABELS_AR = ['أ', 'ب', 'ج', 'د', 'ه', 'و', 'ز', 'ح', 'ط', 'ي']
+
+
+class GenerateOfferingsBody(BaseModel):
+    """جسم الطلب الاختياري لتمرير عدد الشعب لكل مقرر."""
+    sections_map: Optional[dict[str, int]] = None  # curriculum_course_id → عدد الشعب
+    default_sections: Optional[int] = 1  # عدد افتراضي للمقررات غير المحددة
+
+
 @router.post("/curriculum/generate-offerings")
 async def generate_offerings_from_curriculum(
     semester_id: str = Query(..., description="معرّف الفصل الأكاديمي النشط"),
     department_id: Optional[str] = Query(None, description="فلترة قسم محدد"),
     term: Optional[int] = Query(None, ge=1, le=2, description="1=أول، 2=ثاني (افتراضي يأخذ كل الخطة)"),
     skip_existing: bool = Query(True, description="تخطي المقررات الموجودة في الفصل"),
+    body: Optional[GenerateOfferingsBody] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """توليد جلسات (Layer 3 courses) من الخطة الدراسية لفصل أكاديمي محدد.
     - يأخذ مقررات الخطة المطابقة للفلاتر
-    - يُنشئ courses (Layer 3) لكل واحد
+    - يُنشئ courses (Layer 3) لكل واحد بعدد الشعب المحدد (افتراضي: شعبة واحدة "أ")
+    - لكل مقرر: ينشئ N courses منفصلة بشعب أ، ب، ج، ...
     - يربطها بـ curriculum_course_id
     - يأخذ المعلم من أحدث teacher_assignment إن وُجد
     """
     if not _has_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
+
+    # ⭐ خريطة الشعب لكل مقرر (curriculum_course_id → عدد الشعب)
+    sections_map = (body.sections_map if body else None) or {}
+    default_sections = (body.default_sections if body else 1) or 1
+    # تطبيق حدود معقولة
+    default_sections = max(1, min(default_sections, len(SECTION_LABELS_AR)))
 
     # تحقق من الفصل
     try:
@@ -500,37 +517,51 @@ async def generate_offerings_from_curriculum(
     created_items = []
     for cc in curriculum_list:
         cc_id = str(cc["_id"])
-        if skip_existing:
-            exists = await db.courses.find_one({
-                "semester_id": semester_id,
-                "curriculum_course_id": cc_id,
-            })
-            if exists:
-                skipped += 1
-                continue
+        # تحديد عدد الشعب لهذا المقرر (من الخريطة أو الافتراضي)
+        n_sections = sections_map.get(cc_id, default_sections)
+        n_sections = max(1, min(int(n_sections or 1), len(SECTION_LABELS_AR)))
 
-        doc = {
-            "curriculum_course_id": cc_id,
-            "semester_id": semester_id,
-            "code": cc.get("code"),
-            "name": cc.get("name"),
-            "credit_hours": cc.get("credit_hours", 3),
-            "department_id": cc.get("department_id"),
-            "faculty_id": cc.get("faculty_id"),
-            "level": cc.get("level"),
-            "term": cc.get("term"),
-            "section": "أ",  # افتراضي
-            "room": "",
-            "teacher_id": assignments_map.get(cc_id),
-            "is_active": True,  # ← مهم: حتى تظهر في GET /courses الذي يفلتر بـ is_active=True
-            "academic_year": sem.get("academic_year") or "",
-            "created_at": _now(),
-            "created_by": current_user.get("id"),
-            "auto_generated": True,
-        }
-        r = await db.courses.insert_one(doc)
-        created += 1
-        created_items.append({"id": str(r.inserted_id), "name": doc["name"], "code": doc["code"]})
+        for sec_idx in range(n_sections):
+            section_label = SECTION_LABELS_AR[sec_idx]
+
+            if skip_existing:
+                exists = await db.courses.find_one({
+                    "semester_id": semester_id,
+                    "curriculum_course_id": cc_id,
+                    "section": section_label,
+                })
+                if exists:
+                    skipped += 1
+                    continue
+
+            doc = {
+                "curriculum_course_id": cc_id,
+                "semester_id": semester_id,
+                "code": cc.get("code"),
+                "name": cc.get("name"),
+                "credit_hours": cc.get("credit_hours", 3),
+                "department_id": cc.get("department_id"),
+                "faculty_id": cc.get("faculty_id"),
+                "level": cc.get("level"),
+                "term": cc.get("term"),
+                "section": section_label,
+                "room": "",
+                # الإسناد التلقائي للشعبة الأولى فقط (تفادي تعارض المقرر الواحد لمعلمين)
+                "teacher_id": assignments_map.get(cc_id) if sec_idx == 0 else None,
+                "is_active": True,
+                "academic_year": sem.get("academic_year") or "",
+                "created_at": _now(),
+                "created_by": current_user.get("id"),
+                "auto_generated": True,
+            }
+            r = await db.courses.insert_one(doc)
+            created += 1
+            created_items.append({
+                "id": str(r.inserted_id),
+                "name": doc["name"],
+                "code": doc["code"],
+                "section": section_label,
+            })
 
     return {
         "message": f"تم توليد {created} جلسة من الخطة الدراسية",

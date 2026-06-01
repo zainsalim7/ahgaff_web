@@ -23,6 +23,8 @@ export default function CurriculumScreen() {
     code: '', name: '', credit_hours: 3, level: 1, term: 1,
   });
   const [generating, setGenerating] = useState(false);
+  // ⭐ خريطة عدد الشعب لكل مقرر (curriculum_course_id → عدد)
+  const [sectionsMap, setSectionsMap] = useState<Record<string, string>>({});
   const [activeSemester, setActiveSemester] = useState<any>(null);
   const [archives, setArchives] = useState<any[]>([]);
   const [showImport, setShowImport] = useState(false);
@@ -122,10 +124,19 @@ export default function CurriculumScreen() {
     try {
       const params: any = { semester_id: activeSemester.id || activeSemester._id, department_id: selectedDept };
       if (term) params.term = term;
-      const res = await api.post('/curriculum/generate-offerings', null, { params });
+      // ⭐ تجهيز خريطة الشعب (تحويل النصوص لأرقام، وتجاهل القيم الفارغة أو 1)
+      const sectionsPayload: Record<string, number> = {};
+      Object.entries(sectionsMap).forEach(([ccid, val]) => {
+        const n = parseInt(val);
+        if (n && n > 1) sectionsPayload[ccid] = Math.min(n, 10);
+      });
+      const body = { sections_map: sectionsPayload, default_sections: 1 };
+      const res = await api.post('/curriculum/generate-offerings', body, { params });
       const r = res.data;
       const msg = `تم إنشاء ${r.created} جلسة، تخطي ${r.skipped} (موجودة مسبقاً)`;
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
+      // مسح خريطة الشعب بعد التوليد الناجح
+      setSectionsMap({});
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشل التوليد';
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
@@ -375,8 +386,10 @@ export default function CurriculumScreen() {
               <View key={row.level} style={styles.levelBlock}>
                 <Text style={styles.levelTitle}>المستوى {row.level}</Text>
                 <View style={styles.termsRow}>
-                  <TermColumn label="الفصل الأول" courses={row.term1} onDelete={deleteCourse} />
-                  <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse} />
+                  <TermColumn label="الفصل الأول" courses={row.term1} onDelete={deleteCourse}
+                    sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} />
+                  <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse}
+                    sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} />
                 </View>
               </View>
             ))}
@@ -613,7 +626,7 @@ export default function CurriculumScreen() {
   );
 }
 
-const TermColumn = ({ label, courses, onDelete }: any) => (
+const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap }: any) => (
   <View style={styles.termCol}>
     <Text style={styles.termHeader}>{label}</Text>
     {courses.length === 0 ? (
@@ -631,6 +644,24 @@ const TermColumn = ({ label, courses, onDelete }: any) => (
                 👨‍🏫 {c.teachers.map((t: any) => t.full_name).join('، ')}
               </Text>
             )}
+          </View>
+          {/* ⭐ مربع عدد الشعب — يُكتب قبل التوليد */}
+          <View style={styles.sectionsBoxWrap} testID={`sections-wrap-${c.id}`}>
+            <TextInput
+              style={styles.sectionsBox}
+              placeholder="1"
+              placeholderTextColor="#bbb"
+              keyboardType="numeric"
+              maxLength={2}
+              value={sectionsMap?.[c.id] ?? ''}
+              onChangeText={(v) => {
+                // قبول أرقام فقط من 1 إلى 10
+                const cleaned = v.replace(/[^0-9]/g, '');
+                setSectionsMap?.((prev: any) => ({ ...prev, [c.id]: cleaned }));
+              }}
+              testID={`sections-input-${c.id}`}
+            />
+            <Text style={styles.sectionsBoxLabel}>شعب</Text>
           </View>
           <TouchableOpacity onPress={() => onDelete(c.id, c.name)} testID={`del-${c.id}`}>
             <Ionicons name="trash-outline" size={16} color="#c62828" />
@@ -675,6 +706,31 @@ const styles = StyleSheet.create({
   courseCard: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     backgroundColor: '#fafafa', padding: 8, borderRadius: 6, marginBottom: 4,
+  },
+  // ⭐ مربع عدد الشعب الصغير في كل مقرر
+  sectionsBoxWrap: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 2,
+    paddingHorizontal: 4,
+  },
+  sectionsBox: {
+    width: 36,
+    height: 30,
+    borderWidth: 1,
+    borderColor: '#bdbdbd',
+    borderRadius: 6,
+    backgroundColor: '#fff',
+    textAlign: 'center',
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#1565c0',
+    paddingVertical: 0,
+  },
+  sectionsBoxLabel: {
+    fontSize: 9,
+    color: '#777',
+    fontWeight: '600',
   },
   courseName: { fontSize: 12, fontWeight: '700', color: '#222' },
   courseMeta: { fontSize: 10, color: '#888', marginTop: 2 },
