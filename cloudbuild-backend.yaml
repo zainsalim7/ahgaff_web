@@ -13,8 +13,8 @@ steps:
       - '-t'
       - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest'
       - '-f'
-      - 'backend/backend/Dockerfile'
-      - 'backend/backend'
+      - 'backend/Dockerfile'
+      - 'backend'
 
   # 2) رفع الصورة لـ Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
