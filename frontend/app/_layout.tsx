@@ -198,7 +198,7 @@ const styles = StyleSheet.create({
   floatingBtnsRow: {
     position: 'absolute',
     top: Platform.OS === 'web' ? 8 : 50,
-    left: 8,
+    right: 8,
     zIndex: 9999,
     flexDirection: 'row',
     gap: 8,
