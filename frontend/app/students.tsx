@@ -131,6 +131,9 @@ export default function StudentsScreen() {
     program_code: '',
     enrollment_year: '',
   });
+  // أصل بيانات الطالب قبل التعديل (للكشف عن تغيير المستوى)
+  const [editOriginalLevel, setEditOriginalLevel] = useState<string>('');
+  const [editOriginalSection, setEditOriginalSection] = useState<string>('');
 
   // إرسال إنذار يدوي
   const [showWarningModal, setShowWarningModal] = useState(false);
@@ -152,6 +155,11 @@ export default function StudentsScreen() {
   // تغيير المستوى
   const [showLevelModal, setShowLevelModal] = useState(false);
   const [changingLevel, setChangingLevel] = useState(false);
+  // المرحلة الثانية من تغيير المستوى الجماعي: اختيار الشعبة
+  const [showBulkSectionModal, setShowBulkSectionModal] = useState(false);
+  const [pendingBulkLevel, setPendingBulkLevel] = useState<number | null>(null);
+  const [bulkSectionMode, setBulkSectionMode] = useState<'keep' | 'set' | 'clear'>('keep');
+  const [bulkNewSection, setBulkNewSection] = useState<string>('');
 
   // تغيير الحالة (مدمج هنا - تخرج/إعادة/فصل/تجميد)
   const [showStatusModal, setShowStatusModal] = useState(false);
@@ -227,6 +235,20 @@ export default function StudentsScreen() {
     return Array.from(sections).sort();
   }, [students, selectedDeptFilter]);
 
+  // الشعب الموجودة في مستوى معيّن (للاقتراحات عند تغيير المستوى)
+  const getSectionsAtLevel = useCallback((deptId: string | undefined, level: string | number) => {
+    const sections = new Set<string>();
+    const lvl = String(level);
+    students.forEach(s => {
+      if (s.section && String(s.level) === lvl) {
+        if (!deptId || s.department_id === deptId) {
+          sections.add(s.section);
+        }
+      }
+    });
+    return Array.from(sections).sort();
+  }, [students]);
+
   const getDepartmentName = (deptId: string) => {
     const dept = departments.find(d => d.id === deptId);
     return dept?.name || 'غير محدد';
@@ -285,19 +307,43 @@ export default function StudentsScreen() {
   // تغيير المستوى الجماعي
   const handleBulkChangeLevel = async (newLevel: number) => {
     if (selectedIds.size === 0) return;
+    // المرحلة 1: نُغلق نافذة اختيار المستوى ونفتح نافذة اختيار إجراء الشعبة
+    setPendingBulkLevel(newLevel);
+    setBulkSectionMode('keep');
+    setBulkNewSection('');
+    setShowLevelModal(false);
+    setShowBulkSectionModal(true);
+  };
+
+  // المرحلة 2: تنفيذ تغيير المستوى مع خيار الشعبة
+  const submitBulkChangeLevel = async () => {
+    if (selectedIds.size === 0 || pendingBulkLevel === null) return;
+    if (bulkSectionMode === 'set' && !bulkNewSection.trim()) {
+      showMessage('تنبيه', 'يرجى إدخال أو اختيار اسم الشعبة الجديدة');
+      return;
+    }
     setChangingLevel(true);
     try {
       const token = await AsyncStorage.getItem('token');
       const API_URL = process.env.EXPO_PUBLIC_BACKEND_URL;
+      const body: any = {
+        student_ids: Array.from(selectedIds),
+        new_level: pendingBulkLevel,
+        section_mode: bulkSectionMode,
+      };
+      if (bulkSectionMode === 'set') body.new_section = bulkNewSection.trim();
       const res = await fetch(`${API_URL}/api/students/bulk-change-level`, {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_ids: Array.from(selectedIds), new_level: newLevel }),
+        body: JSON.stringify(body),
       });
       const data = await res.json();
       if (res.ok) {
         showMessage('نجاح', data.message);
-        setShowLevelModal(false);
+        setShowBulkSectionModal(false);
+        setPendingBulkLevel(null);
+        setBulkNewSection('');
+        setBulkSectionMode('keep');
         setSelectedIds(new Set());
         setSelectionMode(false);
         fetchData();
@@ -670,6 +716,8 @@ export default function StudentsScreen() {
       program_code: (student as any).program_code || '',
       enrollment_year: (student as any).enrollment_year || '',
     });
+    setEditOriginalLevel(String(student.level || '1'));
+    setEditOriginalSection(student.section || '');
     setShowEditModal(true);
   };
 
@@ -1402,12 +1450,112 @@ export default function StudentsScreen() {
               
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>الشعبة</Text>
+                {/* تنبيه عند تغيير المستوى مع وجود شعبة سابقة */}
+                {editingStudent && editFormData.level !== editOriginalLevel && editOriginalSection ? (
+                  <View
+                    data-testid="section-reassign-notice"
+                    style={{
+                      backgroundColor: '#fff8e1',
+                      borderWidth: 1,
+                      borderColor: '#ffe082',
+                      borderRadius: 8,
+                      padding: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, color: '#795548', textAlign: 'right', marginBottom: 6, fontWeight: '600' }}>
+                      ⚠️ تم تغيير المستوى من م{editOriginalLevel} إلى م{editFormData.level}.{'\n'}
+                      الشعبة الحالية: <Text style={{ fontWeight: '800' }}>{editOriginalSection}</Text>
+                    </Text>
+                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                      <TouchableOpacity
+                        data-testid="section-keep-btn"
+                        style={{
+                          flex: 1,
+                          backgroundColor: editFormData.section === editOriginalSection ? '#2e7d32' : '#e8f5e9',
+                          padding: 8,
+                          borderRadius: 6,
+                          alignItems: 'center',
+                          minWidth: 90,
+                        }}
+                        onPress={() => setEditFormData(prev => ({ ...prev, section: editOriginalSection }))}
+                      >
+                        <Text style={{
+                          fontSize: 11,
+                          fontWeight: '700',
+                          color: editFormData.section === editOriginalSection ? '#fff' : '#2e7d32',
+                        }}>
+                          احتفظ بـ {editOriginalSection}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        data-testid="section-clear-btn"
+                        style={{
+                          flex: 1,
+                          backgroundColor: editFormData.section === '' ? '#c62828' : '#ffebee',
+                          padding: 8,
+                          borderRadius: 6,
+                          alignItems: 'center',
+                          minWidth: 90,
+                        }}
+                        onPress={() => setEditFormData(prev => ({ ...prev, section: '' }))}
+                      >
+                        <Text style={{
+                          fontSize: 11,
+                          fontWeight: '700',
+                          color: editFormData.section === '' ? '#fff' : '#c62828',
+                        }}>
+                          بلا شعبة
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : null}
+                {/* اقتراحات الشعب الموجودة في المستوى المختار */}
+                {(() => {
+                  const suggestions = getSectionsAtLevel(
+                    editingStudent?.department_id,
+                    editFormData.level
+                  );
+                  if (!suggestions.length) return null;
+                  return (
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                      <Text style={{ fontSize: 11, color: '#666', width: '100%', textAlign: 'right' }}>
+                        الشعب الموجودة في م{editFormData.level}:
+                      </Text>
+                      {suggestions.map(sec => (
+                        <TouchableOpacity
+                          key={sec}
+                          data-testid={`section-suggest-${sec}`}
+                          onPress={() => setEditFormData(prev => ({ ...prev, section: sec }))}
+                          style={{
+                            paddingHorizontal: 10,
+                            paddingVertical: 5,
+                            borderRadius: 12,
+                            borderWidth: 1,
+                            borderColor: editFormData.section === sec ? '#1976d2' : '#bbdefb',
+                            backgroundColor: editFormData.section === sec ? '#1976d2' : '#e3f2fd',
+                          }}
+                        >
+                          <Text style={{
+                            fontSize: 12,
+                            fontWeight: '700',
+                            color: editFormData.section === sec ? '#fff' : '#1976d2',
+                          }}>
+                            {sec}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  );
+                })()}
                 <TextInput
                   style={styles.input}
                   value={editFormData.section}
                   onChangeText={(text) => setEditFormData(prev => ({ ...prev, section: text }))}
-                  placeholder="الشعبة (اختياري)"
+                  placeholder="الشعبة (اختياري) - أو إدخال يدوي"
                   placeholderTextColor="#999"
+                  data-testid="edit-section-input"
                 />
               </View>
 
@@ -1619,6 +1767,187 @@ export default function StudentsScreen() {
             >
               <Text style={{ color: '#666', fontWeight: '600' }}>إلغاء</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* نافذة المرحلة 2: اختيار الشعبة عند تغيير المستوى الجماعي */}
+      <Modal visible={showBulkSectionModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '95%', maxWidth: 440 }} data-testid="bulk-section-modal">
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <View style={{ width: 38, height: 38, borderRadius: 19, backgroundColor: '#f3e5f5', alignItems: 'center', justifyContent: 'center' }}>
+                <Ionicons name="people" size={20} color="#9c27b0" />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={{ fontSize: 16, fontWeight: '800', color: '#222', textAlign: 'right' }}>
+                  ماذا عن الشعبة؟
+                </Text>
+                <Text style={{ fontSize: 11, color: '#888', textAlign: 'right' }}>
+                  {selectedIds.size} طالب → المستوى م{pendingBulkLevel}
+                </Text>
+              </View>
+            </View>
+
+            <View style={{ gap: 8, marginVertical: 6 }}>
+              {/* خيار 1: احتفاظ بالشعبة */}
+              <TouchableOpacity
+                data-testid="bulk-section-keep"
+                onPress={() => setBulkSectionMode('keep')}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                  padding: 12, borderRadius: 10,
+                  borderWidth: 1.5,
+                  borderColor: bulkSectionMode === 'keep' ? '#2e7d32' : '#e0e0e0',
+                  backgroundColor: bulkSectionMode === 'keep' ? '#e8f5e9' : '#fafafa',
+                }}
+              >
+                <Ionicons
+                  name={bulkSectionMode === 'keep' ? 'radio-button-on' : 'radio-button-off'}
+                  size={20}
+                  color={bulkSectionMode === 'keep' ? '#2e7d32' : '#999'}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#222', textAlign: 'right' }}>
+                    احتفظ بالشعبة الحالية لكل طالب
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#666', textAlign: 'right' }}>
+                    يبقى كل طالب في شعبته كما هي
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* خيار 2: شعبة موحّدة */}
+              <TouchableOpacity
+                data-testid="bulk-section-set"
+                onPress={() => setBulkSectionMode('set')}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                  padding: 12, borderRadius: 10,
+                  borderWidth: 1.5,
+                  borderColor: bulkSectionMode === 'set' ? '#1976d2' : '#e0e0e0',
+                  backgroundColor: bulkSectionMode === 'set' ? '#e3f2fd' : '#fafafa',
+                }}
+              >
+                <Ionicons
+                  name={bulkSectionMode === 'set' ? 'radio-button-on' : 'radio-button-off'}
+                  size={20}
+                  color={bulkSectionMode === 'set' ? '#1976d2' : '#999'}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#222', textAlign: 'right' }}>
+                    اختر شعبة موحّدة لجميع الطلاب
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#666', textAlign: 'right' }}>
+                    سيتم نقل الجميع إلى نفس الشعبة
+                  </Text>
+                </View>
+              </TouchableOpacity>
+
+              {/* مدخل/اقتراحات الشعبة الموحّدة */}
+              {bulkSectionMode === 'set' && (
+                <View style={{ padding: 8, backgroundColor: '#f5f5f5', borderRadius: 8 }}>
+                  {(() => {
+                    const suggestions = getSectionsAtLevel(selectedDeptFilter, pendingBulkLevel || '');
+                    if (!suggestions.length) return null;
+                    return (
+                      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
+                        <Text style={{ fontSize: 10, color: '#666', width: '100%', textAlign: 'right' }}>
+                          الشعب الموجودة في م{pendingBulkLevel}:
+                        </Text>
+                        {suggestions.map(sec => (
+                          <TouchableOpacity
+                            key={sec}
+                            data-testid={`bulk-section-suggest-${sec}`}
+                            onPress={() => setBulkNewSection(sec)}
+                            style={{
+                              paddingHorizontal: 10,
+                              paddingVertical: 4,
+                              borderRadius: 12,
+                              borderWidth: 1,
+                              borderColor: bulkNewSection === sec ? '#1976d2' : '#bbdefb',
+                              backgroundColor: bulkNewSection === sec ? '#1976d2' : '#e3f2fd',
+                            }}
+                          >
+                            <Text style={{
+                              fontSize: 11,
+                              fontWeight: '700',
+                              color: bulkNewSection === sec ? '#fff' : '#1976d2',
+                            }}>
+                              {sec}
+                            </Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                    );
+                  })()}
+                  <TextInput
+                    data-testid="bulk-section-input"
+                    style={{
+                      borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 6,
+                      paddingHorizontal: 10, paddingVertical: 8, fontSize: 13,
+                      textAlign: 'right', backgroundColor: '#fff',
+                    }}
+                    placeholder="اسم الشعبة (مثال: A أو ب)"
+                    value={bulkNewSection}
+                    onChangeText={setBulkNewSection}
+                    placeholderTextColor="#aaa"
+                  />
+                </View>
+              )}
+
+              {/* خيار 3: بلا شعبة */}
+              <TouchableOpacity
+                data-testid="bulk-section-clear"
+                onPress={() => setBulkSectionMode('clear')}
+                style={{
+                  flexDirection: 'row', alignItems: 'center', gap: 10,
+                  padding: 12, borderRadius: 10,
+                  borderWidth: 1.5,
+                  borderColor: bulkSectionMode === 'clear' ? '#c62828' : '#e0e0e0',
+                  backgroundColor: bulkSectionMode === 'clear' ? '#ffebee' : '#fafafa',
+                }}
+              >
+                <Ionicons
+                  name={bulkSectionMode === 'clear' ? 'radio-button-on' : 'radio-button-off'}
+                  size={20}
+                  color={bulkSectionMode === 'clear' ? '#c62828' : '#999'}
+                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#222', textAlign: 'right' }}>
+                    بلا شعبة لجميع الطلاب
+                  </Text>
+                  <Text style={{ fontSize: 10, color: '#666', textAlign: 'right' }}>
+                    سيتم حذف الشعبة من جميع الطلاب المحددين
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
+              <TouchableOpacity
+                style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 12, borderRadius: 10, alignItems: 'center' }}
+                onPress={() => {
+                  setShowBulkSectionModal(false);
+                  setPendingBulkLevel(null);
+                }}
+                disabled={changingLevel}
+              >
+                <Text style={{ color: '#666', fontWeight: '700' }}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                data-testid="bulk-section-confirm"
+                style={{ flex: 2, backgroundColor: '#9c27b0', padding: 12, borderRadius: 10, alignItems: 'center', opacity: changingLevel ? 0.6 : 1 }}
+                onPress={submitBulkChangeLevel}
+                disabled={changingLevel}
+              >
+                {changingLevel ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>تأكيد التغيير</Text>
+                )}
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

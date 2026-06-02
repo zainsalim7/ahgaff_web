@@ -2842,21 +2842,44 @@ async def get_student_notifications(
 
 @api_router.post("/students/bulk-change-level")
 async def bulk_change_level(request: Request, current_user: dict = Depends(get_current_user)):
-    """تغيير مستوى مجموعة من الطلاب"""
+    """تغيير مستوى مجموعة من الطلاب
+    section_mode:
+        - "keep"  (افتراضي): الإبقاء على شعبة كل طالب كما هي
+        - "set"   : تعيين شعبة موحّدة لجميع الطلاب (new_section)
+        - "clear" : إزالة الشعبة من جميع الطلاب
+    """
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     student_ids = data.get("student_ids", [])
     new_level = data.get("new_level")
+    section_mode = (data.get("section_mode") or "keep").lower()
+    new_section = (data.get("new_section") or "").strip()
     if not student_ids or new_level is None:
         raise HTTPException(status_code=400, detail="بيانات ناقصة")
-    
+    if section_mode not in ("keep", "set", "clear"):
+        raise HTTPException(status_code=400, detail="section_mode غير صالح")
+    if section_mode == "set" and not new_section:
+        raise HTTPException(status_code=400, detail="يجب تحديد شعبة جديدة عند اختيار 'set'")
+
+    update_set = {"level": int(new_level)}
+    if section_mode == "set":
+        update_set["section"] = new_section
+    elif section_mode == "clear":
+        update_set["section"] = ""
+
     updated = 0
     for sid in student_ids:
-        result = await db.students.update_one({"_id": ObjectId(sid)}, {"$set": {"level": int(new_level)}})
+        result = await db.students.update_one({"_id": ObjectId(sid)}, {"$set": update_set})
         if result.modified_count > 0:
             updated += 1
-    return {"message": f"تم تغيير مستوى {updated} طالب إلى المستوى {new_level}", "updated": updated}
+
+    section_msg = ""
+    if section_mode == "set":
+        section_msg = f" - الشعبة: {new_section}"
+    elif section_mode == "clear":
+        section_msg = " - بلا شعبة"
+    return {"message": f"تم تغيير مستوى {updated} طالب إلى المستوى {new_level}{section_msg}", "updated": updated}
 
 @api_router.post("/students", response_model=StudentResponse)
 async def create_student(student: StudentCreate, current_user: dict = Depends(get_current_user)):
