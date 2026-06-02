@@ -526,6 +526,23 @@ async def advanced_teaching_load_report(
     teachers = await db.teachers.find(teacher_query).to_list(500)
     teacher_ids = [str(t["_id"]) for t in teachers]
 
+    # ⭐ التحقق إذا كان الفصل المختار مؤرشف — نقرأ من semester_archives بدلاً من الـ collection الحية
+    is_archived = False
+    archived_courses: list[dict] = []
+    archived_loads: list[dict] = []
+    if semester_id:
+        try:
+            sem_doc = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+            if sem_doc and sem_doc.get("status") == "archived":
+                is_archived = True
+                archive = await db.semester_archives.find_one({"semester_id": semester_id})
+                if archive:
+                    archived_courses = archive.get("courses", []) or []
+                    # دعم اختياري لـ teaching_loads داخل الأرشيف (لو كانت محفوظة)
+                    archived_loads = archive.get("teaching_loads", []) or []
+        except Exception:
+            pass
+
     # فلتر المقررات
     course_query = {"is_active": True}
     if department_id and not teacher_id:
@@ -538,15 +555,32 @@ async def advanced_teaching_load_report(
     if teacher_id:
         course_query["teacher_id"] = teacher_id
 
-    all_courses = await db.courses.find(course_query).to_list(2000)
+    if is_archived:
+        # فلترة المقررات المؤرشفة في الذاكرة
+        all_courses = []
+        for c in archived_courses:
+            if department_id and not teacher_id and c.get("department_id") != department_id:
+                continue
+            if term in (1, 2) and c.get("term") != term:
+                continue
+            if teacher_id and c.get("teacher_id") != teacher_id:
+                continue
+            all_courses.append(c)
+    else:
+        all_courses = await db.courses.find(course_query).to_list(2000)
 
     # جلب الأعباء
-    load_query = {}
-    if teacher_ids:
-        load_query["teacher_id"] = {"$in": teacher_ids}
-    if semester_id:
-        load_query["semester_id"] = semester_id
-    all_loads = await db.teaching_loads.find(load_query).to_list(2000)
+    if is_archived:
+        all_loads = archived_loads
+        if teacher_ids:
+            all_loads = [l for l in all_loads if l.get("teacher_id") in teacher_ids]
+    else:
+        load_query = {}
+        if teacher_ids:
+            load_query["teacher_id"] = {"$in": teacher_ids}
+        if semester_id:
+            load_query["semester_id"] = semester_id
+        all_loads = await db.teaching_loads.find(load_query).to_list(2000)
     loads_by_teacher = {}
     for l in all_loads:
         tid = l["teacher_id"]
@@ -627,6 +661,7 @@ async def advanced_teaching_load_report(
         "department_name": dept_name,
         "teacher_name": teacher_name,
         "scope": "teacher" if teacher_id else "department",
+        "is_archived": is_archived,  # ⭐ للواجهة لمعرفة أن البيانات من الأرشيف
         "summary": {
             "total_teachers": total_teachers,
             "teachers_with_load": teachers_with_load,

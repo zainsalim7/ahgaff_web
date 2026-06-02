@@ -218,6 +218,13 @@ export default function TeachingLoadReport() {
 
         {!loading && report && (
           <>
+            {/* بادج تحذيري للفصول المؤرشفة */}
+            {report.is_archived && (
+              <View style={st.archivedBadge} testID="archived-banner">
+                <Ionicons name="archive-outline" size={16} color="#e65100" />
+                <Text style={st.archivedText}>هذا فصل مؤرشف — البيانات مأخوذة من الأرشيف</Text>
+              </View>
+            )}
             {/* Summary Cards */}
             <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 }}>
               <View style={[st.statCard, { backgroundColor: '#e3f2fd' }]}>
@@ -381,6 +388,13 @@ const st = StyleSheet.create({
   // باقي العناصر
   emptyCard: { backgroundColor: '#fff', borderRadius: 10, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
   emptyText: { marginTop: 8, fontSize: 13, color: '#999', textAlign: 'center' },
+  // بادج فصل مؤرشف
+  archivedBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#fff3e0', borderRightWidth: 4, borderRightColor: '#e65100',
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6, marginBottom: 10,
+  },
+  archivedText: { fontSize: 12, color: '#bf360c', fontWeight: '600', flex: 1, textAlign: 'right' },
   // (متغيرات قديمة للتقرير)
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8, textAlign: 'right' },
   statCard: { flex: 1, minWidth: 100, borderRadius: 10, padding: 12, alignItems: 'center' },
