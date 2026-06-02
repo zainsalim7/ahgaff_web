@@ -1,39 +1,22 @@
-# Google Cloud Build - Backend Deployment (محسّن للسرعة 3x)
-# Trigger: عند push لفرع main (تتغير ملفات داخل backend/)
+# Backend Deployment - Kaniko Optimized (الأسرع لـ Cloud Build)
+# Kaniko يخزّن كل layer مستقلاً في Artifact Registry → cache hits أسرع 3x
 
 steps:
-  # 1) سحب آخر صورة لاستخدامها كـ cache (يوفر ~60% من وقت البناء)
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'pull-cache'
-    entrypoint: 'bash'
+  # بناء وتخزين باستخدام Kaniko (caching متقدّم)
+  - name: 'gcr.io/kaniko-project/executor:latest'
+    id: 'build-and-push-backend'
     args:
-      - '-c'
-      - |
-        docker pull me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest || exit 0
+      - '--dockerfile=backend/Dockerfile'
+      - '--context=backend'
+      - '--destination=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$BUILD_ID'
+      - '--destination=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest'
+      - '--cache=true'
+      - '--cache-ttl=72h'
+      - '--cache-repo=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend-cache'
+      - '--compressed-caching=false'
+      - '--use-new-run'
 
-  # 2) بناء صورة Docker مع استخدام cache من السابق
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'build-backend'
-    args:
-      - 'build'
-      - '--cache-from=me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest'
-      - '-t'
-      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$BUILD_ID'
-      - '-t'
-      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest'
-      - '-f'
-      - 'backend/Dockerfile'
-      - 'backend'
-
-  # 3) رفع الصورة (يرفع الـ layers الجديدة فقط)
-  - name: 'gcr.io/cloud-builders/docker'
-    id: 'push-backend'
-    args:
-      - 'push'
-      - '--all-tags'
-      - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend'
-
-  # 4) النشر على Cloud Run
+  # النشر على Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     id: 'deploy-backend'
     entrypoint: 'gcloud'
@@ -54,10 +37,6 @@ steps:
       - '--concurrency=80'
       - '--set-env-vars=DB_NAME=ahgaff_attendance'
       - '--update-secrets=MONGO_URL=mongo-url:latest,SECRET_KEY=jwt-secret:latest,ALLOWED_ORIGINS=allowed-origins:latest'
-
-images:
-  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:$BUILD_ID'
-  - 'me-central1-docker.pkg.dev/$PROJECT_ID/ahgaff/backend:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
