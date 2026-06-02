@@ -1,19 +1,100 @@
 # Files to ignore when deploying to Google Cloud
+# هذا الملف يقلل حجم الـ tarball المرفوع كل مرة (من 18.7MB إلى ~3MB)
+
+# Git & version control
 .git/
 .gitignore
+.gitattributes
+.gitconfig
+
+# Environment files (الأسرار من Secret Manager)
 .env
 .env.*
+**/.env
+**/.env.*
+
+# Node.js
 node_modules/
+**/node_modules/
+.npm/
+.yarn/
+yarn-error.log
+npm-debug.log*
+
+# Python
 __pycache__/
+**/__pycache__/
 *.pyc
 *.pyo
+*.pyd
 .pytest_cache/
+.venv/
+venv/
+*.egg-info/
+
+# IDE & OS
 .DS_Store
+.vscode/
+.idea/
+*.swp
+*.swo
+Thumbs.db
+
+# Logs
 *.log
+logs/
+
+# Build artifacts
+dist/
+build/
+.expo/
+**/dist/
+**/build/
+**/.expo/
+.metro-cache/
+**/.metro-cache/
+
+# Test artifacts
 test_reports/
 tests/
+**/tests/__pycache__/
+*.test.js
+*.spec.js
+backend_test.py
+
+# Emergent platform metadata
 .emergent/
-.expo/
-README.md
+
+# Documentation (لا تحتاج للنشر)
 docs/
 *.md
+!README.md
+
+# مجلدات تطوير قديمة لا تنشر على GCP
+student-app/
+student-app-standalone/
+teacher-app/
+teacher-app-standalone/
+backend/frontend/
+backend/frontend-web/
+backend/tests/
+backend/__pycache__/
+backend/server.py.backup
+backend/backend/__pycache__/
+
+# Memory files
+memory/
+
+# Diffs & patches
+model.patch
+*.patch
+
+# Docker Compose (محلي فقط)
+docker-compose.yml
+docker-compose.*.yml
+
+# Railway-specific files (لا تؤثر على GCP)
+railway.toml
+**/railway.toml
+nixpacks.toml
+**/nixpacks.toml

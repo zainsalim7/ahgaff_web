@@ -64,7 +64,7 @@ jobs:
         with:
           project_id: ahgaff-university
       - name: Submit Backend Build
-        run: gcloud builds submit --config=cloudbuild-backend.yaml --region=me-central1 .
+        run: gcloud builds submit --config=cloudbuild-backend.yaml --region=me-central1 --gcs-source-staging-dir=gs://ahgaff-university_cloudbuild/source-backend .
 
   deploy-frontend:
     needs: detect-changes
@@ -80,4 +80,4 @@ jobs:
         with:
           project_id: ahgaff-university
       - name: Submit Frontend Build
-        run: gcloud builds submit --config=cloudbuild-frontend.yaml --region=me-central1 .
+        run: gcloud builds submit --config=cloudbuild-frontend.yaml --region=me-central1 --gcs-source-staging-dir=gs://ahgaff-university_cloudbuild/source-frontend .
