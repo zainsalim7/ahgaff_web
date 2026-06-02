@@ -3,6 +3,8 @@ Curriculum Routes - الخطة الدراسية وإسناد المعلمين
 Layer 1: curriculum_courses - تعريفات ثابتة للمقررات (الخطة الدراسية)
 Layer 2: teacher_assignments - الإسناد الدائم للمعلم على مقرر من الخطة
 Layer 3: courses (موجود) - الجلسات الفعلية في فصل أكاديمي محدد
+
+✨ Auto-Deploy Test: 2026-06-02 - GitHub Actions
 """
 from datetime import datetime, timezone
 from typing import Optional, List
