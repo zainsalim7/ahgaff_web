@@ -3,16 +3,33 @@ name: Deploy to GCP Cloud Run
 on:
   push:
     branches: [main]
+  # السماح بالتشغيل اليدوي من تبويب Actions أيضاً
+  workflow_dispatch:
+    inputs:
+      target:
+        description: 'ماذا تريد نشره؟'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - backend
+          - frontend
+
+permissions:
+  contents: read
 
 jobs:
   detect-changes:
     runs-on: ubuntu-latest
     outputs:
-      backend: ${{ steps.filter.outputs.backend }}
-      frontend: ${{ steps.filter.outputs.frontend }}
+      backend: ${{ steps.filter.outputs.backend || steps.manual.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend || steps.manual.outputs.frontend }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dorny/paths-filter@v3
+      - name: Detect file changes (push)
+        if: github.event_name == 'push'
+        uses: dorny/paths-filter@v3
         id: filter
         with:
           filters: |
@@ -22,6 +39,16 @@ jobs:
             frontend:
               - 'frontend/**'
               - 'cloudbuild-frontend.yaml'
+      - name: Manual deploy targets
+        if: github.event_name == 'workflow_dispatch'
+        id: manual
+        run: |
+          if [ "${{ github.event.inputs.target }}" = "both" ] || [ "${{ github.event.inputs.target }}" = "backend" ]; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ github.event.inputs.target }}" = "both" ] || [ "${{ github.event.inputs.target }}" = "frontend" ]; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+          fi
 
   deploy-backend:
     needs: detect-changes
@@ -34,6 +61,8 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ahgaff-university
       - name: Submit Backend Build
         run: gcloud builds submit --config=cloudbuild-backend.yaml --region=me-central1 .
 
@@ -48,5 +77,7 @@ jobs:
         with:
           credentials_json: ${{ secrets.GCP_SA_KEY }}
       - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ahgaff-university
       - name: Submit Frontend Build
         run: gcloud builds submit --config=cloudbuild-frontend.yaml --region=me-central1 .
