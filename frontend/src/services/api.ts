@@ -689,7 +689,7 @@ export const teachingLoadAPI = {
     api.get('/teaching-load/search-courses', { params: { q, department_id: departmentId } }),
   bulkSave: (items: { teacher_id: string; course_id: string; weekly_hours: number; semester_id?: string; notes?: string }[]) =>
     api.post('/teaching-load/bulk', items),
-  advancedReport: (params?: { department_id?: string }) =>
+  advancedReport: (params?: { department_id?: string; teacher_id?: string; semester_id?: string; term?: number }) =>
     api.get('/teaching-load/report/advanced', { params }),
 };
 

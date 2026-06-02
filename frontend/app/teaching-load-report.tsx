@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { teachingLoadAPI, departmentsAPI } from '../src/services/api';
+import { teachingLoadAPI, departmentsAPI, teachersAPI, semestersAPI } from '../src/services/api';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }> = {
   overload: { bg: '#ffebee', text: '#c62828', label: 'حمل زائد' },
@@ -13,9 +13,17 @@ const STATUS_COLORS: Record<string, { bg: string; text: string; label: string }>
   none: { bg: '#f5f5f5', text: '#999', label: 'بدون مقررات' },
 };
 
+type ReportScope = 'department' | 'teacher';
+
 export default function TeachingLoadReport() {
   const [departments, setDepartments] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [semesters, setSemesters] = useState<any[]>([]);
+  const [scope, setScope] = useState<ReportScope>('department');
   const [selectedDept, setSelectedDept] = useState('');
+  const [selectedTeacher, setSelectedTeacher] = useState('');
+  const [selectedSemester, setSelectedSemester] = useState('');
+  const [selectedTerm, setSelectedTerm] = useState<string>(''); // '', '1', '2'
   const [loading, setLoading] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [report, setReport] = useState<any>(null);
@@ -23,15 +31,41 @@ export default function TeachingLoadReport() {
 
   useEffect(() => {
     (async () => {
-      try { const res = await departmentsAPI.getAll(); setDepartments(res.data); } catch {}
+      try {
+        const [dRes, sRes] = await Promise.all([departmentsAPI.getAll(), semestersAPI.getAll()]);
+        setDepartments(dRes.data);
+        setSemesters(sRes.data || []);
+      } catch {}
     })();
   }, []);
 
+  // عند تغيير القسم في وضع "معلم"، نُحدث قائمة المعلمين
+  useEffect(() => {
+    (async () => {
+      if (scope !== 'teacher') return;
+      try {
+        const res = await teachersAPI.getAll(selectedDept ? { department_id: selectedDept } : {});
+        setTeachers(res.data || []);
+      } catch {}
+    })();
+  }, [scope, selectedDept]);
+
+  const resetReport = () => { setReport(null); setHasRun(false); };
+
   const runReport = async () => {
-    if (!selectedDept) return;
+    // التحقق من المدخلات حسب النطاق
+    if (scope === 'department' && !selectedDept) return;
+    if (scope === 'teacher' && !selectedTeacher) return;
+
     setLoading(true);
     try {
-      const res = await teachingLoadAPI.advancedReport({ department_id: selectedDept });
+      const params: any = {};
+      if (scope === 'department') params.department_id = selectedDept;
+      if (scope === 'teacher') params.teacher_id = selectedTeacher;
+      if (selectedSemester) params.semester_id = selectedSemester;
+      if (selectedTerm === '1' || selectedTerm === '2') params.term = parseInt(selectedTerm);
+
+      const res = await teachingLoadAPI.advancedReport(params);
       setReport(res.data);
       setHasRun(true);
     } catch (e) { console.error(e); }
@@ -39,6 +73,7 @@ export default function TeachingLoadReport() {
   };
 
   const s = report?.summary;
+  const canRun = scope === 'department' ? !!selectedDept : !!selectedTeacher;
 
   return (
     <SafeAreaView style={st.container} edges={['bottom']}>
@@ -49,19 +84,84 @@ export default function TeachingLoadReport() {
       </View>
 
       <ScrollView style={st.scroll}>
-        {/* Department Filter */}
+        {/* اختيار نوع التقرير: قسم كامل أو معلم واحد */}
         <View style={st.card}>
-          <Text style={st.label}>القسم</Text>
+          <Text style={st.label}>نوع التقرير</Text>
+          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+            <TouchableOpacity
+              testID="scope-department"
+              onPress={() => { setScope('department'); setSelectedTeacher(''); resetReport(); }}
+              style={[st.scopeBtn, scope === 'department' && st.scopeBtnActive]}
+            >
+              <Ionicons name="business-outline" size={16} color={scope === 'department' ? '#fff' : '#1565c0'} />
+              <Text style={[st.scopeBtnText, scope === 'department' && { color: '#fff' }]}>قسم كامل</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              testID="scope-teacher"
+              onPress={() => { setScope('teacher'); resetReport(); }}
+              style={[st.scopeBtn, scope === 'teacher' && st.scopeBtnActive]}
+            >
+              <Ionicons name="person-outline" size={16} color={scope === 'teacher' ? '#fff' : '#1565c0'} />
+              <Text style={[st.scopeBtnText, scope === 'teacher' && { color: '#fff' }]}>معلم واحد</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* فلتر القسم (دائماً مرئي) */}
+          <Text style={st.label}>القسم {scope === 'teacher' && <Text style={{ fontSize: 11, color: '#888' }}>(اختياري لتقليل قائمة المعلمين)</Text>}</Text>
           <View style={st.pickerWrap}>
-            <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); setReport(null); setHasRun(false); }} style={{ height: 45 }}>
-              <Picker.Item label="-- اختر القسم --" value="" />
+            <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); resetReport(); }} style={{ height: 45 }}>
+              <Picker.Item label={scope === 'teacher' ? '-- كل الأقسام --' : '-- اختر القسم --'} value="" />
               {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
             </Picker>
           </View>
+
+          {/* فلتر المعلم (فقط في وضع المعلم) */}
+          {scope === 'teacher' && (
+            <>
+              <Text style={[st.label, { marginTop: 12 }]}>المعلم *</Text>
+              <View style={st.pickerWrap}>
+                <Picker selectedValue={selectedTeacher} onValueChange={v => { setSelectedTeacher(v); resetReport(); }} style={{ height: 45 }} testID="teacher-picker">
+                  <Picker.Item label="-- اختر المعلم --" value="" />
+                  {teachers.map(t => <Picker.Item key={t.id} label={t.full_name || t.name} value={t.id} />)}
+                </Picker>
+              </View>
+            </>
+          )}
+
+          {/* فلتر الفصل الدراسي */}
+          <Text style={[st.label, { marginTop: 12 }]}>الفصل الدراسي <Text style={{ fontSize: 11, color: '#888' }}>(اختياري — افتراضي كل الفصول)</Text></Text>
+          <View style={st.pickerWrap}>
+            <Picker selectedValue={selectedSemester} onValueChange={v => { setSelectedSemester(v); resetReport(); }} style={{ height: 45 }} testID="semester-picker">
+              <Picker.Item label="-- كل الفصول --" value="" />
+              {semesters.map((sem: any) => (
+                <Picker.Item key={sem.id} label={`${sem.name} ${sem.academic_year || ''}`} value={sem.id} />
+              ))}
+            </Picker>
+          </View>
+
+          {/* فلتر الفصل (الأول/الثاني/الكل) */}
+          <Text style={[st.label, { marginTop: 12 }]}>نوع الفصل <Text style={{ fontSize: 11, color: '#888' }}>(اختياري)</Text></Text>
+          <View style={{ flexDirection: 'row', gap: 8 }}>
+            {[
+              { v: '', l: 'الكل' },
+              { v: '1', l: 'الفصل الأول' },
+              { v: '2', l: 'الفصل الثاني' },
+            ].map(opt => (
+              <TouchableOpacity
+                key={opt.v}
+                testID={`term-btn-${opt.v || 'all'}`}
+                onPress={() => { setSelectedTerm(opt.v); resetReport(); }}
+                style={[st.termBtn, selectedTerm === opt.v && st.termBtnActive]}
+              >
+                <Text style={[st.termBtnText, selectedTerm === opt.v && { color: '#fff', fontWeight: '700' }]}>{opt.l}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+
           <TouchableOpacity
-            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 12 }, (loading || !selectedDept) && { opacity: 0.6 }]}
+            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 16 }, (loading || !canRun) && { opacity: 0.6 }]}
             onPress={runReport}
-            disabled={loading || !selectedDept}
+            disabled={loading || !canRun}
             testID="run-report-btn"
           >
             {loading ? (
@@ -81,7 +181,7 @@ export default function TeachingLoadReport() {
         {loading && <View style={st.emptyCard}><ActivityIndicator size="large" color="#1565c0" /><Text style={st.emptyText}>جاري التحميل...</Text></View>}
 
         {!loading && !report && (
-          <View style={st.emptyCard}><Ionicons name="bar-chart-outline" size={48} color="#ccc" /><Text style={st.emptyText}>{selectedDept ? 'اضغط "تنفيذ التقرير" لعرض البيانات' : 'اختر القسم أولاً'}</Text></View>
+          <View style={st.emptyCard}><Ionicons name="bar-chart-outline" size={48} color="#ccc" /><Text style={st.emptyText}>{canRun ? 'اضغط "تنفيذ التقرير" لعرض البيانات' : (scope === 'teacher' ? 'اختر المعلم أولاً' : 'اختر القسم أولاً')}</Text></View>
         )}
 
         {!loading && report && (
@@ -217,6 +317,21 @@ const st = StyleSheet.create({
   card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8, textAlign: 'right' },
   pickerWrap: { backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden' },
+  // ⭐ أزرار نوع التقرير (قسم/معلم)
+  scopeBtn: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8,
+    borderWidth: 1.5, borderColor: '#1565c0', backgroundColor: '#fff',
+  },
+  scopeBtnActive: { backgroundColor: '#1565c0' },
+  scopeBtnText: { color: '#1565c0', fontWeight: '700', fontSize: 13 },
+  // ⭐ أزرار نوع الفصل (الكل/الأول/الثاني)
+  termBtn: {
+    flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center',
+    borderWidth: 1, borderColor: '#bdbdbd', backgroundColor: '#fafafa',
+  },
+  termBtnActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
+  termBtnText: { fontSize: 12, color: '#555', fontWeight: '600' },
   emptyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 40, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
   emptyText: { marginTop: 10, fontSize: 16, color: '#999', textAlign: 'center' },
   statCard: { flex: 1, minWidth: 100, borderRadius: 10, padding: 12, alignItems: 'center' },

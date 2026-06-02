@@ -494,9 +494,19 @@ async def _get_export_data(db, department_id: str = None, start_date: str = None
 async def advanced_teaching_load_report(
     department_id: Optional[str] = None,
     faculty_id: Optional[str] = None,
+    teacher_id: Optional[str] = None,  # ⭐ تقرير لمعلم واحد
+    semester_id: Optional[str] = None,  # ⭐ فلترة حسب الفصل
+    term: Optional[int] = Query(None, ge=1, le=2, description="1=أول، 2=ثاني"),  # ⭐ فلترة منطقية
     current_user: dict = Depends(get_current_user),
 ):
-    """تقرير العبء التدريسي المتقدم - مقارنة + فجوات"""
+    """تقرير العبء التدريسي المتقدم - مقارنة + فجوات
+    الفلاتر المدعومة:
+    - department_id: قسم
+    - faculty_id: كلية
+    - teacher_id: معلم واحد (تقرير فردي)
+    - semester_id: فصل أكاديمي محدد
+    - term: نوع الفصل (1=أول، 2=ثاني) — يفلتر المقررات حسب term في الخطة
+    """
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
@@ -506,14 +516,27 @@ async def advanced_teaching_load_report(
     teacher_query = {"is_active": {"$ne": False}}
     if department_id:
         teacher_query["department_id"] = department_id
+    if teacher_id:
+        # عند فلترة معلم واحد، تجاهل الفلاتر الأخرى للمعلم
+        try:
+            teacher_query = {"_id": ObjectId(teacher_id)}
+        except Exception:
+            raise HTTPException(status_code=400, detail="معرّف المعلم غير صحيح")
 
     teachers = await db.teachers.find(teacher_query).to_list(500)
     teacher_ids = [str(t["_id"]) for t in teachers]
 
     # فلتر المقررات
     course_query = {"is_active": True}
-    if department_id:
+    if department_id and not teacher_id:
         course_query["department_id"] = department_id
+    if semester_id:
+        course_query["semester_id"] = semester_id
+    if term in (1, 2):
+        course_query["term"] = term
+    # عند فلترة معلم: نريد فقط مقرراته
+    if teacher_id:
+        course_query["teacher_id"] = teacher_id
 
     all_courses = await db.courses.find(course_query).to_list(2000)
 
@@ -521,6 +544,8 @@ async def advanced_teaching_load_report(
     load_query = {}
     if teacher_ids:
         load_query["teacher_id"] = {"$in": teacher_ids}
+    if semester_id:
+        load_query["semester_id"] = semester_id
     all_loads = await db.teaching_loads.find(load_query).to_list(2000)
     loads_by_teacher = {}
     for l in all_loads:
@@ -586,12 +611,22 @@ async def advanced_teaching_load_report(
     # Department name
     dept_name = ""
     if department_id:
-        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
-        if dept:
-            dept_name = dept.get("name", "")
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+            if dept:
+                dept_name = dept.get("name", "")
+        except Exception:
+            pass  # ObjectId غير صحيح — نتجاهل
+
+    # Teacher name (في وضع المعلم الواحد)
+    teacher_name = ""
+    if teacher_id and teachers:
+        teacher_name = teachers[0].get("full_name", "")
 
     return {
         "department_name": dept_name,
+        "teacher_name": teacher_name,
+        "scope": "teacher" if teacher_id else "department",
         "summary": {
             "total_teachers": total_teachers,
             "teachers_with_load": teachers_with_load,
