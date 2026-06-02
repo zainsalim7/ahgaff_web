@@ -22,6 +22,14 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - Edit modal: inline notice when level changes AND student has a section; quick actions (keep / clear) + suggested chips from existing sections at the new level + manual input.
   - Bulk modal: 2-step flow – pick level → choose section action (keep current per-student / set unified section / clear). Suggestion chips at new level.
   - Backend `POST /api/students/bulk-change-level` now accepts `section_mode` ("keep" | "set" | "clear") + optional `new_section`. Backward-compatible default = "keep".
+- 2026-06-02 **Multi-Identifier Login + Duplicate student_id Support**:
+  - Login accepts: `username` (default), `reference_number`, or `student_id` (if unique).
+  - When `student_id` is duplicated across students, login by student_id returns 409 — user must use reference_number.
+  - `POST /api/students` and Excel import: allow duplicate `student_id` only if `department_id` differs (rejects same-dept duplicates).
+  - `PUT /api/students/{id}` and restore endpoints: same scoped duplicate rule.
+  - `POST /api/students/{id}/activate`: if `student_id` is already taken in `users.username`, fallback to `reference_number` as username automatically.
+  - `POST /api/students` (with password): same fallback.
+  - Login screen placeholder updated: "اسم المستخدم / رقم القيد / الرقم المرجعي".
 
 ## P0 / Next
 - (P1) Digital Student Card with QR + Photo

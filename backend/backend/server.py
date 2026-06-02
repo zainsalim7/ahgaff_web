@@ -497,9 +497,12 @@ async def restore_from_trash_helper(backup_data: dict):
         student_data.pop("_id", None)
         student_data.pop("user_id", None)
         
-        existing = await db.students.find_one({"student_id": student_data.get("student_id")})
+        existing = await db.students.find_one({
+            "student_id": student_data.get("student_id"),
+            "department_id": student_data.get("department_id"),
+        })
         if existing:
-            raise HTTPException(status_code=400, detail=f"الطالب برقم {student_data.get('student_id')} موجود بالفعل")
+            raise HTTPException(status_code=400, detail=f"الطالب برقم {student_data.get('student_id')} موجود بالفعل في نفس القسم")
         
         result = await db.students.insert_one(student_data)
         new_id = str(result.inserted_id)
@@ -2886,9 +2889,13 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
-    existing = await db.students.find_one({"student_id": student.student_id})
+    # ✅ السماح بتكرار رقم القيد فقط لو القسم مختلف
+    existing = await db.students.find_one({
+        "student_id": student.student_id,
+        "department_id": student.department_id,
+    })
     if existing:
-        raise HTTPException(status_code=400, detail="رقم الطالب موجود مسبقاً")
+        raise HTTPException(status_code=400, detail="رقم الطالب موجود مسبقاً في نفس القسم")
     
     student_dict = student.dict()
     student_dict["qr_code"] = generate_qr_code(student.student_id)
@@ -2918,11 +2925,32 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
         except Exception:
             pass
     
+    # توليد الرقم المرجعي تلقائياً (قبل إنشاء الـ user حتى نستخدمه كـ fallback)
+    try:
+        from routes.admin_tools import generate_reference_for_new_student
+        ref = await generate_reference_for_new_student(db, student_dict)
+        if ref:
+            student_dict["reference_number"] = ref
+    except Exception:
+        pass
+
     # Create user account for student if password provided
     user_id = None
     if student.password:
+        # ✅ لو رقم القيد مستخدم في users (بسبب طالب آخر بنفس الرقم في قسم آخر)،
+        #    استخدم الرقم المرجعي كـ username
+        desired_username = student.student_id
+        if await db.users.find_one({"username": desired_username}):
+            ref_num = student_dict.get("reference_number")
+            if ref_num:
+                desired_username = ref_num
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail="رقم القيد مستخدم لطالب آخر، ولا يمكن توليد الرقم المرجعي. أكمل بيانات (الكلية/البرنامج/سنة الالتحاق) ثم أعد المحاولة."
+                )
         user_data = {
-            "username": student.student_id,
+            "username": desired_username,
             "password": get_password_hash(student.password),
             "full_name": student.full_name,
             "role": UserRole.STUDENT,
@@ -2936,16 +2964,6 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     
     student_dict["user_id"] = user_id
     del student_dict["password"]
-
-    # توليد الرقم المرجعي تلقائياً إن أمكن
-    try:
-        from routes.admin_tools import generate_reference_for_new_student
-        ref = await generate_reference_for_new_student(db, student_dict)
-        if ref:
-            student_dict["reference_number"] = ref
-    except Exception as _e:
-        # عدم كسر إنشاء الطالب إذا فشل توليد الرقم
-        pass
 
     result = await db.students.insert_one(student_dict)
     student_dict["id"] = str(result.inserted_id)
@@ -3369,10 +3387,13 @@ async def restore_student(request: Request, current_user: dict = Depends(get_cur
     old_student_id = student_data.pop("_id", None)
     student_data.pop("user_id", None)
     
-    # Check if student with same student_id already exists
-    existing = await db.students.find_one({"student_id": student_data.get("student_id")})
+    # Check if student with same student_id already exists in same department (allow duplicates across departments)
+    existing = await db.students.find_one({
+        "student_id": student_data.get("student_id"),
+        "department_id": student_data.get("department_id"),
+    })
     if existing:
-        raise HTTPException(status_code=400, detail=f"الطالب برقم {student_data.get('student_id')} موجود بالفعل")
+        raise HTTPException(status_code=400, detail=f"الطالب برقم {student_data.get('student_id')} موجود بالفعل في نفس القسم")
     
     result = await db.students.insert_one(student_data)
     new_student_id = str(result.inserted_id)
@@ -3431,14 +3452,17 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
                 detail="تغيير رقم القيد مسموح للمدير العام فقط"
             )
         new_sid = new_sid.strip()
+        # ✅ السماح بتكرار رقم القيد في قسم آخر فقط (نفس قاعدة الإنشاء)
+        target_dept = update_data.get("department_id") or student.get("department_id")
         exists = await db.students.find_one({
             "student_id": new_sid,
+            "department_id": target_dept,
             "_id": {"$ne": ObjectId(student_id)}
         })
         if exists:
             raise HTTPException(
                 status_code=400,
-                detail=f"رقم القيد '{new_sid}' مستخدم بالفعل للطالب: {exists.get('full_name', '')}"
+                detail=f"رقم القيد '{new_sid}' مستخدم بالفعل في نفس القسم للطالب: {exists.get('full_name', '')}"
             )
         update_data["student_id"] = new_sid
         # مزامنة اسم المستخدم في جدول users (إذا كان الاسم السابق = رقم القيد)
@@ -3499,14 +3523,22 @@ async def activate_student_account(student_id: str, current_user: dict = Depends
     if student.get("user_id"):
         raise HTTPException(status_code=400, detail="الطالب لديه حساب مفعل مسبقاً")
     
-    # التحقق من عدم وجود مستخدم بنفس الرقم الجامعي
-    existing_user = await db.users.find_one({"username": student["student_id"]})
+    # تحديد اسم المستخدم: رقم القيد افتراضياً، أو الرقم المرجعي لو رقم القيد مستخدم
+    desired_username = student["student_id"]
+    existing_user = await db.users.find_one({"username": desired_username})
     if existing_user:
-        raise HTTPException(status_code=400, detail="يوجد مستخدم بهذا الرقم الجامعي")
+        ref_num = student.get("reference_number")
+        if ref_num and not await db.users.find_one({"username": ref_num}):
+            desired_username = ref_num
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="رقم القيد مستخدم لطالب آخر، ولا يوجد رقم مرجعي صالح. أكمل بيانات (الكلية/البرنامج/سنة الالتحاق) ثم أعد المحاولة."
+            )
     
     # إنشاء حساب للطالب
     user_dict = {
-        "username": student["student_id"],  # الرقم الجامعي كاسم مستخدم
+        "username": desired_username,
         "password": get_password_hash(student["student_id"]),  # الرقم الجامعي ككلمة مرور افتراضية
         "full_name": student["full_name"],
         "role": UserRole.STUDENT,
@@ -3529,7 +3561,7 @@ async def activate_student_account(student_id: str, current_user: dict = Depends
     
     return {
         "message": "تم تفعيل حساب الطالب بنجاح",
-        "username": student["student_id"],
+        "username": desired_username,
         "user_id": user_id,
         "must_change_password": True
     }
@@ -10765,10 +10797,13 @@ async def import_students_from_excel(
         
         for index, row in df.iterrows():
             try:
-                # Check if student already exists
-                existing = await db.students.find_one({"student_id": str(row['student_id'])})
+                # ✅ السماح بتكرار رقم القيد فقط لو القسم مختلف
+                existing = await db.students.find_one({
+                    "student_id": str(row['student_id']),
+                    "department_id": department_id,
+                })
                 if existing:
-                    errors.append(f"الطالب {row['student_id']} موجود مسبقاً")
+                    errors.append(f"الطالب {row['student_id']} موجود مسبقاً في نفس القسم")
                     continue
                 
                 # Use level from parameter first, then from Excel

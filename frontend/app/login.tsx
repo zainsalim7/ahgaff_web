@@ -159,7 +159,7 @@ export default function LoginScreen() {
               <Ionicons name="person" size={20} color="#666" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="اسم المستخدم"
+                placeholder="اسم المستخدم / رقم القيد / الرقم المرجعي"
                 placeholderTextColor="#999"
                 value={username}
                 onChangeText={setUsername}

@@ -17,7 +17,13 @@ router = APIRouter(tags=["المصادقة"])
 
 @router.post("/auth/login")
 async def login(user_data: UserLogin, request: Request):
-    """تسجيل الدخول مع حماية Rate Limiting"""
+    """تسجيل الدخول مع حماية Rate Limiting
+    
+    يسمح بالدخول بأي من:
+    1. username (الافتراضي - عادةً رقم القيد للطلاب)
+    2. reference_number (الرقم المرجعي للطلاب) - فريد دائماً
+    3. student_id (رقم القيد) - إذا كان فريداً
+    """
     db = get_db()
     
     # Rate Limiting - فحص عدد المحاولات (يفضّل CF-Connecting-IP خلف Cloudflare)
@@ -33,7 +39,42 @@ async def login(user_data: UserLogin, request: Request):
             detail="تم تجاوز الحد الأقصى لمحاولات تسجيل الدخول. يرجى المحاولة بعد 5 دقائق"
         )
     
-    user = await db.users.find_one({"username": user_data.username})
+    # ========== البحث عن المستخدم بطرق متعددة ==========
+    login_input = (user_data.username or "").strip()
+    user = None
+    
+    # 1) البحث المباشر بـ username (السلوك الافتراضي)
+    if login_input:
+        user = await db.users.find_one({"username": login_input})
+    
+    # 2) إذا لم نجد، نبحث في الطلاب عبر reference_number أو student_id
+    if not user and login_input:
+        # ابحث في الطلاب عبر الرقم المرجعي (فريد دائماً)
+        student = await db.students.find_one({"reference_number": login_input})
+        
+        # إذا لم نجد، ابحث عبر student_id
+        if not student:
+            matching_students = await db.students.find(
+                {"student_id": login_input}
+            ).to_list(10)
+            
+            if len(matching_students) > 1:
+                # رقم القيد مكرر - رفض الدخول
+                record_login_attempt(client_ip, False)
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="رقم القيد مكرر لأكثر من طالب — يرجى استخدام الرقم المرجعي للدخول"
+                )
+            elif len(matching_students) == 1:
+                student = matching_students[0]
+        
+        # إذا وجدنا طالباً، احصل على حساب المستخدم المرتبط به
+        if student and student.get("user_id"):
+            try:
+                user = await db.users.find_one({"_id": ObjectId(student["user_id"])})
+            except Exception:
+                user = None
+    
     password_field = user.get("hashed_password") or user.get("password") if user else None
     
     if not user or not password_field:
