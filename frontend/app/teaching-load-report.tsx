@@ -1,6 +1,6 @@
 import { goBack } from '../src/utils/navigation';
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
@@ -20,10 +20,10 @@ export default function TeachingLoadReport() {
   const [teachers, setTeachers] = useState<any[]>([]);
   const [semesters, setSemesters] = useState<any[]>([]);
   const [scope, setScope] = useState<ReportScope>('department');
+  const [selectedSemester, setSelectedSemester] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
-  const [selectedSemester, setSelectedSemester] = useState('');
-  const [selectedTerm, setSelectedTerm] = useState<string>(''); // '', '1', '2'
+  const [teacherSearch, setTeacherSearch] = useState('');
   const [loading, setLoading] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [report, setReport] = useState<any>(null);
@@ -33,8 +33,12 @@ export default function TeachingLoadReport() {
     (async () => {
       try {
         const [dRes, sRes] = await Promise.all([departmentsAPI.getAll(), semestersAPI.getAll()]);
-        setDepartments(dRes.data);
-        setSemesters(sRes.data || []);
+        setDepartments(dRes.data || []);
+        const sems = sRes.data || [];
+        setSemesters(sems);
+        // تعيين الفصل النشط افتراضياً
+        const active = sems.find((x: any) => x.status === 'active');
+        if (active) setSelectedSemester(active.id);
       } catch {}
     })();
   }, []);
@@ -50,10 +54,20 @@ export default function TeachingLoadReport() {
     })();
   }, [scope, selectedDept]);
 
+  // فلترة المعلمين بحسب البحث
+  const filteredTeachers = useMemo(() => {
+    if (!teacherSearch.trim()) return teachers;
+    const q = teacherSearch.trim().toLowerCase();
+    return teachers.filter((t: any) =>
+      (t.full_name || '').toLowerCase().includes(q) ||
+      (t.teacher_id || '').toLowerCase().includes(q) ||
+      (t.name || '').toLowerCase().includes(q)
+    );
+  }, [teachers, teacherSearch]);
+
   const resetReport = () => { setReport(null); setHasRun(false); };
 
   const runReport = async () => {
-    // التحقق من المدخلات حسب النطاق
     if (scope === 'department' && !selectedDept) return;
     if (scope === 'teacher' && !selectedTeacher) return;
 
@@ -62,8 +76,8 @@ export default function TeachingLoadReport() {
       const params: any = {};
       if (scope === 'department') params.department_id = selectedDept;
       if (scope === 'teacher') params.teacher_id = selectedTeacher;
+      // الفصل الدراسي اختياري — يحدد الـ term تلقائياً من الفصل المختار
       if (selectedSemester) params.semester_id = selectedSemester;
-      if (selectedTerm === '1' || selectedTerm === '2') params.term = parseInt(selectedTerm);
 
       const res = await teachingLoadAPI.advancedReport(params);
       setReport(res.data);
@@ -84,82 +98,97 @@ export default function TeachingLoadReport() {
       </View>
 
       <ScrollView style={st.scroll}>
-        {/* اختيار نوع التقرير: قسم كامل أو معلم واحد */}
+        {/* بطاقة الفلاتر — مدمجة وعملية */}
         <View style={st.card}>
-          <Text style={st.label}>نوع التقرير</Text>
-          <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+          {/* صف 1: الفصل الدراسي (الأهم — أولاً) */}
+          <View style={st.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={st.lbl}>الفصل الدراسي</Text>
+              <View style={st.pickerWrap}>
+                <Picker selectedValue={selectedSemester} onValueChange={v => { setSelectedSemester(v); resetReport(); }} style={st.picker} testID="semester-picker">
+                  <Picker.Item label="-- كل الفصول --" value="" />
+                  {semesters.map((sem: any) => (
+                    <Picker.Item key={sem.id} label={`${sem.name} ${sem.academic_year || ''}${sem.status === 'active' ? ' (النشط)' : ''}`} value={sem.id} />
+                  ))}
+                </Picker>
+              </View>
+            </View>
+          </View>
+
+          {/* صف 2: نوع التقرير (قسم/معلم) — أزرار صغيرة */}
+          <View style={[st.row, { marginTop: 10 }]}>
+            <Text style={st.lbl}>نوع التقرير</Text>
+          </View>
+          <View style={st.scopeRow}>
             <TouchableOpacity
               testID="scope-department"
               onPress={() => { setScope('department'); setSelectedTeacher(''); resetReport(); }}
-              style={[st.scopeBtn, scope === 'department' && st.scopeBtnActive]}
+              style={[st.pill, scope === 'department' && st.pillActive]}
             >
-              <Ionicons name="business-outline" size={16} color={scope === 'department' ? '#fff' : '#1565c0'} />
-              <Text style={[st.scopeBtnText, scope === 'department' && { color: '#fff' }]}>قسم كامل</Text>
+              <Text style={[st.pillText, scope === 'department' && st.pillTextActive]}>قسم كامل</Text>
             </TouchableOpacity>
             <TouchableOpacity
               testID="scope-teacher"
               onPress={() => { setScope('teacher'); resetReport(); }}
-              style={[st.scopeBtn, scope === 'teacher' && st.scopeBtnActive]}
+              style={[st.pill, scope === 'teacher' && st.pillActive]}
             >
-              <Ionicons name="person-outline" size={16} color={scope === 'teacher' ? '#fff' : '#1565c0'} />
-              <Text style={[st.scopeBtnText, scope === 'teacher' && { color: '#fff' }]}>معلم واحد</Text>
+              <Text style={[st.pillText, scope === 'teacher' && st.pillTextActive]}>معلم محدد</Text>
             </TouchableOpacity>
           </View>
 
-          {/* فلتر القسم (دائماً مرئي) */}
-          <Text style={st.label}>القسم {scope === 'teacher' && <Text style={{ fontSize: 11, color: '#888' }}>(اختياري لتقليل قائمة المعلمين)</Text>}</Text>
-          <View style={st.pickerWrap}>
-            <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); resetReport(); }} style={{ height: 45 }}>
-              <Picker.Item label={scope === 'teacher' ? '-- كل الأقسام --' : '-- اختر القسم --'} value="" />
-              {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
-            </Picker>
-          </View>
-
-          {/* فلتر المعلم (فقط في وضع المعلم) */}
-          {scope === 'teacher' && (
-            <>
-              <Text style={[st.label, { marginTop: 12 }]}>المعلم *</Text>
+          {/* صف 3: القسم — مطلوب في وضع "قسم"، اختياري لتضييق قائمة المعلمين */}
+          <View style={[st.row, { marginTop: 12 }]}>
+            <View style={{ flex: 1 }}>
+              <Text style={st.lbl}>
+                القسم {scope === 'department' ? '*' : <Text style={st.hint}>(لتضييق قائمة المعلمين)</Text>}
+              </Text>
               <View style={st.pickerWrap}>
-                <Picker selectedValue={selectedTeacher} onValueChange={v => { setSelectedTeacher(v); resetReport(); }} style={{ height: 45 }} testID="teacher-picker">
-                  <Picker.Item label="-- اختر المعلم --" value="" />
-                  {teachers.map(t => <Picker.Item key={t.id} label={t.full_name || t.name} value={t.id} />)}
+                <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); resetReport(); }} style={st.picker} testID="dept-picker">
+                  <Picker.Item label={scope === 'teacher' ? '-- كل الأقسام --' : '-- اختر القسم --'} value="" />
+                  {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                 </Picker>
               </View>
-            </>
+            </View>
+          </View>
+
+          {/* صف 4: المعلم — بحث + قائمة (يظهر فقط في وضع "معلم") */}
+          {scope === 'teacher' && (
+            <View style={[st.row, { marginTop: 12 }]}>
+              <View style={{ flex: 1 }}>
+                <Text style={st.lbl}>المعلم *</Text>
+                {/* مربع البحث */}
+                <View style={st.searchWrap}>
+                  <Ionicons name="search" size={16} color="#888" />
+                  <TextInput
+                    style={st.searchInput}
+                    placeholder="ابحث باسم المعلم أو الرقم الوظيفي..."
+                    placeholderTextColor="#aaa"
+                    value={teacherSearch}
+                    onChangeText={setTeacherSearch}
+                    testID="teacher-search"
+                  />
+                  {teacherSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setTeacherSearch('')}>
+                      <Ionicons name="close-circle" size={16} color="#999" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                {/* قائمة منسدلة (مفلترة) */}
+                <View style={[st.pickerWrap, { marginTop: 6 }]}>
+                  <Picker selectedValue={selectedTeacher} onValueChange={v => { setSelectedTeacher(v); resetReport(); }} style={st.picker} testID="teacher-picker">
+                    <Picker.Item label={`-- اختر المعلم (${filteredTeachers.length}) --`} value="" />
+                    {filteredTeachers.map((t: any) => (
+                      <Picker.Item key={t.id} label={`${t.full_name || t.name}${t.teacher_id ? ' — ' + t.teacher_id : ''}`} value={t.id} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
+            </View>
           )}
 
-          {/* فلتر الفصل الدراسي */}
-          <Text style={[st.label, { marginTop: 12 }]}>الفصل الدراسي <Text style={{ fontSize: 11, color: '#888' }}>(اختياري — افتراضي كل الفصول)</Text></Text>
-          <View style={st.pickerWrap}>
-            <Picker selectedValue={selectedSemester} onValueChange={v => { setSelectedSemester(v); resetReport(); }} style={{ height: 45 }} testID="semester-picker">
-              <Picker.Item label="-- كل الفصول --" value="" />
-              {semesters.map((sem: any) => (
-                <Picker.Item key={sem.id} label={`${sem.name} ${sem.academic_year || ''}`} value={sem.id} />
-              ))}
-            </Picker>
-          </View>
-
-          {/* فلتر الفصل (الأول/الثاني/الكل) */}
-          <Text style={[st.label, { marginTop: 12 }]}>نوع الفصل <Text style={{ fontSize: 11, color: '#888' }}>(اختياري)</Text></Text>
-          <View style={{ flexDirection: 'row', gap: 8 }}>
-            {[
-              { v: '', l: 'الكل' },
-              { v: '1', l: 'الفصل الأول' },
-              { v: '2', l: 'الفصل الثاني' },
-            ].map(opt => (
-              <TouchableOpacity
-                key={opt.v}
-                testID={`term-btn-${opt.v || 'all'}`}
-                onPress={() => { setSelectedTerm(opt.v); resetReport(); }}
-                style={[st.termBtn, selectedTerm === opt.v && st.termBtnActive]}
-              >
-                <Text style={[st.termBtnText, selectedTerm === opt.v && { color: '#fff', fontWeight: '700' }]}>{opt.l}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-
+          {/* زر التنفيذ — مدمج */}
           <TouchableOpacity
-            style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10, marginTop: 16 }, (loading || !canRun) && { opacity: 0.6 }]}
+            style={[st.runBtn, (loading || !canRun) && { opacity: 0.5 }]}
             onPress={runReport}
             disabled={loading || !canRun}
             testID="run-report-btn"
@@ -167,12 +196,12 @@ export default function TeachingLoadReport() {
             {loading ? (
               <>
                 <ActivityIndicator size="small" color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>جاري التنفيذ...</Text>
+                <Text style={st.runBtnText}>جاري...</Text>
               </>
             ) : (
               <>
-                <Ionicons name="play" size={18} color="#fff" />
-                <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+                <Ionicons name="play" size={14} color="#fff" />
+                <Text style={st.runBtnText}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
               </>
             )}
           </TouchableOpacity>
@@ -181,7 +210,10 @@ export default function TeachingLoadReport() {
         {loading && <View style={st.emptyCard}><ActivityIndicator size="large" color="#1565c0" /><Text style={st.emptyText}>جاري التحميل...</Text></View>}
 
         {!loading && !report && (
-          <View style={st.emptyCard}><Ionicons name="bar-chart-outline" size={48} color="#ccc" /><Text style={st.emptyText}>{canRun ? 'اضغط "تنفيذ التقرير" لعرض البيانات' : (scope === 'teacher' ? 'اختر المعلم أولاً' : 'اختر القسم أولاً')}</Text></View>
+          <View style={st.emptyCard}>
+            <Ionicons name="bar-chart-outline" size={36} color="#ccc" />
+            <Text style={st.emptyText}>{canRun ? 'اضغط "تنفيذ" لعرض التقرير' : (scope === 'teacher' ? 'اختر المعلم' : 'اختر القسم')}</Text>
+          </View>
         )}
 
         {!loading && report && (
@@ -313,27 +345,44 @@ const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f5f5f5' },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
   headerTitle: { fontSize: 18, fontWeight: '600', color: '#333', flex: 1, textAlign: 'center' },
-  scroll: { flex: 1, padding: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
+  scroll: { flex: 1, padding: 12 },
+  card: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  // عناصر مدمجة
+  row: { flexDirection: 'row', gap: 8, alignItems: 'flex-end' },
+  lbl: { fontSize: 12, fontWeight: '600', color: '#444', marginBottom: 4, textAlign: 'right' },
+  hint: { fontSize: 10, color: '#999', fontWeight: '400' },
+  picker: { height: 38 },
+  pickerWrap: { backgroundColor: '#fafafa', borderRadius: 6, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden' },
+  // أزرار "قسم/معلم" — pills صغيرة
+  scopeRow: { flexDirection: 'row', gap: 6 },
+  pill: {
+    flex: 1, paddingVertical: 7, borderRadius: 16, alignItems: 'center',
+    borderWidth: 1, borderColor: '#1565c0', backgroundColor: '#fff',
+  },
+  pillActive: { backgroundColor: '#1565c0' },
+  pillText: { fontSize: 12, color: '#1565c0', fontWeight: '600' },
+  pillTextActive: { color: '#fff' },
+  // مربع البحث
+  searchWrap: {
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: '#fafafa', borderRadius: 6, borderWidth: 1, borderColor: '#ddd',
+    paddingHorizontal: 10, height: 36,
+  },
+  searchInput: {
+    flex: 1, fontSize: 13, color: '#222', textAlign: 'right',
+    ...Platform.select({ web: { outlineWidth: 0 } as any }),
+  },
+  // زر التنفيذ
+  runBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: '#1565c0', paddingVertical: 9, borderRadius: 8, marginTop: 12,
+  },
+  runBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  // باقي العناصر
+  emptyCard: { backgroundColor: '#fff', borderRadius: 10, padding: 28, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.05, shadowRadius: 2, elevation: 1 },
+  emptyText: { marginTop: 8, fontSize: 13, color: '#999', textAlign: 'center' },
+  // (متغيرات قديمة للتقرير)
   label: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8, textAlign: 'right' },
-  pickerWrap: { backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden' },
-  // ⭐ أزرار نوع التقرير (قسم/معلم)
-  scopeBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
-    paddingVertical: 10, paddingHorizontal: 12, borderRadius: 8,
-    borderWidth: 1.5, borderColor: '#1565c0', backgroundColor: '#fff',
-  },
-  scopeBtnActive: { backgroundColor: '#1565c0' },
-  scopeBtnText: { color: '#1565c0', fontWeight: '700', fontSize: 13 },
-  // ⭐ أزرار نوع الفصل (الكل/الأول/الثاني)
-  termBtn: {
-    flex: 1, paddingVertical: 8, borderRadius: 6, alignItems: 'center',
-    borderWidth: 1, borderColor: '#bdbdbd', backgroundColor: '#fafafa',
-  },
-  termBtnActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
-  termBtnText: { fontSize: 12, color: '#555', fontWeight: '600' },
-  emptyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 40, alignItems: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
-  emptyText: { marginTop: 10, fontSize: 16, color: '#999', textAlign: 'center' },
   statCard: { flex: 1, minWidth: 100, borderRadius: 10, padding: 12, alignItems: 'center' },
   statNum: { fontSize: 22, fontWeight: '700' },
   statLabel: { fontSize: 11, color: '#666', marginTop: 2 },
