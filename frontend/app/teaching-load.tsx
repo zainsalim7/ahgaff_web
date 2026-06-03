@@ -148,6 +148,25 @@ export default function TeachingLoadPage() {
 
   const [crossDept, setCrossDept] = useState(false); // عرض أساتذة ومقررات من كل الأقسام
   const [hideAssignedToOthers, setHideAssignedToOthers] = useState(true); // إخفاء المقررات المسندة لمعلمين آخرين
+  const [activeSemester, setActiveSemester] = useState<{ id: string; name: string; academic_year: string } | null>(null);
+
+  // جلب الفصل النشط
+  useEffect(() => {
+    (async () => {
+      try {
+        const token = await AsyncStorage.getItem('token');
+        const res = await fetch(`${API_URL}/api/semesters/current`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.id) setActiveSemester(data);
+        }
+      } catch (e) {
+        console.error('Error loading active semester:', e);
+      }
+    })();
+  }, []);
 
   // Load teachers when department changes or cross-dept toggled
   useEffect(() => {
@@ -434,6 +453,34 @@ export default function TeachingLoadPage() {
         <Text style={styles.headerTitle}>جدول العبء التدريسي</Text>
         <View style={{ width: 24 }} />
       </View>
+
+      {/* Active Semester Badge */}
+      {activeSemester ? (
+        <View
+          data-testid="active-semester-badge"
+          style={{
+            flexDirection: 'row-reverse',
+            alignItems: 'center',
+            gap: 6,
+            backgroundColor: '#e8f5e9',
+            paddingHorizontal: 12,
+            paddingVertical: 6,
+            marginHorizontal: 12,
+            marginTop: 8,
+            borderRadius: 8,
+            borderRightWidth: 3,
+            borderRightColor: '#2e7d32',
+          }}
+        >
+          <Ionicons name="calendar" size={14} color="#2e7d32" />
+          <Text style={{ fontSize: 12, color: '#1b5e20', fontWeight: '700', flex: 1, textAlign: 'right' }}>
+            الفصل النشط: {activeSemester.name} — {activeSemester.academic_year}
+          </Text>
+          <Text style={{ fontSize: 10, color: '#558b2f' }}>
+            (المقررات المعروضة من هذا الفصل فقط)
+          </Text>
+        </View>
+      ) : null}
 
       {/* View Mode Toggle */}
       <View style={styles.toggleRow}>

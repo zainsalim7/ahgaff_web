@@ -32,9 +32,13 @@ async def get_teaching_loads(
     department_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
     semester_id: Optional[str] = None,
+    all_semesters: bool = False,
     current_user: dict = Depends(get_current_user),
 ):
-    """جلب جدول العبء التدريسي مع تفاصيل المعلم والمقرر"""
+    """جلب جدول العبء التدريسي مع تفاصيل المعلم والمقرر.
+    افتراضياً يعرض الفصل النشط فقط. تمرير all_semesters=true لعرض كل الفصول،
+    أو semester_id لتحديد فصل معيّن (نشط أو مؤرشف).
+    """
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
@@ -42,8 +46,14 @@ async def get_teaching_loads(
     query = {}
     if teacher_id:
         query["teacher_id"] = teacher_id
+
+    # تحديد فلتر الفصل: explicit > active > all
     if semester_id:
         query["semester_id"] = semester_id
+    elif not all_semesters:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            query["semester_id"] = str(active_sem["_id"])
 
     # If department filter, get teacher ids in that department first
     teacher_ids_in_dept = None
@@ -289,9 +299,12 @@ async def delete_teaching_load(
 async def get_teacher_courses_for_load(
     teacher_id: str,
     department_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """جلب جميع المقررات المتاحة لتعيين العبء للمعلم"""
+    """جلب جميع المقررات المتاحة لتعيين العبء للمعلم.
+    افتراضياً يفلتر بالفصل النشط فقط (يستبعد المقررات من الفصول المؤرشفة).
+    """
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
@@ -300,6 +313,13 @@ async def get_teacher_courses_for_load(
     # جلب بيانات المعلم لمعرفة قسمه
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
     
+    # تحديد الفصل المستهدف: لو لم يُمرَّر صراحةً، استخدم الفصل النشط
+    target_semester_id = semester_id
+    if not target_semester_id:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            target_semester_id = str(active_sem["_id"])
+    
     # جلب جميع المقررات النشطة (حسب القسم إذا محدد)
     course_query = {"is_active": True}
     if department_id:
@@ -307,10 +327,17 @@ async def get_teacher_courses_for_load(
     elif teacher and teacher.get("department_id"):
         course_query["department_id"] = teacher["department_id"]
     
+    # فلتر الفصل (يستبعد المقررات من الفصول المؤرشفة)
+    if target_semester_id:
+        course_query["semester_id"] = target_semester_id
+    
     courses = await db.courses.find(course_query).to_list(500)
 
-    # Get existing loads for this teacher
-    existing_loads = await db.teaching_loads.find({"teacher_id": teacher_id}).to_list(100)
+    # Get existing loads for this teacher (نفس الفصل)
+    loads_query = {"teacher_id": teacher_id}
+    if target_semester_id:
+        loads_query["semester_id"] = target_semester_id
+    existing_loads = await db.teaching_loads.find(loads_query).to_list(100)
     loads_map = {l["course_id"]: l for l in existing_loads}
 
     result = []
@@ -354,9 +381,13 @@ async def get_teacher_courses_for_load(
 async def search_courses_for_load(
     q: str = "",
     department_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """بحث في المقررات لإسناد العبء التدريسي"""
+    """بحث في المقررات لإسناد العبء التدريسي.
+    افتراضياً يفلتر بالفصل النشط فقط (يستبعد المقررات من الفصول المؤرشفة).
+    لو تم تمرير semester_id صراحةً، يُستخدم بدلاً من الفصل النشط.
+    """
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
@@ -369,6 +400,17 @@ async def search_courses_for_load(
             {"name": {"$regex": q, "$options": "i"}},
             {"code": {"$regex": q, "$options": "i"}},
         ]
+
+    # تحديد الفصل المستهدف: لو لم يُمرَّر صراحةً، استخدم الفصل النشط
+    target_semester_id = semester_id
+    if not target_semester_id:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            target_semester_id = str(active_sem["_id"])
+
+    # فلتر بـ semester_id (يستبعد المقررات من الفصول المؤرشفة)
+    if target_semester_id:
+        query["semester_id"] = target_semester_id
 
     courses = await db.courses.find(query).limit(20).to_list(20)
     result = []
@@ -390,6 +432,7 @@ async def search_courses_for_load(
             "credit_hours": c.get("credit_hours", 3),
             "department_id": c.get("department_id", ""),
             "current_teacher_name": teacher_name,
+            "semester_id": c.get("semester_id", ""),
         })
     return result
 
@@ -412,11 +455,14 @@ async def bulk_save_teaching_load(
     errors = []
 
     for item in items:
-        # التحقق: هل المقرر مسند لمعلم آخر؟
-        assigned_to_other = await db.teaching_loads.find_one({
+        # التحقق: هل المقرر مسند لمعلم آخر؟ (ضمن نفس الفصل فقط)
+        check_query = {
             "course_id": item.course_id,
             "teacher_id": {"$ne": item.teacher_id},
-        })
+        }
+        if item.semester_id:
+            check_query["semester_id"] = item.semester_id
+        assigned_to_other = await db.teaching_loads.find_one(check_query)
         if assigned_to_other:
             course = await db.courses.find_one({"_id": ObjectId(item.course_id)})
             other_teacher = await db.teachers.find_one({"_id": ObjectId(assigned_to_other["teacher_id"])})
@@ -428,6 +474,7 @@ async def bulk_save_teaching_load(
         existing = await db.teaching_loads.find_one({
             "teacher_id": item.teacher_id,
             "course_id": item.course_id,
+            "semester_id": item.semester_id,
         })
         if existing:
             await db.teaching_loads.update_one(

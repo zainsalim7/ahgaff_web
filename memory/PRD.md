@@ -30,6 +30,12 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - `POST /api/students/{id}/activate`: if `student_id` is already taken in `users.username`, fallback to `reference_number` as username automatically.
   - `POST /api/students` (with password): same fallback.
   - Login screen placeholder updated: "اسم المستخدم / رقم القيد / الرقم المرجعي".
+- 2026-06-02 **Active Semester Scoping for Teaching Load**:
+  - `GET /api/teaching-load/search-courses` defaults to active semester (excludes archived). Accepts `semester_id` override.
+  - `GET /api/teaching-load/teacher/{id}/courses` same default + override + existing-loads also scoped.
+  - `GET /api/teaching-load` defaults to active semester. Accepts `semester_id` or `all_semesters=true`.
+  - `POST /api/teaching-load/bulk` "course assigned to other teacher" check now scoped to same `semester_id` (a course can be reassigned in a new semester without conflict with archived assignment).
+  - Frontend: active-semester badge displayed at top of `teaching-load` page with green accent ("الفصل النشط: ...").
 
 ## P0 / Next
 - (P1) Digital Student Card with QR + Photo
