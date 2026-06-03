@@ -1021,3 +1021,352 @@ async def export_teaching_load_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": "attachment; filename=teaching_load.pdf"}
     )
+
+
+# ============================================================
+# Teaching Load Templates - قوالب الأعباء التدريسية
+# ============================================================
+# الفكرة:
+#  - حفظ snapshot لإسنادات فصل دراسي معيّن كـ "قالب"
+#  - تطبيق هذا القالب لاحقاً على فصل دراسي آخر
+#    (مطابقة المقررات بالكود + المستوى + الشعبة)
+
+
+class TemplateSaveRequest(BaseModel):
+    semester_id: str  # الفصل المصدر الذي ننسخ منه
+    template_name: str  # اسم القالب
+    term: Optional[str] = None  # first / second / summer (للتنظيم)
+    department_id: Optional[str] = None  # لو null = كل الأقسام
+
+
+class TemplateApplyRequest(BaseModel):
+    template_id: str
+    target_semester_id: str
+    overwrite_existing: bool = False  # هل نستبدل الإسنادات الموجودة؟
+
+
+@router.get("/teaching-load/templates")
+async def list_templates(
+    term: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """عرض كل القوالب المحفوظة"""
+    if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    db = get_db()
+    query = {}
+    if term:
+        query["term"] = term
+
+    templates = await db.teaching_load_templates.find(query).sort("created_at", -1).to_list(100)
+    result = []
+    for t in templates:
+        result.append({
+            "id": str(t["_id"]),
+            "name": t.get("name", ""),
+            "term": t.get("term", ""),
+            "source_semester_name": t.get("source_semester_name", ""),
+            "source_semester_id": t.get("source_semester_id", ""),
+            "department_id": t.get("department_id"),
+            "department_name": t.get("department_name", ""),
+            "items_count": len(t.get("items", [])),
+            "created_at": t.get("created_at").isoformat() if t.get("created_at") else None,
+            "created_by_name": t.get("created_by_name", ""),
+        })
+    return result
+
+
+@router.post("/teaching-load/templates")
+async def save_template(
+    payload: TemplateSaveRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """حفظ إسنادات فصل دراسي كقالب"""
+    if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    db = get_db()
+
+    # جلب الفصل المصدر
+    src_sem = await db.semesters.find_one({"_id": ObjectId(payload.semester_id)})
+    if not src_sem:
+        raise HTTPException(status_code=404, detail="الفصل المصدر غير موجود")
+
+    # بناء query للأعباء (مع فلتر القسم لو موجود)
+    loads_query = {"semester_id": payload.semester_id}
+    if payload.department_id:
+        # نحتاج فلترة بالقسم → نجلب المعلمين أو نفلتر بالمقرر
+        # الأبسط: نفلتر بالقسم بعد جلب الـ courses
+        dept_courses = await db.courses.find(
+            {"department_id": payload.department_id, "semester_id": payload.semester_id},
+            {"_id": 1}
+        ).to_list(2000)
+        dept_course_ids = [str(c["_id"]) for c in dept_courses]
+        loads_query["course_id"] = {"$in": dept_course_ids}
+
+    loads = await db.teaching_loads.find(loads_query).to_list(2000)
+
+    if not loads:
+        raise HTTPException(status_code=400, detail="لا توجد إسنادات في هذا الفصل/القسم لحفظها")
+
+    # بناء snapshot - نخزن بمعرفات يمكن مطابقتها (الكود + المستوى + الشعبة + اسم المعلم)
+    items = []
+    for load in loads:
+        try:
+            course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
+            teacher = await db.teachers.find_one({"_id": ObjectId(load["teacher_id"])})
+            if not course or not teacher:
+                continue
+            items.append({
+                # معلومات المقرر للمطابقة
+                "course_code": course.get("code", ""),
+                "course_name": course.get("name", ""),
+                "course_level": course.get("level"),
+                "course_section": course.get("section", ""),
+                "course_department_id": course.get("department_id", ""),
+                "curriculum_course_id": course.get("curriculum_course_id"),  # احتياطي للمطابقة
+                # معلومات المعلم للمطابقة
+                "teacher_employee_id": teacher.get("employee_id", ""),
+                "teacher_full_name": teacher.get("full_name", ""),
+                "teacher_id_snapshot": str(teacher["_id"]),
+                # بيانات الإسناد
+                "weekly_hours": load.get("weekly_hours"),
+                "notes": load.get("notes", ""),
+            })
+        except Exception:
+            continue
+
+    # جلب اسم القسم لو فلتر بقسم
+    department_name = ""
+    if payload.department_id:
+        dept = await db.departments.find_one({"_id": ObjectId(payload.department_id)})
+        if dept:
+            department_name = dept.get("name", "")
+
+    template_doc = {
+        "name": payload.template_name,
+        "term": payload.term or src_sem.get("term") or "",
+        "source_semester_id": payload.semester_id,
+        "source_semester_name": f"{src_sem.get('name','')} {src_sem.get('academic_year','')}",
+        "department_id": payload.department_id,
+        "department_name": department_name,
+        "items": items,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": current_user.get("id"),
+        "created_by_name": current_user.get("full_name", current_user.get("username", "")),
+    }
+
+    result = await db.teaching_load_templates.insert_one(template_doc)
+
+    await log_activity(
+        current_user, "save_template", "teaching_load_template",
+        str(result.inserted_id), None, {"name": payload.template_name, "items_count": len(items)}
+    )
+
+    return {
+        "id": str(result.inserted_id),
+        "message": f"تم حفظ القالب بنجاح ({len(items)} إسناد)",
+        "items_count": len(items),
+    }
+
+
+@router.post("/teaching-load/templates/{template_id}/apply")
+async def apply_template(
+    template_id: str,
+    payload: TemplateApplyRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """تطبيق قالب على فصل دراسي مستهدف.
+    يطابق المقررات بالكود + المستوى + الشعبة
+    والمعلمين بـ employee_id (الأكثر استقراراً).
+    """
+    if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    db = get_db()
+
+    # جلب القالب
+    template = await db.teaching_load_templates.find_one({"_id": ObjectId(template_id)})
+    if not template:
+        raise HTTPException(status_code=404, detail="القالب غير موجود")
+
+    target_sem = await db.semesters.find_one({"_id": ObjectId(payload.target_semester_id)})
+    if not target_sem:
+        raise HTTPException(status_code=404, detail="الفصل المستهدف غير موجود")
+
+    items = template.get("items", [])
+
+    # جلب كل مقررات الفصل المستهدف لمرة واحدة
+    target_courses = await db.courses.find(
+        {"semester_id": payload.target_semester_id, "is_active": True}
+    ).to_list(5000)
+
+    # بناء فهرس للمطابقة
+    courses_by_key = {}  # (code, level, section, department_id) -> course
+    courses_by_curr = {}  # curriculum_course_id -> course
+    for c in target_courses:
+        key = (
+            (c.get("code") or "").strip().upper(),
+            c.get("level"),
+            (c.get("section") or "").strip(),
+            (c.get("department_id") or "").strip(),
+        )
+        courses_by_key[key] = c
+        if c.get("curriculum_course_id"):
+            courses_by_curr.setdefault(c["curriculum_course_id"], c)
+
+    # جلب كل المعلمين النشطين لمرة واحدة
+    teachers_all = await db.teachers.find({"is_active": {"$ne": False}}).to_list(2000)
+    teachers_by_emp = {(t.get("employee_id") or "").strip(): t for t in teachers_all if t.get("employee_id")}
+    teachers_by_name = {(t.get("full_name") or "").strip(): t for t in teachers_all if t.get("full_name")}
+
+    # جلب الإسنادات الموجودة في الفصل المستهدف
+    existing_loads = await db.teaching_loads.find(
+        {"semester_id": payload.target_semester_id}
+    ).to_list(5000)
+    existing_loads_by_course = {l["course_id"]: l for l in existing_loads}
+
+    # الإحصائيات
+    created = 0
+    updated = 0
+    skipped_existing = 0
+    no_course_match = []  # مقررات لم تطابق
+    no_teacher_match = []  # معلمون لم يطابقوا (مفصول/متقاعد)
+    matched_items = []  # تفاصيل الإسنادات المطبقة
+
+    for item in items:
+        # 1. مطابقة المقرر
+        course = None
+        # محاولة 1: بـ curriculum_course_id
+        curr_id = item.get("curriculum_course_id")
+        if curr_id and curr_id in courses_by_curr:
+            course = courses_by_curr[curr_id]
+        # محاولة 2: بـ الكود + المستوى + الشعبة + القسم
+        if not course:
+            key = (
+                (item.get("course_code") or "").strip().upper(),
+                item.get("course_level"),
+                (item.get("course_section") or "").strip(),
+                (item.get("course_department_id") or "").strip(),
+            )
+            course = courses_by_key.get(key)
+        # محاولة 3: بدون قسم (شعبة وكود فقط)
+        if not course:
+            for c in target_courses:
+                if (
+                    (c.get("code") or "").strip().upper() == (item.get("course_code") or "").strip().upper()
+                    and c.get("level") == item.get("course_level")
+                    and (c.get("section") or "").strip() == (item.get("course_section") or "").strip()
+                ):
+                    course = c
+                    break
+
+        if not course:
+            no_course_match.append({
+                "code": item.get("course_code"),
+                "name": item.get("course_name"),
+                "level": item.get("course_level"),
+                "section": item.get("course_section"),
+            })
+            continue
+
+        # 2. مطابقة المعلم
+        teacher = None
+        emp_id = (item.get("teacher_employee_id") or "").strip()
+        if emp_id and emp_id in teachers_by_emp:
+            teacher = teachers_by_emp[emp_id]
+        if not teacher:
+            full_name = (item.get("teacher_full_name") or "").strip()
+            if full_name and full_name in teachers_by_name:
+                teacher = teachers_by_name[full_name]
+
+        if not teacher:
+            no_teacher_match.append({
+                "course": f"{course.get('code')} {course.get('name')}",
+                "teacher_name": item.get("teacher_full_name"),
+                "employee_id": item.get("teacher_employee_id"),
+            })
+            continue
+
+        course_id = str(course["_id"])
+        teacher_id = str(teacher["_id"])
+
+        # 3. التحقق من وجود إسناد سابق
+        existing = existing_loads_by_course.get(course_id)
+        if existing and not payload.overwrite_existing:
+            skipped_existing += 1
+            continue
+
+        # 4. حفظ الإسناد
+        load_doc = {
+            "teacher_id": teacher_id,
+            "course_id": course_id,
+            "semester_id": payload.target_semester_id,
+            "weekly_hours": item.get("weekly_hours"),
+            "notes": item.get("notes", ""),
+            "updated_at": datetime.now(timezone.utc),
+            "updated_by": current_user.get("id"),
+        }
+
+        if existing:
+            await db.teaching_loads.update_one(
+                {"_id": existing["_id"]},
+                {"$set": load_doc}
+            )
+            updated += 1
+        else:
+            load_doc["created_at"] = datetime.now(timezone.utc)
+            load_doc["created_by"] = current_user.get("id")
+            await db.teaching_loads.insert_one(load_doc)
+            created += 1
+
+        matched_items.append({
+            "course": f"{course.get('code')} {course.get('name')} - شعبة {course.get('section','')}",
+            "teacher": teacher.get("full_name", ""),
+            "hours": item.get("weekly_hours"),
+        })
+
+    await log_activity(
+        current_user, "apply_template", "teaching_load_template",
+        template_id, None, {
+            "target_semester_id": payload.target_semester_id,
+            "created": created, "updated": updated, "skipped": skipped_existing,
+        }
+    )
+
+    return {
+        "message": f"تم تطبيق القالب: {created} إسناد جديد، {updated} تحديث، {skipped_existing} متجاهل",
+        "stats": {
+            "created": created,
+            "updated": updated,
+            "skipped_existing": skipped_existing,
+            "no_course_match_count": len(no_course_match),
+            "no_teacher_match_count": len(no_teacher_match),
+            "total_items": len(items),
+        },
+        "no_course_match": no_course_match[:50],  # أول 50 فقط
+        "no_teacher_match": no_teacher_match[:50],
+        "applied_count": len(matched_items),
+    }
+
+
+@router.delete("/teaching-load/templates/{template_id}")
+async def delete_template(
+    template_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """حذف قالب"""
+    if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    db = get_db()
+    result = await db.teaching_load_templates.delete_one({"_id": ObjectId(template_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="القالب غير موجود")
+
+    await log_activity(
+        current_user, "delete_template", "teaching_load_template",
+        template_id, None, None
+    )
+    return {"message": "تم حذف القالب"}

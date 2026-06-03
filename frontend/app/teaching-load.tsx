@@ -9,6 +9,8 @@ import {
   ActivityIndicator,
   Alert,
   Platform,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -149,6 +151,20 @@ export default function TeachingLoadPage() {
   const [crossDept, setCrossDept] = useState(false); // عرض أساتذة ومقررات من كل الأقسام
   const [hideAssignedToOthers, setHideAssignedToOthers] = useState(true); // إخفاء المقررات المسندة لمعلمين آخرين
   const [activeSemester, setActiveSemester] = useState<{ id: string; name: string; academic_year: string } | null>(null);
+  
+  // ============= قوالب الأعباء =============
+  const [showSaveTemplateModal, setShowSaveTemplateModal] = useState(false);
+  const [showApplyTemplateModal, setShowApplyTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [templateTerm, setTemplateTerm] = useState<'first' | 'second' | 'summer'>('first');
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [allSemesters, setAllSemesters] = useState<any[]>([]);
+  const [targetSemesterId, setTargetSemesterId] = useState('');
+  const [overwriteExisting, setOverwriteExisting] = useState(false);
+  const [savingTemplate, setSavingTemplate] = useState(false);
+  const [applyingTemplate, setApplyingTemplate] = useState(false);
+  const [applyResult, setApplyResult] = useState<any>(null);
 
   // جلب الفصل النشط
   useEffect(() => {
@@ -167,6 +183,131 @@ export default function TeachingLoadPage() {
       }
     })();
   }, []);
+
+  // جلب كل الفصول للقوالب
+  const fetchAllSemesters = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/semesters`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAllSemesters(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Error loading semesters:', e);
+    }
+  }, []);
+
+  // جلب القوالب
+  const fetchTemplates = useCallback(async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/teaching-load/templates`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setTemplates(Array.isArray(data) ? data : []);
+      }
+    } catch (e) {
+      console.error('Error loading templates:', e);
+    }
+  }, []);
+
+  // حفظ القالب
+  const handleSaveTemplate = async () => {
+    if (!activeSemester) {
+      Alert.alert('تنبيه', 'لا يوجد فصل نشط');
+      return;
+    }
+    if (!templateName.trim()) {
+      Alert.alert('تنبيه', 'يرجى إدخال اسم القالب');
+      return;
+    }
+    setSavingTemplate(true);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/teaching-load/templates`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          semester_id: activeSemester.id,
+          template_name: templateName.trim(),
+          term: templateTerm,
+          department_id: selectedDept || null,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        Alert.alert('تم بنجاح', data.message || 'تم حفظ القالب');
+        setShowSaveTemplateModal(false);
+        setTemplateName('');
+      } else {
+        Alert.alert('خطأ', data.detail || 'فشل حفظ القالب');
+      }
+    } catch (e) {
+      Alert.alert('خطأ', 'فشل حفظ القالب');
+    } finally {
+      setSavingTemplate(false);
+    }
+  };
+
+  // تطبيق القالب
+  const handleApplyTemplate = async () => {
+    if (!selectedTemplateId) {
+      Alert.alert('تنبيه', 'يرجى اختيار قالب');
+      return;
+    }
+    if (!targetSemesterId) {
+      Alert.alert('تنبيه', 'يرجى اختيار الفصل المستهدف');
+      return;
+    }
+    setApplyingTemplate(true);
+    setApplyResult(null);
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/teaching-load/templates/${selectedTemplateId}/apply`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          template_id: selectedTemplateId,
+          target_semester_id: targetSemesterId,
+          overwrite_existing: overwriteExisting,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setApplyResult(data);
+        // refresh teaching loads
+        await fetchSummary();
+      } else {
+        Alert.alert('خطأ', data.detail || 'فشل تطبيق القالب');
+      }
+    } catch (e) {
+      Alert.alert('خطأ', 'فشل تطبيق القالب');
+    } finally {
+      setApplyingTemplate(false);
+    }
+  };
+
+  // حذف قالب
+  const handleDeleteTemplate = async (templateId: string, templateNameToDelete: string) => {
+    if (!confirm(`حذف القالب "${templateNameToDelete}"؟`)) return;
+    try {
+      const token = await AsyncStorage.getItem('token');
+      const res = await fetch(`${API_URL}/api/teaching-load/templates/${templateId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (res.ok) {
+        await fetchTemplates();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
 
   // Load teachers when department changes or cross-dept toggled
   useEffect(() => {
@@ -481,6 +622,53 @@ export default function TeachingLoadPage() {
           </Text>
         </View>
       ) : null}
+
+      {/* Template Actions */}
+      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8 }}>
+        <TouchableOpacity
+          data-testid="save-template-btn"
+          onPress={() => {
+            setTemplateName(`قالب ${activeSemester?.name || ''} ${activeSemester?.academic_year || ''}`.trim());
+            setShowSaveTemplateModal(true);
+          }}
+          disabled={!activeSemester}
+          style={{
+            flex: 1,
+            flexDirection: 'row-reverse',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            backgroundColor: activeSemester ? '#6a1b9a' : '#bdbdbd',
+            paddingVertical: 10,
+            borderRadius: 8,
+          }}
+        >
+          <Ionicons name="save-outline" size={16} color="#fff" />
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>حفظ كقالب</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          data-testid="apply-template-btn"
+          onPress={async () => {
+            await Promise.all([fetchTemplates(), fetchAllSemesters()]);
+            if (activeSemester) setTargetSemesterId(activeSemester.id);
+            setApplyResult(null);
+            setShowApplyTemplateModal(true);
+          }}
+          style={{
+            flex: 1,
+            flexDirection: 'row-reverse',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            backgroundColor: '#00838f',
+            paddingVertical: 10,
+            borderRadius: 8,
+          }}
+        >
+          <Ionicons name="download-outline" size={16} color="#fff" />
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>تطبيق قالب سابق</Text>
+        </TouchableOpacity>
+      </View>
 
       {/* View Mode Toggle */}
       <View style={styles.toggleRow}>
@@ -933,6 +1121,255 @@ export default function TeachingLoadPage() {
             ))
         }
       </ScrollView>
+
+      {/* ============= Save Template Modal ============= */}
+      <Modal visible={showSaveTemplateModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 20, width: '95%', maxWidth: 460 }} data-testid="save-template-modal">
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="save" size={22} color="#6a1b9a" />
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#222', flex: 1, textAlign: 'right' }}>حفظ القالب</Text>
+            </View>
+            <Text style={{ fontSize: 12, color: '#666', textAlign: 'right', marginBottom: 14, lineHeight: 18 }}>
+              سيتم حفظ جميع إسنادات معلمي الفصل النشط مع ساعات العبء كقالب يمكن تطبيقه على فصول مستقبلية.
+            </Text>
+
+            <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', marginBottom: 4, fontWeight: '700' }}>اسم القالب *</Text>
+            <TextInput
+              data-testid="template-name-input"
+              value={templateName}
+              onChangeText={setTemplateName}
+              placeholder="مثال: خطة قسم البرمجة - الفصل الأول"
+              placeholderTextColor="#aaa"
+              style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, textAlign: 'right', marginBottom: 12 }}
+            />
+
+            <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', marginBottom: 4, fontWeight: '700' }}>نوع الفصل</Text>
+            <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: 12 }}>
+              {[
+                { v: 'first', l: 'الأول' },
+                { v: 'second', l: 'الثاني' },
+                { v: 'summer', l: 'الصيفي' },
+              ].map(o => (
+                <TouchableOpacity
+                  key={o.v}
+                  onPress={() => setTemplateTerm(o.v as any)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    borderWidth: 1.5,
+                    borderColor: templateTerm === o.v ? '#6a1b9a' : '#ddd',
+                    backgroundColor: templateTerm === o.v ? '#f3e5f5' : '#fff',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: templateTerm === o.v ? '#6a1b9a' : '#666' }}>{o.l}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={{ backgroundColor: '#f5f5f5', padding: 10, borderRadius: 8, marginBottom: 14 }}>
+              <Text style={{ fontSize: 11, color: '#555', textAlign: 'right' }}>
+                المصدر: <Text style={{ fontWeight: '800' }}>{activeSemester ? `${activeSemester.name} ${activeSemester.academic_year}` : '—'}</Text>
+              </Text>
+              {selectedDept ? (
+                <Text style={{ fontSize: 11, color: '#555', textAlign: 'right', marginTop: 2 }}>
+                  القسم: <Text style={{ fontWeight: '800' }}>{departments.find(d => d.id === selectedDept)?.name || ''}</Text>
+                </Text>
+              ) : (
+                <Text style={{ fontSize: 11, color: '#888', textAlign: 'right', marginTop: 2 }}>كل الأقسام</Text>
+              )}
+            </View>
+
+            <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+              <TouchableOpacity
+                onPress={() => setShowSaveTemplateModal(false)}
+                disabled={savingTemplate}
+                style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#f5f5f5', alignItems: 'center' }}
+              >
+                <Text style={{ color: '#666', fontWeight: '700' }}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                data-testid="confirm-save-template-btn"
+                onPress={handleSaveTemplate}
+                disabled={savingTemplate}
+                style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: '#6a1b9a', alignItems: 'center', opacity: savingTemplate ? 0.6 : 1 }}
+              >
+                {savingTemplate ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>حفظ القالب</Text>}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* ============= Apply Template Modal ============= */}
+      <Modal visible={showApplyTemplateModal} transparent animationType="fade">
+        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+          <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 18, width: '95%', maxWidth: 560, maxHeight: '90%' }} data-testid="apply-template-modal">
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+              <Ionicons name="download" size={22} color="#00838f" />
+              <Text style={{ fontSize: 17, fontWeight: '800', color: '#222', flex: 1, textAlign: 'right' }}>تطبيق قالب سابق</Text>
+            </View>
+
+            <ScrollView style={{ maxHeight: 480 }} showsVerticalScrollIndicator>
+              {!applyResult ? (
+                <>
+                  <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', marginBottom: 4, fontWeight: '700' }}>اختر القالب *</Text>
+                  {templates.length === 0 ? (
+                    <View style={{ padding: 14, backgroundColor: '#fff3e0', borderRadius: 8, borderRightWidth: 3, borderRightColor: '#ef6c00' }}>
+                      <Text style={{ fontSize: 12, color: '#e65100', textAlign: 'right' }}>
+                        لا توجد قوالب محفوظة. احفظ قالباً أولاً من فصل سابق.
+                      </Text>
+                    </View>
+                  ) : (
+                    <View style={{ gap: 6 }}>
+                      {templates.map(t => (
+                        <TouchableOpacity
+                          key={t.id}
+                          data-testid={`template-option-${t.id}`}
+                          onPress={() => setSelectedTemplateId(t.id)}
+                          style={{
+                            padding: 10,
+                            borderRadius: 8,
+                            borderWidth: 1.5,
+                            borderColor: selectedTemplateId === t.id ? '#00838f' : '#e0e0e0',
+                            backgroundColor: selectedTemplateId === t.id ? '#e0f2f1' : '#fafafa',
+                          }}
+                        >
+                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                            <Ionicons
+                              name={selectedTemplateId === t.id ? 'radio-button-on' : 'radio-button-off'}
+                              size={18}
+                              color={selectedTemplateId === t.id ? '#00838f' : '#999'}
+                            />
+                            <View style={{ flex: 1 }}>
+                              <Text style={{ fontSize: 13, fontWeight: '800', color: '#222', textAlign: 'right' }}>{t.name}</Text>
+                              <Text style={{ fontSize: 10, color: '#777', textAlign: 'right', marginTop: 2 }}>
+                                المصدر: {t.source_semester_name} | {t.items_count} إسناد
+                                {t.department_name ? ` | ${t.department_name}` : ''}
+                              </Text>
+                            </View>
+                            <TouchableOpacity
+                              onPress={() => handleDeleteTemplate(t.id, t.name)}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
+                              <Ionicons name="trash-outline" size={16} color="#c62828" />
+                            </TouchableOpacity>
+                          </View>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+
+                  <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', marginTop: 14, marginBottom: 4, fontWeight: '700' }}>الفصل المستهدف *</Text>
+                  <View style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, overflow: 'hidden' }}>
+                    <Picker selectedValue={targetSemesterId} onValueChange={setTargetSemesterId}>
+                      <Picker.Item label="اختر فصلاً..." value="" />
+                      {allSemesters.map(s => (
+                        <Picker.Item
+                          key={s.id}
+                          label={`${s.name} ${s.academic_year} ${s.status === 'active' ? '(نشط)' : '(مؤرشف)'}`}
+                          value={s.id}
+                        />
+                      ))}
+                    </Picker>
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() => setOverwriteExisting(!overwriteExisting)}
+                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 12 }}
+                  >
+                    <Ionicons name={overwriteExisting ? 'checkbox' : 'square-outline'} size={20} color={overwriteExisting ? '#c62828' : '#999'} />
+                    <Text style={{ fontSize: 12, color: '#444', textAlign: 'right', flex: 1 }}>
+                      استبدال الإسنادات الموجودة (إذا كان للمقرر معلم بالفعل في الفصل المستهدف)
+                    </Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <View>
+                  <View style={{ backgroundColor: '#e8f5e9', padding: 12, borderRadius: 8, marginBottom: 10 }}>
+                    <Text style={{ fontSize: 13, color: '#1b5e20', textAlign: 'right', fontWeight: '700' }}>
+                      {applyResult.message}
+                    </Text>
+                  </View>
+                  <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: 10 }}>
+                    <View style={{ flex: 1, backgroundColor: '#e3f2fd', padding: 8, borderRadius: 6, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 18, fontWeight: '800', color: '#1565c0' }}>{applyResult.stats?.created || 0}</Text>
+                      <Text style={{ fontSize: 10, color: '#1565c0' }}>إسناد جديد</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: '#fff8e1', padding: 8, borderRadius: 6, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 18, fontWeight: '800', color: '#f57f17' }}>{applyResult.stats?.updated || 0}</Text>
+                      <Text style={{ fontSize: 10, color: '#f57f17' }}>تحديث</Text>
+                    </View>
+                    <View style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 8, borderRadius: 6, alignItems: 'center' }}>
+                      <Text style={{ fontSize: 18, fontWeight: '800', color: '#616161' }}>{applyResult.stats?.skipped_existing || 0}</Text>
+                      <Text style={{ fontSize: 10, color: '#616161' }}>متجاهل</Text>
+                    </View>
+                  </View>
+                  {applyResult.no_course_match?.length ? (
+                    <View style={{ backgroundColor: '#fff3e0', padding: 10, borderRadius: 8, marginBottom: 8 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#e65100', textAlign: 'right', marginBottom: 4 }}>
+                        ⚠️ مقررات لم تطابق ({applyResult.no_course_match.length}):
+                      </Text>
+                      {applyResult.no_course_match.slice(0, 10).map((nc: any, i: number) => (
+                        <Text key={i} style={{ fontSize: 11, color: '#bf360c', textAlign: 'right' }}>
+                          • {nc.code} - {nc.name} (م{nc.level} ش{nc.section || '-'})
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                  {applyResult.no_teacher_match?.length ? (
+                    <View style={{ backgroundColor: '#ffebee', padding: 10, borderRadius: 8 }}>
+                      <Text style={{ fontSize: 12, fontWeight: '700', color: '#b71c1c', textAlign: 'right', marginBottom: 4 }}>
+                        🚫 معلمون غير موجودين ({applyResult.no_teacher_match.length}):
+                      </Text>
+                      {applyResult.no_teacher_match.slice(0, 10).map((nt: any, i: number) => (
+                        <Text key={i} style={{ fontSize: 11, color: '#c62828', textAlign: 'right' }}>
+                          • {nt.teacher_name} → {nt.course}
+                        </Text>
+                      ))}
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 12 }}>
+              {applyResult ? (
+                <TouchableOpacity
+                  onPress={() => {
+                    setShowApplyTemplateModal(false);
+                    setApplyResult(null);
+                    setSelectedTemplateId('');
+                  }}
+                  style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#00838f', alignItems: 'center' }}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '800' }}>تم</Text>
+                </TouchableOpacity>
+              ) : (
+                <>
+                  <TouchableOpacity
+                    onPress={() => setShowApplyTemplateModal(false)}
+                    disabled={applyingTemplate}
+                    style={{ flex: 1, paddingVertical: 12, borderRadius: 8, backgroundColor: '#f5f5f5', alignItems: 'center' }}
+                  >
+                    <Text style={{ color: '#666', fontWeight: '700' }}>إلغاء</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    data-testid="confirm-apply-template-btn"
+                    onPress={handleApplyTemplate}
+                    disabled={applyingTemplate || !selectedTemplateId || !targetSemesterId}
+                    style={{ flex: 2, paddingVertical: 12, borderRadius: 8, backgroundColor: '#00838f', alignItems: 'center', opacity: (applyingTemplate || !selectedTemplateId || !targetSemesterId) ? 0.5 : 1 }}
+                  >
+                    {applyingTemplate ? <ActivityIndicator color="#fff" size="small" /> : <Text style={{ color: '#fff', fontWeight: '800' }}>تطبيق</Text>}
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

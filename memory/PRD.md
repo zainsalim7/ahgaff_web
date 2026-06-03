@@ -36,6 +36,13 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - `GET /api/teaching-load` defaults to active semester. Accepts `semester_id` or `all_semesters=true`.
   - `POST /api/teaching-load/bulk` "course assigned to other teacher" check now scoped to same `semester_id` (a course can be reassigned in a new semester without conflict with archived assignment).
   - Frontend: active-semester badge displayed at top of `teaching-load` page with green accent ("الفصل النشط: ...").
+- 2026-06-02 **Teaching Load Templates** (نسخ الإسنادات بين الفصول):
+  - New collection `teaching_load_templates` storing snapshots.
+  - Endpoints: `GET/POST /api/teaching-load/templates`, `POST /api/teaching-load/templates/{id}/apply`, `DELETE /api/teaching-load/templates/{id}`.
+  - Snapshot stores: course_code/level/section/dept + curriculum_course_id + teacher_employee_id + full_name + weekly_hours + notes.
+  - Apply matches courses by curriculum_course_id (primary) → code+level+section+dept (fallback) → code+level+section. Teachers matched by employee_id → full_name.
+  - Returns detailed stats: created/updated/skipped + unmatched courses + unmatched teachers.
+  - Frontend: 2 buttons in teaching-load header (Save Template / Apply Previous Template) + 2 modals. Save modal: name + term selection. Apply modal: template picker + target semester + overwrite checkbox + results dashboard.
 
 ## P0 / Next
 - (P1) Digital Student Card with QR + Photo
