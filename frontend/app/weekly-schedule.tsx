@@ -1,4 +1,5 @@
 import { goBack } from '../src/utils/navigation';
+import { router } from 'expo-router';
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -686,6 +687,16 @@ export default function WeeklySchedulePage() {
                       <Text style={st.btnText}>تصدير</Text>
                     </TouchableOpacity>
                   )}
+                  {/* 📊 تقرير الفراغ */}
+                  <TouchableOpacity
+                    style={[st.btn, { backgroundColor: '#5c6bc0' }]}
+                    onPress={() => router.push('/availability-report')}
+                    data-testid="availability-report-btn"
+                  >
+                    <Ionicons name="analytics" size={16} color="#fff" />
+                    <Text style={st.btnText}>تقرير الفراغ</Text>
+                  </TouchableOpacity>
+
                   {schedule.length > 0 && (
                     <View style={{ marginLeft: 'auto', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#e3f2fd', borderRadius: 6 }}>
                       <Text style={{ fontSize: 12, color: '#1565c0', fontWeight: '600' }}>إجمالي المحاضرات: {schedule.length}</Text>

@@ -1349,3 +1349,262 @@ async def export_visual_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+# ============================================================
+# Availability Reports - تقارير الفراغ/الإشغال للقاعات والأساتذة
+# ============================================================
+
+@router.get("/weekly-schedule/availability/rooms")
+async def rooms_availability(
+    day_of_week: Optional[str] = None,
+    slot_number: Optional[int] = None,
+    faculty_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تقرير حالة القاعات (فارغة/مشغولة) لكل يوم/فترة.
+    - بدون فلاتر: يرجع heatmap كاملة (كل القاعات × كل الأيام × كل الفترات)
+    - مع day + slot: يرجع قائمة القاعات الفارغة والمشغولة لتلك اللحظة
+    """
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+
+    # جلب القاعات
+    rooms_query = {"is_active": {"$ne": False}}
+    if faculty_id:
+        rooms_query["faculty_id"] = faculty_id
+    rooms = await db.rooms.find(rooms_query).to_list(500)
+
+    # جلب الجدول
+    sched_query = {}
+    if faculty_id:
+        sched_query["faculty_id"] = faculty_id
+    if semester_id:
+        sched_query["semester_id"] = semester_id
+    if day_of_week:
+        sched_query["day_of_week"] = day_of_week
+    if slot_number is not None:
+        sched_query["slot_number"] = slot_number
+    slots = await db.weekly_schedule.find(sched_query).to_list(5000)
+
+    # جلب أسماء المقررات/المعلمين للسياق
+    course_ids = {s.get("course_id") for s in slots if s.get("course_id")}
+    teacher_ids = {s.get("teacher_id") for s in slots if s.get("teacher_id")}
+    courses_map = {}
+    if course_ids:
+        async for c in db.courses.find({"_id": {"$in": [ObjectId(x) for x in course_ids if x]}}):
+            courses_map[str(c["_id"])] = c
+    teachers_map = {}
+    if teacher_ids:
+        async for t in db.teachers.find({"_id": {"$in": [ObjectId(x) for x in teacher_ids if x]}}):
+            teachers_map[str(t["_id"])] = t
+
+    # فهرسة slots حسب (room, day, slot)
+    busy_map = {}  # (room_id, day, slot) -> slot info
+    for s in slots:
+        rid = s.get("room_id")
+        if not rid:
+            continue
+        key = (rid, s.get("day_of_week"), s.get("slot_number"))
+        course = courses_map.get(s.get("course_id", ""), {})
+        teacher = teachers_map.get(s.get("teacher_id", ""), {})
+        busy_map[key] = {
+            "course_name": course.get("name", ""),
+            "course_code": course.get("code", ""),
+            "teacher_name": teacher.get("full_name", ""),
+            "section": s.get("section"),
+            "level": s.get("level"),
+        }
+
+    result = []
+    for room in rooms:
+        rid = str(room["_id"])
+        room_info = {
+            "id": rid,
+            "name": room.get("name", ""),
+            "code": room.get("code", ""),
+            "capacity": room.get("capacity"),
+            "type": room.get("type", "regular"),
+        }
+        if day_of_week and slot_number is not None:
+            # حالة محددة لقاعة في وقت محدد
+            busy = busy_map.get((rid, day_of_week, slot_number))
+            room_info["status"] = "busy" if busy else "free"
+            room_info["details"] = busy
+        else:
+            # heatmap: كل اليوم/الفترة
+            room_info["slots"] = []
+            for (br, bd, bs), info in busy_map.items():
+                if br == rid:
+                    room_info["slots"].append({
+                        "day": bd, "slot": bs, **info,
+                    })
+        result.append(room_info)
+
+    # ترتيب: الفارغة أولاً عند الفلتر المحدد
+    if day_of_week and slot_number is not None:
+        result.sort(key=lambda r: (0 if r.get("status") == "free" else 1, r.get("name", "")))
+
+    return {
+        "filter": {
+            "day_of_week": day_of_week,
+            "slot_number": slot_number,
+            "faculty_id": faculty_id,
+            "semester_id": semester_id,
+        },
+        "total": len(result),
+        "free_count": sum(1 for r in result if r.get("status") == "free"),
+        "busy_count": sum(1 for r in result if r.get("status") == "busy"),
+        "rooms": result,
+    }
+
+
+@router.get("/weekly-schedule/availability/teachers")
+async def teachers_availability(
+    day_of_week: Optional[str] = None,
+    slot_number: Optional[int] = None,
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تقرير حالة الأساتذة (فارغ/مشغول) مع الإشارة لتفضيلاتهم.
+    - مع day + slot: يرجع قائمة الأساتذة الفارغين والمشغولين + ما إذا كان الوقت ضمن تفضيلاتهم
+    - بدون فلتر: heatmap كامل
+    """
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+
+    # جلب الأساتذة
+    teachers_query = {"is_active": {"$ne": False}}
+    if department_id:
+        teachers_query["department_id"] = department_id
+    elif faculty_id:
+        teachers_query["faculty_id"] = faculty_id
+    teachers = await db.teachers.find(teachers_query).to_list(500)
+
+    # جلب الجدول
+    sched_query = {}
+    if faculty_id:
+        sched_query["faculty_id"] = faculty_id
+    if department_id:
+        sched_query["department_id"] = department_id
+    if semester_id:
+        sched_query["semester_id"] = semester_id
+    if day_of_week:
+        sched_query["day_of_week"] = day_of_week
+    if slot_number is not None:
+        sched_query["slot_number"] = slot_number
+    slots = await db.weekly_schedule.find(sched_query).to_list(5000)
+
+    # جلب التفضيلات
+    teacher_ids_list = [str(t["_id"]) for t in teachers]
+    prefs_list = await db.teacher_preferences.find({"teacher_id": {"$in": teacher_ids_list}}).to_list(500)
+    prefs_map = {p["teacher_id"]: p for p in prefs_list}
+
+    # سياق المقرر والقاعة
+    course_ids = {s.get("course_id") for s in slots if s.get("course_id")}
+    room_ids_set = {s.get("room_id") for s in slots if s.get("room_id")}
+    courses_map = {}
+    if course_ids:
+        async for c in db.courses.find({"_id": {"$in": [ObjectId(x) for x in course_ids if x]}}):
+            courses_map[str(c["_id"])] = c
+    rooms_map = {}
+    if room_ids_set:
+        async for r in db.rooms.find({"_id": {"$in": [ObjectId(x) for x in room_ids_set if x]}}):
+            rooms_map[str(r["_id"])] = r
+
+    # فهرسة slots
+    busy_map = {}  # (teacher_id, day, slot) -> info
+    for s in slots:
+        tid = s.get("teacher_id")
+        if not tid:
+            continue
+        key = (tid, s.get("day_of_week"), s.get("slot_number"))
+        course = courses_map.get(s.get("course_id", ""), {})
+        room = rooms_map.get(s.get("room_id", ""), {})
+        busy_map[key] = {
+            "course_name": course.get("name", ""),
+            "course_code": course.get("code", ""),
+            "room_name": room.get("name", ""),
+            "section": s.get("section"),
+            "level": s.get("level"),
+        }
+
+    def check_preference(pref: dict, day: str, slot: int):
+        """يرجع: 'preferred' | 'unavailable' | 'neutral'"""
+        if not pref:
+            return "neutral"
+        # غير متاح
+        unavail = pref.get("unavailable_slots", [])
+        for u in unavail:
+            if u.get("day") == day and u.get("slot") == slot:
+                return "unavailable"
+        # مفضّل
+        preferred = pref.get("preferred_slots", [])
+        for p in preferred:
+            if p.get("day") == day and p.get("slot") == slot:
+                return "preferred"
+        # أيام/أوقات مفضّلة عامة
+        preferred_days = pref.get("preferred_days", [])
+        if preferred_days and day not in preferred_days:
+            return "non_preferred_day"
+        return "neutral"
+
+    result = []
+    for teacher in teachers:
+        tid = str(teacher["_id"])
+        pref = prefs_map.get(tid, {})
+        teacher_info = {
+            "id": tid,
+            "full_name": teacher.get("full_name", ""),
+            "employee_id": teacher.get("employee_id", ""),
+            "department_id": teacher.get("department_id"),
+            "has_preferences": bool(pref),
+        }
+        if day_of_week and slot_number is not None:
+            busy = busy_map.get((tid, day_of_week, slot_number))
+            teacher_info["status"] = "busy" if busy else "free"
+            teacher_info["details"] = busy
+            teacher_info["preference_status"] = check_preference(pref, day_of_week, slot_number)
+        else:
+            teacher_info["slots"] = []
+            for (bt, bd, bs), info in busy_map.items():
+                if bt == tid:
+                    teacher_info["slots"].append({
+                        "day": bd, "slot": bs, **info,
+                    })
+        result.append(teacher_info)
+
+    # ترتيب: الفارغين المفضّلين أولاً
+    if day_of_week and slot_number is not None:
+        def sort_key(t):
+            status_order = 0 if t.get("status") == "free" else 2
+            pref_order = {"preferred": 0, "neutral": 1, "non_preferred_day": 2, "unavailable": 3}.get(t.get("preference_status", "neutral"), 1)
+            return (status_order + pref_order, t.get("full_name", ""))
+        result.sort(key=sort_key)
+
+    free_preferred = sum(1 for t in result if t.get("status") == "free" and t.get("preference_status") == "preferred")
+    free_neutral = sum(1 for t in result if t.get("status") == "free" and t.get("preference_status") == "neutral")
+    free_unavailable = sum(1 for t in result if t.get("status") == "free" and t.get("preference_status") == "unavailable")
+    free_total = sum(1 for t in result if t.get("status") == "free")
+
+    return {
+        "filter": {
+            "day_of_week": day_of_week,
+            "slot_number": slot_number,
+            "faculty_id": faculty_id,
+            "department_id": department_id,
+            "semester_id": semester_id,
+        },
+        "total": len(result),
+        "free_total": free_total,
+        "free_preferred": free_preferred,
+        "free_neutral": free_neutral,
+        "free_unavailable": free_unavailable,
+        "busy_count": sum(1 for t in result if t.get("status") == "busy"),
+        "teachers": result,
+    }
