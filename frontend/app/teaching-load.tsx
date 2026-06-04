@@ -586,88 +586,87 @@ export default function TeachingLoadPage() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
+      {/* Header مدمج: زر الرجوع + العنوان + شارة الفصل النشط + الأزرار على نفس السطر */}
+      <View style={{
+        flexDirection: 'row-reverse',
+        alignItems: 'center',
+        gap: 10,
+        paddingHorizontal: 12,
+        paddingVertical: 8,
+        backgroundColor: '#fff',
+        borderBottomWidth: 1,
+        borderBottomColor: '#e0e0e0',
+        flexWrap: 'wrap',
+      }}>
         <TouchableOpacity onPress={() => goBack()} data-testid="teaching-load-back-btn">
-          <Ionicons name="arrow-forward" size={24} color="#333" />
+          <Ionicons name="arrow-forward" size={22} color="#333" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>جدول العبء التدريسي</Text>
-        <View style={{ width: 24 }} />
-      </View>
-
-      {/* Active Semester Badge */}
-      {activeSemester ? (
-        <View
-          data-testid="active-semester-badge"
-          style={{
-            flexDirection: 'row-reverse',
-            alignItems: 'center',
-            gap: 6,
-            backgroundColor: '#e8f5e9',
-            paddingHorizontal: 12,
-            paddingVertical: 6,
-            marginHorizontal: 12,
-            marginTop: 8,
-            borderRadius: 8,
-            borderRightWidth: 3,
-            borderRightColor: '#2e7d32',
-          }}
-        >
-          <Ionicons name="calendar" size={14} color="#2e7d32" />
-          <Text style={{ fontSize: 12, color: '#1b5e20', fontWeight: '700', flex: 1, textAlign: 'right' }}>
-            الفصل النشط: {activeSemester.name} — {activeSemester.academic_year}
-          </Text>
-          <Text style={{ fontSize: 10, color: '#558b2f' }}>
-            (المقررات المعروضة من هذا الفصل فقط)
-          </Text>
+        <Text style={{ fontSize: 15, fontWeight: '700', color: '#222' }}>العبء التدريسي</Text>
+        {activeSemester ? (
+          <View
+            data-testid="active-semester-badge"
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: '#e8f5e9',
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: '#a5d6a7',
+            }}
+          >
+            <Ionicons name="calendar" size={11} color="#2e7d32" />
+            <Text style={{ fontSize: 11, color: '#1b5e20', fontWeight: '700' }}>
+              {activeSemester.name} {activeSemester.academic_year}
+            </Text>
+          </View>
+        ) : null}
+        {/* Template Actions مدمجة كأيقونات بنفس السطر */}
+        <View style={{ flexDirection: 'row-reverse', gap: 6, marginRight: 'auto' }}>
+          <TouchableOpacity
+            data-testid="save-template-btn"
+            onPress={() => {
+              setTemplateName(`قالب ${activeSemester?.name || ''} ${activeSemester?.academic_year || ''}`.trim());
+              setShowSaveTemplateModal(true);
+            }}
+            disabled={!activeSemester}
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: activeSemester ? '#6a1b9a' : '#bdbdbd',
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 6,
+            }}
+          >
+            <Ionicons name="save-outline" size={13} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 11 }}>حفظ كقالب</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            data-testid="apply-template-btn"
+            onPress={async () => {
+              await Promise.all([fetchTemplates(), fetchAllSemesters()]);
+              if (activeSemester) setTargetSemesterId(activeSemester.id);
+              setApplyResult(null);
+              setShowApplyTemplateModal(true);
+            }}
+            style={{
+              flexDirection: 'row-reverse',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: '#00838f',
+              paddingHorizontal: 10,
+              paddingVertical: 6,
+              borderRadius: 6,
+            }}
+          >
+            <Ionicons name="download-outline" size={13} color="#fff" />
+            <Text style={{ color: '#fff', fontWeight: '700', fontSize: 11 }}>تطبيق قالب</Text>
+          </TouchableOpacity>
         </View>
-      ) : null}
-
-      {/* Template Actions */}
-      <View style={{ flexDirection: 'row', gap: 8, paddingHorizontal: 12, paddingVertical: 8 }}>
-        <TouchableOpacity
-          data-testid="save-template-btn"
-          onPress={() => {
-            setTemplateName(`قالب ${activeSemester?.name || ''} ${activeSemester?.academic_year || ''}`.trim());
-            setShowSaveTemplateModal(true);
-          }}
-          disabled={!activeSemester}
-          style={{
-            flex: 1,
-            flexDirection: 'row-reverse',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            backgroundColor: activeSemester ? '#6a1b9a' : '#bdbdbd',
-            paddingVertical: 10,
-            borderRadius: 8,
-          }}
-        >
-          <Ionicons name="save-outline" size={16} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>حفظ كقالب</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          data-testid="apply-template-btn"
-          onPress={async () => {
-            await Promise.all([fetchTemplates(), fetchAllSemesters()]);
-            if (activeSemester) setTargetSemesterId(activeSemester.id);
-            setApplyResult(null);
-            setShowApplyTemplateModal(true);
-          }}
-          style={{
-            flex: 1,
-            flexDirection: 'row-reverse',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-            backgroundColor: '#00838f',
-            paddingVertical: 10,
-            borderRadius: 8,
-          }}
-        >
-          <Ionicons name="download-outline" size={16} color="#fff" />
-          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>تطبيق قالب سابق</Text>
-        </TouchableOpacity>
       </View>
 
       {/* View Mode Toggle */}
@@ -964,8 +963,8 @@ export default function TeachingLoadPage() {
 
             {/* Empty state */}
             {!selectedDept && (
-              <View style={styles.emptyCard}>
-                <Ionicons name="grid-outline" size={56} color="#bbb" />
+              <View style={styles.emptyCard} data-testid="teaching-load-empty">
+                <Ionicons name="grid-outline" size={24} color="#bbb" />
                 <Text style={styles.emptyText}>اختر القسم ثم المعلم لتعيين العبء التدريسي</Text>
               </View>
             )}
@@ -1075,7 +1074,7 @@ export default function TeachingLoadPage() {
 
         {viewMode === 'summary' && !loadingSummary && Object.keys(groupedByTeacher).length === 0 && (
             <View style={styles.emptyCard}>
-              <Ionicons name="document-text-outline" size={48} color="#ccc" />
+              <Ionicons name="document-text-outline" size={24} color="#ccc" />
               <Text style={styles.emptyText}>
                 {selectedDept ? 'لا توجد بيانات عبء تدريسي لهذا القسم' : 'اختر القسم لعرض جدول العبء التدريسي'}
               </Text>
@@ -1384,30 +1383,31 @@ const styles = StyleSheet.create({
   },
   headerTitle: { fontSize: 18, fontWeight: '600', color: '#333', flex: 1, textAlign: 'center' },
   toggleRow: {
-    flexDirection: 'row', padding: 12, gap: 8, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee',
+    flexDirection: 'row', paddingHorizontal: 12, paddingVertical: 6, gap: 6, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee',
   },
   toggleBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 6, paddingVertical: 10, borderRadius: 8, backgroundColor: '#e3f2fd',
+    gap: 4, paddingVertical: 7, borderRadius: 6, backgroundColor: '#e3f2fd',
   },
   toggleBtnActive: { backgroundColor: '#1565c0' },
-  toggleText: { fontSize: 14, color: '#1565c0', fontWeight: '500' },
+  toggleText: { fontSize: 12, color: '#1565c0', fontWeight: '600' },
   toggleTextActive: { color: '#fff' },
-  scrollView: { flex: 1, padding: 16 },
+  scrollView: { flex: 1, padding: 12 },
   filterCard: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 12,
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2, elevation: 2,
+    backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1,
   },
-  filterLabel: { fontSize: 14, fontWeight: '600', color: '#333', marginBottom: 8 },
+  filterLabel: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6 },
   pickerWrapper: {
-    backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden',
+    backgroundColor: '#f5f5f5', borderRadius: 6, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden',
   },
-  picker: { height: 45 },
+  picker: { height: 40 },
   emptyCard: {
-    backgroundColor: '#fff', borderRadius: 12, padding: 40, alignItems: 'center',
-    shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2, elevation: 2,
+    backgroundColor: '#fff', borderRadius: 10, paddingVertical: 18, paddingHorizontal: 16, alignItems: 'center',
+    flexDirection: 'row-reverse', gap: 10, justifyContent: 'center',
+    borderWidth: 1, borderColor: '#f0f0f0',
   },
-  emptyText: { marginTop: 10, fontSize: 16, color: '#999', textAlign: 'center' },
+  emptyText: { fontSize: 13, color: '#888', textAlign: 'center' },
   tableCard: {
     backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16,
     shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.08, shadowRadius: 2, elevation: 2,
