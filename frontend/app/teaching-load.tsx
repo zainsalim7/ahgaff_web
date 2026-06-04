@@ -133,6 +133,10 @@ export default function TeachingLoadPage() {
   const searchTimeout = React.useRef<any>(null);
   // Summary teacher filter
   const [summaryTeacherId, setSummaryTeacherId] = useState('');
+  // 🆕 فلتر الفصل الدراسي (يدعم الفصول المؤرشفة)
+  const [summarySemesterId, setSummarySemesterId] = useState<string>(''); // فارغ = الفصل النشط
+  const [summaryAllSemesters, setSummaryAllSemesters] = useState(false); // عرض كل الفصول
+  const [summaryExecuted, setSummaryExecuted] = useState(false); // هل تم الضغط على زر التنفيذ؟
 
   // Load departments on mount
   useEffect(() => {
@@ -429,18 +433,37 @@ export default function TeachingLoadPage() {
       const params: any = {};
       if (selectedDept) params.department_id = selectedDept;
       if (summaryTeacherId) params.teacher_id = summaryTeacherId;
+      // 🆕 منطق فلتر الفصل الدراسي:
+      // - لو تم اختيار فصل محدد (مؤرشف أو نشط) → نمرر semester_id
+      // - لو طُلب "كل الفصول" → نمرر all_semesters=true
+      // - الافتراضي (لا شيء) → backend يستخدم الفصل النشط
+      if (summarySemesterId) {
+        params.semester_id = summarySemesterId;
+      } else if (summaryAllSemesters) {
+        params.all_semesters = true;
+      }
       const res = await teachingLoadAPI.getAll(params);
       setExistingLoads(res.data.items || []);
+      setSummaryExecuted(true);
     } catch (e) {
       console.error('Error loading summary:', e);
     } finally {
       setLoadingSummary(false);
     }
-  }, [selectedDept, summaryTeacherId]);
+  }, [selectedDept, summaryTeacherId, summarySemesterId, summaryAllSemesters]);
 
+  // 🆕 إعادة تعيين النتيجة عند تغيير أي فلتر (يجب الضغط على "تنفيذ" مجدداً)
   useEffect(() => {
-    if (viewMode === 'summary') loadSummary();
-  }, [viewMode, selectedDept, summaryTeacherId, loadSummary]);
+    setSummaryExecuted(false);
+    setExistingLoads([]);
+  }, [selectedDept, summaryTeacherId, summarySemesterId, summaryAllSemesters]);
+
+  // 🆕 جلب كل الفصول عند فتح عرض الجدول (للـ dropdown)
+  useEffect(() => {
+    if (viewMode === 'summary' && allSemesters.length === 0) {
+      fetchAllSemesters();
+    }
+  }, [viewMode, allSemesters.length, fetchAllSemesters]);
 
   const handleSave = async () => {
     if (!selectedTeacher) return;
@@ -990,6 +1013,81 @@ export default function TeachingLoadPage() {
                   </Picker>
                 </View>
                 )}
+
+                {/* 🆕 فلتر الفصل الدراسي (يشمل المؤرشف) */}
+                <Text style={[styles.filterLabel, { textAlign: 'right', marginTop: 12 }]}>الفصل الدراسي</Text>
+                <View style={styles.pickerWrapper}>
+                  <Picker
+                    selectedValue={summaryAllSemesters ? '__all__' : (summarySemesterId || '__active__')}
+                    onValueChange={(v: string) => {
+                      if (v === '__all__') {
+                        setSummaryAllSemesters(true);
+                        setSummarySemesterId('');
+                      } else if (v === '__active__') {
+                        setSummaryAllSemesters(false);
+                        setSummarySemesterId('');
+                      } else {
+                        setSummaryAllSemesters(false);
+                        setSummarySemesterId(v);
+                      }
+                    }}
+                    style={styles.picker}
+                  >
+                    <Picker.Item label="🟢 الفصل النشط الحالي (افتراضي)" value="__active__" />
+                    <Picker.Item label="📚 كل الفصول (يشمل المؤرشفة)" value="__all__" />
+                    {allSemesters.filter(s => s.status !== 'active').map(s => (
+                      <Picker.Item
+                        key={s.id}
+                        label={`📦 ${s.name} ${s.academic_year} (مؤرشف)`}
+                        value={s.id}
+                      />
+                    ))}
+                  </Picker>
+                </View>
+                {/* مؤشّر الفصل المختار */}
+                {summarySemesterId ? (
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 6, backgroundColor: '#fff3e0', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                    <Ionicons name="archive-outline" size={12} color="#e65100" />
+                    <Text style={{ fontSize: 11, color: '#e65100', fontWeight: '700' }}>
+                      عرض بيانات فصل مؤرشف
+                    </Text>
+                  </View>
+                ) : summaryAllSemesters ? (
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 6, backgroundColor: '#e3f2fd', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 }}>
+                    <Ionicons name="layers-outline" size={12} color="#1565c0" />
+                    <Text style={{ fontSize: 11, color: '#1565c0', fontWeight: '700' }}>
+                      عرض جميع الفصول مجتمعة
+                    </Text>
+                  </View>
+                ) : null}
+
+                {/* 🆕 زر تنفيذ الاستعلام */}
+                <TouchableOpacity
+                  data-testid="summary-execute-btn"
+                  onPress={loadSummary}
+                  disabled={loadingSummary}
+                  style={{
+                    flexDirection: 'row-reverse',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    backgroundColor: loadingSummary ? '#90a4ae' : '#1565c0',
+                    paddingVertical: 11,
+                    borderRadius: 8,
+                    marginTop: 12,
+                  }}
+                >
+                  {loadingSummary ? (
+                    <ActivityIndicator size="small" color="#fff" />
+                  ) : (
+                    <>
+                      <Ionicons name="search" size={16} color="#fff" />
+                      <Text style={{ color: '#fff', fontWeight: '800', fontSize: 14 }}>
+                        {summaryExecuted ? 'تحديث النتائج' : 'تنفيذ الاستعلام'}
+                      </Text>
+                    </>
+                  )}
+                </TouchableOpacity>
               </View>
         )}
 
@@ -1076,7 +1174,11 @@ export default function TeachingLoadPage() {
             <View style={styles.emptyCard}>
               <Ionicons name="document-text-outline" size={24} color="#ccc" />
               <Text style={styles.emptyText}>
-                {selectedDept ? 'لا توجد بيانات عبء تدريسي لهذا القسم' : 'اختر القسم لعرض جدول العبء التدريسي'}
+                {!selectedDept
+                  ? 'اختر القسم لعرض جدول العبء التدريسي'
+                  : !summaryExecuted
+                    ? 'اختر الفصل ثم اضغط "تنفيذ الاستعلام" لعرض البيانات'
+                    : 'لا توجد بيانات عبء تدريسي بالفلاتر المختارة'}
               </Text>
             </View>
         )}
