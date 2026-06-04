@@ -62,7 +62,7 @@ class CurriculumCourseCreate(BaseModel):
     faculty_id: str
     department_id: str
     level: int = Field(..., ge=1, le=10)
-    term: int = Field(..., ge=1, le=2)  # 1=أول، 2=ثاني
+    term: int = Field(..., ge=1, le=3)  # 1=أول، 2=ثاني، 3=صيفي
     description: Optional[str] = None
     prerequisites: List[str] = []
 
@@ -75,7 +75,7 @@ class CurriculumCourseUpdate(BaseModel):
     faculty_id: Optional[str] = None
     department_id: Optional[str] = None
     level: Optional[int] = None
-    term: Optional[int] = None
+    term: Optional[int] = Field(None, ge=1, le=3)
     description: Optional[str] = None
     prerequisites: Optional[List[str]] = None
     is_active: Optional[bool] = None
@@ -182,9 +182,9 @@ async def get_curriculum_by_department(
             pass
 
     # تنظيم في شبكة
-    grid = {}  # grid[level][term] = [courses]
+    grid = {}  # grid[level][term] = [courses]  (term: 1=أول، 2=ثاني، 3=صيفي)
     for lvl in range(1, levels_count + 1):
-        grid[lvl] = {1: [], 2: []}
+        grid[lvl] = {1: [], 2: [], 3: []}
     for c in courses:
         lvl = int(c.get("level") or 0)
         term = int(c.get("term") or 0)
@@ -204,6 +204,7 @@ async def get_curriculum_by_department(
             "level": lvl,
             "term1": grid[lvl][1],
             "term2": grid[lvl][2],
+            "term3": grid[lvl][3],
         })
 
     return {
@@ -439,7 +440,7 @@ class GenerateOfferingsBody(BaseModel):
 async def generate_offerings_from_curriculum(
     semester_id: str = Query(..., description="معرّف الفصل الأكاديمي النشط"),
     department_id: Optional[str] = Query(None, description="فلترة قسم محدد"),
-    term: Optional[int] = Query(None, ge=1, le=2, description="1=أول، 2=ثاني (افتراضي يأخذ كل الخطة)"),
+    term: Optional[int] = Query(None, ge=1, le=3, description="1=أول، 2=ثاني، 3=صيفي (افتراضي يأخذ من term الفصل)"),
     skip_existing: bool = Query(True, description="تخطي المقررات الموجودة في الفصل"),
     body: Optional[GenerateOfferingsBody] = None,
     current_user: dict = Depends(get_current_user),
@@ -494,10 +495,10 @@ async def generate_offerings_from_curriculum(
     q = {"is_active": {"$ne": False}}
     if department_id:
         q["department_id"] = department_id
-    # أولوية: term من الـ query (إن مُرّر صراحة)، ثم term المستنتج من اسم الفصل
+    # أولوية: term من الـ query (إن مُرّر صراحة)، ثم term المستنتج من الفصل
     effective_term = term if term is not None else auto_term
-    # الفصل الصيفي (term=3) لا يفلتر بـ term لأن المقررات الصيفية قد تأتي من فصلين
-    if effective_term is not None and effective_term in (1, 2):
+    # فلترة بـ term عند كل القيم المعروفة (1=أول، 2=ثاني، 3=صيفي)
+    if effective_term is not None and effective_term in (1, 2, 3):
         q["term"] = effective_term
 
     curriculum_list = []

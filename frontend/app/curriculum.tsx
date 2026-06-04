@@ -115,7 +115,7 @@ export default function CurriculumScreen() {
       return;
     }
     const semName = activeSemester.name || activeSemester._id;
-    const termLabel = term === 1 ? 'الفصل الأول' : term === 2 ? 'الفصل الثاني' : 'كل الفصول';
+    const termLabel = term === 1 ? 'الفصل الأول' : term === 2 ? 'الفصل الثاني' : term === 3 ? 'الفصل الصيفي' : 'كل الفصول';
     const ok = Platform.OS === 'web'
       ? window.confirm(`توليد جلسات (${termLabel}) من خطة هذا القسم للفصل النشط "${semName}"؟`)
       : true;
@@ -390,6 +390,9 @@ export default function CurriculumScreen() {
                     sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} />
                   <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse}
                     sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} />
+                  <TermColumn label="الفصل الصيفي" courses={row.term3 || []} onDelete={deleteCourse}
+                    sectionsMap={sectionsMap} setSectionsMap={setSectionsMap}
+                    accentColor="#ef6c00" />
                 </View>
               </View>
             ))}
@@ -450,6 +453,13 @@ export default function CurriculumScreen() {
                   testID="form-term-2"
                 >
                   <Text style={[styles.termBtnText, addForm.term === 2 && { color: '#fff' }]}>الفصل الثاني</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.termBtn, addForm.term === 3 && { backgroundColor: '#ef6c00', borderColor: '#ef6c00' }]}
+                  onPress={() => setAddForm({ ...addForm, term: 3 })}
+                  testID="form-term-3"
+                >
+                  <Text style={[styles.termBtnText, addForm.term === 3 && { color: '#fff' }]}>الفصل الصيفي</Text>
                 </TouchableOpacity>
               </View>
               <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -626,9 +636,9 @@ export default function CurriculumScreen() {
   );
 }
 
-const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap }: any) => (
+const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor }: any) => (
   <View style={styles.termCol}>
-    <Text style={styles.termHeader}>{label}</Text>
+    <Text style={[styles.termHeader, accentColor && { color: accentColor, borderBottomColor: accentColor }]}>{label}</Text>
     {courses.length === 0 ? (
       <Text style={styles.emptyTermText}>لا توجد مقررات</Text>
     ) : (
