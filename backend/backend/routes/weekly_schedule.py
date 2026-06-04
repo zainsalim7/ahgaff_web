@@ -925,8 +925,16 @@ async def delete_draft(draft_id: str, current_user: dict = Depends(get_current_u
 
 
 @router.post("/weekly-schedule/drafts/{draft_id}/restore")
-async def restore_draft(draft_id: str, current_user: dict = Depends(get_current_user)):
-    """استرجاع نسخة (تحل محل الجدول الحالي في نفس النطاق)"""
+async def restore_draft(
+    draft_id: str,
+    backup_current: bool = True,
+    backup_name: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """استرجاع نسخة (تحل محل الجدول الحالي في نفس النطاق)
+    قبل الاستبدال، يتم حفظ الجدول الحالي تلقائياً كنسخة احتياطية (backup_current=True افتراضياً)،
+    حتى لا تُفقد النسخة الحالية أبداً.
+    """
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
@@ -941,8 +949,38 @@ async def restore_draft(draft_id: str, current_user: dict = Depends(get_current_
         query["department_id"] = draft["department_id"]
     if draft.get("semester_id"):
         query["semester_id"] = draft["semester_id"]
-    deleted = await db.weekly_schedule.delete_many(query)
 
+    # 1) حفظ الجدول الحالي تلقائياً كنسخة احتياطية قبل الاستبدال
+    backup_id = None
+    backup_slots_count = 0
+    if backup_current:
+        current_slots = await db.weekly_schedule.find(query).to_list(5000)
+        if current_slots:
+            backup_clean = []
+            for s in current_slots:
+                c = {k: v for k, v in s.items() if k != "_id"}
+                c["_orig_id"] = str(s["_id"])
+                backup_clean.append(c)
+            auto_name = backup_name or f"نسخة تلقائية قبل استعادة \"{draft.get('name','')}\" - {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}"
+            backup_doc = {
+                "name": auto_name,
+                "notes": f"تم إنشاؤها تلقائياً قبل استعادة النسخة {draft.get('name','')}",
+                "slots": backup_clean,
+                "faculty_id": draft.get("faculty_id"),
+                "department_id": draft.get("department_id"),
+                "semester_id": draft.get("semester_id"),
+                "created_at": datetime.now(timezone.utc),
+                "created_by": current_user.get("id"),
+                "created_by_name": current_user.get("full_name", current_user.get("username", "")),
+                "auto_backup": True,
+                "restored_from": str(draft["_id"]),
+            }
+            res = await db.weekly_schedule_drafts.insert_one(backup_doc)
+            backup_id = str(res.inserted_id)
+            backup_slots_count = len(backup_clean)
+
+    # 2) استبدال الجدول الحالي بمحتوى النسخة المختارة
+    deleted = await db.weekly_schedule.delete_many(query)
     inserted = 0
     for slot in draft.get("slots", []):
         slot_copy = {k: v for k, v in slot.items() if k != "_orig_id"}
@@ -953,12 +991,21 @@ async def restore_draft(draft_id: str, current_user: dict = Depends(get_current_
         "message": f"تم استرجاع النسخة: حذف {deleted.deleted_count} وإضافة {inserted}",
         "deleted": deleted.deleted_count,
         "inserted": inserted,
+        "backup_id": backup_id,
+        "backup_slots_count": backup_slots_count,
+        "backup_created": backup_id is not None,
     }
 
 
 @router.get("/weekly-schedule/drafts/{draft_id}/compare")
 async def compare_draft(draft_id: str, current_user: dict = Depends(get_current_user)):
-    """مقارنة النسخة المحفوظة بالجدول الحالي"""
+    """مقارنة النسخة المحفوظة بالجدول الحالي - مقارنة حقيقية slot-by-slot
+    تُرجع:
+      - added: محاضرات موجودة في الحالي وغير موجودة في النسخة (مضافة بعد حفظ النسخة)
+      - removed: محاضرات موجودة في النسخة وغير موجودة في الحالي (حُذفت)
+      - changed: محاضرات بنفس المعرف (course/day/slot/section) لكن تغير فيها شيء (المعلم/القاعة)
+      - unchanged_count: عدد المحاضرات المتطابقة
+    """
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
@@ -973,22 +1020,133 @@ async def compare_draft(draft_id: str, current_user: dict = Depends(get_current_
         query["department_id"] = draft["department_id"]
     if draft.get("semester_id"):
         query["semester_id"] = draft["semester_id"]
-    current_slots = await db.weekly_schedule.find(query).to_list(5000)
+    current_slots_raw = await db.weekly_schedule.find(query).to_list(5000)
+
+    # تطبيع: نزع _id وتحويل التواريخ
+    def normalize(slots):
+        out = []
+        for s in slots:
+            c = {k: v for k, v in s.items() if k not in ("_id", "_orig_id", "created_at", "updated_at")}
+            out.append(c)
+        return out
+
+    draft_slots = normalize(draft.get("slots", []))
+    current_slots = normalize(current_slots_raw)
+
+    # ====== إثراء الـ slots بالأسماء (الـ DB يخزن IDs فقط) ======
+    all_course_ids = set()
+    all_teacher_ids = set()
+    all_room_ids = set()
+    all_dept_ids = set()
+    for s in draft_slots + current_slots:
+        if s.get("course_id"): all_course_ids.add(s["course_id"])
+        if s.get("teacher_id"): all_teacher_ids.add(s["teacher_id"])
+        if s.get("room_id"): all_room_ids.add(s["room_id"])
+        if s.get("department_id"): all_dept_ids.add(s["department_id"])
+
+    courses_map, teachers_map, rooms_map, depts_map = {}, {}, {}, {}
+    if all_course_ids:
+        async for d in db.courses.find({"_id": {"$in": [ObjectId(x) for x in all_course_ids]}}):
+            courses_map[str(d["_id"])] = d
+    if all_teacher_ids:
+        async for d in db.teachers.find({"_id": {"$in": [ObjectId(x) for x in all_teacher_ids]}}):
+            teachers_map[str(d["_id"])] = d
+    if all_room_ids:
+        async for d in db.rooms.find({"_id": {"$in": [ObjectId(x) for x in all_room_ids]}}):
+            rooms_map[str(d["_id"])] = d
+    if all_dept_ids:
+        async for d in db.departments.find({"_id": {"$in": [ObjectId(x) for x in all_dept_ids]}}):
+            depts_map[str(d["_id"])] = d
+
+    def attach_names(s):
+        course = courses_map.get(s.get("course_id", ""), {})
+        teacher = teachers_map.get(s.get("teacher_id", ""), {})
+        room = rooms_map.get(s.get("room_id", ""), {})
+        dept = depts_map.get(s.get("department_id", ""), {})
+        s["course_name"] = s.get("course_name") or course.get("name", "")
+        s["course_code"] = s.get("course_code") or course.get("code", "")
+        s["teacher_name"] = s.get("teacher_name") or teacher.get("full_name", "")
+        s["room_name"] = s.get("room_name") or room.get("name", "")
+        s["department_name"] = s.get("department_name") or dept.get("name", "")
+        return s
+
+    draft_slots = [attach_names(s) for s in draft_slots]
+    current_slots = [attach_names(s) for s in current_slots]
+
+    # مفتاح هوية المحاضرة (يحدد "نفس الخانة") - يدعم day أو day_of_week
+    def slot_key(s):
+        return (
+            str(s.get("course_id", "")),
+            str(s.get("day") or s.get("day_of_week") or ""),
+            int(s.get("slot_number", 0) or 0),
+            str(s.get("section", "") or ""),
+            int(s.get("level", 0) or 0),
+        )
+
+    # حقول مقارنة المحتوى (ما الذي يمكن أن يتغير)
+    COMPARE_FIELDS = ["teacher_id", "teacher_name", "room_id", "room_name", "notes"]
+
+    draft_map = {slot_key(s): s for s in draft_slots}
+    current_map = {slot_key(s): s for s in current_slots}
+
+    draft_keys = set(draft_map.keys())
+    current_keys = set(current_map.keys())
+
+    added_keys = current_keys - draft_keys      # في الحالي فقط = أُضيفت
+    removed_keys = draft_keys - current_keys    # في النسخة فقط = حُذفت
+    common_keys = draft_keys & current_keys
+
+    def enrich(s):
+        return {
+            "course_id": s.get("course_id"),
+            "course_code": s.get("course_code"),
+            "course_name": s.get("course_name"),
+            "day_of_week": s.get("day") or s.get("day_of_week"),
+            "slot_number": s.get("slot_number"),
+            "section": s.get("section"),
+            "level": s.get("level"),
+            "teacher_id": s.get("teacher_id"),
+            "teacher_name": s.get("teacher_name"),
+            "room_id": s.get("room_id"),
+            "room_name": s.get("room_name"),
+            "department_name": s.get("department_name"),
+            "faculty_name": s.get("faculty_name"),
+        }
+
+    added = [enrich(current_map[k]) for k in added_keys]
+    removed = [enrich(draft_map[k]) for k in removed_keys]
+
+    changed = []
+    unchanged_count = 0
+    for k in common_keys:
+        d = draft_map[k]
+        c = current_map[k]
+        diffs = {}
+        for f in COMPARE_FIELDS:
+            if (d.get(f) or "") != (c.get(f) or ""):
+                diffs[f] = {"draft": d.get(f), "current": c.get(f)}
+        if diffs:
+            changed.append({**enrich(c), "diffs": diffs})
+        else:
+            unchanged_count += 1
+
+    # ترتيب موحّد لسهولة العرض
+    def sort_key(x):
+        return (x.get("day_of_week") or "", x.get("slot_number") or 0, x.get("course_code") or "")
+    added.sort(key=sort_key)
+    removed.sort(key=sort_key)
+    changed.sort(key=sort_key)
 
     def stats(slots):
-        teachers = set()
-        rooms = set()
-        courses = set()
+        teachers, rooms, courses = set(), set(), set()
         by_day = {}
         for s in slots:
-            if s.get("teacher_id"):
-                teachers.add(s["teacher_id"])
-            if s.get("room_id"):
-                rooms.add(s["room_id"])
-            if s.get("course_id"):
-                courses.add(s["course_id"])
-            day = s.get("day_of_week")
-            by_day[day] = by_day.get(day, 0) + 1
+            if s.get("teacher_id"): teachers.add(s["teacher_id"])
+            if s.get("room_id"): rooms.add(s["room_id"])
+            if s.get("course_id"): courses.add(s["course_id"])
+            day = s.get("day") or s.get("day_of_week")
+            if day:
+                by_day[day] = by_day.get(day, 0) + 1
         return {
             "total_slots": len(slots),
             "teachers_count": len(teachers),
@@ -1000,8 +1158,17 @@ async def compare_draft(draft_id: str, current_user: dict = Depends(get_current_
     return {
         "draft_name": draft.get("name", ""),
         "draft_created_at": draft.get("created_at").isoformat() if draft.get("created_at") else None,
-        "draft_stats": stats(draft.get("slots", [])),
+        "draft_stats": stats(draft_slots),
         "current_stats": stats(current_slots),
+        "diff": {
+            "added": added,
+            "added_count": len(added),
+            "removed": removed,
+            "removed_count": len(removed),
+            "changed": changed,
+            "changed_count": len(changed),
+            "unchanged_count": unchanged_count,
+        },
     }
 
 

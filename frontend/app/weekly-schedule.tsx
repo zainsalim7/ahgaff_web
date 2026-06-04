@@ -280,10 +280,16 @@ export default function WeeklySchedulePage() {
   };
 
   const handleRestoreDraft = async (id: string, name: string) => {
-    if (Platform.OS === 'web' && !window.confirm(`استرجاع النسخة "${name}"؟\nهذا سيستبدل الجدول الحالي.`)) return;
+    if (Platform.OS === 'web' && !window.confirm(
+      `استعادة النسخة "${name}"؟\n\nسيتم حفظ الجدول الحالي تلقائياً كنسخة احتياطية قبل الاستبدال، حتى لا تفقد البيانات الحالية.\n\nالمتابعة؟`
+    )) return;
     try {
-      const res = await api.post(`/weekly-schedule/drafts/${id}/restore`);
-      if (Platform.OS === 'web') window.alert(res.data.message);
+      const res = await api.post(`/weekly-schedule/drafts/${id}/restore`, null, { params: { backup_current: true } });
+      const d = res.data || {};
+      const backupMsg = d.backup_created
+        ? `\nتم حفظ الجدول السابق كنسخة احتياطية (${d.backup_slots_count} محاضرة) باسم تلقائي.`
+        : '\nلم يكن هناك جدول حالي ليُحفظ.';
+      if (Platform.OS === 'web') window.alert(`${d.message || 'تمت الاستعادة'}${backupMsg}`);
       setShowDraftsModal(false);
       loadSchedule();
     } catch (e: any) {
@@ -1054,7 +1060,7 @@ export default function WeeklySchedulePage() {
       {/* ============= Drafts List Modal ============= */}
       {showDraftsModal && Platform.OS === 'web' && (
         <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
-          <div style={{ backgroundColor: '#fff', borderRadius: 14, padding: 18, width: 600, maxWidth: '95%', maxHeight: '90vh', overflow: 'auto', direction: 'rtl' }} data-testid="drafts-modal">
+          <div style={{ backgroundColor: '#fff', borderRadius: 14, padding: 18, width: 820, maxWidth: '95%', maxHeight: '90vh', overflow: 'auto', direction: 'rtl' }} data-testid="drafts-modal">
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
               <Ionicons name="folder-open" size={22} color="#ef6c00" />
               <span style={{ fontSize: 17, fontWeight: 800, color: '#222', flex: 1 }}>النسخ المحفوظة من الجدول</span>
@@ -1085,6 +1091,101 @@ export default function WeeklySchedulePage() {
                     </div>
                   ))}
                 </div>
+
+                {/* ============= الفروقات التفصيلية slot-by-slot ============= */}
+                {comparingDraft.diff && (
+                  <div style={{ marginTop: 16 }}>
+                    <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 8 }}>🔎 الفروقات التفصيلية:</div>
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1, minWidth: 110, background: '#e8f5e9', padding: 8, borderRadius: 8, textAlign: 'center' }}>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#1b5e20' }}>{comparingDraft.diff.added_count}</div>
+                        <div style={{ fontSize: 11, color: '#1b5e20', fontWeight: 700 }}>➕ مضاف (في الحالي فقط)</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 110, background: '#ffebee', padding: 8, borderRadius: 8, textAlign: 'center' }}>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#c62828' }}>{comparingDraft.diff.removed_count}</div>
+                        <div style={{ fontSize: 11, color: '#c62828', fontWeight: 700 }}>➖ محذوف (في النسخة فقط)</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 110, background: '#fff8e1', padding: 8, borderRadius: 8, textAlign: 'center' }}>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#e65100' }}>{comparingDraft.diff.changed_count}</div>
+                        <div style={{ fontSize: 11, color: '#e65100', fontWeight: 700 }}>✏️ معدّل (تغير معلم/قاعة)</div>
+                      </div>
+                      <div style={{ flex: 1, minWidth: 110, background: '#e3f2fd', padding: 8, borderRadius: 8, textAlign: 'center' }}>
+                        <div style={{ fontSize: 22, fontWeight: 900, color: '#0d47a1' }}>{comparingDraft.diff.unchanged_count}</div>
+                        <div style={{ fontSize: 11, color: '#0d47a1', fontWeight: 700 }}>✓ متطابق</div>
+                      </div>
+                    </div>
+
+                    {/* قائمة المضافة */}
+                    {comparingDraft.diff.added_count > 0 && (
+                      <details open style={{ marginBottom: 8 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 800, color: '#1b5e20', padding: '6px 8px', background: '#e8f5e9', borderRadius: 6 }}>
+                          ➕ مضافة في الجدول الحالي ({comparingDraft.diff.added_count})
+                        </summary>
+                        <div style={{ marginTop: 4, maxHeight: 200, overflow: 'auto' }}>
+                          {comparingDraft.diff.added.map((s: any, i: number) => (
+                            <div key={i} style={{ fontSize: 11, padding: '6px 8px', borderBottom: '1px solid #eee', background: '#f1f8e9' }}>
+                              <strong>{s.course_code} {s.course_name}</strong> · {s.day_of_week} ف{s.slot_number}
+                              {s.section ? ` · شعبة ${s.section}` : ''} · 👨‍🏫 {s.teacher_name || '-'} · 🏛 {s.room_name || '-'}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {/* قائمة المحذوفة */}
+                    {comparingDraft.diff.removed_count > 0 && (
+                      <details open style={{ marginBottom: 8 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 800, color: '#c62828', padding: '6px 8px', background: '#ffebee', borderRadius: 6 }}>
+                          ➖ محذوفة من الجدول الحالي ({comparingDraft.diff.removed_count})
+                        </summary>
+                        <div style={{ marginTop: 4, maxHeight: 200, overflow: 'auto' }}>
+                          {comparingDraft.diff.removed.map((s: any, i: number) => (
+                            <div key={i} style={{ fontSize: 11, padding: '6px 8px', borderBottom: '1px solid #eee', background: '#ffebee' }}>
+                              <strong>{s.course_code} {s.course_name}</strong> · {s.day_of_week} ف{s.slot_number}
+                              {s.section ? ` · شعبة ${s.section}` : ''} · 👨‍🏫 {s.teacher_name || '-'} · 🏛 {s.room_name || '-'}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {/* قائمة المعدّلة */}
+                    {comparingDraft.diff.changed_count > 0 && (
+                      <details open style={{ marginBottom: 8 }}>
+                        <summary style={{ cursor: 'pointer', fontSize: 12, fontWeight: 800, color: '#e65100', padding: '6px 8px', background: '#fff8e1', borderRadius: 6 }}>
+                          ✏️ معدّلة ({comparingDraft.diff.changed_count})
+                        </summary>
+                        <div style={{ marginTop: 4, maxHeight: 250, overflow: 'auto' }}>
+                          {comparingDraft.diff.changed.map((s: any, i: number) => (
+                            <div key={i} style={{ fontSize: 11, padding: '8px', borderBottom: '1px solid #eee', background: '#fffde7' }}>
+                              <div style={{ fontWeight: 700, marginBottom: 3 }}>
+                                {s.course_code} {s.course_name} · {s.day_of_week} ف{s.slot_number}
+                                {s.section ? ` · شعبة ${s.section}` : ''}
+                              </div>
+                              {Object.entries(s.diffs || {}).map(([field, vals]: any) => (
+                                <div key={field} style={{ fontSize: 10, color: '#555', paddingRight: 8 }}>
+                                  • <strong>{({
+                                    teacher_id: 'المعلم (ID)', teacher_name: 'المعلم',
+                                    room_id: 'القاعة (ID)', room_name: 'القاعة', notes: 'ملاحظات'
+                                  } as any)[field] || field}</strong>:
+                                  <span style={{ color: '#c62828', textDecoration: 'line-through' }}> {vals.draft || '∅'}</span>
+                                  {' → '}
+                                  <span style={{ color: '#1b5e20', fontWeight: 700 }}>{vals.current || '∅'}</span>
+                                </div>
+                              ))}
+                            </div>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {comparingDraft.diff.added_count === 0 && comparingDraft.diff.removed_count === 0 && comparingDraft.diff.changed_count === 0 && (
+                      <div style={{ padding: 16, textAlign: 'center', color: '#2e7d32', background: '#e8f5e9', borderRadius: 8, fontSize: 13, fontWeight: 700 }}>
+                        ✓ النسختان متطابقتان تماماً — لا توجد أي فروقات.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             ) : (
               drafts.length === 0 ? (
