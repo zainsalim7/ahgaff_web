@@ -43,6 +43,15 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - Apply matches courses by curriculum_course_id (primary) → code+level+section+dept (fallback) → code+level+section. Teachers matched by employee_id → full_name.
   - Returns detailed stats: created/updated/skipped + unmatched courses + unmatched teachers.
   - Frontend: 2 buttons in teaching-load header (Save Template / Apply Previous Template) + 2 modals. Save modal: name + term selection. Apply modal: template picker + target semester + overwrite checkbox + results dashboard.
+- 2026-06-04 **Weekly Schedule Drafts + Visual Export**:
+  - New collection `weekly_schedule_drafts` (capped to last 10 per scope) — lightweight snapshots, not archived.
+  - Endpoints: `GET/POST /api/weekly-schedule/drafts`, `POST /drafts/{id}/restore`, `GET /drafts/{id}/compare`, `DELETE /drafts/{id}`.
+  - Visual export endpoints: `GET /weekly-schedule/export-visual/pdf` + `/excel` with filters (faculty/dept/level/section/teacher/room/semester).
+  - PDF: A4 landscape, Arabic-shaped text via arabic-reshaper + bidi, colored cells (header blue, time slots light blue, empty grey).
+  - Excel: openpyxl with RTL layout, merged title row, colored fills, bordered cells.
+  - Frontend: 3 new buttons in weekly-schedule (Save Draft / Drafts List / Export) + 3 modals using HTML-native dialogs on web.
+  - Drafts modal shows side-by-side comparison stats (teachers/rooms/courses/by_day) between draft and current schedule.
+  - Export modal: format toggle (PDF/Excel) + scope picker (all/department/section/teacher/room).
 
 ## P0 / Next
 - (P1) Digital Student Card with QR + Photo

@@ -822,3 +822,530 @@ async def auto_generate_schedule(
         "created": created,
         "errors": errors,
     }
+
+
+# ============================================================
+# Schedule Drafts - نسخ احتياطية مؤقتة للجدول للمقارنة
+# ============================================================
+
+
+class SaveDraftRequest(BaseModel):
+    name: str
+    faculty_id: Optional[str] = None
+    department_id: Optional[str] = None
+    semester_id: Optional[str] = None
+    notes: Optional[str] = ""
+
+
+@router.get("/weekly-schedule/drafts")
+async def list_drafts(current_user: dict = Depends(get_current_user)):
+    """قائمة نسخ الجدول المحفوظة"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    drafts = await db.weekly_schedule_drafts.find({}).sort("created_at", -1).to_list(50)
+    result = []
+    for d in drafts:
+        result.append({
+            "id": str(d["_id"]),
+            "name": d.get("name", ""),
+            "notes": d.get("notes", ""),
+            "slots_count": len(d.get("slots", [])),
+            "faculty_id": d.get("faculty_id"),
+            "department_id": d.get("department_id"),
+            "semester_id": d.get("semester_id"),
+            "created_at": d.get("created_at").isoformat() if d.get("created_at") else None,
+            "created_by_name": d.get("created_by_name", ""),
+        })
+    return result
+
+
+@router.post("/weekly-schedule/drafts")
+async def save_draft(req: SaveDraftRequest, current_user: dict = Depends(get_current_user)):
+    """حفظ snapshot للجدول الحالي كنسخة احتياطية"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    query = {}
+    if req.faculty_id:
+        query["faculty_id"] = req.faculty_id
+    if req.department_id:
+        query["department_id"] = req.department_id
+    if req.semester_id:
+        query["semester_id"] = req.semester_id
+
+    slots = await db.weekly_schedule.find(query).to_list(5000)
+    clean_slots = []
+    for s in slots:
+        c = {k: v for k, v in s.items() if k != "_id"}
+        c["_orig_id"] = str(s["_id"])
+        clean_slots.append(c)
+
+    draft_doc = {
+        "name": req.name.strip() or f"نسخة {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M')}",
+        "notes": req.notes or "",
+        "slots": clean_slots,
+        "faculty_id": req.faculty_id,
+        "department_id": req.department_id,
+        "semester_id": req.semester_id,
+        "created_at": datetime.now(timezone.utc),
+        "created_by": current_user.get("id"),
+        "created_by_name": current_user.get("full_name", current_user.get("username", "")),
+    }
+    result = await db.weekly_schedule_drafts.insert_one(draft_doc)
+
+    # حذف النسخ القديمة (الإبقاء على آخر 10 لكل نطاق)
+    scope_query = {
+        "faculty_id": req.faculty_id,
+        "department_id": req.department_id,
+        "semester_id": req.semester_id,
+    }
+    all_in_scope = await db.weekly_schedule_drafts.find(scope_query).sort("created_at", -1).to_list(100)
+    if len(all_in_scope) > 10:
+        for old in all_in_scope[10:]:
+            await db.weekly_schedule_drafts.delete_one({"_id": old["_id"]})
+
+    return {
+        "id": str(result.inserted_id),
+        "message": f"تم حفظ النسخة ({len(clean_slots)} محاضرة)",
+        "slots_count": len(clean_slots),
+    }
+
+
+@router.delete("/weekly-schedule/drafts/{draft_id}")
+async def delete_draft(draft_id: str, current_user: dict = Depends(get_current_user)):
+    """حذف نسخة احتياطية"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    result = await db.weekly_schedule_drafts.delete_one({"_id": ObjectId(draft_id)})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="النسخة غير موجودة")
+    return {"message": "تم حذف النسخة"}
+
+
+@router.post("/weekly-schedule/drafts/{draft_id}/restore")
+async def restore_draft(draft_id: str, current_user: dict = Depends(get_current_user)):
+    """استرجاع نسخة (تحل محل الجدول الحالي في نفس النطاق)"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    draft = await db.weekly_schedule_drafts.find_one({"_id": ObjectId(draft_id)})
+    if not draft:
+        raise HTTPException(status_code=404, detail="النسخة غير موجودة")
+
+    query = {}
+    if draft.get("faculty_id"):
+        query["faculty_id"] = draft["faculty_id"]
+    if draft.get("department_id"):
+        query["department_id"] = draft["department_id"]
+    if draft.get("semester_id"):
+        query["semester_id"] = draft["semester_id"]
+    deleted = await db.weekly_schedule.delete_many(query)
+
+    inserted = 0
+    for slot in draft.get("slots", []):
+        slot_copy = {k: v for k, v in slot.items() if k != "_orig_id"}
+        await db.weekly_schedule.insert_one(slot_copy)
+        inserted += 1
+
+    return {
+        "message": f"تم استرجاع النسخة: حذف {deleted.deleted_count} وإضافة {inserted}",
+        "deleted": deleted.deleted_count,
+        "inserted": inserted,
+    }
+
+
+@router.get("/weekly-schedule/drafts/{draft_id}/compare")
+async def compare_draft(draft_id: str, current_user: dict = Depends(get_current_user)):
+    """مقارنة النسخة المحفوظة بالجدول الحالي"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    draft = await db.weekly_schedule_drafts.find_one({"_id": ObjectId(draft_id)})
+    if not draft:
+        raise HTTPException(status_code=404, detail="النسخة غير موجودة")
+
+    query = {}
+    if draft.get("faculty_id"):
+        query["faculty_id"] = draft["faculty_id"]
+    if draft.get("department_id"):
+        query["department_id"] = draft["department_id"]
+    if draft.get("semester_id"):
+        query["semester_id"] = draft["semester_id"]
+    current_slots = await db.weekly_schedule.find(query).to_list(5000)
+
+    def stats(slots):
+        teachers = set()
+        rooms = set()
+        courses = set()
+        by_day = {}
+        for s in slots:
+            if s.get("teacher_id"):
+                teachers.add(s["teacher_id"])
+            if s.get("room_id"):
+                rooms.add(s["room_id"])
+            if s.get("course_id"):
+                courses.add(s["course_id"])
+            day = s.get("day_of_week")
+            by_day[day] = by_day.get(day, 0) + 1
+        return {
+            "total_slots": len(slots),
+            "teachers_count": len(teachers),
+            "rooms_count": len(rooms),
+            "courses_count": len(courses),
+            "by_day": by_day,
+        }
+
+    return {
+        "draft_name": draft.get("name", ""),
+        "draft_created_at": draft.get("created_at").isoformat() if draft.get("created_at") else None,
+        "draft_stats": stats(draft.get("slots", [])),
+        "current_stats": stats(current_slots),
+    }
+
+
+# ============================================================
+# Visual Export - تصدير مرئي للجدول (PDF + Excel)
+# ============================================================
+
+@router.get("/weekly-schedule/export-visual/pdf")
+async def export_visual_pdf(
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    level: Optional[int] = None,
+    section: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    room_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تصدير PDF بتصميم بصري احترافي حسب الفلاتر"""
+    try:
+        from reportlab.lib.pagesizes import landscape, A4
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"مكتبة PDF غير مثبتة: {e}")
+
+    db = get_db()
+
+    try:
+        pdfmetrics.registerFont(TTFont("Amiri", "/app/backend/backend/fonts/Amiri-Regular.ttf"))
+        font_name = "Amiri"
+    except Exception:
+        font_name = "Helvetica"
+
+    def ar(text):
+        if not text:
+            return ""
+        try:
+            return get_display(arabic_reshaper.reshape(str(text)))
+        except Exception:
+            return str(text)
+
+    query = {}
+    if faculty_id: query["faculty_id"] = faculty_id
+    if department_id: query["department_id"] = department_id
+    if level is not None: query["level"] = level
+    if section: query["section"] = section
+    if teacher_id: query["teacher_id"] = teacher_id
+    if room_id: query["room_id"] = room_id
+    if semester_id: query["semester_id"] = semester_id
+
+    slots = await db.weekly_schedule.find(query).to_list(5000)
+
+    settings = None
+    if faculty_id:
+        settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"})
+    time_slots_cfg = sorted((settings or {}).get("time_slots", []), key=lambda x: x.get("slot_number", 0))
+    working_days = (settings or {}).get("working_days", ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء"])
+
+    slots_by_cell = {}
+    for s in slots:
+        key = (s.get("day_of_week"), s.get("slot_number"))
+        slots_by_cell.setdefault(key, []).append(s)
+
+    course_ids = {s.get("course_id") for s in slots if s.get("course_id")}
+    teacher_ids = {s.get("teacher_id") for s in slots if s.get("teacher_id")}
+    room_ids_set = {s.get("room_id") for s in slots if s.get("room_id")}
+
+    courses_map = {}
+    if course_ids:
+        async for c in db.courses.find({"_id": {"$in": [ObjectId(x) for x in course_ids if x]}}):
+            courses_map[str(c["_id"])] = c
+    teachers_map = {}
+    if teacher_ids:
+        async for t in db.teachers.find({"_id": {"$in": [ObjectId(x) for x in teacher_ids if x]}}):
+            teachers_map[str(t["_id"])] = t
+    rooms_map = {}
+    if room_ids_set:
+        async for r in db.rooms.find({"_id": {"$in": [ObjectId(x) for x in room_ids_set if x]}}):
+            rooms_map[str(r["_id"])] = r
+
+    title_parts = ["الجدول الأسبوعي"]
+    if teacher_id and teacher_id in teachers_map:
+        title_parts.append(f"للأستاذ: {teachers_map[teacher_id].get('full_name', '')}")
+    if room_id and room_id in rooms_map:
+        title_parts.append(f"للقاعة: {rooms_map[room_id].get('name', '')}")
+    if department_id:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+        if dept:
+            title_parts.append(f"قسم: {dept.get('name', '')}")
+    if level is not None:
+        title_parts.append(f"المستوى {level}")
+    if section:
+        title_parts.append(f"شعبة {section}")
+    title = " - ".join(title_parts)
+    if semester_id:
+        sem = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+        if sem:
+            title += f" | {sem.get('name', '')} {sem.get('academic_year', '')}"
+
+    import io
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A4), rightMargin=0.7*cm, leftMargin=0.7*cm, topMargin=0.7*cm, bottomMargin=0.7*cm)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("Title", parent=styles["Title"], fontName=font_name, fontSize=16, alignment=1, textColor=colors.HexColor("#1565c0"))
+    sub_style = ParagraphStyle("Sub", parent=styles["Normal"], fontName=font_name, fontSize=9, alignment=1, textColor=colors.grey)
+
+    story = []
+    story.append(Paragraph(ar(title), title_style))
+    story.append(Paragraph(ar(f"تاريخ التصدير: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  جامعة الأحقاف"), sub_style))
+    story.append(Spacer(1, 0.3*cm))
+
+    header_row = [ar("الفترة")] + [ar(d) for d in working_days]
+    table_data = [header_row]
+
+    for ts in time_slots_cfg:
+        slot_num = ts.get("slot_number")
+        time_str = f"{ts.get('start_time','')}\n{ts.get('end_time','')}"
+        row = [ar(f"الفترة {slot_num}\n{time_str}")]
+        for day in working_days:
+            cell_slots = slots_by_cell.get((day, slot_num), [])
+            if not cell_slots:
+                row.append("")
+            else:
+                parts = []
+                for s in cell_slots:
+                    course = courses_map.get(s.get("course_id", ""), {})
+                    teacher = teachers_map.get(s.get("teacher_id", ""), {})
+                    room = rooms_map.get(s.get("room_id", ""), {})
+                    line = course.get("name", "") or course.get("code", "")
+                    if teacher.get("full_name") and not teacher_id:
+                        line += f"\n{teacher.get('full_name','')}"
+                    if room.get("name") and not room_id:
+                        line += f"\n[{room.get('name','')}]"
+                    sec = s.get("section")
+                    if sec and not section:
+                        line += f" - شعبة {sec}"
+                    parts.append(ar(line))
+                row.append("\n\n".join(parts))
+        table_data.append(row)
+
+    num_cols = len(header_row)
+    col_widths = [3*cm] + [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1)
+
+    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+    base_style = [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, 0), 11),
+        ("FONTSIZE", (0, 1), (-1, -1), 9),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#e3f2fd")),
+        ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#0d47a1")),
+        ("FONTSIZE", (0, 1), (0, -1), 9),
+        ("BACKGROUND", (1, 1), (-1, -1), colors.HexColor("#fafafa")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#bdbdbd")),
+        ("LINEBELOW", (0, 0), (-1, 0), 1.5, colors.HexColor("#1565c0")),
+        ("TOPPADDING", (0, 0), (-1, -1), 6),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+    ]
+    for row_idx in range(1, len(table_data)):
+        for col_idx in range(1, num_cols):
+            if not table_data[row_idx][col_idx]:
+                base_style.append(("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx), colors.HexColor("#f5f5f5")))
+    tbl.setStyle(TableStyle(base_style))
+
+    story.append(tbl)
+    story.append(Spacer(1, 0.4*cm))
+    legend_style = ParagraphStyle("Legend", fontName=font_name, fontSize=8, alignment=1, textColor=colors.grey)
+    story.append(Paragraph(ar(f"إجمالي المحاضرات: {len(slots)}"), legend_style))
+
+    doc.build(story)
+    buf.seek(0)
+    filename = f"weekly_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/weekly-schedule/export-visual/excel")
+async def export_visual_excel(
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    level: Optional[int] = None,
+    section: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    room_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تصدير Excel بنفس فلاتر PDF"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"مكتبة Excel غير مثبتة: {e}")
+
+    db = get_db()
+    query = {}
+    if faculty_id: query["faculty_id"] = faculty_id
+    if department_id: query["department_id"] = department_id
+    if level is not None: query["level"] = level
+    if section: query["section"] = section
+    if teacher_id: query["teacher_id"] = teacher_id
+    if room_id: query["room_id"] = room_id
+    if semester_id: query["semester_id"] = semester_id
+
+    slots = await db.weekly_schedule.find(query).to_list(5000)
+
+    course_ids = {s.get("course_id") for s in slots if s.get("course_id")}
+    teacher_ids = {s.get("teacher_id") for s in slots if s.get("teacher_id")}
+    room_ids_set = {s.get("room_id") for s in slots if s.get("room_id")}
+
+    courses_map = {}
+    if course_ids:
+        async for c in db.courses.find({"_id": {"$in": [ObjectId(x) for x in course_ids if x]}}):
+            courses_map[str(c["_id"])] = c
+    teachers_map = {}
+    if teacher_ids:
+        async for t in db.teachers.find({"_id": {"$in": [ObjectId(x) for x in teacher_ids if x]}}):
+            teachers_map[str(t["_id"])] = t
+    rooms_map = {}
+    if room_ids_set:
+        async for r in db.rooms.find({"_id": {"$in": [ObjectId(x) for x in room_ids_set if x]}}):
+            rooms_map[str(r["_id"])] = r
+
+    settings = None
+    if faculty_id:
+        settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"})
+    time_slots_cfg = sorted((settings or {}).get("time_slots", []), key=lambda x: x.get("slot_number", 0))
+    working_days = (settings or {}).get("working_days", ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء"])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "الجدول الأسبوعي"
+    ws.sheet_view.rightToLeft = True
+
+    title_parts = ["الجدول الأسبوعي"]
+    if teacher_id and teacher_id in teachers_map:
+        title_parts.append(f"للأستاذ: {teachers_map[teacher_id].get('full_name','')}")
+    if room_id and room_id in rooms_map:
+        title_parts.append(f"للقاعة: {rooms_map[room_id].get('name','')}")
+    if level is not None:
+        title_parts.append(f"م{level}")
+    if section:
+        title_parts.append(f"شعبة {section}")
+
+    num_cols = len(working_days) + 1
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
+    cell = ws.cell(row=1, column=1, value=" - ".join(title_parts))
+    cell.font = Font(bold=True, size=16, color="1565c0")
+    cell.alignment = Alignment(horizontal="center", vertical="center")
+    ws.row_dimensions[1].height = 30
+
+    header_fill = PatternFill(start_color="1565c0", end_color="1565c0", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=12)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    border = Border(
+        left=Side(style="thin", color="bdbdbd"),
+        right=Side(style="thin", color="bdbdbd"),
+        top=Side(style="thin", color="bdbdbd"),
+        bottom=Side(style="thin", color="bdbdbd"),
+    )
+
+    headers = ["الفترة"] + working_days
+    for col_idx, h in enumerate(headers, start=1):
+        c = ws.cell(row=3, column=col_idx, value=h)
+        c.fill = header_fill
+        c.font = header_font
+        c.alignment = center
+        c.border = border
+    ws.row_dimensions[3].height = 24
+
+    slots_by_cell = {}
+    for s in slots:
+        key = (s.get("day_of_week"), s.get("slot_number"))
+        slots_by_cell.setdefault(key, []).append(s)
+
+    cell_fill = PatternFill(start_color="fafafa", end_color="fafafa", fill_type="solid")
+    empty_fill = PatternFill(start_color="f5f5f5", end_color="f5f5f5", fill_type="solid")
+    time_fill = PatternFill(start_color="e3f2fd", end_color="e3f2fd", fill_type="solid")
+    time_font = Font(bold=True, color="0d47a1", size=10)
+
+    for r_idx, ts in enumerate(time_slots_cfg, start=4):
+        slot_num = ts.get("slot_number")
+        time_str = f"الفترة {slot_num}\n{ts.get('start_time','')}\n{ts.get('end_time','')}"
+        c = ws.cell(row=r_idx, column=1, value=time_str)
+        c.fill = time_fill
+        c.font = time_font
+        c.alignment = center
+        c.border = border
+        for d_idx, day in enumerate(working_days, start=2):
+            cell_slots = slots_by_cell.get((day, slot_num), [])
+            cell_val = ""
+            if cell_slots:
+                parts = []
+                for s in cell_slots:
+                    course = courses_map.get(s.get("course_id", ""), {})
+                    teacher = teachers_map.get(s.get("teacher_id", ""), {})
+                    room = rooms_map.get(s.get("room_id", ""), {})
+                    line = course.get("name", "") or course.get("code", "")
+                    if teacher.get("full_name") and not teacher_id:
+                        line += f"\n{teacher.get('full_name','')}"
+                    if room.get("name") and not room_id:
+                        line += f"\n[{room.get('name','')}]"
+                    sec = s.get("section")
+                    if sec and not section:
+                        line += f" - ش/{sec}"
+                    parts.append(line)
+                cell_val = "\n\n".join(parts)
+            c = ws.cell(row=r_idx, column=d_idx, value=cell_val)
+            c.fill = empty_fill if not cell_val else cell_fill
+            c.alignment = center
+            c.border = border
+            c.font = Font(size=10)
+        ws.row_dimensions[r_idx].height = 60
+
+    ws.column_dimensions["A"].width = 15
+    for i in range(2, num_cols + 1):
+        ws.column_dimensions[chr(64 + i)].width = 28
+
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"weekly_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

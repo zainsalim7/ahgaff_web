@@ -240,6 +240,127 @@ export default function WeeklySchedulePage() {
     } catch {}
   };
 
+  // ============= Drafts (نسخ احتياطية للمقارنة) =============
+  const [drafts, setDrafts] = useState<any[]>([]);
+  const [showDraftsModal, setShowDraftsModal] = useState(false);
+  const [showSaveDraftModal, setShowSaveDraftModal] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftNotes, setDraftNotes] = useState('');
+  const [savingDraft, setSavingDraft] = useState(false);
+  const [comparingDraft, setComparingDraft] = useState<any>(null);
+
+  const fetchDrafts = async () => {
+    try {
+      const res = await api.get('/weekly-schedule/drafts');
+      setDrafts(Array.isArray(res.data) ? res.data : []);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleSaveDraft = async () => {
+    if (!draftName.trim()) {
+      if (Platform.OS === 'web') window.alert('أدخل اسم النسخة');
+      return;
+    }
+    setSavingDraft(true);
+    try {
+      const body: any = { name: draftName.trim(), notes: draftNotes };
+      if (selectedFaculty) body.faculty_id = selectedFaculty;
+      if (selectedDept) body.department_id = selectedDept;
+      const res = await api.post('/weekly-schedule/drafts', body);
+      if (Platform.OS === 'web') window.alert(res.data.message);
+      setShowSaveDraftModal(false);
+      setDraftName('');
+      setDraftNotes('');
+      fetchDrafts();
+    } catch (e: any) {
+      const err = e?.response?.data?.detail || 'فشل الحفظ';
+      if (Platform.OS === 'web') window.alert(err);
+    } finally { setSavingDraft(false); }
+  };
+
+  const handleRestoreDraft = async (id: string, name: string) => {
+    if (Platform.OS === 'web' && !window.confirm(`استرجاع النسخة "${name}"؟\nهذا سيستبدل الجدول الحالي.`)) return;
+    try {
+      const res = await api.post(`/weekly-schedule/drafts/${id}/restore`);
+      if (Platform.OS === 'web') window.alert(res.data.message);
+      setShowDraftsModal(false);
+      loadSchedule();
+    } catch (e: any) {
+      const err = e?.response?.data?.detail || 'فشل الاسترجاع';
+      if (Platform.OS === 'web') window.alert(err);
+    }
+  };
+
+  const handleDeleteDraft = async (id: string, name: string) => {
+    if (Platform.OS === 'web' && !window.confirm(`حذف النسخة "${name}"؟`)) return;
+    try {
+      await api.delete(`/weekly-schedule/drafts/${id}`);
+      fetchDrafts();
+    } catch {}
+  };
+
+  const handleCompareDraft = async (id: string) => {
+    try {
+      const res = await api.get(`/weekly-schedule/drafts/${id}/compare`);
+      setComparingDraft(res.data);
+    } catch (e: any) {
+      const err = e?.response?.data?.detail || 'فشل المقارنة';
+      if (Platform.OS === 'web') window.alert(err);
+    }
+  };
+
+  // ============= Visual Export =============
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'pdf' | 'excel'>('pdf');
+  const [exportScope, setExportScope] = useState<'all' | 'teacher' | 'room' | 'section' | 'department'>('all');
+  const [exportTeacherId, setExportTeacherId] = useState('');
+  const [exportRoomId, setExportRoomId] = useState('');
+
+  const handleExport = async () => {
+    const params = new URLSearchParams();
+    if (selectedFaculty) params.set('faculty_id', selectedFaculty);
+    if (selectedDept) params.set('department_id', selectedDept);
+    
+    if (exportScope === 'teacher' && exportTeacherId) {
+      params.set('teacher_id', exportTeacherId);
+    } else if (exportScope === 'room' && exportRoomId) {
+      params.set('room_id', exportRoomId);
+    } else if (exportScope === 'section') {
+      if (selectedLevel) params.set('level', selectedLevel);
+      if (selectedSection) params.set('section', selectedSection);
+    }
+    
+    const token = await (async () => {
+      try {
+        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+        return await AsyncStorage.getItem('token');
+      } catch { return null; }
+    })();
+    
+    const url = `${process.env.EXPO_PUBLIC_BACKEND_URL || ''}/api/weekly-schedule/export-visual/${exportFormat}?${params.toString()}`;
+    
+    try {
+      const res = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        if (Platform.OS === 'web') window.alert(err.detail || 'فشل التصدير');
+        return;
+      }
+      const blob = await res.blob();
+      const objUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = objUrl;
+      link.download = `weekly_schedule.${exportFormat === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.click();
+      URL.revokeObjectURL(objUrl);
+      setShowExportModal(false);
+    } catch (e) {
+      if (Platform.OS === 'web') window.alert('فشل التصدير');
+    }
+  };
+
   const handleAddRoom = async () => {
     if (!newRoom.name || !selectedFaculty) {
       if (Platform.OS === 'web') window.alert('اختر الكلية وأدخل اسم القاعة');
@@ -523,6 +644,46 @@ export default function WeeklySchedulePage() {
                     <TouchableOpacity style={[st.btn, { backgroundColor: '#e53935' }]} onPress={handleClearSchedule}>
                       <Ionicons name="trash" size={16} color="#fff" />
                       <Text style={st.btnText}>مسح</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* 💾 حفظ نسخة احتياطية */}
+                  {viewMode === 'section' && schedule.length > 0 && (
+                    <TouchableOpacity
+                      style={[st.btn, { backgroundColor: '#6a1b9a' }]}
+                      onPress={() => {
+                        const now = new Date();
+                        setDraftName(`نسخة ${now.toLocaleDateString('ar')}-${now.getHours()}:${now.getMinutes()}`);
+                        setShowSaveDraftModal(true);
+                      }}
+                      data-testid="save-draft-btn"
+                    >
+                      <Ionicons name="bookmark" size={16} color="#fff" />
+                      <Text style={st.btnText}>حفظ نسخة</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* 📂 النسخ المحفوظة */}
+                  {viewMode === 'section' && (
+                    <TouchableOpacity
+                      style={[st.btn, { backgroundColor: '#ef6c00' }]}
+                      onPress={async () => {
+                        await fetchDrafts();
+                        setShowDraftsModal(true);
+                      }}
+                      data-testid="open-drafts-btn"
+                    >
+                      <Ionicons name="folder-open" size={16} color="#fff" />
+                      <Text style={st.btnText}>النسخ المحفوظة</Text>
+                    </TouchableOpacity>
+                  )}
+                  {/* 📄 تصدير */}
+                  {schedule.length > 0 && (
+                    <TouchableOpacity
+                      style={[st.btn, { backgroundColor: '#00838f' }]}
+                      onPress={() => setShowExportModal(true)}
+                      data-testid="export-btn"
+                    >
+                      <Ionicons name="download" size={16} color="#fff" />
+                      <Text style={st.btnText}>تصدير</Text>
                     </TouchableOpacity>
                   )}
                   {schedule.length > 0 && (
@@ -849,6 +1010,190 @@ export default function WeeklySchedulePage() {
         )}
 
       </ScrollView>
+
+      {/* ============= Save Draft Modal ============= */}
+      {showSaveDraftModal && Platform.OS === 'web' && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 14, padding: 20, width: 460, maxWidth: '95%', direction: 'rtl' }} data-testid="save-draft-modal">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="bookmark" size={22} color="#6a1b9a" />
+              <span style={{ fontSize: 17, fontWeight: 800, color: '#222' }}>حفظ نسخة من الجدول الحالي</span>
+            </div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 14, lineHeight: 1.6 }}>
+              ستُحفظ نسخة كاملة من جدول الحالي. يمكنك توليد جدول آخر بإعدادات مختلفة ثم المقارنة أو الاسترجاع لاحقاً.
+            </div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>اسم النسخة *</label>
+            <input type="text" value={draftName} onChange={(e: any) => setDraftName(e.target.value)} placeholder="مثال: المحاولة الأولى - الأحد بداية"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 14, marginTop: 4, marginBottom: 10, boxSizing: 'border-box' }} data-testid="draft-name-input" />
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>ملاحظات (اختياري)</label>
+            <textarea value={draftNotes} onChange={(e: any) => setDraftNotes(e.target.value)} rows={2}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, marginTop: 4, marginBottom: 14, boxSizing: 'border-box', resize: 'vertical' }} />
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowSaveDraftModal(false)} disabled={savingDraft}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', backgroundColor: '#f5f5f5', cursor: 'pointer', fontWeight: 700 }}>إلغاء</button>
+              <button onClick={handleSaveDraft} disabled={savingDraft} data-testid="confirm-save-draft-btn"
+                style={{ flex: 2, padding: '10px', borderRadius: 8, border: 'none', backgroundColor: '#6a1b9a', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>
+                {savingDraft ? 'جاري الحفظ...' : 'حفظ النسخة'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============= Drafts List Modal ============= */}
+      {showDraftsModal && Platform.OS === 'web' && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 14, padding: 18, width: 600, maxWidth: '95%', maxHeight: '90vh', overflow: 'auto', direction: 'rtl' }} data-testid="drafts-modal">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="folder-open" size={22} color="#ef6c00" />
+              <span style={{ fontSize: 17, fontWeight: 800, color: '#222', flex: 1 }}>النسخ المحفوظة من الجدول</span>
+              <button onClick={() => { setShowDraftsModal(false); setComparingDraft(null); }}
+                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: '#888' }}>×</button>
+            </div>
+            {comparingDraft ? (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <button onClick={() => setComparingDraft(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, color: '#1565c0' }}>← العودة للقائمة</button>
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 800, marginBottom: 10 }}>مقارنة "{comparingDraft.draft_name}" مع الجدول الحالي:</div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  {[{ title: 'النسخة المحفوظة', stats: comparingDraft.draft_stats, color: '#6a1b9a' },
+                    { title: 'الجدول الحالي', stats: comparingDraft.current_stats, color: '#2e7d32' }].map((box, i) => (
+                    <div key={i} style={{ border: `2px solid ${box.color}`, borderRadius: 10, padding: 12 }}>
+                      <div style={{ fontSize: 13, fontWeight: 800, color: box.color, marginBottom: 8 }}>{box.title}</div>
+                      <div style={{ fontSize: 12, lineHeight: 1.7 }}>
+                        <div>📚 المحاضرات: <strong>{box.stats.total_slots}</strong></div>
+                        <div>👨‍🏫 المعلمون: <strong>{box.stats.teachers_count}</strong></div>
+                        <div>🏛 القاعات: <strong>{box.stats.rooms_count}</strong></div>
+                        <div>📖 المقررات: <strong>{box.stats.courses_count}</strong></div>
+                        <div style={{ marginTop: 6, fontSize: 11, color: '#666' }}>التوزيع اليومي:</div>
+                        {Object.entries(box.stats.by_day || {}).map(([day, count]: any) => (
+                          <div key={day} style={{ fontSize: 11 }}>• {day}: {count}</div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              drafts.length === 0 ? (
+                <div style={{ padding: 30, textAlign: 'center', color: '#888' }}>
+                  <Ionicons name="folder-open-outline" size={40} color="#ccc" />
+                  <div style={{ marginTop: 10 }}>لا توجد نسخ محفوظة بعد</div>
+                  <div style={{ fontSize: 12, marginTop: 4 }}>اضغط "حفظ نسخة" لإنشاء أول نسخة</div>
+                </div>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {drafts.map(d => (
+                    <div key={d.id} style={{ border: '1px solid #e0e0e0', borderRadius: 10, padding: 10, backgroundColor: '#fafafa' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="bookmark" size={16} color="#6a1b9a" />
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 14, fontWeight: 800, color: '#222' }}>{d.name}</div>
+                          <div style={{ fontSize: 11, color: '#777', marginTop: 2 }}>
+                            {d.slots_count} محاضرة · {d.created_by_name} · {d.created_at ? new Date(d.created_at).toLocaleString('ar') : ''}
+                          </div>
+                          {d.notes && <div style={{ fontSize: 11, color: '#555', marginTop: 4, fontStyle: 'italic' }}>{d.notes}</div>}
+                        </div>
+                        <button onClick={() => handleCompareDraft(d.id)} title="مقارنة"
+                          style={{ background: '#e3f2fd', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11, color: '#1565c0', fontWeight: 700 }}>
+                          📊 مقارنة
+                        </button>
+                        <button onClick={() => handleRestoreDraft(d.id, d.name)} title="استرجاع"
+                          style={{ background: '#e8f5e9', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11, color: '#2e7d32', fontWeight: 700 }}>
+                          ↩️ استرجاع
+                        </button>
+                        <button onClick={() => handleDeleteDraft(d.id, d.name)} title="حذف"
+                          style={{ background: '#ffebee', border: 'none', borderRadius: 6, padding: '6px 10px', cursor: 'pointer', fontSize: 11, color: '#c62828', fontWeight: 700 }}>
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ============= Export Modal ============= */}
+      {showExportModal && Platform.OS === 'web' && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 14, padding: 20, width: 480, maxWidth: '95%', direction: 'rtl' }} data-testid="export-modal">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+              <Ionicons name="download" size={22} color="#00838f" />
+              <span style={{ fontSize: 17, fontWeight: 800, color: '#222' }}>تصدير الجدول</span>
+            </div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 14 }}>اختر الصيغة ونطاق التصدير</div>
+
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>الصيغة</label>
+            <div style={{ display: 'flex', gap: 8, marginTop: 4, marginBottom: 14 }}>
+              {[{ v: 'pdf', l: '📄 PDF (طباعة)' }, { v: 'excel', l: '📊 Excel (تحرير)' }].map(o => (
+                <button key={o.v} onClick={() => setExportFormat(o.v as any)}
+                  style={{ flex: 1, padding: 10, borderRadius: 8, border: `2px solid ${exportFormat === o.v ? '#00838f' : '#ddd'}`, backgroundColor: exportFormat === o.v ? '#e0f2f1' : '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 13 }}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>نطاق التصدير</label>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginTop: 4, marginBottom: 10 }}>
+              {[
+                { v: 'all', l: '📚 الجدول كاملاً' },
+                { v: 'department', l: '🏛 حسب القسم' },
+                { v: 'section', l: '👨‍🎓 شعبة/مستوى' },
+                { v: 'teacher', l: '👨‍🏫 معلم محدد' },
+                { v: 'room', l: '🏠 قاعة محددة' },
+              ].map(o => (
+                <button key={o.v} onClick={() => setExportScope(o.v as any)}
+                  style={{ padding: 8, borderRadius: 6, border: `1.5px solid ${exportScope === o.v ? '#00838f' : '#e0e0e0'}`, backgroundColor: exportScope === o.v ? '#e0f2f1' : '#fff', cursor: 'pointer', fontWeight: 600, fontSize: 12 }}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+
+            {exportScope === 'teacher' && (
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>اختر المعلم</label>
+                <select value={exportTeacherId} onChange={(e: any) => setExportTeacherId(e.target.value)}
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 13, marginTop: 4 }}>
+                  <option value="">-- اختر --</option>
+                  {allTeachers.map((t: any) => <option key={t.id} value={t.id}>{t.full_name}</option>)}
+                </select>
+              </div>
+            )}
+
+            {exportScope === 'room' && (
+              <div style={{ marginBottom: 10 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>اختر القاعة</label>
+                <select value={exportRoomId} onChange={(e: any) => setExportRoomId(e.target.value)}
+                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ddd', fontSize: 13, marginTop: 4 }}>
+                  <option value="">-- اختر --</option>
+                  {rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                </select>
+              </div>
+            )}
+
+            <div style={{ backgroundColor: '#f5f5f5', borderRadius: 8, padding: 10, marginBottom: 14, fontSize: 11, color: '#555' }}>
+              💡 {exportScope === 'all' ? 'تصدير كامل الفلاتر الحالية' :
+                  exportScope === 'department' ? 'سيتم التصدير حسب القسم المحدد في الفلتر' :
+                  exportScope === 'section' ? `سيتم التصدير لـ م${selectedLevel || '?'} شعبة ${selectedSection || '?'}` :
+                  exportScope === 'teacher' ? 'تصدير الجدول الأسبوعي لمعلم محدد فقط' :
+                  'تصدير الجدول الأسبوعي لقاعة محددة فقط'}
+            </div>
+
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={() => setShowExportModal(false)}
+                style={{ flex: 1, padding: 10, borderRadius: 8, border: 'none', backgroundColor: '#f5f5f5', cursor: 'pointer', fontWeight: 700 }}>إلغاء</button>
+              <button onClick={handleExport} data-testid="confirm-export-btn"
+                style={{ flex: 2, padding: 10, borderRadius: 8, border: 'none', backgroundColor: '#00838f', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>
+                ⬇️ تصدير الآن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </SafeAreaView>
   );
 }
