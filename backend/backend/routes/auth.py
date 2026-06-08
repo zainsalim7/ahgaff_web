@@ -112,8 +112,11 @@ async def login(user_data: UserLogin, request: Request):
     
     # المواقع المسموح بها للطلاب
     ALLOWED_STUDENT_WEB_ORIGINS = [
-        "https://ahgaff-student-web.vercel.app",
-        "https://ahgaffstudent-web-production.up.railway.app",
+        "https://students.ahgaff.net",                          # ← الموقع الرسمي للطلاب
+        "https://ahgaffstudent-web-production.up.railway.app",  # ← المؤقت على Railway
+        "https://ahgaff-student-web.vercel.app",                # ← Vercel القديم
+        "http://localhost:3000",                                # ← التطوير
+        "http://localhost:8081",                                # ← التطوير (Expo web)
     ]
     
     is_allowed_web = (
@@ -127,7 +130,7 @@ async def login(user_data: UserLogin, request: Request):
         record_login_attempt(client_ip, False)
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="هذا الحساب مخصص للتطبيق فقط. يرجى استخدام تطبيق الجوال"
+            detail="هذا الحساب مخصص للتطبيق فقط. يرجى استخدام تطبيق الجوال أو زيارة students.ahgaff.net"
         )
     
     # تسجيل محاولة ناجحة
