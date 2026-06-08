@@ -244,11 +244,22 @@ def record_login_attempt(ip: str, success: bool):
     _login_attempts[ip].append((time_module.time(), success))
 
 # CORS - النطاقات المسموحة
-ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "*")
-if ALLOWED_ORIGINS == "*":
+# قائمة Whitelist دائمة (مدمجة في الكود) - النطاقات الأساسية للتطبيق
+_DEFAULT_ORIGINS = [
+    "https://students.ahgaff.net",
+    "https://ahgaffstudent-web-production.up.railway.app",
+    "https://app.ahgaff.net",
+    "https://api.ahgaff.net",
+    "http://localhost:3000",
+    "http://localhost:8081",
+]
+ALLOWED_ORIGINS = os.environ.get("ALLOWED_ORIGINS", "")
+if ALLOWED_ORIGINS.strip() == "*":
     origins = ["*"]
 else:
-    origins = [o.strip() for o in ALLOWED_ORIGINS.split(",")]
+    # دمج: النطاقات الافتراضية + ما يأتي من env (إن وُجد)
+    extra = [o.strip() for o in ALLOWED_ORIGINS.split(",") if o.strip()]
+    origins = list(dict.fromkeys(_DEFAULT_ORIGINS + extra))  # dedupe with order
 
 app.add_middleware(
     CORSMiddleware,
