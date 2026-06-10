@@ -422,22 +422,28 @@ export default function CurriculumScreen() {
                 testID="form-name"
               />
               <View style={{ flexDirection: 'row', gap: 6 }}>
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="الساعات"
-                  keyboardType="numeric"
-                  value={String(addForm.credit_hours)}
-                  onChangeText={(v) => setAddForm({ ...addForm, credit_hours: parseInt(v) || 0 })}
-                  testID="form-credit"
-                />
-                <TextInput
-                  style={[styles.input, { flex: 1 }]}
-                  placeholder="الفصل"
-                  keyboardType="numeric"
-                  value={String(addForm.level)}
-                  onChangeText={(v) => setAddForm({ ...addForm, level: parseInt(v) || 1 })}
-                  testID="form-level"
-                />
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, color: '#666', marginBottom: 3, fontWeight: '600', textAlign: 'right' }}>الساعات</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="مثال: 3"
+                    keyboardType="numeric"
+                    value={String(addForm.credit_hours)}
+                    onChangeText={(v) => setAddForm({ ...addForm, credit_hours: parseInt(v) || 0 })}
+                    testID="form-credit"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 11, color: '#666', marginBottom: 3, fontWeight: '600', textAlign: 'right' }}>الفصل (المستوى)</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="مثال: 1"
+                    keyboardType="numeric"
+                    value={String(addForm.level)}
+                    onChangeText={(v) => setAddForm({ ...addForm, level: parseInt(v) || 1 })}
+                    testID="form-level"
+                  />
+                </View>
               </View>
               <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
                 <TouchableOpacity
