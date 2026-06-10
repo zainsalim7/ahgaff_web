@@ -367,7 +367,9 @@ export default function TeachingLoadPage() {
         setSelectedCourses(existing);
         const map: Record<string, string> = {};
         for (const c of existing) {
-          map[c.course_id] = c.existing_weekly_hours != null ? String(c.existing_weekly_hours) : '';
+          // 🆕 الأولوية: weekly_hours المحفوظة → credit_hours من المقرر
+          const v = c.existing_weekly_hours ?? c.credit_hours ?? null;
+          map[c.course_id] = v != null ? String(v) : '';
         }
         setHoursMap(map);
       } catch (e) {
@@ -416,8 +418,8 @@ export default function TeachingLoadPage() {
   const addCourseToList = (course: CourseLoad) => {
     if (selectedCourses.some(c => c.course_id === course.course_id)) return;
     setSelectedCourses(prev => [...prev, course]);
-    // 🆕 أولوية القيمة الافتراضية: existing_weekly_hours (من تكليف سابق) → weekly_hours (من الخطة) → فارغ
-    const defaultHours = course.existing_weekly_hours ?? course.weekly_hours ?? null;
+    // 🆕 الأولوية: تكليف سابق → credit_hours من الخطة (= الساعات الأسبوعية في الأحقاف)
+    const defaultHours = course.existing_weekly_hours ?? course.credit_hours ?? null;
     setHoursMap(prev => ({
       ...prev,
       [course.course_id]: defaultHours != null ? String(defaultHours) : ''
@@ -498,8 +500,8 @@ export default function TeachingLoadPage() {
         course_name: i.course_name,
         course_code: i.course_code,
         section: i.course_section || '',
-        level: 0,
-        credit_hours: 0,
+        level: i.course_level || 0,
+        credit_hours: i.course_credit_hours || 0,
         current_teacher_name: '',
         existing_load_id: i.id,
         existing_weekly_hours: i.weekly_hours,
@@ -508,7 +510,9 @@ export default function TeachingLoadPage() {
       setSelectedCourses(existing);
       const map: Record<string, string> = {};
       for (const c of existing) {
-        map[c.course_id] = c.existing_weekly_hours != null ? String(c.existing_weekly_hours) : '';
+        // 🆕 الأولوية: weekly_hours المحفوظة → credit_hours من المقرر
+        const v = c.existing_weekly_hours ?? c.credit_hours ?? null;
+        map[c.course_id] = v != null ? String(v) : '';
       }
       setHoursMap(map);
     } catch (e: any) {
@@ -554,7 +558,9 @@ export default function TeachingLoadPage() {
         setSelectedCourses(existing);
         const map: Record<string, string> = {};
         for (const c of existing) {
-          map[c.course_id] = c.existing_weekly_hours != null ? String(c.existing_weekly_hours) : '';
+          // 🆕 الأولوية: weekly_hours المحفوظة → credit_hours من المقرر
+          const v = c.existing_weekly_hours ?? c.credit_hours ?? null;
+          map[c.course_id] = v != null ? String(v) : '';
         }
         setHoursMap(map);
       }
