@@ -268,6 +268,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
     expose_headers=["*"],
+    max_age=86400,  # 🚀 24 ساعة - يقلل CORS preflight requests بشكل كبير
 )
 
 # ==================== Simple Cache ====================
