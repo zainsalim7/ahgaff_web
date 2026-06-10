@@ -897,18 +897,8 @@ export default function StudentsScreen() {
           <Text style={styles.itemMutedSm}>
             {getDepartmentName(item.department_id)} · م{item.level}{item.section ? ` · ${item.section}` : ''}
           </Text>
-          {item.enrolled_courses && item.enrolled_courses.length > 0 && (
-            <View style={styles.courseChipsRow}>
-              {item.enrolled_courses.slice(0, 4).map((c: any, idx: number) => (
-                <View key={idx} style={styles.courseChip}>
-                  <Text style={styles.courseChipText}>{c.name}</Text>
-                </View>
-              ))}
-              {item.enrolled_courses.length > 4 && (
-                <Text style={styles.itemMutedSm}>+{item.enrolled_courses.length - 4}</Text>
-              )}
-            </View>
-          )}
+          {/* 🚀 إزالة عرض chips للمقررات في القائمة - كانت تسبب بطء كبير (5K+ enrollments تُجلب لكل request).
+              المقررات تظهر الآن في صفحة تفاصيل الطالب (showDetailsModal) عند النقر عليه. */}
         </View>
       </View>
       {!selectionMode && (

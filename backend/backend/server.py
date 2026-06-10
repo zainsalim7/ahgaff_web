@@ -2986,6 +2986,7 @@ async def get_students(
     department_id: Optional[str] = None,
     level: Optional[int] = None,
     section: Optional[str] = None,
+    include_enrollments: bool = False,  # 🚀 أداء: غير مفعّل افتراضياً لأن جلب enrollments مكلف جداً
     current_user: dict = Depends(get_current_user)
 ):
     # بناء فلتر الاستعلام الأساسي
@@ -3010,39 +3011,37 @@ async def get_students(
     if section:
         query["section"] = section
     
-    students = await db.students.find(query).to_list(1000)
+    students = await db.students.find(query).to_list(5000)
     
-    # جلب المقررات المسجل فيها كل طالب (batch)
-    student_ids = [str(s["_id"]) for s in students]
-    enrollments = await db.enrollments.find(
-        {"student_id": {"$in": student_ids}}
-    ).to_list(50000)
-    
-    # تجميع course_ids لكل طالب
+    # 🚀 جلب enrollments + courses (مكلف) فقط إذا طُلب صراحة
     student_course_ids = {}
-    all_course_ids = set()
-    for e in enrollments:
-        sid = e["student_id"]
-        cid = e["course_id"]
-        student_course_ids.setdefault(sid, []).append(cid)
-        all_course_ids.add(cid)
-    
-    # جلب أسماء المقررات دفعة واحدة
     courses_map = {}
-    if all_course_ids:
-        course_obj_ids = []
-        for cid in all_course_ids:
-            try:
-                course_obj_ids.append(ObjectId(cid))
-            except:
-                pass
-        if course_obj_ids:
-            course_docs = await db.courses.find(
-                {"_id": {"$in": course_obj_ids}},
-                {"name": 1, "code": 1}
-            ).to_list(2000)
-            for c in course_docs:
-                courses_map[str(c["_id"])] = {"name": c.get("name", ""), "code": c.get("code", "")}
+    if include_enrollments and students:
+        student_ids = [str(s["_id"]) for s in students]
+        enrollments = await db.enrollments.find(
+            {"student_id": {"$in": student_ids}},
+            {"student_id": 1, "course_id": 1}
+        ).to_list(50000)
+        all_course_ids = set()
+        for e in enrollments:
+            sid = e["student_id"]
+            cid = e["course_id"]
+            student_course_ids.setdefault(sid, []).append(cid)
+            all_course_ids.add(cid)
+        if all_course_ids:
+            course_obj_ids = []
+            for cid in all_course_ids:
+                try:
+                    course_obj_ids.append(ObjectId(cid))
+                except:
+                    pass
+            if course_obj_ids:
+                course_docs = await db.courses.find(
+                    {"_id": {"$in": course_obj_ids}},
+                    {"name": 1, "code": 1}
+                ).to_list(2000)
+                for c in course_docs:
+                    courses_map[str(c["_id"])] = {"name": c.get("name", ""), "code": c.get("code", "")}
     
     return [{
         "id": str(s["_id"]),
@@ -3065,7 +3064,7 @@ async def get_students(
             {"name": courses_map.get(cid, {}).get("name", ""), "code": courses_map.get(cid, {}).get("code", "")}
             for cid in student_course_ids.get(str(s["_id"]), [])
             if cid in courses_map
-        ],
+        ] if include_enrollments else [],
     } for s in students]
 
 @api_router.get("/students/me", response_model=StudentResponse)
