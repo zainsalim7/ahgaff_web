@@ -20,7 +20,7 @@ export default function CurriculumScreen() {
   const [loading, setLoading] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [addForm, setAddForm] = useState<any>({
-    code: '', name: '', credit_hours: 3, level: 1, term: 1,
+    code: '', name: '', credit_hours: 3, weekly_hours: '', level: 1, term: 1,
   });
   const [generating, setGenerating] = useState(false);
   // ⭐ خريطة عدد الشعب لكل مقرر (curriculum_course_id → عدد)
@@ -75,13 +75,18 @@ export default function CurriculumScreen() {
     }
     const dept = departments.find((d: any) => (d.id || d._id) === selectedDept);
     try {
+      // معالجة weekly_hours: لو فارغة → null؛ غير ذلك → رقم
+      const wh = addForm.weekly_hours === '' || addForm.weekly_hours == null
+        ? null
+        : (Number(addForm.weekly_hours) || null);
       await api.post('/curriculum/courses', {
         ...addForm,
+        weekly_hours: wh,
         department_id: selectedDept,
         faculty_id: dept?.faculty_id,
       });
       setShowAdd(false);
-      setAddForm({ code: '', name: '', credit_hours: 3, level: 1, term: 1 });
+      setAddForm({ code: '', name: '', credit_hours: 3, weekly_hours: '', level: 1, term: 1 });
       fetchGrid();
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشل الإضافة';
@@ -429,6 +434,14 @@ export default function CurriculumScreen() {
                   value={String(addForm.credit_hours)}
                   onChangeText={(v) => setAddForm({ ...addForm, credit_hours: parseInt(v) || 0 })}
                   testID="form-credit"
+                />
+                <TextInput
+                  style={[styles.input, { flex: 1 }]}
+                  placeholder="ساعات أسبوعية"
+                  keyboardType="numeric"
+                  value={String(addForm.weekly_hours ?? '')}
+                  onChangeText={(v) => setAddForm({ ...addForm, weekly_hours: v })}
+                  testID="form-weekly"
                 />
                 <TextInput
                   style={[styles.input, { flex: 1 }]}

@@ -59,6 +59,7 @@ class CurriculumCourseCreate(BaseModel):
     name: str
     name_en: Optional[str] = None
     credit_hours: int = 3
+    weekly_hours: Optional[float] = None  # 🆕 الساعات الأسبوعية (تُستخدم كافتراضي عند الإسناد)
     faculty_id: str
     department_id: str
     level: int = Field(..., ge=1, le=10)
@@ -72,6 +73,7 @@ class CurriculumCourseUpdate(BaseModel):
     name: Optional[str] = None
     name_en: Optional[str] = None
     credit_hours: Optional[int] = None
+    weekly_hours: Optional[float] = None  # 🆕
     faculty_id: Optional[str] = None
     department_id: Optional[str] = None
     level: Optional[int] = None
@@ -543,6 +545,7 @@ async def generate_offerings_from_curriculum(
                 "code": cc.get("code"),
                 "name": cc.get("name"),
                 "credit_hours": cc.get("credit_hours", 3),
+                "weekly_hours": cc.get("weekly_hours"),  # 🆕 نسخ الساعات الأسبوعية من الخطة
                 "department_id": cc.get("department_id"),
                 "faculty_id": cc.get("faculty_id"),
                 "level": cc.get("level"),

@@ -413,6 +413,20 @@ async def search_courses_for_load(
         query["semester_id"] = target_semester_id
 
     courses = await db.courses.find(query).limit(20).to_list(20)
+
+    # 🆕 إثراء الـ weekly_hours من curriculum_courses (إن كانت الـ courses القديمة لا تحويها)
+    cc_ids = list({c.get("curriculum_course_id") for c in courses if c.get("curriculum_course_id")})
+    cc_hours_map = {}
+    if cc_ids:
+        try:
+            cc_obj_ids = [ObjectId(x) for x in cc_ids if x]
+            async for cc in db.curriculum_courses.find(
+                {"_id": {"$in": cc_obj_ids}}, {"weekly_hours": 1}
+            ):
+                cc_hours_map[str(cc["_id"])] = cc.get("weekly_hours")
+        except Exception:
+            pass
+
     result = []
     for c in courses:
         teacher_name = ""
@@ -423,6 +437,10 @@ async def search_courses_for_load(
                     teacher_name = t.get("full_name", "")
             except Exception:
                 pass
+        # weekly_hours: من الـ course أولاً، ثم fallback لـ curriculum
+        wh = c.get("weekly_hours")
+        if wh is None:
+            wh = cc_hours_map.get(c.get("curriculum_course_id", ""))
         result.append({
             "course_id": str(c["_id"]),
             "course_name": c.get("name", ""),
@@ -430,6 +448,7 @@ async def search_courses_for_load(
             "section": c.get("section", ""),
             "level": c.get("level", 1),
             "credit_hours": c.get("credit_hours", 3),
+            "weekly_hours": wh,  # 🆕 يُستخدم كافتراضي في فورم الإسناد
             "department_id": c.get("department_id", ""),
             "current_teacher_name": teacher_name,
             "semester_id": c.get("semester_id", ""),

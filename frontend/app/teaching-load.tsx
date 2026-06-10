@@ -27,6 +27,7 @@ interface CourseLoad {
   section: string;
   level: number;
   credit_hours: number;
+  weekly_hours?: number | null;  // 🆕 الساعات الأسبوعية من الخطة الدراسية (يُعرض كقيمة افتراضية في الإسناد)
   department_id?: string;
   current_teacher_name: string;
   existing_load_id: string | null;
@@ -415,7 +416,12 @@ export default function TeachingLoadPage() {
   const addCourseToList = (course: CourseLoad) => {
     if (selectedCourses.some(c => c.course_id === course.course_id)) return;
     setSelectedCourses(prev => [...prev, course]);
-    setHoursMap(prev => ({ ...prev, [course.course_id]: course.existing_weekly_hours ? String(course.existing_weekly_hours) : '' }));
+    // 🆕 أولوية القيمة الافتراضية: existing_weekly_hours (من تكليف سابق) → weekly_hours (من الخطة) → فارغ
+    const defaultHours = course.existing_weekly_hours ?? course.weekly_hours ?? null;
+    setHoursMap(prev => ({
+      ...prev,
+      [course.course_id]: defaultHours != null ? String(defaultHours) : ''
+    }));
     setSearchQuery('');
     setSearchResults([]);
     setShowResults(false);
