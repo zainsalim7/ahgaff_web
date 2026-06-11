@@ -70,7 +70,7 @@ async def send_notification(token: str, title: str, body: str, data: dict = None
                     badge="/icon.png",
                 ),
                 fcm_options=messaging.WebpushFCMOptions(
-                    link="/"
+                    link="https://app.ahgaff.net/"
                 ),
             ),
         )

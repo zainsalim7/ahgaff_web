@@ -75,6 +75,11 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - Converted `getDepartmentName` from O(n) `Array.find` per row to O(1) `Map.get` lookup via memoized `departmentMap`.
   - Wrapped `renderStudent` in `useCallback` with proper deps (`selectedIds`, `selectionMode`, `canManageStudents`, `getDepartmentName`) — stable identity helps `FlatList` skip needless row re-renders.
   - Backend `GET /api/students` already optimized in earlier session (376ms, no enrollments). API + UI are now both fast.
+- 2026-06-11 **FCM Push Notifications Critical Bug Fix (P0)**:
+  - **السبب الجذري**: في `/app/backend/backend/services/firebase_service.py` كان السطر `link="/"` داخل `WebpushFCMOptions` يرفع `ValueError: WebpushFCMOptions.link must be a HTTPS URL` عند **بناء الرسالة**، قبل وصولها إلى خوادم Google.
+  - **النتيجة قبل الإصلاح**: 100% من محاولات إرسال إشعارات FCM تفشل صامتاً (Android + iOS + Web). التوكنات تُسجَّل بنجاح في `db.fcm_tokens` لكن لا إشعار push واحد يصل أبداً. الإشعارات داخل التطبيق تعمل لأنها قراءة من MongoDB مباشرة (مسار منفصل).
+  - **الإصلاح**: استبدال `link="/"` بـ `link="https://app.ahgaff.net/"` (HTTPS صالح). تم التحقق: الخطأ تحوّل من ValueError إلى `InvalidArgumentError: registration token not valid` عند توكن وهمي = الرسالة الآن تصل فعلاً إلى FCM وتُرفض فقط للتوكن الوهمي (سلوك صحيح).
+  - **لا علاقة لهذا الـ bug بترحيل Google Cloud Run** — الكود كان مكسوراً قبل الترحيل وبعده. Firebase Admin SDK يهيّأ بنجاح على Cloud Run (`Firebase Admin SDK initialized successfully` في logs).
 
 ## P0 / Next
 - (P1) Digital Student Card with QR + Photo
