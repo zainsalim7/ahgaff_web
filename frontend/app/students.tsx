@@ -249,10 +249,16 @@ export default function StudentsScreen() {
     return Array.from(sections).sort();
   }, [students]);
 
-  const getDepartmentName = (deptId: string) => {
-    const dept = departments.find(d => d.id === deptId);
-    return dept?.name || 'غير محدد';
-  };
+  // 🚀 خريطة الأقسام لتسريع البحث (O(1) بدلاً من O(n) لكل صف)
+  const departmentMap = useMemo(() => {
+    const m = new Map<string, string>();
+    departments.forEach(d => m.set(d.id, d.name));
+    return m;
+  }, [departments]);
+
+  const getDepartmentName = useCallback((deptId: string) => {
+    return departmentMap.get(deptId) || 'غير محدد';
+  }, [departmentMap]);
 
   // تحديد/إلغاء تحديد طالب
   const toggleSelect = (id: string) => {
@@ -849,7 +855,7 @@ export default function StudentsScreen() {
     });
   };
 
-  const renderStudent = ({ item }: { item: Student }) => (
+  const renderStudent = useCallback(({ item }: { item: Student }) => (
     <TouchableOpacity 
       style={[styles.itemCard, selectedIds.has(item.id) && styles.itemCardSelected]}
       onPress={() => selectionMode ? toggleSelect(item.id) : handleViewDetails(item)}
@@ -942,7 +948,7 @@ export default function StudentsScreen() {
         </View>
       )}
     </TouchableOpacity>
-  );
+  ), [selectedIds, selectionMode, canManageStudents, getDepartmentName]);
 
   if (authLoading || loading) {
     return <LoadingScreen />;
@@ -1227,6 +1233,7 @@ export default function StudentsScreen() {
       </View>
 
       {/* نافذة استيراد الطلاب */}
+      {showImportModal && (
       <Modal visible={showImportModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 450 }}>
@@ -1287,8 +1294,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* نافذة تفاصيل الطالب */}
+      {showDetailsModal && (
       <Modal
         visible={showDetailsModal}
         animationType="slide"
@@ -1376,8 +1385,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* نافذة تعديل الطالب */}
+      {showEditModal && (
       <Modal
         visible={showEditModal}
         animationType="slide"
@@ -1619,8 +1630,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* نافذة إرسال إنذار يدوي */}
+      {showWarningModal && (
       <Modal
         visible={showWarningModal}
         animationType="slide"
@@ -1720,8 +1733,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
       
       {/* نافذة تغيير المستوى */}
+      {showLevelModal && (
       <Modal visible={showLevelModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '85%', maxWidth: 380 }}>
@@ -1760,8 +1775,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* نافذة المرحلة 2: اختيار الشعبة عند تغيير المستوى الجماعي */}
+      {showBulkSectionModal && (
       <Modal visible={showBulkSectionModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '95%', maxWidth: 440 }} data-testid="bulk-section-modal">
@@ -1941,8 +1958,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* نافذة تغيير الحالة (تخرج/إعادة/فصل/تجميد) */}
+      {showStatusModal && (
       <Modal visible={showStatusModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 20, width: '95%', maxWidth: 440 }}>
@@ -2043,8 +2062,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* نافذة سجل تاريخ الحالة */}
+      {showHistoryModal && (
       <Modal visible={showHistoryModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 18, width: '95%', maxWidth: 480 }}>
@@ -2104,8 +2125,10 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
 
       {/* نافذة الحذف الآمن للطالب */}
+      {showSafeDeleteModal && (
       <Modal visible={showSafeDeleteModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
           <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 420 }}>
@@ -2162,6 +2185,7 @@ export default function StudentsScreen() {
           </View>
         </View>
       </Modal>
+      )}
     </SafeAreaView>
   );
 }
