@@ -76,10 +76,21 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - Wrapped `renderStudent` in `useCallback` with proper deps (`selectedIds`, `selectionMode`, `canManageStudents`, `getDepartmentName`) — stable identity helps `FlatList` skip needless row re-renders.
   - Backend `GET /api/students` already optimized in earlier session (376ms, no enrollments). API + UI are now both fast.
 - 2026-06-11 **FCM Push Notifications Critical Bug Fix (P0)**:
-  - **السبب الجذري**: في `/app/backend/backend/services/firebase_service.py` كان السطر `link="/"` داخل `WebpushFCMOptions` يرفع `ValueError: WebpushFCMOptions.link must be a HTTPS URL` عند **بناء الرسالة**، قبل وصولها إلى خوادم Google.
-  - **النتيجة قبل الإصلاح**: 100% من محاولات إرسال إشعارات FCM تفشل صامتاً (Android + iOS + Web). التوكنات تُسجَّل بنجاح في `db.fcm_tokens` لكن لا إشعار push واحد يصل أبداً. الإشعارات داخل التطبيق تعمل لأنها قراءة من MongoDB مباشرة (مسار منفصل).
-  - **الإصلاح**: استبدال `link="/"` بـ `link="https://app.ahgaff.net/"` (HTTPS صالح). تم التحقق: الخطأ تحوّل من ValueError إلى `InvalidArgumentError: registration token not valid` عند توكن وهمي = الرسالة الآن تصل فعلاً إلى FCM وتُرفض فقط للتوكن الوهمي (سلوك صحيح).
-  - **لا علاقة لهذا الـ bug بترحيل Google Cloud Run** — الكود كان مكسوراً قبل الترحيل وبعده. Firebase Admin SDK يهيّأ بنجاح على Cloud Run (`Firebase Admin SDK initialized successfully` في logs).
+  - **السبب الجذري (تأكّد لاحقاً)**: في الـ Backend في Cloud Run، متغيرات Firebase (`FIREBASE_SERVICE_ACCOUNT_JSON` أو `FIREBASE_SERVICE_ACCOUNT_PATH`) **لم تكن مُعرَّفة** بعد ترحيل Railway → Google Cloud Run. النتيجة: `firebase_admin` لم يُهيَّأ على الإنتاج → كل `messaging.send_each_for_multicast()` يفشل صامتاً.
+  - **النتيجة قبل الإصلاح**: 100% من إشعارات Push تفشل على Cloud Run. الإشعارات داخل التطبيق تعمل لأنها قراءة من MongoDB مباشرة (مسار منفصل).
+  - **الإصلاح**:
+    1. رُفع `firebase-service-account.json` من مشروع `ahgaff-attendance` إلى GCP Secret Manager باسم `firebase-service-account` (في مشروع `ahgaff-university` GCP)
+    2. مُنحت Cloud Run compute service account صلاحية `roles/secretmanager.secretAccessor`
+    3. تحديث `/app/cloudbuild-backend.yaml`: إضافة `FIREBASE_SERVICE_ACCOUNT_JSON=firebase-service-account:latest` إلى `--update-secrets`
+    4. الكود يقرأ `os.environ['FIREBASE_SERVICE_ACCOUNT_JSON']` تلقائياً (موجود في `services/firebase_service.py:17`)
+  - **تحسينات إضافية**:
+    - Logging مفصّل لكل توكن فشل: `FCM send failed [token=...] [code=...] [msg=...]`
+    - Endpoint تشخيصي جديد: `POST /api/notifications/debug-send` يُرجع `success_count`, `failure_count`, `failed_details[]` مع `error_code` (مثل `INVALID_ARGUMENT`, `UNREGISTERED`, `SENDER_ID_MISMATCH`)
+    - إصلاح ثانوي: استبدال `WebpushFCMOptions.link="/"` بـ `"https://app.ahgaff.net/"` في `send_notification()` (دالة أقل استخداماً)
+  - **معلومات معمارية مؤكَّدة**:
+    - Firebase project: `ahgaff-attendance` (Spark plan)
+    - يحوي ٣ تطبيقات: `com.ahgaff.teacher`, `com.ahgaff.student`, web app
+    - ملف واحد فقط `firebase-service-account.json` يخدم كل التطبيقات (Best practice)
 
 ## P0 / Next
 - (P1) Digital Student Card with QR + Photo
