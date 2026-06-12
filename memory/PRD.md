@@ -91,6 +91,32 @@ Comprehensive student/teacher management system for Ahgaff University with:
     - Firebase project: `ahgaff-attendance` (Spark plan)
     - يحوي ٣ تطبيقات: `com.ahgaff.teacher`, `com.ahgaff.student`, web app
     - ملف واحد فقط `firebase-service-account.json` يخدم كل التطبيقات (Best practice)
+  - **النتيجة المؤكَّدة**: ✅ المستخدم اختبر فعلياً → الإشعارات وصلت لكلا تطبيقَي المعلم والطالب
+
+- 2026-06-12 **Wafideen Domain Migration (Railway → Cloud Run) — قيد الإنجاز**:
+  - **الهدف**: ترحيل `wafideen.ahgaff.net` و `api.wafideen.ahgaff.net` من Railway إلى Google Cloud Run me-central1 عبر Cloudflare Workers (نفس النمط المستخدم لـ api/app.ahgaff.net).
+  - **Cloud Run targets**:
+    - Frontend: `https://wafideen-frontend-3pzknh7knq-ww.a.run.app/`
+    - Backend: `https://wafideen-backend-872667841290.me-central1.run.app/`
+  - **Cloudflare Workers تم إنشاؤهما**:
+    - `wafideen-api-proxy` (الكود محفوظ في `/app/cloudflare-workers/wafideen-api-proxy.js`)
+    - `wafideen-frontend-proxy` (الكود محفوظ في `/app/cloudflare-workers/wafideen-frontend-proxy.js`)
+  - **حالة DNS الحالية في Cloudflare** (آخر screenshot):
+    - ✅ سجلَا AAAA منشآن: `api.wafideen.ahgaff.net → 100::` و `wafideen.ahgaff.net → 100::` (Proxied)
+    - ⚠️ **مشكلة**: المستخدم أنشأ Custom Domains خاطئة في الـ Workers:
+      - الموجود: `wafideen-api-proxy.ahgaff.net` (خطأ - اسم الـ Worker كاملاً + ahgaff.net)
+      - الموجود: `wafideen-frontend-proxy.ahgaff.net` (خطأ)
+    - 🎯 **الخطوة التالية المطلوبة عند العودة**:
+      1. حذف Custom Domains الخاطئة من إعدادات كل Worker (Settings → Triggers → Custom Domains)
+      2. حذف سجلَي AAAA `100::` من DNS Records (لأن Custom Domain سيُنشئها تلقائياً)
+      3. إضافة Custom Domain صحيح في كل Worker:
+         - `wafideen-api-proxy` → Custom Domain: **`api.wafideen.ahgaff.net`**
+         - `wafideen-frontend-proxy` → Custom Domain: **`wafideen.ahgaff.net`**
+      4. اختبار: `curl -i https://api.wafideen.ahgaff.net/` و `curl -I https://wafideen.ahgaff.net/`
+  - **بدائل لو لم ينجح Custom Domains**: استخدام Workers Routes بدلاً (في ahgaff.net → Workers Routes):
+    - `api.wafideen.ahgaff.net/*` → `wafideen-api-proxy`
+    - `wafideen.ahgaff.net/*` → `wafideen-frontend-proxy`
+  - **بعد نجاح ترحيل wafideen**: نُحدّث CORS على wafideen-backend ليقبل `https://wafideen.ahgaff.net`.
 
 ## P0 / Next
 - (P1) Digital Student Card with QR + Photo
