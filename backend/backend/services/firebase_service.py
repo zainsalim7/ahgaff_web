@@ -124,9 +124,27 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
     try:
         response = messaging.send_each_for_multicast(message)
         logger.info(f"Notifications sent: {response.success_count} success, {response.failure_count} failure")
+        
+        # سجل تفصيلي لكل فشل (لتشخيص مشاكل FCM)
+        failed_details = []
+        if response.failure_count > 0:
+            for idx, resp in enumerate(response.responses):
+                if not resp.success:
+                    token_preview = tokens[idx][:30] + '...' if len(tokens[idx]) > 30 else tokens[idx]
+                    exc = resp.exception
+                    err_code = getattr(exc, 'code', None) or type(exc).__name__
+                    err_msg = str(exc)
+                    logger.error(f"FCM send failed [token={token_preview}] [code={err_code}] [msg={err_msg}]")
+                    failed_details.append({
+                        "token_preview": token_preview,
+                        "error_code": err_code,
+                        "error_message": err_msg,
+                    })
+        
         return {
             "success": response.success_count,
             "failure": response.failure_count,
+            "failed_details": failed_details,
         }
     except Exception as e:
         logger.error(f"Failed to send notifications: {e}")

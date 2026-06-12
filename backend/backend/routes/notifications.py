@@ -149,6 +149,65 @@ async def register_device_token(
     return {"message": "تم تسجيل الجهاز بنجاح"}
 
 
+class DebugSendRequest(BaseModel):
+    token: Optional[str] = None  # توكن FCM محدد (اختياري)
+    user_id: Optional[str] = None  # أو ID مستخدم (يجلب توكناته من DB)
+    title: str = "اختبار من السيرفر"
+    body: str = "هذا إشعار تجريبي للتأكد من عمل Push Notifications"
+
+
+@router.post("/notifications/debug-send")
+async def debug_send_notification(
+    request: DebugSendRequest,
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    endpoint تشخيصي: يُرسل إشعار اختباري ويُرجع رد FCM المفصّل (success_id أو error).
+    يحتاج صلاحية admin أو send_notifications.
+    """
+    if not check_notification_permission(current_user):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية إرسال إشعارات")
+    
+    from services.firebase_service import send_notification_to_many
+    db = get_db()
+    
+    tokens = []
+    if request.token:
+        tokens = [request.token]
+        source = "token مرسل مباشرة"
+    elif request.user_id:
+        docs = await db.fcm_tokens.find({"user_id": request.user_id}).to_list(50)
+        tokens = [d["token"] for d in docs if d.get("token")]
+        source = f"{len(tokens)} توكن للمستخدم {request.user_id}"
+    else:
+        raise HTTPException(status_code=400, detail="يجب تمرير token أو user_id")
+    
+    if not tokens:
+        return {
+            "status": "no_tokens",
+            "message": "لا يوجد توكنات للإرسال",
+            "source": source,
+        }
+    
+    # عرض أول 30 حرف من كل توكن للتحقق
+    tokens_preview = [t[:30] + "..." for t in tokens]
+    
+    result = await send_notification_to_many(
+        tokens=tokens,
+        title=request.title,
+        body=request.body,
+        data={"type": "debug_test", "timestamp": get_yemen_time().isoformat()}
+    )
+    
+    return {
+        "status": "completed",
+        "source": source,
+        "tokens_count": len(tokens),
+        "tokens_preview": tokens_preview,
+        "firebase_result": result,
+    }
+
+
 @router.delete("/notifications/unregister-token")
 async def unregister_device_token(
     request: RegisterTokenRequest,
