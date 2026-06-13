@@ -15,6 +15,7 @@ on:
           - both
           - backend
           - frontend
+          - students
 
 permissions:
   contents: read
@@ -25,6 +26,7 @@ jobs:
     outputs:
       backend: ${{ steps.filter.outputs.backend || steps.manual.outputs.backend }}
       frontend: ${{ steps.filter.outputs.frontend || steps.manual.outputs.frontend }}
+      students: ${{ steps.filter.outputs.students || steps.manual.outputs.students }}
     steps:
       - uses: actions/checkout@v4
       - name: Detect file changes (push)
@@ -39,6 +41,9 @@ jobs:
             frontend:
               - 'frontend/**'
               - 'cloudbuild-frontend.yaml'
+            students:
+              - 'student-app/**'
+              - 'cloudbuild-students.yaml'
       - name: Manual deploy targets
         if: github.event_name == 'workflow_dispatch'
         id: manual
@@ -48,6 +53,9 @@ jobs:
           fi
           if [ "${{ github.event.inputs.target }}" = "both" ] || [ "${{ github.event.inputs.target }}" = "frontend" ]; then
             echo "frontend=true" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "${{ github.event.inputs.target }}" = "students" ]; then
+            echo "students=true" >> "$GITHUB_OUTPUT"
           fi
 
   deploy-backend:
@@ -81,3 +89,19 @@ jobs:
           project_id: ahgaff-university
       - name: Submit Frontend Build
         run: gcloud builds submit --config=cloudbuild-frontend.yaml --region=me-central1 --gcs-source-staging-dir=gs://ahgaff-university_cloudbuild/source-frontend .
+
+  deploy-students:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.students == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+      - uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ahgaff-university
+      - name: Submit Students Frontend Build
+        run: gcloud builds submit --config=cloudbuild-students.yaml --region=me-central1 --gcs-source-staging-dir=gs://ahgaff-university_cloudbuild/source-students .
