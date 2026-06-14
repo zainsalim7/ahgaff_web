@@ -484,6 +484,154 @@ async def get_weekly_schedule(
     return result
 
 
+@router.get("/weekly-schedule/conflicts")
+async def get_schedule_conflicts(
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    level: Optional[int] = None,
+    section: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    كشف التعارضات في الجدول الأسبوعي الحالي.
+    يُرجع قائمة بكل التعارضات: شعبة، معلم، قاعة.
+    كل تعارض يحتوي على IDs الـ slots المتعارضة + التفاصيل.
+    """
+    db = get_db()
+    query = {}
+    if semester_id:
+        query["semester_id"] = semester_id
+    if faculty_id:
+        query["faculty_id"] = faculty_id
+    if department_id:
+        query["department_id"] = department_id
+    if level:
+        query["level"] = level
+    if section:
+        query["section"] = section
+    if teacher_id:
+        query["teacher_id"] = teacher_id
+
+    slots = await db.weekly_schedule.find(query).to_list(5000)
+
+    # تجميع الـ slots حسب (اليوم، رقم الفترة)
+    by_time: dict = {}  # (day, slot_number) -> [slot_dicts]
+    for s in slots:
+        key = (s.get("day", ""), s.get("slot_number"))
+        by_time.setdefault(key, []).append(s)
+
+    # كشف التعارضات داخل كل فترة زمنية
+    section_conflicts: List[dict] = []
+    teacher_conflicts: List[dict] = []
+    room_conflicts: List[dict] = []
+    conflicting_slot_ids: set = set()
+
+    for (day, slot_number), group in by_time.items():
+        if len(group) < 2:
+            continue  # لا تعارض ممكن
+
+        # 1. تعارض الشعبة: نفس (department + level + section)
+        section_groups: dict = {}
+        for s in group:
+            key = (s.get("department_id", ""), s.get("level"), s.get("section", ""))
+            section_groups.setdefault(key, []).append(s)
+        for (dept_id, lv, sec), conflicts in section_groups.items():
+            if len(conflicts) > 1:
+                ids = [str(c["_id"]) for c in conflicts]
+                conflicting_slot_ids.update(ids)
+                section_conflicts.append({
+                    "type": "section",
+                    "day": day,
+                    "slot_number": slot_number,
+                    "department_id": dept_id,
+                    "level": lv,
+                    "section": sec,
+                    "slot_ids": ids,
+                    "count": len(conflicts),
+                })
+
+        # 2. تعارض المعلم: نفس teacher_id
+        teacher_groups: dict = {}
+        for s in group:
+            tid = s.get("teacher_id", "")
+            if tid:
+                teacher_groups.setdefault(tid, []).append(s)
+        for tid, conflicts in teacher_groups.items():
+            if len(conflicts) > 1:
+                ids = [str(c["_id"]) for c in conflicts]
+                conflicting_slot_ids.update(ids)
+                teacher_conflicts.append({
+                    "type": "teacher",
+                    "day": day,
+                    "slot_number": slot_number,
+                    "teacher_id": tid,
+                    "slot_ids": ids,
+                    "count": len(conflicts),
+                })
+
+        # 3. تعارض القاعة: نفس room_id
+        room_groups: dict = {}
+        for s in group:
+            rid = s.get("room_id", "")
+            if rid:
+                room_groups.setdefault(rid, []).append(s)
+        for rid, conflicts in room_groups.items():
+            if len(conflicts) > 1:
+                ids = [str(c["_id"]) for c in conflicts]
+                conflicting_slot_ids.update(ids)
+                room_conflicts.append({
+                    "type": "room",
+                    "day": day,
+                    "slot_number": slot_number,
+                    "room_id": rid,
+                    "slot_ids": ids,
+                    "count": len(conflicts),
+                })
+
+    # جلب أسماء المعلمين والقاعات والأقسام لإثراء التقرير
+    teacher_ids = list({c["teacher_id"] for c in teacher_conflicts})
+    room_ids = list({c["room_id"] for c in room_conflicts})
+    dept_ids = list({c["department_id"] for c in section_conflicts})
+
+    teachers_map: dict = {}
+    if teacher_ids:
+        docs = await db.teachers.find({"_id": {"$in": [ObjectId(x) for x in teacher_ids]}}).to_list(500)
+        teachers_map = {str(d["_id"]): d.get("full_name", "") for d in docs}
+
+    rooms_map: dict = {}
+    if room_ids:
+        docs = await db.rooms.find({"_id": {"$in": [ObjectId(x) for x in room_ids]}}).to_list(500)
+        rooms_map = {str(d["_id"]): d.get("name", "") for d in docs}
+
+    depts_map: dict = {}
+    if dept_ids:
+        docs = await db.departments.find({"_id": {"$in": [ObjectId(x) for x in dept_ids]}}).to_list(100)
+        depts_map = {str(d["_id"]): d.get("name", "") for d in docs}
+
+    for c in section_conflicts:
+        c["department_name"] = depts_map.get(c["department_id"], "")
+    for c in teacher_conflicts:
+        c["teacher_name"] = teachers_map.get(c["teacher_id"], "")
+    for c in room_conflicts:
+        c["room_name"] = rooms_map.get(c["room_id"], "")
+
+    all_conflicts = section_conflicts + teacher_conflicts + room_conflicts
+
+    return {
+        "total_conflicts": len(all_conflicts),
+        "total_conflicting_slots": len(conflicting_slot_ids),
+        "conflicting_slot_ids": list(conflicting_slot_ids),
+        "section_conflicts": section_conflicts,
+        "teacher_conflicts": teacher_conflicts,
+        "room_conflicts": room_conflicts,
+        "all_conflicts": all_conflicts,
+    }
+
+
+
+
 @router.post("/weekly-schedule")
 async def create_schedule_slot(
     data: ScheduleSlotCreate,

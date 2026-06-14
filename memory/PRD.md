@@ -100,7 +100,24 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - **النمط**: Custom Domain على كل Worker (يُنشئ DNS records تلقائياً)
   - **اختبار E2E**: ✅ Backend `HTTP/2 404` + `x-proxied-by: Cloudflare-Worker-Wafideen` / Frontend `HTTP/2 200`
 
-- 2026-06-14 **فلاتر المستوى والشعبة الديناميكية في إرسال نتائج القسم**:
+- 2026-06-14 **كشف التعارضات البصري في الجدول الأسبوعي (P2)**:
+  - **Endpoint جديد في Backend** (`/app/backend/backend/routes/weekly_schedule.py`):
+    - `GET /api/weekly-schedule/conflicts` — يفحص كل الجدول الحالي ويُرجع 3 أنواع من التعارضات:
+      1. **تعارض شعبة**: نفس (department + level + section + day + slot_number) لأكثر من مقرر
+      2. **تعارض معلم**: نفس teacher_id في نفس اليوم والفترة في مكانَين مختلفَين
+      3. **تعارض قاعة**: نفس room_id محجوزة لمقررَين في نفس الوقت
+    - يقبل نفس فلاتر `/weekly-schedule` (faculty/dept/level/section/teacher/semester)
+    - يُرجع: `total_conflicts`, `total_conflicting_slots`, `conflicting_slot_ids[]`, `section_conflicts[]`, `teacher_conflicts[]`, `room_conflicts[]`, `all_conflicts[]`
+    - كل تعارض غني بالتفاصيل: `day, slot_number, slot_ids[], count, department_name/teacher_name/room_name`
+  - **Frontend** (`/app/frontend/app/weekly-schedule.tsx`):
+    - يجلب التعارضات تلقائياً مع كل `loadSchedule` (بنفس الفلاتر)
+    - **مؤشر بصري لكل خلية متعارضة**: حدود حمراء سميكة + خلفية وردية باهتة + شارة `!` حمراء دائرية في الزاوية + ظل أحمر خفيف
+    - **لافتة تحذير علوية**: تظهر فوق الجدول مع عدد التعارضات + عدد الخلايا المتأثرة + قابلة للضغط لفتح نافذة التفاصيل
+    - **نافذة تفاصيل**: تُصنّف التعارضات إلى ٣ مجموعات ملوّنة (شعبة/معلم/قاعة) مع عدّاد لكل نوع، ثم قائمة كاملة فيها اليوم + الفترة + الاسم/القسم/المستوى/الشعبة المتعارضة
+  - **التحقق**: ✅ Endpoint اختُبر بـ curl → يُرجع 0 تعارضات (لأن DB المحلية لا تحوي تعارضات)
+  - **القيمة**: المستخدم يستطيع الآن رؤية كل التعارضات بنظرة واحدة بدلاً من اكتشافها يدوياً بالمقارنة بين الخلايا.
+
+
   - **Endpoints جديدة في Backend** (`/app/backend/backend/server.py`):
     - `GET /api/departments/{id}/distinct-levels` → يُرجع المستويات الموجودة فعلياً في القسم (من `db.students.distinct`)
     - `GET /api/departments/{id}/distinct-sections?level=N` → يُرجع الشعب الموجودة فعلياً (اختيارياً مع فلتر المستوى)

@@ -73,6 +73,8 @@ export default function WeeklySchedulePage() {
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
   const [allCourses, setAllCourses] = useState<any[]>([]);
   const [schedule, setSchedule] = useState<any[]>([]);
+  const [conflicts, setConflicts] = useState<any>({ total_conflicts: 0, total_conflicting_slots: 0, conflicting_slot_ids: [], all_conflicts: [] });
+  const [showConflictsModal, setShowConflictsModal] = useState(false);
   const [timeSlots, setTimeSlots] = useState<any[]>([]);
   const [rooms, setRooms] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -149,6 +151,20 @@ export default function WeeklySchedulePage() {
       }
       const res = await scheduleAPI.getSchedule(params);
       setSchedule(res.data);
+
+      // جلب التعارضات بنفس الفلاتر
+      try {
+        const conflictParams: any = { faculty_id: selectedFaculty };
+        if (selectedDept) conflictParams.department_id = selectedDept;
+        if (selectedLevel) conflictParams.level = parseInt(selectedLevel);
+        if (selectedSection) conflictParams.section = selectedSection;
+        if (viewMode === 'teacher' && scheduleTeacher) conflictParams.teacher_id = scheduleTeacher;
+        const cr = await api.get('/weekly-schedule/conflicts', { params: conflictParams });
+        setConflicts(cr.data || { total_conflicts: 0, total_conflicting_slots: 0, conflicting_slot_ids: [], all_conflicts: [] });
+      } catch (err) {
+        console.warn('Conflicts fetch failed:', err);
+        setConflicts({ total_conflicts: 0, total_conflicting_slots: 0, conflicting_slot_ids: [], all_conflicts: [] });
+      }
     } catch (e) { console.error(e); }
     finally { setLoading(false); }
   }, [selectedFaculty, selectedDept, selectedLevel, selectedSection, viewMode, scheduleCourse, scheduleTeacher]);
@@ -710,6 +726,30 @@ export default function WeeklySchedulePage() {
                   )}
                 </View>
               )}
+
+              {/* لافتة تحذير التعارضات */}
+              {conflicts.total_conflicts > 0 && (
+                <TouchableOpacity
+                  onPress={() => setShowConflictsModal(true)}
+                  style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 10,
+                    backgroundColor: '#ffebee', borderWidth: 1.5, borderColor: '#d32f2f',
+                    borderRadius: 8, padding: 12, marginTop: 10,
+                  }}
+                  testID="conflicts-banner"
+                >
+                  <Ionicons name="warning" size={22} color="#d32f2f" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: '#c62828', textAlign: 'right' }}>
+                      ⚠️ تم اكتشاف {conflicts.total_conflicts} تعارض في الجدول الأسبوعي
+                    </Text>
+                    <Text style={{ fontSize: 11, color: '#a31515', textAlign: 'right', marginTop: 2 }}>
+                      {conflicts.total_conflicting_slots} خلية متأثرة • اضغط لعرض التفاصيل
+                    </Text>
+                  </View>
+                  <Ionicons name="chevron-back" size={20} color="#d32f2f" />
+                </TouchableOpacity>
+              )}
             </View>
 
             {/* Add Slot Modal */}
@@ -781,15 +821,32 @@ export default function WeeklySchedulePage() {
                           const items = grid[day]?.[ts.slot_number] || [];
                           return (
                             <td key={ts.slot_number} style={{ padding: 4, borderLeft: '1px solid #eee', verticalAlign: 'top', minWidth: 140 }}>
-                              {items.map((item: any, idx: number) => (
-                                <div key={item.id} style={{ backgroundColor: COLORS[idx % COLORS.length] + '15', border: `1px solid ${COLORS[idx % COLORS.length]}30`, borderRadius: 8, padding: 6, marginBottom: 4, position: 'relative' }}>
+                              {items.map((item: any, idx: number) => {
+                                const isConflict = conflicts.conflicting_slot_ids?.includes(item.id);
+                                return (
+                                <div key={item.id} style={{
+                                  backgroundColor: isConflict ? '#ffebee' : COLORS[idx % COLORS.length] + '15',
+                                  border: isConflict ? '2px solid #d32f2f' : `1px solid ${COLORS[idx % COLORS.length]}30`,
+                                  borderRadius: 8, padding: 6, marginBottom: 4, position: 'relative',
+                                  boxShadow: isConflict ? '0 0 0 2px rgba(211, 47, 47, 0.15)' : 'none',
+                                }}>
+                                  {isConflict && (
+                                    <div title="هذه الخلية تحتوي على تعارض" style={{
+                                      position: 'absolute', top: -8, right: -6,
+                                      backgroundColor: '#d32f2f', color: '#fff',
+                                      width: 18, height: 18, borderRadius: 9,
+                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                      fontSize: 11, fontWeight: 700, boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+                                    }}>!</div>
+                                  )}
                                   <div style={{ fontSize: 12, fontWeight: 600, color: '#333', textAlign: 'right' }}>{item.course_name}</div>
                                   <div style={{ fontSize: 10, color: '#666', textAlign: 'right' }}>{item.course_code}</div>
                                   <div style={{ fontSize: 10, color: '#1565c0', textAlign: 'right' }}>{item.teacher_name}</div>
                                   <div style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{item.room_name} | {item.department_name} م{item.level}{item.section ? ` ${item.section}` : ''}</div>
                                   <button onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </td>
                           );
                         })}
@@ -1301,6 +1358,76 @@ export default function WeeklySchedulePage() {
               <button onClick={handleExport} data-testid="confirm-export-btn"
                 style={{ flex: 2, padding: 10, borderRadius: 8, border: 'none', backgroundColor: '#00838f', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>
                 ⬇️ تصدير الآن
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة تفاصيل التعارضات */}
+      {showConflictsModal && Platform.OS === 'web' && conflicts.total_conflicts > 0 && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ background: '#fff', borderRadius: 12, width: '90%', maxWidth: 720, maxHeight: '85vh', display: 'flex', flexDirection: 'column', boxShadow: '0 10px 40px rgba(0,0,0,0.3)' }}>
+            <div style={{ padding: 16, borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#d32f2f', color: '#fff', borderRadius: '12px 12px 0 0' }}>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700 }}>⚠️ تفاصيل التعارضات</div>
+                <div style={{ fontSize: 12, marginTop: 4 }}>
+                  {conflicts.total_conflicts} تعارض • {conflicts.total_conflicting_slots} خلية متأثرة
+                </div>
+              </div>
+              <button onClick={() => setShowConflictsModal(false)} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', color: '#fff', width: 32, height: 32, borderRadius: 16, cursor: 'pointer', fontSize: 18, fontWeight: 700 }}>×</button>
+            </div>
+            <div style={{ padding: 16, overflowY: 'auto', flex: 1 }}>
+              {/* ملخّص بالأنواع */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+                {conflicts.section_conflicts?.length > 0 && (
+                  <div style={{ background: '#fff3e0', border: '1px solid #ff9800', padding: '8px 12px', borderRadius: 8, flex: 1, minWidth: 140 }}>
+                    <div style={{ fontSize: 11, color: '#e65100', fontWeight: 600 }}>تعارض شعبة</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#e65100' }}>{conflicts.section_conflicts.length}</div>
+                  </div>
+                )}
+                {conflicts.teacher_conflicts?.length > 0 && (
+                  <div style={{ background: '#e3f2fd', border: '1px solid #1976d2', padding: '8px 12px', borderRadius: 8, flex: 1, minWidth: 140 }}>
+                    <div style={{ fontSize: 11, color: '#0d47a1', fontWeight: 600 }}>تعارض معلم</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#0d47a1' }}>{conflicts.teacher_conflicts.length}</div>
+                  </div>
+                )}
+                {conflicts.room_conflicts?.length > 0 && (
+                  <div style={{ background: '#f3e5f5', border: '1px solid #7b1fa2', padding: '8px 12px', borderRadius: 8, flex: 1, minWidth: 140 }}>
+                    <div style={{ fontSize: 11, color: '#4a148c', fontWeight: 600 }}>تعارض قاعة</div>
+                    <div style={{ fontSize: 18, fontWeight: 700, color: '#4a148c' }}>{conflicts.room_conflicts.length}</div>
+                  </div>
+                )}
+              </div>
+
+              {/* قائمة تفصيلية */}
+              {conflicts.all_conflicts?.map((c: any, i: number) => {
+                const colors: any = {
+                  section: { bg: '#fff3e0', border: '#ff9800', text: '#e65100' },
+                  teacher: { bg: '#e3f2fd', border: '#1976d2', text: '#0d47a1' },
+                  room: { bg: '#f3e5f5', border: '#7b1fa2', text: '#4a148c' },
+                };
+                const col = colors[c.type] || colors.section;
+                const labels: any = { section: 'تعارض شعبة', teacher: 'تعارض معلم', room: 'تعارض قاعة' };
+                let detail = '';
+                if (c.type === 'section') detail = `قسم: ${c.department_name} • مستوى: ${c.level}${c.section ? ' • شعبة: ' + c.section : ''}`;
+                else if (c.type === 'teacher') detail = `معلم: ${c.teacher_name}`;
+                else if (c.type === 'room') detail = `قاعة: ${c.room_name}`;
+                return (
+                  <div key={i} style={{ background: col.bg, border: `1px solid ${col.border}`, borderRadius: 8, padding: 12, marginBottom: 8, textAlign: 'right' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+                      <span style={{ fontSize: 11, color: col.text, fontWeight: 700, background: '#fff', padding: '2px 8px', borderRadius: 4 }}>×{c.count}</span>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: col.text }}>{labels[c.type]}</span>
+                    </div>
+                    <div style={{ fontSize: 12, color: '#333' }}>{detail}</div>
+                    <div style={{ fontSize: 11, color: '#666', marginTop: 4 }}>📅 {c.day} • الفترة {c.slot_number}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ padding: 12, borderTop: '1px solid #eee', textAlign: 'center' }}>
+              <button onClick={() => setShowConflictsModal(false)} style={{ padding: '8px 24px', borderRadius: 8, border: '1px solid #ccc', background: '#fff', cursor: 'pointer', fontWeight: 600 }}>
+                إغلاق
               </button>
             </div>
           </div>
