@@ -2655,6 +2655,44 @@ async def get_department_final_results_template(current_user: dict = Depends(get
     )
 
 
+
+@api_router.get("/departments/{department_id}/distinct-levels")
+async def get_distinct_levels_in_department(
+    department_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """يُرجع قائمة المستويات الموجودة فعلياً في القسم (مرتبة تصاعدياً)."""
+    levels = await db.students.distinct(
+        "level",
+        {"department_id": department_id, "level": {"$exists": True, "$ne": None}},
+    )
+    # تنظيف وفرز - تجاهل القيم غير الصحيحة
+    cleaned = sorted({int(lv) for lv in levels if isinstance(lv, (int, float)) and lv})
+    return {"department_id": department_id, "levels": cleaned}
+
+
+@api_router.get("/departments/{department_id}/distinct-sections")
+async def get_distinct_sections_in_department(
+    department_id: str,
+    level: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """يُرجع قائمة الشعب الموجودة فعلياً في القسم (اختيارياً مع فلتر المستوى)."""
+    query: dict = {
+        "department_id": department_id,
+        "section": {"$exists": True, "$ne": None, "$nin": ["", None]},
+    }
+    if level is not None:
+        query["level"] = level
+    sections = await db.students.distinct("section", query)
+    cleaned = sorted({str(s).strip() for s in sections if s and str(s).strip()})
+    return {
+        "department_id": department_id,
+        "level": level,
+        "sections": cleaned,
+    }
+
+
 @api_router.post("/departments/{department_id}/send-final-results/upload")
 async def send_department_final_results_upload(
     department_id: str,

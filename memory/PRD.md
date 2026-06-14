@@ -100,21 +100,21 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - **النمط**: Custom Domain على كل Worker (يُنشئ DNS records تلقائياً)
   - **اختبار E2E**: ✅ Backend `HTTP/2 404` + `x-proxied-by: Cloudflare-Worker-Wafideen` / Frontend `HTTP/2 200`
 
-- 2026-06-14 **فلاتر المستوى والشعبة في إرسال نتائج القسم**:
-  - **Backend**: `POST /api/departments/{department_id}/send-final-results/upload` يقبل الآن query params اختيارية:
-    - `level: int` (1-8) — فلتر المستوى
-    - `section: str` (A-E) — فلتر الشعبة
-  - عند تحديد فلتر، يُرسل الإشعار فقط لطلاب يُطابقون كل الفلاتر (القسم + المستوى + الشعبة)
+- 2026-06-14 **فلاتر المستوى والشعبة الديناميكية في إرسال نتائج القسم**:
+  - **Endpoints جديدة في Backend** (`/app/backend/backend/server.py`):
+    - `GET /api/departments/{id}/distinct-levels` → يُرجع المستويات الموجودة فعلياً في القسم (من `db.students.distinct`)
+    - `GET /api/departments/{id}/distinct-sections?level=N` → يُرجع الشعب الموجودة فعلياً (اختيارياً مع فلتر المستوى)
+  - **Backend** `send_department_final_results_upload`: يقبل query params اختيارية `level: int` و `section: str` ويفلتر طلاب القسم وفقاً لها
   - عنوان الإشعار يعكس الفلاتر: "النتيجة النهائية - {القسم} - المستوى {N} - الشعبة {X}"
-  - رسالة الإشعار تتضمّن: رقم القيد + القسم + المستوى + الشعبة + النتيجة
-  - حقول `level` و `section` تُحفظ في document الإشعار في `notifications` collection
-  - رسالة فشل الإرسال تذكر إن كان الاستبعاد بسبب المستوى/الشعبة
   - **Frontend** (`/app/frontend/app/send-department-results.tsx`):
-    - Picker مستقل للمستوى: "كل المستويات" أو 1-8
-    - Picker مستقل للشعبة: "كل الشعب" أو A-E
-    - ملخّص مرئي يظهر عند تفعيل أي فلتر
-    - Pickers اختيارية بالكامل (لا تكسر الإرسال للقسم بأكمله)
-  - **التحقق**: Backend اختُبر بـ curl → يقبل `?level=2&section=A` بدون أخطاء.
+    - **حُذِفت** القوائم الثابتة (`LEVELS = [1..8]` و `SECTIONS = ['A'..'E']`) — كانت غير دقيقة (الشعب الفعلية بحروف عربية!)
+    - State جديد: `availableLevels`, `availableSections`, `loadingLevels`, `loadingSections`
+    - `useEffect` يجلب المستويات تلقائياً عند تغيير القسم + إعادة تعيين فلتر المستوى/الشعبة
+    - `useEffect` آخر يجلب الشعب عند تغيير القسم أو المستوى
+    - Pickers تعرض عدد الخيارات المتاحة وحالة التحميل
+    - رسائل واضحة عند عدم وجود بيانات: "-- لا يوجد طلاب في هذا القسم --" و "-- لا توجد شعب في هذا المستوى --"
+    - الـ Pickers معطّلة (`enabled={false}`) عند التحميل أو عدم وجود خيارات
+  - **التحقق**: ✅ Endpoints اختُبرت بـ curl وأرجعت بيانات حقيقية (Levels: [1, 2], Sections: ["أ"]).
   - **الهدف**: ترحيل `wafideen.ahgaff.net` و `api.wafideen.ahgaff.net` من Railway إلى Google Cloud Run me-central1 عبر Cloudflare Workers (نفس النمط المستخدم لـ api/app.ahgaff.net).
   - **Cloud Run targets**:
     - Frontend: `https://wafideen-frontend-3pzknh7knq-ww.a.run.app/`

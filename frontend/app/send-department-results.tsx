@@ -24,9 +24,6 @@ interface Department {
   code: string;
 }
 
-const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8];
-const SECTIONS = ['A', 'B', 'C', 'D', 'E'];
-
 const showAlert = (title: string, msg: string) => {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${msg}`);
   else Alert.alert(title, msg);
@@ -40,6 +37,10 @@ export default function SendDepartmentResultsScreen() {
   const [selectedDept, setSelectedDept] = useState<Department | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [selectedSection, setSelectedSection] = useState<string>('');
+  const [availableLevels, setAvailableLevels] = useState<number[]>([]);
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
+  const [loadingLevels, setLoadingLevels] = useState(false);
+  const [loadingSections, setLoadingSections] = useState(false);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
@@ -72,6 +73,53 @@ export default function SendDepartmentResultsScreen() {
       setLoading(false);
     }
   };
+
+  // عند تغيير القسم → جلب المستويات الموجودة فعلياً + إعادة تعيين الفلاتر
+  useEffect(() => {
+    if (!selectedDept) {
+      setAvailableLevels([]);
+      setAvailableSections([]);
+      setSelectedLevel(null);
+      setSelectedSection('');
+      return;
+    }
+    setSelectedLevel(null);
+    setSelectedSection('');
+    setAvailableSections([]);
+    void (async () => {
+      try {
+        setLoadingLevels(true);
+        const r = await api.get(`/departments/${selectedDept.id}/distinct-levels`);
+        setAvailableLevels(r.data?.levels || []);
+      } catch {
+        setAvailableLevels([]);
+      } finally {
+        setLoadingLevels(false);
+      }
+    })();
+  }, [selectedDept]);
+
+  // عند تغيير القسم/المستوى → جلب الشعب الموجودة فعلياً
+  useEffect(() => {
+    if (!selectedDept) {
+      setAvailableSections([]);
+      return;
+    }
+    setSelectedSection('');
+    void (async () => {
+      try {
+        setLoadingSections(true);
+        const params: any = {};
+        if (selectedLevel !== null) params.level = selectedLevel;
+        const r = await api.get(`/departments/${selectedDept.id}/distinct-sections`, { params });
+        setAvailableSections(r.data?.sections || []);
+      } catch {
+        setAvailableSections([]);
+      } finally {
+        setLoadingSections(false);
+      }
+    })();
+  }, [selectedDept, selectedLevel]);
 
   const downloadTemplate = async () => {
     try {
@@ -220,40 +268,64 @@ export default function SendDepartmentResultsScreen() {
             )}
           </View>
 
-          {/* Step 1.5: فلاتر اختيارية (المستوى + الشعبة) */}
+          {/* Step 1.5: فلاتر اختيارية (المستوى + الشعبة) — ديناميكية حسب القسم */}
           {selectedDept && (
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>
                 فلاتر اختيارية (يمكن تركها فارغة للإرسال للقسم كاملاً)
               </Text>
 
-              <Text style={styles.filterLabel}>المستوى</Text>
+              <Text style={styles.filterLabel}>
+                المستوى
+                {loadingLevels ? ' (...جاري التحميل)' : ` (${availableLevels.length} متاح)`}
+              </Text>
               <View style={styles.pickerWrap}>
                 <Picker
                   selectedValue={selectedLevel === null ? '' : String(selectedLevel)}
                   onValueChange={(val) => {
                     setSelectedLevel(val === '' ? null : parseInt(String(val), 10));
                   }}
+                  enabled={!loadingLevels && availableLevels.length > 0}
                   style={styles.picker}
                   testID="level-picker"
                 >
-                  <Picker.Item label="-- كل المستويات --" value="" />
-                  {LEVELS.map((lv) => (
+                  <Picker.Item
+                    label={
+                      availableLevels.length === 0 && !loadingLevels
+                        ? '-- لا يوجد طلاب في هذا القسم --'
+                        : '-- كل المستويات --'
+                    }
+                    value=""
+                  />
+                  {availableLevels.map((lv) => (
                     <Picker.Item key={lv} label={`المستوى ${lv}`} value={String(lv)} />
                   ))}
                 </Picker>
               </View>
 
-              <Text style={[styles.filterLabel, { marginTop: 10 }]}>الشعبة</Text>
+              <Text style={[styles.filterLabel, { marginTop: 10 }]}>
+                الشعبة
+                {loadingSections ? ' (...جاري التحميل)' : ` (${availableSections.length} متاح)`}
+              </Text>
               <View style={styles.pickerWrap}>
                 <Picker
                   selectedValue={selectedSection}
                   onValueChange={(val) => setSelectedSection(String(val))}
+                  enabled={!loadingSections && availableSections.length > 0}
                   style={styles.picker}
                   testID="section-picker"
                 >
-                  <Picker.Item label="-- كل الشعب --" value="" />
-                  {SECTIONS.map((sc) => (
+                  <Picker.Item
+                    label={
+                      availableSections.length === 0 && !loadingSections
+                        ? selectedLevel !== null
+                          ? '-- لا توجد شعب في هذا المستوى --'
+                          : '-- لا توجد شعب في هذا القسم --'
+                        : '-- كل الشعب --'
+                    }
+                    value=""
+                  />
+                  {availableSections.map((sc) => (
                     <Picker.Item key={sc} label={`الشعبة ${sc}`} value={sc} />
                   ))}
                 </Picker>
