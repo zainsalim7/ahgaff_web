@@ -93,7 +93,28 @@ Comprehensive student/teacher management system for Ahgaff University with:
     - ملف واحد فقط `firebase-service-account.json` يخدم كل التطبيقات (Best practice)
   - **النتيجة المؤكَّدة**: ✅ المستخدم اختبر فعلياً → الإشعارات وصلت لكلا تطبيقَي المعلم والطالب
 
-- 2026-06-12 **Wafideen Domain Migration (Railway → Cloud Run) — قيد الإنجاز**:
+- 2026-06-12 **Wafideen Domain Migration (Railway → Cloud Run) — مكتمل ✅**:
+  - **النطاقات المُرحَّلة**: `wafideen.ahgaff.net` (Frontend) و `api.wafideen.ahgaff.net` (Backend)
+  - **Cloud Run targets**: `wafideen-frontend-3pzknh7knq-ww.a.run.app` و `wafideen-backend-872667841290.me-central1.run.app`
+  - **Cloudflare Workers**: `wafideen-api-proxy` و `wafideen-frontend-proxy` (Code محفوظ في `/app/cloudflare-workers/`)
+  - **النمط**: Custom Domain على كل Worker (يُنشئ DNS records تلقائياً)
+  - **اختبار E2E**: ✅ Backend `HTTP/2 404` + `x-proxied-by: Cloudflare-Worker-Wafideen` / Frontend `HTTP/2 200`
+
+- 2026-06-14 **فلاتر المستوى والشعبة في إرسال نتائج القسم**:
+  - **Backend**: `POST /api/departments/{department_id}/send-final-results/upload` يقبل الآن query params اختيارية:
+    - `level: int` (1-8) — فلتر المستوى
+    - `section: str` (A-E) — فلتر الشعبة
+  - عند تحديد فلتر، يُرسل الإشعار فقط لطلاب يُطابقون كل الفلاتر (القسم + المستوى + الشعبة)
+  - عنوان الإشعار يعكس الفلاتر: "النتيجة النهائية - {القسم} - المستوى {N} - الشعبة {X}"
+  - رسالة الإشعار تتضمّن: رقم القيد + القسم + المستوى + الشعبة + النتيجة
+  - حقول `level` و `section` تُحفظ في document الإشعار في `notifications` collection
+  - رسالة فشل الإرسال تذكر إن كان الاستبعاد بسبب المستوى/الشعبة
+  - **Frontend** (`/app/frontend/app/send-department-results.tsx`):
+    - Picker مستقل للمستوى: "كل المستويات" أو 1-8
+    - Picker مستقل للشعبة: "كل الشعب" أو A-E
+    - ملخّص مرئي يظهر عند تفعيل أي فلتر
+    - Pickers اختيارية بالكامل (لا تكسر الإرسال للقسم بأكمله)
+  - **التحقق**: Backend اختُبر بـ curl → يقبل `?level=2&section=A` بدون أخطاء.
   - **الهدف**: ترحيل `wafideen.ahgaff.net` و `api.wafideen.ahgaff.net` من Railway إلى Google Cloud Run me-central1 عبر Cloudflare Workers (نفس النمط المستخدم لـ api/app.ahgaff.net).
   - **Cloud Run targets**:
     - Frontend: `https://wafideen-frontend-3pzknh7knq-ww.a.run.app/`

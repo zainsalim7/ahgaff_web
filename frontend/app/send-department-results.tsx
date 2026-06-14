@@ -24,6 +24,9 @@ interface Department {
   code: string;
 }
 
+const LEVELS = [1, 2, 3, 4, 5, 6, 7, 8];
+const SECTIONS = ['A', 'B', 'C', 'D', 'E'];
+
 const showAlert = (title: string, msg: string) => {
   if (Platform.OS === 'web') window.alert(`${title}\n\n${msg}`);
   else Alert.alert(title, msg);
@@ -35,6 +38,8 @@ export default function SendDepartmentResultsScreen() {
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [selectedDept, setSelectedDept] = useState<Department | null>(null);
+  const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
+  const [selectedSection, setSelectedSection] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [lastResult, setLastResult] = useState<any>(null);
@@ -119,11 +124,20 @@ export default function SendDepartmentResultsScreen() {
       const r = await api.post(
         `/departments/${selectedDept.id}/send-final-results/upload`,
         fd,
-        { headers: { 'Content-Type': 'multipart/form-data' } },
+        {
+          headers: { 'Content-Type': 'multipart/form-data' },
+          params: {
+            ...(selectedLevel !== null ? { level: selectedLevel } : {}),
+            ...(selectedSection ? { section: selectedSection } : {}),
+          },
+        },
       );
       setLastResult(r.data);
       const d = r.data;
-      let msg = `القسم: ${d.department_name}\nتم إرسال ${d.sent} إشعار`;
+      let msg = `القسم: ${d.department_name}`;
+      if (d.level) msg += ` | المستوى: ${d.level}`;
+      if (d.section) msg += ` | الشعبة: ${d.section}`;
+      msg += `\nتم إرسال ${d.sent} إشعار`;
       if (d.failed_count) {
         msg += `\nفشل: ${d.failed_count}`;
       }
@@ -205,6 +219,58 @@ export default function SendDepartmentResultsScreen() {
               </View>
             )}
           </View>
+
+          {/* Step 1.5: فلاتر اختيارية (المستوى + الشعبة) */}
+          {selectedDept && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>
+                فلاتر اختيارية (يمكن تركها فارغة للإرسال للقسم كاملاً)
+              </Text>
+
+              <Text style={styles.filterLabel}>المستوى</Text>
+              <View style={styles.pickerWrap}>
+                <Picker
+                  selectedValue={selectedLevel === null ? '' : String(selectedLevel)}
+                  onValueChange={(val) => {
+                    setSelectedLevel(val === '' ? null : parseInt(String(val), 10));
+                  }}
+                  style={styles.picker}
+                  testID="level-picker"
+                >
+                  <Picker.Item label="-- كل المستويات --" value="" />
+                  {LEVELS.map((lv) => (
+                    <Picker.Item key={lv} label={`المستوى ${lv}`} value={String(lv)} />
+                  ))}
+                </Picker>
+              </View>
+
+              <Text style={[styles.filterLabel, { marginTop: 10 }]}>الشعبة</Text>
+              <View style={styles.pickerWrap}>
+                <Picker
+                  selectedValue={selectedSection}
+                  onValueChange={(val) => setSelectedSection(String(val))}
+                  style={styles.picker}
+                  testID="section-picker"
+                >
+                  <Picker.Item label="-- كل الشعب --" value="" />
+                  {SECTIONS.map((sc) => (
+                    <Picker.Item key={sc} label={`الشعبة ${sc}`} value={sc} />
+                  ))}
+                </Picker>
+              </View>
+
+              {(selectedLevel !== null || selectedSection) && (
+                <View style={styles.filterSummary}>
+                  <Ionicons name="filter" size={16} color="#1565c0" />
+                  <Text style={styles.filterSummaryText}>
+                    سيُرسل فقط لطلاب القسم
+                    {selectedLevel !== null ? ` + المستوى ${selectedLevel}` : ''}
+                    {selectedSection ? ` + الشعبة ${selectedSection}` : ''}
+                  </Text>
+                </View>
+              )}
+            </View>
+          )}
 
           {/* Step 2: Template + Upload */}
           {selectedDept && (
@@ -355,6 +421,23 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   selectedText: { color: '#2e7d32', fontSize: 13, fontWeight: '600' },
+  filterLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#37474f',
+    marginBottom: 6,
+    textAlign: 'right',
+  },
+  filterSummary: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: '#e3f2fd',
+    padding: 10,
+    borderRadius: 8,
+    marginTop: 12,
+  },
+  filterSummaryText: { color: '#1565c0', fontSize: 12, fontWeight: '600', flex: 1, textAlign: 'right' },
   deptCard: {
     flexDirection: 'row',
     alignItems: 'center',

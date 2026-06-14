@@ -2659,9 +2659,13 @@ async def get_department_final_results_template(current_user: dict = Depends(get
 async def send_department_final_results_upload(
     department_id: str,
     file: UploadFile = File(...),
+    level: Optional[int] = None,
+    section: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """إرسال النتيجة النهائية لطلاب قسم كامل من ملف Excel/CSV (عمودان: رقم القيد، النتيجة)"""
+    """إرسال النتيجة النهائية لطلاب قسم كامل من ملف Excel/CSV (عمودان: رقم القيد، النتيجة).
+    فلاتر اختيارية: level (المستوى)، section (الشعبة).
+    """
     if not _can_send_final_results(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك بإرسال النتائج")
 
@@ -2714,15 +2718,28 @@ async def send_department_final_results_upload(
     if not rows:
         raise HTTPException(status_code=400, detail="الملف لا يحتوي على بيانات صالحة")
 
-    # Fetch all students in this department keyed by student_id (رقم القيد)
+    # Fetch all students in this department (+ optional level/section filters) keyed by student_id
     student_numbers = list({r["student_number"] for r in rows if r["student_number"]})
-    students_cursor = db.students.find({
+    student_filter = {
         "department_id": department_id,
         "student_id": {"$in": student_numbers},
-    })
+    }
+    if level is not None:
+        student_filter["level"] = level
+    if section:
+        student_filter["section"] = section
+    students_cursor = db.students.find(student_filter)
     students_by_number: dict = {}
     async for s in students_cursor:
         students_by_number[str(s.get("student_id", "")).strip()] = s
+
+    # بناء عنوان واضح يعكس الفلاتر المختارة
+    title_parts = [f"النتيجة النهائية - {department_name}"]
+    if level is not None:
+        title_parts.append(f"المستوى {level}")
+    if section:
+        title_parts.append(f"الشعبة {section}")
+    base_title = " - ".join(title_parts)
 
     sent = 0
     push_sent = 0
@@ -2737,21 +2754,31 @@ async def send_department_final_results_upload(
             continue
         student = students_by_number.get(sn)
         if not student:
-            failed.append({"student_number": sn, "reason": "الطالب غير موجود في هذا القسم"})
+            # رسالة الفشل تذكر سبب الاستبعاد (قسم/مستوى/شعبة)
+            reason = "الطالب غير موجود في هذا القسم"
+            if level is not None or section:
+                reason += " (أو لا يطابق فلتر المستوى/الشعبة)"
+            failed.append({"student_number": sn, "reason": reason})
             continue
 
-        title = f"النتيجة النهائية - {department_name}"
-        message = f"رقم القيد: {sn} | القسم: {department_name} | النتيجة: {result_norm}"
+        message = f"رقم القيد: {sn} | القسم: {department_name}"
+        if level is not None:
+            message += f" | المستوى: {level}"
+        if section:
+            message += f" | الشعبة: {section}"
+        message += f" | النتيجة: {result_norm}"
 
         student_db_id = str(student["_id"])
         notification = {
             "student_id": student_db_id,
             "user_id": student.get("user_id"),
-            "title": title,
+            "title": base_title,
             "message": message,
             "type": NotificationType.INFO.value,
             "department_id": department_id,
             "department_name": department_name,
+            "level": level,
+            "section": section,
             "is_read": False,
             "is_manual": True,
             "is_final_result": True,
@@ -2770,7 +2797,7 @@ async def send_department_final_results_upload(
                 tokens_docs = await db.fcm_tokens.find({"user_id": user_id}).to_list(100)
                 tokens = [doc["token"] for doc in tokens_docs if doc.get("token")]
                 if tokens:
-                    await send_notification_to_many(tokens, title, message)
+                    await send_notification_to_many(tokens, base_title, message)
                     push_sent += 1
         except Exception as e:
             logging.getLogger(__name__).error(f"Department final result push failed for {sn}: {e}")
@@ -2781,12 +2808,19 @@ async def send_department_final_results_upload(
         entity_type="department",
         entity_id=department_id,
         entity_name=department_name,
-        details={"sent": sent, "failed_count": len(failed)},
+        details={
+            "sent": sent,
+            "failed_count": len(failed),
+            "level": level,
+            "section": section,
+        },
     )
 
     return {
         "message": f"تم إرسال {sent} إشعار نتيجة نهائية",
         "department_name": department_name,
+        "level": level,
+        "section": section,
         "sent": sent,
         "failed_count": len(failed),
         "failed": failed,
