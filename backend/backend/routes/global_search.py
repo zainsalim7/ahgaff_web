@@ -99,6 +99,39 @@ async def global_search(
     results: dict = {}
     total = 0
 
+    # خرائط مرجعية تُجلب عند الحاجة لإثراء العناوين الفرعية بأسماء الأقسام/الكليات
+    async def _resolve_names(dept_ids: set, faculty_ids: set):
+        depts_map, facs_map = {}, {}
+        if dept_ids:
+            try:
+                async for d in db.departments.find(
+                    {"_id": {"$in": [ObjectId(x) for x in dept_ids if x]}}, {"name": 1, "faculty_id": 1}
+                ):
+                    depts_map[str(d["_id"])] = d
+                    if d.get("faculty_id"):
+                        faculty_ids.add(str(d["faculty_id"]))
+            except Exception:
+                pass
+        if faculty_ids:
+            try:
+                async for f in db.faculties.find(
+                    {"_id": {"$in": [ObjectId(x) for x in faculty_ids if x]}}, {"name": 1}
+                ):
+                    facs_map[str(f["_id"])] = f.get("name", "")
+            except Exception:
+                pass
+        return depts_map, facs_map
+
+    # ترجمة حالة الطالب لنص عربي مختصر
+    status_label = {
+        "active": "نشط",
+        "graduated": "متخرّج",
+        "repeat": "إعادة",
+        "expelled": "مفصول",
+        "frozen": "مجمَّد",
+        "inactive": "غير نشط",
+    }
+
     # =========================================
     # 1) الطلاب
     # =========================================
@@ -116,14 +149,30 @@ async def global_search(
             student_query = None  # type: ignore
         if student_query is not None and (is_admin or is_teacher):
             cursor = db.students.find(student_query).limit(limit_per_type)
+            students_list = await cursor.to_list(limit_per_type)
+            dept_ids = {str(s.get("department_id", "")) for s in students_list if s.get("department_id")}
+            fac_ids = {str(s.get("faculty_id", "")) for s in students_list if s.get("faculty_id")}
+            depts_map, facs_map = await _resolve_names(dept_ids, fac_ids)
             items: List[dict] = []
-            async for s in cursor:
+            for s in students_list:
+                parts = [f"رقم القيد: {s.get('student_id', '')}"]
+                dept_doc = depts_map.get(str(s.get("department_id", "")))
+                if dept_doc:
+                    parts.append(f"قسم: {dept_doc.get('name', '')}")
+                    fac_id_from_dept = str(dept_doc.get("faculty_id", "") or "")
+                    fac_name = facs_map.get(fac_id_from_dept) or facs_map.get(str(s.get("faculty_id", "")))
+                    if fac_name:
+                        parts.append(f"كلية: {fac_name}")
+                if s.get("level"):
+                    parts.append(f"م{s.get('level')}")
+                if s.get("section"):
+                    parts.append(f"شعبة {s.get('section')}")
+                st = s.get("status") or ("active" if s.get("is_active", True) else "inactive")
+                parts.append(f"الحالة: {status_label.get(st, st)}")
                 items.append({
                     "id": str(s["_id"]),
                     "title": s.get("full_name", ""),
-                    "subtitle": f"رقم القيد: {s.get('student_id', '')}"
-                                + (f" - م{s.get('level', '')}" if s.get("level") else "")
-                                + (f" - شعبة {s.get('section', '')}" if s.get("section") else ""),
+                    "subtitle": " · ".join(parts),
                     "route": f"/student-details?studentId={str(s['_id'])}",
                     "type": "student",
                     "icon": "person",
@@ -145,14 +194,28 @@ async def global_search(
                 ],
             }
             cursor = db.teachers.find(tq).limit(limit_per_type)
+            teachers_list = await cursor.to_list(limit_per_type)
+            dept_ids = {str(t.get("department_id", "")) for t in teachers_list if t.get("department_id")}
+            fac_ids = {str(t.get("faculty_id", "")) for t in teachers_list if t.get("faculty_id")}
+            depts_map, facs_map = await _resolve_names(dept_ids, fac_ids)
             items = []
-            async for t in cursor:
+            for t in teachers_list:
                 title = t.get("academic_title") or ""
+                parts = [f"رقم المعلم: {t.get('teacher_id', '')}"]
+                if title:
+                    parts.append(title)
+                dept_doc = depts_map.get(str(t.get("department_id", "")))
+                if dept_doc:
+                    parts.append(f"قسم: {dept_doc.get('name', '')}")
+                fac_name = facs_map.get(str(t.get("faculty_id", ""))) or (
+                    facs_map.get(str(dept_doc.get("faculty_id", ""))) if dept_doc else None
+                )
+                if fac_name:
+                    parts.append(f"كلية: {fac_name}")
                 items.append({
                     "id": str(t["_id"]),
                     "title": t.get("full_name", ""),
-                    "subtitle": f"رقم المعلم: {t.get('teacher_id', '')}"
-                                + (f" - {title}" if title else ""),
+                    "subtitle": " · ".join(parts),
                     "route": f"/teacher-details?teacherId={str(t['_id'])}",
                     "type": "teacher",
                     "icon": "school",
@@ -194,11 +257,20 @@ async def global_search(
 
         if cq is not None:
             cursor = db.courses.find(cq).limit(limit_per_type)
+            courses_list = await cursor.to_list(limit_per_type)
+            dept_ids = {str(c.get("department_id", "")) for c in courses_list if c.get("department_id")}
+            depts_map, facs_map = await _resolve_names(dept_ids, set())
             items = []
-            async for c in cursor:
+            for c in courses_list:
                 lvl = c.get("level")
                 sec = c.get("section")
                 subtitle_parts = [f"كود: {c.get('code', '')}"]
+                dept_doc = depts_map.get(str(c.get("department_id", "")))
+                if dept_doc:
+                    subtitle_parts.append(f"قسم: {dept_doc.get('name', '')}")
+                    fac_name = facs_map.get(str(dept_doc.get("faculty_id", "")))
+                    if fac_name:
+                        subtitle_parts.append(f"كلية: {fac_name}")
                 if lvl:
                     subtitle_parts.append(f"م{lvl}")
                 if sec:
@@ -206,7 +278,7 @@ async def global_search(
                 items.append({
                     "id": str(c["_id"]),
                     "title": c.get("name", ""),
-                    "subtitle": " - ".join(subtitle_parts),
+                    "subtitle": " · ".join(subtitle_parts),
                     "route": f"/course-details?courseId={str(c['_id'])}",
                     "type": "course",
                     "icon": "book",
@@ -327,11 +399,25 @@ async def global_search(
                     pass
             for l in lecs:
                 cinfo = course_map.get(l.get("course_id"), {})
+                lvl = cinfo.get("level")
+                sec = cinfo.get("section")
+                code = cinfo.get("code", "")
+                subtitle_parts = []
+                if code:
+                    subtitle_parts.append(f"كود: {code}")
+                if lvl:
+                    subtitle_parts.append(f"م{lvl}")
+                if sec:
+                    subtitle_parts.append(f"شعبة {sec}")
+                time_part = f"{l.get('start_time', '')} → {l.get('end_time', '')}"
+                if time_part.strip() != "→":
+                    subtitle_parts.append(time_part)
+                if l.get('room'):
+                    subtitle_parts.append(l.get('room'))
                 items.append({
                     "id": str(l["_id"]),
                     "title": f"{cinfo.get('name', 'محاضرة')} - {l.get('date', '')}",
-                    "subtitle": f"{l.get('start_time', '')} → {l.get('end_time', '')}"
-                                + (f" | {l.get('room', '')}" if l.get('room') else ""),
+                    "subtitle": " · ".join(subtitle_parts),
                     "route": f"/course-lectures?courseId={l.get('course_id', '')}",
                     "type": "lecture",
                     "icon": "calendar",
