@@ -1,0 +1,62 @@
+{
+  "summary": "Tested redesigned /teacher-courses page (visuals + assign/unassign flow). Visual design matches spec — header, breadcrumb, teacher card, 3 stats cards, courses list, empty state, assign modal (title, subtitle with teacher name, search input, filter checkbox, footer with picked-count + save/cancel) and unassign confirm modal all render correctly. Backend: 3/4 pytest cases passed. CRITICAL BUG: the unassign flow is broken — PUT /api/courses/{id} with body {teacher_id: null} returns 200 but does NOT clear teacher_id and does NOT remove the teaching_load entry, so the course still shows in the teacher's list. CRITICAL UI BUG: the data-testid contract is broken — every data-testid in the redesigned file (assign-course-btn, back-btn, course-search-input, save-assignments-btn, close-assign-modal, pick-course-{id}, unassign-btn-{id}, confirm-unassign-btn) is NOT reaching the DOM (verified with document.querySelector for both data-testid and testid attributes — all return null). This breaks the testing contract specified in the review request.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "PUT /api/courses/{course_id}",
+        "issue": "Sending {teacher_id: null} returns 200 OK but silently does nothing. The course's teacher_id remains unchanged AND the teaching_loads entry is NOT deleted, so the course continues to appear in GET /api/teachers/{id}/courses. Root cause: server.py line 5617 `update_data = {k: v for k, v in data.dict().items() if v is not None}` strips null values before the update. Then line 5640 `new_teacher_id = update_data.get('teacher_id')` is also None so the teaching_loads cleanup branch (lines 5644-5648) is skipped. This makes the entire 'إلغاء الإسناد' (unassign) feature non-functional from the frontend.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "teacher-courses.tsx (all interactive elements)",
+        "issue": "data-testid props are passed as JSX 'data-testid' attribute on react-native primitives (TouchableOpacity / TextInput / View). react-native-web does NOT forward unknown DOM attributes; the correct prop bridged to data-testid is 'testID' (camelCase). Verified at runtime — querying document for [data-testid='assign-course-btn'], [data-testid='back-btn'], [data-testid='course-search-input'], [data-testid='save-assignments-btn'], [data-testid='close-assign-modal'] all return null. Same will be true for pick-course-{id}, unassign-btn-{id}, confirm-unassign-btn. This breaks the testing contract specified in the review_request and prevents any QA automation against this page. The visual rendering itself is fine — only the testID hook is missing.",
+        "selector": "all data-testid=* on this page",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Unassign course from teacher",
+        "issue": "Frontend calls coursesAPI.update(id, {teacher_id: null}) which hits PUT /api/courses/{id}. Backend ignores the null (see backend issue above) and returns 200, so the success toast fires and fetchCourses() is called, but the course is still there. From the user's POV the action looks 'successful' yet nothing changed.",
+        "affected_selectors": ["unassign-btn-{id}", "confirm-unassign-btn"]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_teacher_courses_assign.py",
+    "/app/test_reports/pytest/teacher_courses_assign_results.xml"
+  ],
+  "action_items": [
+    "BACKEND (server.py update_course around line 5617): support explicit null for teacher_id. Use `data.dict(exclude_unset=True)` instead of filtering out None, OR add a special-case so that if teacher_id is explicitly provided as null the field is unset on the course AND db.teaching_loads.delete_many({course_id, teacher_id: old_teacher_id}) is executed.",
+    "FRONTEND (teacher-courses.tsx): replace every `data-testid=...` JSX prop with `testID=...` on React Native primitives. react-native-web auto-bridges testID -> data-testid in the DOM. For plain HTML elements (none on this page) data-testid would work, but TouchableOpacity / TextInput / View require testID. Affected ids: assign-course-btn, back-btn, course-search-input, save-assignments-btn, close-assign-modal, pick-course-{id}, unassign-btn-{id}, confirm-unassign-btn, course-card-{id}.",
+    "After both fixes, retest the full assign→appears in list→unassign→removed-from-list loop end-to-end."
+  ],
+  "critical_code_review_comments": [
+    "server.py line 5617: stripping all None values is a common but dangerous pattern — it conflates 'field omitted' with 'field explicitly null'. Use Pydantic's `model.dict(exclude_unset=True)` to distinguish the two, otherwise nullable fields can never be cleared through PUT.",
+    "teacher-courses.tsx uses `data-testid` inconsistently with the rest of the codebase. Other recently-redesigned screens (e.g. courses.tsx in iteration 27) used `testID` which works. Make the convention consistent.",
+    "teacher-courses.tsx line 109: the local `teacherName` variable inside the useEffect shadows the route param `teacherName` from useLocalSearchParams (destructured on line 54). Not a bug today (it's only used inside the effect) but it's a latent footgun — rename to e.g. `currentTeacherName`.",
+    "The 'إخفاء المقررات المسندة لمعلمين آخرين' filter defaults to true (line 68) which is sensible, but there is no visual cue that hidden courses exist. Consider showing a counter like '(تم إخفاء N مقرر)'.",
+    "server.py is now 14,447 lines — still way above the 700-line guideline (flagged in previous iterations). update_course belongs in routes/courses.py.",
+    "The unassign confirm modal's outer overlay (line 537) has no TouchableOpacity to dismiss on backdrop tap (unlike the assign modal at line 403). UX inconsistency."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_teacher_courses_assign.py (new)",
+    "/app/test_reports/pytest/teacher_courses_assign_results.xml (new)"
+  ],
+  "success_rate": {
+    "backend": "75% (3/4 — assign endpoint works, unassign-via-PUT does NOT)",
+    "frontend": "Visual: 100%. data-testid contract: 0% (all testids non-discoverable in DOM)."
+  },
+  "test_credentials": "admin/admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Test attempted to assign an unassigned course to teacher 698ad3da31ab437a06176e2a then unassign. The assign step succeeded so the course IS now linked to that teacher in the DB. Test attempted teardown by restoring the original teacher_id, but since the unassign call did nothing the cleanup may be irrelevant. Recommend the main agent verify the teacher's course list before retesting.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two fixes are required before this page can be considered done: (1) backend PUT /api/courses/{id} must accept explicit null for teacher_id and remove the matching teaching_loads row, (2) every data-testid in teacher-courses.tsx must be converted to testID. Once both are done, rerun /app/backend/tests/test_teacher_courses_assign.py — TestAssignUnassignRoundtrip should pass — and rerun a UI Playwright pass querying [data-testid='assign-course-btn'] etc. Existing teacher id used: 698ad3da31ab437a06176e2a (زين سالم).",
+  "rca of the issue": "Unassign bug RCA: client sends {teacher_id: null}; in server.py update_course() the dict comprehension at line 5617 filters out keys with value None, so the field never reaches the $set. Subsequent sync logic (lines 5642-5648) is also keyed off update_data.get('teacher_id'), which is None for the same reason, so teaching_loads is never cleaned up. Mitigation: switch to `data.dict(exclude_unset=True)` (Pydantic v1) or `data.model_dump(exclude_unset=True)` (Pydantic v2) and replace the conditional at line 5642 with `if 'teacher_id' in update_data and update_data['teacher_id'] != old_teacher_id`. data-testid RCA: react-native-web only forwards a small whitelist of HTML attributes through its native primitives; arbitrary `data-*` props on TouchableOpacity/View/TextInput are dropped. The platform-portable way is the camelCase `testID` prop which RN-Web converts to `data-testid` on the underlying DOM node."
+}
