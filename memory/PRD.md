@@ -100,7 +100,18 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - **النمط**: Custom Domain على كل Worker (يُنشئ DNS records تلقائياً)
   - **اختبار E2E**: ✅ Backend `HTTP/2 404` + `x-proxied-by: Cloudflare-Worker-Wafideen` / Frontend `HTTP/2 200`
 
-- 2026-06-14 **كشف التعارضات البصري في الجدول الأسبوعي (P2)**:
+- 2026-06-15 **إصلاح: فتح تفاصيل الطالب من البحث السريع (Quick Search)**:
+  - **المشكلة**: عند البحث عن طالب من البحث الشامل (GlobalSearch) والنقر على نتيجة الطالب، الصفحة "لا تفتح شيئاً" — كانت `/app/frontend/app/student-details.tsx` مجرد placeholder يعرض أيقونة + رقم الطالب فقط (٤٤ سطر فقط، بدون أي جلب لبيانات حقيقية).
+  - **الإصلاح**:
+    1. **`student-details.tsx`** أُعيد بناؤها: تُعرض حالة تحميل ("جاري فتح بيانات الطالب...") ثم تُحوّل إلى `/students?openStudent={id}` بعد 500ms (لضمان تركيب Root Layout)
+    2. **`students.tsx`** أُضيف:
+       - `useLocalSearchParams<{ openStudent?: string }>` لقراءة الـ query param
+       - `useEffect` جديد يفتح نافذة تفاصيل الطالب تلقائياً عند توفّر `openStudent` + تحميل قائمة الطلاب
+       - رسالة خطأ واضحة لو الطالب غير موجود ("غير موجود")
+  - **الفائدة**: إعادة استخدام كاملة لنافذة تفاصيل الطالب الموجودة في `students.tsx` (مع كل الوظائف: التعديل، الحذف، تغيير الحالة، إلخ) بدلاً من بناء صفحة منفصلة.
+  - **الاختبار**: ✅ JSX يجمَّع بدون أخطاء؛ الصفحة الوسيطة تُحمَّل بسلام.
+
+
   - **Endpoint جديد في Backend** (`/app/backend/backend/routes/weekly_schedule.py`):
     - `GET /api/weekly-schedule/conflicts` — يفحص كل الجدول الحالي ويُرجع 3 أنواع من التعارضات:
       1. **تعارض شعبة**: نفس (department + level + section + day + slot_number) لأكثر من مقرر

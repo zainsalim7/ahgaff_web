@@ -13,7 +13,7 @@ import {
   ActivityIndicator,
   Modal,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
@@ -85,6 +85,7 @@ export default function StudentsScreen() {
   
   const isStudent = user?.role === 'student';
   const canManageStudents = user ? (!isStudent && (hasPermission(PERMISSIONS.MANAGE_STUDENTS) || user.role === 'admin')) : false;
+  const { openStudent } = useLocalSearchParams<{ openStudent?: string }>();
   
   useEffect(() => {
     if (!authLoading && isStudent) {
@@ -205,6 +206,18 @@ export default function StudentsScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // فتح تفاصيل الطالب تلقائياً عند تمرير query param ?openStudent=ID
+  useEffect(() => {
+    if (!openStudent || students.length === 0) return;
+    const target = students.find(s => s.id === openStudent);
+    if (target) {
+      setSelectedStudent(target);
+      setShowDetailsModal(true);
+    } else {
+      showMessage('غير موجود', 'الطالب المطلوب غير موجود أو قد تم حذفه');
+    }
+  }, [openStudent, students]);
 
   // تصفية الطلاب
   const filteredStudents = useMemo(() => {
