@@ -114,6 +114,8 @@ export default function CourseStudentsScreen() {
     full_name: '',
     phone: '',
     email: '',
+    program_code: '',
+    enrollment_year: '',
   });
   const [creatingStudent, setCreatingStudent] = useState(false);
   
@@ -315,7 +317,7 @@ export default function CourseStudentsScreen() {
     setCreatingStudent(true);
     try {
       // إنشاء الطالب
-      const studentData = {
+      const studentData: any = {
         student_id: newStudentForm.student_id.trim(),
         full_name: newStudentForm.full_name.trim(),
         department_id: course?.department_id || '',
@@ -324,19 +326,28 @@ export default function CourseStudentsScreen() {
         phone: newStudentForm.phone.trim() || null,
         email: newStudentForm.email.trim() || null,
       };
+      if (newStudentForm.program_code.trim()) {
+        studentData.program_code = newStudentForm.program_code.trim().toUpperCase();
+      }
+      if (newStudentForm.enrollment_year.trim()) {
+        const ey = newStudentForm.enrollment_year.trim();
+        studentData.enrollment_year = ey.length === 4 ? ey.slice(-2) : ey;
+      }
       
       const createRes = await studentsAPI.create(studentData);
       const newStudentId = createRes.data?.id;
+      const refNum = createRes.data?.reference_number;
       
       if (newStudentId) {
         // تسجيل الطالب في المقرر
         await enrollmentAPI.enroll(courseId!, [newStudentId]);
-        Alert.alert('نجاح', `تم إنشاء الطالب "${newStudentForm.full_name}" وتسجيله في المقرر`);
+        const refMsg = refNum ? `\nالرقم المرجعي: ${refNum}` : '';
+        Alert.alert('نجاح', `تم إنشاء الطالب "${newStudentForm.full_name}" وتسجيله في المقرر${refMsg}`);
       } else {
         Alert.alert('نجاح', 'تم إنشاء الطالب');
       }
       
-      setNewStudentForm({ student_id: '', full_name: '', phone: '', email: '' });
+      setNewStudentForm({ student_id: '', full_name: '', phone: '', email: '', program_code: '', enrollment_year: '' });
       setShowAddModal(false);
       fetchData();
     } catch (error: any) {
@@ -1209,6 +1220,40 @@ export default function CourseStudentsScreen() {
                       placeholderTextColor="#aaa"
                       keyboardType="email-address"
                     />
+                  </View>
+
+                  {/* رمز البرنامج وعام الالتحاق - تظهر فقط للأدمن */}
+                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>رمز البرنامج</Text>
+                      <TextInput
+                        style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
+                        value={newStudentForm.program_code}
+                        onChangeText={(t) => setNewStudentForm({...newStudentForm, program_code: t.toUpperCase()})}
+                        placeholder="افتراضي من القسم"
+                        placeholderTextColor="#aaa"
+                        autoCapitalize="characters"
+                        maxLength={3}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>عام الالتحاق</Text>
+                      <TextInput
+                        style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
+                        value={newStudentForm.enrollment_year}
+                        onChangeText={(t) => setNewStudentForm({...newStudentForm, enrollment_year: t.replace(/[^0-9]/g, '')})}
+                        placeholder="25 أو 2025"
+                        placeholderTextColor="#aaa"
+                        keyboardType="numeric"
+                        maxLength={4}
+                      />
+                    </View>
+                  </View>
+
+                  <View style={{ backgroundColor: '#e3f2fd', padding: 10, borderRadius: 8, marginBottom: 12 }}>
+                    <Text style={{ fontSize: 11, color: '#0d47a1', textAlign: 'right', lineHeight: 18 }}>
+                      💡 الرقم المرجعي يُولَّد تلقائياً من <Text style={{ fontWeight: '700' }}>رمز البرنامج + عام الالتحاق + الكلية</Text>. اتركهما فارغين لاستخدام القيم الافتراضية من القسم/المستوى.
+                    </Text>
                   </View>
 
                   <View style={{ backgroundColor: '#e8f5e9', padding: 12, borderRadius: 10, marginBottom: 16 }}>
