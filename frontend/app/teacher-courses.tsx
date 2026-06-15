@@ -106,11 +106,11 @@ export default function TeacherCoursesScreen() {
       setSearching(true);
       try {
         const res = await teachingLoadAPI.searchCourses(searchQuery || '');
-        const teacherName = data?.teacher_name || '';
+        const currentTeacherName = data?.teacher_name || '';
         const currentCourseIds = new Set((data?.courses || []).map(c => c.id));
         const filtered: AvailableCourse[] = (res.data || []).filter((c: AvailableCourse) => {
           if (currentCourseIds.has(c.course_id)) return false;
-          if (hideAssignedToOthers && c.current_teacher_name && c.current_teacher_name !== teacherName) return false;
+          if (hideAssignedToOthers && c.current_teacher_name && c.current_teacher_name !== currentTeacherName) return false;
           return true;
         });
         setSearchResults(filtered);
@@ -240,7 +240,7 @@ export default function TeacherCoursesScreen() {
             <TouchableOpacity
               style={[styles.headerBtn, styles.btnGhost]}
               onPress={() => router.back()}
-              data-testid="back-btn"
+              testID="back-btn"
             >
               <Ionicons name="arrow-forward" size={16} color="#1a2540" />
               <Text style={styles.btnGhostText}>رجوع</Text>
@@ -248,7 +248,7 @@ export default function TeacherCoursesScreen() {
             <TouchableOpacity
               style={[styles.headerBtn, styles.btnPrimary]}
               onPress={openAssignModal}
-              data-testid="assign-course-btn"
+              testID="assign-course-btn"
             >
               <Ionicons name="add" size={16} color="#fff" />
               <Text style={styles.btnPrimaryText}>إسناد مقرر</Text>
@@ -332,7 +332,7 @@ export default function TeacherCoursesScreen() {
                       pathname: '/course-lectures',
                       params: { courseId: course.id, courseName: course.name },
                     })}
-                    data-testid={`course-card-${course.id}`}
+                    testID={`course-card-${course.id}`}
                   >
                     <View style={styles.courseIconBox}>
                       <Ionicons name="book" size={22} color="#2962ff" />
@@ -384,7 +384,7 @@ export default function TeacherCoursesScreen() {
                     <TouchableOpacity
                       style={[styles.actionBtn, styles.actionUnassign]}
                       onPress={() => setUnassignTarget(course)}
-                      data-testid={`unassign-btn-${course.id}`}
+                      testID={`unassign-btn-${course.id}`}
                     >
                       <Ionicons name="close-circle-outline" size={14} color="#f44336" />
                       <Text style={styles.actionUnassignText}>إلغاء الإسناد</Text>
@@ -407,7 +407,7 @@ export default function TeacherCoursesScreen() {
                 <Text style={styles.assignModalTitle}>إسناد مقررات للمعلم</Text>
                 <Text style={styles.assignModalSubtitle}>{data?.teacher_name || teacherDisplay}</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowAssignModal(false)} data-testid="close-assign-modal">
+              <TouchableOpacity onPress={() => setShowAssignModal(false)} testID="close-assign-modal">
                 <Ionicons name="close" size={22} color="#5b6678" />
               </TouchableOpacity>
             </View>
@@ -421,7 +421,7 @@ export default function TeacherCoursesScreen() {
                 placeholderTextColor="#a8b1c2"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
-                data-testid="course-search-input"
+                testID="course-search-input"
               />
               {searching && <ActivityIndicator size="small" color="#2962ff" />}
             </View>
@@ -457,7 +457,7 @@ export default function TeacherCoursesScreen() {
                       <TouchableOpacity
                         style={{ flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}
                         onPress={() => togglePick(course)}
-                        data-testid={`pick-course-${course.course_id}`}
+                        testID={`pick-course-${course.course_id}`}
                       >
                         <Ionicons
                           name={isPicked ? 'checkbox' : 'square-outline'}
@@ -515,7 +515,7 @@ export default function TeacherCoursesScreen() {
                   style={[styles.headerBtn, styles.btnPrimary, (saving || pickedCount === 0) && { opacity: 0.6 }]}
                   onPress={handleSaveAssignments}
                   disabled={saving || pickedCount === 0}
-                  data-testid="save-assignments-btn"
+                  testID="save-assignments-btn"
                 >
                   {saving ? (
                     <ActivityIndicator color="#fff" size="small" />
@@ -556,7 +556,7 @@ export default function TeacherCoursesScreen() {
                 style={[styles.headerBtn, { backgroundColor: '#f44336', flex: 1, justifyContent: 'center' }, unassigning && { opacity: 0.6 }]}
                 onPress={handleUnassign}
                 disabled={unassigning}
-                data-testid="confirm-unassign-btn"
+                testID="confirm-unassign-btn"
               >
                 {unassigning ? (
                   <ActivityIndicator color="#fff" size="small" />

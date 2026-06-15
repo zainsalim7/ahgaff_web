@@ -5614,7 +5614,7 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
     
-    update_data = {k: v for k, v in data.dict().items() if v is not None}
+    update_data = data.dict(exclude_unset=True)
     
     # تنبيه عند تعيين معلم من قسم آخر
     warning = None
@@ -5637,9 +5637,10 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
         )
     
     # مزامنة مع العبء التدريسي عند تغيير المعلم
-    new_teacher_id = update_data.get("teacher_id")
     old_teacher_id = course.get("teacher_id")
-    if new_teacher_id is not None and new_teacher_id != old_teacher_id:
+    teacher_id_in_update = "teacher_id" in update_data
+    new_teacher_id = update_data.get("teacher_id") if teacher_id_in_update else old_teacher_id
+    if teacher_id_in_update and new_teacher_id != old_teacher_id:
         # حذف عبء المعلم القديم لهذا المقرر
         if old_teacher_id:
             await db.teaching_loads.delete_many({

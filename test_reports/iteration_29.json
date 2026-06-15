@@ -1,0 +1,33 @@
+{
+  "summary": "Retested /teacher-courses page after the two iteration_28 fixes (backend update_course exclude_unset + frontend data-testid→testID). Both fixes are CONFIRMED WORKING end-to-end. Backend pytest TestAssignUnassignRoundtrip now passes (4/4). All 8 expected data-testids are reachable in the DOM. Full UI assign flow (open modal → search 'تدريب' → pick course → save) succeeds and the new course card appears. Full UI unassign flow (click إلغاء الإسناد → confirm) removes the course from the UI AND from the backend (verified GET /api/teachers/.../courses returns total_courses=0). No regressions or new issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_teacher_courses_assign.py",
+    "/app/test_reports/pytest/teacher_courses_assign_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 14,448 lines — still way above the 700-line guideline (carried over from iteration_28). update_course and related course routes should be split into routes/courses.py.",
+    "Minor UX (carried over, non-blocking): the unassign confirm modal's outer overlay has no TouchableOpacity to dismiss on backdrop tap; the assign modal has one. UX inconsistency.",
+    "Minor UX (carried over, non-blocking): 'إخفاء المقررات المُسندة لمعلمين آخرين' filter defaults to true but there is no visual counter showing how many courses are hidden."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (4/4 pytest cases pass; assign + unassign + sync all verified)",
+    "frontend": "100% (all testIDs discoverable; assign and unassign flows both work end-to-end and are persisted in DB)"
+  },
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "Re-assigned course 6a21bee1ddb8d04530cf65f6 (تدريب ميداني صيفي SUMM101) to teacher 698ad3da31ab437a06176e2a before UI test (the previous unassign during pytest had emptied the teacher's list). After my UI tests the same course is currently assigned again (1 course on the teacher) — fine to leave as-is for next iteration.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both bugs from iteration_28 are RESOLVED. Verified: (1) testIDs reach DOM as data-testid for back-btn, assign-course-btn, course-card-{id}, unassign-btn-{id}, close-assign-modal, course-search-input, save-assignments-btn, pick-course-{id}, confirm-unassign-btn. (2) PUT /api/courses/{id} with {teacher_id: null} clears the field AND removes the teaching_loads row AND course no longer returned by GET /api/teachers/{old_teacher_id}/courses. Test teacher used: 698ad3da31ab437a06176e2a. Pytest file at /app/backend/tests/test_teacher_courses_assign.py — note that the file relies on REACT_APP_BACKEND_URL being exported; if not set, all tests error during collection. Consider loading it from /app/frontend/.env in conftest.",
+  "rca of the issue": "N/A — both root causes from iteration_28 (filtering None values in update_course, and using data-testid instead of testID on react-native-web primitives) have been fixed in this iteration and verified."
+}
