@@ -8,10 +8,14 @@ import { Ionicons } from '@expo/vector-icons';
 import { AuthProvider } from '../src/contexts/AuthContext';
 import { SideMenu } from '../src/components/SideMenu';
 import GlobalSearch from '../src/components/GlobalSearch';
+import { injectResponsiveStyles } from '../src/utils/responsiveStyles';
 
 // Enable RTL for Arabic
 I18nManager.allowRTL(true);
 I18nManager.forceRTL(true);
+
+// حقن CSS Media Queries للتصميم العصري (مرة واحدة على Web)
+injectResponsiveStyles();
 
 // Load Arabic font on web to fix rendering issues in some Chrome browsers
 if (Platform.OS === 'web' && typeof document !== 'undefined') {

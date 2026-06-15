@@ -12,6 +12,7 @@ import {
   ScrollView,
   Switch,
   Platform,
+  useWindowDimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
@@ -703,7 +704,7 @@ export default function CourseLecturesScreen() {
     const absentCount = stCounts.absent ?? studentsTotal;
 
     return (
-      <View style={[styles.lectureCardNew, isSelected && styles.lectureCardNewSelected]}>
+      <View dataSet={{ responsive: "lecture-card" }} style={[styles.lectureCardNew, isSelected && styles.lectureCardNewSelected]}>
         {/* الرقم التسلسلي */}
         <View style={styles.lectureNumWrap}>
           <View style={styles.lectureNumBadge}>
@@ -783,7 +784,7 @@ export default function CourseLecturesScreen() {
         </View>
 
         {/* شارة الحالة */}
-        <View style={[styles.statusBadgeAbs, { backgroundColor: statusInfo.color }]}>
+        <View dataSet={{ responsive: "lecture-status-abs" }} style={[styles.statusBadgeAbs, { backgroundColor: statusInfo.color }]}>
           <Text style={styles.statusBadgeAbsText}>{statusInfo.label}</Text>
         </View>
       </View>
@@ -827,7 +828,7 @@ export default function CourseLecturesScreen() {
         <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
           {/* بطاقة المقرر + الأزرار في الأعلى */}
-          <View style={styles.courseHeaderCard}>
+          <View dataSet={{ responsive: "course-header" }} style={styles.courseHeaderCard}>
             <View style={styles.courseHeaderRight}>
               <View style={styles.courseBookIcon}>
                 <Ionicons name="book" size={20} color="#2962ff" />
@@ -893,7 +894,7 @@ export default function CourseLecturesScreen() {
           </View>
 
           {/* 4 بطاقات إحصائيات */}
-          <View style={styles.statsGrid}>
+          <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
             {(() => {
               const stats = getStats();
               const totalLectures = lectures.length;
@@ -942,7 +943,7 @@ export default function CourseLecturesScreen() {
 
           {/* بطاقة الفلاتر */}
           <View style={styles.filterCard}>
-            <View style={styles.filterRowLec}>
+            <View dataSet={{ responsive: "filter-row" }} style={styles.filterRowLec}>
               <View style={styles.filterFieldFlex2}>
                 <View style={styles.dropdown}>
                   <Picker selectedValue={selectedStatus || ''} onValueChange={(v) => setSelectedStatus(v || null)} style={styles.dropdownInner}>

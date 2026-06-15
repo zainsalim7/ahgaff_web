@@ -13,6 +13,12 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-15 **Responsive design system for all redesigned admin pages**:
+  - Added `/app/frontend/src/utils/responsiveStyles.ts` — injects CSS Media Queries once at app boot (web only) via `_layout.tsx`.
+  - Breakpoints: Desktop (>1024px) · Tablet (≤1024px → 2x2 stats grid) · Mobile (≤768px → 1-col stacks, table rows become vertical) · Small mobile (≤480px → action buttons stack).
+  - Hook applied to 5 pages via `dataSet={{ responsive: '...' }}` attributes which map to `[data-responsive="..."]` CSS selectors. Keys: `page-scroll`, `page-header`, `page-header-actions`, `page-title`, `stats-grid`, `course-header`, `filter-row`, `table-row`, `table-header-row`, `lecture-card`, `lecture-status-abs`, `table-footer`.
+  - On mobile: page header stacks vertically, stat cards become 1-per-row, filters become full-width, table rows transform to vertical card style, lecture cards stack, page title shrinks 26px→18px.
+  - Course Lectures (`/course-lectures`): added 4th stat card "إجمالي المحاضرات" (الكل) showing total lecture count, before the scheduled/completed/absent cards.
 - 2026-06-15 **Course Lectures page redesigned (`/course-lectures`)** — Applied new design system:
   - Top course header card: book icon + course name + code + meta chips (hours / department / level / students count).
   - Action buttons (top-left): "إضافة محاضرة" (green) · "توليد تلقائي" (purple) · "تحديد متعدد" (outline).

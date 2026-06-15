@@ -721,7 +721,7 @@ export default function AddCourseScreen() {
     const studentsCount = item.students_count ?? 0;
     const lecturesCount = (item as any).lectures_count ?? 0;
     return (
-      <View style={[styles.tRow, index % 2 === 1 && styles.tRowAlt, selectedIds.has(item.id) && styles.tRowSelected]}>
+      <View dataSet={{ responsive: "table-row" }} style={[styles.tRow, index % 2 === 1 && styles.tRowAlt, selectedIds.has(item.id) && styles.tRowSelected]}>
         <TouchableOpacity
           style={[styles.cCol1, styles.cellPad]}
           onPress={() => selectionMode ? toggleSelect(item.id) : router.push({ pathname: '/course-lectures', params: { courseId: item.id } })}
@@ -983,9 +983,9 @@ export default function AddCourseScreen() {
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
             {/* رأس الصفحة */}
-            <View style={styles.pageHeader}>
+            <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>
               <View style={styles.pageHeaderRight}>
-                <Text style={styles.pageTitle}>المقررات</Text>
+                <Text dataSet={{ responsive: "page-title" }} style={styles.pageTitle}>المقررات</Text>
                 <View style={styles.breadcrumb}>
                   <TouchableOpacity onPress={() => router.replace('/')}>
                     <Text style={styles.breadcrumbLink}>الرئيسية</Text>
@@ -1001,7 +1001,7 @@ export default function AddCourseScreen() {
                 )}
               </View>
 
-              <View style={styles.pageHeaderActions}>
+              <View dataSet={{ responsive: "page-header-actions" }} style={styles.pageHeaderActions}>
                 {!selectionMode ? (
                   <>
                     {canEdit && (
@@ -1074,7 +1074,7 @@ export default function AddCourseScreen() {
               const paged = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
               return (
                 <>
-                  <View style={styles.statsGrid}>
+                  <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
                     <View style={styles.statCard}>
                       <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}><Ionicons name="book" size={22} color="#fff" /></View>
                       <View style={styles.statTextCol}>
@@ -1111,7 +1111,7 @@ export default function AddCourseScreen() {
 
                   {/* بطاقة الفلاتر */}
                   <View style={styles.filterCard}>
-                    <View style={styles.filterRow}>
+                    <View dataSet={{ responsive: "filter-row" }} style={styles.filterRow}>
                       <View style={styles.filterField}>
                         <View style={styles.searchBox}>
                           <Ionicons name="search" size={16} color="#8a95a8" />
@@ -1171,7 +1171,7 @@ export default function AddCourseScreen() {
                       </View>
                     ) : (
                       <>
-                        <View style={styles.tableHeaderRow}>
+                        <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
                           <View style={[styles.cCol1, styles.cellPad]}><Text style={styles.thText}>المقرر</Text></View>
                           <View style={[styles.cCol2, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
                           <View style={[styles.cCol3, styles.cellPad]}><Text style={styles.thText}>المستوى</Text></View>
@@ -1193,7 +1193,7 @@ export default function AddCourseScreen() {
                           </View>
                         )}
 
-                        <View style={styles.tableFooter}>
+                        <View dataSet={{ responsive: "table-footer" }} style={styles.tableFooter}>
                           <View style={styles.perPageWrap}>
                             <Text style={styles.perPageLbl}>عرض في الصفحة</Text>
                             <View style={styles.perPageBox}>

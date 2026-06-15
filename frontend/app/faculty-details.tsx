@@ -104,9 +104,9 @@ export default function FacultyDetailsScreen() {
           showsVerticalScrollIndicator={false}
         >
           {/* رأس الصفحة */}
-          <View style={styles.pageHeader}>
+          <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>
             <View style={styles.pageHeaderRight}>
-              <Text style={styles.pageTitle} testID="faculty-name">{data.name}</Text>
+              <Text dataSet={{ responsive: "page-title" }} style={styles.pageTitle} testID="faculty-name">{data.name}</Text>
               <View style={styles.breadcrumb}>
                 <TouchableOpacity onPress={() => router.replace('/')}>
                   <Text style={styles.breadcrumbLink}>الرئيسية</Text>
@@ -120,7 +120,7 @@ export default function FacultyDetailsScreen() {
                 </View>
               ) : null}
             </View>
-            <View style={styles.pageHeaderActions}>
+            <View dataSet={{ responsive: "page-header-actions" }} style={styles.pageHeaderActions}>
               <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={() => router.back()}>
                 <Ionicons name="arrow-forward" size={16} color="#1a2540" />
                 <Text style={styles.btnGhostText}>رجوع</Text>
@@ -129,7 +129,7 @@ export default function FacultyDetailsScreen() {
           </View>
 
           {/* بطاقات الإحصائيات */}
-          <View style={styles.statsGrid}>
+          <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
             <View style={styles.statCard}>
               <View style={[styles.statIconWrap, { backgroundColor: '#ef6c00' }]}>
                 <Ionicons name="grid" size={22} color="#fff" />
@@ -207,7 +207,7 @@ export default function FacultyDetailsScreen() {
               </View>
             ) : (
               <>
-                <View style={styles.tableHeaderRow}>
+                <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
                   <View style={[styles.dCol1, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
                   <View style={[styles.dCol2, styles.cellPad]}><Text style={styles.thText}>الرمز</Text></View>
                   <View style={[styles.dCol3, styles.cellPad]}><Text style={styles.thText}>الطلاب</Text></View>
@@ -217,7 +217,7 @@ export default function FacultyDetailsScreen() {
                 {data.departments.map((d, idx) => (
                   <TouchableOpacity
                     key={d.id}
-                    style={[styles.tRow, idx % 2 === 1 && styles.tRowAlt]}
+                    dataSet={{ responsive: "table-row" }} style={[styles.tRow, idx % 2 === 1 && styles.tRowAlt]}
                     onPress={() => router.push(`/department-details?departmentId=${d.id}` as any)}
                     testID={`dept-${d.id}`}
                   >

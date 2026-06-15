@@ -458,7 +458,7 @@ export default function ManageTeachersScreen() {
     const coursesCount = (item.assigned_courses?.length ?? item.courses_count ?? 0);
 
     return (
-      <View style={[styles.tRow, index % 2 === 1 && styles.tRowAlt]}>
+      <View dataSet={{ responsive: "table-row" }} style={[styles.tRow, index % 2 === 1 && styles.tRowAlt]}>
         <View style={[styles.colTeacher, styles.cellPad]}>
           <View style={[styles.tAvatar, { backgroundColor: hasAccount ? '#dcedc8' : '#eceff1' }]}>
             <Text style={[styles.tAvatarText, { color: hasAccount ? '#4caf50' : '#90a4ae' }]}>{teacherName.charAt(0)}</Text>
@@ -652,9 +652,9 @@ export default function ManageTeachersScreen() {
           <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
             {/* رأس الصفحة */}
-            <View style={styles.pageHeader}>
+            <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>
               <View style={styles.pageHeaderRight}>
-                <Text style={styles.pageTitle}>المعلمون</Text>
+                <Text dataSet={{ responsive: "page-title" }} style={styles.pageTitle}>المعلمون</Text>
                 <View style={styles.breadcrumb}>
                   <TouchableOpacity onPress={() => router.replace('/')}>
                     <Text style={styles.breadcrumbLink}>الرئيسية</Text>
@@ -663,7 +663,7 @@ export default function ManageTeachersScreen() {
                   <Text style={styles.breadcrumbCurrent}>المعلمون</Text>
                 </View>
               </View>
-              <View style={styles.pageHeaderActions}>
+              <View dataSet={{ responsive: "page-header-actions" }} style={styles.pageHeaderActions}>
                 <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary]} onPress={() => setShowForm(true)}>
                   <Ionicons name="add" size={16} color="#fff" />
                   <Text style={styles.btnPrimaryText}>إضافة معلم</Text>
@@ -684,7 +684,7 @@ export default function ManageTeachersScreen() {
             </View>
 
             {/* بطاقات الإحصائيات */}
-            <View style={styles.statsGrid}>
+            <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
               <View style={styles.statCard}>
                 <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}>
                   <Ionicons name="people" size={22} color="#fff" />
@@ -729,7 +729,7 @@ export default function ManageTeachersScreen() {
 
             {/* بطاقة الفلاتر */}
             <View style={styles.filterCard}>
-              <View style={styles.filterRow}>
+              <View dataSet={{ responsive: "filter-row" }} style={styles.filterRow}>
                 <View style={styles.filterField}>
                   <View style={styles.searchBox}>
                     <Ionicons name="search" size={16} color="#8a95a8" />
@@ -780,7 +780,7 @@ export default function ManageTeachersScreen() {
                 </Text>
               </View>
 
-              <View style={styles.tableHeaderRow}>
+              <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
                 <View style={[styles.colTeacher, styles.cellPad]}><Text style={styles.thText}>المعلم</Text></View>
                 <View style={[styles.colPhone, styles.cellPad]}><Text style={styles.thText}>رقم الجوال</Text></View>
                 <View style={[styles.colDept, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
@@ -804,7 +804,7 @@ export default function ManageTeachersScreen() {
                 </View>
               )}
 
-              <View style={styles.tableFooter}>
+              <View dataSet={{ responsive: "table-footer" }} style={styles.tableFooter}>
                 <View style={styles.perPageWrap}>
                   <Text style={styles.perPageLbl}>عرض في الصفحة</Text>
                   <View style={styles.perPageBox}>

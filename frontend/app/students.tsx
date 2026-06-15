@@ -947,7 +947,7 @@ export default function StudentsScreen() {
     const isMenuOpen = openMenuId === item.id;
 
     return (
-      <View style={[styles.tableRow, isSelected && styles.tableRowSelected, index % 2 === 1 && styles.tableRowAlt]}>
+      <View dataSet={{ responsive: "table-row" }} style={[styles.tableRow, isSelected && styles.tableRowSelected, index % 2 === 1 && styles.tableRowAlt]}>
         {/* العمود 1: الطالب - أفاتار + اسم */}
         <TouchableOpacity
           style={[styles.colStudent, styles.cellPad]}
@@ -1050,10 +1050,10 @@ export default function StudentsScreen() {
       <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
         {/* === رأس الصفحة: عنوان + breadcrumb + أزرار === */}
-        <View style={styles.pageHeader}>
+        <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>
           {/* في RTL: العناصر الأولى تظهر يميناً تلقائياً */}
           <View style={styles.pageHeaderRight}>
-            <Text style={styles.pageTitle}>الطلاب</Text>
+            <Text dataSet={{ responsive: "page-title" }} style={styles.pageTitle}>الطلاب</Text>
             <View style={styles.breadcrumb}>
               <TouchableOpacity onPress={() => router.replace('/')}>
                 <Text style={styles.breadcrumbLink}>الرئيسية</Text>
@@ -1064,7 +1064,7 @@ export default function StudentsScreen() {
           </View>
 
           {canManageStudents && (
-            <View style={styles.pageHeaderActions}>
+            <View dataSet={{ responsive: "page-header-actions" }} style={styles.pageHeaderActions}>
               <TouchableOpacity
                 style={[styles.headerBtn, styles.btnPrimary]}
                 onPress={() => { setNewStudent({ student_id: '', full_name: '', department_id: selectedDeptFilter || '', level: selectedLevelFilter || '1', section: selectedSectionFilter || '', phone: '', email: '', password: '', program_code: '', enrollment_year: '' }); setShowAddModal(true); }}
@@ -1094,7 +1094,7 @@ export default function StudentsScreen() {
         </View>
 
         {/* === بطاقات الإحصائيات === */}
-        <View style={styles.statsGrid}>
+        <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
           <View style={styles.statCard}>
             <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}>
               <Ionicons name="people" size={22} color="#fff" />
@@ -1142,7 +1142,7 @@ export default function StudentsScreen() {
 
         {/* === بطاقة الفلاتر === */}
         <View style={styles.filterCard}>
-          <View style={styles.filterRow}>
+          <View dataSet={{ responsive: "filter-row" }} style={styles.filterRow}>
             {/* البحث - يمين */}
             <View style={styles.filterField}>
               <View style={styles.searchBox}>
@@ -1294,7 +1294,7 @@ export default function StudentsScreen() {
           </View>
 
           {/* رؤوس الأعمدة */}
-          <View style={styles.tableHeaderRow}>
+          <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
             <View style={[styles.colStudent, styles.cellPad]}><Text style={styles.thText}>الطالب</Text></View>
             <View style={[styles.colUniId, styles.cellPad]}><Text style={styles.thText}>الرقم الجامعي</Text></View>
             <View style={[styles.colInner, styles.cellPad]}><Text style={styles.thText}>الرقم الداخلي</Text></View>
@@ -1322,7 +1322,7 @@ export default function StudentsScreen() {
           )}
 
           {/* تذييل الجدول: pagination */}
-          <View style={styles.tableFooter}>
+          <View dataSet={{ responsive: "table-footer" }} style={styles.tableFooter}>
             <View style={styles.perPageWrap}>
               <Text style={styles.perPageLbl}>عرض في الصفحة</Text>
               <View style={styles.perPageBox}>
