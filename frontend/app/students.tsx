@@ -14,6 +14,7 @@ import {
   Modal,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
+import { AddStudentForm, emptyStudentForm } from '../src/components/AddStudentForm';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
@@ -1306,155 +1307,20 @@ export default function StudentsScreen() {
         )}
       </View>
 
-      {/* نافذة إضافة طالب مفرد */}
+      {/* نافذة إضافة طالب مفرد - مكوّن مشترك */}
       {showAddModal && (
       <Modal visible={showAddModal} transparent animationType="fade">
         <View style={styles.modalOverlay}>
           <View style={[styles.modalContent, { maxWidth: 480, maxHeight: '90%' }]}>
-            <ScrollView contentContainerStyle={{ padding: 20 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 10 }}>
-                <Ionicons name="person-add" size={22} color="#1565c0" />
-                <Text style={{ fontSize: 17, fontWeight: '700', color: '#1565c0' }}>إضافة طالب جديد</Text>
-              </View>
-
-              <Text style={styles.filterLabel}>رقم القيد *</Text>
-              <TextInput
-                value={newStudent.student_id}
-                onChangeText={(v) => setNewStudent({ ...newStudent, student_id: v })}
-                placeholder="مثل: 1001"
-                style={styles.sectionInput}
-                testID="add-student-id-input"
-              />
-
-              <Text style={[styles.filterLabel, { marginTop: 10 }]}>الاسم الكامل *</Text>
-              <TextInput
-                value={newStudent.full_name}
-                onChangeText={(v) => setNewStudent({ ...newStudent, full_name: v })}
-                placeholder="مثل: أحمد علي السعدي"
-                style={styles.sectionInput}
-                testID="add-student-name-input"
-              />
-
-              <Text style={[styles.filterLabel, { marginTop: 10 }]}>القسم *</Text>
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={newStudent.department_id}
-                  onValueChange={(v) => setNewStudent({ ...newStudent, department_id: String(v) })}
-                  style={styles.picker}
-                  testID="add-student-dept-picker"
-                >
-                  <Picker.Item label="-- اختر القسم --" value="" />
-                  {departments.map((d) => (
-                    <Picker.Item key={d.id} label={d.name} value={d.id} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.filterLabel}>المستوى *</Text>
-                  <View style={styles.pickerContainer}>
-                    <Picker
-                      selectedValue={newStudent.level}
-                      onValueChange={(v) => setNewStudent({ ...newStudent, level: String(v) })}
-                      style={styles.picker}
-                      testID="add-student-level-picker"
-                    >
-                      {[1,2,3,4,5,6,7,8].map(lv => <Picker.Item key={lv} label={`المستوى ${lv}`} value={String(lv)} />)}
-                    </Picker>
-                  </View>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.filterLabel}>الشعبة (اختياري)</Text>
-                  <TextInput
-                    value={newStudent.section}
-                    onChangeText={(v) => setNewStudent({ ...newStudent, section: v })}
-                    placeholder="اتركها فارغة لو لا توجد"
-                    style={styles.sectionInput}
-                    testID="add-student-section-input"
-                  />
-                </View>
-              </View>
-
-              {/* رمز البرنامج وعام الالتحاق */}
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.filterLabel}>رمز البرنامج (اختياري)</Text>
-                  <TextInput
-                    value={newStudent.program_code}
-                    onChangeText={(v) => setNewStudent({ ...newStudent, program_code: v.toUpperCase() })}
-                    placeholder="افتراضي من القسم (B, M, ...)"
-                    autoCapitalize="characters"
-                    style={styles.sectionInput}
-                    testID="add-student-program-input"
-                  />
-                </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.filterLabel}>عام الالتحاق (اختياري)</Text>
-                  <TextInput
-                    value={newStudent.enrollment_year}
-                    onChangeText={(v) => setNewStudent({ ...newStudent, enrollment_year: v.replace(/[^0-9]/g, '') })}
-                    placeholder="افتراضي محسوب (مثل 25 أو 2025)"
-                    keyboardType="numeric"
-                    maxLength={4}
-                    style={styles.sectionInput}
-                    testID="add-student-year-input"
-                  />
-                </View>
-              </View>
-
-              <View style={{ backgroundColor: '#e3f2fd', padding: 8, borderRadius: 6, marginTop: 10 }}>
-                <Text style={{ fontSize: 11, color: '#0d47a1', textAlign: 'right', lineHeight: 18 }}>
-                  💡 الرقم المرجعي يُولَّد تلقائياً من <Text style={{ fontWeight: '700' }}>رمز البرنامج + عام الالتحاق + الكلية</Text>.
-                  اتركهما فارغين لاستخدام القيم الافتراضية من القسم/المستوى.
-                </Text>
-              </View>
-
-              <Text style={[styles.filterLabel, { marginTop: 10 }]}>الجوال (اختياري)</Text>
-              <TextInput
-                value={newStudent.phone}
-                onChangeText={(v) => setNewStudent({ ...newStudent, phone: v })}
-                placeholder="مثل: 7xxxxxxxx"
-                keyboardType="phone-pad"
-                style={styles.sectionInput}
-              />
-
-              <Text style={[styles.filterLabel, { marginTop: 10 }]}>البريد الإلكتروني (اختياري)</Text>
-              <TextInput
-                value={newStudent.email}
-                onChangeText={(v) => setNewStudent({ ...newStudent, email: v })}
-                placeholder="example@mail.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={styles.sectionInput}
-              />
-
-              <Text style={[styles.filterLabel, { marginTop: 10 }]}>كلمة المرور (اختياري — افتراضياً = رقم القيد)</Text>
-              <TextInput
-                value={newStudent.password}
-                onChangeText={(v) => setNewStudent({ ...newStudent, password: v })}
-                placeholder="اتركها فارغة لاستخدام رقم القيد"
-                style={styles.sectionInput}
-              />
-
-              <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
-                <TouchableOpacity
-                  style={{ flex: 1, backgroundColor: '#9e9e9e', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
-                  onPress={() => setShowAddModal(false)}
-                  disabled={adding}
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>إلغاء</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ flex: 1, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 8, alignItems: 'center', opacity: adding ? 0.6 : 1 }}
-                  onPress={handleAddStudent}
-                  disabled={adding}
-                  testID="confirm-add-student-btn"
-                >
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>{adding ? 'جاري الإضافة...' : 'إضافة'}</Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
+            <AddStudentForm
+              mode="standalone"
+              values={newStudent}
+              onChange={setNewStudent}
+              onSubmit={handleAddStudent}
+              onCancel={() => setShowAddModal(false)}
+              submitting={adding}
+              departments={departments.map(d => ({ id: d.id, name: d.name }))}
+            />
           </View>
         </View>
       </Modal>

@@ -100,7 +100,25 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - **النمط**: Custom Domain على كل Worker (يُنشئ DNS records تلقائياً)
   - **اختبار E2E**: ✅ Backend `HTTP/2 404` + `x-proxied-by: Cloudflare-Worker-Wafideen` / Frontend `HTTP/2 200`
 
-- 2026-06-15 **🔄 توحيد حقول إضافة الطالب في صفحة المقرر مع إدارة الطلاب**:
+- 2026-06-15 **🔧 إنشاء مكوّن مشترك `AddStudentForm` (DRY refactor)**:
+  - **الهدف**: منع أي اختلاف مستقبلي بين نموذجَي إضافة الطالب في `/students` و `/course-students` — أي حقل جديد يُضاف مرة واحدة في المكوّن وينعكس فوراً في كلا الصفحتين.
+  - **الملف الجديد**: `/app/frontend/src/components/AddStudentForm.tsx` (~210 سطر) يصدّر:
+    - `AddStudentForm` (المكوّن نفسه)
+    - `StudentFormValues` (TypeScript type للحالة)
+    - `emptyStudentForm` (قيم ابتدائية موحَّدة)
+  - **Props**:
+    - `mode`: `'standalone'` (يُظهر القسم/المستوى/الشعبة كحقول) أو `'course'` (يخفيها لأنها مأخوذة من المقرر)
+    - `values`, `onChange`, `onSubmit`, `onCancel`, `submitting`
+    - `departments` (مطلوب فقط في standalone)
+    - `contextLabel` (نص ملخّص في الرأس مثل اسم المقرر)
+    - `submitLabel` (مخصّص: "إضافة" أو "إنشاء وتسجيل")
+  - **الحقول الموحَّدة**: رقم القيد، الاسم، القسم (standalone فقط)، المستوى (standalone فقط)، الشعبة (standalone فقط)، رمز البرنامج، عام الالتحاق، الجوال، البريد، كلمة المرور
+  - **الاستخدام في `students.tsx`**: `mode="standalone"` + قائمة الأقسام
+  - **الاستخدام في `course-students.tsx`**: `mode="course"` + `contextLabel="سيُسجَّل في: {اسم المقرر}"`
+  - **حذف الكود المكرَّر**: ~145 سطراً من `students.tsx` + ~120 سطراً من `course-students.tsx` (إجمالي ~265 سطر مكرَّر استُبدلت بـ ~210 سطر مشترك قابل للصيانة).
+  - **الفائدة**: تجربة موحَّدة + صيانة سهلة + اتساق بين الواجهات + اختبار من نقطة واحدة.
+
+
   - **بلاغ المستخدم**: نموذج إضافة طالب في `course-students` يفتقد لحقول رمز البرنامج وعام الالتحاق الموجودة في صفحة الطلاب الرئيسية.
   - **الإصلاح في `/app/frontend/app/course-students.tsx`** (`handleCreateAndEnroll` + النموذج):
     - **حقل "رمز البرنامج"** (TextInput, auto-uppercase, max=3 أحرف) — اختياري، افتراضي من القسم

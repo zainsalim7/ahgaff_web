@@ -20,6 +20,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { coursesAPI, studentsAPI, enrollmentAPI, lecturesAPI, attendanceAPI, API_URL } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { AddStudentForm, type StudentFormValues } from '../src/components/AddStudentForm';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { useAuthStore } from '../src/store/authStore';
 import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR_SHORT } from '../src/utils/dateUtils';
@@ -108,12 +109,16 @@ export default function CourseStudentsScreen() {
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
   
-  // نموذج إنشاء طالب جديد
-  const [newStudentForm, setNewStudentForm] = useState({
+  // نموذج إنشاء طالب جديد (نستخدم StudentFormValues الموحَّد)
+  const [newStudentForm, setNewStudentForm] = useState<StudentFormValues>({
     student_id: '',
     full_name: '',
+    department_id: '',
+    level: '1',
+    section: '',
     phone: '',
     email: '',
+    password: '',
     program_code: '',
     enrollment_year: '',
   });
@@ -347,7 +352,7 @@ export default function CourseStudentsScreen() {
         Alert.alert('نجاح', 'تم إنشاء الطالب');
       }
       
-      setNewStudentForm({ student_id: '', full_name: '', phone: '', email: '', program_code: '', enrollment_year: '' });
+      setNewStudentForm({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', password: '', program_code: '', enrollment_year: '' });
       setShowAddModal(false);
       fetchData();
     } catch (error: any) {
@@ -1103,178 +1108,20 @@ export default function CourseStudentsScreen() {
           />
         )}
 
-        {/* Add Students Modal */}
-        {canManageStudents && (
-          <Modal
-            visible={showAddModal}
-            animationType="slide"
-            presentationStyle="pageSheet"
-          >
+        {/* Add Students Modal — مكوّن مشترك */}
+        {canManageStudents && showAddModal && (
+          <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
             <SafeAreaView style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => {
-                  setShowAddModal(false);
-                  setSelectedStudents([]);
-                  setSearchText('');
-                  setAddMode('existing');
-                }}>
-                  <Text style={styles.cancelText}>إلغاء</Text>
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>إضافة طلاب</Text>
-                {addMode === 'existing' ? (
-                  <TouchableOpacity onPress={handleEnrollStudents} disabled={saving}>
-                    <Text style={[styles.saveText, saving && styles.disabledText]}>
-                      {saving ? 'جاري...' : `إضافة (${selectedStudents.length})`}
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <View style={{ width: 60 }} />
-                )}
-              </View>
-
-              {/* تبويبات: موجود / جديد */}
-              <View style={{ flexDirection: 'row', backgroundColor: '#f0f0f0', borderRadius: 10, margin: 12, padding: 3 }}>
-                <TouchableOpacity
-                  style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: addMode === 'existing' ? '#fff' : 'transparent' }}
-                  onPress={() => setAddMode('existing')}
-                >
-                  <Text style={{ fontWeight: addMode === 'existing' ? '700' : '400', color: addMode === 'existing' ? '#1565c0' : '#666', fontSize: 14 }}>
-                    طلاب موجودين
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={{ flex: 1, paddingVertical: 10, borderRadius: 8, alignItems: 'center', backgroundColor: addMode === 'new' ? '#fff' : 'transparent' }}
-                  onPress={() => setAddMode('new')}
-                >
-                  <Text style={{ fontWeight: addMode === 'new' ? '700' : '400', color: addMode === 'new' ? '#4caf50' : '#666', fontSize: 14 }}>
-                    إنشاء طالب جديد
-                  </Text>
-                </TouchableOpacity>
-              </View>
-
-              {addMode === 'existing' ? (
-                <>
-                  <View style={styles.searchContainer}>
-                    <Ionicons name="search" size={20} color="#999" />
-                    <TextInput
-                      style={styles.searchInput}
-                      placeholder="بحث بالاسم أو الرقم..."
-                      value={searchText}
-                      onChangeText={setSearchText}
-                    />
-                  </View>
-
-                  {filteredStudents.length === 0 ? (
-                    <View style={styles.emptyState}>
-                      <Text style={styles.emptyText}>لا توجد نتائج</Text>
-                    </View>
-                  ) : (
-                    <FlatList
-                      data={filteredStudents}
-                      keyExtractor={(item) => item.id}
-                      renderItem={renderAvailableStudent}
-                      contentContainerStyle={styles.listContent}
-                    />
-                  )}
-                </>
-              ) : (
-                <ScrollView style={{ flex: 1, padding: 16 }}>
-                  <View style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>الرقم الجامعي *</Text>
-                    <TextInput
-                      style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
-                      value={newStudentForm.student_id}
-                      onChangeText={(t) => setNewStudentForm({...newStudentForm, student_id: t})}
-                      placeholder="أدخل الرقم الجامعي"
-                      placeholderTextColor="#aaa"
-                    />
-                  </View>
-                  <View style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>اسم الطالب *</Text>
-                    <TextInput
-                      style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
-                      value={newStudentForm.full_name}
-                      onChangeText={(t) => setNewStudentForm({...newStudentForm, full_name: t})}
-                      placeholder="أدخل اسم الطالب الكامل"
-                      placeholderTextColor="#aaa"
-                    />
-                  </View>
-                  <View style={{ marginBottom: 16 }}>
-                    <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>رقم الهاتف</Text>
-                    <TextInput
-                      style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
-                      value={newStudentForm.phone}
-                      onChangeText={(t) => setNewStudentForm({...newStudentForm, phone: t})}
-                      placeholder="اختياري"
-                      placeholderTextColor="#aaa"
-                      keyboardType="phone-pad"
-                    />
-                  </View>
-                  <View style={{ marginBottom: 24 }}>
-                    <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>البريد الإلكتروني</Text>
-                    <TextInput
-                      style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
-                      value={newStudentForm.email}
-                      onChangeText={(t) => setNewStudentForm({...newStudentForm, email: t})}
-                      placeholder="اختياري"
-                      placeholderTextColor="#aaa"
-                      keyboardType="email-address"
-                    />
-                  </View>
-
-                  {/* رمز البرنامج وعام الالتحاق - تظهر فقط للأدمن */}
-                  <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>رمز البرنامج</Text>
-                      <TextInput
-                        style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
-                        value={newStudentForm.program_code}
-                        onChangeText={(t) => setNewStudentForm({...newStudentForm, program_code: t.toUpperCase()})}
-                        placeholder="افتراضي من القسم"
-                        placeholderTextColor="#aaa"
-                        autoCapitalize="characters"
-                        maxLength={3}
-                      />
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={{ fontSize: 13, color: '#555', marginBottom: 6, fontWeight: '600' }}>عام الالتحاق</Text>
-                      <TextInput
-                        style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 10, padding: 12, fontSize: 15, backgroundColor: '#f9f9f9' }}
-                        value={newStudentForm.enrollment_year}
-                        onChangeText={(t) => setNewStudentForm({...newStudentForm, enrollment_year: t.replace(/[^0-9]/g, '')})}
-                        placeholder="25 أو 2025"
-                        placeholderTextColor="#aaa"
-                        keyboardType="numeric"
-                        maxLength={4}
-                      />
-                    </View>
-                  </View>
-
-                  <View style={{ backgroundColor: '#e3f2fd', padding: 10, borderRadius: 8, marginBottom: 12 }}>
-                    <Text style={{ fontSize: 11, color: '#0d47a1', textAlign: 'right', lineHeight: 18 }}>
-                      💡 الرقم المرجعي يُولَّد تلقائياً من <Text style={{ fontWeight: '700' }}>رمز البرنامج + عام الالتحاق + الكلية</Text>. اتركهما فارغين لاستخدام القيم الافتراضية من القسم/المستوى.
-                    </Text>
-                  </View>
-
-                  <View style={{ backgroundColor: '#e8f5e9', padding: 12, borderRadius: 10, marginBottom: 16 }}>
-                    <Text style={{ fontSize: 13, color: '#2e7d32', textAlign: 'center' }}>
-                      سيتم تسجيل الطالب في المقرر "{course?.name}" تلقائياً
-                    </Text>
-                  </View>
-
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#4caf50', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 30 }}
-                    onPress={handleCreateAndEnroll}
-                    disabled={creatingStudent}
-                  >
-                    {creatingStudent ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <Text style={{ color: '#fff', fontWeight: '700', fontSize: 16 }}>إنشاء وتسجيل الطالب</Text>
-                    )}
-                  </TouchableOpacity>
-                </ScrollView>
-              )}
+              <AddStudentForm
+                mode="course"
+                values={newStudentForm}
+                onChange={setNewStudentForm}
+                onSubmit={handleCreateAndEnroll}
+                onCancel={() => setShowAddModal(false)}
+                submitting={creatingStudent}
+                contextLabel={course?.name ? `سيُسجَّل الطالب تلقائياً في المقرر: ${course.name}` : undefined}
+                submitLabel="إنشاء وتسجيل"
+              />
             </SafeAreaView>
           </Modal>
         )}
