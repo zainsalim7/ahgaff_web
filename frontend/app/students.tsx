@@ -193,6 +193,8 @@ export default function StudentsScreen() {
     phone: '',
     email: '',
     password: '',
+    program_code: '',
+    enrollment_year: '',
   });
 
   const handleAddStudent = async () => {
@@ -207,15 +209,22 @@ export default function StudentsScreen() {
         full_name: newStudent.full_name.trim(),
         department_id: newStudent.department_id,
         level: parseInt(newStudent.level) || 1,
-        section: newStudent.section.trim() || 'أ',
+        section: newStudent.section.trim(), // فارغ مسموح
       };
       if (newStudent.phone.trim()) body.phone = newStudent.phone.trim();
       if (newStudent.email.trim()) body.email = newStudent.email.trim();
       if (newStudent.password.trim()) body.password = newStudent.password.trim();
+      if (newStudent.program_code.trim()) body.program_code = newStudent.program_code.trim().toUpperCase();
+      if (newStudent.enrollment_year.trim()) {
+        // قبول 25 أو 2025 — نطبّع للصيغة ذات رقمين
+        const ey = newStudent.enrollment_year.trim();
+        body.enrollment_year = ey.length === 4 ? ey.slice(-2) : ey;
+      }
       const r = await api.post('/students', body);
-      showMessage('تم', `أُضيف الطالب: ${r.data.full_name}`);
+      const refMsg = r.data?.reference_number ? `\nالرقم المرجعي: ${r.data.reference_number}` : '';
+      showMessage('تم', `أُضيف الطالب: ${r.data.full_name}${refMsg}`);
       setShowAddModal(false);
-      setNewStudent({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', password: '' });
+      setNewStudent({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', password: '', program_code: '', enrollment_year: '' });
       fetchData();
     } catch (e: any) {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل في إضافة الطالب');
@@ -1097,7 +1106,7 @@ export default function StudentsScreen() {
             <>
               <TouchableOpacity
                 style={[styles.iconBtn, { backgroundColor: '#1565c0' }]}
-                onPress={() => { setNewStudent({ student_id: '', full_name: '', department_id: selectedDeptFilter || '', level: selectedLevelFilter || '1', section: selectedSectionFilter || '', phone: '', email: '', password: '' }); setShowAddModal(true); }}
+                onPress={() => { setNewStudent({ student_id: '', full_name: '', department_id: selectedDeptFilter || '', level: selectedLevelFilter || '1', section: selectedSectionFilter || '', phone: '', email: '', password: '', program_code: '', enrollment_year: '' }); setShowAddModal(true); }}
                 data-testid="add-student-btn"
                 accessibilityLabel="إضافة طالب"
               >
@@ -1356,15 +1365,49 @@ export default function StudentsScreen() {
                   </View>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={styles.filterLabel}>الشعبة</Text>
+                  <Text style={styles.filterLabel}>الشعبة (اختياري)</Text>
                   <TextInput
                     value={newStudent.section}
                     onChangeText={(v) => setNewStudent({ ...newStudent, section: v })}
-                    placeholder="مثل: أ"
+                    placeholder="اتركها فارغة لو لا توجد"
                     style={styles.sectionInput}
                     testID="add-student-section-input"
                   />
                 </View>
+              </View>
+
+              {/* رمز البرنامج وعام الالتحاق */}
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.filterLabel}>رمز البرنامج (اختياري)</Text>
+                  <TextInput
+                    value={newStudent.program_code}
+                    onChangeText={(v) => setNewStudent({ ...newStudent, program_code: v.toUpperCase() })}
+                    placeholder="افتراضي من القسم (B, M, ...)"
+                    autoCapitalize="characters"
+                    style={styles.sectionInput}
+                    testID="add-student-program-input"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.filterLabel}>عام الالتحاق (اختياري)</Text>
+                  <TextInput
+                    value={newStudent.enrollment_year}
+                    onChangeText={(v) => setNewStudent({ ...newStudent, enrollment_year: v.replace(/[^0-9]/g, '') })}
+                    placeholder="افتراضي محسوب (مثل 25 أو 2025)"
+                    keyboardType="numeric"
+                    maxLength={4}
+                    style={styles.sectionInput}
+                    testID="add-student-year-input"
+                  />
+                </View>
+              </View>
+
+              <View style={{ backgroundColor: '#e3f2fd', padding: 8, borderRadius: 6, marginTop: 10 }}>
+                <Text style={{ fontSize: 11, color: '#0d47a1', textAlign: 'right', lineHeight: 18 }}>
+                  💡 الرقم المرجعي يُولَّد تلقائياً من <Text style={{ fontWeight: '700' }}>رمز البرنامج + عام الالتحاق + الكلية</Text>.
+                  اتركهما فارغين لاستخدام القيم الافتراضية من القسم/المستوى.
+                </Text>
               </View>
 
               <Text style={[styles.filterLabel, { marginTop: 10 }]}>الجوال (اختياري)</Text>
