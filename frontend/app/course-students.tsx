@@ -104,6 +104,7 @@ export default function CourseStudentsScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [addTab, setAddTab] = useState<'existing' | 'new'>('existing');
   const [addMode, setAddMode] = useState<'existing' | 'new'>('existing');
   const [searchText, setSearchText] = useState('');
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
@@ -1108,21 +1109,103 @@ export default function CourseStudentsScreen() {
           />
         )}
 
-        {/* Add Students Modal — مكوّن مشترك */}
+        {/* Add Students Modal — تبويبان: موجود / جديد */}
         {canManageStudents && showAddModal && (
-          <Modal visible={showAddModal} animationType="slide" presentationStyle="pageSheet">
-            <SafeAreaView style={styles.modalContainer}>
-              <AddStudentForm
-                mode="course"
-                values={newStudentForm}
-                onChange={setNewStudentForm}
-                onSubmit={handleCreateAndEnroll}
-                onCancel={() => setShowAddModal(false)}
-                submitting={creatingStudent}
-                contextLabel={course?.name ? `سيُسجَّل الطالب تلقائياً في المقرر: ${course.name}` : undefined}
-                submitLabel="إنشاء وتسجيل"
-              />
-            </SafeAreaView>
+          <Modal visible={showAddModal} transparent animationType="fade">
+            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+              <View style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: 540, maxHeight: '90%', overflow: 'hidden' }}>
+                {/* Header */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1565c0' }}>إضافة طلاب — {course?.name}</Text>
+                  <TouchableOpacity onPress={() => setShowAddModal(false)} testID="close-add-modal-btn">
+                    <Ionicons name="close" size={24} color="#666" />
+                  </TouchableOpacity>
+                </View>
+
+                {/* Tabs */}
+                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: addTab === 'existing' ? '#1565c0' : 'transparent' }}
+                    onPress={() => setAddTab('existing')}
+                    testID="tab-existing-students"
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: addTab === 'existing' ? '#1565c0' : '#666' }}>
+                      من القائمة ({filteredStudents.length})
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{ flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: addTab === 'new' ? '#1565c0' : 'transparent' }}
+                    onPress={() => setAddTab('new')}
+                    testID="tab-new-student"
+                  >
+                    <Text style={{ fontSize: 14, fontWeight: '700', color: addTab === 'new' ? '#1565c0' : '#666' }}>
+                      إنشاء طالب جديد
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {/* Body */}
+                {addTab === 'existing' ? (
+                  <View style={{ flex: 1, padding: 12 }}>
+                    {/* البحث */}
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 8, paddingHorizontal: 10, marginBottom: 10 }}>
+                      <Ionicons name="search" size={18} color="#888" />
+                      <TextInput
+                        value={searchText}
+                        onChangeText={setSearchText}
+                        placeholder="ابحث بالاسم أو رقم القيد..."
+                        style={{ flex: 1, padding: 10, fontSize: 14, textAlign: 'right' }}
+                      />
+                    </View>
+                    {/* القائمة */}
+                    <FlatList
+                      data={filteredStudents}
+                      keyExtractor={(item) => item.id}
+                      renderItem={renderAvailableStudent}
+                      style={{ maxHeight: 380 }}
+                      ListEmptyComponent={
+                        <View style={{ padding: 24, alignItems: 'center' }}>
+                          <Ionicons name="people-outline" size={36} color="#bbb" />
+                          <Text style={{ color: '#888', marginTop: 8, fontSize: 13 }}>
+                            {searchText ? 'لا يوجد طالب يطابق البحث' : 'لا يوجد طلاب متاحون لإضافتهم'}
+                          </Text>
+                        </View>
+                      }
+                    />
+                    {/* أزرار */}
+                    <View style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: '#9e9e9e', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                        onPress={() => setShowAddModal(false)}
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700' }}>إلغاء</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={{ flex: 1, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 8, alignItems: 'center', opacity: saving || selectedStudents.length === 0 ? 0.6 : 1 }}
+                        onPress={handleEnrollStudents}
+                        disabled={saving || selectedStudents.length === 0}
+                        testID="enroll-selected-btn"
+                      >
+                        <Text style={{ color: '#fff', fontWeight: '700' }}>
+                          {saving ? 'جاري التسجيل...' : `تسجيل (${selectedStudents.length})`}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ) : (
+                  <AddStudentForm
+                    mode="course"
+                    values={newStudentForm}
+                    onChange={setNewStudentForm}
+                    onSubmit={handleCreateAndEnroll}
+                    onCancel={() => setShowAddModal(false)}
+                    submitting={creatingStudent}
+                    contextLabel={course?.name ? `سيُسجَّل الطالب تلقائياً في المقرر: ${course.name}` : undefined}
+                    submitLabel="إنشاء وتسجيل"
+                  />
+                )}
+              </View>
+            </View>
           </Modal>
         )}
         

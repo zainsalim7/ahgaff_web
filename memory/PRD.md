@@ -100,7 +100,25 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - **النمط**: Custom Domain على كل Worker (يُنشئ DNS records تلقائياً)
   - **اختبار E2E**: ✅ Backend `HTTP/2 404` + `x-proxied-by: Cloudflare-Worker-Wafideen` / Frontend `HTTP/2 200`
 
-- 2026-06-15 **🔧 إنشاء مكوّن مشترك `AddStudentForm` (DRY refactor)**:
+- 2026-06-15 **🔧 إعادة ميزة "إضافة طالب موجود" + توحيد نمط النافذة في صفحة المقرر**:
+  - **بلاغ المستخدم**: 
+    1. كنت قد ألغيت ميزة "إضافة طالب موجود إلى المقرر" بالخطأ عند الـ refactor السابق — كانت موجودة قبل ذلك
+    2. نافذة "إنشاء طالب جديد" في صفحة المقرر كانت بنمط slide-up (`pageSheet`) — المستخدم يريدها بنفس نمط Popup منبثق المركَّز كما في صفحة `/students`
+  - **الإصلاح في `/app/frontend/app/course-students.tsx`**:
+    - **state جديد**: `addTab: 'existing' | 'new'` (يحدد التبويب النشط)
+    - **نافذة موحَّدة بـ Modal منبثق** (transparent + fade animation + overlay شبه شفاف) — نفس نمط `/students` ✅
+    - **تبويبان أعلى النافذة**:
+      - **"من القائمة"**: عرض FlatList بالطلاب غير المسجَّلين في المقرر + بحث + اختيار متعدد + زر تسجيل
+      - **"إنشاء طالب جديد"**: مكوّن `AddStudentForm` المشترك (mode="course")
+    - **التبويب الأول يعرض العداد**: "من القائمة (45)" — عدد الطلاب المتاحين
+    - يستخدم الـ handlers الموجودة مسبقاً: `handleEnrollStudents` للطلاب الموجودين، `handleCreateAndEnroll` للطلاب الجدد
+    - حالات فارغة واضحة: "لا يوجد طالب يطابق البحث" / "لا يوجد طلاب متاحون لإضافتهم"
+  - **الفائدة**:
+    - استعادة الوظيفة المحذوفة بالخطأ ✅
+    - تجربة موحَّدة ١٠٠٪ بين `/students` و `/course-students` (نمط Popup، fade، overlay)
+    - حرية المستخدم بالتبديل بين تسجيل طالب موجود أو إنشاء طالب جديد بنفس النافذة
+
+
   - **الهدف**: منع أي اختلاف مستقبلي بين نموذجَي إضافة الطالب في `/students` و `/course-students` — أي حقل جديد يُضاف مرة واحدة في المكوّن وينعكس فوراً في كلا الصفحتين.
   - **الملف الجديد**: `/app/frontend/src/components/AddStudentForm.tsx` (~210 سطر) يصدّر:
     - `AddStudentForm` (المكوّن نفسه)
