@@ -182,6 +182,11 @@ export default function StudentsScreen() {
   const [importSection, setImportSection] = useState('');
   const [importing, setImporting] = useState(false);
 
+  // قائمة العمليات (3 نقاط) لكل صف
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  // عدد العناصر في الصفحة
+  const [perPage, setPerPage] = useState(10);
+
   // ➕ إضافة طالب مفرد
   const [showAddModal, setShowAddModal] = useState(false);
   const [adding, setAdding] = useState(false);
@@ -921,100 +926,120 @@ export default function StudentsScreen() {
     });
   };
 
-  const renderStudent = useCallback(({ item }: { item: Student }) => (
-    <TouchableOpacity 
-      style={[styles.itemCard, selectedIds.has(item.id) && styles.itemCardSelected]}
-      onPress={() => selectionMode ? toggleSelect(item.id) : handleViewDetails(item)}
-      onLongPress={() => {
-        if (!selectionMode) {
-          setSelectionMode(true);
-          setSelectedIds(new Set([item.id]));
-        }
-      }}
-      activeOpacity={0.7}
-    >
-      {selectionMode && (
-        <TouchableOpacity style={styles.checkbox} onPress={() => toggleSelect(item.id)}>
-          <Ionicons 
-            name={selectedIds.has(item.id) ? "checkbox" : "square-outline"} 
-            size={24} 
-            color={selectedIds.has(item.id) ? "#1565c0" : "#999"} 
-          />
-        </TouchableOpacity>
-      )}
-      <View style={styles.itemInfo}>
-        {/* الصف العلوي: الاسم + رقم القيد + الرقم المرجعي + بادج الحالة */}
-        <View style={styles.itemTopRow}>
-          <Text style={styles.itemName} numberOfLines={1}>{item.full_name}</Text>
-          <Text style={styles.itemMutedSm}>· {item.student_id}</Text>
-          {(item as any).reference_number && (
-            <Text style={styles.refBadge} testID={`student-ref-${item.id}`}>
-              {(item as any).reference_number}
-            </Text>
+  // مساعد لتاريخ التسجيل (مختصر)
+  const formatRegDate = useCallback((s: Student) => {
+    const raw = (s as any).created_at || (s as any).enrollment_year;
+    if (!raw) return '—';
+    try {
+      const d = new Date(raw);
+      if (!isNaN(d.getTime())) {
+        return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+      }
+    } catch {}
+    return String(raw);
+  }, []);
+
+  const renderStudent = useCallback(({ item, index }: { item: Student; index: number }) => {
+    const isSelected = selectedIds.has(item.id);
+    const st = (item as any).status || (item.is_active === false ? 'inactive' : 'active');
+    const si = getStatusInfo(st);
+    const dept = getDepartmentName(item.department_id);
+    const isMenuOpen = openMenuId === item.id;
+
+    return (
+      <View style={[styles.tableRow, isSelected && styles.tableRowSelected, index % 2 === 1 && styles.tableRowAlt]}>
+        {/* العمود 1: الطالب - أفاتار + اسم */}
+        <TouchableOpacity
+          style={[styles.colStudent, styles.cellPad]}
+          onPress={() => selectionMode ? toggleSelect(item.id) : handleViewDetails(item)}
+          onLongPress={() => { if (!selectionMode) { setSelectionMode(true); setSelectedIds(new Set([item.id])); } }}
+          activeOpacity={0.7}
+        >
+          {selectionMode ? (
+            <View style={styles.rowCheckbox}>
+              <Ionicons name={isSelected ? 'checkbox' : 'square-outline'} size={20} color={isSelected ? '#2962ff' : '#b0bbcc'} />
+            </View>
+          ) : (
+            <View style={styles.avatarCircle}>
+              <Ionicons name="person" size={16} color="#1a2540" />
+            </View>
           )}
-          {(() => {
-            const st = (item as any).status || (item.is_active === false ? 'inactive' : 'active');
-            if (st === 'active' || st === 'inactive') return null; // إخفاء البادج للحالة الاعتيادية
-            const si = getStatusInfo(st);
-            return (
-              <View style={[styles.statusInlineBadge, { backgroundColor: si.bg }]} testID={`status-${item.id}`}>
-                <Ionicons name={si.icon} size={10} color={si.color} />
-                <Text style={[styles.statusInlineBadgeText, { color: si.color }]}>{si.label}</Text>
-              </View>
-            );
-          })()}
+          <Text style={styles.studentNameCell} numberOfLines={1}>{item.full_name}</Text>
+        </TouchableOpacity>
+
+        {/* العمود 2: الرقم الجامعي - badge أخضر */}
+        <View style={[styles.colUniId, styles.cellPad]}>
+          {(item as any).reference_number ? (
+            <View style={styles.uniIdBadge}>
+              <Text style={styles.uniIdBadgeText}>{(item as any).reference_number}</Text>
+            </View>
+          ) : (
+            <Text style={styles.mutedCell}>—</Text>
+          )}
         </View>
-        {/* الصف السفلي: قسم/مستوى/شعبة + المقررات إن وُجدت */}
-        <View style={styles.itemBottomRow}>
-          <Text style={styles.itemMutedSm}>
-            {getDepartmentName(item.department_id)} · م{item.level}{item.section ? ` · ${item.section}` : ''}
-          </Text>
-          {/* 🚀 إزالة عرض chips للمقررات في القائمة - كانت تسبب بطء كبير (5K+ enrollments تُجلب لكل request).
-              المقررات تظهر الآن في صفحة تفاصيل الطالب (showDetailsModal) عند النقر عليه. */}
+
+        {/* العمود 3: الرقم الداخلي */}
+        <View style={[styles.colInner, styles.cellPad]}>
+          <Text style={styles.innerIdText}>{item.student_id}</Text>
+        </View>
+
+        {/* العمود 4: البرنامج (القسم) */}
+        <View style={[styles.colProg, styles.cellPad]}>
+          <Text style={styles.progCell} numberOfLines={1}>{dept}</Text>
+        </View>
+
+        {/* العمود 5: المستوى */}
+        <View style={[styles.colLevel, styles.cellPad]}>
+          <Text style={styles.levelCell}>{item.level}{item.section ? ` · ${item.section}` : ''}</Text>
+        </View>
+
+        {/* العمود 6: الحالة */}
+        <View style={[styles.colStatus, styles.cellPad]}>
+          <View style={[styles.statusPill, { backgroundColor: si.bg }]}>
+            <Text style={[styles.statusPillText, { color: si.color }]}>{si.label}</Text>
+          </View>
+        </View>
+
+        {/* العمود 7: تاريخ التسجيل */}
+        <View style={[styles.colDate, styles.cellPad]}>
+          <Text style={styles.dateCell}>{formatRegDate(item)}</Text>
+        </View>
+
+        {/* العمود 8: العمليات (3 نقاط) */}
+        <View style={[styles.colActions, styles.cellPad]}>
+          <TouchableOpacity
+            style={styles.dotsBtn}
+            onPress={() => setOpenMenuId(isMenuOpen ? null : item.id)}
+            accessibilityLabel="العمليات"
+            testID={`row-actions-${item.id}`}
+          >
+            <Ionicons name="ellipsis-vertical" size={18} color="#5b6678" />
+          </TouchableOpacity>
         </View>
       </View>
-      {!selectionMode && (
-        <View style={styles.actionButtons}>
-          {canManageStudents && (
-            <TouchableOpacity
-              style={[styles.accountBtn, item.user_id ? styles.accountBtnActive : styles.accountBtnInactive]}
-              onPress={() => item.user_id ? handleDeactivateAccount(item) : handleActivateAccount(item)}
-            >
-              <Ionicons name={item.user_id ? "person" : "person-outline"} size={18} color="#fff" />
-            </TouchableOpacity>
-          )}
-          {item.user_id && canManageStudents && (
-            <TouchableOpacity
-              style={styles.keyBtn}
-              onPress={() => handleResetPassword(item)}
-            >
-              <Ionicons name="key" size={18} color="#ff9800" />
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity style={styles.viewBtn} onPress={() => handleViewDetails(item)} accessibilityLabel="عرض التفاصيل">
-            <Ionicons name="eye" size={20} color="#1565c0" />
-          </TouchableOpacity>
-          {canManageStudents && (
-            <>
-              <TouchableOpacity 
-                style={styles.warningBtn} 
-                onPress={() => handleOpenWarningModal(item)}
-                accessibilityLabel="إنذار"
-              >
-                <Ionicons name="warning" size={20} color="#f57c00" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.editBtn} onPress={() => handleEdit(item)} accessibilityLabel="تعديل">
-                <Ionicons name="pencil" size={20} color="#4caf50" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.deleteBtn} onPress={() => handleDelete(item.id, item.full_name)} accessibilityLabel="حذف">
-                <Ionicons name="trash" size={20} color="#f44336" />
-              </TouchableOpacity>
-            </>
-          )}
-        </View>
-      )}
-    </TouchableOpacity>
-  ), [selectedIds, selectionMode, canManageStudents, getDepartmentName]);
+    );
+  }, [selectedIds, selectionMode, canManageStudents, getDepartmentName, openMenuId, formatRegDate]);
+
+  // الطالب الحالي للقائمة المنبثقة
+  const menuStudent = useMemo(() => students.find(s => s.id === openMenuId) || null, [students, openMenuId]);
+
+  // اسم البرنامج المعروض في بطاقة الإحصائيات
+  const currentProgramName = useMemo(() => {
+    if (!selectedDeptFilter) return 'الكل';
+    return departments.find(d => d.id === selectedDeptFilter)?.name || 'الكل';
+  }, [selectedDeptFilter, departments]);
+
+  // إعادة تعيين كل الفلاتر
+  const handleResetFilters = useCallback(() => {
+    setSelectedDeptFilter('');
+    setSelectedLevelFilter('');
+    setSelectedSectionFilter('');
+    setSelectedStatusFilter('');
+    setSearchQuery('');
+    setCurrentPage(1);
+  }, []);
+
+  const hasAnyFilter = !!(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery);
 
   if (authLoading || loading) {
     return <LoadingScreen />;
@@ -1022,290 +1047,395 @@ export default function StudentsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-forward" size={14} color="#fff" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>الطلاب</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
-      <View style={styles.content}>
-        {/* شريط مدمج: بحث + فلاتر + أزرار في صف واحد */}
-        <View style={styles.compactBar}>
-          {/* البحث */}
-          <View style={styles.searchSlim}>
-            <Ionicons name="search" size={16} color="#999" />
-            <TextInput
-              style={styles.searchSlimInput}
-              placeholder="بحث..."
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              placeholderTextColor="#aaa"
-              testID="search-input"
-            />
-            {searchQuery ? (
-              <TouchableOpacity onPress={() => setSearchQuery('')}>
-                <Ionicons name="close-circle" size={16} color="#999" />
+        {/* === رأس الصفحة: عنوان + breadcrumb + أزرار === */}
+        <View style={styles.pageHeader}>
+          {/* في RTL: العناصر الأولى تظهر يميناً تلقائياً */}
+          <View style={styles.pageHeaderRight}>
+            <Text style={styles.pageTitle}>الطلاب</Text>
+            <View style={styles.breadcrumb}>
+              <TouchableOpacity onPress={() => router.replace('/')}>
+                <Text style={styles.breadcrumbLink}>الرئيسية</Text>
               </TouchableOpacity>
-            ) : null}
+              <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+              <Text style={styles.breadcrumbCurrent}>الطلاب</Text>
+            </View>
           </View>
 
-          {/* القسم */}
-          <View style={styles.compactSelect}>
-            <Picker
-              selectedValue={selectedDeptFilter}
-              onValueChange={(v) => { setSelectedDeptFilter(v); setCurrentPage(1); }}
-              style={styles.pickerSlim}
-            >
-              <Picker.Item label="كل الأقسام" value="" />
-              {departments.map(dept => (
-                <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
-              ))}
-            </Picker>
-          </View>
-
-          {/* المستوى */}
-          <View style={[styles.compactSelect, { flex: 0, minWidth: 80 }]}>
-            <Picker
-              selectedValue={selectedLevelFilter}
-              onValueChange={(v) => { setSelectedLevelFilter(v); setCurrentPage(1); }}
-              style={styles.pickerSlim}
-            >
-              <Picker.Item label="المستوى" value="" />
-              {LEVELS.map(level => (
-                <Picker.Item key={level} label={`م${level}`} value={level} />
-              ))}
-            </Picker>
-          </View>
-
-          {/* الشعبة */}
-          <TextInput
-            style={styles.compactSection}
-            placeholder="شعبة"
-            value={selectedSectionFilter}
-            onChangeText={setSelectedSectionFilter}
-            placeholderTextColor="#aaa"
-          />
-
-          {/* الحالة */}
-          <View style={[styles.compactSelect, { flex: 0, minWidth: 110 }]}>
-            <Picker
-              selectedValue={selectedStatusFilter}
-              onValueChange={(v) => { setSelectedStatusFilter(v); setCurrentPage(1); }}
-              style={styles.pickerSlim}
-            >
-              <Picker.Item label="كل الحالات" value="" />
-              {STATUS_OPTIONS.map(o => (
-                <Picker.Item key={o.value} label={o.label} value={o.value} />
-              ))}
-            </Picker>
-          </View>
-
-          {/* أزرار سريعة */}
-          {canManageStudents && Platform.OS === 'web' && (
-            <>
+          {canManageStudents && (
+            <View style={styles.pageHeaderActions}>
               <TouchableOpacity
-                style={[styles.iconBtn, { backgroundColor: '#1565c0' }]}
+                style={[styles.headerBtn, styles.btnPrimary]}
                 onPress={() => { setNewStudent({ student_id: '', full_name: '', department_id: selectedDeptFilter || '', level: selectedLevelFilter || '1', section: selectedSectionFilter || '', phone: '', email: '', password: '', program_code: '', enrollment_year: '' }); setShowAddModal(true); }}
                 data-testid="add-student-btn"
-                accessibilityLabel="إضافة طالب"
               >
-                <Ionicons name="person-add" size={16} color="#fff" />
+                <Ionicons name="add" size={16} color="#fff" />
+                <Text style={styles.btnPrimaryText}>إضافة طالب</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={[styles.iconBtn, { backgroundColor: '#2e7d32' }]}
+                style={[styles.headerBtn, styles.btnSuccess]}
                 onPress={() => { setImportDept(''); setImportLevel(''); setImportSection(''); setShowImportModal(true); }}
                 data-testid="import-students-btn"
-                accessibilityLabel="استيراد"
               >
-                <Ionicons name="cloud-upload" size={16} color="#fff" />
+                <Ionicons name="document-text-outline" size={16} color="#fff" />
+                <Text style={styles.btnPrimaryText}>استيراد Excel</Text>
               </TouchableOpacity>
-
               <TouchableOpacity
-                style={[
-                  styles.iconBtn,
-                  { backgroundColor: (selectionMode && selectedIds.size > 0) ? '#9c27b0' : '#f57c00' }
-                ]}
+                style={[styles.headerBtn, styles.btnGhost]}
                 onPress={handleExportStudents}
                 data-testid="export-students-btn"
-                accessibilityLabel="تصدير"
               >
-                <Ionicons name="download" size={16} color="#fff" />
-                {(selectionMode && selectedIds.size > 0) ? (
-                  <Text style={styles.iconBtnBadge}>{selectedIds.size}</Text>
-                ) : (selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || searchQuery) ? (
-                  <View style={styles.iconBtnDot} />
-                ) : null}
+                <Ionicons name="download-outline" size={16} color="#1a2540" />
+                <Text style={styles.btnGhostText}>تصدير</Text>
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.iconBtn, { backgroundColor: '#1565c0' }]}
-                onPress={handleRestoreStudent}
-                disabled={restoringStudent}
-                data-testid="restore-student-btn"
-                accessibilityLabel="استعادة طالب"
-              >
-                <Ionicons name={restoringStudent ? 'hourglass' : 'refresh'} size={16} color="#fff" />
-              </TouchableOpacity>
-            </>
+            </View>
           )}
         </View>
 
-        {/* مؤشر السياق (يوضح ما يصدّر فعلاً) */}
-        {(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || searchQuery || (selectionMode && selectedIds.size > 0)) && (
-          <View style={styles.contextBar}>
-            <Ionicons name="funnel" size={12} color="#1565c0" />
-            <Text style={styles.contextText} numberOfLines={1}>
-              {selectionMode && selectedIds.size > 0
-                ? `سيتم تصدير ${selectedIds.size} طالب محدد فقط`
-                : `يعرض ${filteredStudents.length} من ${students.length} طالب`}
-            </Text>
-            {(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || searchQuery) && !selectionMode && (
-              <TouchableOpacity
-                onPress={() => {
-                  setSelectedDeptFilter(''); setSelectedLevelFilter(''); setSelectedSectionFilter(''); setSearchQuery('');
-                }}
-                testID="clear-filters-btn"
-              >
-                <Text style={styles.clearLink}>مسح الفلاتر</Text>
-              </TouchableOpacity>
-            )}
+        {/* === بطاقات الإحصائيات === */}
+        <View style={styles.statsGrid}>
+          <View style={styles.statCard}>
+            <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}>
+              <Ionicons name="people" size={22} color="#fff" />
+            </View>
+            <View style={styles.statTextCol}>
+              <Text style={styles.statLabel}>إجمالي الطلاب</Text>
+              <Text style={styles.statValue}>{students.length.toLocaleString('en-US')}</Text>
+              <Text style={styles.statSubLabel}>طالب</Text>
+            </View>
           </View>
-        )}
 
-        {/* شريط التحديد */}
+          <View style={styles.statCard}>
+            <View style={[styles.statIconWrap, { backgroundColor: '#29b6f6' }]}>
+              <Ionicons name="eye" size={22} color="#fff" />
+            </View>
+            <View style={styles.statTextCol}>
+              <Text style={styles.statLabel}>المعروض حالياً</Text>
+              <Text style={styles.statValue}>{filteredStudents.length.toLocaleString('en-US')}</Text>
+              <Text style={styles.statSubLabel}>من {students.length.toLocaleString('en-US')} طالب</Text>
+            </View>
+          </View>
+
+          <View style={styles.statCard}>
+            <View style={[styles.statIconWrap, { backgroundColor: '#ff9800' }]}>
+              <Ionicons name="book" size={22} color="#fff" />
+            </View>
+            <View style={styles.statTextCol}>
+              <Text style={styles.statLabel}>البرنامج</Text>
+              <Text style={styles.statValue} numberOfLines={1}>{currentProgramName}</Text>
+              <Text style={styles.statSubLabel}>البرنامج الحالي</Text>
+            </View>
+          </View>
+
+          <View style={styles.statCard}>
+            <View style={[styles.statIconWrap, { backgroundColor: '#7c4dff' }]}>
+              <Ionicons name="school" size={22} color="#fff" />
+            </View>
+            <View style={styles.statTextCol}>
+              <Text style={styles.statLabel}>المستوى</Text>
+              <Text style={styles.statValue}>{selectedLevelFilter || 'الكل'}</Text>
+              <Text style={styles.statSubLabel}>المستوى الحالي</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* === بطاقة الفلاتر === */}
+        <View style={styles.filterCard}>
+          <View style={styles.filterRow}>
+            {/* البحث - يمين */}
+            <View style={styles.filterField}>
+              <View style={styles.searchBox}>
+                <Ionicons name="search" size={16} color="#8a95a8" />
+                <TextInput
+                  style={styles.searchBoxInput}
+                  placeholder="ابحث بالاسم أو الرقم الجامعي..."
+                  value={searchQuery}
+                  onChangeText={(v) => { setSearchQuery(v); setCurrentPage(1); }}
+                  placeholderTextColor="#a8b1c2"
+                  testID="search-input"
+                />
+              </View>
+            </View>
+
+            <View style={styles.filterField}>
+              <Text style={styles.filterLbl}>البرنامج</Text>
+              <View style={styles.dropdown}>
+                <Picker
+                  selectedValue={selectedDeptFilter}
+                  onValueChange={(v) => { setSelectedDeptFilter(v); setCurrentPage(1); }}
+                  style={styles.dropdownInner}
+                >
+                  <Picker.Item label="الكل" value="" />
+                  {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={[styles.filterField, { maxWidth: 130 }]}>
+              <Text style={styles.filterLbl}>المستوى</Text>
+              <View style={styles.dropdown}>
+                <Picker
+                  selectedValue={selectedLevelFilter}
+                  onValueChange={(v) => { setSelectedLevelFilter(v); setCurrentPage(1); }}
+                  style={styles.dropdownInner}
+                >
+                  <Picker.Item label="الكل" value="" />
+                  {LEVELS.map(l => <Picker.Item key={l} label={l} value={l} />)}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={[styles.filterField, { maxWidth: 130 }]}>
+              <Text style={styles.filterLbl}>الشعبة</Text>
+              <View style={styles.dropdown}>
+                <Picker
+                  selectedValue={selectedSectionFilter}
+                  onValueChange={(v) => { setSelectedSectionFilter(v); setCurrentPage(1); }}
+                  style={styles.dropdownInner}
+                >
+                  <Picker.Item label="الكل" value="" />
+                  {availableSections.map(s => <Picker.Item key={s} label={s} value={s} />)}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={[styles.filterField, { maxWidth: 140 }]}>
+              <Text style={styles.filterLbl}>الحالة</Text>
+              <View style={styles.dropdown}>
+                <Picker
+                  selectedValue={selectedStatusFilter}
+                  onValueChange={(v) => { setSelectedStatusFilter(v); setCurrentPage(1); }}
+                  style={styles.dropdownInner}
+                >
+                  <Picker.Item label="الكل" value="" />
+                  {STATUS_OPTIONS.map(o => <Picker.Item key={o.value} label={o.label} value={o.value} />)}
+                </Picker>
+              </View>
+            </View>
+
+            {/* أزرار اليسار */}
+            <View style={styles.filterBtns}>
+              <TouchableOpacity
+                style={styles.resetBtn}
+                onPress={handleResetFilters}
+                disabled={!hasAnyFilter}
+                data-testid="reset-filters-btn"
+              >
+                <Ionicons name="refresh" size={13} color={hasAnyFilter ? '#2962ff' : '#a8b1c2'} />
+                <Text style={[styles.resetBtnText, !hasAnyFilter && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { paddingHorizontal: 18 }]}>
+                <Text style={styles.btnPrimaryText}>تطبيق الفلتر</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+
+        {/* === شريط التحديد (يظهر فقط في وضع التحديد) === */}
         {selectionMode && (
-          <View style={styles.selectionBar}>
-            <TouchableOpacity style={styles.selectAllBtn} onPress={selectAll}>
-              <Ionicons 
-                name={selectedIds.size === filteredStudents.length ? "checkbox" : "square-outline"} 
-                size={20} 
-                color="#1565c0" 
-              />
-              <Text style={styles.selectAllText}>تحديد الكل</Text>
+          <View style={styles.selBar}>
+            <TouchableOpacity style={styles.selBarItem} onPress={selectAll}>
+              <Ionicons name={selectedIds.size === filteredStudents.length && filteredStudents.length > 0 ? 'checkbox' : 'square-outline'} size={18} color="#2962ff" />
+              <Text style={styles.selBarText}>تحديد الكل</Text>
             </TouchableOpacity>
-            <Text style={styles.selectedCount}>{selectedIds.size} محدد</Text>
-            <TouchableOpacity 
-              style={styles.cancelSelectionBtn} 
-              onPress={() => { setSelectionMode(false); setSelectedIds(new Set()); }}
-            >
-              <Text style={styles.cancelSelectionText}>إلغاء</Text>
-            </TouchableOpacity>
+            <Text style={styles.selBarCount}>{selectedIds.size} محدد</Text>
+            <View style={{ flex: 1 }} />
             {selectedIds.size > 0 && (
               <>
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#4caf50', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4, opacity: bulkLoading ? 0.6 : 1 }}
-                  onPress={handleBulkActivateSelected}
-                  disabled={bulkLoading}
-                >
-                  {bulkLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="person-add" size={18} color="#fff" />}
-                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>تفعيل</Text>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#4caf50' }]} onPress={handleBulkActivateSelected} disabled={bulkLoading}>
+                  <Ionicons name="person-add" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تفعيل</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#ff9800', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4, opacity: bulkLoading ? 0.6 : 1 }}
-                  onPress={handleBulkDeactivateSelected}
-                  disabled={bulkLoading}
-                >
-                  {bulkLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="person-remove" size={18} color="#fff" />}
-                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>إلغاء تفعيل</Text>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#ff9800' }]} onPress={handleBulkDeactivateSelected} disabled={bulkLoading}>
+                  <Ionicons name="person-remove" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>إلغاء تفعيل</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#9c27b0', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
-                  onPress={() => setShowLevelModal(true)}
-                  data-testid="bulk-change-level-btn"
-                >
-                  <Ionicons name="trending-up" size={18} color="#fff" />
-                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>تغيير المستوى</Text>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#7c4dff' }]} onPress={() => setShowLevelModal(true)} data-testid="bulk-change-level-btn">
+                  <Ionicons name="trending-up" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تغيير المستوى</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#5e35b1', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, gap: 4 }}
-                  onPress={() => { setStatusToApply('repeat'); setStatusNewLevel(''); setStatusReason(''); setShowStatusModal(true); }}
-                  testID="bulk-change-status-btn"
-                >
-                  <Ionicons name="shuffle" size={18} color="#fff" />
-                  <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>تغيير الحالة</Text>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#5e35b1' }]} onPress={() => { setStatusToApply('repeat'); setStatusNewLevel(''); setStatusReason(''); setShowStatusModal(true); }} testID="bulk-change-status-btn">
+                  <Ionicons name="shuffle" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تغيير الحالة</Text>
                 </TouchableOpacity>
-                <TouchableOpacity 
-                  style={styles.bulkDeleteBtn} 
-                  onPress={handleBulkDelete}
-                  disabled={deleting}
-                >
-                  {deleting ? (
-                    <ActivityIndicator size="small" color="#fff" />
-                  ) : (
-                    <>
-                      <Ionicons name="trash" size={18} color="#fff" />
-                      <Text style={styles.bulkDeleteText}>حذف</Text>
-                    </>
-                  )}
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#f44336' }]} onPress={handleBulkDelete} disabled={deleting}>
+                  {deleting ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash" size={14} color="#fff" />}
+                  <Text style={styles.selActionText}>حذف</Text>
                 </TouchableOpacity>
               </>
             )}
+            <TouchableOpacity onPress={() => { setSelectionMode(false); setSelectedIds(new Set()); }}>
+              <Text style={styles.selCancelText}>إلغاء</Text>
+            </TouchableOpacity>
           </View>
         )}
 
-        {/* عدد الطلاب + زر التحديد */}
-        {(!selectedDeptFilter && !selectedLevelFilter && !searchQuery) ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="filter-outline" size={56} color="#bbb" />
-            <Text style={styles.emptyText}>اختر قسم أو مستوى أو ابحث لعرض الطلاب</Text>
-          </View>
-        ) : (
-          <>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 8 }}>
-              <Text style={styles.countText}>عدد الطلاب: {filteredStudents.length} من {students.length}</Text>
+        {/* === بطاقة الجدول === */}
+        <View style={styles.tableCard}>
+          {/* رأس البطاقة */}
+          <View style={styles.tableCardHeader}>
+            <Text style={styles.tableCardTitle}>قائمة الطلاب</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               {canManageStudents && !selectionMode && (
-                <TouchableOpacity 
-                  style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 }}
+                <TouchableOpacity
+                  style={styles.selectModeBtn}
                   onPress={() => setSelectionMode(true)}
                   data-testid="enter-selection-mode-btn"
                 >
-                  <Ionicons name="checkbox-outline" size={18} color="#1565c0" />
-                  <Text style={{ color: '#1565c0', marginLeft: 6, fontWeight: '600', fontSize: 13 }}>تحديد</Text>
+                  <Ionicons name="checkbox-outline" size={14} color="#2962ff" />
+                  <Text style={styles.selectModeText}>تحديد</Text>
                 </TouchableOpacity>
               )}
+              <Text style={styles.tableCardCount}>
+                عرض <Text style={styles.tableCardCountAccent}>{filteredStudents.length}</Text> من <Text style={styles.tableCardCountAccent}>{students.length}</Text> طالب
+              </Text>
+            </View>
+          </View>
+
+          {/* رؤوس الأعمدة */}
+          <View style={styles.tableHeaderRow}>
+            <View style={[styles.colStudent, styles.cellPad]}><Text style={styles.thText}>الطالب</Text></View>
+            <View style={[styles.colUniId, styles.cellPad]}><Text style={styles.thText}>الرقم الجامعي</Text></View>
+            <View style={[styles.colInner, styles.cellPad]}><Text style={styles.thText}>الرقم الداخلي</Text></View>
+            <View style={[styles.colProg, styles.cellPad]}><Text style={styles.thText}>البرنامج</Text></View>
+            <View style={[styles.colLevel, styles.cellPad]}><Text style={styles.thText}>المستوى</Text></View>
+            <View style={[styles.colStatus, styles.cellPad]}><Text style={styles.thText}>الحالة</Text></View>
+            <View style={[styles.colDate, styles.cellPad]}><Text style={styles.thText}>تاريخ التسجيل</Text></View>
+            <View style={[styles.colActions, styles.cellPad]}><Text style={styles.thText}>العمليات</Text></View>
+          </View>
+
+          {/* الصفوف */}
+          {filteredStudents.length === 0 ? (
+            <View style={styles.tableEmpty}>
+              <Ionicons name="people-outline" size={48} color="#cfd6e1" />
+              <Text style={styles.tableEmptyText}>{hasAnyFilter ? 'لا توجد نتائج للفلاتر المطبّقة' : 'لا يوجد طلاب'}</Text>
+            </View>
+          ) : (
+            <View>
+              {filteredStudents
+                .slice((currentPage - 1) * perPage, currentPage * perPage)
+                .map((item, index) => (
+                  <View key={item.id}>{renderStudent({ item, index })}</View>
+                ))}
+            </View>
+          )}
+
+          {/* تذييل الجدول: pagination */}
+          <View style={styles.tableFooter}>
+            <View style={styles.perPageWrap}>
+              <Text style={styles.perPageLbl}>عرض في الصفحة</Text>
+              <View style={styles.perPageBox}>
+                <Picker
+                  selectedValue={String(perPage)}
+                  onValueChange={(v) => { setPerPage(parseInt(v) || 10); setCurrentPage(1); }}
+                  style={styles.perPagePicker}
+                >
+                  {[10, 25, 50, 100].map(n => <Picker.Item key={n} label={String(n)} value={String(n)} />)}
+                </Picker>
+              </View>
             </View>
 
-            {/* قائمة الطلاب */}
-            <FlatList
-              data={filteredStudents.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)}
-              renderItem={renderStudent}
-              keyExtractor={item => item.id}
-              contentContainerStyle={styles.listContainer}
-              showsVerticalScrollIndicator={false}
-              ListEmptyComponent={
-                <View style={styles.emptyState}>
-                  <Ionicons name="people-outline" size={64} color="#ccc" />
-                  <Text style={styles.emptyText}>لا يوجد طلاب</Text>
-                </View>
-              }
-            />
-
-            {/* ترقيم الصفحات */}
-            {Math.ceil(filteredStudents.length / PAGE_SIZE) > 1 && (
-              <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, gap: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }}>
+            {Math.ceil(filteredStudents.length / perPage) > 1 && (
+              <View style={styles.pagerWrap}>
                 <TouchableOpacity
-                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage <= 1 ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                  style={[styles.pagerNavBtn, currentPage <= 1 && styles.pagerNavBtnDisabled]}
                   onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
                   disabled={currentPage <= 1}
                 >
-                  <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+                  <Ionicons name="chevron-forward" size={14} color={currentPage <= 1 ? '#c0c8d4' : '#1a2540'} />
+                  <Text style={[styles.pagerNavText, currentPage <= 1 && { color: '#c0c8d4' }]}>السابق</Text>
                 </TouchableOpacity>
-                <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{currentPage} / {Math.ceil(filteredStudents.length / PAGE_SIZE)}</Text>
+
+                {(() => {
+                  const totalPages = Math.ceil(filteredStudents.length / perPage);
+                  const pages: (number | 'dots')[] = [];
+                  const last = totalPages;
+                  pages.push(1);
+                  if (currentPage > 4) pages.push('dots');
+                  const start = Math.max(2, currentPage - 1);
+                  const end = Math.min(last - 1, currentPage + 1);
+                  for (let i = start; i <= end; i++) pages.push(i);
+                  if (currentPage < last - 3) pages.push('dots');
+                  if (last > 1) pages.push(last);
+                  return pages.map((p, idx) => p === 'dots' ? (
+                    <Text key={`d-${idx}`} style={styles.pagerDots}>...</Text>
+                  ) : (
+                    <TouchableOpacity key={p} style={[styles.pagerBtn, currentPage === p && styles.pagerBtnActive]} onPress={() => setCurrentPage(p as number)}>
+                      <Text style={[styles.pagerBtnText, currentPage === p && styles.pagerBtnTextActive]}>{p}</Text>
+                    </TouchableOpacity>
+                  ));
+                })()}
+
                 <TouchableOpacity
-                  style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage >= Math.ceil(filteredStudents.length / PAGE_SIZE) ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
-                  onPress={() => setCurrentPage(p => Math.min(Math.ceil(filteredStudents.length / PAGE_SIZE), p + 1))}
-                  disabled={currentPage >= Math.ceil(filteredStudents.length / PAGE_SIZE)}
+                  style={[styles.pagerNavBtn, currentPage >= Math.ceil(filteredStudents.length / perPage) && styles.pagerNavBtnDisabled]}
+                  onPress={() => setCurrentPage(p => Math.min(Math.ceil(filteredStudents.length / perPage), p + 1))}
+                  disabled={currentPage >= Math.ceil(filteredStudents.length / perPage)}
                 >
-                  <Ionicons name="chevron-back" size={20} color={currentPage >= Math.ceil(filteredStudents.length / PAGE_SIZE) ? '#ccc' : '#1565c0'} />
+                  <Text style={[styles.pagerNavText, currentPage >= Math.ceil(filteredStudents.length / perPage) && { color: '#c0c8d4' }]}>التالي</Text>
+                  <Ionicons name="chevron-back" size={14} color={currentPage >= Math.ceil(filteredStudents.length / perPage) ? '#c0c8d4' : '#1a2540'} />
                 </TouchableOpacity>
               </View>
             )}
-          </>
-        )}
-      </View>
+          </View>
+        </View>
+
+      </ScrollView>
+
+      {/* === قائمة العمليات (3 نقاط) - Modal === */}
+      {menuStudent && (
+        <Modal visible={!!menuStudent} transparent animationType="fade" onRequestClose={() => setOpenMenuId(null)}>
+          <View style={styles.modalOverlay}>
+            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setOpenMenuId(null)} />
+            <View style={styles.menuModalCard}>
+              <View style={styles.menuModalHeader}>
+                <Text style={styles.menuModalTitle} numberOfLines={1}>{menuStudent.full_name}</Text>
+                <TouchableOpacity onPress={() => setOpenMenuId(null)}>
+                  <Ionicons name="close" size={20} color="#5b6678" />
+                </TouchableOpacity>
+              </View>
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleViewDetails(menuStudent); }}>
+                <Ionicons name="eye-outline" size={18} color="#2962ff" />
+                <Text style={styles.menuText}>عرض التفاصيل</Text>
+              </TouchableOpacity>
+              {canManageStudents && (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleEdit(menuStudent); }}>
+                  <Ionicons name="pencil-outline" size={18} color="#4caf50" />
+                  <Text style={styles.menuText}>تعديل</Text>
+                </TouchableOpacity>
+              )}
+              {canManageStudents && (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleOpenWarningModal(menuStudent); }}>
+                  <Ionicons name="warning-outline" size={18} color="#f57c00" />
+                  <Text style={styles.menuText}>إرسال إنذار</Text>
+                </TouchableOpacity>
+              )}
+              {canManageStudents && (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); menuStudent.user_id ? handleDeactivateAccount(menuStudent) : handleActivateAccount(menuStudent); }}>
+                  <Ionicons name={menuStudent.user_id ? 'person' : 'person-add-outline'} size={18} color={menuStudent.user_id ? '#9e9e9e' : '#4caf50'} />
+                  <Text style={styles.menuText}>{menuStudent.user_id ? 'إلغاء تفعيل الحساب' : 'تفعيل الحساب'}</Text>
+                </TouchableOpacity>
+              )}
+              {menuStudent.user_id && canManageStudents && (
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleResetPassword(menuStudent); }}>
+                  <Ionicons name="key-outline" size={18} color="#ff9800" />
+                  <Text style={styles.menuText}>إعادة تعيين كلمة المرور</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); openHistoryFor(menuStudent); }}>
+                <Ionicons name="time-outline" size={18} color="#5e35b1" />
+                <Text style={styles.menuText}>سجل الحالة</Text>
+              </TouchableOpacity>
+              {canManageStudents && (
+                <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={() => { setOpenMenuId(null); handleDelete(menuStudent.id, menuStudent.full_name); }}>
+                  <Ionicons name="trash-outline" size={18} color="#f44336" />
+                  <Text style={[styles.menuText, { color: '#f44336' }]}>حذف</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* نافذة إضافة طالب مفرد - مكوّن مشترك */}
       {showAddModal && (
@@ -2287,9 +2417,527 @@ export default function StudentsScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f6fb',
   },
-  // Compact bar — كل الفلاتر والأزرار في صف واحد
+  pageScroll: {
+    padding: 20,
+    paddingBottom: 60,
+    maxWidth: 1440,
+    width: '100%',
+    alignSelf: 'center',
+  },
+
+  // ====== رأس الصفحة ======
+  pageHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: 18,
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  pageHeaderRight: {
+    alignItems: 'flex-end',
+  },
+  pageTitle: {
+    fontSize: 26,
+    fontWeight: '700',
+    color: '#1a2540',
+    textAlign: 'right',
+    marginBottom: 6,
+  },
+  breadcrumb: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  breadcrumbLink: {
+    fontSize: 13,
+    color: '#2962ff',
+    fontWeight: '500',
+  },
+  breadcrumbCurrent: {
+    fontSize: 13,
+    color: '#8a95a8',
+    fontWeight: '500',
+  },
+  pageHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  headerBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    borderRadius: 8,
+  },
+  btnPrimary: {
+    backgroundColor: '#2962ff',
+  },
+  btnPrimaryText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  btnSuccess: {
+    backgroundColor: '#22c55e',
+  },
+  btnGhost: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+  },
+  btnGhostText: {
+    color: '#1a2540',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+
+  // ====== بطاقات الإحصائيات ======
+  statsGrid: {
+    flexDirection: 'row',
+    gap: 14,
+    marginBottom: 18,
+    flexWrap: 'wrap',
+  },
+  statCard: {
+    flex: 1,
+    minWidth: 200,
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 14,
+    borderWidth: 1,
+    borderColor: '#eef1f6',
+  },
+  statIconWrap: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statTextCol: {
+    flex: 1,
+    alignItems: 'flex-end',
+  },
+  statLabel: {
+    fontSize: 13,
+    color: '#8a95a8',
+    fontWeight: '500',
+    marginBottom: 4,
+  },
+  statValue: {
+    fontSize: 22,
+    color: '#1a2540',
+    fontWeight: '700',
+    marginBottom: 2,
+  },
+  statSubLabel: {
+    fontSize: 11,
+    color: '#a8b1c2',
+  },
+
+  // ====== بطاقة الفلاتر ======
+  filterCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 18,
+    borderWidth: 1,
+    borderColor: '#eef1f6',
+  },
+  filterRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-end',
+    gap: 12,
+    flexWrap: 'wrap',
+  },
+  filterField: {
+    flex: 1,
+    minWidth: 140,
+  },
+  filterLbl: {
+    fontSize: 12,
+    color: '#5b6678',
+    fontWeight: '500',
+    marginBottom: 5,
+    textAlign: 'right',
+  },
+  searchBox: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    height: 40,
+  },
+  searchBoxInput: {
+    flex: 1,
+    fontSize: 13,
+    color: '#1a2540',
+    textAlign: 'right',
+    outlineStyle: 'none' as any,
+  },
+  dropdown: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    height: 40,
+    overflow: 'hidden',
+    justifyContent: 'center',
+  },
+  dropdownInner: {
+    height: 40,
+    fontSize: 13,
+    color: '#1a2540',
+    textAlign: 'right',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+  filterBtns: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 14,
+  },
+  resetBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 9,
+    paddingHorizontal: 4,
+  },
+  resetBtnText: {
+    fontSize: 13,
+    color: '#2962ff',
+    fontWeight: '600',
+  },
+
+  // ====== شريط التحديد ======
+  selBar: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#eef4ff',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: '#cfdcff',
+    flexWrap: 'wrap',
+  },
+  selBarItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  selBarText: { fontSize: 13, color: '#2962ff', fontWeight: '600' },
+  selBarCount: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+  selActionBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 7,
+  },
+  selActionText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  selCancelText: { fontSize: 13, color: '#5b6678', fontWeight: '600', marginRight: 8 },
+
+  // ====== بطاقة الجدول ======
+  tableCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#eef1f6',
+  },
+  tableCardHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef1f6',
+  },
+  tableCardTitle: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#1a2540',
+  },
+  tableCardCount: {
+    fontSize: 12,
+    color: '#5b6678',
+  },
+  tableCardCountAccent: {
+    color: '#2962ff',
+    fontWeight: '700',
+  },
+  selectModeBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    backgroundColor: '#eef4ff',
+  },
+  selectModeText: { fontSize: 12, color: '#2962ff', fontWeight: '600' },
+  tableHeaderRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: '#fafbfd',
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef1f6',
+    minHeight: 44,
+  },
+  thText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#5b6678',
+    textAlign: 'right',
+  },
+  tableRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f5f9',
+    minHeight: 56,
+  },
+  tableRowAlt: {
+    backgroundColor: '#fcfcfd',
+  },
+  tableRowSelected: {
+    backgroundColor: '#eef4ff',
+  },
+  cellPad: {
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+  },
+  // عرض الأعمدة (flex بدلاً من قيم ثابتة)
+  colStudent: { flex: 2.2, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  colUniId: { flex: 1.3 },
+  colInner: { flex: 1 },
+  colProg: { flex: 1.2 },
+  colLevel: { flex: 0.8 },
+  colStatus: { flex: 1 },
+  colDate: { flex: 1.1 },
+  colActions: { flex: 0.7, alignItems: 'flex-start', position: 'relative' },
+
+  avatarCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: '#dfe6ef',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rowCheckbox: { width: 32, alignItems: 'center', justifyContent: 'center' },
+  studentNameCell: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a2540',
+    flex: 1,
+    textAlign: 'right',
+  },
+  uniIdBadge: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#e7f6ee',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  uniIdBadgeText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#22a35a',
+    letterSpacing: 0.3,
+  },
+  innerIdText: { fontSize: 13, color: '#5b6678', textAlign: 'right' },
+  progCell: { fontSize: 13, color: '#1a2540', textAlign: 'right' },
+  levelCell: { fontSize: 13, color: '#1a2540', textAlign: 'right', fontWeight: '600' },
+  mutedCell: { fontSize: 12, color: '#a8b1c2', textAlign: 'right' },
+  dateCell: { fontSize: 12, color: '#5b6678', textAlign: 'right' },
+  statusPill: {
+    alignSelf: 'flex-end',
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    borderRadius: 12,
+  },
+  statusPillText: { fontSize: 11, fontWeight: '700' },
+
+  dotsBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    backgroundColor: '#fff',
+  },
+  menuBackdrop: {
+    position: 'absolute',
+    top: -1000,
+    left: -1000,
+    right: -1000,
+    bottom: -1000,
+    backgroundColor: 'transparent',
+    zIndex: 1,
+  },
+  actionMenu: {
+    position: 'absolute',
+    top: 38,
+    left: 10,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingVertical: 6,
+    minWidth: 200,
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    zIndex: 10,
+    boxShadow: '0 4px 16px rgba(20,30,55,0.08)' as any,
+  },
+  menuItem: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  menuItemDanger: {
+    borderTopWidth: 1,
+    borderTopColor: '#f3f5f9',
+    marginTop: 2,
+  },
+  menuText: { fontSize: 13, color: '#1a2540', fontWeight: '500', textAlign: 'right' },
+
+  menuModalBackdrop: {
+    position: 'fixed' as any,
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    width: '100%',
+    height: '100%',
+    backgroundColor: 'rgba(20,30,55,0.45)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+    zIndex: 9999,
+  },
+  menuModalCard: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    width: '100%',
+    maxWidth: 380,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#eef1f6',
+    boxShadow: '0 12px 32px rgba(20,30,55,0.18)' as any,
+  },
+  menuModalHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f3f5f9',
+    marginBottom: 4,
+  },
+  menuModalTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1a2540',
+    flex: 1,
+    textAlign: 'right',
+  },
+
+  tableEmpty: {
+    paddingVertical: 60,
+    alignItems: 'center',
+    gap: 12,
+  },
+  tableEmptyText: {
+    fontSize: 14,
+    color: '#8a95a8',
+  },
+
+  tableFooter: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#eef1f6',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  perPageWrap: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+  },
+  perPageLbl: { fontSize: 12, color: '#5b6678' },
+  perPageBox: {
+    width: 70,
+    height: 34,
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    borderRadius: 6,
+    justifyContent: 'center',
+    overflow: 'hidden',
+  },
+  perPagePicker: {
+    height: 34,
+    fontSize: 12,
+    borderWidth: 0,
+    backgroundColor: 'transparent',
+  },
+  pagerWrap: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+  },
+  pagerBtn: {
+    minWidth: 32,
+    height: 32,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    backgroundColor: '#fff',
+  },
+  pagerBtnActive: {
+    backgroundColor: '#2962ff',
+    borderColor: '#2962ff',
+  },
+  pagerBtnText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+  pagerBtnTextActive: { color: '#fff' },
+  pagerDots: { color: '#8a95a8', paddingHorizontal: 4 },
+  pagerNavBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 12,
+    height: 32,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    backgroundColor: '#fff',
+  },
+  pagerNavBtnDisabled: { backgroundColor: '#fafbfd' },
+  pagerNavText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+
+  // ====== استبقاء الستايلات القديمة المستخدمة في الـ modals ======
+  // Compact bar — old (kept to avoid breaking refs)
   compactBar: {
     flexDirection: 'row',
     alignItems: 'center',

@@ -13,6 +13,15 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-15 **Students page redesigned (new design system)**:
+  - `/app/frontend/app/students.tsx` rebuilt UI to clean SaaS aesthetic (light bg `#f4f6fb`, rounded white cards, 1px borders, no heavy shadows).
+  - **Header block:** Page title + breadcrumb (right), action buttons (left): "إضافة طالب" (blue), "استيراد Excel" (green), "تصدير" (outline).
+  - **4 stats cards:** Total Students (green) · Currently Displayed (cyan) · Program (orange) · Level (purple) — colored circular icons + label + value + sublabel.
+  - **Filter card:** Search input + Program/Level/Section/Status dropdowns + Reset link + "تطبيق الفلتر" blue button.
+  - **Table view:** 8 columns — الطالب (avatar + name) · الرقم الجامعي (green pill badge) · الرقم الداخلي · البرنامج · المستوى · الحالة (colored pill) · تاريخ التسجيل · العمليات (3-dot menu).
+  - **3-dot action menu:** Opens as centered Modal showing: View Details, Edit, Send Warning, Activate/Deactivate Account, Reset Password, Status History, Delete (red).
+  - **Footer:** Per-page selector (10/25/50/100) + numbered pagination with Previous/Next.
+  - All existing functionality preserved (bulk operations, Excel import/export, status changes, level changes, warnings, safe delete with backup, history, etc.).
 - 2026-02 Term field added to Semester create/edit (UI + backend)
 - 2026-02 Multi-section curriculum offering generator (sections_map)
 - 2026-02 Teaching Load Report redesigned (filters: semester/department/teacher) + reads from `semester_archives` for archived semesters
