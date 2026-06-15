@@ -181,6 +181,49 @@ export default function StudentsScreen() {
   const [importSection, setImportSection] = useState('');
   const [importing, setImporting] = useState(false);
 
+  // ➕ إضافة طالب مفرد
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [newStudent, setNewStudent] = useState({
+    student_id: '',
+    full_name: '',
+    department_id: '',
+    level: '1',
+    section: '',
+    phone: '',
+    email: '',
+    password: '',
+  });
+
+  const handleAddStudent = async () => {
+    if (!newStudent.student_id.trim() || !newStudent.full_name.trim() || !newStudent.department_id) {
+      showMessage('بيانات ناقصة', 'يرجى إدخال رقم القيد والاسم والقسم على الأقل');
+      return;
+    }
+    setAdding(true);
+    try {
+      const body: any = {
+        student_id: newStudent.student_id.trim(),
+        full_name: newStudent.full_name.trim(),
+        department_id: newStudent.department_id,
+        level: parseInt(newStudent.level) || 1,
+        section: newStudent.section.trim() || 'أ',
+      };
+      if (newStudent.phone.trim()) body.phone = newStudent.phone.trim();
+      if (newStudent.email.trim()) body.email = newStudent.email.trim();
+      if (newStudent.password.trim()) body.password = newStudent.password.trim();
+      const r = await api.post('/students', body);
+      showMessage('تم', `أُضيف الطالب: ${r.data.full_name}`);
+      setShowAddModal(false);
+      setNewStudent({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', password: '' });
+      fetchData();
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل في إضافة الطالب');
+    } finally {
+      setAdding(false);
+    }
+  };
+
   const fetchData = useCallback(async () => {
     if (!canManageStudents) return;
     
@@ -1053,6 +1096,15 @@ export default function StudentsScreen() {
           {canManageStudents && Platform.OS === 'web' && (
             <>
               <TouchableOpacity
+                style={[styles.iconBtn, { backgroundColor: '#1565c0' }]}
+                onPress={() => { setNewStudent({ student_id: '', full_name: '', department_id: selectedDeptFilter || '', level: selectedLevelFilter || '1', section: selectedSectionFilter || '', phone: '', email: '', password: '' }); setShowAddModal(true); }}
+                data-testid="add-student-btn"
+                accessibilityLabel="إضافة طالب"
+              >
+                <Ionicons name="person-add" size={16} color="#fff" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
                 style={[styles.iconBtn, { backgroundColor: '#2e7d32' }]}
                 onPress={() => { setImportDept(''); setImportLevel(''); setImportSection(''); setShowImportModal(true); }}
                 data-testid="import-students-btn"
@@ -1244,6 +1296,126 @@ export default function StudentsScreen() {
           </>
         )}
       </View>
+
+      {/* نافذة إضافة طالب مفرد */}
+      {showAddModal && (
+      <Modal visible={showAddModal} transparent animationType="fade">
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 480, maxHeight: '90%' }]}>
+            <ScrollView contentContainerStyle={{ padding: 20 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 10 }}>
+                <Ionicons name="person-add" size={22} color="#1565c0" />
+                <Text style={{ fontSize: 17, fontWeight: '700', color: '#1565c0' }}>إضافة طالب جديد</Text>
+              </View>
+
+              <Text style={styles.filterLabel}>رقم القيد *</Text>
+              <TextInput
+                value={newStudent.student_id}
+                onChangeText={(v) => setNewStudent({ ...newStudent, student_id: v })}
+                placeholder="مثل: 1001"
+                style={styles.sectionInput}
+                testID="add-student-id-input"
+              />
+
+              <Text style={[styles.filterLabel, { marginTop: 10 }]}>الاسم الكامل *</Text>
+              <TextInput
+                value={newStudent.full_name}
+                onChangeText={(v) => setNewStudent({ ...newStudent, full_name: v })}
+                placeholder="مثل: أحمد علي السعدي"
+                style={styles.sectionInput}
+                testID="add-student-name-input"
+              />
+
+              <Text style={[styles.filterLabel, { marginTop: 10 }]}>القسم *</Text>
+              <View style={styles.pickerContainer}>
+                <Picker
+                  selectedValue={newStudent.department_id}
+                  onValueChange={(v) => setNewStudent({ ...newStudent, department_id: String(v) })}
+                  style={styles.picker}
+                  testID="add-student-dept-picker"
+                >
+                  <Picker.Item label="-- اختر القسم --" value="" />
+                  {departments.map((d) => (
+                    <Picker.Item key={d.id} label={d.name} value={d.id} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.filterLabel}>المستوى *</Text>
+                  <View style={styles.pickerContainer}>
+                    <Picker
+                      selectedValue={newStudent.level}
+                      onValueChange={(v) => setNewStudent({ ...newStudent, level: String(v) })}
+                      style={styles.picker}
+                      testID="add-student-level-picker"
+                    >
+                      {[1,2,3,4,5,6,7,8].map(lv => <Picker.Item key={lv} label={`المستوى ${lv}`} value={String(lv)} />)}
+                    </Picker>
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.filterLabel}>الشعبة</Text>
+                  <TextInput
+                    value={newStudent.section}
+                    onChangeText={(v) => setNewStudent({ ...newStudent, section: v })}
+                    placeholder="مثل: أ"
+                    style={styles.sectionInput}
+                    testID="add-student-section-input"
+                  />
+                </View>
+              </View>
+
+              <Text style={[styles.filterLabel, { marginTop: 10 }]}>الجوال (اختياري)</Text>
+              <TextInput
+                value={newStudent.phone}
+                onChangeText={(v) => setNewStudent({ ...newStudent, phone: v })}
+                placeholder="مثل: 7xxxxxxxx"
+                keyboardType="phone-pad"
+                style={styles.sectionInput}
+              />
+
+              <Text style={[styles.filterLabel, { marginTop: 10 }]}>البريد الإلكتروني (اختياري)</Text>
+              <TextInput
+                value={newStudent.email}
+                onChangeText={(v) => setNewStudent({ ...newStudent, email: v })}
+                placeholder="example@mail.com"
+                keyboardType="email-address"
+                autoCapitalize="none"
+                style={styles.sectionInput}
+              />
+
+              <Text style={[styles.filterLabel, { marginTop: 10 }]}>كلمة المرور (اختياري — افتراضياً = رقم القيد)</Text>
+              <TextInput
+                value={newStudent.password}
+                onChangeText={(v) => setNewStudent({ ...newStudent, password: v })}
+                placeholder="اتركها فارغة لاستخدام رقم القيد"
+                style={styles.sectionInput}
+              />
+
+              <View style={{ flexDirection: 'row', gap: 10, marginTop: 18 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#9e9e9e', paddingVertical: 12, borderRadius: 8, alignItems: 'center' }}
+                  onPress={() => setShowAddModal(false)}
+                  disabled={adding}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 8, alignItems: 'center', opacity: adding ? 0.6 : 1 }}
+                  onPress={handleAddStudent}
+                  disabled={adding}
+                  testID="confirm-add-student-btn"
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700' }}>{adding ? 'جاري الإضافة...' : 'إضافة'}</Text>
+                </TouchableOpacity>
+              </View>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
+      )}
 
       {/* نافذة استيراد الطلاب */}
       {showImportModal && (
