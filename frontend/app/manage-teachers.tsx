@@ -58,6 +58,10 @@ export default function ManageTeachersScreen() {
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
+  // قائمة العمليات (3 نقاط)
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [perPage, setPerPage] = useState(10);
+
   const [formData, setFormData] = useState({
     teacher_id: '',
     full_name: '',
@@ -447,114 +451,53 @@ export default function ManageTeachersScreen() {
 
   const hasActiveFilter = !!filterDepartment || !!searchQuery;
 
-  const renderTeacher = ({ item }: { item: Teacher }) => {
+  const renderTeacher = ({ item, index }: { item: Teacher; index: number }) => {
     const hasAccount = !!item.user_id;
-    
+    const teacherName = getTeacherName(item);
+    const dept = getDepartmentName(item.department_id);
+    const coursesCount = (item.assigned_courses?.length ?? item.courses_count ?? 0);
+
     return (
-      <View style={styles.teacherCard}>
-        <View style={styles.teacherInfo}>
-          <View style={[styles.avatar, { backgroundColor: hasAccount ? '#4caf50' : '#9e9e9e' }]}>
-            <Text style={styles.avatarText}>{getTeacherName(item).charAt(0)}</Text>
+      <View style={[styles.tRow, index % 2 === 1 && styles.tRowAlt]}>
+        <View style={[styles.colTeacher, styles.cellPad]}>
+          <View style={[styles.tAvatar, { backgroundColor: hasAccount ? '#dcedc8' : '#eceff1' }]}>
+            <Text style={[styles.tAvatarText, { color: hasAccount ? '#4caf50' : '#90a4ae' }]}>{teacherName.charAt(0)}</Text>
           </View>
-          <View style={styles.teacherDetails}>
-            {/* صف 1: الاسم + اللقب الأكاديمي + شارة الحساب */}
-            <View style={styles.teacherTopRow}>
-              <Text style={styles.teacherName} numberOfLines={1}>{getTeacherName(item)}</Text>
-              {item.academic_title && <Text style={styles.academicTitle}>· {item.academic_title}</Text>}
-              <View style={[styles.statusBadge, { backgroundColor: hasAccount ? '#e8f5e9' : '#fafafa' }]}>
-                <Ionicons
-                  name={hasAccount ? "checkmark-circle" : "close-circle"}
-                  size={11}
-                  color={hasAccount ? '#4caf50' : '#999'}
-                />
-                <Text style={[styles.statusText, { color: hasAccount ? '#4caf50' : '#999' }]}>
-                  {hasAccount ? 'مفعل' : 'غير مفعل'}
-                </Text>
-              </View>
-            </View>
-            {/* صف 2: القسم + التخصص + النصاب + رقم الجوال — مدمج */}
-            <View style={styles.teacherMetaRow}>
-              <Text style={styles.teacherMeta}>{getDepartmentName(item.department_id)}</Text>
-              {item.specialization && <Text style={styles.teacherMeta}>· {item.specialization}</Text>}
-              {(item.weekly_hours || item.teaching_load) && (
-                <Text style={styles.teacherMeta}>· نصاب: {item.weekly_hours || item.teaching_load} س</Text>
-              )}
-              <Text style={styles.teacherMeta}>· جوال: {getTeacherId(item)}</Text>
-            </View>
-            {/* صف 3: المقررات (chips متراصة) */}
-            {item.assigned_courses && item.assigned_courses.length > 0 && (
-              <View style={styles.teacherCoursesRow}>
-                {item.assigned_courses.slice(0, 6).map((c: any, idx: number) => (
-                  <View key={idx} style={styles.courseChipMini}>
-                    <Ionicons name="book-outline" size={9} color="#1565c0" />
-                    <Text style={styles.courseChipMiniText}>
-                      {c.name}{c.section ? ` ${c.section}` : ''} م{c.level}
-                    </Text>
-                  </View>
-                ))}
-                {item.assigned_courses.length > 6 && (
-                  <Text style={styles.teacherMeta}>+{item.assigned_courses.length - 6}</Text>
-                )}
-              </View>
-            )}
+          <View style={{ flex: 1 }}>
+            <Text style={styles.tName} numberOfLines={1}>{teacherName}</Text>
+            {item.academic_title ? <Text style={styles.tSubName} numberOfLines={1}>{item.academic_title}</Text> : null}
           </View>
         </View>
-        
-        <View style={styles.actionButtons}>
-          {/* زر عرض المقررات */}
+        <View style={[styles.colPhone, styles.cellPad]}>
+          <Text style={styles.tCell}>{getTeacherId(item)}</Text>
+        </View>
+        <View style={[styles.colDept, styles.cellPad]}>
+          <Text style={styles.tCell} numberOfLines={1}>{dept}</Text>
+        </View>
+        <View style={[styles.colSpec, styles.cellPad]}>
+          <Text style={styles.tCell} numberOfLines={1}>{item.specialization || '—'}</Text>
+        </View>
+        <View style={[styles.colLoad, styles.cellPad]}>
+          <Text style={styles.tCell}>{item.weekly_hours || item.teaching_load || 0} س</Text>
+        </View>
+        <View style={[styles.colCourses, styles.cellPad]}>
+          <View style={styles.coursesBadge}>
+            <Ionicons name="book-outline" size={11} color="#1565c0" />
+            <Text style={styles.coursesBadgeText}>{coursesCount}</Text>
+          </View>
+        </View>
+        <View style={[styles.colAcc, styles.cellPad]}>
+          <View style={[styles.accPill, { backgroundColor: hasAccount ? '#e7f6ee' : '#fafafa' }]}>
+            <Text style={[styles.accPillText, { color: hasAccount ? '#22a35a' : '#9e9e9e' }]}>{hasAccount ? 'مفعل' : 'غير مفعل'}</Text>
+          </View>
+        </View>
+        <View style={[styles.colActions, styles.cellPad]}>
           <TouchableOpacity
-            style={[styles.actionBtn, styles.coursesBtn]}
-            onPress={() => router.push({
-              pathname: '/teacher-courses',
-              params: { teacherId: item.id, teacherName: getTeacherName(item) }
-            })}
-            accessibilityLabel="المقررات"
+            style={styles.dotsBtn}
+            onPress={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+            accessibilityLabel="العمليات"
           >
-            <Ionicons name="book" size={18} color="#9c27b0" />
-          </TouchableOpacity>
-          
-          {/* زر تفعيل/إلغاء تفعيل الحساب */}
-          <TouchableOpacity
-            style={[styles.actionBtn, hasAccount ? styles.deactivateBtn : styles.activateBtn]}
-            onPress={() => hasAccount ? handleDeactivateAccount(item) : handleActivateAccount(item)}
-            disabled={saving}
-            accessibilityLabel={hasAccount ? "إلغاء تفعيل الحساب" : "تفعيل الحساب"}
-          >
-            <Ionicons 
-              name={hasAccount ? "person-remove" : "person-add"} 
-              size={18} 
-              color={hasAccount ? '#f44336' : '#4caf50'} 
-            />
-          </TouchableOpacity>
-          
-          {/* زر إعادة كلمة المرور - يظهر فقط إذا كان الحساب مفعلاً */}
-          {hasAccount && (
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.resetBtn]}
-              onPress={() => handleResetPassword(item)}
-              disabled={saving}
-              accessibilityLabel="إعادة تعيين كلمة المرور"
-            >
-              <Ionicons name="key" size={18} color="#ff9800" />
-            </TouchableOpacity>
-          )}
-          
-          {/* زر التعديل */}
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.editBtn]}
-            onPress={() => handleEdit(item)}
-            accessibilityLabel="تعديل"
-          >
-            <Ionicons name="create" size={18} color="#1565c0" />
-          </TouchableOpacity>
-          
-          {/* زر الحذف */}
-          <TouchableOpacity
-            style={[styles.actionBtn, styles.deleteBtn]}
-            onPress={() => handleDelete(item)}
-            accessibilityLabel="حذف"
-          >
-            <Ionicons name="trash" size={18} color="#f44336" />
+            <Ionicons name="ellipsis-vertical" size={18} color="#5b6678" />
           </TouchableOpacity>
         </View>
       </View>
@@ -706,132 +649,262 @@ export default function ManageTeachersScreen() {
             </View>
           </ScrollView>
         ) : (
-          <>
-            {/* زر الإضافة */}
-            <View style={{ flexDirection: 'row', gap: 6, marginHorizontal: 16, marginTop: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowForm(true)}
-              >
-                <Ionicons name="add-circle" size={14} color="#fff" />
-                <Text style={styles.addButtonText}>إضافة معلم</Text>
-              </TouchableOpacity>
-              
-              {Platform.OS === 'web' && (
-                <>
-                  <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: '#4caf50' }]}
-                    onPress={() => { setImportDeptId(''); setImportResult(null); setShowImportModal(true); }}
-                  >
-                    <Ionicons name="cloud-download" size={14} color="#fff" />
-                    <Text style={styles.addButtonText}>استيراد Excel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.addButton, { backgroundColor: '#1565c0' }]}
-                    onPress={handleRestore}
-                    disabled={restoring}
-                  >
-                    <Ionicons name="cloud-upload" size={14} color="#fff" />
-                    <Text style={styles.addButtonText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
-            {/* البحث */}
-            <View style={styles.searchContainer}>
-              <Ionicons name="search" size={20} color="#999" />
-              <TextInput
-                style={styles.searchInput}
-                placeholder="بحث بالاسم أو رقم الجوال..."
-                value={searchQuery}
-                onChangeText={(v) => { setSearchQuery(v); setCurrentPage(1); }}
-              />
-              {searchQuery.length > 0 && (
-                <TouchableOpacity onPress={() => setSearchQuery('')}>
-                  <Ionicons name="close-circle" size={20} color="#999" />
+            {/* رأس الصفحة */}
+            <View style={styles.pageHeader}>
+              <View style={styles.pageHeaderRight}>
+                <Text style={styles.pageTitle}>المعلمون</Text>
+                <View style={styles.breadcrumb}>
+                  <TouchableOpacity onPress={() => router.replace('/')}>
+                    <Text style={styles.breadcrumbLink}>الرئيسية</Text>
+                  </TouchableOpacity>
+                  <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+                  <Text style={styles.breadcrumbCurrent}>المعلمون</Text>
+                </View>
+              </View>
+              <View style={styles.pageHeaderActions}>
+                <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary]} onPress={() => setShowForm(true)}>
+                  <Ionicons name="add" size={16} color="#fff" />
+                  <Text style={styles.btnPrimaryText}>إضافة معلم</Text>
                 </TouchableOpacity>
-              )}
+                {Platform.OS === 'web' && (
+                  <>
+                    <TouchableOpacity style={[styles.headerBtn, styles.btnSuccess]} onPress={() => { setImportDeptId(''); setImportResult(null); setShowImportModal(true); }}>
+                      <Ionicons name="document-text-outline" size={16} color="#fff" />
+                      <Text style={styles.btnPrimaryText}>استيراد Excel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={handleRestore} disabled={restoring}>
+                      <Ionicons name="refresh" size={16} color="#1a2540" />
+                      <Text style={styles.btnGhostText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
             </View>
 
-            {/* فلتر الأقسام - قائمة منسدلة */}
-            <View style={styles.filterContainer}>
-              <View style={styles.dropdownRow}>
-                <View style={styles.dropdownContainer}>
-                  <Text style={styles.dropdownLabel}>القسم</Text>
-                  <View style={styles.pickerWrapper}>
+            {/* بطاقات الإحصائيات */}
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}>
+                  <Ionicons name="people" size={22} color="#fff" />
+                </View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>إجمالي المعلمين</Text>
+                  <Text style={styles.statValue}>{teachers.length}</Text>
+                  <Text style={styles.statSubLabel}>معلم</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#29b6f6' }]}>
+                  <Ionicons name="eye" size={22} color="#fff" />
+                </View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>المعروض حالياً</Text>
+                  <Text style={styles.statValue}>{filteredTeachers.length}</Text>
+                  <Text style={styles.statSubLabel}>من {teachers.length} معلم</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#ff9800' }]}>
+                  <Ionicons name="checkmark-circle" size={22} color="#fff" />
+                </View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>الحسابات المفعّلة</Text>
+                  <Text style={styles.statValue}>{teachers.filter(t => !!t.user_id).length}</Text>
+                  <Text style={styles.statSubLabel}>حساب نشط</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#7c4dff' }]}>
+                  <Ionicons name="business" size={22} color="#fff" />
+                </View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>القسم</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{filterDepartment ? (departments.find(d => d.id === filterDepartment)?.name || 'الكل') : 'الكل'}</Text>
+                  <Text style={styles.statSubLabel}>القسم الحالي</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* بطاقة الفلاتر */}
+            <View style={styles.filterCard}>
+              <View style={styles.filterRow}>
+                <View style={styles.filterField}>
+                  <View style={styles.searchBox}>
+                    <Ionicons name="search" size={16} color="#8a95a8" />
+                    <TextInput
+                      style={styles.searchBoxInput}
+                      placeholder="ابحث بالاسم أو رقم الجوال..."
+                      value={searchQuery}
+                      onChangeText={(v) => { setSearchQuery(v); setCurrentPage(1); }}
+                      placeholderTextColor="#a8b1c2"
+                    />
+                  </View>
+                </View>
+                <View style={styles.filterField}>
+                  <Text style={styles.filterLbl}>القسم</Text>
+                  <View style={styles.dropdown}>
                     <Picker
                       selectedValue={filterDepartment}
-                      onValueChange={(value) => { setFilterDepartment(value); setCurrentPage(1); }}
-                      style={styles.picker}
+                      onValueChange={(v) => { setFilterDepartment(v); setCurrentPage(1); }}
+                      style={styles.dropdownInner}
                     >
-                      <Picker.Item label={`الكل (${teachers.length})`} value="" />
-                      {departments.map(dept => (
-                        <Picker.Item 
-                          key={dept.id} 
-                          label={`${dept.name} (${teachers.filter(t => t.department_id === dept.id).length})`} 
-                          value={dept.id} 
-                        />
-                      ))}
+                      <Picker.Item label="الكل" value="" />
+                      {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                     </Picker>
                   </View>
                 </View>
+                <View style={styles.filterBtns}>
+                  <TouchableOpacity
+                    style={styles.resetBtn}
+                    onPress={() => { setFilterDepartment(''); setSearchQuery(''); setCurrentPage(1); }}
+                    disabled={!filterDepartment && !searchQuery}
+                  >
+                    <Ionicons name="refresh" size={13} color={(filterDepartment || searchQuery) ? '#2962ff' : '#a8b1c2'} />
+                    <Text style={[styles.resetBtnText, !(filterDepartment || searchQuery) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { paddingHorizontal: 18 }]}>
+                    <Text style={styles.btnPrimaryText}>تطبيق الفلتر</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             </View>
 
-            {/* عداد المعلمين */}
-            {!hasActiveFilter ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="filter-outline" size={56} color="#bbb" />
-                <Text style={styles.emptyText}>اختر قسم أو ابحث لعرض المعلمين</Text>
+            {/* بطاقة الجدول */}
+            <View style={styles.tableCard}>
+              <View style={styles.tableCardHeader}>
+                <Text style={styles.tableCardTitle}>قائمة المعلمين</Text>
+                <Text style={styles.tableCardCount}>
+                  عرض <Text style={styles.tableCardCountAccent}>{filteredTeachers.length}</Text> من <Text style={styles.tableCardCountAccent}>{teachers.length}</Text> معلم
+                </Text>
               </View>
-            ) : (
-              <>
-                <View style={styles.countContainer}>
-                  <Text style={styles.countText}>
-                    عدد المعلمين: {filteredTeachers.length} من {teachers.length}
-                  </Text>
+
+              <View style={styles.tableHeaderRow}>
+                <View style={[styles.colTeacher, styles.cellPad]}><Text style={styles.thText}>المعلم</Text></View>
+                <View style={[styles.colPhone, styles.cellPad]}><Text style={styles.thText}>رقم الجوال</Text></View>
+                <View style={[styles.colDept, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
+                <View style={[styles.colSpec, styles.cellPad]}><Text style={styles.thText}>التخصص</Text></View>
+                <View style={[styles.colLoad, styles.cellPad]}><Text style={styles.thText}>النصاب</Text></View>
+                <View style={[styles.colCourses, styles.cellPad]}><Text style={styles.thText}>المقررات</Text></View>
+                <View style={[styles.colAcc, styles.cellPad]}><Text style={styles.thText}>الحساب</Text></View>
+                <View style={[styles.colActions, styles.cellPad]}><Text style={styles.thText}>العمليات</Text></View>
+              </View>
+
+              {filteredTeachers.length === 0 ? (
+                <View style={styles.tableEmpty}>
+                  <Ionicons name="people-outline" size={48} color="#cfd6e1" />
+                  <Text style={styles.tableEmptyText}>لا توجد نتائج للفلاتر المطبّقة</Text>
                 </View>
+              ) : (
+                <View>
+                  {filteredTeachers.slice((currentPage - 1) * perPage, currentPage * perPage).map((item, index) => (
+                    <View key={item.id}>{renderTeacher({ item, index })}</View>
+                  ))}
+                </View>
+              )}
 
-                {/* قائمة المعلمين */}
-                <FlatList
-                  data={filteredTeachers.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)}
-                  renderItem={renderTeacher}
-                  keyExtractor={(item) => item.id}
-                  contentContainerStyle={styles.listContent}
-                  ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                      <Ionicons name="people-outline" size={64} color="#ccc" />
-                      <Text style={styles.emptyText}>لا يوجد معلمين</Text>
-                    </View>
-                  }
-                />
-
-                {/* ترقيم الصفحات */}
-                {Math.ceil(filteredTeachers.length / PAGE_SIZE) > 1 && (
-                  <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, gap: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }}>
+              <View style={styles.tableFooter}>
+                <View style={styles.perPageWrap}>
+                  <Text style={styles.perPageLbl}>عرض في الصفحة</Text>
+                  <View style={styles.perPageBox}>
+                    <Picker
+                      selectedValue={String(perPage)}
+                      onValueChange={(v) => { setPerPage(parseInt(v) || 10); setCurrentPage(1); }}
+                      style={styles.perPagePicker}
+                    >
+                      {[10, 25, 50, 100].map(n => <Picker.Item key={n} label={String(n)} value={String(n)} />)}
+                    </Picker>
+                  </View>
+                </View>
+                {Math.ceil(filteredTeachers.length / perPage) > 1 && (
+                  <View style={styles.pagerWrap}>
                     <TouchableOpacity
-                      style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage <= 1 ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                      style={[styles.pagerNavBtn, currentPage <= 1 && styles.pagerNavBtnDisabled]}
                       onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
                       disabled={currentPage <= 1}
                     >
-                      <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+                      <Ionicons name="chevron-forward" size={14} color={currentPage <= 1 ? '#c0c8d4' : '#1a2540'} />
+                      <Text style={[styles.pagerNavText, currentPage <= 1 && { color: '#c0c8d4' }]}>السابق</Text>
                     </TouchableOpacity>
-                    <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{currentPage} / {Math.ceil(filteredTeachers.length / PAGE_SIZE)}</Text>
+                    {(() => {
+                      const totalPages = Math.ceil(filteredTeachers.length / perPage);
+                      const pages: (number | 'dots')[] = [];
+                      pages.push(1);
+                      if (currentPage > 4) pages.push('dots');
+                      const start = Math.max(2, currentPage - 1);
+                      const end = Math.min(totalPages - 1, currentPage + 1);
+                      for (let i = start; i <= end; i++) pages.push(i);
+                      if (currentPage < totalPages - 3) pages.push('dots');
+                      if (totalPages > 1) pages.push(totalPages);
+                      return pages.map((p, idx) => p === 'dots' ? (
+                        <Text key={`d-${idx}`} style={styles.pagerDots}>...</Text>
+                      ) : (
+                        <TouchableOpacity key={p} style={[styles.pagerBtn, currentPage === p && styles.pagerBtnActive]} onPress={() => setCurrentPage(p as number)}>
+                          <Text style={[styles.pagerBtnText, currentPage === p && styles.pagerBtnTextActive]}>{p}</Text>
+                        </TouchableOpacity>
+                      ));
+                    })()}
                     <TouchableOpacity
-                      style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage >= Math.ceil(filteredTeachers.length / PAGE_SIZE) ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
-                      onPress={() => setCurrentPage(p => Math.min(Math.ceil(filteredTeachers.length / PAGE_SIZE), p + 1))}
-                      disabled={currentPage >= Math.ceil(filteredTeachers.length / PAGE_SIZE)}
+                      style={[styles.pagerNavBtn, currentPage >= Math.ceil(filteredTeachers.length / perPage) && styles.pagerNavBtnDisabled]}
+                      onPress={() => setCurrentPage(p => Math.min(Math.ceil(filteredTeachers.length / perPage), p + 1))}
+                      disabled={currentPage >= Math.ceil(filteredTeachers.length / perPage)}
                     >
-                      <Ionicons name="chevron-back" size={20} color={currentPage >= Math.ceil(filteredTeachers.length / PAGE_SIZE) ? '#ccc' : '#1565c0'} />
+                      <Text style={[styles.pagerNavText, currentPage >= Math.ceil(filteredTeachers.length / perPage) && { color: '#c0c8d4' }]}>التالي</Text>
+                      <Ionicons name="chevron-back" size={14} color={currentPage >= Math.ceil(filteredTeachers.length / perPage) ? '#c0c8d4' : '#1a2540'} />
                     </TouchableOpacity>
                   </View>
                 )}
-              </>
-            )}
-          </>
+              </View>
+            </View>
+
+          </ScrollView>
         )}
       </KeyboardAvoidingView>
+
+      {/* قائمة العمليات (3 نقاط) - Modal مركّز */}
+      {openMenuId && (() => {
+        const t = teachers.find(x => x.id === openMenuId);
+        if (!t) return null;
+        const hasAcc = !!t.user_id;
+        return (
+          <Modal visible transparent animationType="fade" onRequestClose={() => setOpenMenuId(null)}>
+            <View style={styles.modalOverlay}>
+              <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setOpenMenuId(null)} />
+              <View style={styles.menuModalCard}>
+                <View style={styles.menuModalHeader}>
+                  <Text style={styles.menuModalTitle} numberOfLines={1}>{getTeacherName(t)}</Text>
+                  <TouchableOpacity onPress={() => setOpenMenuId(null)}>
+                    <Ionicons name="close" size={20} color="#5b6678" />
+                  </TouchableOpacity>
+                </View>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); router.push({ pathname: '/teacher-courses', params: { teacherId: t.id, teacherName: getTeacherName(t) } }); }}>
+                  <Ionicons name="book-outline" size={18} color="#9c27b0" />
+                  <Text style={styles.menuText}>عرض المقررات</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleEdit(t); }}>
+                  <Ionicons name="pencil-outline" size={18} color="#4caf50" />
+                  <Text style={styles.menuText}>تعديل</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); hasAcc ? handleDeactivateAccount(t) : handleActivateAccount(t); }}>
+                  <Ionicons name={hasAcc ? 'person-remove-outline' : 'person-add-outline'} size={18} color={hasAcc ? '#9e9e9e' : '#4caf50'} />
+                  <Text style={styles.menuText}>{hasAcc ? 'إلغاء تفعيل الحساب' : 'تفعيل الحساب'}</Text>
+                </TouchableOpacity>
+                {hasAcc && (
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleResetPassword(t); }}>
+                    <Ionicons name="key-outline" size={18} color="#ff9800" />
+                    <Text style={styles.menuText}>إعادة تعيين كلمة المرور</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={() => { setOpenMenuId(null); handleDelete(t); }}>
+                  <Ionicons name="trash-outline" size={18} color="#f44336" />
+                  <Text style={[styles.menuText, { color: '#f44336' }]}>حذف</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </Modal>
+        );
+      })()}
       
       {/* Loading overlay */}
       {saving && (
@@ -985,8 +1058,99 @@ export default function ManageTeachersScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f6fb',
   },
+
+  // ====== التصميم الجديد ======
+  pageScroll: { padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center' },
+  pageHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
+  pageHeaderRight: { alignItems: 'flex-end' },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  breadcrumbLink: { fontSize: 13, color: '#2962ff', fontWeight: '500' },
+  breadcrumbCurrent: { fontSize: 13, color: '#8a95a8', fontWeight: '500' },
+  pageHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
+  btnPrimary: { backgroundColor: '#2962ff' },
+  btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  btnSuccess: { backgroundColor: '#22c55e' },
+  btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+
+  statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },
+  statCard: { flex: 1, minWidth: 200, backgroundColor: '#fff', borderRadius: 14, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  statIconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  statTextCol: { flex: 1, alignItems: 'flex-end' },
+  statLabel: { fontSize: 13, color: '#8a95a8', fontWeight: '500', marginBottom: 4 },
+  statValue: { fontSize: 22, color: '#1a2540', fontWeight: '700', marginBottom: 2 },
+  statSubLabel: { fontSize: 11, color: '#a8b1c2' },
+
+  filterCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18, marginBottom: 18, borderWidth: 1, borderColor: '#eef1f6' },
+  filterRow: { flexDirection: 'row-reverse', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' },
+  filterField: { flex: 1, minWidth: 140 },
+  filterLbl: { fontSize: 12, color: '#5b6678', fontWeight: '500', marginBottom: 5, textAlign: 'right' },
+  searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e3e7ee', height: 40 },
+  searchBoxInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', outlineStyle: 'none' as any },
+  dropdown: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e3e7ee', height: 40, overflow: 'hidden', justifyContent: 'center' },
+  dropdownInner: { height: 40, fontSize: 13, color: '#1a2540', textAlign: 'right', backgroundColor: 'transparent', borderWidth: 0 },
+  filterBtns: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14 },
+  resetBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingVertical: 9, paddingHorizontal: 4 },
+  resetBtnText: { fontSize: 13, color: '#2962ff', fontWeight: '600' },
+
+  tableCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  tableCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
+  tableCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
+  tableCardCount: { fontSize: 12, color: '#5b6678' },
+  tableCardCountAccent: { color: '#2962ff', fontWeight: '700' },
+  tableHeaderRow: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fafbfd', borderBottomWidth: 1, borderBottomColor: '#eef1f6', minHeight: 44 },
+  thText: { fontSize: 12, fontWeight: '600', color: '#5b6678', textAlign: 'right' },
+  tRow: { flexDirection: 'row-reverse', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f3f5f9', minHeight: 60 },
+  tRowAlt: { backgroundColor: '#fcfcfd' },
+  cellPad: { paddingVertical: 12, paddingHorizontal: 14 },
+  colTeacher: { flex: 2.4, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  colPhone: { flex: 1.2 },
+  colDept: { flex: 1.4 },
+  colSpec: { flex: 1.3 },
+  colLoad: { flex: 0.8 },
+  colCourses: { flex: 0.8 },
+  colAcc: { flex: 1 },
+  colActions: { flex: 0.7, alignItems: 'flex-start' },
+  tAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  tAvatarText: { fontSize: 14, fontWeight: '700' },
+  tName: { fontSize: 13, fontWeight: '600', color: '#1a2540', textAlign: 'right' },
+  tSubName: { fontSize: 11, color: '#8a95a8', textAlign: 'right', marginTop: 2 },
+  tCell: { fontSize: 13, color: '#1a2540', textAlign: 'right' },
+  coursesBadge: { alignSelf: 'flex-end', flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#e7f0fe', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  coursesBadgeText: { fontSize: 12, color: '#1565c0', fontWeight: '700' },
+  accPill: { alignSelf: 'flex-end', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12 },
+  accPillText: { fontSize: 11, fontWeight: '700' },
+  dotsBtn: { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  tableEmpty: { paddingVertical: 60, alignItems: 'center', gap: 12 },
+  tableEmptyText: { fontSize: 14, color: '#8a95a8' },
+  tableFooter: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderTopWidth: 1, borderTopColor: '#eef1f6', flexWrap: 'wrap', gap: 12 },
+  perPageWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  perPageLbl: { fontSize: 12, color: '#5b6678' },
+  perPageBox: { width: 70, height: 34, borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 6, justifyContent: 'center', overflow: 'hidden' },
+  perPagePicker: { height: 34, fontSize: 12, borderWidth: 0, backgroundColor: 'transparent' },
+  pagerWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  pagerBtn: { minWidth: 32, height: 32, borderRadius: 6, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  pagerBtnActive: { backgroundColor: '#2962ff', borderColor: '#2962ff' },
+  pagerBtnText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+  pagerBtnTextActive: { color: '#fff' },
+  pagerDots: { color: '#8a95a8', paddingHorizontal: 4 },
+  pagerNavBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 12, height: 32, borderRadius: 6, borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  pagerNavBtnDisabled: { backgroundColor: '#fafbfd' },
+  pagerNavText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(20,30,55,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  menuModalCard: { backgroundColor: '#fff', borderRadius: 14, width: '100%', maxWidth: 380, paddingVertical: 8, borderWidth: 1, borderColor: '#eef1f6', boxShadow: '0 12px 32px rgba(20,30,55,0.18)' as any },
+  menuModalHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f5f9', marginBottom: 4 },
+  menuModalTitle: { fontSize: 14, fontWeight: '700', color: '#1a2540', flex: 1, textAlign: 'right' },
+  menuItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  menuItemDanger: { borderTopWidth: 1, borderTopColor: '#f3f5f9', marginTop: 2 },
+  menuText: { fontSize: 13, color: '#1a2540', fontWeight: '500', textAlign: 'right' },
+
+  // ====== الستايلات القديمة (لا تزال مستخدمة في النموذج والـ modals) ======
   addButton: {
     flexDirection: 'row',
     backgroundColor: '#1565c0',

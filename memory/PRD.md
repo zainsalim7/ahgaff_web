@@ -13,15 +13,16 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
-- 2026-06-15 **Students page redesigned (new design system)**:
-  - `/app/frontend/app/students.tsx` rebuilt UI to clean SaaS aesthetic (light bg `#f4f6fb`, rounded white cards, 1px borders, no heavy shadows).
-  - **Header block:** Page title + breadcrumb (right), action buttons (left): "إضافة طالب" (blue), "استيراد Excel" (green), "تصدير" (outline).
-  - **4 stats cards:** Total Students (green) · Currently Displayed (cyan) · Program (orange) · Level (purple) — colored circular icons + label + value + sublabel.
-  - **Filter card:** Search input + Program/Level/Section/Status dropdowns + Reset link + "تطبيق الفلتر" blue button.
-  - **Table view:** 8 columns — الطالب (avatar + name) · الرقم الجامعي (green pill badge) · الرقم الداخلي · البرنامج · المستوى · الحالة (colored pill) · تاريخ التسجيل · العمليات (3-dot menu).
-  - **3-dot action menu:** Opens as centered Modal showing: View Details, Edit, Send Warning, Activate/Deactivate Account, Reset Password, Status History, Delete (red).
-  - **Footer:** Per-page selector (10/25/50/100) + numbered pagination with Previous/Next.
-  - All existing functionality preserved (bulk operations, Excel import/export, status changes, level changes, warnings, safe delete with backup, history, etc.).
+- 2026-06-15 **Unified Design System across admin pages (students, teachers, courses, faculty-details)**:
+  - Applied consistent new SaaS-style design to `/students`, `/manage-teachers`, `/(tabs)/courses`, and `/faculty-details`.
+  - **Pattern:** Light bg (`#f4f6fb`), white rounded cards with thin borders, colorful circular stat icons, clean table layout with avatar/badge cells, centered Modal action menus.
+  - **Common building blocks:** Page header (title + breadcrumb + action buttons), 4 colored stat cards (green/cyan/orange/purple), filter card (search + dropdowns + reset/apply), tabular list with pill badges, 3-dot row menu opening as centered Modal, footer with per-page selector + numbered pagination.
+  - **Per-page specifics:**
+    - `/students`: 8-column table (student/uni ID/inner ID/program/level/status/date/actions) + bulk selection bar + status-history menu item.
+    - `/manage-teachers`: 8-column table (teacher/phone/dept/specialization/load/courses/account/actions) with avatar initials and account pill.
+    - `/courses`: 7-column table (course/dept/level/teacher/students/lectures/actions) + active semester badge + "المزيد" menu (templates, lectures import, auto-enroll, restore).
+    - `/faculty-details`: 4 stat cards + "البيانات الأساسية" info card + departments table with student/course chips.
+  - All existing logic preserved (CRUD, Excel import/export, bulk operations, status/level changes, safe delete with backup, warnings, history, auto-enroll, etc.).
 - 2026-02 Term field added to Semester create/edit (UI + backend)
 - 2026-02 Multi-section curriculum offering generator (sections_map)
 - 2026-02 Teaching Load Report redesigned (filters: semester/department/teacher) + reads from `semester_archives` for archived semesters

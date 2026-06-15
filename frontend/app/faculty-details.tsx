@@ -100,60 +100,156 @@ export default function FacultyDetailsScreen() {
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <ScrollView
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ paddingBottom: 30 }}
+          contentContainerStyle={styles.pageScroll}
+          showsVerticalScrollIndicator={false}
         >
-          <View style={styles.header}>
-            <View style={styles.iconBox}>
-              <Ionicons name="business" size={36} color="#fff" />
+          {/* رأس الصفحة */}
+          <View style={styles.pageHeader}>
+            <View style={styles.pageHeaderRight}>
+              <Text style={styles.pageTitle} testID="faculty-name">{data.name}</Text>
+              <View style={styles.breadcrumb}>
+                <TouchableOpacity onPress={() => router.replace('/')}>
+                  <Text style={styles.breadcrumbLink}>الرئيسية</Text>
+                </TouchableOpacity>
+                <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+                <Text style={styles.breadcrumbCurrent}>{data.name}</Text>
+              </View>
+              {data.code ? (
+                <View style={styles.codeBadge}>
+                  <Text style={styles.codeBadgeText}>{data.code}</Text>
+                </View>
+              ) : null}
             </View>
-            <Text style={styles.headerName} testID="faculty-name">{data.name}</Text>
-            {data.code ? <Text style={styles.headerCode}>{data.code}</Text> : null}
+            <View style={styles.pageHeaderActions}>
+              <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={() => router.back()}>
+                <Ionicons name="arrow-forward" size={16} color="#1a2540" />
+                <Text style={styles.btnGhostText}>رجوع</Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
-          <View style={styles.statsRow}>
-            <StatCard icon="grid" label="الأقسام" value={data.stats.departments_count} color="#ef6c00" />
-            <StatCard icon="people" label="الطلاب" value={data.stats.students_count} color="#1565c0" />
-            <StatCard icon="book" label="المقررات" value={data.stats.courses_count} color="#2e7d32" />
+          {/* بطاقات الإحصائيات */}
+          <View style={styles.statsGrid}>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconWrap, { backgroundColor: '#ef6c00' }]}>
+                <Ionicons name="grid" size={22} color="#fff" />
+              </View>
+              <View style={styles.statTextCol}>
+                <Text style={styles.statLabel}>الأقسام</Text>
+                <Text style={styles.statValue}>{data.stats.departments_count}</Text>
+                <Text style={styles.statSubLabel}>قسم</Text>
+              </View>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconWrap, { backgroundColor: '#29b6f6' }]}>
+                <Ionicons name="people" size={22} color="#fff" />
+              </View>
+              <View style={styles.statTextCol}>
+                <Text style={styles.statLabel}>الطلاب</Text>
+                <Text style={styles.statValue}>{(data.stats.students_count || 0).toLocaleString('en-US')}</Text>
+                <Text style={styles.statSubLabel}>طالب</Text>
+              </View>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}>
+                <Ionicons name="book" size={22} color="#fff" />
+              </View>
+              <View style={styles.statTextCol}>
+                <Text style={styles.statLabel}>المقررات</Text>
+                <Text style={styles.statValue}>{(data.stats.courses_count || 0).toLocaleString('en-US')}</Text>
+                <Text style={styles.statSubLabel}>مقرر</Text>
+              </View>
+            </View>
+            <View style={styles.statCard}>
+              <View style={[styles.statIconWrap, { backgroundColor: '#7c4dff' }]}>
+                <Ionicons name="person" size={22} color="#fff" />
+              </View>
+              <View style={styles.statTextCol}>
+                <Text style={styles.statLabel}>العميد</Text>
+                <Text style={styles.statValue} numberOfLines={1}>{data.dean_name || '—'}</Text>
+                <Text style={styles.statSubLabel}>{data.dean_name ? 'عميد الكلية' : 'غير معيّن'}</Text>
+              </View>
+            </View>
           </View>
 
-          <Section title="البيانات الأساسية" icon="information-circle">
-            <InfoRow label="العميد" value={data.dean_name || '-'} />
-            <InfoRow label="رمز الكلية" value={data.code || '-'} />
-          </Section>
+          {/* بطاقة البيانات الأساسية */}
+          <View style={styles.infoCard}>
+            <View style={styles.infoCardHeader}>
+              <Text style={styles.infoCardTitle}>البيانات الأساسية</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>اسم الكلية</Text>
+              <Text style={styles.infoValue}>{data.name}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>الرمز</Text>
+              <Text style={styles.infoValue}>{data.code || '—'}</Text>
+            </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.infoLabel}>العميد</Text>
+              <Text style={styles.infoValue}>{data.dean_name || '—'}</Text>
+            </View>
+          </View>
 
-          <Section title={`الأقسام (${data.departments.length})`} icon="grid">
+          {/* بطاقة الجدول - الأقسام */}
+          <View style={styles.tableCard}>
+            <View style={styles.tableCardHeader}>
+              <Text style={styles.tableCardTitle}>الأقسام</Text>
+              <Text style={styles.tableCardCount}>
+                إجمالي <Text style={styles.tableCardCountAccent}>{data.departments.length}</Text> قسم
+              </Text>
+            </View>
+
             {data.departments.length === 0 ? (
-              <Text style={styles.emptyText}>لا توجد أقسام</Text>
+              <View style={styles.tableEmpty}>
+                <Ionicons name="grid-outline" size={48} color="#cfd6e1" />
+                <Text style={styles.tableEmptyText}>لا توجد أقسام في هذه الكلية</Text>
+              </View>
             ) : (
-              data.departments.map((d) => (
-                <TouchableOpacity
-                  key={d.id}
-                  style={styles.deptCard}
-                  onPress={() => router.push(`/department-details?departmentId=${d.id}` as any)}
-                  testID={`dept-${d.id}`}
-                >
-                  <View style={[styles.deptIcon, { backgroundColor: '#ef6c0020' }]}>
-                    <Ionicons name="grid" size={18} color="#ef6c00" />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.deptName}>{d.name}</Text>
-                    <Text style={styles.deptMeta}>{d.code || '-'}</Text>
-                    <View style={styles.deptStatsRow}>
-                      <View style={styles.deptStatBox}>
-                        <Ionicons name="people" size={12} color="#1565c0" />
-                        <Text style={styles.deptStatText}>{d.students_count} طالب</Text>
+              <>
+                <View style={styles.tableHeaderRow}>
+                  <View style={[styles.dCol1, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
+                  <View style={[styles.dCol2, styles.cellPad]}><Text style={styles.thText}>الرمز</Text></View>
+                  <View style={[styles.dCol3, styles.cellPad]}><Text style={styles.thText}>الطلاب</Text></View>
+                  <View style={[styles.dCol4, styles.cellPad]}><Text style={styles.thText}>المقررات</Text></View>
+                  <View style={[styles.dCol5, styles.cellPad]}><Text style={styles.thText}></Text></View>
+                </View>
+                {data.departments.map((d, idx) => (
+                  <TouchableOpacity
+                    key={d.id}
+                    style={[styles.tRow, idx % 2 === 1 && styles.tRowAlt]}
+                    onPress={() => router.push(`/department-details?departmentId=${d.id}` as any)}
+                    testID={`dept-${d.id}`}
+                  >
+                    <View style={[styles.dCol1, styles.cellPad]}>
+                      <View style={styles.deptIconNew}>
+                        <Ionicons name="grid" size={16} color="#ef6c00" />
                       </View>
-                      <View style={styles.deptStatBox}>
-                        <Ionicons name="book" size={12} color="#2e7d32" />
-                        <Text style={styles.deptStatText}>{d.courses_count} مقرر</Text>
+                      <Text style={styles.tName} numberOfLines={1}>{d.name}</Text>
+                    </View>
+                    <View style={[styles.dCol2, styles.cellPad]}>
+                      <Text style={styles.tCell}>{d.code || '—'}</Text>
+                    </View>
+                    <View style={[styles.dCol3, styles.cellPad]}>
+                      <View style={[styles.statChip, { backgroundColor: '#e7f0fe' }]}>
+                        <Ionicons name="people" size={11} color="#1565c0" />
+                        <Text style={[styles.statChipText, { color: '#1565c0' }]}>{d.students_count}</Text>
                       </View>
                     </View>
-                  </View>
-                  <Ionicons name="chevron-back" size={18} color="#bbb" />
-                </TouchableOpacity>
-              ))
+                    <View style={[styles.dCol4, styles.cellPad]}>
+                      <View style={[styles.statChip, { backgroundColor: '#e7f6ee' }]}>
+                        <Ionicons name="book" size={11} color="#2e7d32" />
+                        <Text style={[styles.statChipText, { color: '#2e7d32' }]}>{d.courses_count}</Text>
+                      </View>
+                    </View>
+                    <View style={[styles.dCol5, styles.cellPad]}>
+                      <Ionicons name="chevron-back" size={16} color="#a8b1c2" />
+                    </View>
+                  </TouchableOpacity>
+                ))}
+              </>
             )}
-          </Section>
+          </View>
         </ScrollView>
       </SafeAreaView>
     </>
@@ -186,17 +282,66 @@ const InfoRow = ({ label, value }: { label: string; value: string }) => (
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f7' },
+  container: { flex: 1, backgroundColor: '#f4f6fb' },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
   errorText: { fontSize: 14, color: '#666', marginTop: 12, textAlign: 'center' },
-  retryBtn: {
-    marginTop: 16,
-    backgroundColor: '#c62828',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
+  retryBtn: { marginTop: 16, backgroundColor: '#2962ff', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
   retryBtnText: { color: '#fff', fontWeight: '700' },
+
+  // ====== التصميم الجديد ======
+  pageScroll: { padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center' },
+  pageHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
+  pageHeaderRight: { alignItems: 'flex-end' },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  breadcrumbLink: { fontSize: 13, color: '#2962ff', fontWeight: '500' },
+  breadcrumbCurrent: { fontSize: 13, color: '#8a95a8', fontWeight: '500' },
+  codeBadge: { backgroundColor: '#e7f0fe', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 12, marginTop: 6, alignSelf: 'flex-end' },
+  codeBadgeText: { fontSize: 11, color: '#2962ff', fontWeight: '700' },
+  pageHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
+  btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+
+  statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },
+  statCard: { flex: 1, minWidth: 200, backgroundColor: '#fff', borderRadius: 14, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  statIconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  statTextCol: { flex: 1, alignItems: 'flex-end' },
+  statLabel: { fontSize: 13, color: '#8a95a8', fontWeight: '500', marginBottom: 4 },
+  statValue: { fontSize: 22, color: '#1a2540', fontWeight: '700', marginBottom: 2 },
+  statSubLabel: { fontSize: 11, color: '#a8b1c2' },
+
+  infoCard: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 18, borderWidth: 1, borderColor: '#eef1f6', overflow: 'hidden' },
+  infoCardHeader: { padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
+  infoCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
+  infoRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#f3f5f9' },
+  infoLabel: { fontSize: 13, color: '#8a95a8', fontWeight: '500' },
+  infoValue: { fontSize: 14, color: '#1a2540', fontWeight: '600' },
+
+  tableCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  tableCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
+  tableCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
+  tableCardCount: { fontSize: 12, color: '#5b6678' },
+  tableCardCountAccent: { color: '#2962ff', fontWeight: '700' },
+  tableHeaderRow: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fafbfd', borderBottomWidth: 1, borderBottomColor: '#eef1f6', minHeight: 44 },
+  thText: { fontSize: 12, fontWeight: '600', color: '#5b6678', textAlign: 'right' },
+  tRow: { flexDirection: 'row-reverse', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f3f5f9', minHeight: 60 },
+  tRowAlt: { backgroundColor: '#fcfcfd' },
+  cellPad: { paddingVertical: 12, paddingHorizontal: 14 },
+  dCol1: { flex: 3, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  dCol2: { flex: 1 },
+  dCol3: { flex: 1 },
+  dCol4: { flex: 1 },
+  dCol5: { flex: 0.5, alignItems: 'flex-start' },
+  deptIconNew: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#fff3e0', alignItems: 'center', justifyContent: 'center' },
+  tName: { fontSize: 13, fontWeight: '600', color: '#1a2540', flex: 1, textAlign: 'right' },
+  tCell: { fontSize: 13, color: '#1a2540', textAlign: 'right' },
+  statChip: { alignSelf: 'flex-end', flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  statChipText: { fontSize: 12, fontWeight: '700' },
+  tableEmpty: { paddingVertical: 60, alignItems: 'center', gap: 12 },
+  tableEmptyText: { fontSize: 14, color: '#8a95a8' },
+
+  // ====== الستايلات القديمة (مُحتفظ بها للنسخ القديمة إن استخدمت) ======
   header: {
     backgroundColor: '#c62828',
     paddingTop: 24,
