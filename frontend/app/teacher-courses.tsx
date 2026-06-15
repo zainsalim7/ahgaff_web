@@ -35,6 +35,7 @@ interface TeacherCoursesData {
   teacher_id: string;
   teacher_name: string;
   total_courses: number;
+  total_weekly_hours: number;
   courses: Course[];
 }
 
@@ -263,7 +264,13 @@ export default function TeacherCoursesScreen() {
           </View>
           <View style={{ flex: 1, alignItems: 'flex-end' }}>
             <Text style={styles.teacherCardName}>{data?.teacher_name || teacherDisplay}</Text>
-            <Text style={styles.teacherCardSub}>يدرّس {data?.total_courses || 0} مقرر</Text>
+            <View style={styles.teacherCardSubRow}>
+              <Text style={styles.teacherCardSub}>يدرّس {data?.total_courses || 0} مقرر</Text>
+              <View style={styles.teacherCardDot} />
+              <Text style={styles.teacherCardSub}>إجمالي الساعات: </Text>
+              <Text style={styles.teacherHoursValue} testID="total-weekly-hours">{data?.total_weekly_hours || 0}</Text>
+              <Text style={styles.teacherCardSub}> س/أسبوع</Text>
+            </View>
           </View>
           <View style={styles.teacherIconBg}>
             <Ionicons name="person" size={32} color="#2962ff" />
@@ -614,6 +621,9 @@ const styles = StyleSheet.create({
   teacherAvatarText: { color: '#fff', fontSize: 18, fontWeight: '700' },
   teacherCardName: { fontSize: 18, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
   teacherCardSub: { fontSize: 13, color: '#8a95a8', marginTop: 4, textAlign: 'right' },
+  teacherCardSubRow: { flexDirection: 'row-reverse', alignItems: 'center', marginTop: 4, flexWrap: 'wrap' },
+  teacherCardDot: { width: 4, height: 4, borderRadius: 2, backgroundColor: '#cfd6e1', marginHorizontal: 8 },
+  teacherHoursValue: { fontSize: 14, fontWeight: '700', color: '#2962ff' },
 
   // إحصائيات
   statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },

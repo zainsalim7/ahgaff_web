@@ -4024,7 +4024,12 @@ async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_
     # جلب المقررات التي يدرسها المعلم
     courses = await db.courses.find({"teacher_id": teacher_id}).to_list(100)
     
+    # جلب العبء التدريسي (الساعات الأسبوعية) لكل مقرر
+    teaching_loads = await db.teaching_loads.find({"teacher_id": teacher_id}).to_list(200)
+    loads_by_course = {tl.get("course_id"): tl.get("weekly_hours", 0) for tl in teaching_loads}
+    
     result = []
+    total_weekly_hours = 0
     for course in courses:
         # جلب معلومات القسم
         dept_name = ""
@@ -4043,8 +4048,12 @@ async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_
         # حساب عدد المحاضرات
         lectures_count = await db.lectures.count_documents({"course_id": str(course["_id"])})
         
+        course_id_str = str(course["_id"])
+        weekly_hours = loads_by_course.get(course_id_str, course.get("credit_hours", 0)) or 0
+        total_weekly_hours += weekly_hours
+        
         result.append({
-            "id": str(course["_id"]),
+            "id": course_id_str,
             "name": course["name"],
             "code": course.get("code", ""),
             "level": course.get("level", 1),
@@ -4054,6 +4063,7 @@ async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_
             "faculty_name": faculty_name,
             "students_count": students_count,
             "lectures_count": lectures_count,
+            "weekly_hours": weekly_hours,
             "is_active": course.get("is_active", True)
         })
     
@@ -4062,6 +4072,7 @@ async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_
         "teacher_name": teacher.get("full_name", ""),
         "department_name": "",  # القسم الإداري
         "total_courses": len(result),
+        "total_weekly_hours": total_weekly_hours,
         "courses": result
     }
 
