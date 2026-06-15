@@ -892,12 +892,22 @@ export default function CourseLecturesScreen() {
             </View>
           </View>
 
-          {/* 3 بطاقات إحصائيات */}
+          {/* 4 بطاقات إحصائيات */}
           <View style={styles.statsGrid}>
             {(() => {
               const stats = getStats();
+              const totalLectures = lectures.length;
               return (
                 <>
+                  <View style={styles.statCard}>
+                    <View style={[styles.statIconWrap, { backgroundColor: '#e7f0fe' }]}>
+                      <Ionicons name="library" size={20} color="#2962ff" />
+                    </View>
+                    <View style={styles.statTextCol}>
+                      <Text style={styles.statValueNew}>{totalLectures}</Text>
+                      <Text style={styles.statLabelNew}>إجمالي المحاضرات</Text>
+                    </View>
+                  </View>
                   <View style={styles.statCard}>
                     <View style={[styles.statIconWrap, { backgroundColor: '#e7f6ee' }]}>
                       <Ionicons name="calendar" size={20} color="#22a35a" />
