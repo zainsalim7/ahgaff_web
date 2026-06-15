@@ -1047,7 +1047,7 @@ export default function StudentsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
+      <ScrollView dataSet={{ responsiveScrollRoot: "true" }} style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
         {/* === رأس الصفحة: عنوان + breadcrumb + أزرار === */}
         <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>

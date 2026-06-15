@@ -12,6 +12,45 @@ export function injectResponsiveStyles() {
   injected = true;
 
   const css = `
+    /* ============= جعل صفحات الإدارة تستخدم scroll النافذة لإظهار شريط التمرير ============= */
+    /* RN Web بشكل افتراضي يضع body{overflow:hidden} ويستخدم scrollview داخلي.
+       لإظهار scrollbar طبيعي للمتصفح، نعكس هذا السلوك ونسمح بتمرير body */
+    html, body, #root {
+      overflow-y: auto !important;
+      height: auto !important;
+      min-height: 100% !important;
+    }
+    body {
+      scrollbar-width: auto !important;
+      scrollbar-color: #c0c8d4 #f4f6fb !important;
+    }
+    body::-webkit-scrollbar {
+      width: 14px !important;
+      height: 14px !important;
+    }
+    body::-webkit-scrollbar-track {
+      background: #eef1f6 !important;
+    }
+    body::-webkit-scrollbar-thumb {
+      background: #c0c8d4 !important;
+      border-radius: 7px !important;
+      border: 3px solid #eef1f6 !important;
+    }
+    body::-webkit-scrollbar-thumb:hover {
+      background: #8a95a8 !important;
+    }
+
+    /* الـ ScrollView الجذر يتحرر من قيد الارتفاع ليسمح بالتمرير الطبيعي للصفحة */
+    [data-responsive-scroll-root="true"] {
+      overflow: visible !important;
+      flex: none !important;
+      height: auto !important;
+      min-height: 0 !important;
+    }
+    [data-responsive-scroll-root="true"] > div {
+      overflow: visible !important;
+    }
+
     /* ============= Tablet (≤1024px) ============= */
     @media (max-width: 1024px) {
       [data-responsive="page-scroll"] { padding: 14px !important; }
@@ -61,4 +100,46 @@ export function injectResponsiveStyles() {
   styleEl.setAttribute('data-responsive-admin', 'true');
   styleEl.appendChild(document.createTextNode(css));
   document.head.appendChild(styleEl);
+
+  // RN-Web يضبط body{overflow:hidden} عبر inline style — نتجاوزها بقوة
+  const forceBodyScroll = () => {
+    if (typeof document === 'undefined') return;
+    const b = document.body;
+    const h = document.documentElement;
+    if (b) {
+      b.style.setProperty('overflow-y', 'auto', 'important');
+      b.style.setProperty('overflow-x', 'hidden', 'important');
+      b.style.setProperty('height', 'auto', 'important');
+      b.style.setProperty('min-height', '100vh', 'important');
+    }
+    if (h) {
+      h.style.setProperty('overflow-y', 'auto', 'important');
+      h.style.setProperty('height', 'auto', 'important');
+    }
+    const root = document.getElementById('root');
+    if (root) {
+      root.style.setProperty('overflow', 'visible', 'important');
+      root.style.setProperty('height', 'auto', 'important');
+      root.style.setProperty('min-height', '100vh', 'important');
+    }
+  };
+
+  // اضبط الستايل عند التحميل + كل تنقّل
+  if (typeof requestAnimationFrame !== 'undefined') {
+    requestAnimationFrame(() => {
+      forceBodyScroll();
+      setTimeout(forceBodyScroll, 100);
+      setTimeout(forceBodyScroll, 500);
+      setTimeout(forceBodyScroll, 1500);
+    });
+  } else {
+    setTimeout(forceBodyScroll, 100);
+  }
+
+  // مراقبة DOM لإعادة تطبيق الستايل عند تغيير الصفحات
+  try {
+    const obs = new MutationObserver(() => forceBodyScroll());
+    obs.observe(document.body, { attributes: true, attributeFilter: ['style'] });
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
+  } catch {}
 }

@@ -649,7 +649,7 @@ export default function ManageTeachersScreen() {
             </View>
           </ScrollView>
         ) : (
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
+          <ScrollView dataSet={{ responsiveScrollRoot: "true" }} style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
             {/* رأس الصفحة */}
             <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>

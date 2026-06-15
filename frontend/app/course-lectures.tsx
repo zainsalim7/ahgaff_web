@@ -825,7 +825,7 @@ export default function CourseLecturesScreen() {
           </TouchableOpacity>
         )}
 
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView dataSet={{ responsiveScrollRoot: "true" }} style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
           {/* بطاقة المقرر + الأزرار في الأعلى */}
           <View dataSet={{ responsive: "course-header" }} style={styles.courseHeaderCard}>

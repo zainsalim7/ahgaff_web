@@ -98,8 +98,7 @@ export default function FacultyDetailsScreen() {
     <>
       <Stack.Screen options={{ title: 'تفاصيل الكلية', headerBackTitle: 'رجوع' }} />
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <ScrollView
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        <ScrollView dataSet={{ responsiveScrollRoot: "true" }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={styles.pageScroll}
           showsVerticalScrollIndicator={false}
         >
