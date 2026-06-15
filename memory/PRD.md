@@ -13,6 +13,13 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-15 **Teacher Courses page (`/teacher-courses`) redesigned + course assignment**:
+  - Applied new design system: page header with breadcrumb (الرئيسية > المعلمون > المقررات), teacher info card with avatar, 3 colorful stat cards (إجمالي المقررات / الطلاب / المحاضرات), course list cards with rich metadata badges.
+  - **NEW: Assign Courses flow** — primary "إسناد مقرر" button opens modal with debounced course search (`/api/teaching-load/search-courses`), multi-select with checkboxes, per-course weekly-hours input, "إخفاء المقررات المسندة لمعلمين آخرين" filter, batch save via `POST /api/teaching-load/bulk`.
+  - **NEW: Unassign flow** — per-course "إلغاء الإسناد" button + confirmation modal calls `PUT /api/courses/{id}` with `teacher_id: null`.
+  - **Backend fix**: `update_course` in `server.py` (line 5617) switched from `{k:v for k,v in data.dict().items() if v is not None}` (which silently dropped null values) to `data.dict(exclude_unset=True)` so explicit `teacher_id: null` now clears the field AND removes the matching `teaching_loads` row.
+  - **Frontend fix**: replaced all `data-testid` JSX attributes with `testID` for proper RN-Web bridging (data-testid props weren't reaching the DOM on TouchableOpacity/View/TextInput).
+  - Verified end-to-end (iteration_29): 4/4 backend pytest cases pass, all testIDs discoverable, assign + unassign flows persist correctly in DB.
 - 2026-06-15 **Responsive design system for all redesigned admin pages**:
   - Added `/app/frontend/src/utils/responsiveStyles.ts` — injects CSS Media Queries once at app boot (web only) via `_layout.tsx`.
   - Breakpoints: Desktop (>1024px) · Tablet (≤1024px → 2x2 stats grid) · Mobile (≤768px → 1-col stacks, table rows become vertical) · Small mobile (≤480px → action buttons stack).
