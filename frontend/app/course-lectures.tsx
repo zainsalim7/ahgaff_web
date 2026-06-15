@@ -717,7 +717,7 @@ export default function CourseLecturesScreen() {
           <Text style={styles.lectureDateText}>{dateStr}</Text>
         </View>
 
-        {/* الوسط: الوقت + المكان + إحصائيات */}
+        {/* الوسط: الوقت + المكان */}
         <View style={styles.lectureMidCol}>
           <View style={styles.lectureMetaRowNew}>
             <View style={styles.lectureMetaItem}>
@@ -730,12 +730,6 @@ export default function CourseLecturesScreen() {
                 <Text style={styles.lectureMetaText}>{item.room}</Text>
               </View>
             ) : null}
-          </View>
-          <View style={styles.lectureCountsRow}>
-            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#2962ff' }]} /><Text style={styles.countText}>{studentsTotal}</Text><Text style={styles.countLbl}>إجمالي الطلاب</Text></View>
-            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#4caf50' }]} /><Text style={styles.countText}>{item.status === 'scheduled' ? studentsTotal : 0}</Text><Text style={styles.countLbl}>مجدولة</Text></View>
-            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#22a35a' }]} /><Text style={styles.countText}>{presentCount}</Text><Text style={styles.countLbl}>منفذة</Text></View>
-            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#ff9800' }]} /><Text style={styles.countText}>{absentCount}</Text><Text style={styles.countLbl}>غائب</Text></View>
           </View>
           {item.last_rescheduled_from && (
             <View style={styles.noteBoxInfoNew}>
@@ -842,6 +836,12 @@ export default function CourseLecturesScreen() {
                 <Text style={styles.courseHeaderName}>{course?.name}</Text>
                 {course?.code ? <Text style={styles.courseHeaderCode}>رقم المقرر - {course.code}</Text> : null}
                 <View style={styles.courseHeaderChips}>
+                  {course?.teacher_name && (
+                    <View style={styles.courseChipNew}>
+                      <Ionicons name="person-outline" size={11} color="#5b6678" />
+                      <Text style={styles.courseChipText}>{course.teacher_name}</Text>
+                    </View>
+                  )}
                   {course?.credit_hours && (
                     <View style={styles.courseChipNew}>
                       <Ionicons name="time-outline" size={11} color="#5b6678" />
@@ -892,22 +892,12 @@ export default function CourseLecturesScreen() {
             </View>
           </View>
 
-          {/* 4 بطاقات إحصائيات */}
+          {/* 3 بطاقات إحصائيات */}
           <View style={styles.statsGrid}>
             {(() => {
               const stats = getStats();
-              const total = course?.students_count ?? 0;
               return (
                 <>
-                  <View style={styles.statCard}>
-                    <View style={[styles.statIconWrap, { backgroundColor: '#e7f0fe' }]}>
-                      <Ionicons name="people" size={20} color="#2962ff" />
-                    </View>
-                    <View style={styles.statTextCol}>
-                      <Text style={styles.statValueNew}>{total}</Text>
-                      <Text style={styles.statLabelNew}>إجمالي الطلاب</Text>
-                    </View>
-                  </View>
                   <View style={styles.statCard}>
                     <View style={[styles.statIconWrap, { backgroundColor: '#e7f6ee' }]}>
                       <Ionicons name="calendar" size={20} color="#22a35a" />
@@ -944,18 +934,6 @@ export default function CourseLecturesScreen() {
           <View style={styles.filterCard}>
             <View style={styles.filterRowLec}>
               <View style={styles.filterFieldFlex2}>
-                <View style={styles.searchBox}>
-                  <Ionicons name="search" size={16} color="#8a95a8" />
-                  <TextInput
-                    style={styles.searchBoxInput}
-                    placeholder="بحث في المحاضرات..."
-                    value={searchLecture}
-                    onChangeText={(t) => { setSearchLecture(t); setPageNum(1); }}
-                    placeholderTextColor="#a8b1c2"
-                  />
-                </View>
-              </View>
-              <View style={styles.filterFieldFlex1}>
                 <View style={styles.dropdown}>
                   <Picker selectedValue={selectedStatus || ''} onValueChange={(v) => setSelectedStatus(v || null)} style={styles.dropdownInner}>
                     <Picker.Item label="كل الحالات" value="" />
@@ -966,7 +944,7 @@ export default function CourseLecturesScreen() {
                   </Picker>
                 </View>
               </View>
-              <View style={styles.filterFieldFlex1}>
+              <View style={styles.filterFieldFlex2}>
                 <View style={styles.dropdown}>
                   <Picker selectedValue={selectedDay} onValueChange={(v) => setSelectedDay(v)} style={styles.dropdownInner}>
                     <Picker.Item label="كل الأيام" value="" />
@@ -994,7 +972,7 @@ export default function CourseLecturesScreen() {
               </View>
               <TouchableOpacity
                 style={styles.filterApplyBtn}
-                onPress={() => { setSelectedStatus(null); setSelectedDay(''); setDateFrom(''); setDateTo(''); setSearchLecture(''); setPageNum(1); }}
+                onPress={() => { setSelectedStatus(null); setSelectedDay(''); setDateFrom(''); setDateTo(''); setPageNum(1); }}
               >
                 <Ionicons name="funnel-outline" size={14} color="#1a2540" />
                 <Text style={styles.btnGhostText}>تصفية</Text>
@@ -1026,10 +1004,6 @@ export default function CourseLecturesScreen() {
           {(() => {
             let filtered = getFilteredLectures();
             // فلاتر إضافية
-            if (searchLecture) {
-              const q = searchLecture.toLowerCase();
-              filtered = filtered.filter(l => (l.room || '').toLowerCase().includes(q) || (l.date || '').includes(q));
-            }
             if (selectedDay !== '') {
               filtered = filtered.filter(l => String(parseDate(l.date).getDay()) === selectedDay);
             }
