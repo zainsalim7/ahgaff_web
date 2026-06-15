@@ -3059,11 +3059,19 @@ async def get_students(
     department_id: Optional[str] = None,
     level: Optional[int] = None,
     section: Optional[str] = None,
+    status: Optional[str] = None,
+    is_active: Optional[bool] = None,
     include_enrollments: bool = False,  # 🚀 أداء: غير مفعّل افتراضياً لأن جلب enrollments مكلف جداً
     current_user: dict = Depends(get_current_user)
 ):
     # بناء فلتر الاستعلام الأساسي
-    query = {"is_active": True}
+    # ملاحظة: لا نفلتر على is_active لأن الطلاب المتخرجين/المفصولين/المجمَّدين
+    # يجب أن يظهروا في القائمة (الفلترة تكون من واجهة المستخدم حسب الحالة)
+    query: dict = {}
+    if is_active is not None:
+        query["is_active"] = is_active
+    if status:
+        query["status"] = status
     
     # تطبيق فلتر النطاق بناءً على دور المستخدم
     scope_filter = await get_user_scope_filter(current_user, "students")
@@ -3130,6 +3138,13 @@ async def get_students(
         "qr_code": s["qr_code"],
         "created_at": s["created_at"],
         "is_active": s.get("is_active", True),
+        "status": s.get("status") or ("active" if s.get("is_active", True) else "inactive"),
+        "status_changed_at": s.get("status_changed_at"),
+        "status_reason": s.get("status_reason"),
+        "graduation_date": s.get("graduation_date"),
+        "graduated_from_level": s.get("graduated_from_level"),
+        "expulsion_date": s.get("expulsion_date"),
+        "frozen_at": s.get("frozen_at"),
         "reference_number": s.get("reference_number"),
         "program_code": s.get("program_code"),
         "enrollment_year": s.get("enrollment_year"),

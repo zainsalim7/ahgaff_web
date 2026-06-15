@@ -39,6 +39,7 @@ async def get_students(
     section: Optional[str] = None,
     search: Optional[str] = None,
     is_active: Optional[bool] = None,
+    status: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """الحصول على جميع الطلاب"""
@@ -53,6 +54,8 @@ async def get_students(
         query["section"] = section
     if is_active is not None:
         query["is_active"] = is_active
+    if status:
+        query["status"] = status
     if search:
         query["$or"] = [
             {"name": {"$regex": search, "$options": "i"}},
@@ -72,9 +75,14 @@ async def get_students(
             except:
                 pass
         
+        # تحديد الحالة الفعلية: من حقل status لو موجود، وإلا نشتقّها من is_active
+        is_act = s.get("is_active", True)
+        student_status = s.get("status") or ("active" if is_act else "inactive")
+        
         result.append({
             "id": str(s["_id"]),
             "name": s.get("name", "غير محدد"),
+            "full_name": s.get("full_name") or s.get("name", "غير محدد"),
             "student_id": s.get("student_id", ""),
             "department_id": s.get("department_id"),
             "department_name": dept_name,
@@ -82,7 +90,14 @@ async def get_students(
             "section": s.get("section"),
             "phone": s.get("phone"),
             "email": s.get("email"),
-            "is_active": s.get("is_active", True),
+            "is_active": is_act,
+            "status": student_status,
+            "status_changed_at": s.get("status_changed_at"),
+            "status_reason": s.get("status_reason"),
+            "graduation_date": s.get("graduation_date"),
+            "graduated_from_level": s.get("graduated_from_level"),
+            "expulsion_date": s.get("expulsion_date"),
+            "frozen_at": s.get("frozen_at"),
             "created_at": s.get("created_at", datetime.utcnow())
         })
     

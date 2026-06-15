@@ -100,7 +100,25 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - **النمط**: Custom Domain على كل Worker (يُنشئ DNS records تلقائياً)
   - **اختبار E2E**: ✅ Backend `HTTP/2 404` + `x-proxied-by: Cloudflare-Worker-Wafideen` / Frontend `HTTP/2 200`
 
-- 2026-06-15 **إصلاح: فتح تفاصيل الطالب من البحث السريع (Quick Search)**:
+- 2026-06-15 **🐛 إصلاح حرج: حالة الطالب لا تتغيّر / المتخرج يختفي**:
+  - **بلاغ المستخدم**: 
+    1. تغيير حالة طالب إلى "إعادة" — لم يتغيّر شيء في الواجهة
+    2. تغيير حالة إلى "متخرج" — الطالب اختفى من **كل** القوائم (الكل، المتخرجين، النشطين)
+  - **السبب الجذري** (3 مشاكل متراكبة في `GET /api/students` في `server.py:3057`):
+    1. الـ Query: `query = {"is_active": True}` كان يفلتر بشكل صارم — الطلاب المتخرّجون/المفصولون/المجمَّدون لديهم `is_active=False` فيختفون **تماماً** من الـ API
+    2. الـ Response: لا يحوي حقل `status` نهائياً — الـ Frontend يستنتجها من `is_active` فقط، فحالة "repeat" تبدو "active" وحالة "graduated" تبدو "inactive"
+    3. حقول إضافية مفقودة: `status_changed_at`, `status_reason`, `graduation_date`, `graduated_from_level`, `expulsion_date`, `frozen_at`
+  - **الإصلاح** (`/app/backend/backend/server.py`):
+    - إزالة `"is_active": True` من الـ query (يُرجع كل الطلاب)
+    - إضافة query params اختيارية: `status` و `is_active` للفلترة من الـ Frontend
+    - إضافة كل حقول الحالة في dict الـ response
+    - الـ Pydantic model `StudentResponse` يدعم هذه الحقول مسبقاً
+  - **الاختبار**: ✅ `GET /api/students` يُرجع الآن:
+    - **92 طالب** (بدلاً من 91 — الطالب المتخرّج عاد!)
+    - حقل `status` يحوي القيمة الفعلية: "graduated", "active", "repeat", إلخ
+  - **الفائدة**: تغيير الحالة سيظهر فوراً في UI + الطلاب المتخرّجون/المفصولون/المجمَّدون يظهرون في فلتر "كل الحالات".
+
+
   - **المشكلة**: عند البحث عن طالب من البحث الشامل (GlobalSearch) والنقر على نتيجة الطالب، الصفحة "لا تفتح شيئاً" — كانت `/app/frontend/app/student-details.tsx` مجرد placeholder يعرض أيقونة + رقم الطالب فقط (٤٤ سطر فقط، بدون أي جلب لبيانات حقيقية).
   - **الإصلاح**:
     1. **`student-details.tsx`** أُعيد بناؤها: تُعرض حالة تحميل ("جاري فتح بيانات الطالب...") ثم تُحوّل إلى `/students?openStudent={id}` بعد 500ms (لضمان تركيب Root Layout)
