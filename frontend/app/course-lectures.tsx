@@ -14,6 +14,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import api, { coursesAPI, lecturesAPI, settingsAPI } from '../src/services/api';
@@ -142,6 +143,14 @@ export default function CourseLecturesScreen() {
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
+  // التصميم الجديد
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [perPage, setPerPage] = useState(10);
+  const [pageNum, setPageNum] = useState(1);
+  const [searchLecture, setSearchLecture] = useState('');
+  const [selectedDay, setSelectedDay] = useState<string>('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   
   // أسماء الأشهر بالعربية
   const MONTHS_AR = [
@@ -682,177 +691,108 @@ export default function CourseLecturesScreen() {
   };
 
 
-  const renderLecture = ({ item }: { item: Lecture }) => {
+  const renderLecture = ({ item, index }: { item: Lecture; index: number }) => {
     const statusInfo = STATUS_LABELS[item.status] || STATUS_LABELS.scheduled;
     const isSelected = selectedLectures.has(item.id);
-    
+    const lectureDate = parseDate(item.date);
+    const dayName = WEEKDAYS_AR[lectureDate.getDay()];
+    const dateStr = formatGregorianDate(lectureDate, { includeYear: true });
+    const studentsTotal = (item as any).students_count ?? course?.students_count ?? 0;
+    const stCounts = (item as any).attendance_stats || {};
+    const presentCount = stCounts.present ?? 0;
+    const absentCount = stCounts.absent ?? studentsTotal;
+
     return (
-      <TouchableOpacity
-        style={[styles.lectureCard, isSelected && styles.lectureCardSelected]}
-        onPress={() => {
-          if (selectionMode) {
-            toggleLectureSelection(item.id);
-          } else {
-            router.push({ pathname: '/take-attendance', params: { lectureId: item.id } });
-          }
-        }}
-        onLongPress={() => {
-          if (!selectionMode && canManageLectures) {
-            setSelectionMode(true);
-            toggleLectureSelection(item.id);
-          }
-        }}
-      >
-        {/* Checkbox للتحديد */}
-        {selectionMode && (
-          <TouchableOpacity 
-            style={styles.checkbox}
-            onPress={() => toggleLectureSelection(item.id)}
-          >
-            <Ionicons 
-              name={isSelected ? "checkbox" : "square-outline"} 
-              size={24} 
-              color={isSelected ? "#1565c0" : "#666"} 
-            />
-          </TouchableOpacity>
-        )}
-        
-        <View style={selectionMode ? styles.lectureContentWithCheckbox : styles.lectureContentFull}>
-          {/* الصف العلوي: التاريخ + الوقت + المكان + الحالة، كل شيء في سطر واحد */}
-          <View style={styles.lectureRow}>
-            <View style={styles.lectureDateBlock}>
-              <Text style={styles.lectureDay}>{WEEKDAYS_AR[parseDate(item.date).getDay()]}</Text>
-              <Text style={styles.lectureDate}>{formatGregorianDate(parseDate(item.date), { includeYear: false })}</Text>
-              <Text style={styles.lectureHijri}>{formatHijriDate(parseDate(item.date), { includeYear: false })}</Text>
-            </View>
-
-            <View style={styles.lectureMetaInline}>
-              <View style={styles.detailRowInline}>
-                <Ionicons name="time-outline" size={14} color="#666" />
-                <Text style={styles.detailText}>{item.start_time} - {item.end_time}</Text>
-              </View>
-              {item.room && (
-                <View style={styles.detailRowInline}>
-                  <Ionicons name="location-outline" size={14} color="#666" />
-                  <Text style={styles.detailText}>{item.room}</Text>
-                </View>
-              )}
-            </View>
-
-            <View style={[styles.statusBadge, { backgroundColor: statusInfo.color }]}>
-              <Text style={styles.statusText}>{statusInfo.label}</Text>
-            </View>
+      <View style={[styles.lectureCardNew, isSelected && styles.lectureCardNewSelected]}>
+        {/* الرقم التسلسلي */}
+        <View style={styles.lectureNumWrap}>
+          <View style={styles.lectureNumBadge}>
+            <Text style={styles.lectureNumText}>{index + 1}</Text>
           </View>
+        </View>
 
-          {/* ملاحظة: تاريخ سابق عند إعادة الجدولة */}
+        {/* العمود الأول: اليوم + التاريخ */}
+        <View style={styles.lectureDayCol}>
+          <Text style={styles.lectureDayName}>{dayName}</Text>
+          <Text style={styles.lectureDateText}>{dateStr}</Text>
+        </View>
+
+        {/* الوسط: الوقت + المكان + إحصائيات */}
+        <View style={styles.lectureMidCol}>
+          <View style={styles.lectureMetaRowNew}>
+            <View style={styles.lectureMetaItem}>
+              <Ionicons name="time-outline" size={13} color="#5b6678" />
+              <Text style={styles.lectureMetaText}>{item.start_time} - {item.end_time}</Text>
+            </View>
+            {item.room ? (
+              <View style={styles.lectureMetaItem}>
+                <Ionicons name="location-outline" size={13} color="#5b6678" />
+                <Text style={styles.lectureMetaText}>{item.room}</Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={styles.lectureCountsRow}>
+            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#2962ff' }]} /><Text style={styles.countText}>{studentsTotal}</Text><Text style={styles.countLbl}>إجمالي الطلاب</Text></View>
+            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#4caf50' }]} /><Text style={styles.countText}>{item.status === 'scheduled' ? studentsTotal : 0}</Text><Text style={styles.countLbl}>مجدولة</Text></View>
+            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#22a35a' }]} /><Text style={styles.countText}>{presentCount}</Text><Text style={styles.countLbl}>منفذة</Text></View>
+            <View style={styles.countItem}><View style={[styles.countDot, { backgroundColor: '#ff9800' }]} /><Text style={styles.countText}>{absentCount}</Text><Text style={styles.countLbl}>غائب</Text></View>
+          </View>
           {item.last_rescheduled_from && (
-            <View style={styles.noteBoxInfo}>
-              <Ionicons name="swap-horizontal" size={14} color="#1565c0" />
-              <Text style={styles.noteText}>
-                تمت إعادة الجدولة من تاريخ:{' '}
-                <Text style={{ fontWeight: '700' }}>
-                  {formatGregorianDate(parseDate(item.last_rescheduled_from), { includeYear: false })}
-                </Text>
-                {item.original_date && item.original_date !== item.last_rescheduled_from ? (
-                  <Text style={{ color: '#666', fontSize: 11 }}>
-                    {' '}(الأصلي: {formatGregorianDate(parseDate(item.original_date), { includeYear: false })})
-                  </Text>
-                ) : null}
-                {item.rescheduled_by_name ? (
-                  <Text style={{ color: '#666', fontSize: 11 }}> • بواسطة {item.rescheduled_by_name}</Text>
-                ) : null}
+            <View style={styles.noteBoxInfoNew}>
+              <Ionicons name="swap-horizontal" size={12} color="#1565c0" />
+              <Text style={styles.noteTextNew} numberOfLines={1}>
+                أُعيدت الجدولة من {formatGregorianDate(parseDate(item.last_rescheduled_from), { includeYear: false })}
+                {item.rescheduled_by_name ? ` · ${item.rescheduled_by_name}` : ''}
               </Text>
-            </View>
-          )}
-
-          {/* ملاحظة: سبب الإلغاء */}
-          {(item.status === 'cancelled' || item.status === 'absent') && item.cancellation_reason ? (
-            <View style={styles.noteBoxDanger}>
-              <Ionicons name="alert-circle" size={14} color="#c62828" />
-              <Text style={styles.noteText}>
-                <Text style={{ fontWeight: '700' }}>سبب الإلغاء: </Text>
-                {item.cancellation_reason}
-                {item.cancelled_by_name ? (
-                  <Text style={{ color: '#666', fontSize: 11 }}> • بواسطة {item.cancelled_by_name}</Text>
-                ) : null}
-              </Text>
-            </View>
-          ) : null}
-          
-          {!selectionMode && (
-            <View style={styles.lectureActions}>
-              {item.status === 'scheduled' && (
-                <>
-                  <TouchableOpacity
-                    style={styles.attendanceBtn}
-                    onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id } })}
-                  >
-                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
-                    <Text style={styles.attendanceBtnText}>تسجيل الحضور</Text>
-                  </TouchableOpacity>
-                  {canManageLectures && (
-                    <TouchableOpacity
-                      style={styles.cancelBtn}
-                      onPress={() => handleCancelLecture(item.id)}
-                      accessibilityLabel="إلغاء المحاضرة"
-                    >
-                      <Ionicons name="close-circle" size={20} color="#f44336" />
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
-              {item.status === 'completed' && (
-                <TouchableOpacity
-                  style={[styles.attendanceBtn, { backgroundColor: '#4caf50' }]}
-                  onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id } })}
-                >
-                  <Ionicons name="eye" size={20} color="#fff" />
-                  <Text style={styles.attendanceBtnText}>عرض الحضور</Text>
-                </TouchableOpacity>
-              )}
-              {item.status === 'absent' && (
-                <>
-                  {canReschedule && (
-                    <TouchableOpacity
-                      style={[styles.attendanceBtn, { backgroundColor: '#ff9800' }]}
-                      onPress={() => {
-                        setRescheduleData({ date: '', start_time: item.start_time || '08:00', end_time: item.end_time || '09:00' });
-                        setRescheduleModal({ lectureId: item.id, courseName: course?.name || '', oldDate: item.date });
-                      }}
-                      data-testid={`reschedule-${item.id}`}
-                    >
-                      <Ionicons name="calendar" size={20} color="#fff" />
-                      <Text style={styles.attendanceBtnText}>إعادة جدولة</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
-              )}
-              {item.status === 'scheduled' && canReschedule && (
-                <TouchableOpacity
-                  style={[styles.cancelBtn, { backgroundColor: '#ff980020', borderColor: '#ff9800' }]}
-                  onPress={() => {
-                    setRescheduleData({ date: '', start_time: item.start_time || '08:00', end_time: item.end_time || '09:00' });
-                    setRescheduleModal({ lectureId: item.id, courseName: course?.name || '', oldDate: item.date });
-                  }}
-                  data-testid={`reschedule-scheduled-${item.id}`}
-                  accessibilityLabel="إعادة جدولة"
-                >
-                  <Ionicons name="calendar" size={20} color="#ff9800" />
-                </TouchableOpacity>
-              )}
-              {canManageLectures && (
-                <TouchableOpacity
-                  style={styles.deleteBtn}
-                  onPress={() => handleDeleteLecture(item.id)}
-                  accessibilityLabel="حذف"
-                >
-                  <Ionicons name="trash" size={20} color="#f44336" />
-                </TouchableOpacity>
-              )}
             </View>
           )}
         </View>
-      </TouchableOpacity>
+
+        {/* العمليات */}
+        <View style={styles.lectureActionsNew}>
+          <TouchableOpacity style={styles.actBtnDetails} onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id } })}>
+            <Ionicons name="information-circle-outline" size={14} color="#2962ff" />
+            <Text style={styles.actBtnDetailsText}>التفاصيل</Text>
+          </TouchableOpacity>
+          {canReschedule && (item.status === 'scheduled' || item.status === 'absent') && (
+            <TouchableOpacity
+              style={styles.actBtnReschedule}
+              onPress={() => {
+                setRescheduleData({ date: '', start_time: item.start_time || '08:00', end_time: item.end_time || '09:00' });
+                setRescheduleModal({ lectureId: item.id, courseName: course?.name || '', oldDate: item.date });
+              }}
+              testID={`reschedule-${item.id}`}
+            >
+              <Ionicons name="calendar-outline" size={14} color="#ff9800" />
+              <Text style={styles.actBtnRescheduleText}>إعادة الجدولة</Text>
+            </TouchableOpacity>
+          )}
+          {item.status === 'scheduled' && (
+            <TouchableOpacity style={styles.actBtnAttend} onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id } })}>
+              <Ionicons name="checkmark-circle-outline" size={14} color="#22a35a" />
+              <Text style={styles.actBtnAttendText}>تسجيل الحضور</Text>
+            </TouchableOpacity>
+          )}
+          {item.status === 'completed' && (
+            <TouchableOpacity style={styles.actBtnAttend} onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id } })}>
+              <Ionicons name="eye-outline" size={14} color="#22a35a" />
+              <Text style={styles.actBtnAttendText}>عرض الحضور</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={styles.dotsBtn}
+            onPress={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
+            accessibilityLabel="العمليات"
+          >
+            <Ionicons name="ellipsis-vertical" size={16} color="#5b6678" />
+          </TouchableOpacity>
+        </View>
+
+        {/* شارة الحالة */}
+        <View style={[styles.statusBadgeAbs, { backgroundColor: statusInfo.color }]}>
+          <Text style={styles.statusBadgeAbsText}>{statusInfo.label}</Text>
+        </View>
+      </View>
     );
   };
 
@@ -876,8 +816,8 @@ export default function CourseLecturesScreen() {
             style={{
               backgroundColor: notification.type === 'success' ? '#4caf50' : '#f44336',
               padding: 14,
-              marginHorizontal: 16,
-              marginTop: 8,
+              marginHorizontal: 20,
+              marginTop: 12,
               borderRadius: 10,
               flexDirection: 'row',
               alignItems: 'center',
@@ -889,246 +829,327 @@ export default function CourseLecturesScreen() {
             <Text style={{ color: '#fff', marginLeft: 8, fontWeight: '600', fontSize: 15 }}>{notification.message}</Text>
           </TouchableOpacity>
         )}
-        {/* Course Info - مدمج */}
-        <View style={styles.courseInfo}>
-          <View style={styles.courseTitleRow}>
-            <Text style={styles.courseName}>{course?.name}</Text>
-            {course?.code ? <Text style={styles.courseCode}>· {course.code}</Text> : null}
-          </View>
-          <View style={styles.courseDetailsRow}>
-            {course?.teacher_name && (
-              <View style={styles.courseDetailChip}>
-                <Ionicons name="person" size={11} color="rgba(255,255,255,0.9)" />
-                <Text style={styles.courseDetailText}>{course.teacher_name}</Text>
-              </View>
-            )}
-            {course?.department_name && (
-              <View style={styles.courseDetailChip}>
-                <Ionicons name="business" size={11} color="rgba(255,255,255,0.9)" />
-                <Text style={styles.courseDetailText}>{course.department_name}</Text>
-              </View>
-            )}
-            {course?.level && (
-              <View style={styles.courseDetailChip}>
-                <Ionicons name="layers" size={11} color="rgba(255,255,255,0.9)" />
-                <Text style={styles.courseDetailText}>م{course.level}</Text>
-              </View>
-            )}
-            {course?.section ? (
-              <View style={styles.courseDetailChip}>
-                <Ionicons name="git-branch" size={11} color="rgba(255,255,255,0.9)" />
-                <Text style={styles.courseDetailText}>{course.section}</Text>
-              </View>
-            ) : null}
-            {course?.students_count != null && (
-              <View style={styles.courseDetailChip}>
-                <Ionicons name="people" size={11} color="rgba(255,255,255,0.9)" />
-                <Text style={styles.courseDetailText}>{course.students_count} طالب</Text>
-              </View>
-            )}
-            {course?.credit_hours && (
-              <View style={styles.courseDetailChip}>
-                <Ionicons name="time" size={11} color="rgba(255,255,255,0.9)" />
-                <Text style={styles.courseDetailText}>{course.credit_hours} س</Text>
-              </View>
-            )}
-          </View>
-        </View>
 
-        {/* بانر الفصل الدراسي المُفعَّل */}
-        {(serverStats?.semester_name || serverStats?.semester_start_date) && (
-          <View style={styles.semesterBanner} data-testid="lectures-semester-banner">
-            <Ionicons name="calendar" size={14} color="#1565c0" />
-            <Text style={styles.semesterBannerText}>
-              إحصائيات {serverStats.semester_name || 'الفصل الحالي'}
-              {serverStats.semester_start_date && serverStats.semester_end_date
-                ? ` (من ${serverStats.semester_start_date} إلى ${serverStats.semester_end_date})`
-                : ''}
-            </Text>
-          </View>
-        )}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
 
-        {/* إحصائيات سريعة */}
-        <View style={{ flexDirection: 'row', backgroundColor: '#fff', marginHorizontal: 16, marginTop: 8, borderRadius: 10, overflow: 'hidden' }} data-testid="lectures-stats-bar">
-          {[
-            { key: null, label: 'الكل', count: getStats().total, color: '#333', bgActive: '#e3f2fd' },
-            { key: 'scheduled', label: 'مجدولة', count: getStats().scheduled, color: '#2196f3', bgActive: '#e3f2fd' },
-            { key: 'completed', label: 'منعقدة', count: getStats().completed, color: '#4caf50', bgActive: '#e8f5e9' },
-            { key: 'cancelled', label: 'ملغاة', count: getStats().cancelled, color: '#f44336', bgActive: '#ffebee' },
-            { key: 'absent', label: 'غائب', count: getStats().absent, color: '#ff9800', bgActive: '#fff3e0' },
-          ].map((stat) => (
-            <TouchableOpacity
-              key={stat.key || 'all'}
-              onPress={() => setSelectedStatus(stat.key === selectedStatus ? null : stat.key)}
-              data-testid={`stat-${stat.key || 'all'}`}
-              style={{
-                flex: 1,
-                alignItems: 'center',
-                paddingVertical: 6,
-                borderRightWidth: 1,
-                borderRightColor: '#f0f0f0',
-                backgroundColor: selectedStatus === stat.key || (!selectedStatus && stat.key === null) ? stat.bgActive : 'transparent',
-              }}
-            >
-              <Text style={{ fontSize: 15, fontWeight: 'bold', color: stat.color }}>{stat.count}</Text>
-              <Text style={{ fontSize: 10, color: '#666', marginTop: 1 }}>{stat.label}</Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-
-        {/* فلترة حسب الشهر */}
-        {getAvailableMonths().length > 0 && (
-          <ScrollView 
-            horizontal 
-            showsHorizontalScrollIndicator={false}
-            style={styles.monthsFilter}
-            contentContainerStyle={styles.monthsFilterContent}
-          >
-            <TouchableOpacity
-              style={[styles.monthChip, !selectedMonth && styles.monthChipActive]}
-              onPress={() => setSelectedMonth(null)}
-            >
-              <Text style={[styles.monthChipText, !selectedMonth && styles.monthChipTextActive]}>
-                كل الأشهر
-              </Text>
-            </TouchableOpacity>
-            {getAvailableMonths().map(monthKey => {
-              const [year, month] = monthKey.split('-');
-              const monthName = MONTHS_AR[parseInt(month) - 1];
-              const count = groupLecturesByMonth()[monthKey]?.length || 0;
-              return (
-                <TouchableOpacity
-                  key={monthKey}
-                  style={[styles.monthChip, selectedMonth === monthKey && styles.monthChipActive]}
-                  onPress={() => setSelectedMonth(selectedMonth === monthKey ? null : monthKey)}
-                >
-                  <Text style={[styles.monthChipText, selectedMonth === monthKey && styles.monthChipTextActive]}>
-                    {monthName} ({count})
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        )}
-
-        {/* Action Buttons - Only for authorized users */}
-        {canManageLectures && (
-          <View style={styles.actions}>
-            <TouchableOpacity
-              style={styles.actionBtn}
-              onPress={() => setShowAddModal(true)}
-            >
-              <Ionicons name="add" size={14} color="#fff" />
-              <Text style={styles.actionBtnText}>إضافة</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity
-              style={[styles.actionBtn, styles.generateBtnStyle]}
-              onPress={openGenerateModal}
-            >
-              <Ionicons name="flash" size={14} color="#fff" />
-              <Text style={styles.actionBtnText}>توليد</Text>
-            </TouchableOpacity>
-
-            {lectures.length > 0 && (
-              <TouchableOpacity
-                style={[styles.actionBtn, selectionMode ? styles.selectionActiveBtn : styles.selectionBtn]}
-                onPress={toggleSelectionMode}
-              >
-                <Ionicons name={selectionMode ? "close" : "checkbox-outline"} size={14} color="#fff" />
-                <Text style={styles.actionBtnText}>{selectionMode ? "إلغاء" : "تحديد"}</Text>
-              </TouchableOpacity>
-            )}
-          </View>
-        )}
-
-        {/* Selection Bar - يظهر عند تفعيل وضع التحديد */}
-        {selectionMode && canManageLectures && (
-          <View style={styles.selectionBar}>
-            <View style={styles.selectionInfo}>
-              <TouchableOpacity style={styles.selectAllBtn} onPress={toggleSelectAll}>
-                <Ionicons 
-                  name={selectedLectures.size === getFilteredLectures().length ? "checkbox" : "square-outline"} 
-                  size={24} 
-                  color="#1565c0" 
-                />
-                <Text style={styles.selectAllText}>
-                  {selectedLectures.size === getFilteredLectures().length ? "إلغاء الكل" : "تحديد الكل"}
-                </Text>
-              </TouchableOpacity>
-              <Text style={styles.selectedCount}>
-                {selectedLectures.size} / {getFilteredLectures().length}
-              </Text>
+          {/* بطاقة المقرر + الأزرار في الأعلى */}
+          <View style={styles.courseHeaderCard}>
+            <View style={styles.courseHeaderRight}>
+              <View style={styles.courseBookIcon}>
+                <Ionicons name="book" size={20} color="#2962ff" />
+              </View>
+              <View>
+                <Text style={styles.courseHeaderName}>{course?.name}</Text>
+                {course?.code ? <Text style={styles.courseHeaderCode}>رقم المقرر - {course.code}</Text> : null}
+                <View style={styles.courseHeaderChips}>
+                  {course?.credit_hours && (
+                    <View style={styles.courseChipNew}>
+                      <Ionicons name="time-outline" size={11} color="#5b6678" />
+                      <Text style={styles.courseChipText}>{course.credit_hours} ساعات</Text>
+                    </View>
+                  )}
+                  {course?.department_name && (
+                    <View style={styles.courseChipNew}>
+                      <Ionicons name="business-outline" size={11} color="#5b6678" />
+                      <Text style={styles.courseChipText}>{course.department_name}</Text>
+                    </View>
+                  )}
+                  {course?.level && (
+                    <View style={styles.courseChipNew}>
+                      <Ionicons name="school-outline" size={11} color="#5b6678" />
+                      <Text style={styles.courseChipText}>المستوى {course.level}</Text>
+                    </View>
+                  )}
+                  {course?.students_count != null && (
+                    <View style={styles.courseChipNew}>
+                      <Ionicons name="people-outline" size={11} color="#5b6678" />
+                      <Text style={styles.courseChipText}>{course.students_count} طالب</Text>
+                    </View>
+                  )}
+                </View>
+              </View>
             </View>
-            
-            <View style={styles.selectionActions}>
-              <TouchableOpacity 
-                style={[styles.deleteSelectedBtn, selectedLectures.size === 0 && styles.disabledBtn]}
-                onPress={deleteSelectedLectures}
-                disabled={selectedLectures.size === 0 || deleting}
-              >
-                {deleting ? (
-                  <ActivityIndicator size="small" color="#fff" />
-                ) : (
-                  <>
-                    <Ionicons name="trash" size={18} color="#fff" />
-                    <Text style={styles.deleteSelectedText}>حذف</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={styles.deleteAllBtn}
-                onPress={deleteAllLectures}
-                disabled={deleting}
-              >
-                <Ionicons name="trash-bin" size={18} color="#fff" />
-                <Text style={styles.deleteAllText}>حذف الكل</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        )}
 
-        {/* Lectures List */}
-        {getFilteredLectures().length === 0 ? (
-          <View style={styles.emptyState}>
-            <Ionicons name="calendar-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>
-              {lectures.length === 0 ? 'لا توجد محاضرات' : 'لا توجد محاضرات تطابق الفلتر'}
-            </Text>
-            <Text style={styles.emptySubtext}>
-              {lectures.length === 0 
-                ? 'اضغط على "توليد" لإنشاء محاضرات الفصل الدراسي'
-                : 'جرب تغيير الفلتر أو الشهر المحدد'}
-            </Text>
-          </View>
-        ) : (
-          <FlatList
-            data={getFilteredLectures()}
-            keyExtractor={(item) => item.id}
-            renderItem={renderLecture}
-            contentContainerStyle={styles.listContent}
-            ListFooterComponent={() => (
-              <View style={{ padding: 16, alignItems: 'center', gap: 8 }}>
-                <Text style={{ color: '#666', fontSize: 13 }}>
-                  عرض {lectures.length} من {totalLectures} محاضرة
-                </Text>
-                {currentPage < totalPages && (
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#1565c0', paddingHorizontal: 24, paddingVertical: 10, borderRadius: 8 }}
-                    onPress={() => fetchData(currentPage + 1, true)}
-                    disabled={loadingMore}
-                  >
-                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 14 }}>
-                      {loadingMore ? 'جاري التحميل...' : 'تحميل المزيد'}
-                    </Text>
+            <View style={styles.courseHeaderActions}>
+              {canManageLectures && (
+                <>
+                  <TouchableOpacity style={[styles.headerBtn, styles.btnAddGreen]} onPress={() => setShowAddModal(true)}>
+                    <Ionicons name="add" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>إضافة محاضرة</Text>
                   </TouchableOpacity>
-                )}
-              </View>
-            )}
-          />
-        )}
+                  <TouchableOpacity style={[styles.headerBtn, styles.btnGeneratePurple]} onPress={openGenerateModal}>
+                    <Ionicons name="flash" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>توليد تلقائي</Text>
+                  </TouchableOpacity>
+                  {lectures.length > 0 && (
+                    <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={toggleSelectionMode}>
+                      <Ionicons name={selectionMode ? 'close' : 'checkbox-outline'} size={16} color="#1a2540" />
+                      <Text style={styles.btnGhostText}>{selectionMode ? 'إلغاء التحديد' : 'تحديد متعدد'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </>
+              )}
+            </View>
+          </View>
 
+          {/* 4 بطاقات إحصائيات */}
+          <View style={styles.statsGrid}>
+            {(() => {
+              const stats = getStats();
+              const total = course?.students_count ?? 0;
+              return (
+                <>
+                  <View style={styles.statCard}>
+                    <View style={[styles.statIconWrap, { backgroundColor: '#e7f0fe' }]}>
+                      <Ionicons name="people" size={20} color="#2962ff" />
+                    </View>
+                    <View style={styles.statTextCol}>
+                      <Text style={styles.statValueNew}>{total}</Text>
+                      <Text style={styles.statLabelNew}>إجمالي الطلاب</Text>
+                    </View>
+                  </View>
+                  <View style={styles.statCard}>
+                    <View style={[styles.statIconWrap, { backgroundColor: '#e7f6ee' }]}>
+                      <Ionicons name="calendar" size={20} color="#22a35a" />
+                    </View>
+                    <View style={styles.statTextCol}>
+                      <Text style={styles.statValueNew}>{stats.scheduled}</Text>
+                      <Text style={styles.statLabelNew}>مجدولة</Text>
+                    </View>
+                  </View>
+                  <View style={styles.statCard}>
+                    <View style={[styles.statIconWrap, { backgroundColor: '#e7f6ee' }]}>
+                      <Ionicons name="checkmark-circle" size={20} color="#22a35a" />
+                    </View>
+                    <View style={styles.statTextCol}>
+                      <Text style={styles.statValueNew}>{stats.completed}</Text>
+                      <Text style={styles.statLabelNew}>منفذة</Text>
+                    </View>
+                  </View>
+                  <View style={styles.statCard}>
+                    <View style={[styles.statIconWrap, { backgroundColor: '#fff3e0' }]}>
+                      <Ionicons name="warning" size={20} color="#ff9800" />
+                    </View>
+                    <View style={styles.statTextCol}>
+                      <Text style={styles.statValueNew}>{stats.absent}</Text>
+                      <Text style={styles.statLabelNew}>غائب</Text>
+                    </View>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+
+          {/* بطاقة الفلاتر */}
+          <View style={styles.filterCard}>
+            <View style={styles.filterRowLec}>
+              <View style={styles.filterFieldFlex2}>
+                <View style={styles.searchBox}>
+                  <Ionicons name="search" size={16} color="#8a95a8" />
+                  <TextInput
+                    style={styles.searchBoxInput}
+                    placeholder="بحث في المحاضرات..."
+                    value={searchLecture}
+                    onChangeText={(t) => { setSearchLecture(t); setPageNum(1); }}
+                    placeholderTextColor="#a8b1c2"
+                  />
+                </View>
+              </View>
+              <View style={styles.filterFieldFlex1}>
+                <View style={styles.dropdown}>
+                  <Picker selectedValue={selectedStatus || ''} onValueChange={(v) => setSelectedStatus(v || null)} style={styles.dropdownInner}>
+                    <Picker.Item label="كل الحالات" value="" />
+                    <Picker.Item label="مجدولة" value="scheduled" />
+                    <Picker.Item label="منفذة" value="completed" />
+                    <Picker.Item label="ملغاة" value="cancelled" />
+                    <Picker.Item label="غائب" value="absent" />
+                  </Picker>
+                </View>
+              </View>
+              <View style={styles.filterFieldFlex1}>
+                <View style={styles.dropdown}>
+                  <Picker selectedValue={selectedDay} onValueChange={(v) => setSelectedDay(v)} style={styles.dropdownInner}>
+                    <Picker.Item label="كل الأيام" value="" />
+                    {WEEKDAYS_AR.map((d, i) => <Picker.Item key={i} label={d} value={String(i)} />)}
+                  </Picker>
+                </View>
+              </View>
+              <View style={styles.dateRangeBox}>
+                <Ionicons name="calendar-outline" size={14} color="#8a95a8" />
+                <TextInput
+                  style={styles.dateInput}
+                  placeholder="من"
+                  value={dateFrom}
+                  onChangeText={setDateFrom}
+                  placeholderTextColor="#a8b1c2"
+                />
+                <Text style={styles.dateSep}>–</Text>
+                <TextInput
+                  style={styles.dateInput}
+                  placeholder="إلى"
+                  value={dateTo}
+                  onChangeText={setDateTo}
+                  placeholderTextColor="#a8b1c2"
+                />
+              </View>
+              <TouchableOpacity
+                style={styles.filterApplyBtn}
+                onPress={() => { setSelectedStatus(null); setSelectedDay(''); setDateFrom(''); setDateTo(''); setSearchLecture(''); setPageNum(1); }}
+              >
+                <Ionicons name="funnel-outline" size={14} color="#1a2540" />
+                <Text style={styles.btnGhostText}>تصفية</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
+          {/* شريط التحديد (يظهر فقط عند تفعيله) */}
+          {selectionMode && canManageLectures && (
+            <View style={styles.selBarLec}>
+              <TouchableOpacity style={styles.selBarItem} onPress={toggleSelectAll}>
+                <Ionicons name={selectedLectures.size === getFilteredLectures().length ? 'checkbox' : 'square-outline'} size={18} color="#2962ff" />
+                <Text style={styles.selBarText}>{selectedLectures.size === getFilteredLectures().length ? 'إلغاء الكل' : 'تحديد الكل'}</Text>
+              </TouchableOpacity>
+              <Text style={styles.selBarCount}>{selectedLectures.size} / {getFilteredLectures().length}</Text>
+              <View style={{ flex: 1 }} />
+              <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#f44336' }]} onPress={deleteSelectedLectures} disabled={selectedLectures.size === 0 || deleting}>
+                {deleting ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash" size={14} color="#fff" />}
+                <Text style={styles.selActionText}>حذف</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#c62828' }]} onPress={deleteAllLectures} disabled={deleting}>
+                <Ionicons name="trash-bin" size={14} color="#fff" />
+                <Text style={styles.selActionText}>حذف الكل</Text>
+              </TouchableOpacity>
+            </View>
+          )}
+
+          {/* قائمة المحاضرات */}
+          {(() => {
+            let filtered = getFilteredLectures();
+            // فلاتر إضافية
+            if (searchLecture) {
+              const q = searchLecture.toLowerCase();
+              filtered = filtered.filter(l => (l.room || '').toLowerCase().includes(q) || (l.date || '').includes(q));
+            }
+            if (selectedDay !== '') {
+              filtered = filtered.filter(l => String(parseDate(l.date).getDay()) === selectedDay);
+            }
+            if (dateFrom) filtered = filtered.filter(l => l.date >= dateFrom);
+            if (dateTo) filtered = filtered.filter(l => l.date <= dateTo);
+
+            const total = filtered.length;
+            const totPages = Math.max(1, Math.ceil(total / perPage));
+            const paged = filtered.slice((pageNum - 1) * perPage, pageNum * perPage);
+
+            if (total === 0) {
+              return (
+                <View style={styles.tableCard}>
+                  <View style={styles.tableEmpty}>
+                    <Ionicons name="calendar-outline" size={48} color="#cfd6e1" />
+                    <Text style={styles.tableEmptyText}>
+                      {lectures.length === 0 ? 'لا توجد محاضرات' : 'لا توجد محاضرات تطابق الفلتر'}
+                    </Text>
+                    {lectures.length === 0 && canManageLectures && (
+                      <TouchableOpacity style={[styles.headerBtn, styles.btnGeneratePurple, { marginTop: 8 }]} onPress={openGenerateModal}>
+                        <Ionicons name="flash" size={14} color="#fff" />
+                        <Text style={styles.btnPrimaryText}>توليد للفصل النشط</Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              );
+            }
+
+            return (
+              <View>
+                <View style={{ gap: 12 }}>
+                  {paged.map((item, idx) => (
+                    <View key={item.id}>{renderLecture({ item, index: (pageNum - 1) * perPage + idx })}</View>
+                  ))}
+                </View>
+
+                {/* تذييل: pagination */}
+                <View style={[styles.tableFooter, { backgroundColor: '#fff', borderRadius: 14, marginTop: 14, borderWidth: 1, borderColor: '#eef1f6' }]}>
+                  <View style={styles.perPageWrap}>
+                    <Text style={styles.perPageLbl}>عرض {((pageNum - 1) * perPage) + 1} إلى {Math.min(pageNum * perPage, total)} من {total} محاضرات</Text>
+                  </View>
+                  <View style={styles.pagerWrap}>
+                    <Text style={styles.perPageLbl}>لكل صفحة</Text>
+                    <View style={[styles.perPageBox, { width: 64 }]}>
+                      <Picker selectedValue={String(perPage)} onValueChange={(v) => { setPerPage(parseInt(v) || 10); setPageNum(1); }} style={styles.perPagePicker}>
+                        {[10, 25, 50, 100].map(n => <Picker.Item key={n} label={String(n)} value={String(n)} />)}
+                      </Picker>
+                    </View>
+                    {totPages > 1 && (
+                      <>
+                        <TouchableOpacity style={[styles.pagerNavBtn, pageNum <= 1 && styles.pagerNavBtnDisabled]} onPress={() => setPageNum(p => Math.max(1, p - 1))} disabled={pageNum <= 1}>
+                          <Text style={[styles.pagerNavText, pageNum <= 1 && { color: '#c0c8d4' }]}>السابق</Text>
+                        </TouchableOpacity>
+                        {Array.from({ length: totPages }, (_, i) => i + 1).slice(0, 5).map(p => (
+                          <TouchableOpacity key={p} style={[styles.pagerBtn, pageNum === p && styles.pagerBtnActive]} onPress={() => setPageNum(p)}>
+                            <Text style={[styles.pagerBtnText, pageNum === p && styles.pagerBtnTextActive]}>{p}</Text>
+                          </TouchableOpacity>
+                        ))}
+                        <TouchableOpacity style={[styles.pagerNavBtn, pageNum >= totPages && styles.pagerNavBtnDisabled]} onPress={() => setPageNum(p => Math.min(totPages, p + 1))} disabled={pageNum >= totPages}>
+                          <Text style={[styles.pagerNavText, pageNum >= totPages && { color: '#c0c8d4' }]}>التالي</Text>
+                        </TouchableOpacity>
+                      </>
+                    )}
+                  </View>
+                </View>
+              </View>
+            );
+          })()}
+
+        </ScrollView>
+
+        {/* قائمة العمليات (3 نقاط) */}
+        {openMenuId && (() => {
+          const lec = lectures.find(l => l.id === openMenuId);
+          if (!lec) return null;
+          return (
+            <Modal visible transparent animationType="fade" onRequestClose={() => setOpenMenuId(null)}>
+              <View style={styles.modalOverlayNew}>
+                <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setOpenMenuId(null)} />
+                <View style={styles.menuModalCard}>
+                  <View style={styles.menuModalHeader}>
+                    <Text style={styles.menuModalTitle} numberOfLines={1}>{WEEKDAYS_AR[parseDate(lec.date).getDay()]} · {formatGregorianDate(parseDate(lec.date), { includeYear: true })}</Text>
+                    <TouchableOpacity onPress={() => setOpenMenuId(null)}>
+                      <Ionicons name="close" size={20} color="#5b6678" />
+                    </TouchableOpacity>
+                  </View>
+                  <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); router.push({ pathname: '/take-attendance', params: { lectureId: lec.id } }); }}>
+                    <Ionicons name="information-circle-outline" size={18} color="#2962ff" />
+                    <Text style={styles.menuText}>عرض التفاصيل</Text>
+                  </TouchableOpacity>
+                  {canReschedule && (lec.status === 'scheduled' || lec.status === 'absent') && (
+                    <TouchableOpacity style={styles.menuItem} onPress={() => {
+                      setOpenMenuId(null);
+                      setRescheduleData({ date: '', start_time: lec.start_time || '08:00', end_time: lec.end_time || '09:00' });
+                      setRescheduleModal({ lectureId: lec.id, courseName: course?.name || '', oldDate: lec.date });
+                    }}>
+                      <Ionicons name="calendar-outline" size={18} color="#ff9800" />
+                      <Text style={styles.menuText}>إعادة الجدولة</Text>
+                    </TouchableOpacity>
+                  )}
+                  {canManageLectures && lec.status === 'scheduled' && (
+                    <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleCancelLecture(lec.id); }}>
+                      <Ionicons name="close-circle-outline" size={18} color="#f57c00" />
+                      <Text style={styles.menuText}>إلغاء المحاضرة</Text>
+                    </TouchableOpacity>
+                  )}
+                  {canManageLectures && (
+                    <TouchableOpacity style={[styles.menuItem, styles.menuItemDanger]} onPress={() => { setOpenMenuId(null); handleDeleteLecture(lec.id); }}>
+                      <Ionicons name="trash-outline" size={18} color="#f44336" />
+                      <Text style={[styles.menuText, { color: '#f44336' }]}>حذف</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              </View>
+            </Modal>
+          );
+        })()}
+
+        {/* Add Lecture Modal - Using the new unified component */}
         {/* Add Lecture Modal - Using the new unified component */}
         <AddLectureModal
           visible={showAddModal}
@@ -1538,8 +1559,115 @@ export default function CourseLecturesScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#f4f6fb',
   },
+
+  // ====== التصميم الجديد ======
+  pageScroll: { padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center' },
+
+  courseHeaderCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18, marginBottom: 16, borderWidth: 1, borderColor: '#eef1f6', flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 16, flexWrap: 'wrap' },
+  courseHeaderRight: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 14, flex: 1, minWidth: 280 },
+  courseBookIcon: { width: 48, height: 48, borderRadius: 10, backgroundColor: '#eef4ff', alignItems: 'center', justifyContent: 'center' },
+  courseHeaderName: { fontSize: 22, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
+  courseHeaderCode: { fontSize: 12, color: '#8a95a8', marginTop: 2, textAlign: 'right' },
+  courseHeaderChips: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginTop: 10, flexWrap: 'wrap' },
+  courseChipNew: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  courseChipText: { fontSize: 11, color: '#1a2540', fontWeight: '500' },
+  courseHeaderActions: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+
+  headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
+  btnAddGreen: { backgroundColor: '#22c55e' },
+  btnGeneratePurple: { backgroundColor: '#9333ea' },
+  btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+
+  statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 16, flexWrap: 'wrap' },
+  statCard: { flex: 1, minWidth: 180, backgroundColor: '#fff', borderRadius: 14, padding: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#eef1f6' },
+  statIconWrap: { width: 44, height: 44, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  statTextCol: { flex: 1, alignItems: 'flex-end' },
+  statValueNew: { fontSize: 22, color: '#1a2540', fontWeight: '700' },
+  statLabelNew: { fontSize: 12, color: '#8a95a8', marginTop: 2 },
+
+  filterCard: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: '#eef1f6' },
+  filterRowLec: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  filterFieldFlex1: { flex: 1, minWidth: 140 },
+  filterFieldFlex2: { flex: 2, minWidth: 220 },
+  searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e3e7ee', height: 40 },
+  searchBoxInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', outlineStyle: 'none' as any },
+  dropdown: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e3e7ee', height: 40, overflow: 'hidden', justifyContent: 'center' },
+  dropdownInner: { height: 40, fontSize: 13, color: '#1a2540', textAlign: 'right', backgroundColor: 'transparent', borderWidth: 0 },
+  dateRangeBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, borderWidth: 1, borderColor: '#e3e7ee', height: 40, minWidth: 200 },
+  dateInput: { flex: 1, fontSize: 12, color: '#1a2540', textAlign: 'center', outlineStyle: 'none' as any, minWidth: 70 },
+  dateSep: { color: '#8a95a8' },
+  filterApplyBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', height: 40, paddingHorizontal: 14, borderRadius: 8 },
+
+  selBarLec: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: '#eef4ff', borderRadius: 12, padding: 12, marginBottom: 14, borderWidth: 1, borderColor: '#cfdcff', flexWrap: 'wrap' },
+  selBarItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  selBarText: { fontSize: 13, color: '#2962ff', fontWeight: '600' },
+  selBarCount: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+  selActionBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7 },
+  selActionText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+
+  // بطاقة محاضرة
+  lectureCardNew: { backgroundColor: '#fff', borderRadius: 12, padding: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6', position: 'relative' },
+  lectureCardNewSelected: { backgroundColor: '#eef4ff', borderColor: '#cfdcff' },
+  lectureNumWrap: { width: 44 },
+  lectureNumBadge: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#eef4ff', alignItems: 'center', justifyContent: 'center' },
+  lectureNumText: { fontSize: 14, fontWeight: '700', color: '#2962ff' },
+  lectureDayCol: { minWidth: 110, alignItems: 'flex-end' },
+  lectureDayName: { fontSize: 14, fontWeight: '700', color: '#1a2540' },
+  lectureDateText: { fontSize: 11, color: '#8a95a8', marginTop: 2 },
+  lectureMidCol: { flex: 1, gap: 8 },
+  lectureMetaRowNew: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
+  lectureMetaItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 },
+  lectureMetaText: { fontSize: 12, color: '#1a2540' },
+  lectureCountsRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14, flexWrap: 'wrap' },
+  countItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 },
+  countDot: { width: 6, height: 6, borderRadius: 3 },
+  countText: { fontSize: 12, fontWeight: '700', color: '#1a2540' },
+  countLbl: { fontSize: 11, color: '#8a95a8' },
+  noteBoxInfoNew: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#eef4ff', padding: 6, borderRadius: 6, borderRightWidth: 2, borderRightColor: '#2962ff', marginTop: 4 },
+  noteTextNew: { fontSize: 11, color: '#1a2540', flex: 1 },
+
+  lectureActionsNew: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  actBtnDetails: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, backgroundColor: '#eef4ff' },
+  actBtnDetailsText: { fontSize: 12, fontWeight: '600', color: '#2962ff' },
+  actBtnReschedule: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, backgroundColor: '#fff3e0' },
+  actBtnRescheduleText: { fontSize: 12, fontWeight: '600', color: '#ff9800' },
+  actBtnAttend: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 7, borderRadius: 7, backgroundColor: '#e7f6ee' },
+  actBtnAttendText: { fontSize: 12, fontWeight: '600', color: '#22a35a' },
+  dotsBtn: { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+
+  statusBadgeAbs: { position: 'absolute', top: 12, left: 16, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  statusBadgeAbsText: { fontSize: 10, color: '#fff', fontWeight: '700' },
+
+  tableCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  tableEmpty: { paddingVertical: 60, alignItems: 'center', gap: 12 },
+  tableEmptyText: { fontSize: 14, color: '#8a95a8' },
+  tableFooter: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, flexWrap: 'wrap', gap: 12 },
+  perPageWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  perPageLbl: { fontSize: 12, color: '#5b6678' },
+  perPageBox: { width: 70, height: 34, borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 6, justifyContent: 'center', overflow: 'hidden' },
+  perPagePicker: { height: 34, fontSize: 12, borderWidth: 0, backgroundColor: 'transparent' },
+  pagerWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  pagerBtn: { minWidth: 32, height: 32, borderRadius: 6, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  pagerBtnActive: { backgroundColor: '#2962ff', borderColor: '#2962ff' },
+  pagerBtnText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+  pagerBtnTextActive: { color: '#fff' },
+  pagerNavBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 12, height: 32, borderRadius: 6, borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  pagerNavBtnDisabled: { backgroundColor: '#fafbfd' },
+  pagerNavText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+
+  modalOverlayNew: { flex: 1, backgroundColor: 'rgba(20,30,55,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  menuModalCard: { backgroundColor: '#fff', borderRadius: 14, width: '100%', maxWidth: 380, paddingVertical: 8, borderWidth: 1, borderColor: '#eef1f6', boxShadow: '0 12px 32px rgba(20,30,55,0.18)' as any },
+  menuModalHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#f3f5f9', marginBottom: 4 },
+  menuModalTitle: { fontSize: 14, fontWeight: '700', color: '#1a2540', flex: 1, textAlign: 'right' },
+  menuItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 14 },
+  menuItemDanger: { borderTopWidth: 1, borderTopColor: '#f3f5f9', marginTop: 2 },
+  menuText: { fontSize: 13, color: '#1a2540', fontWeight: '500', textAlign: 'right' },
+
+  // ====== الستايلات القديمة (يحتفظ بها للنوافذ المنبثقة) ======
   courseInfo: {
     backgroundColor: '#1565c0',
     paddingHorizontal: 14,

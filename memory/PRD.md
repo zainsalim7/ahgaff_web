@@ -13,6 +13,15 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-15 **Course Lectures page redesigned (`/course-lectures`)** — Applied new design system:
+  - Top course header card: book icon + course name + code + meta chips (hours / department / level / students count).
+  - Action buttons (top-left): "إضافة محاضرة" (green) · "توليد تلقائي" (purple) · "تحديد متعدد" (outline).
+  - 4 stats cards: Total students · Scheduled · Completed · Absent.
+  - Filter bar: search + status dropdown + day dropdown + date-range (from–to) + "تصفية" reset.
+  - Lecture rows as cards (one per row) with: numbered badge · day name · date · time · room · 4 mini counters (total/scheduled/completed/absent) · action buttons (التفاصيل / إعادة الجدولة / تسجيل الحضور / 3-dot) · status badge.
+  - Pagination footer: page numbers + per-page selector + Prev/Next.
+  - 3-dot action Modal: View details · Reschedule · Cancel lecture · Delete (with proper permission checks).
+  - All existing logic preserved (selection mode, bulk delete, reschedule modal, generate semester, attendance, etc.).
 - 2026-06-15 **Unified Design System across admin pages (students, teachers, courses, faculty-details)**:
   - Applied consistent new SaaS-style design to `/students`, `/manage-teachers`, `/(tabs)/courses`, and `/faculty-details`.
   - **Pattern:** Light bg (`#f4f6fb`), white rounded cards with thin borders, colorful circular stat icons, clean table layout with avatar/badge cells, centered Modal action menus.
