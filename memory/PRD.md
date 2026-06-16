@@ -13,6 +13,14 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-16 **Student Details page (`/student-details`) — full redesign replacing modal**:
+  - **Replaced 39-line redirect-shim** with a 1360-line full-featured page mimicking `/teacher-courses` design system.
+  - **Sections:** page header (title + status badge + breadcrumb + actions), student profile card (avatar/name/student_id/reference_number/department/level/section/phone/email), 3 stat cards (مقررات / ساعات معتمدة / حالة الحساب), quick-actions row (تغيير الحالة / تفعيل أو إلغاء تفعيل الحساب / إعادة تعيين كلمة المرور / التقرير المفصّل), courses list with rich metadata badges, and an attendance section.
+  - **CRITICAL UX (per user request): Attendance does NOT load on mount.** A "عرض ملخص الحضور" button triggers GET `/api/attendance/stats/student/{id}` and shows 5 summary cards (حاضر/غائب/متأخر/معذور/إجمالي) + معدل الحضور chip. After that, an "عرض التفاصيل" button fetches `/api/attendance/student/{id}` and renders the detailed records (capped at 100).
+  - **Modals:** Edit info (PUT `/api/students/{id}`) and Change Status (POST `/api/student-status/{id}/change`) — both inline, fully styled, RTL.
+  - **Excel export:** `/api/export/report/student/{id}/excel`.
+  - **`/students.tsx` updated:** `handleViewDetails` now routes to `/student-details?studentId=ID` (was opening modal); the `?openStudent=ID` query param now redirects to the new page (legacy compatibility for global search results).
+  - **Verified:** iteration_31 backend pytest 6/6 PASS · iteration_32 frontend 100% PASS (all 22 testIDs reachable, attendance-empty-on-mount network invariant verified, edit/status modals exercised).
 - 2026-06-15 **Teacher Courses page (`/teacher-courses`) redesigned + course assignment**:
   - Applied new design system: page header with breadcrumb (الرئيسية > المعلمون > المقررات), teacher info card with avatar, 3 colorful stat cards (إجمالي المقررات / الطلاب / المحاضرات), course list cards with rich metadata badges.
   - **NEW: Assign Courses flow** — primary "إسناد مقرر" button opens modal with debounced course search (`/api/teaching-load/search-courses`), multi-select with checkboxes, per-course weekly-hours input, "إخفاء المقررات المسندة لمعلمين آخرين" filter, batch save via `POST /api/teaching-load/bulk`.
