@@ -370,7 +370,7 @@ export default function StudentDetailsScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Stack.Screen
         options={{
-          title: `تفاصيل الطالب - ${student.full_name}`,
+          title: student.full_name,
           headerBackTitle: 'رجوع',
         }}
       />
@@ -410,7 +410,7 @@ export default function StudentDetailsScreen() {
             <TouchableOpacity
               style={[styles.headerBtn, styles.btnGhost]}
               onPress={() => router.back()}
-              data-testid="back-btn"
+              testID="back-btn"
             >
               <Ionicons name="arrow-forward" size={16} color="#1a2540" />
               <Text style={styles.btnGhostText}>رجوع</Text>
@@ -420,7 +420,7 @@ export default function StudentDetailsScreen() {
                 style={[styles.headerBtn, styles.btnExportExcel, exportingExcel && { opacity: 0.5 }]}
                 onPress={handleExportExcel}
                 disabled={exportingExcel}
-                data-testid="export-excel-btn"
+                testID="export-excel-btn"
               >
                 {exportingExcel ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -436,7 +436,7 @@ export default function StudentDetailsScreen() {
               <TouchableOpacity
                 style={[styles.headerBtn, styles.btnPrimary]}
                 onPress={openEditModal}
-                data-testid="edit-student-btn"
+                testID="edit-student-btn"
               >
                 <Ionicons name="create" size={16} color="#fff" />
                 <Text style={styles.btnPrimaryText}>تعديل</Text>
@@ -520,7 +520,7 @@ export default function StudentDetailsScreen() {
             </View>
             <View style={styles.statTextCol}>
               <Text style={styles.statLabel}>المقررات المسجلة</Text>
-              <Text style={styles.statValue} data-testid="total-courses-value">
+              <Text style={styles.statValue} testID="total-courses-value">
                 {courses.length}
               </Text>
               <Text style={styles.statSubLabel}>
@@ -562,7 +562,7 @@ export default function StudentDetailsScreen() {
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: '#fff3e0' }]}
                 onPress={openStatusModal}
-                data-testid="change-status-btn"
+                testID="change-status-btn"
               >
                 <Ionicons name="swap-horizontal" size={18} color="#e65100" />
                 <Text style={[styles.actionBtnText, { color: '#e65100' }]}>تغيير الحالة</Text>
@@ -571,7 +571,7 @@ export default function StudentDetailsScreen() {
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#ffebee' }]}
                   onPress={handleDeactivateAccount}
-                  data-testid="deactivate-account-btn"
+                  testID="deactivate-account-btn"
                 >
                   <Ionicons name="person-remove" size={18} color="#c62828" />
                   <Text style={[styles.actionBtnText, { color: '#c62828' }]}>
@@ -582,7 +582,7 @@ export default function StudentDetailsScreen() {
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#e8f5e9' }]}
                   onPress={handleActivateAccount}
-                  data-testid="activate-account-btn"
+                  testID="activate-account-btn"
                 >
                   <Ionicons name="person-add" size={18} color="#2e7d32" />
                   <Text style={[styles.actionBtnText, { color: '#2e7d32' }]}>
@@ -594,7 +594,7 @@ export default function StudentDetailsScreen() {
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#e3f2fd' }]}
                   onPress={handleResetPassword}
-                  data-testid="reset-password-btn"
+                  testID="reset-password-btn"
                 >
                   <Ionicons name="key" size={18} color="#1565c0" />
                   <Text style={[styles.actionBtnText, { color: '#1565c0' }]}>
@@ -610,7 +610,7 @@ export default function StudentDetailsScreen() {
                     params: { studentId: student.id },
                   })
                 }
-                data-testid="open-report-btn"
+                testID="open-report-btn"
               >
                 <Ionicons name="document-text" size={18} color="#5e35b1" />
                 <Text style={[styles.actionBtnText, { color: '#5e35b1' }]}>التقرير المفصّل</Text>
@@ -653,7 +653,7 @@ export default function StudentDetailsScreen() {
                       params: { courseId: course.id },
                     })
                   }
-                  data-testid={`course-row-${course.id}`}
+                  testID={`course-row-${course.id}`}
                 >
                   <View style={styles.courseIconBox}>
                     <Ionicons name="book" size={22} color="#2962ff" />
@@ -727,7 +727,7 @@ export default function StudentDetailsScreen() {
                 style={[styles.headerBtn, styles.btnPrimary, { marginTop: 14 }]}
                 onPress={handleLoadAttendanceStats}
                 disabled={statsLoading}
-                data-testid="load-attendance-summary-btn"
+                testID="load-attendance-summary-btn"
               >
                 {statsLoading ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -781,7 +781,7 @@ export default function StudentDetailsScreen() {
                   style={[styles.headerBtn, styles.btnGhost, { alignSelf: 'center', marginTop: 14 }]}
                   onPress={handleLoadAttendanceRecords}
                   disabled={recordsLoading}
-                  data-testid="load-attendance-records-btn"
+                  testID="load-attendance-records-btn"
                 >
                   {recordsLoading ? (
                     <ActivityIndicator size="small" color="#1a2540" />
@@ -879,7 +879,7 @@ export default function StudentDetailsScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>تعديل بيانات الطالب</Text>
-              <TouchableOpacity onPress={() => setShowEditModal(false)} data-testid="close-edit-modal">
+              <TouchableOpacity onPress={() => setShowEditModal(false)} testID="close-edit-modal">
                 <Ionicons name="close" size={22} color="#5b6678" />
               </TouchableOpacity>
             </View>
@@ -891,7 +891,7 @@ export default function StudentDetailsScreen() {
                 onChangeText={(t) => setEditForm(p => ({ ...p, full_name: t }))}
                 placeholder="الاسم الكامل"
                 placeholderTextColor="#a8b1c2"
-                data-testid="edit-name-input"
+                testID="edit-name-input"
               />
               <Text style={styles.inputLabel}>الهاتف</Text>
               <TextInput
@@ -901,7 +901,7 @@ export default function StudentDetailsScreen() {
                 placeholder="رقم الهاتف"
                 placeholderTextColor="#a8b1c2"
                 keyboardType="phone-pad"
-                data-testid="edit-phone-input"
+                testID="edit-phone-input"
               />
               <Text style={styles.inputLabel}>البريد الإلكتروني</Text>
               <TextInput
@@ -911,7 +911,7 @@ export default function StudentDetailsScreen() {
                 placeholder="البريد الإلكتروني"
                 placeholderTextColor="#a8b1c2"
                 keyboardType="email-address"
-                data-testid="edit-email-input"
+                testID="edit-email-input"
               />
               <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
                 <View style={{ flex: 1 }}>
@@ -946,7 +946,7 @@ export default function StudentDetailsScreen() {
                     onChangeText={(t) => setEditForm(p => ({ ...p, section: t }))}
                     placeholder="الشعبة"
                     placeholderTextColor="#a8b1c2"
-                    data-testid="edit-section-input"
+                    testID="edit-section-input"
                   />
                 </View>
               </View>
@@ -962,7 +962,7 @@ export default function StudentDetailsScreen() {
                 style={[styles.headerBtn, styles.btnPrimary, savingEdit && { opacity: 0.5 }]}
                 onPress={handleSaveEdit}
                 disabled={savingEdit}
-                data-testid="save-edit-btn"
+                testID="save-edit-btn"
               >
                 {savingEdit ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -994,7 +994,7 @@ export default function StudentDetailsScreen() {
           <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>تغيير حالة الطالب</Text>
-              <TouchableOpacity onPress={() => setShowStatusModal(false)} data-testid="close-status-modal">
+              <TouchableOpacity onPress={() => setShowStatusModal(false)} testID="close-status-modal">
                 <Ionicons name="close" size={22} color="#5b6678" />
               </TouchableOpacity>
             </View>
@@ -1013,7 +1013,7 @@ export default function StudentDetailsScreen() {
                       },
                     ]}
                     onPress={() => setNewStatus(opt.value)}
-                    data-testid={`status-option-${opt.value}`}
+                    testID={`status-option-${opt.value}`}
                   >
                     <Ionicons name={opt.icon} size={18} color={opt.color} />
                     <Text style={[styles.statusOptionText, { color: opt.color }]}>
@@ -1054,7 +1054,7 @@ export default function StudentDetailsScreen() {
                 placeholder="سبب تغيير الحالة..."
                 placeholderTextColor="#a8b1c2"
                 multiline
-                data-testid="status-reason-input"
+                testID="status-reason-input"
               />
             </ScrollView>
             <View style={styles.modalFooter}>
@@ -1068,7 +1068,7 @@ export default function StudentDetailsScreen() {
                 style={[styles.headerBtn, styles.btnPrimary, savingStatus && { opacity: 0.5 }]}
                 onPress={handleChangeStatus}
                 disabled={savingStatus}
-                data-testid="save-status-btn"
+                testID="save-status-btn"
               >
                 {savingStatus ? (
                   <ActivityIndicator size="small" color="#fff" />

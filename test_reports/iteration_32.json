@@ -1,0 +1,25 @@
+{
+  "summary": "RETEST of /student-details after `data-testid` → `testID` rename: PASS. All 22 testIDs now reach the DOM as `data-testid` attributes (only the 2 global testIDs from _layout.tsx reached DOM before; now we count 13 testIDs from student-details.tsx + 2 global ones for a total of 13 on this page — back-btn, export-excel-btn, edit-student-btn, change-status-btn, deactivate-account-btn, reset-password-btn, open-report-btn, total-courses-value, course-row-* (2 courses), load-attendance-summary-btn, plus the 2 floating buttons). After clicking load-attendance-summary-btn, load-attendance-records-btn renders and the 5 summary cards appear. Edit modal exposes edit-name-input/edit-phone-input/edit-email-input/edit-section-input/save-edit-btn/close-edit-modal. Status modal exposes status-option-active/repeat/graduated/expelled/frozen + status-reason-input + save-status-btn + close-status-modal. Stack.Screen header now reads just 'محمد أحمد علي' (no longer 'تفاصيل الطالب - محمد أحمد علي'). NETWORK INVARIANT CONFIRMED: zero /api/attendance/* calls fire in the first 3 s after mount; the very first attendance call (GET /api/attendance/stats/student/{id}) fires only after explicit user click. Backend skipped per request.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/student-details", "issues": ["In-page page-header still renders 'تفاصيل الطالب' text + breadcrumb 80px below the top app bar (which now correctly shows only the student name). This is now consistent with other pages in the app — no longer a duplicate-title issue. Acceptable."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_student_details_page.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "student-details.tsx is still 1360 lines — well above the 700-line guideline. Recommend extracting StudentHeader, ProfileCard, StatCards, QuickActions, CoursesList, AttendanceSection, EditStudentModal, ChangeStatusModal into /components for maintainability (carry-over from iteration_31).",
+    "On initial test run, all 22 testIDs were missing from DOM despite the source having `testID=` everywhere. Root cause: Metro/Expo bundler was serving a stale chunk for /student-details after the rename. A `sudo supervisorctl restart expo` was required to pick up the new bundle. Hot-reload via CI mode (`Metro is running in CI mode, reloads are disabled. Remove CI=true to enable watch mode.`) was NOT actually hot-reloading the file change. Consider removing `CI=true` from the expo supervisor config OR documenting that any `*.tsx` rename inside /app/frontend/app requires an expo restart for the change to be visible in the served bundle. This is a pitfall for future iterations."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "skipped (already 6/6 in iteration_31)", "frontend": "100% — all 22 testIDs reachable, attendance-empty-on-mount invariant holds, summary fetch flow works, edit + status modal testIDs all present"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "None. Reused student 698ef706d803b27aab012065 (محمد أحمد علي).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "If you change *.tsx file in /app/frontend/app, do `sudo supervisorctl restart expo` and wait ~25 s before testing — Metro is in CI mode (reloads disabled). Login via browser-side fetch + localStorage write is reliable. Backend pytest file at /app/backend/tests/test_student_details_page.py is reusable.",
+  "rca of the issue": "Previous-iteration finding (data-testid vs testID) is fully fixed in source. Initial flake on this run was Metro CI-mode bundle cache; resolved by restarting the `expo` supervisor process. After restart, DOM exposes every documented testID; attendance lazy-load behaviour verified; edit/status modal selectors all reachable."
+}
