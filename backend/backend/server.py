@@ -4822,6 +4822,7 @@ async def get_courses(
     semester_id: Optional[str] = None,
     level: Optional[int] = None,
     fields: Optional[str] = None,
+    all_semesters: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
     query = {"is_active": True}
@@ -4843,9 +4844,22 @@ async def get_courses(
         elif not query.get("department_id"):
             query["department_id"] = department_id
 
-    # فلتر الفصل الدراسي - مهم: يضمن أن المقررات مرتبطة بالفصل المطلوب فقط
+    # فلتر الفصل الدراسي:
+    # - عند تمرير semester_id صريحاً: يُطبَّق كما هو
+    # - عدا ذلك: يُفعَّل تلقائياً للمعلم/الطالب أو عند تمرير teacher_id
+    #   (تطبيقات الجوال يجب أن ترى مقررات الفصل النشط فقط)
+    role = current_user.get("role")
+    auto_filter_active = (
+        not all_semesters
+        and not semester_id
+        and (role in (UserRole.TEACHER, UserRole.STUDENT) or teacher_id is not None)
+    )
     if semester_id:
         query["semester_id"] = semester_id
+    elif auto_filter_active:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            query["semester_id"] = str(active_sem["_id"])
 
     # فلتر المستوى
     if level is not None:

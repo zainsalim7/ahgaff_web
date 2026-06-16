@@ -13,6 +13,10 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-16 **إصلاح ثانٍ لفلترة `/courses` — endpoint مزدوج (P0)**:
+  - **المشكلة:** التعديل السابق طُبِّق على `routes/courses.py` لكن FastAPI كان يستخدم `server.py:4818` (مسجَّل أولاً) — لذا بقي تطبيق المعلم يعرض الفصل الماضي.
+  - **الإصلاح:** نقل نفس منطق الفلترة الذكية إلى `server.py::get_courses`: تُفعَّل تلقائياً للمعلم/الطالب أو عند تمرير `?teacher_id`، الإداريون يرون كل المقررات، ودعم `?all_semesters=true` للتجاوز.
+  - **التحقق (بتوكن معلم حقيقي):** قبل=1 مقرر بـsemester_id قديم؛ بعد=0 (صحيح، المعلم لا يدرّس في الصيفي). Admin بدون params = 13 (كل المقررات). Admin مع `teacher_id` = مفلتر. `all_semesters=true` = escape hatch يعمل.
 - 2026-06-16 **إصلاح فلترة المقررات في تطبيقات المعلم والطالب بالفصل النشط (P0)**:
   - **المشكلة:** تطبيقات الطالب والمعلم كانت تعرض مقررات الفصل السابق (الفصل الأول) لأن endpoints `/students/me/courses` و `/students/{id}/courses` و `/courses?teacher_id=X` لم تفلتر بالفصل النشط.
   - **الإصلاح (3 endpoints):**
