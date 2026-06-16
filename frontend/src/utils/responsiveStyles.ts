@@ -51,6 +51,83 @@ export function injectResponsiveStyles() {
       overflow: visible !important;
     }
 
+    /* ============= حل شامل لكل صفحات RN-Web: تمكين تمرير body بدلاً من تمرير داخلي ============= */
+    /* جذر التطبيق (المنشأ من react-native-web) */
+    #root > div,
+    #root > div > div {
+      overflow: visible !important;
+      height: auto !important;
+      min-height: 100vh !important;
+    }
+    /* جميع حاويات RN-Web المرئية القابلة للتمرير (ScrollView/FlatList):
+       تحديد قابلية scroll بناءً على أنماط classes التي ينتجها RN-Web */
+    [class*="r-overflow"],
+    [class*="OverflowScrolling"],
+    [class*="WebkitOverflow"],
+    [class*="r-overflowY"],
+    [class*="r-overflowX"] {
+      scrollbar-width: auto !important;
+      scrollbar-color: #6b7d99 #eef1f6 !important;
+      -webkit-overflow-scrolling: auto !important;
+    }
+    /* تجاوز قوي لأي عنصر يخفي شريط التمرير */
+    *::-webkit-scrollbar {
+      width: 14px !important;
+      height: 14px !important;
+      display: block !important;
+      -webkit-appearance: auto !important;
+      appearance: auto !important;
+    }
+    *::-webkit-scrollbar-track {
+      background: #eef1f6 !important;
+    }
+    *::-webkit-scrollbar-thumb {
+      background: #6b7d99 !important;
+      border-radius: 7px !important;
+      border: 2px solid #eef1f6 !important;
+      min-height: 40px !important;
+    }
+    *::-webkit-scrollbar-thumb:hover {
+      background: #3949ab !important;
+    }
+    /* أي عنصر بـ overflow scroll/auto عبر inline style يحصل على scrollbar مرئي */
+    div[style*="overflow: auto"]::-webkit-scrollbar,
+    div[style*="overflow: scroll"]::-webkit-scrollbar,
+    div[style*="overflow-y: auto"]::-webkit-scrollbar,
+    div[style*="overflow-y: scroll"]::-webkit-scrollbar,
+    div[style*="overflow-x: auto"]::-webkit-scrollbar,
+    div[style*="overflow-x: scroll"]::-webkit-scrollbar {
+      width: 12px !important;
+      height: 12px !important;
+      display: block !important;
+    }
+    div[style*="overflow: auto"]::-webkit-scrollbar-track,
+    div[style*="overflow: scroll"]::-webkit-scrollbar-track,
+    div[style*="overflow-y: auto"]::-webkit-scrollbar-track,
+    div[style*="overflow-y: scroll"]::-webkit-scrollbar-track,
+    div[style*="overflow-x: auto"]::-webkit-scrollbar-track,
+    div[style*="overflow-x: scroll"]::-webkit-scrollbar-track {
+      background: #eef1f6 !important;
+    }
+    div[style*="overflow: auto"]::-webkit-scrollbar-thumb,
+    div[style*="overflow: scroll"]::-webkit-scrollbar-thumb,
+    div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb,
+    div[style*="overflow-y: scroll"]::-webkit-scrollbar-thumb,
+    div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb,
+    div[style*="overflow-x: scroll"]::-webkit-scrollbar-thumb {
+      background: #c0c8d4 !important;
+      border-radius: 6px !important;
+      border: 2px solid #eef1f6 !important;
+    }
+    div[style*="overflow: auto"]::-webkit-scrollbar-thumb:hover,
+    div[style*="overflow: scroll"]::-webkit-scrollbar-thumb:hover,
+    div[style*="overflow-y: auto"]::-webkit-scrollbar-thumb:hover,
+    div[style*="overflow-y: scroll"]::-webkit-scrollbar-thumb:hover,
+    div[style*="overflow-x: auto"]::-webkit-scrollbar-thumb:hover,
+    div[style*="overflow-x: scroll"]::-webkit-scrollbar-thumb:hover {
+      background: #8a95a8 !important;
+    }
+
     /* ============= Tablet (≤1024px) ============= */
     @media (max-width: 1024px) {
       [data-responsive="page-scroll"] { padding: 14px !important; }

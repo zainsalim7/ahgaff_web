@@ -133,6 +133,7 @@ export default function CourseDetailsScreen() {
       <Stack.Screen options={{ title: 'تفاصيل المقرر', headerBackTitle: 'رجوع' }} />
       <SafeAreaView style={styles.container} edges={['bottom']}>
         <ScrollView
+          dataSet={{ responsiveScrollRoot: "true" }}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
           contentContainerStyle={{ paddingBottom: 30 }}
         >

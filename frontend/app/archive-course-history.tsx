@@ -66,7 +66,7 @@ export default function ArchiveCourseHistoryScreen() {
           pdfPath={`/archives/courses/${encodeURIComponent(courseCode || '')}/history/pdf`}
           pdfFileName={`course-history-${courseCode}.pdf`}
         />
-        <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 30 }}>
+        <ScrollView dataSet={{ responsiveScrollRoot: "true" }} contentContainerStyle={{ padding: 12, paddingBottom: 30 }}>
           <View style={styles.header}>
             <View style={styles.iconBox}><Ionicons name="book" size={32} color="#fff" /></View>
             <View style={{ flex: 1 }}>

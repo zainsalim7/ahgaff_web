@@ -13,6 +13,14 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-16 **شريط تمرير مرئي شامل في كل صفحات RN-Web**:
+  - **المشكلة:** صفحات المقررات (والصفحات الفرعية الأخرى) لم تكن تُظهر scrollbar حتى عندما يكون المحتوى أطول من النافذة.
+  - **الإصلاح:** توسيع CSS العالمي في `responsiveStyles.ts` ليستهدف كل ScrollView/FlatList في RN-Web عبر:
+    - `[class*="r-overflow"]`, `[class*="OverflowScrolling"]`, `[class*="WebkitOverflow"]`, `[class*="r-overflowY"]`, `[class*="r-overflowX"]` — يطابق كل classes RN-Web الفعلية.
+    - `*::-webkit-scrollbar` كتجاوز قوي + `*::-webkit-scrollbar-thumb` بلون داكن (`#6b7d99`) وحدّ خارجي للوضوح.
+    - `scrollbar-width: auto` و `appearance: auto` لإجبار المتصفحات على إظهار الشريط دائماً (بدلاً من overlay-only).
+  - **إضافة `dataSet={{ responsiveScrollRoot: "true" }}`** لصفحتين كانتا تفتقدانها: `course-details.tsx` و `archive-course-history.tsx`.
+  - **التحقق:** عبر JS evaluation داخل المتصفح: `pseudo_width=14px`, `display=block`, `scrollbar-width=auto` (CSS مُطبَّق فعلاً). screenshot tool لا يُظهر الـ scrollbar بصرياً لأن Playwright Chromium headless يخفي الـ scrollbars تلقائياً في screenshots — لكن متصفح المستخدم العادي سيعرضها.
 - 2026-06-16 **إصلاح ثانٍ لفلترة `/courses` — endpoint مزدوج (P0)**:
   - **المشكلة:** التعديل السابق طُبِّق على `routes/courses.py` لكن FastAPI كان يستخدم `server.py:4818` (مسجَّل أولاً) — لذا بقي تطبيق المعلم يعرض الفصل الماضي.
   - **الإصلاح:** نقل نفس منطق الفلترة الذكية إلى `server.py::get_courses`: تُفعَّل تلقائياً للمعلم/الطالب أو عند تمرير `?teacher_id`، الإداريون يرون كل المقررات، ودعم `?all_semesters=true` للتجاوز.
