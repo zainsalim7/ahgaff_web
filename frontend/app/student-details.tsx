@@ -116,6 +116,16 @@ export default function StudentDetailsScreen() {
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [showRecords, setShowRecords] = useState(false);
 
+  // توسيع سجل الحضور لمقرر معيّن
+  const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
+  const [courseRecordsCache, setCourseRecordsCache] = useState<Record<string, AttendanceRecord[]>>({});
+  const [loadingCourseId, setLoadingCourseId] = useState<string | null>(null);
+
+  // مودال تغيير المستوى
+  const [showLevelModal, setShowLevelModal] = useState(false);
+  const [newLevel, setNewLevel] = useState('1');
+  const [savingLevel, setSavingLevel] = useState(false);
+
   // Edit Modal
   const [showEditModal, setShowEditModal] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -205,6 +215,53 @@ export default function StudentDetailsScreen() {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل تحميل سجل الحضور');
     } finally {
       setRecordsLoading(false);
+    }
+  };
+
+  // فتح/طيّ سجل الحضور لمقرر معيّن داخل بطاقة المقرر
+  const toggleCourseAttendance = async (courseId: string) => {
+    if (!student) return;
+    if (expandedCourseId === courseId) {
+      setExpandedCourseId(null);
+      return;
+    }
+    setExpandedCourseId(courseId);
+    if (courseRecordsCache[courseId]) return; // محمَّل مسبقاً
+    setLoadingCourseId(courseId);
+    try {
+      const res = await attendanceAPI.getStudentAttendance(student.id, courseId);
+      setCourseRecordsCache(p => ({ ...p, [courseId]: res.data || [] }));
+    } catch (e: any) {
+      setCourseRecordsCache(p => ({ ...p, [courseId]: [] }));
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل تحميل سجل الحضور');
+    } finally {
+      setLoadingCourseId(null);
+    }
+  };
+
+  // فتح مودال تغيير المستوى
+  const openLevelModal = () => {
+    if (!student) return;
+    setNewLevel(String(student.level || '1'));
+    setShowLevelModal(true);
+  };
+
+  const handleSaveLevel = async () => {
+    if (!student) return;
+    if (parseInt(newLevel) === student.level) {
+      setShowLevelModal(false);
+      return;
+    }
+    setSavingLevel(true);
+    try {
+      await studentsAPI.update(student.id, { level: parseInt(newLevel) } as any);
+      showMessage('تم', `تم تغيير المستوى إلى م${newLevel}`);
+      setShowLevelModal(false);
+      fetchStudent();
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل تحديث المستوى');
+    } finally {
+      setSavingLevel(false);
     }
   };
 
@@ -647,6 +704,14 @@ export default function StudentDetailsScreen() {
                 <Ionicons name="swap-horizontal" size={18} color="#e65100" />
                 <Text style={[styles.actionBtnText, { color: '#e65100' }]}>تغيير الحالة</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#e8eaf6' }]}
+                onPress={openLevelModal}
+                testID="change-level-btn"
+              >
+                <Ionicons name="layers" size={18} color="#3949ab" />
+                <Text style={[styles.actionBtnText, { color: '#3949ab' }]}>تغيير المستوى</Text>
+              </TouchableOpacity>
               {isAccountActive ? (
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#ffebee' }]}
@@ -734,64 +799,112 @@ export default function StudentDetailsScreen() {
                   : rate >= 75 ? '#e8f5e9'
                   : rate >= 50 ? '#fff3e0'
                   : '#ffebee';
+                const isExpanded = expandedCourseId === course.id;
+                const isLoading = loadingCourseId === course.id;
+                const records = courseRecordsCache[course.id] || [];
                 return (
-                <TouchableOpacity
-                  key={course.id}
-                  style={styles.courseRow}
-                  onPress={() =>
-                    router.push({
-                      pathname: '/course-lectures',
-                      params: { courseId: course.id, courseName: course.name },
-                    })
-                  }
-                  testID={`course-row-${course.id}`}
-                >
-                  <View style={styles.courseIconBox}>
-                    <Ionicons name="book" size={20} color="#2962ff" />
-                  </View>
-                  <View style={styles.courseInfo}>
-                    <View style={styles.courseTitleRow}>
-                      <Text style={styles.courseName} numberOfLines={1}>
-                        {course.name}
-                      </Text>
-                      <Text style={styles.courseCode}>{course.code || '—'}</Text>
+                <View key={course.id} style={{ gap: 0 }}>
+                  <TouchableOpacity
+                    style={[styles.courseRow, isExpanded && styles.courseRowExpanded]}
+                    onPress={() => toggleCourseAttendance(course.id)}
+                    testID={`course-row-${course.id}`}
+                  >
+                    <View style={styles.courseIconBox}>
+                      <Ionicons name="book" size={20} color="#2962ff" />
                     </View>
-                    <View style={styles.metaRow}>
-                      {course.teacher_name ? (
-                        <View style={styles.metaItem}>
-                          <Ionicons name="person-outline" size={12} color="#5b6678" />
-                          <Text style={styles.metaText}>{course.teacher_name}</Text>
-                        </View>
-                      ) : null}
-                      <View style={[styles.badge, styles.badgeLevel]}>
-                        <Text style={styles.badgeText}>م{course.level}</Text>
+                    <View style={styles.courseInfo}>
+                      <View style={styles.courseTitleRow}>
+                        <Text style={styles.courseName} numberOfLines={1}>
+                          {course.name}
+                        </Text>
+                        <Text style={styles.courseCode}>{course.code || '—'}</Text>
                       </View>
-                      {!!course.section && (
-                        <View style={[styles.badge, styles.badgeSection]}>
-                          <Text style={styles.badgeText}>شعبة {course.section}</Text>
+                      <View style={styles.metaRow}>
+                        {course.teacher_name ? (
+                          <View style={styles.metaItem}>
+                            <Ionicons name="person-outline" size={12} color="#5b6678" />
+                            <Text style={styles.metaText}>{course.teacher_name}</Text>
+                          </View>
+                        ) : null}
+                        <View style={[styles.badge, styles.badgeLevel]}>
+                          <Text style={styles.badgeText}>م{course.level}</Text>
                         </View>
+                        {!!course.section && (
+                          <View style={[styles.badge, styles.badgeSection]}>
+                            <Text style={styles.badgeText}>شعبة {course.section}</Text>
+                          </View>
+                        )}
+                        <View style={[styles.badge, styles.badgeHours]}>
+                          <Ionicons name="time-outline" size={10} color="#e65100" />
+                          <Text style={[styles.badgeText, { color: '#e65100' }]}>
+                            {course.credit_hours} س
+                          </Text>
+                        </View>
+                      </View>
+                    </View>
+                    <View style={[styles.courseRatePill, { backgroundColor: rateBg }]}>
+                      <Text style={[styles.courseRateValue, { color: rateColor }]}>
+                        {rate == null ? '—' : `${rate}%`}
+                      </Text>
+                      <Text style={[styles.courseRateLabel, { color: rateColor }]}>حضور</Text>
+                      {courseStats && (
+                        <Text style={styles.courseRateSub}>
+                          {courseStats.present_count}/{courseStats.total_sessions}
+                        </Text>
                       )}
-                      <View style={[styles.badge, styles.badgeHours]}>
-                        <Ionicons name="time-outline" size={10} color="#e65100" />
-                        <Text style={[styles.badgeText, { color: '#e65100' }]}>
-                          {course.credit_hours} س
+                    </View>
+                    <Ionicons
+                      name={isExpanded ? 'chevron-down' : 'chevron-back'}
+                      size={18}
+                      color="#c0c8d4"
+                    />
+                  </TouchableOpacity>
+                  {isExpanded && (
+                    <View style={styles.expandedAttendance} testID={`expanded-attendance-${course.id}`}>
+                      <View style={styles.expandedHeader}>
+                        <Ionicons name="calendar" size={14} color="#1565c0" />
+                        <Text style={styles.expandedTitle}>
+                          سجل حضور الطالب في "{course.name}"
                         </Text>
                       </View>
+                      {isLoading ? (
+                        <View style={styles.expandedLoading}>
+                          <ActivityIndicator size="small" color="#2962ff" />
+                          <Text style={styles.metaText}>جاري تحميل السجلات...</Text>
+                        </View>
+                      ) : records.length === 0 ? (
+                        <Text style={styles.noAttendance}>لا توجد محاضرات مسجلة لهذا المقرر</Text>
+                      ) : (
+                        <View style={{ gap: 6 }}>
+                          {records.map(r => {
+                            const isP = r.status === 'present';
+                            const isL = r.status === 'late';
+                            const isE = r.status === 'excused';
+                            const color = isP ? '#2e7d32' : isL ? '#e65100' : isE ? '#1565c0' : '#c62828';
+                            const bg = isP ? '#e8f5e9' : isL ? '#fff3e0' : isE ? '#e3f2fd' : '#ffebee';
+                            const label = isP ? 'حاضر' : isL ? 'متأخر' : isE ? 'بعذر' : 'غائب';
+                            return (
+                              <View key={r.id} style={styles.miniRecordRow}>
+                                <View style={[styles.attStatusPill, { backgroundColor: bg }]}>
+                                  <Text style={[styles.attStatusText, { color }]}>{label}</Text>
+                                </View>
+                                <Text style={styles.attDate}>
+                                  {formatGregorianDate(new Date(r.date))}
+                                  {r.start_time ? ` · ${r.start_time}-${r.end_time}` : ''}
+                                </Text>
+                                {r.method ? (
+                                  <View style={styles.miniMethodPill}>
+                                    <Text style={styles.miniMethodText}>{r.method}</Text>
+                                  </View>
+                                ) : null}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
                     </View>
-                  </View>
-                  <View style={[styles.courseRatePill, { backgroundColor: rateBg }]}>
-                    <Text style={[styles.courseRateValue, { color: rateColor }]}>
-                      {rate == null ? '—' : `${rate}%`}
-                    </Text>
-                    <Text style={[styles.courseRateLabel, { color: rateColor }]}>حضور</Text>
-                    {courseStats && (
-                      <Text style={styles.courseRateSub}>
-                        {courseStats.present_count}/{courseStats.total_sessions}
-                      </Text>
-                    )}
-                  </View>
-                  <Ionicons name="chevron-back" size={18} color="#c0c8d4" />
-                </TouchableOpacity>
+                  )}
+                </View>
                 );
               })}
             </View>
@@ -1088,6 +1201,81 @@ export default function StudentDetailsScreen() {
           </View>
         </View>
       </Modal>
+      {/* ============ مودال تغيير المستوى ============ */}
+      <Modal
+        visible={showLevelModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowLevelModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <TouchableOpacity
+            style={StyleSheet.absoluteFill}
+            activeOpacity={1}
+            onPress={() => setShowLevelModal(false)}
+          />
+          <View style={[styles.modalCard, { maxWidth: 420 }]}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>تغيير المستوى الدراسي</Text>
+              <TouchableOpacity onPress={() => setShowLevelModal(false)} testID="close-level-modal">
+                <Ionicons name="close" size={22} color="#5b6678" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 16 }}>
+              <Text style={styles.inputLabel}>
+                المستوى الحالي: <Text style={{ color: '#1a2540', fontWeight: '700' }}>م{student?.level}</Text>
+              </Text>
+              <Text style={styles.inputLabel}>اختر المستوى الجديد</Text>
+              <View style={styles.levelPickerRow}>
+                {LEVELS.map(lvl => (
+                  <TouchableOpacity
+                    key={lvl}
+                    style={[
+                      styles.levelPickerBtn,
+                      { flex: 1 },
+                      newLevel === lvl && styles.levelPickerBtnActive,
+                    ]}
+                    onPress={() => setNewLevel(lvl)}
+                    testID={`level-option-${lvl}`}
+                  >
+                    <Text
+                      style={[
+                        styles.levelPickerText,
+                        newLevel === lvl && { color: '#fff' },
+                      ]}
+                    >
+                      م{lvl}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnGhost]}
+                onPress={() => setShowLevelModal(false)}
+              >
+                <Text style={styles.btnGhostText}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnPrimary, savingLevel && { opacity: 0.5 }]}
+                onPress={handleSaveLevel}
+                disabled={savingLevel}
+                testID="save-level-btn"
+              >
+                {savingLevel ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                )}
+                <Text style={styles.btnPrimaryText}>
+                  {savingLevel ? 'جاري الحفظ...' : 'تطبيق'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1187,6 +1375,54 @@ const styles = StyleSheet.create({
   courseRateValue: { fontSize: 14, fontWeight: '800' },
   courseRateLabel: { fontSize: 9, fontWeight: '600' },
   courseRateSub: { fontSize: 9, color: '#8a95a8', marginTop: 1 },
+
+  // Course row expanded inline attendance
+  courseRowExpanded: {
+    borderColor: '#bdd4fd',
+    backgroundColor: '#f6f9ff',
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+  },
+  expandedAttendance: {
+    backgroundColor: '#f6f9ff',
+    borderWidth: 1,
+    borderTopWidth: 0,
+    borderColor: '#bdd4fd',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+    padding: 12,
+    marginTop: -10,
+    paddingTop: 10,
+  },
+  expandedHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10,
+    paddingBottom: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#dde6f5',
+  },
+  expandedTitle: { fontSize: 13, fontWeight: '700', color: '#1565c0' },
+  expandedLoading: { alignItems: 'center', padding: 14, gap: 8 },
+  miniRecordRow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e9eef6',
+  },
+  miniMethodPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 8,
+    backgroundColor: '#f0f2f6',
+  },
+  miniMethodText: { fontSize: 10, color: '#5b6678', fontWeight: '600' },
 
   // إحصائيات
   statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },
