@@ -28,6 +28,8 @@ interface Course {
   faculty_name: string;
   students_count: number;
   lectures_count: number;
+  weekly_hours?: number;
+  teaching_load_id?: string;
   is_active: boolean;
 }
 
@@ -36,6 +38,8 @@ interface TeacherCoursesData {
   teacher_name: string;
   total_courses: number;
   total_weekly_hours: number;
+  semester_id?: string;
+  semester_name?: string;
   courses: Course[];
 }
 
@@ -48,6 +52,7 @@ interface AvailableCourse {
   credit_hours: number;
   weekly_hours?: number | null;
   department_id?: string;
+  semester_id?: string;
   current_teacher_name?: string;
 }
 
@@ -157,6 +162,7 @@ export default function TeacherCoursesScreen() {
       teacher_id: teacherId!,
       course_id: p.course.course_id,
       weekly_hours: parseFloat(p.hours) || (p.course.credit_hours || 3),
+      semester_id: data?.semester_id || p.course.semester_id,
     }));
     if (items.length === 0) {
       showMessage('تنبيه', 'الرجاء اختيار مقرر واحد على الأقل');
@@ -180,8 +186,13 @@ export default function TeacherCoursesScreen() {
     if (!unassignTarget) return;
     setUnassigning(true);
     try {
-      // Remove teacher_id from course (this also syncs teaching_loads via backend)
-      await coursesAPI.update(unassignTarget.id, { teacher_id: null });
+      if (unassignTarget.teaching_load_id) {
+        // إلغاء الإسناد في الفصل الحالي فقط (لا يؤثر على الفصول السابقة)
+        await teachingLoadAPI.delete(unassignTarget.teaching_load_id);
+      } else {
+        // fallback: إزالة المعلم من المقرر (سلوك قديم)
+        await coursesAPI.update(unassignTarget.id, { teacher_id: null });
+      }
       showMessage('نجاح', `تم إلغاء إسناد المقرر "${unassignTarget.name}"`);
       setUnassignTarget(null);
       await fetchCourses();
@@ -224,7 +235,15 @@ export default function TeacherCoursesScreen() {
         {/* رأس الصفحة */}
         <View dataSet={{ responsive: 'page-header' }} style={styles.pageHeader}>
           <View style={styles.pageHeaderRight}>
-            <Text dataSet={{ responsive: 'page-title' }} style={styles.pageTitle}>مقررات {teacherDisplay}</Text>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+              <Text dataSet={{ responsive: 'page-title' }} style={styles.pageTitle}>مقررات {teacherDisplay}</Text>
+              {!!data?.semester_name && (
+                <View style={styles.semesterBadge}>
+                  <Ionicons name="calendar" size={11} color="#2962ff" />
+                  <Text style={styles.semesterBadgeText}>{data.semester_name}</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.breadcrumb}>
               <TouchableOpacity onPress={() => router.replace('/')}>
                 <Text style={styles.breadcrumbLink}>الرئيسية</Text>
@@ -586,6 +605,13 @@ const styles = StyleSheet.create({
   pageHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
   pageHeaderRight: { alignItems: 'flex-end' },
   pageTitle: { fontSize: 24, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  semesterBadge: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
+    backgroundColor: '#e7f0fe', borderWidth: 1, borderColor: '#bdd4fd',
+    marginBottom: 6,
+  },
+  semesterBadgeText: { fontSize: 11, color: '#1565c0', fontWeight: '700' },
   breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   breadcrumbLink: { fontSize: 13, color: '#2962ff', fontWeight: '500' },
   breadcrumbCurrent: { fontSize: 13, color: '#8a95a8', fontWeight: '500' },

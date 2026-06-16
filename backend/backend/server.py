@@ -4014,19 +4014,53 @@ async def get_teacher(teacher_id: str, current_user: dict = Depends(get_current_
     }
 
 @api_router.get("/teachers/{teacher_id}/courses")
-async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_current_user)):
-    """جلب جميع مقررات المعلم في جميع الأقسام"""
+async def get_teacher_courses(
+    teacher_id: str,
+    semester_id: Optional[str] = None,
+    include_all: bool = False,
+    current_user: dict = Depends(get_current_user),
+):
+    """جلب مقررات المعلم في الفصل النشط افتراضياً.
+    
+    Query params:
+    - semester_id: لجلب مقررات فصل محدد (نشط أو مؤرشف)
+    - include_all=true: لجلب كل المقررات من جميع الفصول (سلوك قديم)
+    """
     # التحقق من وجود المعلم
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
     if not teacher:
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
     
-    # جلب المقررات التي يدرسها المعلم
-    courses = await db.courses.find({"teacher_id": teacher_id}).to_list(100)
+    # تحديد الفصل المستهدف: نشط افتراضياً، أو semester_id إن مُرّر
+    target_semester_id = semester_id
+    semester_label = ""
+    if not include_all and not target_semester_id:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            target_semester_id = str(active_sem["_id"])
+            semester_label = active_sem.get("name", "")
+    elif target_semester_id:
+        try:
+            sem = await db.semesters.find_one({"_id": ObjectId(target_semester_id)})
+            if sem:
+                semester_label = sem.get("name", "")
+        except Exception:
+            pass
     
-    # جلب العبء التدريسي (الساعات الأسبوعية) لكل مقرر
-    teaching_loads = await db.teaching_loads.find({"teacher_id": teacher_id}).to_list(200)
+    # جلب العبء التدريسي للمعلم (مع تصفية الفصل إن وُجد)
+    loads_query = {"teacher_id": teacher_id}
+    if target_semester_id:
+        loads_query["semester_id"] = target_semester_id
+    teaching_loads = await db.teaching_loads.find(loads_query).to_list(500)
     loads_by_course = {tl.get("course_id"): tl.get("weekly_hours", 0) for tl in teaching_loads}
+    load_id_by_course = {tl.get("course_id"): str(tl.get("_id")) for tl in teaching_loads}
+    
+    # جلب المقررات: من teaching_loads إن كان هناك فصل مستهدف، وإلا من courses.teacher_id
+    if target_semester_id:
+        course_ids = [ObjectId(cid) for cid in loads_by_course.keys() if cid]
+        courses = await db.courses.find({"_id": {"$in": course_ids}}).to_list(200) if course_ids else []
+    else:
+        courses = await db.courses.find({"teacher_id": teacher_id}).to_list(200)
     
     result = []
     total_weekly_hours = 0
@@ -4064,6 +4098,7 @@ async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_
             "students_count": students_count,
             "lectures_count": lectures_count,
             "weekly_hours": weekly_hours,
+            "teaching_load_id": load_id_by_course.get(course_id_str),
             "is_active": course.get("is_active", True)
         })
     
@@ -4073,6 +4108,8 @@ async def get_teacher_courses(teacher_id: str, current_user: dict = Depends(get_
         "department_name": "",  # القسم الإداري
         "total_courses": len(result),
         "total_weekly_hours": total_weekly_hours,
+        "semester_id": target_semester_id,
+        "semester_name": semester_label,
         "courses": result
     }
 
