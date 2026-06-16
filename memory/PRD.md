@@ -13,6 +13,10 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-16 **توحيد عرض حمل المعلم بين `/manage-teachers` و `/teacher-courses`**:
+  - **المشكلة:** كان عمود "النصاب" يعرض السقف الأسبوعي المخزن للمعلم (12 افتراضياً) وعمود "المقررات" يحسب كل المقررات النشطة عبر **كل الفصول**. بينما `/teacher-courses` يعرض ساعات ومقررات **الفصل النشط فقط** — مما أدى إلى تباين في الأرقام (مثلاً 9 س / 3 مقررات في القائمة مقابل 3 س / 1 مقرر في الصفحة المخصصة).
+  - **الحل (Backend):** أضيف لـ `GET /api/teachers` الحقول `current_semester_id`, `current_semester_hours`, `current_semester_courses_count` — تُحسب دفعة واحدة من `db.teaching_loads` المُفلتَر بالفصل النشط (`semesters.status='active'`).
+  - **الحل (Frontend):** صفحة `/manage-teachers` تستخدم الحقول الجديدة (مع fallback للحقول القديمة) في عمودي "النصاب" و"المقررات" — صار العرض متطابقاً 100% مع `/teacher-courses`.
 - 2026-06-16 **Student Details page (`/student-details`) — full redesign replacing modal**:
   - **Replaced 39-line redirect-shim** with a 1360-line full-featured page mimicking `/teacher-courses` design system.
   - **Sections:** page header (title + status badge + breadcrumb + actions), student profile card (avatar/name/student_id/reference_number/department/level/section/phone/email), 3 stat cards (مقررات / ساعات معتمدة / حالة الحساب), quick-actions row (تغيير الحالة / تفعيل أو إلغاء تفعيل الحساب / إعادة تعيين كلمة المرور / التقرير المفصّل), courses list with rich metadata badges, and an attendance section.

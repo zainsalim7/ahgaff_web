@@ -3939,6 +3939,21 @@ async def get_teachers(
             "level": c.get("level", 1),
         })
     
+    # حساب الحمل الفعلي في الفصل النشط لكل المعلمين دفعة واحدة
+    active_sem = await db.semesters.find_one({"status": "active"})
+    active_sem_id = str(active_sem["_id"]) if active_sem else None
+    current_sem_hours_by_teacher: dict = {}
+    current_sem_courses_by_teacher: dict = {}
+    if active_sem_id and teacher_ids:
+        async for tl in db.teaching_loads.find({
+            "teacher_id": {"$in": teacher_ids},
+            "semester_id": active_sem_id,
+        }):
+            tid = tl.get("teacher_id", "")
+            hours = tl.get("weekly_hours", 0) or 0
+            current_sem_hours_by_teacher[tid] = current_sem_hours_by_teacher.get(tid, 0) + hours
+            current_sem_courses_by_teacher[tid] = current_sem_courses_by_teacher.get(tid, 0) + 1
+    
     result = []
     for teacher in teachers:
         tid = str(teacher["_id"])
@@ -3957,7 +3972,11 @@ async def get_teachers(
             "weekly_hours": teacher.get("weekly_hours", 12),
             "teaching_load": teacher.get("teaching_load"),
             "created_at": teacher.get("created_at", get_yemen_time()),
-            "is_active": teacher.get("is_active", True)
+            "is_active": teacher.get("is_active", True),
+            # حقول مُحسّبة من الفصل النشط (لاتساق العرض مع صفحة /teacher-courses)
+            "current_semester_id": active_sem_id,
+            "current_semester_hours": current_sem_hours_by_teacher.get(tid, 0),
+            "current_semester_courses_count": current_sem_courses_by_teacher.get(tid, 0),
         }
         teacher_dict["assigned_courses"] = courses_by_teacher.get(tid, [])
         result.append(teacher_dict)

@@ -38,6 +38,9 @@ interface Teacher {
   teaching_load?: number;
   weekly_hours?: number;
   courses_count?: number;
+  current_semester_id?: string | null;
+  current_semester_hours?: number;
+  current_semester_courses_count?: number;
   user_id?: string;
   is_active: boolean;
 }
@@ -455,7 +458,9 @@ export default function ManageTeachersScreen() {
     const hasAccount = !!item.user_id;
     const teacherName = getTeacherName(item);
     const dept = getDepartmentName(item.department_id);
-    const coursesCount = (item.assigned_courses?.length ?? item.courses_count ?? 0);
+    // ✅ توحيد العرض: استخدام بيانات الفصل النشط (متطابقة مع صفحة /teacher-courses)
+    const coursesCount = item.current_semester_courses_count ?? (item.assigned_courses?.length ?? item.courses_count ?? 0);
+    const loadHours = item.current_semester_hours ?? item.weekly_hours ?? item.teaching_load ?? 0;
 
     return (
       <View dataSet={{ responsive: "table-row" }} style={[styles.tRow, index % 2 === 1 && styles.tRowAlt]}>
@@ -482,7 +487,7 @@ export default function ManageTeachersScreen() {
           <Text style={styles.tCell} numberOfLines={1}>{item.specialization || '—'}</Text>
         </View>
         <View style={[styles.colLoad, styles.cellPad]}>
-          <Text style={styles.tCell}>{item.weekly_hours || item.teaching_load || 0} س</Text>
+          <Text style={styles.tCell}>{loadHours} س</Text>
         </View>
         <View style={[styles.colCourses, styles.cellPad]}>
           <View style={styles.coursesBadge}>
