@@ -463,10 +463,14 @@ export default function ManageTeachersScreen() {
           <View style={[styles.tAvatar, { backgroundColor: hasAccount ? '#dcedc8' : '#eceff1' }]}>
             <Text style={[styles.tAvatarText, { color: hasAccount ? '#4caf50' : '#90a4ae' }]}>{teacherName.charAt(0)}</Text>
           </View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.tName} numberOfLines={1}>{teacherName}</Text>
+          <TouchableOpacity
+            style={{ flex: 1 }}
+            onPress={() => router.push({ pathname: '/teacher-courses', params: { teacherId: item.id, teacherName } })}
+            testID={`teacher-name-link-${item.id}`}
+          >
+            <Text style={[styles.tName, styles.tNameLink]} numberOfLines={1}>{teacherName}</Text>
             {item.academic_title ? <Text style={styles.tSubName} numberOfLines={1}>{item.academic_title}</Text> : null}
-          </View>
+          </TouchableOpacity>
         </View>
         <View style={[styles.colPhone, styles.cellPad]}>
           <Text style={styles.tCell}>{getTeacherId(item)}</Text>
@@ -1118,6 +1122,7 @@ const styles = StyleSheet.create({
   tAvatar: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   tAvatarText: { fontSize: 14, fontWeight: '700' },
   tName: { fontSize: 13, fontWeight: '600', color: '#1a2540', textAlign: 'right' },
+  tNameLink: { color: '#2962ff', ...Platform.select({ web: { cursor: 'pointer' as any } }) },
   tSubName: { fontSize: 11, color: '#8a95a8', textAlign: 'right', marginTop: 2 },
   tCell: { fontSize: 13, color: '#1a2540', textAlign: 'right' },
   coursesBadge: { alignSelf: 'flex-end', flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#e7f0fe', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },

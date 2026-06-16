@@ -6,6 +6,7 @@ Global Search Route - بحث عام موحَّد
 """
 import re
 from typing import Optional, List
+from urllib.parse import quote
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Query
@@ -212,11 +213,13 @@ async def global_search(
                 )
                 if fac_name:
                     parts.append(f"كلية: {fac_name}")
+                # تشفير اسم المعلم لاستخدامه كرابط URL آمن
+                teacher_name_enc = quote(t.get("full_name", ""))
                 items.append({
                     "id": str(t["_id"]),
                     "title": t.get("full_name", ""),
                     "subtitle": " · ".join(parts),
-                    "route": f"/teacher-details?teacherId={str(t['_id'])}",
+                    "route": f"/teacher-courses?teacherId={str(t['_id'])}&teacherName={teacher_name_enc}",
                     "type": "teacher",
                     "icon": "school",
                 })

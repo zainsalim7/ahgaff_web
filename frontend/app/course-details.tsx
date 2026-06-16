@@ -188,7 +188,7 @@ export default function CourseDetailsScreen() {
                   value={data.teacher_name || '-'}
                   onPress={
                     data.teacher_id
-                      ? () => router.push(`/teacher-details?teacherId=${data.teacher_id}` as any)
+                      ? () => router.push({ pathname: '/teacher-courses', params: { teacherId: data.teacher_id, teacherName: data.teacher_name || '' } } as any)
                       : undefined
                   }
                 />

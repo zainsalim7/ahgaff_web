@@ -147,7 +147,7 @@ export default function DepartmentDetailsScreen() {
                 <TouchableOpacity
                   key={t.id}
                   style={styles.row}
-                  onPress={() => router.push(`/teacher-details?teacherId=${t.id}` as any)}
+                  onPress={() => router.push({ pathname: '/teacher-courses', params: { teacherId: t.id, teacherName: t.full_name } } as any)}
                   testID={`teacher-${t.id}`}
                 >
                   <View style={[styles.avatar, { backgroundColor: '#6a1b9a20' }]}>
