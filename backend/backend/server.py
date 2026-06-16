@@ -3272,6 +3272,94 @@ async def get_my_courses(
 
 
 
+@api_router.get("/students/{student_id}/courses")
+async def get_student_courses_admin(
+    student_id: str,
+    current_user: dict = Depends(get_current_user),
+):
+    """جلب مقررات طالب محدد (للإدارة/المعلمين).
+    
+    يدعم: التسجيلات الصريحة + الاستنتاج من القسم/المستوى/الشعبة.
+    """
+    # التحقق من الصلاحيات
+    if current_user["role"] not in [UserRole.ADMIN] and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_teachers"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    try:
+        student = await db.students.find_one({"_id": ObjectId(student_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرّف الطالب غير صحيح")
+    if not student:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    
+    # جلب التسجيلات
+    enrollments = await db.enrollments.find({"student_id": student_id}).to_list(200)
+    course_ids = [e["course_id"] for e in enrollments]
+    
+    # إذا لا يوجد تسجيلات، نستنتج من القسم/المستوى/الشعبة
+    inferred = False
+    if not course_ids:
+        inferred = True
+        query = {
+            "department_id": student.get("department_id"),
+            "level": student.get("level"),
+            "is_active": True,
+        }
+        if student.get("section"):
+            query["$or"] = [
+                {"section": {"$in": [None, "", student["section"]]}},
+                {"section": {"$exists": False}},
+            ]
+        courses_list = await db.courses.find(query).to_list(200)
+    else:
+        courses_list = []
+        for cid in course_ids:
+            try:
+                c = await db.courses.find_one({"_id": ObjectId(cid)})
+                if c:
+                    courses_list.append(c)
+            except Exception:
+                pass
+    
+    result = []
+    for c in courses_list:
+        teacher_name = None
+        if c.get("teacher_id"):
+            try:
+                t = await db.teachers.find_one({"_id": ObjectId(c["teacher_id"])})
+                if t:
+                    teacher_name = t.get("full_name")
+            except Exception:
+                pass
+        sem_name = None
+        if c.get("semester_id"):
+            try:
+                sem = await db.semesters.find_one({"_id": ObjectId(c["semester_id"])})
+                if sem:
+                    sem_name = sem.get("name")
+            except Exception:
+                pass
+        result.append({
+            "id": str(c["_id"]),
+            "name": c.get("name", ""),
+            "code": c.get("code", ""),
+            "level": c.get("level"),
+            "section": c.get("section", ""),
+            "credit_hours": c.get("credit_hours", 3),
+            "teacher_id": c.get("teacher_id"),
+            "teacher_name": teacher_name,
+            "semester_id": c.get("semester_id"),
+            "semester_name": sem_name,
+        })
+    
+    return {
+        "student_id": student_id,
+        "total_courses": len(result),
+        "is_inferred": inferred,
+        "courses": result,
+    }
+
+
 @api_router.get("/students/{student_id}", response_model=StudentResponse)
 async def get_student(student_id: str, current_user: dict = Depends(get_current_user)):
     student = await db.students.find_one({"_id": ObjectId(student_id)})

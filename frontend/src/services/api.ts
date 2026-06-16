@@ -343,6 +343,7 @@ export const studentsAPI = {
   getAll: (params?: { department_id?: string; level?: number; section?: string }) =>
     api.get('/students', { params }),
   getById: (id: string) => api.get(`/students/${id}`),
+  getCourses: (id: string) => api.get(`/students/${id}/courses`),
   getByQR: (qrCode: string) => api.get(`/students/qr/${qrCode}`),
   getMe: () => api.get('/students/me'),  // للطالب للحصول على بياناته الخاصة
   update: (id: string, data: any) => api.put(`/students/${id}`, data),
