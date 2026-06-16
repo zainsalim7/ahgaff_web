@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, Stack } from 'expo-router';
 import { teachingLoadAPI, departmentsAPI, teachersAPI, semestersAPI } from '../src/services/api';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; barBg: string; label: string; icon: any }> = {
@@ -96,6 +96,7 @@ export default function TeachingLoadReport() {
 
   return (
     <SafeAreaView style={st.container} edges={['bottom']}>
+      <Stack.Screen options={{ headerShown: false }} />
       <ScrollView
         dataSet={{ responsiveScrollRoot: 'true' }}
         style={{ flex: 1 }}
