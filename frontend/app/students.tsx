@@ -265,17 +265,14 @@ export default function StudentsScreen() {
     fetchData();
   }, [fetchData]);
 
-  // فتح تفاصيل الطالب تلقائياً عند تمرير query param ?openStudent=ID
+  // إعادة توجيه تلقائي إلى صفحة تفاصيل الطالب عند تمرير ?openStudent=ID
   useEffect(() => {
-    if (!openStudent || students.length === 0) return;
-    const target = students.find(s => s.id === openStudent);
-    if (target) {
-      setSelectedStudent(target);
-      setShowDetailsModal(true);
-    } else {
-      showMessage('غير موجود', 'الطالب المطلوب غير موجود أو قد تم حذفه');
-    }
-  }, [openStudent, students]);
+    if (!openStudent) return;
+    router.replace({
+      pathname: '/student-details',
+      params: { studentId: String(openStudent) },
+    } as any);
+  }, [openStudent]);
 
   // تصفية الطلاب
   const filteredStudents = useMemo(() => {
@@ -763,21 +760,12 @@ export default function StudentsScreen() {
     }
   };
 
-  // عرض تفاصيل الطالب
-  const handleViewDetails = async (student: Student) => {
-    setSelectedStudent(student);
-    setShowDetailsModal(true);
-    setLoadingAttendance(true);
-    
-    try {
-      const response = await attendanceAPI.getStudentAttendance(student.id);
-      setStudentAttendance(response.data || []);
-    } catch (error) {
-      console.error('Error fetching attendance:', error);
-      setStudentAttendance([]);
-    } finally {
-      setLoadingAttendance(false);
-    }
+  // عرض تفاصيل الطالب - الانتقال إلى الصفحة المخصصة
+  const handleViewDetails = (student: Student) => {
+    router.push({
+      pathname: '/student-details',
+      params: { studentId: student.id },
+    } as any);
   };
 
   // فتح نموذج التعديل

@@ -1,0 +1,34 @@
+{
+  "summary": "Tested the new /student-details page (replacing the old modal). Backend pytest 6/6 PASS (login, GET /students/{id}, GET /students/{id}/courses wrapper, GET /attendance/stats/student/{id}, GET /attendance/student/{id}, POST /student-status/{id}/change round-trip, GET /export/report/student/{id}/excel). Frontend visual flow PASSES end-to-end: page renders with header + status badge (مستمر), profile card (name/student_id/department/level/section), 3 stat cards (2 courses / 6 credit hours / مفعّل), quick actions row (تغيير الحالة, إلغاء تفعيل الحساب, إعادة تعيين كلمة المرور, التقرير المفصل), header buttons (تعديل / تصدير Excel / رجوع), 2 enrolled courses (مقرر اختبار 180156 + دراسات حضرموت). CRITICAL UX REQUIREMENT VERIFIED: attendance section starts EMPTY — zero /api/attendance/* calls fire on mount. Clicking 'عرض ملخص الحضور' triggers GET /api/attendance/stats/student/{id} and renders the 5 summary cards (حاضر/غائب/متأخر/معذور/إجمالي) + معدل الحضور chip. After summary loads, 'عرض التفاصيل' button appears and clicking it fires GET /api/attendance/student/{id}. Edit modal opens with name/phone/email/level/section + حفظ. Status modal opens with 5 options (مستمر/إعادة/متخرج/مفصول/مجمَّد) + optional new-level chips + reason text + تطبيق.\n\nHOWEVER: A blocking issue for any automated test was found — see frontend_issues.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "student-details.tsx (all interactive elements)", "issue": "`data-testid` prop is passed to RN-Web `TouchableOpacity`/`Pressable` components, but RN-Web does NOT forward `data-testid` to the rendered DOM (only `testID` is converted to `data-testid` automatically). Result: NONE of the documented testIDs (back-btn, export-excel-btn, edit-student-btn, change-status-btn, deactivate-account-btn, activate-account-btn, reset-password-btn, open-report-btn, total-courses-value, load-attendance-summary-btn, load-attendance-records-btn, save-edit-btn, save-status-btn, status-option-*, edit-name-input, edit-phone-input, edit-email-input, edit-section-input, status-reason-input, close-edit-modal, close-status-modal, course-row-*) reach the DOM. Only the globally injected `testID=\"floating-menu-btn\"` and `testID=\"floating-search-btn\"` (which correctly use `testID=`) appear in the DOM. This makes E2E selectors unusable and is a regression vs. the design guideline. Buttons themselves are visually present and clickable by text — functionality works, but stable selectors do not.", "selector": "[data-testid=\"*\"]", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/student-details", "issues": ["Top app bar (from _layout.tsx Stack screen options) shows 'تفاصيل الطالب - محمد أحمد علي' AND the in-page card header repeats 'تفاصيل الطالب' just 80px below — same duplication pattern as iteration_30 on /teaching-load-report. Consider hiding one."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_student_details_page.py",
+    "/app/test_reports/pytest/student_details_page_results.xml"
+  ],
+  "action_items": [
+    "Rename every `data-testid=\"...\"` prop on RN-Web components (TouchableOpacity, Pressable, View, TextInput, Modal) to `testID=\"...\"` in /app/frontend/app/student-details.tsx so that RN-Web emits `data-testid` to the DOM. This applies to ~25 occurrences. After the fix, all the testIDs listed in the review request will become reachable for automated/Playwright selectors. (Functionality is unaffected; this is only about test hooks reaching the DOM.)",
+    "Optional: hide the duplicated 'تفاصيل الطالب' text — either remove from the in-page header card or set headerShown:false for the student-details screen."
+  ],
+  "critical_code_review_comments": [
+    "student-details.tsx is 1360 lines — well above the 700-line guideline. Extract: StudentHeader, ProfileCard, StatCards, QuickActions, CoursesList, AttendanceSection, EditStudentModal, ChangeStatusModal into /components for maintainability.",
+    "Status field semantics: GET /api/students/{id} returns `status: null` even after POST /student-status/{id}/change with new_status='active' (the backend only persists non-default statuses and toggles is_active). The UI already handles this gracefully (line 345 derives from is_active), but documenting this contract on the model would prevent future bugs.",
+    "Courses endpoint returns wrapper `{courses, total_courses, is_inferred, student_id}` — the review-request description claimed flat fields with per-course `is_inferred`; in reality `is_inferred` is a top-level boolean. Frontend already consumes the wrapper correctly, but the review description was slightly off."
+  ],
+  "updated_files": ["/app/backend/tests/test_student_details_page.py"],
+  "success_rate": {"backend": "100% (6/6 pytest)", "frontend": "Visual/functional flow 100%, but 0% testID DOM coverage due to `data-testid` vs `testID` issue"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "None. Used existing student 698ef706d803b27aab012065 (محمد أحمد علي, 2 courses, 6 credit hours).",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend is fully verified. Re-run after E1 swaps `data-testid` → `testID` in student-details.tsx; then re-run Playwright with the original selectors. Pytest file at /app/backend/tests/test_student_details_page.py is reusable. Login via browser-side fetch ('/api/auth/login') and writing token+user to localStorage works around the egress 403 that hits raw urllib.",
+  "rca of the issue": "RN-Web only converts the React Native `testID` prop into a `data-testid` HTML attribute. When the developer writes `data-testid` directly on `<TouchableOpacity>` / `<Pressable>` / `<View>` / `<Text>`, RN-Web treats it as an unknown prop and drops it. The two testIDs that DO reach the DOM in the entire app (`floating-menu-btn`, `floating-search-btn`) are written with `testID=` in _layout.tsx — proving the convention. Fix: search-replace `data-testid=` → `testID=` across student-details.tsx (and for consistency, audit the rest of /app/frontend/app/*.tsx)."
+}
