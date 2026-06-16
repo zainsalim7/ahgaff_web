@@ -691,6 +691,10 @@ export const teachingLoadAPI = {
     api.post('/teaching-load/bulk', items),
   advancedReport: (params?: { department_id?: string; teacher_id?: string; semester_id?: string; term?: number }) =>
     api.get('/teaching-load/report/advanced', { params }),
+  exportPDF: (params?: { department_id?: string; teacher_id?: string; semester_id?: string; start_date?: string; end_date?: string }) =>
+    api.get('/export/teaching-load/pdf', { params, responseType: 'blob' }),
+  exportExcel: (params?: { department_id?: string; teacher_id?: string; semester_id?: string; start_date?: string; end_date?: string }) =>
+    api.get('/export/teaching-load/excel', { params, responseType: 'blob' }),
 };
 
 // Weekly Schedule API (الجدول الأسبوعي)

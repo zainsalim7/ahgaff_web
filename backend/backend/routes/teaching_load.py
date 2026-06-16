@@ -543,18 +543,125 @@ async def bulk_save_teaching_load(
     }
 
 
-async def _get_export_data(db, department_id: str = None, start_date: str = None, end_date: str = None):
-    """تجميع بيانات التصدير مع حساب إجمالي الساعات للفترة"""
+async def _get_export_data(
+    db,
+    department_id: str = None,
+    start_date: str = None,
+    end_date: str = None,
+    teacher_id: str = None,
+    semester_id: str = None,
+):
+    """تجميع بيانات التصدير مع حساب إجمالي الساعات للفترة.
+    
+    Args:
+        teacher_id: لتصدير عبء معلم واحد فقط.
+        semester_id: لفلترة على فصل دراسي محدد.
+    """
     from math import ceil
 
     query = {}
-    teacher_ids_in_dept = None
-    if department_id:
+    if teacher_id:
+        query["teacher_id"] = teacher_id
+    elif department_id:
         dept_teachers = await db.teachers.find(
             {"department_id": department_id, "is_active": {"$ne": False}}, {"_id": 1}
         ).to_list(500)
         teacher_ids_in_dept = [str(t["_id"]) for t in dept_teachers]
         query["teacher_id"] = {"$in": teacher_ids_in_dept}
+    if semester_id:
+        query["semester_id"] = semester_id
+
+    loads = await db.teaching_loads.find(query).to_list(1000)
+    if not loads:
+        return [], 0, "", ""
+
+    # حساب الأسابيع في الفترة
+    weeks = 16  # افتراضي للفصل الدراسي
+    period_label = "فصل دراسي (16 أسبوع)"
+    if semester_id:
+        try:
+            sem_doc = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+            if sem_doc:
+                period_label = sem_doc.get("name", period_label)
+        except Exception:
+            pass
+    if start_date and end_date:
+        try:
+            sd = datetime.fromisoformat(start_date)
+            ed = datetime.fromisoformat(end_date)
+            days = (ed - sd).days + 1
+            weeks = max(1, ceil(days / 7))
+            period_label = f"من {start_date} إلى {end_date} ({weeks} أسبوع)"
+        except Exception:
+            pass
+
+    # جلب المعلمين والمقررات
+    t_ids = list({l["teacher_id"] for l in loads})
+    c_ids = list({l["course_id"] for l in loads})
+
+    teachers_map = {}
+    if t_ids:
+        docs = await db.teachers.find({"_id": {"$in": [ObjectId(x) for x in t_ids]}}).to_list(500)
+        for t in docs:
+            teachers_map[str(t["_id"])] = t
+
+    courses_map = {}
+    if c_ids:
+        docs = await db.courses.find({"_id": {"$in": [ObjectId(x) for x in c_ids]}}).to_list(500)
+        for c in docs:
+            courses_map[str(c["_id"])] = c
+
+    # تجميع حسب المعلم
+    grouped = {}
+    for load in loads:
+        tid = load["teacher_id"]
+        teacher = teachers_map.get(tid, {})
+        course = courses_map.get(load["course_id"], {})
+        wh = load.get("weekly_hours", 0)
+
+        if tid not in grouped:
+            grouped[tid] = {
+                "teacher_name": teacher.get("full_name", ""),
+                "employee_id": teacher.get("teacher_id", ""),
+                "rows": [],
+                "total_weekly": 0,
+            }
+        grouped[tid]["rows"].append({
+            "course_name": course.get("name", ""),
+            "course_code": course.get("code", ""),
+            "section": course.get("section", ""),
+            "weekly_hours": wh,
+            "total_hours": round(wh * weeks, 2),
+        })
+        grouped[tid]["total_weekly"] += wh
+
+    # تسطيح للتصدير
+    rows = []
+    for tid, g in grouped.items():
+        for r in g["rows"]:
+            rows.append({
+                "teacher_name": g["teacher_name"],
+                "employee_id": g["employee_id"],
+                "course_name": r["course_name"],
+                "course_code": r["course_code"],
+                "section": r["section"],
+                "weekly_hours": r["weekly_hours"],
+                "total_hours": r["total_hours"],
+            })
+        # سطر الإجمالي
+        total_period = round(g["total_weekly"] * weeks, 2)
+        rows.append({
+            "teacher_name": g["teacher_name"],
+            "employee_id": g["employee_id"],
+            "course_name": "*** الإجمالي ***",
+            "course_code": "",
+            "section": "",
+            "weekly_hours": round(g["total_weekly"], 2),
+            "total_hours": total_period,
+        })
+
+    return rows, weeks, period_label, ""
+
 
 @router.get("/teaching-load/report/advanced")
 async def advanced_teaching_load_report(
@@ -744,96 +851,13 @@ async def advanced_teaching_load_report(
     }
 
 
-    loads = await db.teaching_loads.find(query).to_list(1000)
-    if not loads:
-        return [], 0, "", ""
-
-    # Calculate weeks in period
-    weeks = 16  # default semester
-    period_label = "فصل دراسي (16 أسبوع)"
-    if start_date and end_date:
-        try:
-            sd = datetime.fromisoformat(start_date)
-            ed = datetime.fromisoformat(end_date)
-            days = (ed - sd).days + 1
-            weeks = max(1, ceil(days / 7))
-            period_label = f"من {start_date} إلى {end_date} ({weeks} أسبوع)"
-        except Exception:
-            pass
-
-    # Batch fetch teachers and courses
-    t_ids = list({l["teacher_id"] for l in loads})
-    c_ids = list({l["course_id"] for l in loads})
-
-    teachers_map = {}
-    if t_ids:
-        docs = await db.teachers.find({"_id": {"$in": [ObjectId(x) for x in t_ids]}}).to_list(500)
-        for t in docs:
-            teachers_map[str(t["_id"])] = t
-
-    courses_map = {}
-    if c_ids:
-        docs = await db.courses.find({"_id": {"$in": [ObjectId(x) for x in c_ids]}}).to_list(500)
-        for c in docs:
-            courses_map[str(c["_id"])] = c
-
-    # Group by teacher
-    grouped = {}
-    for load in loads:
-        tid = load["teacher_id"]
-        teacher = teachers_map.get(tid, {})
-        course = courses_map.get(load["course_id"], {})
-        wh = load.get("weekly_hours", 0)
-
-        if tid not in grouped:
-            grouped[tid] = {
-                "teacher_name": teacher.get("full_name", ""),
-                "employee_id": teacher.get("teacher_id", ""),
-                "rows": [],
-                "total_weekly": 0,
-            }
-        grouped[tid]["rows"].append({
-            "course_name": course.get("name", ""),
-            "course_code": course.get("code", ""),
-            "section": course.get("section", ""),
-            "weekly_hours": wh,
-            "total_hours": round(wh * weeks, 2),
-        })
-        grouped[tid]["total_weekly"] += wh
-
-    # Flatten for export
-    rows = []
-    for tid, g in grouped.items():
-        for r in g["rows"]:
-            rows.append({
-                "teacher_name": g["teacher_name"],
-                "employee_id": g["employee_id"],
-                "course_name": r["course_name"],
-                "course_code": r["course_code"],
-                "section": r["section"],
-                "weekly_hours": r["weekly_hours"],
-                "total_hours": r["total_hours"],
-            })
-        # Summary row
-        total_period = round(g["total_weekly"] * weeks, 2)
-        rows.append({
-            "teacher_name": g["teacher_name"],
-            "employee_id": g["employee_id"],
-            "course_name": "*** الإجمالي ***",
-            "course_code": "",
-            "section": "",
-            "weekly_hours": round(g["total_weekly"], 2),
-            "total_hours": total_period,
-        })
-
-    return rows, weeks, period_label, ""
-
-
 @router.get("/export/teaching-load/excel")
 async def export_teaching_load_excel(
     department_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
     """تصدير جدول العبء التدريسي إلى Excel"""
@@ -845,7 +869,9 @@ async def export_teaching_load_excel(
     from io import BytesIO
 
     db = get_db()
-    rows, weeks, period_label, _ = await _get_export_data(db, department_id, start_date, end_date)
+    rows, weeks, period_label, _ = await _get_export_data(
+        db, department_id, start_date, end_date, teacher_id=teacher_id, semester_id=semester_id,
+    )
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -929,9 +955,14 @@ async def export_teaching_load_pdf(
     department_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
+    teacher_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """تصدير جدول العبء التدريسي إلى PDF"""
+    """تصدير جدول العبء التدريسي إلى PDF.
+    
+    يدعم تصدير عبء معلم واحد فقط عبر `teacher_id`.
+    """
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
@@ -949,7 +980,19 @@ async def export_teaching_load_pdf(
     from pathlib import Path
 
     db = get_db()
-    rows, weeks, period_label, _ = await _get_export_data(db, department_id, start_date, end_date)
+    rows, weeks, period_label, _ = await _get_export_data(
+        db, department_id, start_date, end_date, teacher_id=teacher_id, semester_id=semester_id,
+    )
+
+    # جلب اسم المعلم في حالة تقرير معلم واحد
+    teacher_name_label = None
+    if teacher_id:
+        try:
+            t = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+            if t:
+                teacher_name_label = t.get("full_name", "")
+        except Exception:
+            pass
 
     # Register Arabic font
     font_path = Path(__file__).parent.parent / "fonts" / "Amiri-Regular.ttf"
@@ -974,12 +1017,13 @@ async def export_teaching_load_pdf(
     subtitle_style = ParagraphStyle('ArabicSubtitle', parent=styles['Normal'], fontName=arabic_font, fontSize=11, alignment=TA_CENTER, textColor=colors.grey)
 
     elements = []
-    elements.append(Paragraph(ar("جدول العبء التدريسي"), title_style))
+    pdf_title = f"عبء المعلم: {teacher_name_label}" if teacher_name_label else "جدول العبء التدريسي"
+    elements.append(Paragraph(ar(pdf_title), title_style))
     elements.append(Spacer(1, 4 * mm))
     elements.append(Paragraph(ar(period_label), subtitle_style))
 
-    # Department name
-    if department_id:
+    # اسم القسم
+    if department_id and not teacher_id:
         dept = await db.departments.find_one({"_id": ObjectId(department_id)})
         if dept:
             elements.append(Paragraph(ar(f"القسم: {dept.get('name', '')}"), subtitle_style))

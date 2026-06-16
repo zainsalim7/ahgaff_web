@@ -77,6 +77,9 @@ export default function TeacherCoursesScreen() {
   const [unassignTarget, setUnassignTarget] = useState<Course | null>(null);
   const [unassigning, setUnassigning] = useState(false);
 
+  // Exporting PDF
+  const [exportingPdf, setExportingPdf] = useState(false);
+
   const showMessage = (title: string, message: string) => {
     if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
     else Alert.alert(title, message);
@@ -182,6 +185,37 @@ export default function TeacherCoursesScreen() {
     }
   };
 
+  const handleExportPdf = async () => {
+    if (!teacherId) return;
+    if ((data?.courses?.length || 0) === 0) {
+      showMessage('تنبيه', 'لا توجد مقررات مسندة لتصديرها');
+      return;
+    }
+    setExportingPdf(true);
+    try {
+      const params: any = { teacher_id: teacherId };
+      if (data?.semester_id) params.semester_id = data.semester_id;
+      const res = await teachingLoadAPI.exportPDF(params);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      if (Platform.OS === 'web') {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `teacher_workload_${(data?.teacher_name || teacherDisplay || 'teacher').replace(/\s+/g, '_')}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error: any) {
+      const msg = error.response?.data?.detail || 'فشل تصدير PDF';
+      showMessage('خطأ', msg);
+    } finally {
+      setExportingPdf(false);
+    }
+  };
+
+
   const handleUnassign = async () => {
     if (!unassignTarget) return;
     setUnassigning(true);
@@ -264,6 +298,19 @@ export default function TeacherCoursesScreen() {
             >
               <Ionicons name="arrow-forward" size={16} color="#1a2540" />
               <Text style={styles.btnGhostText}>رجوع</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.headerBtn, styles.btnExport, ((data?.courses?.length || 0) === 0 || exportingPdf) && { opacity: 0.5 }]}
+              onPress={handleExportPdf}
+              disabled={(data?.courses?.length || 0) === 0 || exportingPdf}
+              testID="export-pdf-btn"
+            >
+              {exportingPdf ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="document-text" size={16} color="#fff" />
+              )}
+              <Text style={styles.btnPrimaryText}>{exportingPdf ? 'جاري التصدير...' : 'تصدير PDF'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.headerBtn, styles.btnPrimary]}
@@ -618,6 +665,7 @@ const styles = StyleSheet.create({
   pageHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
   btnPrimary: { backgroundColor: '#2962ff' },
+  btnExport: { backgroundColor: '#e53935' },
   btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
   btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
