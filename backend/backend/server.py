@@ -3942,6 +3942,7 @@ async def get_teachers(
     # حساب الحمل الفعلي في الفصل النشط لكل المعلمين دفعة واحدة
     active_sem = await db.semesters.find_one({"status": "active"})
     active_sem_id = str(active_sem["_id"]) if active_sem else None
+    active_sem_name = active_sem.get("name", "") if active_sem else ""
     current_sem_hours_by_teacher: dict = {}
     current_sem_courses_by_teacher: dict = {}
     if active_sem_id and teacher_ids:
@@ -3975,6 +3976,7 @@ async def get_teachers(
             "is_active": teacher.get("is_active", True),
             # حقول مُحسّبة من الفصل النشط (لاتساق العرض مع صفحة /teacher-courses)
             "current_semester_id": active_sem_id,
+            "current_semester_name": active_sem_name,
             "current_semester_hours": current_sem_hours_by_teacher.get(tid, 0),
             "current_semester_courses_count": current_sem_courses_by_teacher.get(tid, 0),
         }

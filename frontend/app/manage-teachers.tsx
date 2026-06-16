@@ -39,6 +39,7 @@ interface Teacher {
   weekly_hours?: number;
   courses_count?: number;
   current_semester_id?: string | null;
+  current_semester_name?: string;
   current_semester_hours?: number;
   current_semester_courses_count?: number;
   user_id?: string;
@@ -452,6 +453,12 @@ export default function ManageTeachersScreen() {
     );
   }
 
+  // اسم الفصل النشط (للشارة في رأس الصفحة)
+  const activeSemesterName = useMemo(
+    () => teachers.find(t => t.current_semester_name)?.current_semester_name || '',
+    [teachers],
+  );
+
   const hasActiveFilter = !!filterDepartment || !!searchQuery;
 
   const renderTeacher = ({ item, index }: { item: Teacher; index: number }) => {
@@ -663,7 +670,15 @@ export default function ManageTeachersScreen() {
             {/* رأس الصفحة */}
             <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>
               <View style={styles.pageHeaderRight}>
-                <Text dataSet={{ responsive: "page-title" }} style={styles.pageTitle}>المعلمون</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <Text dataSet={{ responsive: "page-title" }} style={styles.pageTitle}>المعلمون</Text>
+                  {!!activeSemesterName && (
+                    <View style={styles.semesterBadge} testID="active-semester-badge">
+                      <Ionicons name="calendar" size={11} color="#1565c0" />
+                      <Text style={styles.semesterBadgeText}>بيانات الفصل: {activeSemesterName}</Text>
+                    </View>
+                  )}
+                </View>
                 <View style={styles.breadcrumb}>
                   <TouchableOpacity onPress={() => router.replace('/')}>
                     <Text style={styles.breadcrumbLink}>الرئيسية</Text>
@@ -1075,6 +1090,13 @@ const styles = StyleSheet.create({
   pageHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
   pageHeaderRight: { alignItems: 'flex-end' },
   pageTitle: { fontSize: 26, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  semesterBadge: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
+    paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12,
+    backgroundColor: '#e7f0fe', borderWidth: 1, borderColor: '#bdd4fd',
+    marginBottom: 6,
+  },
+  semesterBadgeText: { fontSize: 11, color: '#1565c0', fontWeight: '700' },
   breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   breadcrumbLink: { fontSize: 13, color: '#2962ff', fontWeight: '500' },
   breadcrumbCurrent: { fontSize: 13, color: '#8a95a8', fontWeight: '500' },
