@@ -18,7 +18,7 @@ import {
   studentsAPI,
   departmentsAPI,
   attendanceAPI,
-  exportAPI,
+  reportsAPI,
 } from '../src/services/api';
 import api from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
@@ -102,17 +102,17 @@ export default function StudentDetailsScreen() {
   const canManage =
     user?.role === 'admin' || (user && hasPermission(PERMISSIONS.MANAGE_STUDENTS));
 
-  // ============== State ==============
+  // State
   const [student, setStudent] = useState<any>(null);
   const [departmentName, setDepartmentName] = useState<string>('');
   const [courses, setCourses] = useState<StudentCourse[]>([]);
   const [coursesInferred, setCoursesInferred] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  // Attendance (manual fetch only)
+  // Attendance — يُحمَّل الملخص تلقائياً، أما التفاصيل (السجلات) فيدوياً
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStats | null>(null);
+  const [attendanceByCourse, setAttendanceByCourse] = useState<Record<string, AttendanceStats>>({});
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [statsLoading, setStatsLoading] = useState(false);
   const [recordsLoading, setRecordsLoading] = useState(false);
   const [showRecords, setShowRecords] = useState(false);
 
@@ -134,8 +134,9 @@ export default function StudentDetailsScreen() {
   const [statusNewLevel, setStatusNewLevel] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
 
-  // Export Excel
+  // Export Excel + PDF
   const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPdf, setExportingPdf] = useState(false);
 
   // ============== Fetch ==============
   const fetchStudent = useCallback(async () => {
@@ -154,13 +155,32 @@ export default function StudentDetailsScreen() {
       const sData = studentRes.data;
       setStudent(sData);
       const cData = coursesRes.data as CoursesResponse;
-      setCourses(cData.courses || []);
+      const courseList = cData.courses || [];
+      setCourses(courseList);
       setCoursesInferred(!!cData.is_inferred);
 
       const dept = (deptsRes.data || []).find(
         (d: any) => d.id === sData.department_id,
       );
       setDepartmentName(dept?.name || 'غير محدد');
+
+      // تحميل ملخص الحضور تلقائياً (إجمالي + لكل مقرر)
+      const sid = String(studentId);
+      attendanceAPI.getStudentStats(sid)
+        .then(r => setAttendanceStats(r.data))
+        .catch(() => {});
+      if (courseList.length > 0) {
+        const statsResults = await Promise.all(
+          courseList.map(c =>
+            attendanceAPI.getStudentStats(sid, c.id)
+              .then(r => [c.id, r.data] as [string, AttendanceStats])
+              .catch(() => null),
+          ),
+        );
+        const map: Record<string, AttendanceStats> = {};
+        statsResults.forEach(item => { if (item) map[item[0]] = item[1]; });
+        setAttendanceByCourse(map);
+      }
     } catch (e: any) {
       console.error('Error loading student:', e);
       showMessage('خطأ', e?.response?.data?.detail || 'فشل تحميل بيانات الطالب');
@@ -174,19 +194,6 @@ export default function StudentDetailsScreen() {
   }, [fetchStudent]);
 
   // ============== Actions ==============
-  const handleLoadAttendanceStats = async () => {
-    if (!student) return;
-    setStatsLoading(true);
-    try {
-      const res = await attendanceAPI.getStudentStats(student.id);
-      setAttendanceStats(res.data);
-    } catch (e: any) {
-      showMessage('خطأ', e?.response?.data?.detail || 'فشل تحميل ملخص الحضور');
-    } finally {
-      setStatsLoading(false);
-    }
-  };
-
   const handleLoadAttendanceRecords = async () => {
     if (!student) return;
     setRecordsLoading(true);
@@ -319,20 +326,39 @@ export default function StudentDetailsScreen() {
     if (!student) return;
     setExportingExcel(true);
     try {
-      const res = await exportAPI.exportStudentReportExcel(student.id);
+      const res = await reportsAPI.exportStudentReportExcel(student.id);
       const blob = new Blob([res.data], {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       });
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `student_report_${student.student_id}.xlsx`;
+      a.download = `student_${student.student_id}_report.xlsx`;
       a.click();
       window.URL.revokeObjectURL(url);
     } catch (e: any) {
-      showMessage('خطأ', 'فشل تصدير التقرير');
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل تصدير التقرير');
     } finally {
       setExportingExcel(false);
+    }
+  };
+
+  const handleExportPdf = async () => {
+    if (!student) return;
+    setExportingPdf(true);
+    try {
+      const res = await reportsAPI.exportStudentReportPDF(student.id);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `student_${student.student_id}_report.pdf`;
+      a.click();
+      window.URL.revokeObjectURL(url);
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل تصدير PDF');
+    } finally {
+      setExportingPdf(false);
     }
   };
 
@@ -393,6 +419,41 @@ export default function StudentDetailsScreen() {
                   {statusInfo.label}
                 </Text>
               </View>
+              {attendanceStats && (
+                <View
+                  style={[
+                    styles.attendanceRatePill,
+                    {
+                      backgroundColor:
+                        attendanceStats.attendance_rate >= 75 ? '#e8f5e9'
+                        : attendanceStats.attendance_rate >= 50 ? '#fff3e0'
+                        : '#ffebee',
+                      borderColor:
+                        attendanceStats.attendance_rate >= 75 ? '#81c784'
+                        : attendanceStats.attendance_rate >= 50 ? '#ffb74d'
+                        : '#e57373',
+                    },
+                  ]}
+                  testID="overall-attendance-badge"
+                >
+                  <Ionicons
+                    name="pie-chart"
+                    size={12}
+                    color={
+                      attendanceStats.attendance_rate >= 75 ? '#2e7d32'
+                      : attendanceStats.attendance_rate >= 50 ? '#e65100'
+                      : '#c62828'
+                    }
+                  />
+                  <Text style={[styles.attendanceRateText, {
+                    color: attendanceStats.attendance_rate >= 75 ? '#2e7d32'
+                      : attendanceStats.attendance_rate >= 50 ? '#e65100'
+                      : '#c62828',
+                  }]}>
+                    نسبة الحضور: {attendanceStats.attendance_rate}%
+                  </Text>
+                </View>
+              )}
             </View>
             <View style={styles.breadcrumb}>
               <TouchableOpacity onPress={() => router.replace('/')}>
@@ -417,6 +478,23 @@ export default function StudentDetailsScreen() {
             </TouchableOpacity>
             {canManage && (
               <TouchableOpacity
+                style={[styles.headerBtn, styles.btnExport, exportingPdf && { opacity: 0.5 }]}
+                onPress={handleExportPdf}
+                disabled={exportingPdf}
+                testID="export-pdf-btn"
+              >
+                {exportingPdf ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="document-text" size={16} color="#fff" />
+                )}
+                <Text style={styles.btnPrimaryText}>
+                  {exportingPdf ? '...' : 'PDF'}
+                </Text>
+              </TouchableOpacity>
+            )}
+            {canManage && (
+              <TouchableOpacity
                 style={[styles.headerBtn, styles.btnExportExcel, exportingExcel && { opacity: 0.5 }]}
                 onPress={handleExportExcel}
                 disabled={exportingExcel}
@@ -428,7 +506,7 @@ export default function StudentDetailsScreen() {
                   <Ionicons name="grid" size={16} color="#fff" />
                 )}
                 <Text style={styles.btnPrimaryText}>
-                  {exportingExcel ? 'جاري التصدير...' : 'تصدير Excel'}
+                  {exportingExcel ? '...' : 'Excel'}
                 </Text>
               </TouchableOpacity>
             )}
@@ -512,46 +590,42 @@ export default function StudentDetailsScreen() {
           </View>
         </View>
 
-        {/* ============ بطاقات الإحصائيات ============ */}
-        <View dataSet={{ responsive: 'stats-grid' }} style={styles.statsGrid}>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}>
-              <Ionicons name="book" size={22} color="#fff" />
-            </View>
-            <View style={styles.statTextCol}>
-              <Text style={styles.statLabel}>المقررات المسجلة</Text>
-              <Text style={styles.statValue} testID="total-courses-value">
-                {courses.length}
-              </Text>
-              <Text style={styles.statSubLabel}>
-                {coursesInferred ? 'مستنتجة من القسم/المستوى' : 'تسجيلات صريحة'}
-              </Text>
-            </View>
+        {/* ============ بطاقات الإحصائيات المدمجة ============ */}
+        <View style={styles.compactStatsRow}>
+          <View style={styles.compactStatChip}>
+            <Ionicons name="book" size={14} color="#2962ff" />
+            <Text style={styles.compactStatValue}>{courses.length}</Text>
+            <Text style={styles.compactStatLabel}>مقرر</Text>
           </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconWrap, { backgroundColor: '#ff9800' }]}>
-              <Ionicons name="time" size={22} color="#fff" />
-            </View>
-            <View style={styles.statTextCol}>
-              <Text style={styles.statLabel}>الساعات المعتمدة</Text>
-              <Text style={styles.statValue}>{totalCreditHours}</Text>
-              <Text style={styles.statSubLabel}>ساعة دراسية</Text>
-            </View>
+          <View style={styles.compactStatChip}>
+            <Ionicons name="time" size={14} color="#e65100" />
+            <Text style={styles.compactStatValue}>{totalCreditHours}</Text>
+            <Text style={styles.compactStatLabel}>س معتمدة</Text>
           </View>
-          <View style={styles.statCard}>
-            <View style={[styles.statIconWrap, { backgroundColor: isAccountActive ? '#29b6f6' : '#9e9e9e' }]}>
-              <Ionicons name={isAccountActive ? 'checkmark-circle' : 'close-circle'} size={22} color="#fff" />
-            </View>
-            <View style={styles.statTextCol}>
-              <Text style={styles.statLabel}>حالة الحساب</Text>
-              <Text style={styles.statValue}>
-                {isAccountActive ? 'مفعّل' : 'غير مفعّل'}
-              </Text>
-              <Text style={styles.statSubLabel}>
-                {isAccountActive ? 'يمكنه تسجيل الدخول' : 'لا يمكنه تسجيل الدخول'}
-              </Text>
-            </View>
+          <View style={styles.compactStatChip}>
+            <Ionicons name={isAccountActive ? 'checkmark-circle' : 'close-circle'} size={14} color={isAccountActive ? '#2e7d32' : '#9e9e9e'} />
+            <Text style={[styles.compactStatValue, { color: isAccountActive ? '#2e7d32' : '#9e9e9e' }]}>{isAccountActive ? 'مفعّل' : 'غير مفعّل'}</Text>
+            <Text style={styles.compactStatLabel}>الحساب</Text>
           </View>
+          {attendanceStats && (
+            <>
+              <View style={[styles.compactStatChip, { backgroundColor: '#e8f5e9' }]}>
+                <Ionicons name="checkmark-circle" size={14} color="#2e7d32" />
+                <Text style={[styles.compactStatValue, { color: '#2e7d32' }]}>{attendanceStats.present_count}</Text>
+                <Text style={[styles.compactStatLabel, { color: '#2e7d32' }]}>حاضر</Text>
+              </View>
+              <View style={[styles.compactStatChip, { backgroundColor: '#ffebee' }]}>
+                <Ionicons name="close-circle" size={14} color="#c62828" />
+                <Text style={[styles.compactStatValue, { color: '#c62828' }]}>{attendanceStats.absent_count}</Text>
+                <Text style={[styles.compactStatLabel, { color: '#c62828' }]}>غائب</Text>
+              </View>
+              <View style={[styles.compactStatChip, { backgroundColor: '#fff3e0' }]}>
+                <Ionicons name="time" size={14} color="#e65100" />
+                <Text style={[styles.compactStatValue, { color: '#e65100' }]}>{attendanceStats.late_count}</Text>
+                <Text style={[styles.compactStatLabel, { color: '#e65100' }]}>متأخر</Text>
+              </View>
+            </>
+          )}
         </View>
 
         {/* ============ الإجراءات السريعة ============ */}
@@ -643,20 +717,31 @@ export default function StudentDetailsScreen() {
                   </Text>
                 </View>
               )}
-              {courses.map(course => (
+              {courses.map(course => {
+                const courseStats = attendanceByCourse[course.id];
+                const rate = courseStats?.attendance_rate;
+                const rateColor = rate == null ? '#8a95a8'
+                  : rate >= 75 ? '#2e7d32'
+                  : rate >= 50 ? '#e65100'
+                  : '#c62828';
+                const rateBg = rate == null ? '#f0f2f6'
+                  : rate >= 75 ? '#e8f5e9'
+                  : rate >= 50 ? '#fff3e0'
+                  : '#ffebee';
+                return (
                 <TouchableOpacity
                   key={course.id}
                   style={styles.courseRow}
                   onPress={() =>
                     router.push({
-                      pathname: '/course-details',
-                      params: { courseId: course.id },
+                      pathname: '/course-lectures',
+                      params: { courseId: course.id, courseName: course.name },
                     })
                   }
                   testID={`course-row-${course.id}`}
                 >
                   <View style={styles.courseIconBox}>
-                    <Ionicons name="book" size={22} color="#2962ff" />
+                    <Ionicons name="book" size={20} color="#2962ff" />
                   </View>
                   <View style={styles.courseInfo}>
                     <View style={styles.courseTitleRow}>
@@ -668,20 +753,12 @@ export default function StudentDetailsScreen() {
                     <View style={styles.metaRow}>
                       {course.teacher_name ? (
                         <View style={styles.metaItem}>
-                          <Ionicons name="person-outline" size={13} color="#5b6678" />
+                          <Ionicons name="person-outline" size={12} color="#5b6678" />
                           <Text style={styles.metaText}>{course.teacher_name}</Text>
                         </View>
                       ) : null}
-                      {course.semester_name ? (
-                        <View style={styles.metaItem}>
-                          <Ionicons name="calendar-outline" size={13} color="#5b6678" />
-                          <Text style={styles.metaText}>{course.semester_name}</Text>
-                        </View>
-                      ) : null}
-                    </View>
-                    <View style={styles.metaRow}>
                       <View style={[styles.badge, styles.badgeLevel]}>
-                        <Text style={styles.badgeText}>المستوى {course.level}</Text>
+                        <Text style={styles.badgeText}>م{course.level}</Text>
                       </View>
                       {!!course.section && (
                         <View style={[styles.badge, styles.badgeSection]}>
@@ -689,174 +766,96 @@ export default function StudentDetailsScreen() {
                         </View>
                       )}
                       <View style={[styles.badge, styles.badgeHours]}>
-                        <Ionicons name="time-outline" size={11} color="#e65100" />
+                        <Ionicons name="time-outline" size={10} color="#e65100" />
                         <Text style={[styles.badgeText, { color: '#e65100' }]}>
                           {course.credit_hours} س
                         </Text>
                       </View>
                     </View>
                   </View>
-                  <Ionicons name="chevron-back" size={20} color="#c0c8d4" />
+                  <View style={[styles.courseRatePill, { backgroundColor: rateBg }]}>
+                    <Text style={[styles.courseRateValue, { color: rateColor }]}>
+                      {rate == null ? '—' : `${rate}%`}
+                    </Text>
+                    <Text style={[styles.courseRateLabel, { color: rateColor }]}>حضور</Text>
+                    {courseStats && (
+                      <Text style={styles.courseRateSub}>
+                        {courseStats.present_count}/{courseStats.total_sessions}
+                      </Text>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-back" size={18} color="#c0c8d4" />
                 </TouchableOpacity>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>
 
-        {/* ============ سجل الحضور (يدوي) ============ */}
+        {/* ============ سجل الحضور التفصيلي (يدوي) ============ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionCardHeader}>
-            <Text style={styles.sectionCardTitle}>سجل الحضور</Text>
-            {attendanceStats && (
-              <View style={styles.ratePill}>
-                <Text style={styles.rateText}>
-                  معدل الحضور: {attendanceStats.attendance_rate}%
-                </Text>
-              </View>
-            )}
-          </View>
-
-          {!attendanceStats ? (
-            <View style={styles.attendanceCta}>
-              <Ionicons name="calendar-outline" size={48} color="#cfd6e1" />
-              <Text style={styles.ctaTitle}>سجل الحضور لا يُحمَّل تلقائياً</Text>
-              <Text style={styles.ctaSubtitle}>
-                لتسريع تحميل الصفحة، اضغط الزر لجلب ملخص الحضور
-              </Text>
+            <Text style={styles.sectionCardTitle}>سجل الحضور التفصيلي</Text>
+            {!showRecords && (
               <TouchableOpacity
-                style={[styles.headerBtn, styles.btnPrimary, { marginTop: 14 }]}
-                onPress={handleLoadAttendanceStats}
-                disabled={statsLoading}
-                testID="load-attendance-summary-btn"
+                style={[styles.headerBtn, styles.btnGhost, { paddingVertical: 6, paddingHorizontal: 10 }]}
+                onPress={handleLoadAttendanceRecords}
+                disabled={recordsLoading}
+                testID="load-attendance-records-btn"
               >
-                {statsLoading ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                {recordsLoading ? (
+                  <ActivityIndicator size="small" color="#1a2540" />
                 ) : (
-                  <Ionicons name="cloud-download" size={16} color="#fff" />
+                  <Ionicons name="list" size={14} color="#1a2540" />
                 )}
-                <Text style={styles.btnPrimaryText}>
-                  {statsLoading ? 'جاري التحميل...' : 'عرض ملخص الحضور'}
+                <Text style={[styles.btnGhostText, { fontSize: 12 }]}>
+                  {recordsLoading ? '...' : 'تحميل السجلات'}
                 </Text>
               </TouchableOpacity>
-            </View>
-          ) : (
+            )}
+          </View>
+          {showRecords && (
             <View style={{ padding: 14 }}>
-              {/* ملخص الحضور */}
-              <View dataSet={{ responsive: 'stats-grid' }} style={styles.attendanceStatsGrid}>
-                <View style={[styles.attStatCard, { backgroundColor: '#e8f5e9' }]}>
-                  <Text style={[styles.attStatValue, { color: '#2e7d32' }]}>
-                    {attendanceStats.present_count}
-                  </Text>
-                  <Text style={[styles.attStatLabel, { color: '#2e7d32' }]}>حاضر</Text>
-                </View>
-                <View style={[styles.attStatCard, { backgroundColor: '#ffebee' }]}>
-                  <Text style={[styles.attStatValue, { color: '#c62828' }]}>
-                    {attendanceStats.absent_count}
-                  </Text>
-                  <Text style={[styles.attStatLabel, { color: '#c62828' }]}>غائب</Text>
-                </View>
-                <View style={[styles.attStatCard, { backgroundColor: '#fff3e0' }]}>
-                  <Text style={[styles.attStatValue, { color: '#e65100' }]}>
-                    {attendanceStats.late_count}
-                  </Text>
-                  <Text style={[styles.attStatLabel, { color: '#e65100' }]}>متأخر</Text>
-                </View>
-                <View style={[styles.attStatCard, { backgroundColor: '#e3f2fd' }]}>
-                  <Text style={[styles.attStatValue, { color: '#1565c0' }]}>
-                    {attendanceStats.excused_count}
-                  </Text>
-                  <Text style={[styles.attStatLabel, { color: '#1565c0' }]}>بعذر</Text>
-                </View>
-                <View style={[styles.attStatCard, { backgroundColor: '#f3e5f5' }]}>
-                  <Text style={[styles.attStatValue, { color: '#5e35b1' }]}>
-                    {attendanceStats.total_sessions}
-                  </Text>
-                  <Text style={[styles.attStatLabel, { color: '#5e35b1' }]}>إجمالي</Text>
-                </View>
-              </View>
-
-              {/* زر عرض التفاصيل */}
-              {!showRecords ? (
-                <TouchableOpacity
-                  style={[styles.headerBtn, styles.btnGhost, { alignSelf: 'center', marginTop: 14 }]}
-                  onPress={handleLoadAttendanceRecords}
-                  disabled={recordsLoading}
-                  testID="load-attendance-records-btn"
-                >
-                  {recordsLoading ? (
-                    <ActivityIndicator size="small" color="#1a2540" />
-                  ) : (
-                    <Ionicons name="list" size={16} color="#1a2540" />
-                  )}
-                  <Text style={styles.btnGhostText}>
-                    {recordsLoading ? 'جاري التحميل...' : 'عرض التفاصيل'}
-                  </Text>
-                </TouchableOpacity>
+              {attendanceRecords.length === 0 ? (
+                <Text style={styles.noAttendance}>لا توجد سجلات حضور</Text>
               ) : (
-                <View style={{ marginTop: 14 }}>
-                  <Text style={styles.recordsTitle}>
-                    تفاصيل سجل الحضور ({attendanceRecords.length})
-                  </Text>
-                  {attendanceRecords.length === 0 ? (
-                    <Text style={styles.noAttendance}>لا توجد سجلات حضور</Text>
-                  ) : (
-                    attendanceRecords.slice(0, 100).map(record => {
-                      const isPresent = record.status === 'present';
-                      const isLate = record.status === 'late';
-                      const statusColor = isPresent
-                        ? '#2e7d32'
-                        : isLate
-                        ? '#e65100'
-                        : record.status === 'excused'
-                        ? '#1565c0'
-                        : '#c62828';
-                      const statusBg = isPresent
-                        ? '#e8f5e9'
-                        : isLate
-                        ? '#fff3e0'
-                        : record.status === 'excused'
-                        ? '#e3f2fd'
-                        : '#ffebee';
-                      const statusLabel = isPresent
-                        ? 'حاضر'
-                        : isLate
-                        ? 'متأخر'
-                        : record.status === 'excused'
-                        ? 'بعذر'
-                        : 'غائب';
-                      return (
-                        <View key={record.id} style={styles.attendanceRow}>
-                          <View style={[styles.attStatusPill, { backgroundColor: statusBg }]}>
-                            <Text style={[styles.attStatusText, { color: statusColor }]}>
-                              {statusLabel}
-                            </Text>
-                          </View>
-                          <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                            <Text style={styles.attCourseName}>{record.course_name}</Text>
-                            <View style={styles.metaRow}>
-                              <Text style={styles.attDate}>
-                                {formatGregorianDate(new Date(record.date))}
-                              </Text>
-                              {record.start_time ? (
-                                <>
-                                  <View style={styles.dot} />
-                                  <Text style={styles.attDate}>
-                                    {record.start_time} - {record.end_time}
-                                  </Text>
-                                </>
-                              ) : null}
-                            </View>
-                          </View>
+                attendanceRecords.slice(0, 100).map(record => {
+                    const isPresent = record.status === 'present';
+                    const isLate = record.status === 'late';
+                    const statusColor = isPresent ? '#2e7d32'
+                      : isLate ? '#e65100'
+                      : record.status === 'excused' ? '#1565c0'
+                      : '#c62828';
+                    const statusBg = isPresent ? '#e8f5e9'
+                      : isLate ? '#fff3e0'
+                      : record.status === 'excused' ? '#e3f2fd'
+                      : '#ffebee';
+                    const statusLabel = isPresent ? 'حاضر'
+                      : isLate ? 'متأخر'
+                      : record.status === 'excused' ? 'بعذر'
+                      : 'غائب';
+                    return (
+                      <View key={record.id} style={styles.attendanceRow}>
+                        <View style={[styles.attStatusPill, { backgroundColor: statusBg }]}>
+                          <Text style={[styles.attStatusText, { color: statusColor }]}>
+                            {statusLabel}
+                          </Text>
                         </View>
-                      );
-                    })
-                  )}
-                  {attendanceRecords.length > 100 && (
-                    <Text style={styles.morePill}>
-                      عُرضت أول 100 سجل من إجمالي {attendanceRecords.length}
-                    </Text>
-                  )}
-                </View>
+                        <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                          <Text style={styles.attCourseName}>{record.course_name}</Text>
+                          <Text style={styles.attDate}>
+                            {formatGregorianDate(new Date(record.date))}
+                            {record.start_time ? ` · ${record.start_time} - ${record.end_time}` : ''}
+                          </Text>
+                        </View>
+                      </View>
+                    );
+                  })
+              )}
+              {attendanceRecords.length > 100 && (
+                <Text style={styles.morePill}>
+                  عُرضت أول 100 سجل من إجمالي {attendanceRecords.length}
+                </Text>
               )}
             </View>
           )}
@@ -1090,7 +1089,7 @@ export default function StudentDetailsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f6fb' },
 
-  pageScroll: { padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center' },
+  pageScroll: { padding: 16, paddingBottom: 40, maxWidth: 1440, width: '100%', alignSelf: 'center' },
   pageHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1128,25 +1127,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row-reverse',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 18,
-    marginBottom: 18,
-    gap: 14,
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 12,
+    gap: 12,
     borderWidth: 1,
     borderColor: '#eef1f6',
   },
   studentIconBg: {
-    width: 64, height: 64, borderRadius: 32,
+    width: 44, height: 44, borderRadius: 22,
     backgroundColor: '#e7f0fe',
     alignItems: 'center', justifyContent: 'center',
   },
   studentAvatar: {
-    width: 48, height: 48, borderRadius: 24,
+    width: 40, height: 40, borderRadius: 20,
     backgroundColor: '#2962ff',
     alignItems: 'center', justifyContent: 'center',
   },
-  studentAvatarText: { color: '#fff', fontSize: 20, fontWeight: '700' },
-  studentName: { fontSize: 20, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
+  studentAvatarText: { color: '#fff', fontSize: 17, fontWeight: '700' },
+  studentName: { fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
   studentSubRow: { flexDirection: 'row-reverse', alignItems: 'center', marginTop: 5, flexWrap: 'wrap', gap: 6 },
   studentSub: { fontSize: 13, color: '#8a95a8' },
   studentSubBold: { fontSize: 13, color: '#1a2540', fontWeight: '700' },
@@ -1154,6 +1153,34 @@ const styles = StyleSheet.create({
 
   metaItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 },
   metaText: { fontSize: 12, color: '#5b6678' },
+
+  // Compact stats
+  compactStatsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
+  compactStatChip: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 10,
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#eef1f6',
+  },
+  compactStatValue: { fontSize: 14, fontWeight: '700', color: '#1a2540' },
+  compactStatLabel: { fontSize: 11, color: '#8a95a8' },
+
+  // Attendance rate pill (badge at top)
+  attendanceRatePill: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
+    paddingHorizontal: 12, paddingVertical: 5, borderRadius: 14,
+    borderWidth: 1.5, marginBottom: 6,
+  },
+  attendanceRateText: { fontSize: 12, fontWeight: '800' },
+
+  // Per-course attendance pill
+  courseRatePill: {
+    alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+    minWidth: 60,
+  },
+  courseRateValue: { fontSize: 14, fontWeight: '800' },
+  courseRateLabel: { fontSize: 9, fontWeight: '600' },
+  courseRateSub: { fontSize: 9, color: '#8a95a8', marginTop: 1 },
 
   // إحصائيات
   statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },

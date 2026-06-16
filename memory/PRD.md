@@ -13,6 +13,14 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-16 **تحسين صفحة `/student-details` بناءً على ملاحظات المستخدم**:
+  - **تصميم مدمج:** استبدال المربعات الكبيرة (3 stat cards) بشرائح أفقية صغيرة (compact chips) — توفير ~40% من المساحة الرأسية. تصغير بطاقة الطالب والـavatar.
+  - **شارة نسبة الحضور الإجمالية:** badge ملوّن (أخضر≥75% / برتقالي≥50% / أحمر<50%) بجانب عنوان الصفحة مباشرة.
+  - **نسبة الحضور لكل مقرر:** chip ملوّن داخل صف المقرر يعرض النسبة + `حاضر/إجمالي` — يُحمَّل تلقائياً بالتوازي لكل المقررات.
+  - **تصدير PDF جديد:** Backend endpoint جديد `GET /api/export/report/student/{id}/pdf` يولد PDF عربي احترافي (ReportLab + Amiri) يعرض بطاقة معلومات الطالب + جدول المقررات مع نسب الحضور والإجمالي. اختُبر عبر curl (22KB، content-type=pdf).
+  - **إصلاح Excel:** كان `exportAPI.exportStudentReportExcel` غير موجود (السبب الحقيقي للفشل) — صُحّح إلى `reportsAPI.exportStudentReportExcel`.
+  - **رابط المقرر:** التوجيه من `/course-details` (القديمة) إلى `/course-lectures` (الحديثة المتسقة مع `/teacher-courses`).
+  - **حذف CTA "عرض ملخص الحضور":** الملخص يُحمَّل تلقائياً الآن، يبقى فقط زر "تحميل السجلات" للسجل التفصيلي (للحفاظ على سرعة التحميل).
 - 2026-06-16 **توحيد عرض حمل المعلم بين `/manage-teachers` و `/teacher-courses`**:
   - **المشكلة:** كان عمود "النصاب" يعرض السقف الأسبوعي المخزن للمعلم (12 افتراضياً) وعمود "المقررات" يحسب كل المقررات النشطة عبر **كل الفصول**. بينما `/teacher-courses` يعرض ساعات ومقررات **الفصل النشط فقط** — مما أدى إلى تباين في الأرقام (مثلاً 9 س / 3 مقررات في القائمة مقابل 3 س / 1 مقرر في الصفحة المخصصة).
   - **الحل (Backend):** أضيف لـ `GET /api/teachers` الحقول `current_semester_id`, `current_semester_hours`, `current_semester_courses_count` — تُحسب دفعة واحدة من `db.teaching_loads` المُفلتَر بالفصل النشط (`semesters.status='active'`).

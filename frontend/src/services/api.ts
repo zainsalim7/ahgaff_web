@@ -470,6 +470,8 @@ export const reportsAPI = {
     api.get('/export/report/daily/excel', { params, responseType: 'blob' }),
   exportStudentReportExcel: (studentId: string) =>
     api.get(`/export/report/student/${studentId}/excel`, { responseType: 'blob' }),
+  exportStudentReportPDF: (studentId: string) =>
+    api.get(`/export/report/student/${studentId}/pdf`, { responseType: 'blob' }),
   exportCourseReportExcel: (courseId: string) =>
     api.get(`/export/report/course/${courseId}/excel`, { responseType: 'blob' }),
   exportAttendanceOverviewExcel: (params?: { department_id?: string }) =>

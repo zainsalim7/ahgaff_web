@@ -10222,7 +10222,91 @@ async def export_student_report_excel(
         headers={"Content-Disposition": f"attachment; filename=student_{student_info['student_id']}_report.xlsx"}
     )
 
-@api_router.get("/export/report/course/{course_id}/excel")
+
+@api_router.get("/export/report/student/{student_id}/pdf")
+async def export_student_report_pdf(
+    student_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """تصدير تقرير طالب إلى PDF"""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+
+    report = await get_student_attendance_report(student_id, current_user)
+    student_info = report["student"]
+    summary = report["summary"]
+
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4,
+                            rightMargin=20, leftMargin=20, topMargin=20, bottomMargin=20)
+    elements = []
+    add_pdf_header(
+        elements,
+        title=f"تقرير حضور الطالب",
+        subtitle=f"{student_info.get('full_name', '')} - رقم القيد: {student_info.get('student_id', '')}",
+    )
+
+    # بطاقة معلومات الطالب
+    info_data = [
+        [arabic_text("القيمة"), arabic_text("البيان")],
+        [arabic_text(student_info.get("full_name", "")), arabic_text("الاسم")],
+        [arabic_text(str(student_info.get("student_id", ""))), arabic_text("رقم القيد")],
+        [arabic_text(f"م{student_info.get('level', '')}"), arabic_text("المستوى")],
+        [arabic_text(student_info.get("section", "") or "—"), arabic_text("الشعبة")],
+        [arabic_text(f"{summary.get('overall_attendance_rate', 0)}%"), arabic_text("نسبة الحضور الإجمالية")],
+    ]
+    info_table = Table(info_data, colWidths=[260, 200])
+    info_table.setStyle(get_pro_table_style(name_cols=[0, 1]))
+    elements.append(info_table)
+    elements.append(Spacer(1, 14))
+
+    # جدول المقررات
+    elements.append(Paragraph(
+        arabic_text("تفاصيل الحضور حسب المقرر"),
+        ParagraphStyle('SH', fontName=ARABIC_FONT, fontSize=12, alignment=TA_CENTER, spaceAfter=6, textColor=colors.HexColor('#1565c0'))
+    ))
+
+    courses_data = [[
+        arabic_text("نسبة %"),
+        arabic_text("متأخر"),
+        arabic_text("غائب"),
+        arabic_text("حاضر"),
+        arabic_text("المحاضرات"),
+        arabic_text("الكود"),
+        arabic_text("المقرر"),
+    ]]
+    for course in report["courses"]:
+        courses_data.append([
+            arabic_text(f"{course.get('attendance_rate', 0)}%"),
+            arabic_text(str(course.get("late", 0))),
+            arabic_text(str(course.get("absent", 0))),
+            arabic_text(str(course.get("present", 0))),
+            arabic_text(str(course.get("total_lectures", 0))),
+            arabic_text(course.get("course_code", "")),
+            arabic_text(course.get("course_name", "")),
+        ])
+    # صف الإجمالي
+    courses_data.append([
+        arabic_text(f"{summary.get('overall_attendance_rate', 0)}%"),
+        arabic_text(str(summary.get("total_late", 0))),
+        arabic_text(str(summary.get("total_absent", 0))),
+        arabic_text(str(summary.get("total_present", 0))),
+        arabic_text(str(summary.get("total_lectures", 0))),
+        arabic_text(""),
+        arabic_text("الإجمالي"),
+    ])
+    courses_table = Table(courses_data, colWidths=[55, 50, 50, 50, 65, 70, 180], repeatRows=1)
+    courses_table.setStyle(get_pro_table_style(num_cols=[0, 1, 2, 3, 4], name_cols=[6]))
+    elements.append(courses_table)
+
+    doc.build(elements)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=student_{student_info.get('student_id', student_id)}_report.pdf"}
+    )
 async def export_course_report_excel(
     course_id: str,
     current_user: dict = Depends(get_current_user)
