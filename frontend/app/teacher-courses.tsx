@@ -79,6 +79,7 @@ export default function TeacherCoursesScreen() {
 
   // Exporting PDF
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   const showMessage = (title: string, message: string) => {
     if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
@@ -215,6 +216,36 @@ export default function TeacherCoursesScreen() {
     }
   };
 
+  const handleExportExcel = async () => {
+    if (!teacherId) return;
+    if ((data?.courses?.length || 0) === 0) {
+      showMessage('تنبيه', 'لا توجد مقررات مسندة لتصديرها');
+      return;
+    }
+    setExportingExcel(true);
+    try {
+      const params: any = { teacher_id: teacherId };
+      if (data?.semester_id) params.semester_id = data.semester_id;
+      const res = await teachingLoadAPI.exportExcel(params);
+      const blob = new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      if (Platform.OS === 'web') {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `teacher_workload_${(data?.teacher_name || teacherDisplay || 'teacher').replace(/\s+/g, '_')}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (error: any) {
+      const msg = error.response?.data?.detail || 'فشل تصدير Excel';
+      showMessage('خطأ', msg);
+    } finally {
+      setExportingExcel(false);
+    }
+  };
+
 
   const handleUnassign = async () => {
     if (!unassignTarget) return;
@@ -298,6 +329,19 @@ export default function TeacherCoursesScreen() {
             >
               <Ionicons name="arrow-forward" size={16} color="#1a2540" />
               <Text style={styles.btnGhostText}>رجوع</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.headerBtn, styles.btnExportExcel, ((data?.courses?.length || 0) === 0 || exportingExcel) && { opacity: 0.5 }]}
+              onPress={handleExportExcel}
+              disabled={(data?.courses?.length || 0) === 0 || exportingExcel}
+              testID="export-excel-btn"
+            >
+              {exportingExcel ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Ionicons name="grid" size={16} color="#fff" />
+              )}
+              <Text style={styles.btnPrimaryText}>{exportingExcel ? 'جاري التصدير...' : 'تصدير Excel'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.headerBtn, styles.btnExport, ((data?.courses?.length || 0) === 0 || exportingPdf) && { opacity: 0.5 }]}
@@ -666,6 +710,7 @@ const styles = StyleSheet.create({
   headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
   btnPrimary: { backgroundColor: '#2962ff' },
   btnExport: { backgroundColor: '#e53935' },
+  btnExportExcel: { backgroundColor: '#1b7d3f' },
   btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
   btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
   btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },

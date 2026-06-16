@@ -29,6 +29,8 @@ export default function TeachingLoadReport() {
   const [hasRun, setHasRun] = useState(false);
   const [report, setReport] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'comparison' | 'unassigned_courses' | 'idle_teachers'>('comparison');
+  const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -74,6 +76,40 @@ export default function TeachingLoadReport() {
   );
 
   const resetReport = () => { setReport(null); setHasRun(false); };
+
+  const handleExport = async (kind: 'pdf' | 'excel') => {
+    if (!report) return;
+    const setBusy = kind === 'pdf' ? setExportingPdf : setExportingExcel;
+    setBusy(true);
+    try {
+      const params: any = {};
+      if (scope === 'department' && selectedDept) params.department_id = selectedDept;
+      if (scope === 'teacher' && selectedTeacher) params.teacher_id = selectedTeacher;
+      if (selectedSemester) params.semester_id = selectedSemester;
+      const res = kind === 'pdf' ? await teachingLoadAPI.exportPDF(params) : await teachingLoadAPI.exportExcel(params);
+      const mime = kind === 'pdf' ? 'application/pdf' : 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+      const ext = kind === 'pdf' ? 'pdf' : 'xlsx';
+      const blob = new Blob([res.data], { type: mime });
+      const url = URL.createObjectURL(blob);
+      if (Platform.OS === 'web') {
+        const name = scope === 'teacher' && selectedTeacherObj
+          ? `teacher_workload_${(selectedTeacherObj.full_name || 'teacher').replace(/\s+/g, '_')}`
+          : 'teaching_load_report';
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${name}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || `فشل تصدير ${kind === 'pdf' ? 'PDF' : 'Excel'}`;
+      if (Platform.OS === 'web') window.alert(msg); else console.error(msg);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const runReport = async () => {
     if (scope === 'department' && !selectedDept) return;
@@ -130,6 +166,28 @@ export default function TeachingLoadReport() {
               <Ionicons name="arrow-forward" size={16} color="#1a2540" />
               <Text style={st.btnGhostText}>رجوع</Text>
             </TouchableOpacity>
+            {report && (
+              <>
+                <TouchableOpacity
+                  style={[st.headerBtn, st.btnExportExcel, exportingExcel && { opacity: 0.5 }]}
+                  onPress={() => handleExport('excel')}
+                  disabled={exportingExcel}
+                  testID="export-excel-btn"
+                >
+                  {exportingExcel ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="grid" size={16} color="#fff" />}
+                  <Text style={st.btnExportText}>Excel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[st.headerBtn, st.btnExportPdf, exportingPdf && { opacity: 0.5 }]}
+                  onPress={() => handleExport('pdf')}
+                  disabled={exportingPdf}
+                  testID="export-pdf-btn"
+                >
+                  {exportingPdf ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document-text" size={16} color="#fff" />}
+                  <Text style={st.btnExportText}>PDF</Text>
+                </TouchableOpacity>
+              </>
+            )}
           </View>
         </View>
 
@@ -587,6 +645,9 @@ const st = StyleSheet.create({
   headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
   btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
   btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+  btnExportPdf: { backgroundColor: '#e53935' },
+  btnExportExcel: { backgroundColor: '#1b7d3f' },
+  btnExportText: { color: '#fff', fontSize: 13, fontWeight: '600' },
 
   // Filter card
   filterCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6', marginBottom: 18 },
