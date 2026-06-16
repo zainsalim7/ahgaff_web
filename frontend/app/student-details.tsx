@@ -322,20 +322,32 @@ export default function StudentDetailsScreen() {
     );
   };
 
+  // Helper مشترك لتنزيل ملف Blob على الويب
+  const downloadBlob = (data: any, filename: string, mime: string) => {
+    const blob = new Blob([data], { type: mime });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      try { document.body.removeChild(a); } catch {}
+      window.URL.revokeObjectURL(url);
+    }, 100);
+  };
+
   const handleExportExcel = async () => {
     if (!student) return;
     setExportingExcel(true);
     try {
       const res = await reportsAPI.exportStudentReportExcel(student.id);
-      const blob = new Blob([res.data], {
-        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `student_${student.student_id}_report.xlsx`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+      downloadBlob(
+        res.data,
+        `student_${student.student_id}_report.xlsx`,
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
     } catch (e: any) {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل تصدير التقرير');
     } finally {
@@ -348,13 +360,7 @@ export default function StudentDetailsScreen() {
     setExportingPdf(true);
     try {
       const res = await reportsAPI.exportStudentReportPDF(student.id);
-      const blob = new Blob([res.data], { type: 'application/pdf' });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `student_${student.student_id}_report.pdf`;
-      a.click();
-      window.URL.revokeObjectURL(url);
+      downloadBlob(res.data, `student_${student.student_id}_report.pdf`, 'application/pdf');
     } catch (e: any) {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل تصدير PDF');
     } finally {
