@@ -3196,16 +3196,25 @@ async def get_my_courses(
     
     student_id = str(student["_id"])
     
-    # جلب التسجيلات
-    enrollments = await db.enrollments.find({"student_id": student_id}).to_list(100)
+    # الفصل النشط
+    active_sem = await db.semesters.find_one({"status": "active"})
+    active_sem_id = str(active_sem["_id"]) if active_sem else None
+    
+    # جلب التسجيلات (مفلترة بالفصل النشط إن وُجد)
+    enroll_query: dict = {"student_id": student_id}
+    if active_sem_id:
+        enroll_query["semester_id"] = active_sem_id
+    enrollments = await db.enrollments.find(enroll_query).to_list(100)
     course_ids = [e["course_id"] for e in enrollments]
     
-    # إذا لا يوجد تسجيلات، جلب المقررات حسب القسم والمستوى
+    # إذا لا يوجد تسجيلات، جلب المقررات حسب القسم والمستوى (مفلترة بالفصل النشط)
     if not course_ids:
-        query = {
+        query: dict = {
             "department_id": student["department_id"],
             "level": student["level"],
         }
+        if active_sem_id:
+            query["semester_id"] = active_sem_id
         if student.get("section"):
             query["$or"] = [
                 {"section": {"$in": [None, "", student["section"]]}},
@@ -3292,19 +3301,28 @@ async def get_student_courses_admin(
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
     
-    # جلب التسجيلات
-    enrollments = await db.enrollments.find({"student_id": student_id}).to_list(200)
+    # الفصل النشط
+    active_sem = await db.semesters.find_one({"status": "active"})
+    active_sem_id = str(active_sem["_id"]) if active_sem else None
+    
+    # جلب التسجيلات (مفلترة بالفصل النشط إن وُجد)
+    enroll_query: dict = {"student_id": student_id}
+    if active_sem_id:
+        enroll_query["semester_id"] = active_sem_id
+    enrollments = await db.enrollments.find(enroll_query).to_list(200)
     course_ids = [e["course_id"] for e in enrollments]
     
-    # إذا لا يوجد تسجيلات، نستنتج من القسم/المستوى/الشعبة
+    # إذا لا يوجد تسجيلات، نستنتج من القسم/المستوى/الشعبة (مفلترة بالفصل النشط)
     inferred = False
     if not course_ids:
         inferred = True
-        query = {
+        query: dict = {
             "department_id": student.get("department_id"),
             "level": student.get("level"),
             "is_active": True,
         }
+        if active_sem_id:
+            query["semester_id"] = active_sem_id
         if student.get("section"):
             query["$or"] = [
                 {"section": {"$in": [None, "", student["section"]]}},

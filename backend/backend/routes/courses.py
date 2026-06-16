@@ -25,9 +25,18 @@ class CourseCreate(BaseModel):
 async def get_courses(
     department_id: Optional[str] = None,
     teacher_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    all_semesters: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
-    """الحصول على جميع المقررات"""
+    """الحصول على جميع المقررات.
+    
+    منطق الفلترة الافتراضي بالفصل النشط:
+    - يفعَّل تلقائياً للمعلمين (role=teacher) والطلاب (role=student) — يرون فقط الفصل الحالي.
+    - يفعَّل تلقائياً عند تمرير ?teacher_id (استعلام تطبيقات).
+    - الإداريون يرون كل الفصول افتراضياً.
+    - أرسل ?all_semesters=true لتعطيل الفلترة، أو ?semester_id=X لفصل محدد.
+    """
     db = get_db()
     query = {}
     
@@ -35,6 +44,19 @@ async def get_courses(
         query["department_id"] = department_id
     if teacher_id:
         query["teacher_id"] = teacher_id
+    
+    # الفلترة بالفصل النشط — تلقائياً للمعلمين/الطلاب وأي استعلام معلم
+    role = current_user.get("role")
+    should_filter_active = (
+        not all_semesters and
+        (semester_id is not None or teacher_id is not None or role in ("teacher", "student"))
+    )
+    if semester_id:
+        query["semester_id"] = semester_id
+    elif should_filter_active:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            query["semester_id"] = str(active_sem["_id"])
     
     courses = await db.courses.find(query).to_list(100)
     
