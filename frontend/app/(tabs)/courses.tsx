@@ -104,7 +104,7 @@ export default function AddCourseScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterDept, setFilterDept] = useState<string>('');
   const [filterLevel, setFilterLevel] = useState<string>('');
-  const [filterSemester, setFilterSemester] = useState<string>(''); // فلتر الفصل ('' = الفصل النشط, 'all' = كل الفصول)
+  const [filterSemester, setFilterSemester] = useState<string>('all'); // 'all' = كل الفصول (افتراضي), '' = الفصل النشط فقط, أو semester_id
   const [activeSemester, setActiveSemester] = useState<any>(null);
   const [allSemesters, setAllSemesters] = useState<any[]>([]);
   
@@ -206,9 +206,15 @@ export default function AddCourseScreen() {
       if (deptId && deptId !== 'all') {
         params.department_id = deptId;
       }
-      // دائماً نعرض مقررات الفصل النشط فقط - الفصول المؤرشفة لها صفحة منفصلة في الأرشيف
-      if (activeSemester?.id) {
+      // فلتر الفصل: 'all' = كل الفصول (default), '' = الفصل النشط، أو semester_id محدد
+      if (filterSemester === 'all') {
+        params.all_semesters = true;
+      } else if (filterSemester) {
+        params.semester_id = filterSemester;
+      } else if (activeSemester?.id) {
         params.semester_id = activeSemester.id;
+      } else {
+        params.all_semesters = true;
       }
       const res = await coursesAPI.getAll(params);
       setCourses(res.data);
@@ -217,18 +223,15 @@ export default function AddCourseScreen() {
     } finally {
       setCoursesLoading(false);
     }
-  }, [activeSemester]);
+  }, [activeSemester, filterSemester]);
 
   useEffect(() => {
     fetchBaseData();
   }, [fetchBaseData]);
 
   useEffect(() => {
-    if (filterDept) {
-      fetchCourses(filterDept);
-    } else {
-      setCourses([]);
-    }
+    // عرض كل المقررات افتراضياً (مع/بدون اختيار قسم)
+    fetchCourses(filterDept || 'all');
   }, [filterDept, fetchCourses]);
 
   const handleSubmit = async () => {
@@ -1159,12 +1162,7 @@ export default function AddCourseScreen() {
                       </Text>
                     </View>
 
-                    {!filterDept ? (
-                      <View style={styles.tableEmpty}>
-                        <Ionicons name="filter-outline" size={48} color="#cfd6e1" />
-                        <Text style={styles.tableEmptyText}>اختر قسم لعرض المقررات</Text>
-                      </View>
-                    ) : coursesLoading ? (
+                    {coursesLoading ? (
                       <View style={styles.tableEmpty}>
                         <ActivityIndicator size="large" color="#2962ff" />
                         <Text style={styles.tableEmptyText}>جاري تحميل المقررات...</Text>
