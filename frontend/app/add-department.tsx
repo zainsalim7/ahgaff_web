@@ -1,4 +1,11 @@
-import React, { useState, useEffect, useCallback } from 'react';
+/**
+ * إدارة الأقسام - تصميم حديث (متّسق مع /(tabs)/courses و /manage-teachers)
+ * الميزات:
+ *  - عرض جدولي حديث + بطاقات إحصائية + فلاتر + بحث
+ *  - النقر على القسم يفتح صفحة التفاصيل الجديدة /department-details?departmentId=...
+ *  - إضافة/تعديل/حذف مع نموذج كامل
+ */
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -7,7 +14,6 @@ import {
   TouchableOpacity,
   Alert,
   ScrollView,
-  FlatList,
   KeyboardAvoidingView,
   Platform,
   Modal,
@@ -15,6 +21,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Picker } from '@react-native-picker/picker';
 import { departmentsAPI, facultiesAPI, scopeAPI } from '../src/services/api';
 import { Department } from '../src/types';
 import { LoadingScreen } from '../src/components/LoadingScreen';
@@ -29,23 +37,9 @@ interface Faculty {
 interface DeptStats extends Department {
   students_count: number;
   courses_count: number;
+  teachers_count?: number;
   faculty_id?: string;
   faculty_name?: string;
-}
-
-interface DeptDetails {
-  id: string;
-  name: string;
-  code: string;
-  description: string;
-  faculty_id?: string;
-  faculty_name?: string;
-  students_count: number;
-  courses_count: number;
-  teachers_count: number;
-  students: Array<{ id: string; student_id: string; full_name: string; level: number; section: string }>;
-  courses: Array<{ id: string; name: string; code: string; level: number; section: string; teacher_name: string; students_count: number }>;
-  teachers: Array<{ id: string; full_name: string; username: string }>;
 }
 
 interface UserScope {
@@ -57,6 +51,7 @@ interface UserScope {
 }
 
 export default function AddDepartmentScreen() {
+  const router = useRouter();
   const [departments, setDepartments] = useState<DeptStats[]>([]);
   const [faculties, setFaculties] = useState<Faculty[]>([]);
   const [loading, setLoading] = useState(true);
@@ -64,28 +59,23 @@ export default function AddDepartmentScreen() {
   const [showForm, setShowForm] = useState(false);
   const [editingDept, setEditingDept] = useState<Department | null>(null);
   const [userScope, setUserScope] = useState<UserScope | null>(null);
-  
+
   // صلاحيات
   const { hasPermission, user } = useAuth();
   const canManageDepts = hasPermission(PERMISSIONS.MANAGE_DEPARTMENTS);
-  
-  // Details modal
-  const [selectedDept, setSelectedDept] = useState<DeptDetails | null>(null);
-  const [loadingDetails, setLoadingDetails] = useState(false);
-  const [detailsTab, setDetailsTab] = useState<'students' | 'courses' | 'teachers'>('students');
 
   // Delete confirmation modal
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  // Filter by faculty
+  // فلاتر وبحث
   const [filterFacultyId, setFilterFacultyId] = useState<string>('');
-  const [searchDept, setSearchDept] = useState('');
-  
-  // Pagination
-  const PAGE_SIZE = 10;
+  const [searchQuery, setSearchQuery] = useState('');
+
+  // ترقيم الصفحات
   const [currentPage, setCurrentPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -97,7 +87,6 @@ export default function AddDepartmentScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      // جلب نطاق صلاحيات المستخدم أولاً
       let scope: UserScope | null = null;
       try {
         const scopeRes = await scopeAPI.get();
@@ -111,50 +100,40 @@ export default function AddDepartmentScreen() {
         departmentsAPI.getStats(),
         facultiesAPI.getAll(),
       ]);
-      
+
       let filteredDepts = deptsRes.data || [];
       let filteredFaculties = facultiesRes.data || [];
-      
-      // تصفية حسب نطاق المستخدم
+
       if (scope && user?.role !== 'admin') {
-        // إذا كان لديه صلاحية على مستوى الجامعة، يرى كل شيء
         if (scope.level === 'university') {
           // لا تصفية
-        }
-        // إذا كان لديه صلاحية على مستوى كلية
-        else if (scope.level === 'faculty' && scope.faculties?.length > 0) {
+        } else if (scope.level === 'faculty' && scope.faculties?.length > 0) {
           const allowedFacultyIds = scope.faculties.map(f => f.id);
-          filteredDepts = filteredDepts.filter((d: DeptStats) => 
+          filteredDepts = filteredDepts.filter((d: DeptStats) =>
             allowedFacultyIds.includes(d.faculty_id || '')
           );
-          filteredFaculties = filteredFaculties.filter((f: Faculty) => 
+          filteredFaculties = filteredFaculties.filter((f: Faculty) =>
             allowedFacultyIds.includes(f.id)
           );
-        }
-        // إذا كان لديه صلاحية على مستوى قسم
-        else if (scope.level === 'department' && scope.departments?.length > 0) {
+        } else if (scope.level === 'department' && scope.departments?.length > 0) {
           const allowedDeptIds = scope.departments.map(d => d.id);
-          filteredDepts = filteredDepts.filter((d: DeptStats) => 
+          filteredDepts = filteredDepts.filter((d: DeptStats) =>
             allowedDeptIds.includes(d.id)
           );
-          // عرض الكليات التابعة للأقسام المسموح بها فقط
           const allowedFacultyIds = [...new Set(scope.departments.map(d => d.faculty_id).filter(Boolean))];
-          filteredFaculties = filteredFaculties.filter((f: Faculty) => 
+          filteredFaculties = filteredFaculties.filter((f: Faculty) =>
             allowedFacultyIds.includes(f.id)
           );
-        }
-        // إذا لم يكن لديه نطاق محدد، لا يرى شيء
-        else if (scope.level === 'none') {
+        } else if (scope.level === 'none') {
           filteredDepts = [];
           filteredFaculties = [];
         }
       }
-      
+
       setDepartments(filteredDepts);
       setFaculties(filteredFaculties);
     } catch (error) {
       console.error('Error fetching data:', error);
-      // Fallback to regular getAll
       try {
         const fallback = await departmentsAPI.getAll();
         setDepartments(fallback.data.map((d: Department) => ({ ...d, students_count: 0, courses_count: 0 })));
@@ -170,26 +149,11 @@ export default function AddDepartmentScreen() {
     fetchData();
   }, [fetchData]);
 
-  const handleShowDetails = async (deptId: string) => {
-    setLoadingDetails(true);
-    setDetailsTab('students');
-    try {
-      const response = await departmentsAPI.getDetails(deptId);
-      setSelectedDept(response.data);
-    } catch (error) {
-      console.error('Error fetching department details:', error);
-      Alert.alert('خطأ', 'فشل في تحميل تفاصيل القسم');
-    } finally {
-      setLoadingDetails(false);
-    }
-  };
-
   const handleSubmit = async () => {
     if (!formData.name || !formData.code) {
       Alert.alert('خطأ', 'الرجاء ملء جميع الحقول المطلوبة');
       return;
     }
-
     setSaving(true);
     try {
       if (editingDept) {
@@ -249,200 +213,29 @@ export default function AddDepartmentScreen() {
     }
   };
 
-  const renderDepartment = ({ item }: { item: DeptStats }) => (
-    <View style={styles.itemCard}>
-      <TouchableOpacity 
-        style={{ flexDirection: 'row', flex: 1, alignItems: 'center' }}
-        onPress={() => handleShowDetails(item.id)}
-        activeOpacity={0.7}
-      >
-        <View style={styles.itemIcon}>
-          <Ionicons name="business" size={24} color="#e91e63" />
-        </View>
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemName}>{item.name}</Text>
-          <Text style={styles.itemDetail}>{item.code}</Text>
-          {item.faculty_name && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 2 }}>
-              <Ionicons name="business" size={12} color="#9c27b0" />
-              <Text style={{ fontSize: 12, color: '#9c27b0', marginLeft: 4, fontWeight: '600' }}>{item.faculty_name}</Text>
-            </View>
-          )}
-          <View style={styles.statsRow}>
-            <View style={styles.statBadge}>
-              <Ionicons name="people" size={14} color="#1565c0" />
-              <Text style={styles.statText}>{item.students_count} طالب</Text>
-            </View>
-            <View style={styles.statBadge}>
-              <Ionicons name="book" size={14} color="#4caf50" />
-              <Text style={styles.statText}>{item.courses_count} مقرر</Text>
-            </View>
-          </View>
-        </View>
-      </TouchableOpacity>
-      {canManageDepts && (
-        <View style={styles.actionButtons}>
-          <TouchableOpacity
-            style={styles.editBtn}
-            onPress={() => handleEdit(item)}
-            accessibilityLabel="تعديل"
-          >
-            <Ionicons name="create" size={20} color="#ff9800" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.deleteBtn, { backgroundColor: '#ffebee', borderRadius: 8 }]}
-            onPress={() => handleDelete(item.id, item.name)}
-            data-testid={`delete-dept-${item.id}`}
-            accessibilityLabel="حذف"
-          >
-            <Ionicons name="trash" size={20} color="#f44336" />
-          </TouchableOpacity>
-        </View>
-      )}
-    </View>
-  );
+  // فلترة + بحث
+  const filtered = useMemo(() => {
+    return departments.filter(d => {
+      if (filterFacultyId && d.faculty_id !== filterFacultyId) return false;
+      if (searchQuery) {
+        const q = searchQuery.toLowerCase();
+        if (!d.name?.toLowerCase().includes(q)
+            && !d.code?.toLowerCase().includes(q)
+            && !d.faculty_name?.toLowerCase().includes(q)) return false;
+      }
+      return true;
+    });
+  }, [departments, filterFacultyId, searchQuery]);
 
-  // Details Modal Content
-  const renderDetailsModal = () => (
-    <Modal
-      visible={selectedDept !== null}
-      animationType="slide"
-      transparent
-      onRequestClose={() => setSelectedDept(null)}
-    >
-      <View style={styles.modalOverlay}>
-        <View style={styles.modalContent}>
-          {loadingDetails ? (
-            <View style={styles.loadingContainer}>
-              <ActivityIndicator size="large" color="#e91e63" />
-              <Text style={styles.loadingText}>جاري التحميل...</Text>
-            </View>
-          ) : selectedDept && (
-            <>
-              {/* Header */}
-              <View style={styles.modalHeader}>
-                <TouchableOpacity onPress={() => setSelectedDept(null)}>
-                  <Ionicons name="close" size={28} color="#333" />
-                </TouchableOpacity>
-                <Text style={styles.modalTitle}>{selectedDept.name}</Text>
-                <View style={{ width: 28 }} />
-              </View>
-              
-              {/* Stats Summary */}
-              <View style={styles.summaryRow}>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryNumber}>{selectedDept.students_count}</Text>
-                  <Text style={styles.summaryLabel}>طالب</Text>
-                </View>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryNumber}>{selectedDept.courses_count}</Text>
-                  <Text style={styles.summaryLabel}>مقرر</Text>
-                </View>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryNumber}>{selectedDept.teachers_count}</Text>
-                  <Text style={styles.summaryLabel}>مدرس</Text>
-                </View>
-              </View>
-              
-              {/* Tabs */}
-              <View style={styles.tabsRow}>
-                <TouchableOpacity 
-                  style={[styles.tab, detailsTab === 'students' && styles.tabActive]}
-                  onPress={() => setDetailsTab('students')}
-                >
-                  <Ionicons name="people" size={18} color={detailsTab === 'students' ? '#fff' : '#666'} />
-                  <Text style={[styles.tabText, detailsTab === 'students' && styles.tabTextActive]}>الطلاب</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.tab, detailsTab === 'courses' && styles.tabActive]}
-                  onPress={() => setDetailsTab('courses')}
-                >
-                  <Ionicons name="book" size={18} color={detailsTab === 'courses' ? '#fff' : '#666'} />
-                  <Text style={[styles.tabText, detailsTab === 'courses' && styles.tabTextActive]}>المقررات</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.tab, detailsTab === 'teachers' && styles.tabActive]}
-                  onPress={() => setDetailsTab('teachers')}
-                >
-                  <Ionicons name="school" size={18} color={detailsTab === 'teachers' ? '#fff' : '#666'} />
-                  <Text style={[styles.tabText, detailsTab === 'teachers' && styles.tabTextActive]}>المدرسين</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {/* Content */}
-              <ScrollView style={styles.modalBody}>
-                {detailsTab === 'students' && (
-                  selectedDept.students.length === 0 ? (
-                    <Text style={styles.emptyListText}>لا يوجد طلاب في هذا القسم</Text>
-                  ) : (
-                    selectedDept.students.map(student => (
-                      <View key={student.id} style={styles.listItem}>
-                        <View style={styles.listItemIcon}>
-                          <Ionicons name="person" size={20} color="#1565c0" />
-                        </View>
-                        <View style={styles.listItemInfo}>
-                          <Text style={styles.listItemName}>{student.full_name}</Text>
-                          <Text style={styles.listItemDetail}>
-                            {student.student_id} | م{student.level} {student.section && `| ${student.section}`}
-                          </Text>
-                        </View>
-                      </View>
-                    ))
-                  )
-                )}
-                
-                {detailsTab === 'courses' && (
-                  selectedDept.courses.length === 0 ? (
-                    <Text style={styles.emptyListText}>لا توجد مقررات في هذا القسم</Text>
-                  ) : (
-                    selectedDept.courses.map(course => (
-                      <View key={course.id} style={styles.listItem}>
-                        <View style={[styles.listItemIcon, { backgroundColor: '#e8f5e9' }]}>
-                          <Ionicons name="book" size={20} color="#4caf50" />
-                        </View>
-                        <View style={styles.listItemInfo}>
-                          <Text style={styles.listItemName}>{course.name}</Text>
-                          <Text style={styles.listItemDetail}>
-                            م{course.level} {course.section && `| ${course.section}`} | {course.students_count} طالب
-                          </Text>
-                          {course.teacher_name && (
-                            <Text style={styles.listItemTeacher}>المدرس: {course.teacher_name}</Text>
-                          )}
-                        </View>
-                      </View>
-                    ))
-                  )
-                )}
-                
-                {detailsTab === 'teachers' && (
-                  selectedDept.teachers.length === 0 ? (
-                    <Text style={styles.emptyListText}>لا يوجد مدرسين في هذا القسم</Text>
-                  ) : (
-                    selectedDept.teachers.map(teacher => (
-                      <View key={teacher.id} style={styles.listItem}>
-                        <View style={[styles.listItemIcon, { backgroundColor: '#fff3e0' }]}>
-                          <Ionicons name="school" size={20} color="#ff9800" />
-                        </View>
-                        <View style={styles.listItemInfo}>
-                          <Text style={styles.listItemName}>{teacher.full_name}</Text>
-                          <Text style={styles.listItemDetail}>
-                            {teacher.academic_title ? `${teacher.academic_title} | ` : ''}{teacher.username ? `@${teacher.username}` : ''}
-                          </Text>
-                          {teacher.specialization ? (
-                            <Text style={[styles.listItemDetail, { color: '#666' }]}>{teacher.specialization}</Text>
-                          ) : null}
-                        </View>
-                      </View>
-                    ))
-                  )
-                )}
-              </ScrollView>
-            </>
-          )}
-        </View>
-      </View>
-    </Modal>
-  );
+  const totalStudents = useMemo(() => departments.reduce((s, d) => s + (d.students_count ?? 0), 0), [departments]);
+  const totalCourses = useMemo(() => departments.reduce((s, d) => s + (d.courses_count ?? 0), 0), [departments]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const paged = filtered.slice((currentPage - 1) * perPage, currentPage * perPage);
+
+  const goToDetails = (id: string) => {
+    router.push(`/department-details?departmentId=${id}` as any);
+  };
 
   if (loading) {
     return <LoadingScreen />;
@@ -455,234 +248,462 @@ export default function AddDepartmentScreen() {
         style={{ flex: 1 }}
       >
         {showForm ? (
-          <ScrollView style={styles.formContainer}>
-            <Text style={styles.formTitle}>
-              {editingDept ? 'تعديل القسم' : 'إضافة قسم جديد'}
-            </Text>
-            
-            {/* اختيار الكلية */}
-            <Text style={styles.label}>الكلية *</Text>
-            <View style={styles.facultySelector}>
-              {faculties.length > 0 ? (
-                faculties.map(faculty => (
+          // ====== نموذج الإضافة/التعديل ======
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1 }]} showsVerticalScrollIndicator={true}>
+            <View style={styles.formCard}>
+              <View style={styles.formHeader}>
+                <Text style={styles.formTitle}>
+                  {editingDept ? 'تعديل القسم' : 'إضافة قسم جديد'}
+                </Text>
+                <TouchableOpacity
+                  onPress={() => { setShowForm(false); setEditingDept(null); resetForm(); }}
+                  style={styles.formCloseBtn}
+                  data-testid="close-form-btn"
+                >
+                  <Ionicons name="close" size={22} color="#5b6678" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>الكلية <Text style={{ color: '#e91e63' }}>*</Text></Text>
+              <View style={styles.facultySelector}>
+                {faculties.length > 0 ? (
+                  faculties.map(faculty => (
+                    <TouchableOpacity
+                      key={faculty.id}
+                      style={[
+                        styles.facultyOption,
+                        formData.faculty_id === faculty.id && styles.facultyOptionActive
+                      ]}
+                      onPress={() => setFormData({ ...formData, faculty_id: faculty.id })}
+                      data-testid={`faculty-option-${faculty.id}`}
+                    >
+                      <Text style={[
+                        styles.facultyOptionText,
+                        formData.faculty_id === faculty.id && styles.facultyOptionTextActive
+                      ]}>
+                        {faculty.name}
+                      </Text>
+                    </TouchableOpacity>
+                  ))
+                ) : (
+                  <Text style={styles.noDataText}>لا توجد كليات - أضف كليات أولاً</Text>
+                )}
+              </View>
+
+              <Text style={styles.label}>اسم القسم <Text style={{ color: '#e91e63' }}>*</Text></Text>
+              <TextInput
+                style={styles.input}
+                value={formData.name}
+                onChangeText={(text) => setFormData({ ...formData, name: text })}
+                placeholder="مثال: قسم الشريعة الإسلامية"
+                placeholderTextColor="#a8b1c2"
+                data-testid="dept-name-input"
+              />
+
+              <Text style={styles.label}>رمز القسم <Text style={{ color: '#e91e63' }}>*</Text></Text>
+              <TextInput
+                style={styles.input}
+                value={formData.code}
+                onChangeText={(text) => setFormData({ ...formData, code: text })}
+                placeholder="مثال: SHARIA"
+                placeholderTextColor="#a8b1c2"
+                autoCapitalize="characters"
+                data-testid="dept-code-input"
+              />
+
+              <Text style={styles.label}>الوصف</Text>
+              <TextInput
+                style={[styles.input, styles.textArea]}
+                value={formData.description}
+                onChangeText={(text) => setFormData({ ...formData, description: text })}
+                placeholder="وصف مختصر للقسم"
+                placeholderTextColor="#a8b1c2"
+                multiline
+                numberOfLines={3}
+              />
+
+              <Text style={styles.label}>البرنامج الافتراضي للطلاب</Text>
+              <View style={styles.programChips}>
+                {[
+                  { v: '', l: 'غير محدد' },
+                  { v: 'B', l: 'بكالوريوس' },
+                  { v: 'M', l: 'ماجستير' },
+                  { v: 'D', l: 'دكتوراه' },
+                  { v: 'P', l: 'دبلوم' },
+                  { v: 'E', l: 'عن بُعد' },
+                ].map((opt) => (
                   <TouchableOpacity
-                    key={faculty.id}
+                    key={opt.v || 'none'}
+                    onPress={() => setFormData({ ...formData, default_program_code: opt.v })}
                     style={[
-                      styles.facultyOption,
-                      formData.faculty_id === faculty.id && styles.facultyOptionActive
+                      styles.programChip,
+                      formData.default_program_code === opt.v && styles.programChipActive,
                     ]}
-                    onPress={() => setFormData({ ...formData, faculty_id: faculty.id })}
+                    testID={`program-code-${opt.v || 'none'}`}
                   >
                     <Text style={[
-                      styles.facultyOptionText,
-                      formData.faculty_id === faculty.id && styles.facultyOptionTextActive
+                      styles.programChipText,
+                      formData.default_program_code === opt.v && styles.programChipTextActive,
                     ]}>
-                      {faculty.name}
+                      {opt.l}{opt.v ? ` (${opt.v})` : ''}
                     </Text>
                   </TouchableOpacity>
-                ))
-              ) : (
-                <Text style={styles.noDataText}>لا توجد كليات - أضف كليات أولاً</Text>
-              )}
-            </View>
-            
-            <Text style={styles.label}>اسم القسم *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.name}
-              onChangeText={(text) => setFormData({ ...formData, name: text })}
-              placeholder="مثال: قسم الشريعة الإسلامية"
-            />
+                ))}
+              </View>
 
-            <Text style={styles.label}>رمز القسم *</Text>
-            <TextInput
-              style={styles.input}
-              value={formData.code}
-              onChangeText={(text) => setFormData({ ...formData, code: text })}
-              placeholder="مثال: SHARIA"
-              autoCapitalize="characters"
-            />
-
-            <Text style={styles.label}>الوصف</Text>
-            <TextInput
-              style={[styles.input, styles.textArea]}
-              value={formData.description}
-              onChangeText={(text) => setFormData({ ...formData, description: text })}
-              placeholder="وصف مختصر للقسم"
-              multiline
-              numberOfLines={3}
-            />
-
-            <Text style={styles.label}>البرنامج الافتراضي للطلاب</Text>
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-              {[
-                { v: '', l: 'غير محدد' },
-                { v: 'B', l: 'بكالوريوس' },
-                { v: 'M', l: 'ماجستير' },
-                { v: 'D', l: 'دكتوراه' },
-                { v: 'P', l: 'دبلوم' },
-                { v: 'E', l: 'عن بُعد' },
-              ].map((opt) => (
+              <View style={styles.formButtons}>
                 <TouchableOpacity
-                  key={opt.v || 'none'}
-                  onPress={() => setFormData({ ...formData, default_program_code: opt.v })}
-                  style={{
-                    paddingVertical: 6,
-                    paddingHorizontal: 12,
-                    borderRadius: 16,
-                    borderWidth: 1,
-                    borderColor: formData.default_program_code === opt.v ? '#1565c0' : '#ddd',
-                    backgroundColor: formData.default_program_code === opt.v ? '#e3f2fd' : '#fff',
-                  }}
-                  testID={`program-code-${opt.v || 'none'}`}
+                  style={[styles.btn, styles.cancelBtn]}
+                  onPress={() => { setShowForm(false); setEditingDept(null); resetForm(); }}
                 >
-                  <Text style={{
-                    color: formData.default_program_code === opt.v ? '#1565c0' : '#666',
-                    fontWeight: formData.default_program_code === opt.v ? '700' : '400',
-                    fontSize: 12,
-                  }}>
-                    {opt.l}{opt.v ? ` (${opt.v})` : ''}
-                  </Text>
+                  <Text style={styles.cancelBtnText}>إلغاء</Text>
                 </TouchableOpacity>
-              ))}
-            </View>
-
-            <View style={styles.formButtons}>
-              <TouchableOpacity
-                style={[styles.btn, styles.cancelBtn]}
-                onPress={() => {
-                  setShowForm(false);
-                  setEditingDept(null);
-                  resetForm();
-                }}
-              >
-                <Text style={styles.cancelBtnText}>إلغاء</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.btn, styles.saveBtn]}
-                onPress={handleSubmit}
-                disabled={saving || !formData.faculty_id}
-              >
-                <Text style={styles.saveBtnText}>
-                  {saving ? 'جاري الحفظ...' : editingDept ? 'تحديث' : 'حفظ'}
-                </Text>
-              </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.btn, styles.saveBtn, (!formData.faculty_id || saving) && { opacity: 0.6 }]}
+                  onPress={handleSubmit}
+                  disabled={saving || !formData.faculty_id}
+                  data-testid="submit-dept-btn"
+                >
+                  {saving ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <Text style={styles.saveBtnText}>
+                      {editingDept ? 'تحديث' : 'حفظ'}
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
             </View>
           </ScrollView>
         ) : (
-          <>
-            {canManageDepts && (
-              <TouchableOpacity
-                style={styles.addButton}
-                onPress={() => setShowForm(true)}
-              >
-                <Ionicons name="add-circle" size={24} color="#fff" />
-                <Text style={styles.addButtonText}>إضافة قسم جديد</Text>
-              </TouchableOpacity>
-            )}
+          // ====== عرض القائمة ======
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1 }]} showsVerticalScrollIndicator={true}>
+            {/* رأس الصفحة */}
+            <View dataSet={{ responsive: "page-header" }} style={styles.pageHeader}>
+              <View style={styles.pageHeaderRight}>
+                <Text dataSet={{ responsive: "page-title" }} style={styles.pageTitle}>إدارة الأقسام</Text>
+                <View style={styles.breadcrumb}>
+                  <TouchableOpacity onPress={() => router.replace('/')}>
+                    <Text style={styles.breadcrumbLink}>الرئيسية</Text>
+                  </TouchableOpacity>
+                  <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+                  <Text style={styles.breadcrumbCurrent}>الأقسام</Text>
+                </View>
+              </View>
 
-            {/* فلتر حسب الكلية */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}>
-              {faculties.map(f => (
+              <View dataSet={{ responsive: "page-header-actions" }} style={styles.pageHeaderActions}>
+                {canManageDepts && (
+                  <TouchableOpacity
+                    style={[styles.headerBtn, styles.btnPrimary]}
+                    onPress={() => { resetForm(); setEditingDept(null); setShowForm(true); }}
+                    data-testid="add-dept-btn"
+                  >
+                    <Ionicons name="add" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>إضافة قسم</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
-                  key={f.id}
-                  style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: filterFacultyId === f.id ? '#1a237e' : '#e8eaf6' }}
-                  onPress={() => { setFilterFacultyId(prev => prev === f.id ? '' : f.id); setCurrentPage(1); }}
+                  style={[styles.headerBtn, styles.btnGhost]}
+                  onPress={() => fetchData()}
                 >
-                  <Text style={{ fontSize: 13, fontWeight: '600', color: filterFacultyId === f.id ? '#fff' : '#1a237e' }}>{f.name}</Text>
+                  <Ionicons name="refresh" size={16} color="#1a2540" />
+                  <Text style={styles.btnGhostText}>تحديث</Text>
                 </TouchableOpacity>
-              ))}
+              </View>
             </View>
 
-            {!filterFacultyId ? (
-              <View style={styles.emptyContainer}>
-                <Ionicons name="filter-outline" size={56} color="#bbb" />
-                <Text style={styles.emptyText}>اختر كلية لعرض الأقسام</Text>
+            {/* بطاقات الإحصائيات */}
+            <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#e91e63' }]}><Ionicons name="business" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>إجمالي الأقسام</Text>
+                  <Text style={styles.statValue}>{departments.length}</Text>
+                  <Text style={styles.statSubLabel}>قسم</Text>
+                </View>
               </View>
-            ) : (() => {
-              const filtered = departments.filter(d => d.faculty_id === filterFacultyId);
-              const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-              const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
-              return (
-                <View style={{ flex: 1 }}>
-                  <Text style={{ paddingHorizontal: 16, fontSize: 12, color: '#888', marginBottom: 4 }}>{filtered.length} قسم</Text>
-                  <FlatList
-                    data={paged}
-                    renderItem={renderDepartment}
-                    keyExtractor={(item) => item.id}
-                    contentContainerStyle={styles.listContent}
-                    ListEmptyComponent={
-                      <View style={styles.emptyContainer}>
-                        <Ionicons name="business-outline" size={64} color="#ccc" />
-                        <Text style={styles.emptyText}>لا توجد أقسام</Text>
-                      </View>
-                    }
-                  />
-                  {totalPages > 1 && (
-                    <View style={{ flexDirection: 'row', justifyContent: 'center', alignItems: 'center', paddingVertical: 12, gap: 16, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' }}>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#29b6f6' }]}><Ionicons name="eye" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>المعروض حالياً</Text>
+                  <Text style={styles.statValue}>{filtered.length}</Text>
+                  <Text style={styles.statSubLabel}>من {departments.length} قسم</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#1565c0' }]}><Ionicons name="people" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>إجمالي الطلاب</Text>
+                  <Text style={styles.statValue}>{totalStudents.toLocaleString('en-US')}</Text>
+                  <Text style={styles.statSubLabel}>طالب</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#4caf50' }]}><Ionicons name="book" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>إجمالي المقررات</Text>
+                  <Text style={styles.statValue}>{totalCourses.toLocaleString('en-US')}</Text>
+                  <Text style={styles.statSubLabel}>مقرر</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* بطاقة الفلاتر */}
+            <View style={styles.filterCard}>
+              <View dataSet={{ responsive: "filter-row" }} style={styles.filterRow}>
+                <View style={styles.filterField}>
+                  <Text style={styles.filterLbl}>البحث</Text>
+                  <View style={styles.searchBox}>
+                    <Ionicons name="search" size={16} color="#8a95a8" />
+                    <TextInput
+                      style={styles.searchBoxInput}
+                      placeholder="ابحث بالاسم أو الرمز أو الكلية..."
+                      value={searchQuery}
+                      onChangeText={(t) => { setSearchQuery(t); setCurrentPage(1); }}
+                      placeholderTextColor="#a8b1c2"
+                      data-testid="dept-search-input"
+                    />
+                  </View>
+                </View>
+                <View style={styles.filterField}>
+                  <Text style={styles.filterLbl}>الكلية</Text>
+                  <View style={styles.dropdown}>
+                    <Picker
+                      selectedValue={filterFacultyId}
+                      onValueChange={(v) => { setFilterFacultyId(v); setCurrentPage(1); }}
+                      style={styles.dropdownInner}
+                    >
+                      <Picker.Item label="كل الكليات" value="" />
+                      {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                    </Picker>
+                  </View>
+                </View>
+                <View style={styles.filterBtns}>
+                  <TouchableOpacity
+                    style={styles.resetBtn}
+                    onPress={() => { setFilterFacultyId(''); setSearchQuery(''); setCurrentPage(1); }}
+                    disabled={!filterFacultyId && !searchQuery}
+                  >
+                    <Ionicons name="refresh" size={13} color={(filterFacultyId || searchQuery) ? '#2962ff' : '#a8b1c2'} />
+                    <Text style={[styles.resetBtnText, !(filterFacultyId || searchQuery) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+
+            {/* بطاقة الجدول */}
+            <View style={styles.tableCard}>
+              <View style={styles.tableCardHeader}>
+                <Text style={styles.tableCardTitle}>قائمة الأقسام</Text>
+                <Text style={styles.tableCardCount}>
+                  عرض <Text style={styles.tableCardCountAccent}>{filtered.length}</Text> من <Text style={styles.tableCardCountAccent}>{departments.length}</Text> قسم
+                </Text>
+              </View>
+
+              <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
+                <View style={[styles.cCol1, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
+                <View style={[styles.cCol2, styles.cellPad]}><Text style={styles.thText}>الكلية</Text></View>
+                <View style={[styles.cCol3, styles.cellPad]}><Text style={styles.thText}>الطلاب</Text></View>
+                <View style={[styles.cCol4, styles.cellPad]}><Text style={styles.thText}>المقررات</Text></View>
+                <View style={[styles.cCol5, styles.cellPad]}><Text style={styles.thText}>العمليات</Text></View>
+              </View>
+
+              {paged.length === 0 ? (
+                <View style={styles.tableEmpty}>
+                  <Ionicons name="business-outline" size={48} color="#cfd6e1" />
+                  <Text style={styles.tableEmptyText}>
+                    {searchQuery || filterFacultyId ? 'لا توجد نتائج مطابقة' : 'لا توجد أقسام بعد'}
+                  </Text>
+                  {canManageDepts && !searchQuery && !filterFacultyId && (
+                    <TouchableOpacity
+                      style={[styles.headerBtn, styles.btnPrimary, { marginTop: 10 }]}
+                      onPress={() => { resetForm(); setEditingDept(null); setShowForm(true); }}
+                    >
+                      <Ionicons name="add" size={16} color="#fff" />
+                      <Text style={styles.btnPrimaryText}>إضافة أول قسم</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ) : (
+                <View>
+                  {paged.map((item, index) => (
+                    <View key={item.id} dataSet={{ responsive: "table-row" }} style={[styles.tRow, index % 2 === 1 && styles.tRowAlt]}>
+                      {/* القسم */}
                       <TouchableOpacity
-                        style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage <= 1 ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                        style={[styles.cCol1, styles.cellPad]}
+                        onPress={() => goToDetails(item.id)}
+                        data-testid={`dept-row-${item.id}`}
+                      >
+                        <View style={styles.deptAvatar}>
+                          <Ionicons name="business" size={16} color="#e91e63" />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={styles.tName} numberOfLines={1}>{item.name}</Text>
+                          <Text style={styles.tSubName}>{item.code}</Text>
+                        </View>
+                      </TouchableOpacity>
+
+                      {/* الكلية */}
+                      <View style={[styles.cCol2, styles.cellPad]}>
+                        {item.faculty_name ? (
+                          <View style={styles.facultyChip}>
+                            <Ionicons name="school" size={11} color="#9c27b0" />
+                            <Text style={styles.facultyChipText} numberOfLines={1}>{item.faculty_name}</Text>
+                          </View>
+                        ) : (
+                          <Text style={styles.tMutedCell}>—</Text>
+                        )}
+                      </View>
+
+                      {/* الطلاب */}
+                      <View style={[styles.cCol3, styles.cellPad]}>
+                        <View style={[styles.statChip, { backgroundColor: '#e7f0fe' }]}>
+                          <Ionicons name="people" size={11} color="#1565c0" />
+                          <Text style={[styles.statChipText, { color: '#1565c0' }]}>{item.students_count ?? 0}</Text>
+                        </View>
+                      </View>
+
+                      {/* المقررات */}
+                      <View style={[styles.cCol4, styles.cellPad]}>
+                        <View style={[styles.statChip, { backgroundColor: '#e8f5e9' }]}>
+                          <Ionicons name="book" size={11} color="#2e7d32" />
+                          <Text style={[styles.statChipText, { color: '#2e7d32' }]}>{item.courses_count ?? 0}</Text>
+                        </View>
+                      </View>
+
+                      {/* العمليات */}
+                      <View style={[styles.cCol5, styles.cellPad, { flexDirection: 'row-reverse', gap: 6 }]}>
+                        <TouchableOpacity
+                          style={styles.actionIconBtn}
+                          onPress={() => goToDetails(item.id)}
+                          accessibilityLabel="عرض التفاصيل"
+                          data-testid={`view-dept-${item.id}`}
+                        >
+                          <Ionicons name="eye-outline" size={16} color="#2962ff" />
+                        </TouchableOpacity>
+                        {canManageDepts && (
+                          <>
+                            <TouchableOpacity
+                              style={[styles.actionIconBtn, { backgroundColor: '#fff3e0', borderColor: '#ffe0b2' }]}
+                              onPress={() => handleEdit(item)}
+                              accessibilityLabel="تعديل"
+                              data-testid={`edit-dept-${item.id}`}
+                            >
+                              <Ionicons name="pencil-outline" size={16} color="#ff9800" />
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                              style={[styles.actionIconBtn, { backgroundColor: '#ffebee', borderColor: '#ffcdd2' }]}
+                              onPress={() => handleDelete(item.id, item.name)}
+                              accessibilityLabel="حذف"
+                              data-testid={`delete-dept-${item.id}`}
+                            >
+                              <Ionicons name="trash-outline" size={16} color="#f44336" />
+                            </TouchableOpacity>
+                          </>
+                        )}
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              )}
+
+              {/* تذييل الجدول مع pagination */}
+              {filtered.length > 0 && (
+                <View dataSet={{ responsive: "table-footer" }} style={styles.tableFooter}>
+                  <View style={styles.perPageWrap}>
+                    <Text style={styles.perPageLbl}>عرض في الصفحة</Text>
+                    <View style={styles.perPageBox}>
+                      <Picker
+                        selectedValue={String(perPage)}
+                        onValueChange={(v) => { setPerPage(parseInt(v) || 10); setCurrentPage(1); }}
+                        style={styles.perPagePicker}
+                      >
+                        {[10, 25, 50, 100].map(n => <Picker.Item key={n} label={String(n)} value={String(n)} />)}
+                      </Picker>
+                    </View>
+                  </View>
+                  {totalPages > 1 && (
+                    <View style={styles.pagerWrap}>
+                      <TouchableOpacity
+                        style={[styles.pagerNavBtn, currentPage <= 1 && styles.pagerNavBtnDisabled]}
                         onPress={() => setCurrentPage(p => Math.max(1, p - 1))}
                         disabled={currentPage <= 1}
                       >
-                        <Ionicons name="chevron-forward" size={20} color={currentPage <= 1 ? '#ccc' : '#1565c0'} />
+                        <Ionicons name="chevron-forward" size={14} color={currentPage <= 1 ? '#c0c8d4' : '#1a2540'} />
+                        <Text style={[styles.pagerNavText, currentPage <= 1 && { color: '#c0c8d4' }]}>السابق</Text>
                       </TouchableOpacity>
-                      <Text style={{ fontSize: 14, fontWeight: '600', color: '#333' }}>{currentPage} / {totalPages}</Text>
+                      {(() => {
+                        const pages: (number | 'dots')[] = [];
+                        pages.push(1);
+                        if (currentPage > 4) pages.push('dots');
+                        const start = Math.max(2, currentPage - 1);
+                        const end = Math.min(totalPages - 1, currentPage + 1);
+                        for (let i = start; i <= end; i++) pages.push(i);
+                        if (currentPage < totalPages - 3) pages.push('dots');
+                        if (totalPages > 1) pages.push(totalPages);
+                        return pages.map((p, idx) => p === 'dots' ? (
+                          <Text key={`d-${idx}`} style={styles.pagerDots}>...</Text>
+                        ) : (
+                          <TouchableOpacity
+                            key={p}
+                            style={[styles.pagerBtn, currentPage === p && styles.pagerBtnActive]}
+                            onPress={() => setCurrentPage(p as number)}
+                          >
+                            <Text style={[styles.pagerBtnText, currentPage === p && styles.pagerBtnTextActive]}>{p}</Text>
+                          </TouchableOpacity>
+                        ));
+                      })()}
                       <TouchableOpacity
-                        style={{ width: 40, height: 40, borderRadius: 20, backgroundColor: currentPage >= totalPages ? '#f5f5f5' : '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}
+                        style={[styles.pagerNavBtn, currentPage >= totalPages && styles.pagerNavBtnDisabled]}
                         onPress={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
                         disabled={currentPage >= totalPages}
                       >
-                        <Ionicons name="chevron-back" size={20} color={currentPage >= totalPages ? '#ccc' : '#1565c0'} />
+                        <Text style={[styles.pagerNavText, currentPage >= totalPages && { color: '#c0c8d4' }]}>التالي</Text>
+                        <Ionicons name="chevron-back" size={14} color={currentPage >= totalPages ? '#c0c8d4' : '#1a2540'} />
                       </TouchableOpacity>
                     </View>
                   )}
                 </View>
-              );
-            })()}
-          </>
+              )}
+            </View>
+          </ScrollView>
         )}
       </KeyboardAvoidingView>
-      
-      {renderDetailsModal()}
 
       {/* نافذة تأكيد الحذف */}
       <Modal visible={deleteTarget !== null} transparent animationType="fade">
-        <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 400 }}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.deleteModalCard}>
             <Ionicons name="warning" size={40} color="#f44336" style={{ alignSelf: 'center', marginBottom: 12 }} />
-            <Text style={{ fontSize: 18, fontWeight: '700', color: '#333', textAlign: 'center', marginBottom: 8 }}>
-              حذف القسم
-            </Text>
-            <Text style={{ fontSize: 15, color: '#666', textAlign: 'center', marginBottom: 16 }}>
+            <Text style={styles.deleteModalTitle}>حذف القسم</Text>
+            <Text style={styles.deleteModalSub}>
               هل أنت متأكد من حذف قسم "{deleteTarget?.name}"؟
             </Text>
-            <Text style={{ fontSize: 13, color: '#999', textAlign: 'center', marginBottom: 16 }}>
-              لا يمكن التراجع عن هذا الإجراء
-            </Text>
-            
+            <Text style={styles.deleteModalWarn}>لا يمكن التراجع عن هذا الإجراء</Text>
+
             {deleteError && (
-              <View style={{ backgroundColor: '#ffebee', padding: 12, borderRadius: 8, marginBottom: 16 }}>
-                <Text style={{ fontSize: 13, color: '#c62828', textAlign: 'center' }}>{deleteError}</Text>
+              <View style={styles.deleteErrorBox}>
+                <Text style={styles.deleteErrorText}>{deleteError}</Text>
               </View>
             )}
-            
+
             <View style={{ flexDirection: 'row', gap: 10 }}>
               <TouchableOpacity
-                style={{ flex: 1, backgroundColor: '#f5f5f5', padding: 14, borderRadius: 10, alignItems: 'center' }}
+                style={styles.deleteModalCancel}
                 onPress={() => { setDeleteTarget(null); setDeleteError(null); }}
               >
-                <Text style={{ color: '#666', fontWeight: '600' }}>إلغاء</Text>
+                <Text style={styles.deleteModalCancelText}>إلغاء</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={{ flex: 1, backgroundColor: '#f44336', padding: 14, borderRadius: 10, alignItems: 'center', opacity: deleting ? 0.6 : 1 }}
+                style={[styles.deleteModalConfirm, deleting && { opacity: 0.6 }]}
                 onPress={confirmDelete}
                 disabled={deleting}
+                data-testid="confirm-delete-btn"
               >
                 {deleting ? (
                   <ActivityIndicator color="#fff" size="small" />
                 ) : (
-                  <Text style={{ color: '#fff', fontWeight: '700' }}>حذف</Text>
+                  <Text style={styles.deleteModalConfirmText}>حذف</Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -694,321 +715,125 @@ export default function AddDepartmentScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  addButton: {
-    flexDirection: 'row',
-    backgroundColor: '#e91e63',
-    margin: 16,
-    padding: 16,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  addButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  // أنماط اختيار الكلية
-  facultySelector: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginBottom: 16,
-  },
-  facultyOption: {
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-  },
-  facultyOptionActive: {
-    backgroundColor: '#e91e63',
-    borderColor: '#e91e63',
-  },
-  facultyOptionText: {
-    fontSize: 14,
-    color: '#333',
-  },
-  facultyOptionTextActive: {
-    color: '#fff',
-    fontWeight: '600',
-  },
-  noDataText: {
-    color: '#999',
-    fontStyle: 'italic',
-    padding: 16,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 16,
-  },
-  itemCard: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  itemIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#fce4ec',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  itemInfo: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  itemName: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#333',
-  },
-  itemDetail: {
-    fontSize: 14,
-    color: '#e91e63',
-    marginTop: 2,
-  },
-  statsRow: {
-    flexDirection: 'row',
-    marginTop: 8,
-    gap: 8,
-  },
-  statBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-    gap: 4,
-  },
-  statText: {
-    fontSize: 12,
-    color: '#666',
-  },
-  deleteBtn: {
-    padding: 8,
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  editBtn: {
-    padding: 8,
-    backgroundColor: '#fff3e0',
-    borderRadius: 8,
-  },
-  emptyContainer: {
-    alignItems: 'center',
-    paddingTop: 60,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-    marginTop: 16,
-  },
-  formContainer: {
-    padding: 16,
-  },
-  formTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 20,
-    textAlign: 'center',
-  },
-  label: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 12,
-  },
-  input: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 16,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    textAlign: 'right',
-  },
-  textArea: {
-    height: 100,
-    textAlignVertical: 'top',
-  },
-  formButtons: {
-    flexDirection: 'row',
-    marginTop: 24,
-    marginBottom: 40,
-  },
-  btn: {
-    flex: 1,
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  cancelBtn: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
-    marginRight: 8,
-  },
-  cancelBtnText: {
-    color: '#666',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  saveBtn: {
-    backgroundColor: '#4caf50',
-    marginLeft: 8,
-  },
-  saveBtnText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  // Modal Styles
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'flex-end',
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    maxHeight: '85%',
-    minHeight: '60%',
-  },
-  loadingContainer: {
-    padding: 40,
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 12,
-    color: '#666',
-  },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  summaryRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    padding: 20,
-    backgroundColor: '#fce4ec',
-  },
-  summaryItem: {
-    alignItems: 'center',
-  },
-  summaryNumber: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#e91e63',
-  },
-  summaryLabel: {
-    fontSize: 14,
-    color: '#666',
-    marginTop: 4,
-  },
-  tabsRow: {
-    flexDirection: 'row',
-    padding: 12,
-    gap: 8,
-  },
-  tab: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 10,
-    borderRadius: 10,
-    backgroundColor: '#f5f5f5',
-    gap: 6,
-  },
-  tabActive: {
-    backgroundColor: '#e91e63',
-  },
-  tabText: {
-    fontSize: 14,
-    color: '#666',
-    fontWeight: '500',
-  },
-  tabTextActive: {
-    color: '#fff',
-  },
-  modalBody: {
-    flex: 1,
-    padding: 12,
-  },
-  listItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    padding: 12,
-    borderRadius: 10,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: '#f0f0f0',
-  },
-  listItemIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: '#e3f2fd',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  listItemInfo: {
-    flex: 1,
-    marginLeft: 12,
-  },
-  listItemName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#333',
-  },
-  listItemDetail: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  listItemTeacher: {
-    fontSize: 12,
-    color: '#e91e63',
-    marginTop: 4,
-  },
-  emptyListText: {
-    textAlign: 'center',
-    color: '#999',
-    padding: 20,
-    fontSize: 14,
-  },
+  container: { flex: 1, backgroundColor: '#f4f6fb' },
+
+  // التخطيط
+  pageScroll: { padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center' },
+
+  // رأس الصفحة
+  pageHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
+  pageHeaderRight: { alignItems: 'flex-end' },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  breadcrumbLink: { fontSize: 13, color: '#2962ff', fontWeight: '500' },
+  breadcrumbCurrent: { fontSize: 13, color: '#8a95a8', fontWeight: '500' },
+  pageHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
+  btnPrimary: { backgroundColor: '#e91e63' },
+  btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+
+  // البطاقات الإحصائية
+  statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },
+  statCard: { flex: 1, minWidth: 200, backgroundColor: '#fff', borderRadius: 14, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  statIconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  statTextCol: { flex: 1, alignItems: 'flex-end' },
+  statLabel: { fontSize: 13, color: '#8a95a8', fontWeight: '500', marginBottom: 4 },
+  statValue: { fontSize: 22, color: '#1a2540', fontWeight: '700', marginBottom: 2 },
+  statSubLabel: { fontSize: 11, color: '#a8b1c2' },
+
+  // الفلاتر
+  filterCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18, marginBottom: 18, borderWidth: 1, borderColor: '#eef1f6' },
+  filterRow: { flexDirection: 'row-reverse', alignItems: 'flex-end', gap: 12, flexWrap: 'wrap' },
+  filterField: { flex: 1, minWidth: 140 },
+  filterLbl: { fontSize: 12, color: '#5b6678', fontWeight: '500', marginBottom: 5, textAlign: 'right' },
+  searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e3e7ee', height: 40 },
+  searchBoxInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', outlineStyle: 'none' as any },
+  dropdown: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#e3e7ee', height: 40, overflow: 'hidden', justifyContent: 'center' },
+  dropdownInner: { height: 40, fontSize: 13, color: '#1a2540', textAlign: 'right', backgroundColor: 'transparent', borderWidth: 0 },
+  filterBtns: { flexDirection: 'row-reverse', alignItems: 'center', gap: 14 },
+  resetBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingVertical: 9, paddingHorizontal: 4 },
+  resetBtnText: { fontSize: 13, color: '#2962ff', fontWeight: '600' },
+
+  // الجدول
+  tableCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  tableCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
+  tableCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
+  tableCardCount: { fontSize: 12, color: '#5b6678' },
+  tableCardCountAccent: { color: '#e91e63', fontWeight: '700' },
+  tableHeaderRow: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fafbfd', borderBottomWidth: 1, borderBottomColor: '#eef1f6', minHeight: 44 },
+  thText: { fontSize: 12, fontWeight: '600', color: '#5b6678', textAlign: 'right' },
+  tRow: { flexDirection: 'row-reverse', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f3f5f9', minHeight: 60 },
+  tRowAlt: { backgroundColor: '#fcfcfd' },
+  cellPad: { paddingVertical: 12, paddingHorizontal: 14 },
+  cCol1: { flex: 2.5, flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  cCol2: { flex: 2 },
+  cCol3: { flex: 1 },
+  cCol4: { flex: 1 },
+  cCol5: { flex: 1.2, alignItems: 'flex-start' },
+  deptAvatar: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#fce4ec', alignItems: 'center', justifyContent: 'center' },
+  tName: { fontSize: 13, fontWeight: '600', color: '#1a2540', textAlign: 'right' },
+  tSubName: { fontSize: 11, color: '#8a95a8', textAlign: 'right', marginTop: 2 },
+  tMutedCell: { fontSize: 13, color: '#a8b1c2', textAlign: 'right' },
+  facultyChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, backgroundColor: '#f3e5f5', alignSelf: 'flex-end' },
+  facultyChipText: { fontSize: 12, color: '#9c27b0', fontWeight: '600' },
+  statChip: { alignSelf: 'flex-end', flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  statChipText: { fontSize: 12, fontWeight: '700' },
+  actionIconBtn: { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#f7f9fc' },
+  tableEmpty: { paddingVertical: 60, alignItems: 'center', gap: 12 },
+  tableEmptyText: { fontSize: 14, color: '#8a95a8' },
+  tableFooter: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderTopWidth: 1, borderTopColor: '#eef1f6', flexWrap: 'wrap', gap: 12 },
+  perPageWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  perPageLbl: { fontSize: 12, color: '#5b6678' },
+  perPageBox: { width: 70, height: 34, borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 6, justifyContent: 'center', overflow: 'hidden' },
+  perPagePicker: { height: 34, fontSize: 12, borderWidth: 0, backgroundColor: 'transparent' },
+  pagerWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  pagerBtn: { minWidth: 32, height: 32, borderRadius: 6, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  pagerBtnActive: { backgroundColor: '#e91e63', borderColor: '#e91e63' },
+  pagerBtnText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+  pagerBtnTextActive: { color: '#fff' },
+  pagerDots: { color: '#8a95a8', paddingHorizontal: 4 },
+  pagerNavBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 12, height: 32, borderRadius: 6, borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  pagerNavBtnDisabled: { backgroundColor: '#fafbfd' },
+  pagerNavText: { fontSize: 12, color: '#1a2540', fontWeight: '600' },
+
+  // نموذج الإضافة/التعديل
+  formCard: { backgroundColor: '#fff', borderRadius: 14, padding: 20, borderWidth: 1, borderColor: '#eef1f6' },
+  formHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
+  formTitle: { fontSize: 18, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
+  formCloseBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f4f6fb' },
+  label: { fontSize: 13, fontWeight: '600', color: '#1a2540', marginBottom: 6, marginTop: 12, textAlign: 'right' },
+  input: { backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 14, borderWidth: 1, borderColor: '#e3e7ee', textAlign: 'right', color: '#1a2540' },
+  textArea: { height: 90, textAlignVertical: 'top' },
+  facultySelector: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+  facultyOption: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  facultyOptionActive: { backgroundColor: '#e91e63', borderColor: '#e91e63' },
+  facultyOptionText: { fontSize: 13, color: '#1a2540' },
+  facultyOptionTextActive: { color: '#fff', fontWeight: '600' },
+  noDataText: { color: '#8a95a8', fontStyle: 'italic', padding: 12 },
+  programChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
+  programChip: { paddingVertical: 6, paddingHorizontal: 12, borderRadius: 16, borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  programChipActive: { borderColor: '#1565c0', backgroundColor: '#e3f2fd' },
+  programChipText: { color: '#5b6678', fontSize: 12 },
+  programChipTextActive: { color: '#1565c0', fontWeight: '700' },
+  formButtons: { flexDirection: 'row', marginTop: 24, gap: 12 },
+  btn: { flex: 1, padding: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  cancelBtn: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  cancelBtnText: { color: '#5b6678', fontSize: 14, fontWeight: '600' },
+  saveBtn: { backgroundColor: '#e91e63' },
+  saveBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+
+  // نافذة الحذف
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(20,30,55,0.45)', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  deleteModalCard: { backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '100%', maxWidth: 400 },
+  deleteModalTitle: { fontSize: 18, fontWeight: '700', color: '#1a2540', textAlign: 'center', marginBottom: 8 },
+  deleteModalSub: { fontSize: 14, color: '#5b6678', textAlign: 'center', marginBottom: 8 },
+  deleteModalWarn: { fontSize: 12, color: '#a8b1c2', textAlign: 'center', marginBottom: 16 },
+  deleteErrorBox: { backgroundColor: '#ffebee', padding: 12, borderRadius: 8, marginBottom: 16 },
+  deleteErrorText: { fontSize: 13, color: '#c62828', textAlign: 'center' },
+  deleteModalCancel: { flex: 1, backgroundColor: '#f4f6fb', padding: 14, borderRadius: 10, alignItems: 'center' },
+  deleteModalCancelText: { color: '#5b6678', fontWeight: '600' },
+  deleteModalConfirm: { flex: 1, backgroundColor: '#f44336', padding: 14, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  deleteModalConfirmText: { color: '#fff', fontWeight: '700' },
 });

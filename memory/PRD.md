@@ -13,6 +13,18 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-17 **إعادة تصميم `/add-department` بالنمط الحديث + توحيد روابط الأقسام**:
+  - **المشكلة:** صفحة إدارة الأقسام (`/add-department`) كانت تستخدم النمط القديم (تبويبات modal للتفاصيل + قائمة بسيطة)، بينما البحث السريع يربط إلى النمط الجديد (`/department-details`). كان هناك تناقض في تجربة المستخدم.
+  - **الإصلاح:**
+    - إعادة كتابة `/app/frontend/app/add-department.tsx` كاملاً بالنمط الحديث: SafeAreaView + ScrollView (flex:1 + flexGrow:1) + Header مع breadcrumb + 4 stat cards + filter card + table card مع pagination.
+    - النقر على أي قسم في الجدول (الاسم أو زر العين) يفتح `/department-details?departmentId={id}` بدلاً من modal قديم.
+    - إزالة modal التفاصيل القديم نهائياً.
+    - تحديث الفلاتر: dropdown للكلية + بحث نصي + reset.
+    - تصحيح breadcrumb في `/department-details.tsx`: كان يربط إلى `/departments` (مسار غير موجود) → الآن يربط إلى `/add-department` (المسار الصحيح).
+  - **النتيجة المُختبَرة:**
+    - `/add-department` تعرض 4 أقسام في جدول حديث مع 4 بطاقات إحصائية (4 أقسام، 4 معروض، 92 طالب، 12 مقرر).
+    - النقر على breadcrumb "الأقسام" من `/department-details` يعود بنجاح إلى `/add-department` الجديدة.
+    - زر "إضافة قسم" يفتح نموذج بتصميم متّسق مع باقي الصفحات.
 - 2026-06-17 **إرجاع صفحة المقررات إلى `(tabs)/courses.tsx` مع إصلاح التمرير**:
   - **الطلب:** المستخدم طلب إعادة محتوى صفحة المقررات الكامل إلى ملف `(tabs)/courses.tsx` بدلاً من إعادة التوجيه إلى `/manage-courses`، وإصلاح مشكلة التمرير بنفس النمط المستخدم في الشاشات العاملة (SafeAreaView flex:1 → ScrollView flex:1 → contentContainerStyle flexGrow:1).
   - **الإصلاح:**

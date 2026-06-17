@@ -148,7 +148,7 @@ export default function DepartmentDetailsScreen() {
                 <Text style={styles.breadcrumbLink}>الرئيسية</Text>
               </TouchableOpacity>
               <Ionicons name="chevron-back" size={12} color="#8a95a8" />
-              <TouchableOpacity onPress={() => router.replace('/departments' as any)}>
+              <TouchableOpacity onPress={() => router.replace('/add-department' as any)}>
                 <Text style={styles.breadcrumbLink}>الأقسام</Text>
               </TouchableOpacity>
               <Ionicons name="chevron-back" size={12} color="#8a95a8" />
