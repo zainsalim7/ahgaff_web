@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter, useLocalSearchParams } from 'expo-router';
 import api, { coursesAPI } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
+import { CourseTabBar } from '../src/components/CourseTabBar';
 
 interface Topic {
   id?: string;
@@ -387,35 +388,40 @@ export default function ManageStudyPlanScreen() {
     <>
       <Stack.Screen options={{ title: 'إدارة الخطة الدراسية', headerBackTitle: 'رجوع' }} />
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        <ScrollView contentContainerStyle={{ paddingBottom: 80 }}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Ionicons name="book" size={28} color="#fff" />
-            <Text style={styles.headerTitle} testID="study-plan-course-name">
-              {course?.name || courseName || 'الخطة الدراسية'}
-            </Text>
-            {course?.code && <Text style={styles.headerSub}>{course.code}</Text>}
-            {/* Approval badge */}
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 80, maxWidth: 1440, width: '100%', alignSelf: 'center', flexGrow: 1 }}>
+          {/* رأس الصفحة الموحّد (تبويبات + تعديل/حذف) */}
+          {courseId && (
+            <CourseTabBar
+              courseId={courseId as string}
+              course={course}
+              activeTab="plan"
+              onCourseUpdated={fetchCourse}
+            />
+          )}
+
+          {/* شريط إحصائيات الخطة */}
+          <View style={styles.planStatsRow}>
+            <View style={styles.planStatBox}>
+              <Ionicons name="calendar-outline" size={18} color="#1565c0" />
+              <Text style={styles.planStatValue}>{plan.weeks.length}</Text>
+              <Text style={styles.planStatLabel}>أسبوع</Text>
+            </View>
+            <View style={styles.planStatBox}>
+              <Ionicons name="document-text-outline" size={18} color="#6a1b9a" />
+              <Text style={styles.planStatValue}>{totalTopics}</Text>
+              <Text style={styles.planStatLabel}>موضوع</Text>
+            </View>
+            <View style={styles.planStatBox}>
+              <Ionicons name="checkmark-circle-outline" size={18} color="#2e7d32" />
+              <Text style={styles.planStatValue}>{plan.completion_percent ?? 0}%</Text>
+              <Text style={styles.planStatLabel}>الإنجاز</Text>
+            </View>
             {plan.approved && (
-              <View style={styles.approvedBadge} testID="study-plan-approved-badge">
-                <Ionicons name="shield-checkmark" size={14} color="#fff" />
-                <Text style={styles.approvedBadgeText}>الخطة معتمدة</Text>
+              <View style={[styles.planStatBox, { backgroundColor: '#e8f5e9', borderColor: '#a5d6a7' }]} testID="study-plan-approved-badge">
+                <Ionicons name="shield-checkmark" size={18} color="#2e7d32" />
+                <Text style={[styles.planStatValue, { color: '#2e7d32', fontSize: 13 }]}>معتمدة</Text>
               </View>
             )}
-            <View style={styles.statsRow}>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>{plan.weeks.length}</Text>
-                <Text style={styles.statLabel}>أسبوع</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>{totalTopics}</Text>
-                <Text style={styles.statLabel}>موضوع</Text>
-              </View>
-              <View style={styles.statBox}>
-                <Text style={styles.statValue}>{plan.completion_percent ?? 0}%</Text>
-                <Text style={styles.statLabel}>الإنجاز</Text>
-              </View>
-            </View>
           </View>
 
           {/* Pending banner (admin sees pending review actions; teacher sees waiting) */}
@@ -903,6 +909,10 @@ export default function ManageStudyPlanScreen() {
 }
 
 const styles = StyleSheet.create({
+  planStatsRow: { flexDirection: 'row-reverse', gap: 10, marginBottom: 14, flexWrap: 'wrap' },
+  planStatBox: { flex: 1, minWidth: 110, backgroundColor: '#fff', borderRadius: 12, padding: 12, alignItems: 'center', gap: 4, borderWidth: 1, borderColor: '#eef1f6' },
+  planStatValue: { fontSize: 18, fontWeight: '800', color: '#1a2540' },
+  planStatLabel: { fontSize: 11, color: '#5b6678', fontWeight: '600' },
   container: { flex: 1, backgroundColor: '#f5f7fb' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   loadingText: { marginTop: 12, color: '#666', fontSize: 13 },

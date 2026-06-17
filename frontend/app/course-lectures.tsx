@@ -22,6 +22,7 @@ import api, { coursesAPI, lecturesAPI, settingsAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import AddLectureModal, { LectureFormData } from '../src/components/AddLectureModal';
 import { useAuthStore } from '../src/store/authStore';
+import { CourseTabBar } from '../src/components/CourseTabBar';
 import { PERMISSIONS } from '../src/contexts/AuthContext';
 import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR } from '../src/utils/dateUtils';
 import { goBack, goHome } from '../src/utils/navigation';
@@ -825,73 +826,38 @@ export default function CourseLecturesScreen() {
           </TouchableOpacity>
         )}
 
-        <ScrollView dataSet={{ responsiveScrollRoot: "true" }} style={{ flex: 1 }} contentContainerStyle={styles.pageScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1 }]} showsVerticalScrollIndicator={true}>
 
-          {/* بطاقة المقرر + الأزرار في الأعلى */}
-          <View dataSet={{ responsive: "course-header" }} style={styles.courseHeaderCard}>
-            <View style={styles.courseHeaderRight}>
-              <View style={styles.courseBookIcon}>
-                <Ionicons name="book" size={20} color="#2962ff" />
-              </View>
-              <View>
-                <Text style={styles.courseHeaderName}>{course?.name}</Text>
-                {course?.code ? <Text style={styles.courseHeaderCode}>رقم المقرر - {course.code}</Text> : null}
-                <View style={styles.courseHeaderChips}>
-                  {course?.teacher_name && (
-                    <View style={styles.courseChipNew}>
-                      <Ionicons name="person-outline" size={11} color="#5b6678" />
-                      <Text style={styles.courseChipText}>{course.teacher_name}</Text>
-                    </View>
-                  )}
-                  {course?.credit_hours && (
-                    <View style={styles.courseChipNew}>
-                      <Ionicons name="time-outline" size={11} color="#5b6678" />
-                      <Text style={styles.courseChipText}>{course.credit_hours} ساعات</Text>
-                    </View>
-                  )}
-                  {course?.department_name && (
-                    <View style={styles.courseChipNew}>
-                      <Ionicons name="business-outline" size={11} color="#5b6678" />
-                      <Text style={styles.courseChipText}>{course.department_name}</Text>
-                    </View>
-                  )}
-                  {course?.level && (
-                    <View style={styles.courseChipNew}>
-                      <Ionicons name="school-outline" size={11} color="#5b6678" />
-                      <Text style={styles.courseChipText}>المستوى {course.level}</Text>
-                    </View>
-                  )}
-                  {course?.students_count != null && (
-                    <View style={styles.courseChipNew}>
-                      <Ionicons name="people-outline" size={11} color="#5b6678" />
-                      <Text style={styles.courseChipText}>{course.students_count} طالب</Text>
-                    </View>
-                  )}
-                </View>
-              </View>
-            </View>
+          {/* رأس الصفحة الموحّد (breadcrumb + بطاقة المقرر + تبويبات + تعديل/حذف) */}
+          {courseId && (
+            <CourseTabBar
+              courseId={courseId as string}
+              course={course}
+              activeTab="lectures"
+              onCourseUpdated={() => fetchData(1, false)}
+              canManage={canManageLectures}
+            />
+          )}
 
-            <View style={styles.courseHeaderActions}>
-              {canManageLectures && (
-                <>
-                  <TouchableOpacity style={[styles.headerBtn, styles.btnAddGreen]} onPress={() => setShowAddModal(true)}>
-                    <Ionicons name="add" size={16} color="#fff" />
-                    <Text style={styles.btnPrimaryText}>إضافة محاضرة</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity style={[styles.headerBtn, styles.btnGeneratePurple]} onPress={openGenerateModal}>
-                    <Ionicons name="flash" size={16} color="#fff" />
-                    <Text style={styles.btnPrimaryText}>توليد تلقائي</Text>
-                  </TouchableOpacity>
-                  {lectures.length > 0 && (
-                    <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={toggleSelectionMode}>
-                      <Ionicons name={selectionMode ? 'close' : 'checkbox-outline'} size={16} color="#1a2540" />
-                      <Text style={styles.btnGhostText}>{selectionMode ? 'إلغاء التحديد' : 'تحديد متعدد'}</Text>
-                    </TouchableOpacity>
-                  )}
-                </>
+          {/* أزرار إجراءات المحاضرات */}
+          {canManageLectures && (
+            <View style={styles.lecturesActionsRow}>
+              <TouchableOpacity style={[styles.headerBtn, styles.btnAddGreen]} onPress={() => setShowAddModal(true)}>
+                <Ionicons name="add" size={16} color="#fff" />
+                <Text style={styles.btnPrimaryText}>إضافة محاضرة</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.headerBtn, styles.btnGeneratePurple]} onPress={openGenerateModal}>
+                <Ionicons name="flash" size={16} color="#fff" />
+                <Text style={styles.btnPrimaryText}>توليد تلقائي</Text>
+              </TouchableOpacity>
+              {lectures.length > 0 && (
+                <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={toggleSelectionMode}>
+                  <Ionicons name={selectionMode ? 'close' : 'checkbox-outline'} size={16} color="#1a2540" />
+                  <Text style={styles.btnGhostText}>{selectionMode ? 'إلغاء التحديد' : 'تحديد متعدد'}</Text>
+                </TouchableOpacity>
               )}
             </View>
-          </View>
+          )}
 
           {/* 4 بطاقات إحصائيات */}
           <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
@@ -1542,6 +1508,7 @@ export default function CourseLecturesScreen() {
 }
 
 const styles = StyleSheet.create({
+  lecturesActionsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
   container: {
     flex: 1,
     backgroundColor: '#f4f6fb',

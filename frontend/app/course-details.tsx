@@ -11,6 +11,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import api from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { CourseTabBar } from '../src/components/CourseTabBar';
 
 interface StudentItem {
   id: string;
@@ -98,117 +99,17 @@ export default function CourseDetailsScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Stack.Screen options={{ title: data.name, headerBackTitle: 'رجوع' }} />
       <ScrollView
-        dataSet={{ responsiveScrollRoot: 'true' }}
         style={{ flex: 1 }}
-        contentContainerStyle={styles.pageScroll}
+        contentContainerStyle={[styles.pageScroll, { flexGrow: 1 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); fetchData(); }} />}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
       >
-        {/* رأس الصفحة */}
-        <View dataSet={{ responsive: 'page-header' }} style={styles.pageHeader}>
-          <View style={styles.pageHeaderRight}>
-            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-              <Text dataSet={{ responsive: 'page-title' }} style={styles.pageTitle}>تفاصيل المقرر</Text>
-              {!!data.code && (
-                <View style={styles.codeBadge}>
-                  <Ionicons name="barcode" size={11} color="#2e7d32" />
-                  <Text style={styles.codeBadgeText}>{data.code}</Text>
-                </View>
-              )}
-              {!!data.semester_name && (
-                <View style={styles.semBadge}>
-                  <Ionicons name="calendar" size={11} color="#1565c0" />
-                  <Text style={styles.semBadgeText}>{data.semester_name}</Text>
-                </View>
-              )}
-            </View>
-            <View style={styles.breadcrumb}>
-              <TouchableOpacity onPress={() => router.replace('/')}>
-                <Text style={styles.breadcrumbLink}>الرئيسية</Text>
-              </TouchableOpacity>
-              <Ionicons name="chevron-back" size={12} color="#8a95a8" />
-              <TouchableOpacity onPress={() => router.replace('/(tabs)/courses' as any)}>
-                <Text style={styles.breadcrumbLink}>المقررات</Text>
-              </TouchableOpacity>
-              <Ionicons name="chevron-back" size={12} color="#8a95a8" />
-              <Text style={styles.breadcrumbCurrent}>{data.name}</Text>
-            </View>
-          </View>
-          <View dataSet={{ responsive: 'page-header-actions' }} style={styles.pageHeaderActions}>
-            <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={() => router.back()} testID="back-btn">
-              <Ionicons name="arrow-forward" size={16} color="#1a2540" />
-              <Text style={styles.btnGhostText}>رجوع</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.headerBtn, styles.btnPrimary]}
-              onPress={() => router.push({ pathname: '/course-lectures', params: { courseId: data.id, courseName: data.name } } as any)}
-              testID="open-lectures-btn"
-            >
-              <Ionicons name="list" size={16} color="#fff" />
-              <Text style={styles.btnPrimaryText}>محاضرات المقرر</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {/* بطاقة المقرر */}
-        <View style={styles.entityCard}>
-          <View style={styles.entityAvatar}>
-            <Ionicons name="book" size={24} color="#fff" />
-          </View>
-          <View style={{ flex: 1, alignItems: 'flex-end' }}>
-            <Text style={styles.entityName}>{data.name}</Text>
-            <View style={styles.entitySubRow}>
-              {data.teacher_name ? (
-                <TouchableOpacity
-                  style={styles.metaItem}
-                  onPress={() => data.teacher_id && router.push(`/teacher-courses?teacherId=${data.teacher_id}` as any)}
-                >
-                  <Ionicons name="person-outline" size={13} color="#5b6678" />
-                  <Text style={[styles.metaText, { color: '#2962ff', fontWeight: '600' }]}>{data.teacher_name}</Text>
-                </TouchableOpacity>
-              ) : null}
-              {data.department_name ? (
-                <>
-                  {data.teacher_name ? <View style={styles.dot} /> : null}
-                  <TouchableOpacity
-                    style={styles.metaItem}
-                    onPress={() => data.department_id && router.push(`/department-details?departmentId=${data.department_id}` as any)}
-                  >
-                    <Ionicons name="grid-outline" size={13} color="#5b6678" />
-                    <Text style={[styles.metaText, { color: '#2962ff', fontWeight: '600' }]}>{data.department_name}</Text>
-                  </TouchableOpacity>
-                </>
-              ) : null}
-            </View>
-            <View style={styles.entitySubRow}>
-              {data.level ? (
-                <View style={[styles.badge, { backgroundColor: '#e7f0fe' }]}>
-                  <Text style={[styles.badgeText, { color: '#1565c0' }]}>المستوى {data.level}</Text>
-                </View>
-              ) : null}
-              {!!data.section && (
-                <View style={[styles.badge, { backgroundColor: '#f3e5f5' }]}>
-                  <Text style={[styles.badgeText, { color: '#6a1b9a' }]}>شعبة {data.section}</Text>
-                </View>
-              )}
-              {data.credit_hours ? (
-                <View style={[styles.badge, { backgroundColor: '#fff3e0' }]}>
-                  <Ionicons name="time-outline" size={10} color="#e65100" />
-                  <Text style={[styles.badgeText, { color: '#e65100' }]}>{data.credit_hours} س معتمدة</Text>
-                </View>
-              ) : null}
-              {!!data.room && (
-                <View style={[styles.badge, { backgroundColor: '#e8f5e9' }]}>
-                  <Ionicons name="location-outline" size={10} color="#2e7d32" />
-                  <Text style={[styles.badgeText, { color: '#2e7d32' }]}>{data.room}</Text>
-                </View>
-              )}
-            </View>
-          </View>
-          <View style={styles.entityIconBg}>
-            <Ionicons name="book" size={32} color="#2e7d32" />
-          </View>
-        </View>
+        <CourseTabBar
+          courseId={data.id}
+          course={data}
+          activeTab="overview"
+          onCourseUpdated={fetchData}
+        />
 
         {/* شرائح إحصائية */}
         <View style={styles.compactStatsRow}>

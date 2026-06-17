@@ -13,6 +13,7 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-17 **توحيد صفحات المقرر في 4 تبويبات + تعديل/حذف**: إنشاء `<CourseTabBar>` كمكوّن مشترك (/src/components/CourseTabBar.tsx) يعرض في رأس course-details, course-lectures, course-students, manage-study-plan. يحوي: Breadcrumb + بطاقة معلومات المقرر + شريط تبويبات (نظرة عامة/المحاضرات/الطلاب/الخطة) + زرّا تعديل/حذف مع modals. النقر على تبويب يستدعي router.replace للمسار المقابل. النتيجة المختبرة: التبويبات الأربعة تعمل بسلاسة مع الحفاظ على كامل وظائف كل صفحة.
 - 2026-06-17 **إعادة تصميم `/schedule` و `/take-attendance` بالنمط الحديث**:
   - **`/schedule.tsx` (380 سطر):** Header + Breadcrumb + 4 stat cards (إجمالي/منعقدة/مجدولة/ملغاة) + Date picker card (مع semester chip + native date overlay) + active semester badge + List card مع timeline cards محسّنة (بطاقات محاضرات بألوان مميزة + status badge + meta chips + action buttons).
   - **`/take-attendance.tsx`:** أُجريت جراحة دقيقة: تم استبدال JSX الرندر والـ styles فقط مع الحفاظ على 100% من المنطق (offline cache, network monitoring, error handling, attendance status, lesson modal, PDF export, study plan integration, تبديل الحالة بنقرة، حفظ أوفلاين/أونلاين). التصميم الجديد: Header + Breadcrumb (الرئيسية ← الجدول ← اسم المقرر) + Course info card مع meta chips (تاريخ ميلادي/هجري/وقت/قاعة) + status bar ديناميكي + 4 stat cards + Action toolbar (QR + PDF) + List card للطلاب + Bottom action bar للحفظ + Error card حديث.

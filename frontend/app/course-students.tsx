@@ -19,6 +19,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { coursesAPI, studentsAPI, enrollmentAPI, lecturesAPI, attendanceAPI, API_URL } from '../src/services/api';
+import { CourseTabBar } from '../src/components/CourseTabBar';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { AddStudentForm, type StudentFormValues } from '../src/components/AddStudentForm';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
@@ -789,14 +790,15 @@ export default function CourseStudentsScreen() {
         }}
       />
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        {/* Course Info */}
-        <View style={styles.courseInfo}>
-          <Text style={styles.courseTitle}>{course?.name}</Text>
-          <Text style={styles.courseCode}>{course?.code}</Text>
-          <Text style={styles.studentCount}>
-            {enrolledStudents.length} طالب مسجل
-          </Text>
-        </View>
+        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center', flexGrow: 1 }} showsVerticalScrollIndicator={true}>
+          {courseId && (
+            <CourseTabBar
+              courseId={courseId}
+              course={course}
+              activeTab="students"
+              onCourseUpdated={fetchData}
+            />
+          )}
 
         {/* View Mode Toggle */}
         <View style={styles.viewModeContainer}>
@@ -1108,6 +1110,7 @@ export default function CourseStudentsScreen() {
             contentContainerStyle={styles.listContent}
           />
         )}
+        </ScrollView>
 
         {/* Add Students Modal — تبويبان: موجود / جديد */}
         {canManageStudents && showAddModal && (
