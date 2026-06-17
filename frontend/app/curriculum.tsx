@@ -1,10 +1,17 @@
 /**
- * صفحة الخطة الدراسية - إدارة المقررات الثابتة للقسم منظمة في شبكة (مستوى × فصل)
+ * صفحة الخطة الدراسية - تصميم حديث متّسق
+ * تحفظ جميع الوظائف:
+ *  - اختيار القسم
+ *  - إضافة مقرر / تحميل نموذج / رفع من Excel (مع معاينة)
+ *  - توليد جلسات للفصل النشط
+ *  - مسح خطة القسم
+ *  - استيراد من أرشيف
+ *  - شبكة المستوى × الفصل مع مدخل عدد الشعب لكل مقرر
  */
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, TextInput, Platform, Modal, Alert,
+  ActivityIndicator, TextInput, Platform, Modal, Alert, KeyboardAvoidingView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -23,11 +30,11 @@ export default function CurriculumScreen() {
     code: '', name: '', credit_hours: 3, level: 1, term: 1,
   });
   const [generating, setGenerating] = useState(false);
-  // ⭐ خريطة عدد الشعب لكل مقرر (curriculum_course_id → عدد)
   const [sectionsMap, setSectionsMap] = useState<Record<string, string>>({});
   const [activeSemester, setActiveSemester] = useState<any>(null);
   const [archives, setArchives] = useState<any[]>([]);
   const [showImport, setShowImport] = useState(false);
+  const [deptFilter, setDeptFilter] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -124,7 +131,6 @@ export default function CurriculumScreen() {
     try {
       const params: any = { semester_id: activeSemester.id || activeSemester._id, department_id: selectedDept };
       if (term) params.term = term;
-      // ⭐ تجهيز خريطة الشعب (تحويل النصوص لأرقام، وتجاهل القيم الفارغة أو 1)
       const sectionsPayload: Record<string, number> = {};
       Object.entries(sectionsMap).forEach(([ccid, val]) => {
         const n = parseInt(val);
@@ -135,7 +141,6 @@ export default function CurriculumScreen() {
       const r = res.data;
       const msg = `تم إنشاء ${r.created} جلسة، تخطي ${r.skipped} (موجودة مسبقاً)`;
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
-      // مسح خريطة الشعب بعد التوليد الناجح
       setSectionsMap({});
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشل التوليد';
@@ -163,24 +168,6 @@ export default function CurriculumScreen() {
     }
   };
 
-  const backfillFromActive = async () => {
-    const ok = Platform.OS === 'web'
-      ? window.confirm('بناء الخطة الدراسية من المقررات النشطة حالياً؟ (آمن، لن يكرر الموجود)')
-      : true;
-    if (!ok) return;
-    try {
-      const res = await api.post('/curriculum/backfill-from-active');
-      const r = res.data;
-      const msg = `تم إنشاء ${r.created} مقرر • تخطي ${r.skipped_existing} موجود • ربط ${r.linked_active_courses} مقرر فعلي • ${r.assignments_created} إسناد`;
-      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
-      fetchGrid();
-    } catch (e: any) {
-      const msg = e?.response?.data?.detail || 'فشل البناء';
-      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
-    }
-  };
-
-  // ===== مسح خطة القسم =====
   const wipeDepartment = async () => {
     if (!selectedDept) return;
     const deptObj = departments.find((d: any) => (d.id || d._id) === selectedDept);
@@ -206,7 +193,6 @@ export default function CurriculumScreen() {
     }
   };
 
-  // ===== تحميل نموذج Excel =====
   const downloadTemplate = async () => {
     try {
       const res = await api.get('/template/curriculum', { responseType: 'blob' as any });
@@ -215,7 +201,9 @@ export default function CurriculumScreen() {
         const a = document.createElement('a');
         a.href = url;
         a.download = 'curriculum_template.xlsx';
+        document.body.appendChild(a);
         a.click();
+        document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       } else {
         Alert.alert('تم', 'تم تحميل النموذج');
@@ -226,7 +214,6 @@ export default function CurriculumScreen() {
     }
   };
 
-  // ===== رفع Excel - معاينة ثم تنفيذ =====
   const [uploadPreview, setUploadPreview] = useState<any>(null);
   const [uploadFile, setUploadFile] = useState<any>(null);
   const [uploadMode, setUploadMode] = useState<'merge' | 'replace'>('merge');
@@ -303,158 +290,298 @@ export default function CurriculumScreen() {
     }
   };
 
+  const selectedDeptObj = departments.find((d: any) => (d.id || d._id) === selectedDept);
+  const filteredDepts = useMemo(() => {
+    if (!deptFilter) return departments;
+    const q = deptFilter.toLowerCase();
+    return departments.filter((d: any) => (d.name || '').toLowerCase().includes(q));
+  }, [departments, deptFilter]);
+
+  const levelsCount = (grid?.grid || []).length;
+  const totalCourses = grid?.total_courses || 0;
+
   return (
     <>
       <Stack.Screen options={{ title: 'الخطة الدراسية', headerBackTitle: 'رجوع' }} />
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        {/* رأس */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>📚 الخطة الدراسية</Text>
-          <Text style={styles.headerSubtitle}>المقررات الثابتة لكل قسم (المستوى × الفصل)</Text>
-        </View>
-
-        {/* اختيار القسم */}
-        <View style={styles.deptBar}>
-          <Text style={styles.deptLabel}>القسم:</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', gap: 6 }}>
-              {departments.map((d: any) => {
-                const did = d.id || d._id;
-                return (
-                  <TouchableOpacity
-                    key={did}
-                    style={[styles.deptChip, selectedDept === did && styles.deptChipActive]}
-                    onPress={() => setSelectedDept(did)}
-                    testID={`dept-${did}`}
-                  >
-                    <Text style={[styles.deptChipText, selectedDept === did && { color: '#fff' }]}>
-                      {d.name}
-                    </Text>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1 }]} showsVerticalScrollIndicator={true}>
+            {/* رأس الصفحة */}
+            <View style={styles.pageHeader}>
+              <View style={styles.pageHeaderRight}>
+                <Text style={styles.pageTitle}>الخطة الدراسية</Text>
+                <View style={styles.breadcrumb}>
+                  <TouchableOpacity onPress={() => router.replace('/')}>
+                    <Text style={styles.breadcrumbLink}>الرئيسية</Text>
                   </TouchableOpacity>
-                );
-              })}
-            </View>
-          </ScrollView>
-        </View>
-
-        {/* شريط إجراءات */}
-        <View style={styles.actionsBar}>
-          <TouchableOpacity style={styles.actBtn} onPress={() => setShowAdd(true)} testID="add-curr-btn">
-            <Ionicons name="add-circle" size={16} color="#2e7d32" />
-            <Text style={[styles.actBtnText, { color: '#2e7d32' }]}>إضافة مقرر</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actBtn} onPress={downloadTemplate} testID="dl-template-btn">
-            <Ionicons name="download" size={16} color="#1565c0" />
-            <Text style={[styles.actBtnText, { color: '#1565c0' }]}>تحميل نموذج</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.actBtn} onPress={pickAndPreview} disabled={uploading} testID="upload-excel-btn">
-            {uploading ? <ActivityIndicator size="small" color="#2e7d32" /> : <Ionicons name="cloud-upload" size={16} color="#2e7d32" />}
-            <Text style={[styles.actBtnText, { color: '#2e7d32' }]}>رفع من Excel</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.actBtn}
-            onPress={() => generateOfferings()}
-            disabled={generating}
-            testID="gen-offerings-btn"
-          >
-            {generating ? <ActivityIndicator size="small" color="#1565c0" /> : <Ionicons name="play-circle" size={16} color="#1565c0" />}
-            <Text style={[styles.actBtnText, { color: '#1565c0' }]}>
-              توليد للفصل النشط
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.actBtn, { backgroundColor: '#ffebee' }]} onPress={wipeDepartment} testID="wipe-dept-btn">
-            <Ionicons name="trash" size={16} color="#c62828" />
-            <Text style={[styles.actBtnText, { color: '#c62828' }]}>مسح خطة القسم</Text>
-          </TouchableOpacity>
-        </View>
-
-        {activeSemester && (
-          <View style={styles.semInfo}>
-            <Ionicons name="calendar" size={13} color="#1565c0" />
-            <Text style={styles.semInfoText}>الفصل النشط: {activeSemester.name}</Text>
-          </View>
-        )}
-
-        {/* الشبكة */}
-        {loading ? (
-          <View style={styles.center}><ActivityIndicator size="large" color="#6a1b9a" /></View>
-        ) : !grid ? (
-          <View style={styles.center}><Text style={styles.emptyText}>اختر قسماً لعرض الخطة</Text></View>
-        ) : (
-          <ScrollView contentContainerStyle={{ padding: 12, paddingBottom: 40 }}>
-            {(grid.grid || []).map((row: any) => (
-              <View key={row.level} style={styles.levelBlock}>
-                <Text style={styles.levelTitle}>المستوى {row.level}</Text>
-                <View style={styles.termsRow}>
-                  <TermColumn label="الفصل الأول" courses={row.term1} onDelete={deleteCourse}
-                    sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} />
-                  <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse}
-                    sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} />
-                  <TermColumn label="الفصل الصيفي" courses={row.term3 || []} onDelete={deleteCourse}
-                    sectionsMap={sectionsMap} setSectionsMap={setSectionsMap}
-                    accentColor="#ef6c00" />
+                  <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+                  <Text style={styles.breadcrumbCurrent}>الخطة الدراسية</Text>
+                  {selectedDeptObj && (
+                    <>
+                      <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+                      <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{selectedDeptObj.name}</Text>
+                    </>
+                  )}
                 </View>
               </View>
-            ))}
-            <Text style={styles.summaryText}>
-              إجمالي المقررات في الخطة: {grid.total_courses}
-            </Text>
+
+              <View style={styles.pageHeaderActions}>
+                <TouchableOpacity
+                  style={[styles.headerBtn, styles.btnPrimary]}
+                  onPress={() => setShowAdd(true)}
+                  testID="add-curr-btn"
+                  disabled={!selectedDept}
+                >
+                  <Ionicons name="add" size={16} color="#fff" />
+                  <Text style={styles.btnPrimaryText}>إضافة مقرر</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={() => fetchGrid()}>
+                  <Ionicons name="refresh" size={16} color="#1a2540" />
+                  <Text style={styles.btnGhostText}>تحديث</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* البطاقات الإحصائية */}
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#6a1b9a' }]}><Ionicons name="library" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>إجمالي مقررات الخطة</Text>
+                  <Text style={styles.statValue}>{totalCourses}</Text>
+                  <Text style={styles.statSubLabel}>مقرر دراسي</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#1565c0' }]}><Ionicons name="layers" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>المستويات</Text>
+                  <Text style={styles.statValue}>{levelsCount}</Text>
+                  <Text style={styles.statSubLabel}>مستوى دراسي</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#2e7d32' }]}><Ionicons name="business" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>الأقسام المتاحة</Text>
+                  <Text style={styles.statValue}>{departments.length}</Text>
+                  <Text style={styles.statSubLabel}>قسم</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#ef6c00' }]}><Ionicons name="calendar" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>الفصل النشط</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{activeSemester?.name || '—'}</Text>
+                  <Text style={styles.statSubLabel}>{activeSemester ? 'نشط' : 'غير محدد'}</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* بطاقة اختيار القسم */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionCardHeader}>
+                <Text style={styles.sectionCardTitle}>اختر القسم</Text>
+                <View style={styles.searchBox}>
+                  <Ionicons name="search" size={14} color="#8a95a8" />
+                  <TextInput
+                    style={styles.searchBoxInput}
+                    placeholder="بحث عن قسم..."
+                    placeholderTextColor="#a8b1c2"
+                    value={deptFilter}
+                    onChangeText={setDeptFilter}
+                  />
+                </View>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, padding: 14 }}>
+                {filteredDepts.length === 0 ? (
+                  <Text style={styles.emptyText}>لا توجد أقسام مطابقة</Text>
+                ) : filteredDepts.map((d: any) => {
+                  const did = d.id || d._id;
+                  const isActive = selectedDept === did;
+                  return (
+                    <TouchableOpacity
+                      key={did}
+                      style={[styles.deptChip, isActive && styles.deptChipActive]}
+                      onPress={() => setSelectedDept(did)}
+                      testID={`dept-${did}`}
+                    >
+                      <Ionicons name={isActive ? 'business' : 'business-outline'} size={13} color={isActive ? '#fff' : '#6a1b9a'} />
+                      <Text style={[styles.deptChipText, isActive && { color: '#fff' }]}>{d.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+
+            {/* شريط الإجراءات */}
+            <View style={styles.toolbarCard}>
+              <Text style={styles.toolbarTitle}>إجراءات الخطة</Text>
+              <View style={styles.toolbarGrid}>
+                <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#e3f2fd' }]} onPress={downloadTemplate} testID="dl-template-btn">
+                  <Ionicons name="download" size={18} color="#1565c0" />
+                  <Text style={[styles.toolBtnText, { color: '#1565c0' }]}>تحميل نموذج Excel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#e8f5e9' }]} onPress={pickAndPreview} disabled={uploading} testID="upload-excel-btn">
+                  {uploading ? <ActivityIndicator size="small" color="#2e7d32" /> : <Ionicons name="cloud-upload" size={18} color="#2e7d32" />}
+                  <Text style={[styles.toolBtnText, { color: '#2e7d32' }]}>رفع من Excel</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toolBtn, { backgroundColor: '#fff3e0' }]}
+                  onPress={() => setShowImport(true)}
+                  testID="open-import-btn"
+                  disabled={archives.length === 0}
+                >
+                  <Ionicons name="archive" size={18} color="#ef6c00" />
+                  <Text style={[styles.toolBtnText, { color: '#ef6c00' }]}>استيراد من أرشيف</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toolBtn, { backgroundColor: '#e1f5fe' }]}
+                  onPress={() => generateOfferings()}
+                  disabled={generating || !activeSemester}
+                  testID="gen-offerings-btn"
+                >
+                  {generating ? <ActivityIndicator size="small" color="#0277bd" /> : <Ionicons name="play-circle" size={18} color="#0277bd" />}
+                  <Text style={[styles.toolBtnText, { color: '#0277bd' }]}>توليد للفصل النشط</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#ffebee' }]} onPress={wipeDepartment} testID="wipe-dept-btn">
+                  <Ionicons name="trash" size={18} color="#c62828" />
+                  <Text style={[styles.toolBtnText, { color: '#c62828' }]}>مسح خطة القسم</Text>
+                </TouchableOpacity>
+              </View>
+              {activeSemester && (
+                <View style={styles.semInfo}>
+                  <Ionicons name="information-circle" size={13} color="#1565c0" />
+                  <Text style={styles.semInfoText}>الفصل النشط حالياً: <Text style={{ fontWeight: '800' }}>{activeSemester.name}</Text></Text>
+                </View>
+              )}
+            </View>
+
+            {/* الشبكة (المستوى × الفصل) */}
+            <View style={styles.gridCard}>
+              <View style={styles.gridCardHeader}>
+                <Text style={styles.gridCardTitle}>خطة المستويات والفصول</Text>
+                {selectedDeptObj && (
+                  <Text style={styles.gridCardSub}>القسم: <Text style={{ fontWeight: '700', color: '#6a1b9a' }}>{selectedDeptObj.name}</Text></Text>
+                )}
+              </View>
+
+              {loading ? (
+                <View style={styles.center}><ActivityIndicator size="large" color="#6a1b9a" /></View>
+              ) : !grid ? (
+                <View style={styles.center}>
+                  <Ionicons name="library-outline" size={48} color="#cfd6e1" />
+                  <Text style={styles.emptyText}>اختر قسماً لعرض خطته الدراسية</Text>
+                </View>
+              ) : (grid.grid || []).length === 0 ? (
+                <View style={styles.center}>
+                  <Ionicons name="document-text-outline" size={48} color="#cfd6e1" />
+                  <Text style={styles.emptyText}>لا توجد مقررات في الخطة بعد</Text>
+                  <TouchableOpacity
+                    style={[styles.headerBtn, styles.btnPrimary, { marginTop: 10 }]}
+                    onPress={() => setShowAdd(true)}
+                  >
+                    <Ionicons name="add" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>إضافة أول مقرر</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={{ padding: 14 }}>
+                  {(grid.grid || []).map((row: any) => (
+                    <View key={row.level} style={styles.levelBlock}>
+                      <View style={styles.levelHeader}>
+                        <View style={styles.levelBadge}>
+                          <Text style={styles.levelBadgeText}>{row.level}</Text>
+                        </View>
+                        <Text style={styles.levelTitle}>المستوى {row.level}</Text>
+                        <View style={styles.levelCountChip}>
+                          <Text style={styles.levelCountChipText}>
+                            {(row.term1?.length || 0) + (row.term2?.length || 0) + (row.term3?.length || 0)} مقرر
+                          </Text>
+                        </View>
+                      </View>
+                      <View style={styles.termsRow}>
+                        <TermColumn label="الفصل الأول" courses={row.term1} onDelete={deleteCourse}
+                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#1565c0" />
+                        <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse}
+                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#6a1b9a" />
+                        <TermColumn label="الفصل الصيفي" courses={row.term3 || []} onDelete={deleteCourse}
+                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#ef6c00" />
+                      </View>
+                    </View>
+                  ))}
+                  <View style={styles.summaryBox}>
+                    <Ionicons name="checkmark-circle" size={16} color="#2e7d32" />
+                    <Text style={styles.summaryText}>
+                      إجمالي مقررات الخطة: <Text style={{ fontWeight: '800', color: '#2e7d32' }}>{grid.total_courses}</Text> مقرر
+                    </Text>
+                  </View>
+                </View>
+              )}
+            </View>
           </ScrollView>
-        )}
+        </KeyboardAvoidingView>
 
         {/* Modal إضافة */}
         <Modal visible={showAdd} transparent animationType="fade" onRequestClose={() => setShowAdd(false)}>
           <View style={styles.modalOverlay}>
             <View style={styles.modal}>
               <Text style={styles.modalTitle}>إضافة مقرر للخطة</Text>
+              <Text style={styles.modalLabel}>الكود <Text style={{ color: '#e91e63' }}>*</Text></Text>
               <TextInput
                 style={styles.input}
-                placeholder="الكود (مثال: ISL101)"
+                placeholder="مثال: ISL101"
+                placeholderTextColor="#a8b1c2"
                 value={addForm.code}
                 onChangeText={(v) => setAddForm({ ...addForm, code: v.toUpperCase() })}
                 testID="form-code"
               />
+              <Text style={styles.modalLabel}>اسم المقرر <Text style={{ color: '#e91e63' }}>*</Text></Text>
               <TextInput
                 style={styles.input}
                 placeholder="اسم المقرر"
+                placeholderTextColor="#a8b1c2"
                 value={addForm.name}
                 onChangeText={(v) => setAddForm({ ...addForm, name: v })}
                 testID="form-name"
               />
-              <View style={{ flexDirection: 'row', gap: 6 }}>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, color: '#666', marginBottom: 3, fontWeight: '600', textAlign: 'right' }}>الساعات</Text>
+                  <Text style={styles.modalLabel}>الساعات</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="مثال: 3"
+                    placeholder="3"
                     keyboardType="numeric"
+                    placeholderTextColor="#a8b1c2"
                     value={String(addForm.credit_hours)}
                     onChangeText={(v) => setAddForm({ ...addForm, credit_hours: parseInt(v) || 0 })}
                     testID="form-credit"
                   />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 11, color: '#666', marginBottom: 3, fontWeight: '600', textAlign: 'right' }}>الفصل (المستوى)</Text>
+                  <Text style={styles.modalLabel}>المستوى</Text>
                   <TextInput
                     style={styles.input}
-                    placeholder="مثال: 1"
+                    placeholder="1"
                     keyboardType="numeric"
+                    placeholderTextColor="#a8b1c2"
                     value={String(addForm.level)}
                     onChangeText={(v) => setAddForm({ ...addForm, level: parseInt(v) || 1 })}
                     testID="form-level"
                   />
                 </View>
               </View>
+              <Text style={styles.modalLabel}>الفصل</Text>
               <View style={{ flexDirection: 'row', gap: 6, marginBottom: 8 }}>
                 <TouchableOpacity
-                  style={[styles.termBtn, addForm.term === 1 && styles.termBtnActive]}
+                  style={[styles.termBtn, addForm.term === 1 && { backgroundColor: '#1565c0', borderColor: '#1565c0' }]}
                   onPress={() => setAddForm({ ...addForm, term: 1 })}
                   testID="form-term-1"
                 >
                   <Text style={[styles.termBtnText, addForm.term === 1 && { color: '#fff' }]}>الفصل الأول</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[styles.termBtn, addForm.term === 2 && styles.termBtnActive]}
+                  style={[styles.termBtn, addForm.term === 2 && { backgroundColor: '#6a1b9a', borderColor: '#6a1b9a' }]}
                   onPress={() => setAddForm({ ...addForm, term: 2 })}
                   testID="form-term-2"
                 >
@@ -468,12 +595,12 @@ export default function CurriculumScreen() {
                   <Text style={[styles.termBtnText, addForm.term === 3 && { color: '#fff' }]}>الفصل الصيفي</Text>
                 </TouchableOpacity>
               </View>
-              <View style={{ flexDirection: 'row', gap: 6 }}>
-                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#e0e0e0' }]} onPress={() => setShowAdd(false)}>
-                  <Text style={[styles.modalBtnText, { color: '#555' }]}>إلغاء</Text>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 6 }}>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowAdd(false)}>
+                  <Text style={styles.modalBtnCancelText}>إلغاء</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#2e7d32' }]} onPress={submitAdd} testID="submit-add-btn">
-                  <Text style={styles.modalBtnText}>إضافة</Text>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnPrimary]} onPress={submitAdd} testID="submit-add-btn">
+                  <Text style={styles.modalBtnPrimaryText}>إضافة</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -485,13 +612,13 @@ export default function CurriculumScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modal}>
               <Text style={styles.modalTitle}>استيراد من فصل مؤرشف</Text>
-              <Text style={styles.modalDesc}>
-                اختر فصلاً مؤرشفاً ليتم بناء الخطة الدراسية من مقرراته:
-              </Text>
+              <Text style={styles.modalDesc}>اختر فصلاً مؤرشفاً لبناء الخطة من مقرراته:</Text>
               {archives.length === 0 ? (
-                <Text style={styles.emptyText}>لا توجد فصول مؤرشفة</Text>
+                <View style={{ padding: 20 }}>
+                  <Text style={styles.emptyText}>لا توجد فصول مؤرشفة</Text>
+                </View>
               ) : (
-                <ScrollView style={{ maxHeight: 250 }}>
+                <ScrollView style={{ maxHeight: 280 }}>
                   {archives.map((a: any) => (
                     <TouchableOpacity
                       key={a.semester_id}
@@ -499,7 +626,9 @@ export default function CurriculumScreen() {
                       onPress={() => importFromArchive(a.semester_id, a.semester_name)}
                       testID={`import-${a.semester_id}`}
                     >
-                      <Ionicons name="archive" size={18} color="#6a1b9a" />
+                      <View style={[styles.archiveIconWrap]}>
+                        <Ionicons name="archive" size={18} color="#6a1b9a" />
+                      </View>
                       <View style={{ flex: 1 }}>
                         <Text style={styles.archiveItemName}>{a.semester_name}</Text>
                         <Text style={styles.archiveItemMeta}>
@@ -511,8 +640,8 @@ export default function CurriculumScreen() {
                   ))}
                 </ScrollView>
               )}
-              <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#e0e0e0', marginTop: 10 }]} onPress={() => setShowImport(false)}>
-                <Text style={[styles.modalBtnText, { color: '#555' }]}>إغلاق</Text>
+              <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel, { marginTop: 12 }]} onPress={() => setShowImport(false)}>
+                <Text style={styles.modalBtnCancelText}>إغلاق</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -521,16 +650,16 @@ export default function CurriculumScreen() {
         {/* Modal معاينة رفع Excel */}
         <Modal visible={showUpload} transparent animationType="fade" onRequestClose={() => setShowUpload(false)}>
           <View style={styles.modalOverlay}>
-            <View style={[styles.modal, { maxWidth: 580 }]}>
+            <View style={[styles.modal, { maxWidth: 600 }]}>
               <Text style={styles.modalTitle}>معاينة رفع الخطة من Excel</Text>
               {uploadPreview && (
-                <ScrollView style={{ maxHeight: 400 }}>
+                <ScrollView style={{ maxHeight: 440 }}>
                   <View style={styles.previewSummary}>
                     <Text style={styles.previewSummaryText}>
-                      📋 القسم: <Text style={{ fontWeight: '800' }}>{uploadPreview.department?.name}</Text>
+                      القسم: <Text style={{ fontWeight: '800' }}>{uploadPreview.department?.name}</Text>
                     </Text>
                     <Text style={styles.previewSummaryText}>
-                      📚 إجمالي الصفوف: {uploadPreview.total_rows_read}
+                      إجمالي الصفوف المقروءة: {uploadPreview.total_rows_read}
                     </Text>
                   </View>
 
@@ -553,18 +682,17 @@ export default function CurriculumScreen() {
                     </View>
                   </View>
 
-                  {/* وضع الرفع */}
                   <Text style={styles.previewSectionTitle}>وضع الرفع:</Text>
                   <View style={{ flexDirection: 'row', gap: 6, marginBottom: 10 }}>
                     <TouchableOpacity
-                      style={[styles.modeBtn, uploadMode === 'merge' && styles.modeBtnActive]}
+                      style={[styles.modeBtn, uploadMode === 'merge' && styles.modeBtnMergeActive]}
                       onPress={() => setUploadMode('merge')}
                       testID="mode-merge"
                     >
                       <Text style={[styles.modeBtnText, uploadMode === 'merge' && { color: '#fff' }]}>دمج (إضافة فقط)</Text>
                     </TouchableOpacity>
                     <TouchableOpacity
-                      style={[styles.modeBtn, uploadMode === 'replace' && { backgroundColor: '#c62828' }]}
+                      style={[styles.modeBtn, uploadMode === 'replace' && styles.modeBtnReplaceActive]}
                       onPress={() => setUploadMode('replace')}
                       testID="mode-replace"
                     >
@@ -572,7 +700,6 @@ export default function CurriculumScreen() {
                     </TouchableOpacity>
                   </View>
 
-                  {/* عينة من الصالح */}
                   {uploadPreview.valid_sample?.length > 0 && (
                     <>
                       <Text style={styles.previewSectionTitle}>عينة من المقررات الصالحة:</Text>
@@ -589,7 +716,6 @@ export default function CurriculumScreen() {
                     </>
                   )}
 
-                  {/* أخطاء التحليل */}
                   {uploadPreview.parse_errors?.length > 0 && (
                     <>
                       <Text style={[styles.previewSectionTitle, { color: '#c62828' }]}>أخطاء:</Text>
@@ -599,7 +725,6 @@ export default function CurriculumScreen() {
                     </>
                   )}
 
-                  {/* الموجود مسبقاً */}
                   {uploadPreview.existing_in_db?.length > 0 && (
                     <>
                       <Text style={[styles.previewSectionTitle, { color: '#ef6c00' }]}>موجود مسبقاً (سيتم تخطيه):</Text>
@@ -611,24 +736,24 @@ export default function CurriculumScreen() {
                 </ScrollView>
               )}
 
-              <View style={{ flexDirection: 'row', gap: 6, marginTop: 12 }}>
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 12 }}>
                 <TouchableOpacity
-                  style={[styles.modalBtn, { backgroundColor: '#e0e0e0' }]}
+                  style={[styles.modalBtn, styles.modalBtnCancel]}
                   onPress={() => { setShowUpload(false); setUploadFile(null); setUploadPreview(null); }}
                   testID="cancel-upload"
                 >
-                  <Text style={[styles.modalBtnText, { color: '#555' }]}>إلغاء</Text>
+                  <Text style={styles.modalBtnCancelText}>إلغاء</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.modalBtn, {
-                    backgroundColor: uploadPreview?.valid_count > 0 ? '#2e7d32' : '#ccc',
+                    backgroundColor: uploadPreview?.valid_count > 0 ? '#2e7d32' : '#cfd6e1',
                   }]}
                   onPress={executeUpload}
                   disabled={uploading || !uploadPreview?.valid_count}
                   testID="execute-upload"
                 >
                   {uploading ? <ActivityIndicator size="small" color="#fff" /> : (
-                    <Text style={styles.modalBtnText}>
+                    <Text style={styles.modalBtnPrimaryText}>
                       تنفيذ الرفع ({uploadPreview?.valid_count || 0})
                     </Text>
                   )}
@@ -644,34 +769,45 @@ export default function CurriculumScreen() {
 
 const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor }: any) => (
   <View style={styles.termCol}>
-    <Text style={[styles.termHeader, accentColor && { color: accentColor, borderBottomColor: accentColor }]}>{label}</Text>
-    {courses.length === 0 ? (
-      <Text style={styles.emptyTermText}>لا توجد مقررات</Text>
+    <View style={[styles.termHeader, { borderBottomColor: accentColor }]}>
+      <View style={[styles.termHeaderDot, { backgroundColor: accentColor }]} />
+      <Text style={[styles.termHeaderText, { color: accentColor }]}>{label}</Text>
+      <Text style={styles.termHeaderCount}>({courses?.length || 0})</Text>
+    </View>
+    {!courses || courses.length === 0 ? (
+      <View style={styles.emptyTermBox}>
+        <Ionicons name="document-outline" size={20} color="#cfd6e1" />
+        <Text style={styles.emptyTermText}>لا توجد مقررات</Text>
+      </View>
     ) : (
       courses.map((c: any) => (
         <View key={c.id} style={styles.courseCard} testID={`curr-${c.id}`}>
-          <View style={{ flex: 1 }}>
+          <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.courseName} numberOfLines={2}>{c.name}</Text>
-            <Text style={styles.courseMeta}>
-              {c.code} • {c.credit_hours} س.م
-            </Text>
+            <View style={styles.courseMetaRow}>
+              <View style={styles.codeChip}>
+                <Text style={styles.codeChipText}>{c.code}</Text>
+              </View>
+              <Text style={styles.creditText}>{c.credit_hours} س.م</Text>
+            </View>
             {c.teachers?.length > 0 && (
-              <Text style={styles.teacherText} numberOfLines={1}>
-                👨‍🏫 {c.teachers.map((t: any) => t.full_name).join('، ')}
-              </Text>
+              <View style={styles.teacherRow}>
+                <Ionicons name="person" size={10} color="#1565c0" />
+                <Text style={styles.teacherText} numberOfLines={1}>
+                  {c.teachers.map((t: any) => t.full_name).join('، ')}
+                </Text>
+              </View>
             )}
           </View>
-          {/* ⭐ مربع عدد الشعب — يُكتب قبل التوليد */}
           <View style={styles.sectionsBoxWrap} testID={`sections-wrap-${c.id}`}>
             <TextInput
               style={styles.sectionsBox}
               placeholder="1"
-              placeholderTextColor="#bbb"
+              placeholderTextColor="#cfd6e1"
               keyboardType="numeric"
               maxLength={2}
               value={sectionsMap?.[c.id] ?? ''}
               onChangeText={(v) => {
-                // قبول أرقام فقط من 1 إلى 10
                 const cleaned = v.replace(/[^0-9]/g, '');
                 setSectionsMap?.((prev: any) => ({ ...prev, [c.id]: cleaned }));
               }}
@@ -679,8 +815,8 @@ const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, acc
             />
             <Text style={styles.sectionsBoxLabel}>شعب</Text>
           </View>
-          <TouchableOpacity onPress={() => onDelete(c.id, c.name)} testID={`del-${c.id}`}>
-            <Ionicons name="trash-outline" size={16} color="#c62828" />
+          <TouchableOpacity onPress={() => onDelete(c.id, c.name)} testID={`del-${c.id}`} style={styles.delBtn}>
+            <Ionicons name="trash-outline" size={15} color="#c62828" />
           </TouchableOpacity>
         </View>
       ))
@@ -689,109 +825,130 @@ const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, acc
 );
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f7' },
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 30 },
-  header: { backgroundColor: '#6a1b9a', paddingTop: 18, paddingBottom: 16, paddingHorizontal: 18 },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#fff', textAlign: 'right' },
-  headerSubtitle: { fontSize: 12, color: 'rgba(255,255,255,0.8)', marginTop: 4, textAlign: 'right' },
-  deptBar: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, backgroundColor: '#fff' },
-  deptLabel: { fontSize: 12, color: '#555', fontWeight: '700' },
-  deptChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, backgroundColor: '#f0f0f0' },
-  deptChipActive: { backgroundColor: '#6a1b9a' },
-  deptChipText: { fontSize: 12, fontWeight: '600', color: '#555' },
-  actionsBar: { flexDirection: 'row', padding: 8, gap: 6, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eee' },
-  actBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-    gap: 5, paddingVertical: 8, borderRadius: 8, backgroundColor: '#f9f9f9',
-  },
-  actBtnText: { fontSize: 11, fontWeight: '700' },
-  semInfo: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#e3f2fd', paddingVertical: 6, paddingHorizontal: 12,
-  },
+  container: { flex: 1, backgroundColor: '#f4f6fb' },
+  pageScroll: { padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center' },
+  center: { padding: 40, alignItems: 'center', gap: 10 },
+
+  // Page header
+  pageHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
+  pageHeaderRight: { alignItems: 'flex-end' },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  breadcrumbLink: { fontSize: 13, color: '#2962ff', fontWeight: '500' },
+  breadcrumbCurrent: { fontSize: 13, color: '#8a95a8', fontWeight: '500', maxWidth: 280 },
+  pageHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
+  headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
+  btnPrimary: { backgroundColor: '#6a1b9a' },
+  btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+
+  // Stats grid
+  statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },
+  statCard: { flex: 1, minWidth: 200, backgroundColor: '#fff', borderRadius: 14, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  statIconWrap: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center' },
+  statTextCol: { flex: 1, alignItems: 'flex-end' },
+  statLabel: { fontSize: 13, color: '#8a95a8', fontWeight: '500', marginBottom: 4 },
+  statValue: { fontSize: 22, color: '#1a2540', fontWeight: '700', marginBottom: 2 },
+  statSubLabel: { fontSize: 11, color: '#a8b1c2' },
+
+  // Section card (dept selector)
+  sectionCard: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 18, borderWidth: 1, borderColor: '#eef1f6' },
+  sectionCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f5f9', gap: 12, flexWrap: 'wrap' },
+  sectionCardTitle: { fontSize: 14, fontWeight: '700', color: '#1a2540' },
+  searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#f7f9fc', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e3e7ee', minWidth: 240, height: 36 },
+  searchBoxInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', outlineStyle: 'none' as any },
+  deptChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  deptChipActive: { backgroundColor: '#6a1b9a', borderColor: '#6a1b9a' },
+  deptChipText: { fontSize: 13, fontWeight: '600', color: '#6a1b9a' },
+
+  // Toolbar card
+  toolbarCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: '#eef1f6' },
+  toolbarTitle: { fontSize: 14, fontWeight: '700', color: '#1a2540', marginBottom: 12, textAlign: 'right' },
+  toolbarGrid: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
+  toolBtn: { flex: 1, minWidth: 150, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10 },
+  toolBtnText: { fontSize: 13, fontWeight: '700' },
+  semInfo: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#e3f2fd', padding: 10, borderRadius: 8, marginTop: 12 },
   semInfoText: { color: '#1565c0', fontSize: 12, fontWeight: '600' },
-  levelBlock: { marginBottom: 14 },
-  levelTitle: { fontSize: 14, fontWeight: '800', color: '#222', marginBottom: 6, textAlign: 'right' },
-  termsRow: { flexDirection: 'row', gap: 8 },
-  termCol: { flex: 1, backgroundColor: '#fff', borderRadius: 10, padding: 10, minHeight: 80 },
-  termHeader: {
-    fontSize: 12, fontWeight: '700', color: '#6a1b9a',
-    paddingBottom: 6, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', marginBottom: 6, textAlign: 'right',
-  },
-  emptyTermText: { textAlign: 'center', color: '#bbb', fontSize: 11, paddingVertical: 10 },
-  courseCard: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: '#fafafa', padding: 8, borderRadius: 6, marginBottom: 4,
-  },
-  // ⭐ مربع عدد الشعب الصغير في كل مقرر
-  sectionsBoxWrap: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    paddingHorizontal: 4,
-  },
-  sectionsBox: {
-    width: 36,
-    height: 30,
-    borderWidth: 1,
-    borderColor: '#bdbdbd',
-    borderRadius: 6,
-    backgroundColor: '#fff',
-    textAlign: 'center',
-    fontSize: 13,
-    fontWeight: '700',
-    color: '#1565c0',
-    paddingVertical: 0,
-  },
-  sectionsBoxLabel: {
-    fontSize: 9,
-    color: '#777',
-    fontWeight: '600',
-  },
-  courseName: { fontSize: 12, fontWeight: '700', color: '#222' },
-  courseMeta: { fontSize: 10, color: '#888', marginTop: 2 },
-  teacherText: { fontSize: 10, color: '#1565c0', marginTop: 2 },
-  emptyText: { textAlign: 'center', color: '#aaa', fontSize: 13, padding: 20 },
-  summaryText: { textAlign: 'center', color: '#666', fontSize: 12, marginTop: 10, fontWeight: '700' },
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center', alignItems: 'center', padding: 16,
-  },
-  modal: { backgroundColor: '#fff', borderRadius: 12, padding: 18, width: '100%', maxWidth: 450 },
-  modalTitle: { fontSize: 16, fontWeight: '800', color: '#222', marginBottom: 12, textAlign: 'right' },
-  modalDesc: { fontSize: 12, color: '#666', marginBottom: 10, textAlign: 'right' },
-  input: {
-    borderWidth: 1, borderColor: '#e0e0e0', borderRadius: 8,
-    paddingHorizontal: 12, paddingVertical: 9, fontSize: 13,
-    marginBottom: 8, textAlign: 'right', outlineWidth: 0 as any,
-  },
-  termBtn: { flex: 1, paddingVertical: 9, borderRadius: 8, backgroundColor: '#f0f0f0', alignItems: 'center' },
-  termBtnActive: { backgroundColor: '#6a1b9a' },
-  termBtnText: { fontSize: 12, fontWeight: '700', color: '#555' },
-  modalBtn: {
-    flex: 1, paddingVertical: 11, borderRadius: 8, alignItems: 'center',
-  },
-  modalBtnText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  archiveItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    padding: 10, backgroundColor: '#fafafa', borderRadius: 8, marginBottom: 4,
-  },
-  archiveItemName: { fontSize: 13, fontWeight: '700', color: '#222' },
-  archiveItemMeta: { fontSize: 11, color: '#888', marginTop: 2 },
-  // Upload preview styles
-  previewSummary: { backgroundColor: '#f0f4f8', padding: 10, borderRadius: 8, marginBottom: 10 },
-  previewSummaryText: { fontSize: 12, color: '#333', marginBottom: 3, textAlign: 'right' },
-  previewStats: { flexDirection: 'row', gap: 6, marginBottom: 10 },
-  statBox: { flex: 1, padding: 8, borderRadius: 8, alignItems: 'center' },
-  statNum: { fontSize: 18, fontWeight: '800' },
-  statText: { fontSize: 10, color: '#555', marginTop: 2 },
-  previewSectionTitle: { fontSize: 12, fontWeight: '800', color: '#444', marginTop: 8, marginBottom: 4, textAlign: 'right' },
-  previewItem: { backgroundColor: '#f9f9f9', padding: 6, borderRadius: 4, marginBottom: 2 },
-  previewItemText: { fontSize: 11, color: '#333', textAlign: 'right' },
-  previewMore: { fontSize: 10, color: '#888', textAlign: 'center', marginTop: 4, fontStyle: 'italic' },
+
+  // Grid card
+  gridCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  gridCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#eef1f6', flexWrap: 'wrap', gap: 8 },
+  gridCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
+  gridCardSub: { fontSize: 12, color: '#5b6678' },
+
+  // Level block
+  levelBlock: { marginBottom: 18 },
+  levelHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 10, paddingBottom: 6, borderBottomWidth: 2, borderBottomColor: '#f3e5f5' },
+  levelBadge: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#6a1b9a', alignItems: 'center', justifyContent: 'center' },
+  levelBadgeText: { color: '#fff', fontSize: 14, fontWeight: '800' },
+  levelTitle: { fontSize: 15, fontWeight: '800', color: '#1a2540', flex: 1, textAlign: 'right' },
+  levelCountChip: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: '#f3e5f5' },
+  levelCountChipText: { fontSize: 11, color: '#6a1b9a', fontWeight: '700' },
+  termsRow: { flexDirection: 'row', gap: 10 },
+  termCol: { flex: 1, backgroundColor: '#fafbfd', borderRadius: 10, padding: 10, minHeight: 110, borderWidth: 1, borderColor: '#eef1f6' },
+  termHeader: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingBottom: 8, borderBottomWidth: 1, marginBottom: 8 },
+  termHeaderDot: { width: 8, height: 8, borderRadius: 4 },
+  termHeaderText: { fontSize: 12, fontWeight: '800', flex: 1, textAlign: 'right' },
+  termHeaderCount: { fontSize: 11, color: '#8a95a8', fontWeight: '600' },
+  emptyTermBox: { alignItems: 'center', gap: 4, paddingVertical: 14 },
+  emptyTermText: { textAlign: 'center', color: '#a8b1c2', fontSize: 11 },
+
+  // Course card
+  courseCard: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#fff', padding: 10, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: '#eef1f6' },
+  courseName: { fontSize: 13, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
+  courseMetaRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 4 },
+  codeChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: '#e3f2fd' },
+  codeChipText: { fontSize: 10, fontWeight: '700', color: '#1565c0' },
+  creditText: { fontSize: 11, color: '#5b6678' },
+  teacherRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, marginTop: 4 },
+  teacherText: { fontSize: 10, color: '#1565c0', flex: 1, textAlign: 'right' },
+  sectionsBoxWrap: { alignItems: 'center', justifyContent: 'center', gap: 2, paddingHorizontal: 2 },
+  sectionsBox: { width: 36, height: 30, borderWidth: 1, borderColor: '#cfd6e1', borderRadius: 6, backgroundColor: '#fff', textAlign: 'center', fontSize: 13, fontWeight: '700', color: '#1565c0', paddingVertical: 0, outlineStyle: 'none' as any },
+  sectionsBoxLabel: { fontSize: 9, color: '#8a95a8', fontWeight: '600' },
+  delBtn: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffebee', borderWidth: 1, borderColor: '#ffcdd2' },
+
+  // Summary box
+  summaryBox: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#e8f5e9', padding: 12, borderRadius: 10, marginTop: 4 },
+  summaryText: { fontSize: 13, color: '#1a2540', fontWeight: '600' },
+
+  emptyText: { textAlign: 'center', color: '#8a95a8', fontSize: 13 },
+
+  // Modals
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(20,30,55,0.45)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  modal: { backgroundColor: '#fff', borderRadius: 14, padding: 22, width: '100%', maxWidth: 460 },
+  modalTitle: { fontSize: 17, fontWeight: '800', color: '#1a2540', marginBottom: 14, textAlign: 'right' },
+  modalDesc: { fontSize: 13, color: '#5b6678', marginBottom: 12, textAlign: 'right' },
+  modalLabel: { fontSize: 12, fontWeight: '600', color: '#1a2540', marginBottom: 4, marginTop: 4, textAlign: 'right' },
+  input: { borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, marginBottom: 8, textAlign: 'right', outlineStyle: 'none' as any, backgroundColor: '#fff', color: '#1a2540' },
+  termBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', alignItems: 'center' },
+  termBtnText: { fontSize: 12, fontWeight: '700', color: '#5b6678' },
+  modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  modalBtnCancel: { backgroundColor: '#f4f6fb', borderWidth: 1, borderColor: '#e3e7ee' },
+  modalBtnCancelText: { color: '#5b6678', fontWeight: '700', fontSize: 13 },
+  modalBtnPrimary: { backgroundColor: '#6a1b9a' },
+  modalBtnPrimaryText: { color: '#fff', fontWeight: '800', fontSize: 13 },
+
+  archiveItem: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 12, backgroundColor: '#fafbfd', borderRadius: 10, marginBottom: 6, borderWidth: 1, borderColor: '#eef1f6' },
+  archiveIconWrap: { width: 36, height: 36, borderRadius: 8, backgroundColor: '#f3e5f5', alignItems: 'center', justifyContent: 'center' },
+  archiveItemName: { fontSize: 13, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
+  archiveItemMeta: { fontSize: 11, color: '#8a95a8', marginTop: 2, textAlign: 'right' },
+
+  // Upload preview
+  previewSummary: { backgroundColor: '#f7f9fc', padding: 12, borderRadius: 10, marginBottom: 12 },
+  previewSummaryText: { fontSize: 12, color: '#1a2540', marginBottom: 4, textAlign: 'right' },
+  previewStats: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  statBox: { flex: 1, padding: 10, borderRadius: 10, alignItems: 'center' },
+  statNum: { fontSize: 20, fontWeight: '800' },
+  statText: { fontSize: 10, color: '#5b6678', marginTop: 2 },
+  previewSectionTitle: { fontSize: 12, fontWeight: '800', color: '#1a2540', marginTop: 10, marginBottom: 6, textAlign: 'right' },
+  previewItem: { backgroundColor: '#fafbfd', padding: 7, borderRadius: 6, marginBottom: 3 },
+  previewItemText: { fontSize: 11, color: '#1a2540', textAlign: 'right' },
+  previewMore: { fontSize: 10, color: '#8a95a8', textAlign: 'center', marginTop: 4, fontStyle: 'italic' },
   errorItem: { fontSize: 10, color: '#c62828', textAlign: 'right', marginBottom: 2 },
   warnItem: { fontSize: 10, color: '#ef6c00', textAlign: 'right', marginBottom: 2 },
-  modeBtn: { flex: 1, paddingVertical: 8, borderRadius: 6, backgroundColor: '#f0f0f0', alignItems: 'center' },
-  modeBtnActive: { backgroundColor: '#2e7d32' },
-  modeBtnText: { fontSize: 12, fontWeight: '700', color: '#555' },
+  modeBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', alignItems: 'center' },
+  modeBtnMergeActive: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },
+  modeBtnReplaceActive: { backgroundColor: '#c62828', borderColor: '#c62828' },
+  modeBtnText: { fontSize: 12, fontWeight: '700', color: '#5b6678' },
 });
