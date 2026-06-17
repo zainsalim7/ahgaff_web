@@ -20,63 +20,28 @@ export function injectResponsiveStyles() {
       height: auto !important;
       min-height: 100% !important;
     }
-
-    /* جذر التطبيق والـ Tab Layout */
-    #root > div,
-    #root > div > div,
-    #root > div > div > div {
-      overflow: visible !important;
-      height: auto !important;
-      min-height: 100vh !important;
-    }
-
-    /* ============= الحل الجذري: تعطيل scroll الداخلي في كل ScrollView/FlatList ============= */
-    /* جميع حاويات RN-Web القابلة للتمرير (إلا الـ modals والـ inputs):
-       نُعطل scroll الداخلي ونسمح للـ body بالتمرر */
-    [class*="r-WebkitOverflowScrolling"]:not([role="dialog"]):not([role="dialog"] *),
-    [class*="r-overflow-1rynq56"],
-    [class*="r-overflowY"] {
-      overflow: visible !important;
-      max-height: none !important;
-      height: auto !important;
-      -webkit-overflow-scrolling: auto !important;
-    }
-
-    /* استثناء: الـ modals والـ tooltips تحافظ على scroll الداخلي */
-    [role="dialog"] [class*="r-WebkitOverflowScrolling"],
-    [role="dialog"] [class*="r-overflowY"],
-    [role="tooltip"] [class*="r-WebkitOverflowScrolling"] {
-      overflow-y: auto !important;
-      max-height: 80vh !important;
-    }
-
-    /* ============= تنسيق شريط التمرير الموحَّد لكل المتصفحات ============= */
     body {
       scrollbar-width: auto !important;
       scrollbar-color: #6b7d99 #eef1f6 !important;
     }
-    *::-webkit-scrollbar {
+    body::-webkit-scrollbar {
       width: 14px !important;
       height: 14px !important;
-      display: block !important;
-      -webkit-appearance: auto !important;
-      appearance: auto !important;
     }
-    *::-webkit-scrollbar-track {
+    body::-webkit-scrollbar-track {
       background: #eef1f6 !important;
-      border-radius: 7px !important;
     }
-    *::-webkit-scrollbar-thumb {
+    body::-webkit-scrollbar-thumb {
       background: #6b7d99 !important;
       border-radius: 7px !important;
-      border: 2px solid #eef1f6 !important;
-      min-height: 40px !important;
+      border: 3px solid #eef1f6 !important;
     }
-    *::-webkit-scrollbar-thumb:hover {
+    body::-webkit-scrollbar-thumb:hover {
       background: #3949ab !important;
     }
 
-    /* الـ ScrollView الجذر يتحرر من قيد الارتفاع ليسمح بالتمرير الطبيعي للصفحة */
+    /* الـ ScrollView الجذر يتحرر من قيد الارتفاع ليسمح بالتمرير الطبيعي للصفحة
+       (يُطبَّق فقط على الصفحات التي تضع dataSet={{ responsiveScrollRoot: "true" }} */
     [data-responsive-scroll-root="true"] {
       overflow: visible !important;
       flex: none !important;
@@ -85,6 +50,28 @@ export function injectResponsiveStyles() {
     }
     [data-responsive-scroll-root="true"] > div {
       overflow: visible !important;
+    }
+
+    /* أي ScrollView داخلي يحوي محتوى قابل للتمرير يحصل على scrollbar مرئي */
+    [class*="r-WebkitOverflowScrolling"]::-webkit-scrollbar,
+    [class*="r-overflowY"]::-webkit-scrollbar {
+      width: 12px !important;
+      height: 12px !important;
+      display: block !important;
+    }
+    [class*="r-WebkitOverflowScrolling"]::-webkit-scrollbar-track,
+    [class*="r-overflowY"]::-webkit-scrollbar-track {
+      background: #eef1f6 !important;
+    }
+    [class*="r-WebkitOverflowScrolling"]::-webkit-scrollbar-thumb,
+    [class*="r-overflowY"]::-webkit-scrollbar-thumb {
+      background: #6b7d99 !important;
+      border-radius: 6px !important;
+      border: 2px solid #eef1f6 !important;
+    }
+    [class*="r-WebkitOverflowScrolling"]::-webkit-scrollbar-thumb:hover,
+    [class*="r-overflowY"]::-webkit-scrollbar-thumb:hover {
+      background: #3949ab !important;
     }
 
     /* ============= Tablet (≤1024px) ============= */

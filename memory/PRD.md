@@ -13,6 +13,14 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-17 **تراجع عن CSS العدواني الذي كسر التخطيط (P0)**:
+  - **المشكلة:** الـ CSS السابق طبَّق `overflow: visible` على كل عناصر RN-Web بما فيها الـ Tab navigator والـ floating header buttons — مما سبب: (1) اختفاء شريط التبويب السفلي، (2) انزلاق زر القائمة والبحث إلى وسط الصفحة، (3) كسر سلوك التمرير.
+  - **الإصلاح:** التراجع إلى CSS آمن يستهدف فقط:
+    - `body` + `html` (تنسيق scrollbar الجميل بلون داكن)
+    - `[data-responsive-scroll-root="true"]` فقط (الصفحات التي اختارت explicit opt-in)
+    - تنسيق scrollbar للـ inner ScrollViews دون تعطيل overflow.
+  - **النتيجة:** التخطيط استعاد طبيعته في كل الصفحات (الرئيسية، المقررات، الطلاب، المعلمين).
+  - **خطوة لاحقة آمنة:** إضافة `responsiveScrollRoot="true"` يدوياً لكل صفحة فرعية (مثل course-students, course-details) عند الحاجة — بدون CSS عدواني.
 - 2026-06-17 **حل جذري لـ scrollbar في كل صفحات RN-Web (P0)**:
   - **السبب الجذري المُكتشَف:** RN-Web يضع `overflow: hidden auto` على كل ScrollView/FlatList مع ارتفاع داخلي ثابت (مثلاً `296px`). الـ body له `scrollHeight === clientHeight === 720` → لا يحتاج scrollbar. المحتوى الفعلي محبوس داخل container داخلي صغير بـ scroll مخفي يعمل لكنه غير مرئي.
   - **الإصلاح:** CSS قوي في `responsiveStyles.ts` يجبر كل `[class*="r-WebkitOverflowScrolling"]` و `[class*="r-overflowY"]` على `overflow: visible !important + max-height: none !important + height: auto !important`. مع استثناء `[role="dialog"]` (الـ modals تحافظ على scroll الداخلي).
