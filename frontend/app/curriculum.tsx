@@ -8,7 +8,7 @@
  *  - استيراد من أرشيف
  *  - شبكة المستوى × الفصل مع مدخل عدد الشعب لكل مقرر
  */
-import React, { useEffect, useState, useCallback, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Modal, Alert, KeyboardAvoidingView,
@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
+import { Picker } from '@react-native-picker/picker';
 import api from '../src/services/api';
 
 export default function CurriculumScreen() {
@@ -34,7 +35,6 @@ export default function CurriculumScreen() {
   const [activeSemester, setActiveSemester] = useState<any>(null);
   const [archives, setArchives] = useState<any[]>([]);
   const [showImport, setShowImport] = useState(false);
-  const [deptFilter, setDeptFilter] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -291,11 +291,6 @@ export default function CurriculumScreen() {
   };
 
   const selectedDeptObj = departments.find((d: any) => (d.id || d._id) === selectedDept);
-  const filteredDepts = useMemo(() => {
-    if (!deptFilter) return departments;
-    const q = deptFilter.toLowerCase();
-    return departments.filter((d: any) => (d.name || '').toLowerCase().includes(q));
-  }, [departments, deptFilter]);
 
   const levelsCount = (grid?.grid || []).length;
   const totalCourses = grid?.total_courses || 0;
@@ -382,36 +377,38 @@ export default function CurriculumScreen() {
             <View style={styles.sectionCard}>
               <View style={styles.sectionCardHeader}>
                 <Text style={styles.sectionCardTitle}>اختر القسم</Text>
-                <View style={styles.searchBox}>
-                  <Ionicons name="search" size={14} color="#8a95a8" />
-                  <TextInput
-                    style={styles.searchBoxInput}
-                    placeholder="بحث عن قسم..."
-                    placeholderTextColor="#a8b1c2"
-                    value={deptFilter}
-                    onChangeText={setDeptFilter}
-                  />
-                </View>
+                {selectedDeptObj && (
+                  <View style={styles.deptActiveChip}>
+                    <Ionicons name="business" size={12} color="#6a1b9a" />
+                    <Text style={styles.deptActiveChipText} numberOfLines={1}>{selectedDeptObj.name}</Text>
+                  </View>
+                )}
               </View>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, padding: 14 }}>
-                {filteredDepts.length === 0 ? (
-                  <Text style={styles.emptyText}>لا توجد أقسام مطابقة</Text>
-                ) : filteredDepts.map((d: any) => {
-                  const did = d.id || d._id;
-                  const isActive = selectedDept === did;
-                  return (
-                    <TouchableOpacity
-                      key={did}
-                      style={[styles.deptChip, isActive && styles.deptChipActive]}
-                      onPress={() => setSelectedDept(did)}
-                      testID={`dept-${did}`}
-                    >
-                      <Ionicons name={isActive ? 'business' : 'business-outline'} size={13} color={isActive ? '#fff' : '#6a1b9a'} />
-                      <Text style={[styles.deptChipText, isActive && { color: '#fff' }]}>{d.name}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
+              <View style={styles.deptDropdownWrap}>
+                <View style={styles.deptDropdown}>
+                  <Ionicons name="business-outline" size={16} color="#6a1b9a" style={{ marginHorizontal: 8 }} />
+                  <Picker
+                    selectedValue={selectedDept}
+                    onValueChange={(v) => setSelectedDept(v)}
+                    style={styles.deptDropdownPicker}
+                    enabled={departments.length > 0}
+                  >
+                    {departments.length === 0 ? (
+                      <Picker.Item label="لا توجد أقسام" value="" />
+                    ) : (
+                      <>
+                        <Picker.Item label="-- اختر قسماً --" value="" />
+                        {departments.map((d: any) => {
+                          const did = d.id || d._id;
+                          return <Picker.Item key={did} label={d.name} value={did} />;
+                        })}
+                      </>
+                    )}
+                  </Picker>
+                  <Ionicons name="chevron-down" size={16} color="#8a95a8" style={{ marginHorizontal: 8 }} />
+                </View>
+                <Text style={styles.deptDropdownHint}>إجمالي الأقسام المتاحة: {departments.length}</Text>
+              </View>
             </View>
 
             {/* شريط الإجراءات */}
@@ -856,11 +853,12 @@ const styles = StyleSheet.create({
   sectionCard: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 18, borderWidth: 1, borderColor: '#eef1f6' },
   sectionCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f3f5f9', gap: 12, flexWrap: 'wrap' },
   sectionCardTitle: { fontSize: 14, fontWeight: '700', color: '#1a2540' },
-  searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#f7f9fc', borderRadius: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#e3e7ee', minWidth: 240, height: 36 },
-  searchBoxInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', outlineStyle: 'none' as any },
-  deptChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
-  deptChipActive: { backgroundColor: '#6a1b9a', borderColor: '#6a1b9a' },
-  deptChipText: { fontSize: 13, fontWeight: '600', color: '#6a1b9a' },
+  deptActiveChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: '#f3e5f5', maxWidth: 260 },
+  deptActiveChipText: { fontSize: 12, color: '#6a1b9a', fontWeight: '700' },
+  deptDropdownWrap: { padding: 14, gap: 6 },
+  deptDropdown: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#f7f9fc', borderRadius: 10, borderWidth: 1, borderColor: '#e3e7ee', height: 44 },
+  deptDropdownPicker: { flex: 1, height: 44, fontSize: 14, color: '#1a2540', textAlign: 'right', backgroundColor: 'transparent', borderWidth: 0, outlineStyle: 'none' as any },
+  deptDropdownHint: { fontSize: 11, color: '#8a95a8', textAlign: 'right', marginTop: 2 },
 
   // Toolbar card
   toolbarCard: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginBottom: 18, borderWidth: 1, borderColor: '#eef1f6' },
