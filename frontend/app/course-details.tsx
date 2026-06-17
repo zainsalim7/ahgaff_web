@@ -127,7 +127,7 @@ export default function CourseDetailsScreen() {
                 <Text style={styles.breadcrumbLink}>الرئيسية</Text>
               </TouchableOpacity>
               <Ionicons name="chevron-back" size={12} color="#8a95a8" />
-              <TouchableOpacity onPress={() => router.replace('/manage-courses' as any)}>
+              <TouchableOpacity onPress={() => router.replace('/(tabs)/courses' as any)}>
                 <Text style={styles.breadcrumbLink}>المقررات</Text>
               </TouchableOpacity>
               <Ionicons name="chevron-back" size={12} color="#8a95a8" />

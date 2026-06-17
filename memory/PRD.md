@@ -13,7 +13,19 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
-- 2026-06-17 **حل نهائي لـ scroll في صفحة المقررات: نقلها خارج Tabs navigator**:
+- 2026-06-17 **إرجاع صفحة المقررات إلى `(tabs)/courses.tsx` مع إصلاح التمرير**:
+  - **الطلب:** المستخدم طلب إعادة محتوى صفحة المقررات الكامل إلى ملف `(tabs)/courses.tsx` بدلاً من إعادة التوجيه إلى `/manage-courses`، وإصلاح مشكلة التمرير بنفس النمط المستخدم في الشاشات العاملة (SafeAreaView flex:1 → ScrollView flex:1 → contentContainerStyle flexGrow:1).
+  - **الإصلاح:**
+    - دمج محتوى `/manage-courses.tsx` (2046 سطر) داخل `(tabs)/courses.tsx`.
+    - تحديث مسارات الاستيراد من `../src/...` إلى `../../src/...`.
+    - حذف `dataSet={{ responsiveScrollRoot: "true" }}` من الـ ScrollView (هذا الـ attribute كان يطبق قاعدة CSS عالمية تجبر `overflow: visible` على الـ ScrollView وتمنعه من scrolling).
+    - إضافة `flexGrow: 1` إلى `contentContainerStyle` ليضمن أن المحتوى يتمدد لملء الـ ScrollView.
+    - تحديث 3 مراجع من `/manage-courses` إلى `/(tabs)/courses` في: `(tabs)/index.tsx` (×2) و `course-details.tsx`.
+    - حذف ملف `manage-courses.tsx` نهائياً.
+  - **النتيجة المُختبَرة:**
+    - قبل: `dataAttr="true", overflowY=visible, scrollableElements=0` (المحتوى مقصوص داخل tabs container)
+    - بعد: `dataAttr=null, overflowY=auto, clientH=1020, scrollH=1366` (التمرير الداخلي للـ ScrollView يعمل، شريط التبويب السفلي يبقى ثابت).
+- 2026-06-17 **حل نهائي لـ scroll في صفحة المقررات: نقلها خارج Tabs navigator** (تم استبداله بالحل أعلاه):
   - **السبب الجذري:** React Navigation Tabs يحبس المحتوى داخل container بارتفاع ثابت وflex constraint، مما يمنع الـ body من التمدد طبيعياً. كل محاولات CSS/JS كانت تكسر التخطيط أو لا تعمل بسبب hashed class names المتغيرة بين builds.
   - **الإصلاح:** إنشاء صفحة جديدة `/app/frontend/app/manage-courses.tsx` (re-export من `(tabs)/courses.tsx`) خارج tab navigator — مثل `/students` و `/manage-teachers` العاملتين. الـ DOM tree لها أبسط بكثير ولا يحوي tabs container constraints.
   - **تحديث الروابط:** بطاقات "المقررات" في الصفحة الرئيسية `(tabs)/index.tsx` تشير الآن إلى `/manage-courses` بدلاً من `/courses`.

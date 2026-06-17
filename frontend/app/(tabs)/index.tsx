@@ -615,7 +615,7 @@ export default function HomeScreen() {
               <Text style={styles.sectionTitle}>إجراءات سريعة</Text>
               <TouchableOpacity
                 style={styles.actionCard}
-                onPress={() => router.push('/manage-courses')}
+                onPress={() => router.push('/(tabs)/courses' as any)}
               >
                 <View style={[styles.actionIcon, { backgroundColor: '#e3f2fd' }]}>
                   <Ionicons name="book" size={28} color="#1565c0" />
@@ -664,7 +664,7 @@ export default function HomeScreen() {
 
                 <TouchableOpacity
                   style={styles.adminRoleCard}
-                  onPress={() => router.push('/manage-courses')}
+                  onPress={() => router.push('/(tabs)/courses' as any)}
                 >
                   <View style={[styles.adminRoleIcon, { backgroundColor: '#fff3e0' }]}>
                     <Ionicons name="book" size={28} color="#ff9800" />
