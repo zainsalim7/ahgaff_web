@@ -13,6 +13,15 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-17 **حل جذري لـ scrollbar في كل صفحات RN-Web (P0)**:
+  - **السبب الجذري المُكتشَف:** RN-Web يضع `overflow: hidden auto` على كل ScrollView/FlatList مع ارتفاع داخلي ثابت (مثلاً `296px`). الـ body له `scrollHeight === clientHeight === 720` → لا يحتاج scrollbar. المحتوى الفعلي محبوس داخل container داخلي صغير بـ scroll مخفي يعمل لكنه غير مرئي.
+  - **الإصلاح:** CSS قوي في `responsiveStyles.ts` يجبر كل `[class*="r-WebkitOverflowScrolling"]` و `[class*="r-overflowY"]` على `overflow: visible !important + max-height: none !important + height: auto !important`. مع استثناء `[role="dialog"]` (الـ modals تحافظ على scroll الداخلي).
+  - **النتيجة المُختبَرة في `/course-students` بـ21 طالب:**
+    - قبل: `bodyScrollH=720`, `bodyClientH=720` (لا scroll)
+    - بعد: `bodyScrollH=2338`, `bodyClientH=720` (scroll طبيعي للمتصفح يعمل)
+    - `computedOverflowY` تحوّل من `auto` إلى `visible` (تأكيد تطبيق CSS).
+  - **شريط التمرير المُنسَّق:** `*::-webkit-scrollbar { width: 14px }` بلون داكن `#6b7d99` وحدّ خارجي. يظهر في كل صفحات admin/student/teacher عند المحتوى الطويل.
+  - **قيد بصري:** Playwright headless screenshots لا تُظهر scrollbars (قيد معروف للأداة) — في متصفح المستخدم العادي ستظهر بوضوح.
 - 2026-06-16 **شريط تمرير مرئي شامل في كل صفحات RN-Web**:
   - **المشكلة:** صفحات المقررات (والصفحات الفرعية الأخرى) لم تكن تُظهر scrollbar حتى عندما يكون المحتوى أطول من النافذة.
   - **الإصلاح:** توسيع CSS العالمي في `responsiveStyles.ts` ليستهدف كل ScrollView/FlatList في RN-Web عبر:
