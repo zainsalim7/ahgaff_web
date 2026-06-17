@@ -13,6 +13,10 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-17 **إعادة تصميم `/schedule` و `/take-attendance` بالنمط الحديث**:
+  - **`/schedule.tsx` (380 سطر):** Header + Breadcrumb + 4 stat cards (إجمالي/منعقدة/مجدولة/ملغاة) + Date picker card (مع semester chip + native date overlay) + active semester badge + List card مع timeline cards محسّنة (بطاقات محاضرات بألوان مميزة + status badge + meta chips + action buttons).
+  - **`/take-attendance.tsx`:** أُجريت جراحة دقيقة: تم استبدال JSX الرندر والـ styles فقط مع الحفاظ على 100% من المنطق (offline cache, network monitoring, error handling, attendance status, lesson modal, PDF export, study plan integration, تبديل الحالة بنقرة، حفظ أوفلاين/أونلاين). التصميم الجديد: Header + Breadcrumb (الرئيسية ← الجدول ← اسم المقرر) + Course info card مع meta chips (تاريخ ميلادي/هجري/وقت/قاعة) + status bar ديناميكي + 4 stat cards + Action toolbar (QR + PDF) + List card للطلاب + Bottom action bar للحفظ + Error card حديث.
+  - **التحقق:** schedule يعرض stat cards وdate picker بشكل صحيح؛ take-attendance error state يظهر بتصميم حديث (المحاضرة غير موجودة → بطاقة بيضاء مع أيقونة حمراء + زرّان).
 - 2026-06-17 **إعادة تصميم `/curriculum` بالنمط الحديث - حفظ كامل للوظائف**:
   - **الهدف:** تطبيق النمط الحديث الموحد على صفحة الخطة الدراسية مع الحفاظ على جميع الوظائف.
   - **التحسينات البصرية:**

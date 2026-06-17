@@ -12,6 +12,7 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  KeyboardAvoidingView,
 } from 'react-native';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -550,208 +551,292 @@ export default function TakeAttendanceScreen() {
         }}
       />
       <SafeAreaView style={styles.container} edges={['bottom']}>
-        {/* عرض رسالة الخطأ */}
-        {errorMessage && (
-          <View style={styles.errorContainer} data-testid="attendance-error-container">
-            <Ionicons name="alert-circle" size={48} color="#f44336" />
-            <View style={styles.errorContent}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
+        {errorMessage ? (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1, justifyContent: 'center' }]}>
+            <View style={styles.errorCard} data-testid="attendance-error-container">
+              <View style={styles.errorIconWrap}>
+                <Ionicons name="alert-circle" size={48} color="#f44336" />
+              </View>
               <Text style={styles.errorTitle}>تعذر تحميل البيانات</Text>
               <Text style={styles.errorText} data-testid="attendance-error-message">{errorMessage}</Text>
+              <View style={{ flexDirection: 'row-reverse', gap: 10, marginTop: 16 }}>
+                <TouchableOpacity
+                  style={styles.errorPrimaryBtn}
+                  data-testid="attendance-retry-btn"
+                  onPress={() => { setErrorMessage(null); setLoading(true); fetchData(); }}
+                >
+                  <Ionicons name="refresh" size={18} color="#fff" />
+                  <Text style={styles.errorPrimaryBtnText}>إعادة المحاولة</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.errorGhostBtn}
+                  data-testid="attendance-back-btn"
+                  onPress={() => goBack()}
+                >
+                  <Ionicons name="arrow-back" size={18} color="#1565c0" />
+                  <Text style={styles.errorGhostBtnText}>العودة</Text>
+                </TouchableOpacity>
+              </View>
             </View>
-            <TouchableOpacity 
-              style={styles.retryButton}
-              data-testid="attendance-retry-btn"
-              onPress={() => {
-                setErrorMessage(null);
-                setLoading(true);
-                fetchData();
-              }}
+          </ScrollView>
+        ) : (
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1 }]} showsVerticalScrollIndicator={true}>
+
+            {/* Page header */}
+            <View style={styles.pageHeader}>
+              <View style={styles.pageHeaderRight}>
+                <Text style={styles.pageTitle}>تسجيل الحضور</Text>
+                <View style={styles.breadcrumb}>
+                  <TouchableOpacity onPress={() => router.replace('/')}>
+                    <Text style={styles.breadcrumbLink}>الرئيسية</Text>
+                  </TouchableOpacity>
+                  <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+                  <TouchableOpacity onPress={() => router.replace('/schedule' as any)}>
+                    <Text style={styles.breadcrumbLink}>الجدول</Text>
+                  </TouchableOpacity>
+                  <Ionicons name="chevron-back" size={12} color="#8a95a8" />
+                  <Text style={styles.breadcrumbCurrent} numberOfLines={1}>{displayName}</Text>
+                </View>
+              </View>
+              <View style={styles.pageHeaderActions}>
+                <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={() => goBack()}>
+                  <Ionicons name="arrow-back" size={15} color="#1a2540" />
+                  <Text style={styles.btnGhostText}>رجوع</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {/* Course Info Card */}
+            <View style={styles.courseCard}>
+              <View style={[styles.courseIconWrap]}>
+                <Ionicons name="book" size={28} color="#fff" />
+              </View>
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={styles.courseTitle} numberOfLines={2}>{displayName}</Text>
+                {lecture && (
+                  <View style={styles.lectureMetaRow}>
+                    <View style={styles.lectureMetaChip}>
+                      <Ionicons name="calendar" size={11} color="#1565c0" />
+                      <Text style={styles.lectureMetaText}>
+                        {WEEKDAYS_AR[parseDate(lecture.date).getDay()]} • {formatGregorianDate(parseDate(lecture.date), { includeYear: false })}
+                      </Text>
+                    </View>
+                    <View style={styles.lectureMetaChip}>
+                      <Ionicons name="moon" size={11} color="#8a95a8" />
+                      <Text style={styles.lectureMetaText}>{formatHijriDate(parseDate(lecture.date))}</Text>
+                    </View>
+                    <View style={styles.lectureMetaChip}>
+                      <Ionicons name="time" size={11} color="#1565c0" />
+                      <Text style={styles.lectureMetaText}>{lecture.start_time} - {lecture.end_time}</Text>
+                    </View>
+                    {lecture.room ? (
+                      <View style={styles.lectureMetaChip}>
+                        <Ionicons name="location" size={11} color="#ef6c00" />
+                        <Text style={styles.lectureMetaText}>{lecture.room}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+                {offlineMode && (
+                  <View style={[styles.statusPill, { backgroundColor: '#fff3e0' }]}>
+                    <Ionicons name="cloud-offline" size={12} color="#ef6c00" />
+                    <Text style={[styles.statusPillText, { color: '#ef6c00' }]}>وضع أوفلاين</Text>
+                  </View>
+                )}
+              </View>
+            </View>
+
+            {/* Attendance status bar */}
+            {attendanceStatus && (
+              <View style={[
+                styles.statusBar,
+                { backgroundColor: attendanceStatus.can_take_attendance ? '#e8f5e9' :
+                  attendanceStatus.status === 'completed' ? '#e3f2fd' : '#ffebee' }
+              ]}>
+                <Ionicons
+                  name={attendanceStatus.can_take_attendance ? 'checkmark-circle' :
+                        attendanceStatus.status === 'completed' ? 'lock-closed' : 'time-outline'}
+                  size={18}
+                  color={attendanceStatus.can_take_attendance ? '#2e7d32' :
+                         attendanceStatus.status === 'completed' ? '#1565c0' : '#c62828'}
+                />
+                <Text style={[
+                  styles.statusBarText,
+                  { color: attendanceStatus.can_take_attendance ? '#2e7d32' :
+                           attendanceStatus.status === 'completed' ? '#1565c0' : '#c62828' }
+                ]}>
+                  {attendanceStatus.reason}
+                </Text>
+                {attendanceStatus.minutes_remaining && (
+                  <Text style={styles.statusBarDeadline}>
+                    (متبقي {attendanceStatus.minutes_remaining} دقيقة)
+                  </Text>
+                )}
+              </View>
+            )}
+
+            {attendanceRecorded && !attendanceStatus && (
+              <View style={[styles.statusBar, { backgroundColor: '#e8f5e9' }]}>
+                <Ionicons name="checkmark-circle" size={18} color="#2e7d32" />
+                <Text style={[styles.statusBarText, { color: '#2e7d32' }]}>تم تسجيل الحضور مسبقاً</Text>
+              </View>
+            )}
+
+            {/* Stats grid */}
+            <View style={styles.statsGrid}>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#1a237e' }]}><Ionicons name="people" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>إجمالي الطلاب</Text>
+                  <Text style={styles.statValue}>{students.length}</Text>
+                  <Text style={styles.statSubLabel}>مسجل</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#2e7d32' }]}><Ionicons name="checkmark-circle" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>حاضر</Text>
+                  <Text style={[styles.statValue, { color: '#2e7d32' }]}>{presentCount}</Text>
+                  <Text style={styles.statSubLabel}>طالب</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#c62828' }]}><Ionicons name="close-circle" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>غائب</Text>
+                  <Text style={[styles.statValue, { color: '#c62828' }]}>{absentCount}</Text>
+                  <Text style={styles.statSubLabel}>طالب</Text>
+                </View>
+              </View>
+              <View style={styles.statCard}>
+                <View style={[styles.statIconWrap, { backgroundColor: '#ef6c00' }]}><Ionicons name="alert-circle" size={22} color="#fff" /></View>
+                <View style={styles.statTextCol}>
+                  <Text style={styles.statLabel}>معذور</Text>
+                  <Text style={[styles.statValue, { color: '#ef6c00' }]}>{excusedCount}</Text>
+                  <Text style={styles.statSubLabel}>طالب</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Action toolbar */}
+            {lectureId && (
+              <View style={styles.toolbarCard}>
+                <TouchableOpacity
+                  style={[styles.toolBtn, { backgroundColor: '#f3e5f5' }]}
+                  onPress={() => router.push({ pathname: '/qr-scanner', params: { lectureId } })}
+                >
+                  <Ionicons name="qr-code" size={18} color="#7b1fa2" />
+                  <Text style={[styles.toolBtnText, { color: '#7b1fa2' }]}>مسح QR</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.toolBtn, { backgroundColor: '#e3f2fd' }]}
+                  onPress={handleExportPdf}
+                  disabled={exportingPdf}
+                  data-testid="export-pdf-btn"
+                >
+                  {exportingPdf ? (
+                    <ActivityIndicator size="small" color="#1565c0" />
+                  ) : (
+                    <Ionicons name="document-text" size={18} color="#1565c0" />
+                  )}
+                  <Text style={[styles.toolBtnText, { color: '#1565c0' }]}>تصدير PDF</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* Students list card */}
+            <View style={styles.listCard}>
+              <View style={styles.listCardHeader}>
+                <Text style={styles.listCardTitle}>قائمة الحضور</Text>
+                <Text style={styles.listCardCount}>
+                  <Text style={styles.listCardCountAccent}>{students.length}</Text> طالب
+                </Text>
+              </View>
+
+              {students.length === 0 ? (
+                <View style={styles.emptyState}>
+                  <Ionicons name="people-outline" size={56} color="#cfd6e1" />
+                  <Text style={styles.emptyTitle}>لا يوجد طلاب مسجلين</Text>
+                  <Text style={styles.emptySubtitle}>قم بإضافة طلاب من صفحة &quot;طلاب المقرر&quot;</Text>
+                </View>
+              ) : (
+                <View style={{ opacity: (canTakeAttendanceNow || canEditAttendance) ? 1 : 0.5 }}>
+                  <FlatList
+                    data={students}
+                    renderItem={renderStudent}
+                    keyExtractor={(item) => item.id}
+                    contentContainerStyle={{ padding: 10 }}
+                    scrollEnabled={false}
+                  />
+                </View>
+              )}
+            </View>
+
+            {/* Spacer for fixed save button */}
+            <View style={{ height: 90 }} />
+
+          </ScrollView>
+        )}
+
+        {/* Bottom action bar */}
+        {!errorMessage && students.length > 0 && ((canRecordAttendance && canTakeAttendanceNow) || canEditAttendance) && (
+          <View style={styles.bottomBar}>
+            <TouchableOpacity
+              style={[styles.saveButton, saving && styles.saveButtonDisabled]}
+              onPress={promptForLessonAndSave}
+              disabled={saving}
+              data-testid="save-attendance-btn"
             >
-              <Ionicons name="refresh" size={20} color="#fff" />
-              <Text style={styles.retryText}>إعادة المحاولة</Text>
-            </TouchableOpacity>
-            <TouchableOpacity 
-              style={styles.backButtonError}
-              data-testid="attendance-back-btn"
-              onPress={() => goBack()}
-            >
-              <Ionicons name="arrow-back" size={18} color="#1565c0" />
-              <Text style={styles.backButtonText}>العودة للمحاضرات</Text>
+              {saving ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <>
+                  <Ionicons name="checkmark-circle" size={22} color="#fff" />
+                  <Text style={styles.saveButtonText}>
+                    {attendanceRecorded ? 'تحديث الحضور' : 'حفظ الحضور'}
+                  </Text>
+                </>
+              )}
             </TouchableOpacity>
           </View>
         )}
-        
-        {/* Header */}
-        {!errorMessage && (
-        <View style={styles.courseHeader}>
-          <Text style={styles.courseTitle}>{displayName}</Text>
-          {lecture && (
-            <View style={styles.lectureInfo}>
-              <Text style={styles.dateText}>📅 {WEEKDAYS_AR[parseDate(lecture.date).getDay()]}، {formatGregorianDate(parseDate(lecture.date), { includeYear: false })}</Text>
-              <Text style={styles.hijriText}>{formatHijriDate(parseDate(lecture.date))}</Text>
-              <Text style={styles.timeText}>🕐 {lecture.start_time} - {lecture.end_time}</Text>
-              {lecture.room && <Text style={styles.roomText}>📍 {lecture.room}</Text>}
-            </View>
-          )}
-          
-          {/* حالة التحضير */}
-          {attendanceStatus && (
-            <View style={[
-              styles.attendanceStatusBar,
-              { backgroundColor: attendanceStatus.can_take_attendance ? '#e8f5e9' : 
-                attendanceStatus.status === 'completed' ? '#e3f2fd' : '#ffebee' }
-            ]}>
-              <Ionicons 
-                name={attendanceStatus.can_take_attendance ? 'checkmark-circle' : 
-                      attendanceStatus.status === 'completed' ? 'lock-closed' : 'time-outline'} 
-                size={18} 
-                color={attendanceStatus.can_take_attendance ? '#4caf50' : 
-                       attendanceStatus.status === 'completed' ? '#1565c0' : '#f44336'} 
+
+        {!errorMessage && students.length > 0 && !canTakeAttendanceNow && !canEditAttendance && attendanceStatus && (
+          <View style={styles.bottomBar}>
+            <View style={[styles.noPermissionBanner, { backgroundColor:
+              attendanceStatus.status === 'completed' ? '#e3f2fd' :
+              attendanceStatus.status === 'not_started' ? '#fff3e0' : '#ffebee'
+            }]}>
+              <Ionicons
+                name={attendanceStatus.status === 'completed' ? 'lock-closed' :
+                      attendanceStatus.status === 'not_started' ? 'time-outline' : 'close-circle'}
+                size={20}
+                color={attendanceStatus.status === 'completed' ? '#1565c0' :
+                       attendanceStatus.status === 'not_started' ? '#ef6c00' : '#c62828'}
               />
-              <Text style={[
-                styles.attendanceStatusText,
-                { color: attendanceStatus.can_take_attendance ? '#4caf50' : 
-                         attendanceStatus.status === 'completed' ? '#1565c0' : '#f44336' }
-              ]}>
+              <Text style={[styles.noPermissionText, {
+                color: attendanceStatus.status === 'completed' ? '#1565c0' :
+                       attendanceStatus.status === 'not_started' ? '#ef6c00' : '#c62828'
+              }]}>
                 {attendanceStatus.reason}
               </Text>
-              {attendanceStatus.minutes_remaining && (
-                <Text style={styles.attendanceDeadline}>
-                  (متبقي {attendanceStatus.minutes_remaining} دقيقة)
-                </Text>
-              )}
             </View>
-          )}
-          
-          {attendanceRecorded && !attendanceStatus && (
-            <View style={styles.recordedBadge}>
-              <Ionicons name="checkmark-circle" size={16} color="#fff" />
-              <Text style={styles.recordedText}>تم تسجيل الحضور مسبقاً</Text>
+          </View>
+        )}
+
+        {!errorMessage && students.length > 0 && !canRecordAttendance && !canEditAttendance && canTakeAttendanceNow && (
+          <View style={styles.bottomBar}>
+            <View style={styles.noPermissionBanner}>
+              <Ionicons name="lock-closed" size={20} color="#ef6c00" />
+              <Text style={[styles.noPermissionText, { color: '#ef6c00' }]}>عرض فقط - ليس لديك صلاحية تسجيل الحضور</Text>
             </View>
-          )}
-        </View>
-        )}
-
-        {/* Stats Bar */}
-        <View style={styles.statsBar}>
-          <View style={styles.statItem}>
-            <Text style={styles.statValue}>{students.length}</Text>
-            <Text style={styles.statLabel}>إجمالي</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: '#4caf50' }]}>{presentCount}</Text>
-            <Text style={styles.statLabel}>حاضر</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: '#f44336' }]}>{absentCount}</Text>
-            <Text style={styles.statLabel}>غائب</Text>
-          </View>
-          <View style={styles.statItem}>
-            <Text style={[styles.statValue, { color: '#ff9800' }]}>{excusedCount}</Text>
-            <Text style={styles.statLabel}>معذور</Text>
-          </View>
-        </View>
-
-        {/* QR Button */}
-        {lectureId && (
-          <View style={{ flexDirection: 'row', marginHorizontal: 16, marginTop: 8, gap: 10 }}>
-            <TouchableOpacity
-              style={styles.qrButton}
-              onPress={() => router.push({
-                pathname: '/qr-scanner',
-                params: { lectureId }
-              })}
-            >
-              <Ionicons name="qr-code" size={20} color="#fff" />
-              <Text style={styles.qrButtonText}>مسح QR</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.qrButton, { backgroundColor: '#1565c0' }]}
-              onPress={handleExportPdf}
-              disabled={exportingPdf}
-              data-testid="export-pdf-btn"
-            >
-              {exportingPdf ? (
-                <ActivityIndicator size="small" color="#fff" />
-              ) : (
-                <Ionicons name="document-text" size={20} color="#fff" />
-              )}
-              <Text style={styles.qrButtonText}>تصدير PDF</Text>
-            </TouchableOpacity>
           </View>
         )}
 
-        {/* Student List */}
-        {students.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={64} color="#ccc" />
-            <Text style={styles.emptyText}>لا يوجد طلاب مسجلين في هذا المقرر</Text>
-            <Text style={styles.emptySubtext}>
-              قم بإضافة طلاب من صفحة "طلاب المقرر"
-            </Text>
-          </View>
-        ) : (
-          <View style={{ flex: 1, opacity: (canTakeAttendanceNow || canEditAttendance) ? 1 : 0.5 }}>
-            <FlatList
-              data={students}
-              renderItem={renderStudent}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.listContent}
-            />
-          </View>
-        )}
+        </KeyboardAvoidingView>
 
-        {/* Save Button - Only visible if user has permission AND attendance is allowed (or user has edit permission to override) */}
-        {students.length > 0 && ((canRecordAttendance && canTakeAttendanceNow) || canEditAttendance) && (
-          <TouchableOpacity
-            style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-            onPress={promptForLessonAndSave}
-            disabled={saving}
-          >
-            {saving ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="checkmark-circle" size={24} color="#fff" />
-                <Text style={styles.saveButtonText}>
-                  {attendanceRecorded ? 'تحديث الحضور' : 'حفظ الحضور'}
-                </Text>
-              </>
-            )}
-          </TouchableOpacity>
-        )}
-        
-        {/* Message if attendance is not allowed */}
-        {students.length > 0 && !canTakeAttendanceNow && !canEditAttendance && attendanceStatus && (
-          <View style={[styles.noPermissionBanner, { backgroundColor: 
-            attendanceStatus.status === 'completed' ? '#e3f2fd' : 
-            attendanceStatus.status === 'not_started' ? '#fff3e0' : '#ffebee' 
-          }]}>
-            <Ionicons 
-              name={attendanceStatus.status === 'completed' ? 'lock-closed' : 
-                    attendanceStatus.status === 'not_started' ? 'time-outline' : 'close-circle'} 
-              size={20} 
-              color={attendanceStatus.status === 'completed' ? '#1565c0' : 
-                     attendanceStatus.status === 'not_started' ? '#ff9800' : '#f44336'} 
-            />
-            <Text style={[styles.noPermissionText, { 
-              color: attendanceStatus.status === 'completed' ? '#1565c0' : 
-                     attendanceStatus.status === 'not_started' ? '#ff9800' : '#f44336' 
-            }]}>
-              {attendanceStatus.reason}
-            </Text>
-          </View>
-        )}
-        
-        {/* Message if user doesn't have permission */}
-        {students.length > 0 && !canRecordAttendance && !canEditAttendance && canTakeAttendanceNow && (
-          <View style={styles.noPermissionBanner}>
-            <Ionicons name="lock-closed" size={20} color="#ff9800" />
-            <Text style={styles.noPermissionText}>عرض فقط - ليس لديك صلاحية تسجيل الحضور</Text>
-          </View>
-        )}
-
-        {/* Modal اختيار موضوع الدرس من الخطة الدراسية */}
+        {/* Modal اختيار موضوع الدرس */}
         <Modal visible={showLessonModal} transparent animationType="slide">
           <View style={modalStyles.overlay}>
             <View style={modalStyles.card}>
@@ -985,275 +1070,88 @@ const modalStyles = StyleSheet.create({
   },
 });
 
+
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  courseHeader: {
-    backgroundColor: '#1565c0',
-    padding: 16,
-  },
-  courseTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#fff',
-    textAlign: 'center',
-  },
-  lectureInfo: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 8,
-  },
-  dateText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-  },
-  hijriText: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.6)',
-    marginTop: 2,
-  },
-  timeText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-  },
-  roomText: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.9)',
-  },
-  recordedBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(76, 175, 80, 0.8)',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
-    marginTop: 10,
-    gap: 6,
-  },
-  recordedText: {
-    fontSize: 12,
-    color: '#fff',
-    fontWeight: '600',
-  },
-  attendanceStatusBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 8,
-    marginTop: 10,
-    gap: 8,
-  },
-  attendanceStatusText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  attendanceDeadline: {
-    fontSize: 11,
-    color: '#666',
-  },
-  statsBar: {
-    flexDirection: 'row',
-    backgroundColor: '#fff',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
-  },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statValue: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  statLabel: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
-  },
-  qrButton: {
-    flexDirection: 'row',
-    backgroundColor: '#7b1fa2',
-    margin: 16,
-    padding: 12,
-    borderRadius: 8,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  qrButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
-  },
-  listContent: {
-    paddingHorizontal: 16,
-    paddingBottom: 100,
-  },
-  studentCard: {
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 12,
-    marginBottom: 8,
-    flexDirection: 'row',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
-    elevation: 2,
-  },
-  studentIndex: {
-    width: 30,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#999',
-    textAlign: 'center',
-  },
-  studentInfo: {
-    flex: 1,
-    marginHorizontal: 12,
-  },
-  studentName: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#333',
-  },
-  studentId: {
-    fontSize: 13,
-    color: '#666',
-    marginTop: 2,
-  },
-  statusBadge: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    minWidth: 70,
-    alignItems: 'center',
-  },
-  statusText: {
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  emptyText: {
-    fontSize: 16,
-    color: '#999',
-    marginTop: 16,
-    textAlign: 'center',
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#bbb',
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  saveButton: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    backgroundColor: '#4caf50',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  saveButtonDisabled: {
-    opacity: 0.7,
-  },
-  saveButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginLeft: 8,
-  },
-  noPermissionBanner: {
-    position: 'absolute',
-    bottom: 20,
-    left: 16,
-    right: 16,
-    backgroundColor: '#fff3e0',
-    borderRadius: 12,
-    padding: 16,
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#ffcc80',
-  },
-  noPermissionText: {
-    color: '#e65100',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  errorContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-    backgroundColor: '#fff',
-  },
-  errorContent: {
-    alignItems: 'center',
-    marginTop: 16,
-    marginBottom: 24,
-  },
-  errorTitle: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#f44336',
-    marginBottom: 8,
-  },
-  errorText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  retryButton: {
-    flexDirection: 'row',
-    backgroundColor: '#1565c0',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 12,
-  },
-  retryText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
-  backButtonError: {
-    flexDirection: 'row',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    alignItems: 'center',
-    gap: 6,
-  },
-  backButtonText: {
-    color: '#1565c0',
-    fontSize: 16,
-  },
+  container: { flex: 1, backgroundColor: '#f4f6fb' },
+  pageScroll: { padding: 20, paddingBottom: 40, maxWidth: 1200, width: '100%', alignSelf: 'center' },
+
+  // page header
+  pageHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 },
+  pageHeaderRight: { alignItems: 'flex-end', flex: 1, minWidth: 280 },
+  pageTitle: { fontSize: 26, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  breadcrumb: { flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' },
+  breadcrumbLink: { fontSize: 13, color: '#2962ff', fontWeight: '500' },
+  breadcrumbCurrent: { fontSize: 13, color: '#8a95a8', fontWeight: '500', maxWidth: 240 },
+  pageHeaderActions: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  headerBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 8 },
+  btnGhost: { backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee' },
+  btnGhostText: { color: '#1a2540', fontSize: 13, fontWeight: '600' },
+
+  // course info card
+  courseCard: { backgroundColor: '#fff', borderRadius: 14, padding: 18, marginBottom: 14, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  courseIconWrap: { width: 56, height: 56, borderRadius: 12, backgroundColor: '#1565c0', alignItems: 'center', justifyContent: 'center' },
+  courseTitle: { fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
+  lectureMetaRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 8 },
+  lectureMetaChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, backgroundColor: '#f4f6fb' },
+  lectureMetaText: { fontSize: 11, color: '#5b6678', fontWeight: '600' },
+  statusPill: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 10, marginTop: 8 },
+  statusPillText: { fontSize: 11, fontWeight: '700' },
+
+  // status bar
+  statusBar: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 12, borderRadius: 12, marginBottom: 14, flexWrap: 'wrap' },
+  statusBarText: { fontSize: 13, fontWeight: '700' },
+  statusBarDeadline: { fontSize: 11, color: '#5b6678' },
+
+  // stats grid
+  statsGrid: { flexDirection: 'row', gap: 14, marginBottom: 18, flexWrap: 'wrap' },
+  statCard: { flex: 1, minWidth: 180, backgroundColor: '#fff', borderRadius: 14, padding: 16, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, borderWidth: 1, borderColor: '#eef1f6' },
+  statIconWrap: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
+  statTextCol: { flex: 1, alignItems: 'flex-end' },
+  statLabel: { fontSize: 12, color: '#8a95a8', fontWeight: '500', marginBottom: 2 },
+  statValue: { fontSize: 22, color: '#1a2540', fontWeight: '700', marginBottom: 1 },
+  statSubLabel: { fontSize: 10, color: '#a8b1c2' },
+
+  // toolbar
+  toolbarCard: { flexDirection: 'row', gap: 10, marginBottom: 14, flexWrap: 'wrap' },
+  toolBtn: { flex: 1, minWidth: 140, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12, borderRadius: 10 },
+  toolBtnText: { fontSize: 13, fontWeight: '700' },
+
+  // list card
+  listCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },
+  listCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
+  listCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
+  listCardCount: { fontSize: 12, color: '#5b6678' },
+  listCardCountAccent: { color: '#1565c0', fontWeight: '700' },
+
+  // student card
+  studentCard: { backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 6, flexDirection: 'row-reverse', alignItems: 'center', borderWidth: 1, borderColor: '#eef1f6' },
+  studentIndex: { width: 36, height: 36, borderRadius: 18, fontSize: 13, fontWeight: '700', color: '#5b6678', textAlign: 'center', lineHeight: 36, backgroundColor: '#f4f6fb' },
+  studentInfo: { flex: 1, marginHorizontal: 12, alignItems: 'flex-end' },
+  studentName: { fontSize: 14, fontWeight: '600', color: '#1a2540', textAlign: 'right' },
+  studentId: { fontSize: 12, color: '#8a95a8', marginTop: 2, textAlign: 'right' },
+  statusBadge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, minWidth: 70, alignItems: 'center' },
+  statusText: { fontSize: 13, fontWeight: '700' },
+
+  // empty state
+  emptyState: { alignItems: 'center', paddingVertical: 50, gap: 6 },
+  emptyTitle: { fontSize: 15, color: '#5b6678', marginTop: 12, fontWeight: '600' },
+  emptySubtitle: { fontSize: 12, color: '#8a95a8', textAlign: 'center' },
+
+  // bottom bar
+  bottomBar: { padding: 14, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eef1f6' },
+  saveButton: { backgroundColor: '#2e7d32', borderRadius: 12, paddingVertical: 14, flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 8 },
+  saveButtonDisabled: { opacity: 0.7 },
+  saveButtonText: { color: '#fff', fontSize: 16, fontWeight: '700' },
+  noPermissionBanner: { backgroundColor: '#fff3e0', borderRadius: 10, padding: 14, flexDirection: 'row-reverse', justifyContent: 'center', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#ffcc80' },
+  noPermissionText: { color: '#ef6c00', fontSize: 13, fontWeight: '600', flex: 1, textAlign: 'right' },
+
+  // error card
+  errorCard: { backgroundColor: '#fff', borderRadius: 14, padding: 28, borderWidth: 1, borderColor: '#eef1f6', alignItems: 'center', maxWidth: 480, alignSelf: 'center', width: '100%' },
+  errorIconWrap: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#ffebee', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  errorTitle: { fontSize: 18, fontWeight: '700', color: '#c62828', textAlign: 'center', marginBottom: 8 },
+  errorText: { fontSize: 14, color: '#5b6678', textAlign: 'center' },
+  errorPrimaryBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#1565c0', paddingHorizontal: 18, paddingVertical: 11, borderRadius: 10 },
+  errorPrimaryBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  errorGhostBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', paddingHorizontal: 18, paddingVertical: 11, borderRadius: 10 },
+  errorGhostBtnText: { color: '#1565c0', fontSize: 14, fontWeight: '700' },
 });
