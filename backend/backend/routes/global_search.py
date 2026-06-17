@@ -282,7 +282,7 @@ async def global_search(
                     "id": str(c["_id"]),
                     "title": c.get("name", ""),
                     "subtitle": " · ".join(subtitle_parts),
-                    "route": f"/course-details?courseId={str(c['_id'])}",
+                    "route": f"/course-lectures?courseId={str(c['_id'])}&courseName={c.get('name', '')}",
                     "type": "course",
                     "icon": "book",
                 })
