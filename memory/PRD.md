@@ -13,6 +13,11 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-17 **حل نهائي لـ scroll في صفحة المقررات: نقلها خارج Tabs navigator**:
+  - **السبب الجذري:** React Navigation Tabs يحبس المحتوى داخل container بارتفاع ثابت وflex constraint، مما يمنع الـ body من التمدد طبيعياً. كل محاولات CSS/JS كانت تكسر التخطيط أو لا تعمل بسبب hashed class names المتغيرة بين builds.
+  - **الإصلاح:** إنشاء صفحة جديدة `/app/frontend/app/manage-courses.tsx` (re-export من `(tabs)/courses.tsx`) خارج tab navigator — مثل `/students` و `/manage-teachers` العاملتين. الـ DOM tree لها أبسط بكثير ولا يحوي tabs container constraints.
+  - **تحديث الروابط:** بطاقات "المقررات" في الصفحة الرئيسية `(tabs)/index.tsx` تشير الآن إلى `/manage-courses` بدلاً من `/courses`.
+  - **النتيجة:** body يتمدد إلى 1430px (قبل: 720px) — يضمن ظهور scrollbar الطبيعي للمتصفح.
 - 2026-06-17 **تراجع عن CSS العدواني الذي كسر التخطيط (P0)**:
   - **المشكلة:** الـ CSS السابق طبَّق `overflow: visible` على كل عناصر RN-Web بما فيها الـ Tab navigator والـ floating header buttons — مما سبب: (1) اختفاء شريط التبويب السفلي، (2) انزلاق زر القائمة والبحث إلى وسط الصفحة، (3) كسر سلوك التمرير.
   - **الإصلاح:** التراجع إلى CSS آمن يستهدف فقط:

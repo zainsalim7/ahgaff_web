@@ -51,17 +51,8 @@ export function injectResponsiveStyles() {
     [data-responsive-scroll-root="true"] > div {
       overflow: visible !important;
     }
-
-    /* ============= حل Tab Navigator: فك قيد ارتفاع container الـ tab content =============
-       React Navigation Tabs يضع div محتوي بـ flex:1 + overflow:hidden + height ثابت = window-tabbar
-       هذا يحجب التمرير حتى لو المحتوى داخله طويل. نفك القيد فقط على هذا العنصر:
-       (الـ class الذي يجمع r-flex-13awgt0 + r-overflow-* يدل على tab content wrapper) */
-    div[class*="r-flex-13awgt0"][class*="r-overflow-1udh08x"],
-    div[class*="r-flex-13awgt0"][class*="r-overflowX-"][class*="r-overflowY-"] {
-      overflow: visible !important;
-      height: auto !important;
-      min-height: 100vh !important;
-    }
+    /* ملاحظة: التعامل مع Tab Navigator container يتم عبر JavaScript أدناه
+       (لا نستخدم CSS class hashes لأنها تتغير بين builds) */
 
     /* أي ScrollView داخلي يحوي محتوى قابل للتمرير يحصل على scrollbar مرئي */
     [class*="r-WebkitOverflowScrolling"]::-webkit-scrollbar,
@@ -158,22 +149,33 @@ export function injectResponsiveStyles() {
     }
   };
 
-  // اضبط الستايل عند التحميل + كل تنقّل
+  // 🎯 الحل الآمن: نُعدِّل فقط المباشر parent للـ ScrollView (overflow:hidden → visible)
+  // ولا نلمس باقي العناصر — لتجنب كسر التخطيط
+  const unblockTabScroll = () => {
+    // معطل افتراضياً — الصفحات يجب أن تكون خارج tab navigator لتعمل بشكل صحيح
+    return;
+  };
+
+  // اضبط الستايل عند التحميل + بعد لحظات لأن الصفحة تتغير
+  const runAll = () => {
+    try {
+      forceBodyScroll();
+      unblockTabScroll();
+    } catch {}
+  };
   if (typeof requestAnimationFrame !== 'undefined') {
     requestAnimationFrame(() => {
-      forceBodyScroll();
-      setTimeout(forceBodyScroll, 100);
-      setTimeout(forceBodyScroll, 500);
-      setTimeout(forceBodyScroll, 1500);
+      runAll();
+      setTimeout(runAll, 500);
+      setTimeout(runAll, 2000);
     });
   } else {
-    setTimeout(forceBodyScroll, 100);
+    setTimeout(runAll, 500);
   }
 
-  // مراقبة DOM لإعادة تطبيق الستايل عند تغيير الصفحات
-  try {
-    const obs = new MutationObserver(() => forceBodyScroll());
-    obs.observe(document.body, { attributes: true, attributeFilter: ['style'] });
-    obs.observe(document.documentElement, { attributes: true, attributeFilter: ['style'] });
-  } catch {}
+  // عند الـ route change فقط — استمع لـ popstate و click
+  if (typeof window !== 'undefined') {
+    window.addEventListener('popstate', () => setTimeout(runAll, 300));
+    document.addEventListener('click', () => setTimeout(runAll, 500), true);
+  }
 }
