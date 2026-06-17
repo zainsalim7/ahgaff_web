@@ -52,6 +52,17 @@ export function injectResponsiveStyles() {
       overflow: visible !important;
     }
 
+    /* ============= حل Tab Navigator: فك قيد ارتفاع container الـ tab content =============
+       React Navigation Tabs يضع div محتوي بـ flex:1 + overflow:hidden + height ثابت = window-tabbar
+       هذا يحجب التمرير حتى لو المحتوى داخله طويل. نفك القيد فقط على هذا العنصر:
+       (الـ class الذي يجمع r-flex-13awgt0 + r-overflow-* يدل على tab content wrapper) */
+    div[class*="r-flex-13awgt0"][class*="r-overflow-1udh08x"],
+    div[class*="r-flex-13awgt0"][class*="r-overflowX-"][class*="r-overflowY-"] {
+      overflow: visible !important;
+      height: auto !important;
+      min-height: 100vh !important;
+    }
+
     /* أي ScrollView داخلي يحوي محتوى قابل للتمرير يحصل على scrollbar مرئي */
     [class*="r-WebkitOverflowScrolling"]::-webkit-scrollbar,
     [class*="r-overflowY"]::-webkit-scrollbar {
