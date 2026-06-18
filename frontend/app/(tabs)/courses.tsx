@@ -1712,8 +1712,13 @@ export default function AddCourseScreen() {
 
       {/* 🔧 مودال الإسناد الجماعي — لـ selectedIds */}
       <AssignTeacherModal
-        visible={showBulkAssign && selectedIds.size > 0}
-        onClose={() => setShowBulkAssign(false)}
+        visible={showBulkAssign}
+        onClose={() => {
+          // عند الإغلاق: ننظّف وضع التحديد ونغلق المودال
+          setShowBulkAssign(false);
+          setSelectedIds(new Set());
+          setSelectionMode(false);
+        }}
         courseId=""
         teachers={teachers}
         departments={departments}
@@ -1734,7 +1739,8 @@ export default function AddCourseScreen() {
         teacherCurrentLoadMap={teacherLoadMap}
         onSaved={() => {}}
         onBulkSaved={(newTeacherId, name, results) => {
-          // تحديث محلي للجدول لكل المقررات التي نجحت
+          // تحديث محلي للجدول للمقررات التي نجحت — بدون مسح selectedIds
+          // (نتركها للمستخدم ليرى النتائج ثم يغلق المودال)
           const okIds = new Set(results.filter(r => r.ok).map(r => r.course_id));
           if (okIds.size > 0) {
             setCourses(prev => prev.map(c =>
@@ -1742,12 +1748,6 @@ export default function AddCourseScreen() {
                 ? { ...c, teacher_id: newTeacherId || '', teacher_name: name || '' }
                 : c
             ));
-            // خرج من وضع التحديد بعد النجاح الكامل
-            const failedCount = results.filter(r => !r.ok).length;
-            if (failedCount === 0) {
-              setSelectedIds(new Set());
-              setSelectionMode(false);
-            }
           }
         }}
       />

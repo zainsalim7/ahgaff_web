@@ -13,6 +13,38 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-18 **الإسناد الجماعي (Bulk Teacher Assignment) — P1 + P2**:
+  - **المتطلب:** تسهيل إسناد معلم واحد لعدة مقررات دفعة واحدة في بداية الفصل، مع تحذيرات ذكية لتجنّب تجاوز عبء المعلم أو الإسناد العابر غير المقصود.
+  - **آلية العمل:**
+    - استخدام البنية الموجودة `selectionMode + selectedIds` في `/(tabs)/courses.tsx` (إعادة استخدام بدون تكرار).
+    - زر جديد في شريط أدوات وضع التحديد: **"إسناد جماعي (N)"** (testID=`open-bulk-assign-btn`) بجانب زر "حذف".
+    - يفتح نفس `<AssignTeacherModal>` لكن في **نمط `bulkCourses`**.
+  - **مميزات النمط الجماعي:**
+    - **حساب العبء التلقائي:** يجمع credit_hours من المقررات المعروضة لكل معلم → `teacherCurrentLoadMap` (useMemo) → يُمرَّر للمودال.
+    - **بطاقة ملخّص مباشرة عند اختيار المعلم:**
+      - "سيتم إسنادها: X" (بعد تطبيق فلتر التجاوز)
+      - Badges: "X نفس القسم" (أخضر) / "X عابر للقسم" (برتقالي)
+      - تحذير "⚠️ X مقرر مُسند سلفاً" + كم منها لنفس المعلم
+      - "عبء المعلم بعد الإسناد: X / MAX ساعة" (مع تحذير أحمر عند التجاوز)
+    - **خيار "تجاوز المُسندة سلفاً":** toggle (testID=`skip-assigned-toggle`) — يستثني المقررات المُسندة لمعلم آخر.
+    - **حقل "ساعات أسبوعية مخصصة":** اختياري (testID=`custom-weekly-hours-input`) — يُمرَّر للخادم كـ `weekly_hours` بدلاً من `credit_hours` الافتراضية.
+    - **وضع "إلغاء الإسناد الجماعي":** عند ترك "إزالة الإسناد" مختاراً، زر الحفظ يصبح "إلغاء إسناد N مقرر" → يرسل `{teacher_id: null}` للجميع.
+  - **التنفيذ:**
+    - `Promise.allSettled` للطلبات بالتوازي → كل طلب `PUT /api/courses/{id}` → الخادم يقوم تلقائياً بمزامنة `teaching_loads`.
+    - **عرض النتائج:** بعد الحفظ، المودال يتحول لعرض ملخّص "نجح: N/N" مع قائمة لكل مقرر (✓ أو ✗ مع رسالة الخطأ).
+    - تحديث محلي فوري للجدول للمقررات التي نجحت.
+    - عند ضغط "إغلاق": يخرج المستخدم من وضع التحديد ويُمسح selectedIds.
+  - **التكامل مع جدول العبء التدريسي:** لا تعارض — الخادم يحدّث `teaching_loads` تلقائياً عبر `PUT /api/courses/{id}` (نفس المسار المختبر). تقرير `/teaching-load/report/advanced` يعكس النتائج فوراً.
+  - **الاختبار:** 10/10 تدفقات نجحت (testing agent iteration_35):
+    - زر `إسناد جماعي` يظهر/يُعطّل حسب `selectedIds.size`
+    - حساب العبء (6/12 ساعة) صحيح للحالة المختبرة
+    - حقل الساعات المخصصة يعيد الحساب فوراً (10/12 بـ 5 ساعات)
+    - PUT متوازي بقيم teacher_id صحيحة (200 OK في backend logs)
+    - تنظيف وضع التحديد بعد الإغلاق
+  - **الملفات:**
+    - `/app/frontend/src/components/AssignTeacherModal.tsx` (موسّع: bulkCourses, onBulkSaved, teacherCurrentLoadMap, handleBulkSave, bulk results view)
+    - `/app/frontend/app/(tabs)/courses.tsx` (useMemo import, teacherLoadMap، زر `open-bulk-assign-btn`، مودال bulk)
+
 - 2026-06-18 **إسناد معلم سريع من صف المقرر + بحث متقدم في التعديل**: 
   - **المشكلة المُبلَّغة:** "في تعديل المقرر يتم تحديد الاستاذ لكن لا يوجد بحث، اعمل لنا امكانية بحث، واعمللنا تسهيل ربط المقرر لمعلم في الصفحة مباشر ظاهرة".
   - **الحل:** إنشاء مكوّن قابل لإعادة الاستخدام `<AssignTeacherModal>` في `/app/frontend/src/components/AssignTeacherModal.tsx` يدعم نمطين:
