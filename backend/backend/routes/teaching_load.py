@@ -663,6 +663,103 @@ async def _get_export_data(
     return rows, weeks, period_label, ""
 
 
+async def _sync_teaching_loads_for_teachers(db, teacher_ids: list, semester_id: Optional[str] = None) -> int:
+    """مزامنة تلقائية: لكل مقرر له `teacher_id` وليس له entry في `teaching_loads`،
+    يُنشَأ entry بساعات أسبوعية = `credit_hours` من المقرر (افتراضي 3 إذا غير محدد).
+
+    تُستخدم قبل توليد التقارير لضمان دقة الحساب. آمنة لإعادة الاستدعاء (idempotent).
+
+    Returns: عدد السجلات التي تم إنشاؤها.
+    """
+    if not teacher_ids:
+        return 0
+
+    # جلب كل المقررات التي يدرّسها هؤلاء المعلمون (بصرف النظر عن القسم)
+    course_query: dict = {
+        "is_active": True,
+        "teacher_id": {"$in": teacher_ids},
+    }
+    if semester_id:
+        course_query["semester_id"] = semester_id
+    courses = await db.courses.find(course_query).to_list(2000)
+    if not courses:
+        return 0
+
+    # جلب الـ teaching_loads الموجودة
+    load_query: dict = {"teacher_id": {"$in": teacher_ids}}
+    if semester_id:
+        load_query["semester_id"] = semester_id
+    existing_loads = await db.teaching_loads.find(load_query, {"teacher_id": 1, "course_id": 1}).to_list(5000)
+    existing_keys = {(l["teacher_id"], l["course_id"]) for l in existing_loads}
+
+    # تحديد السجلات المفقودة
+    to_insert = []
+    now = datetime.now(timezone.utc)
+    for c in courses:
+        tid = c.get("teacher_id")
+        cid = str(c["_id"])
+        if not tid or (tid, cid) in existing_keys:
+            continue
+        weekly = c.get("credit_hours") or 3
+        doc = {
+            "teacher_id": tid,
+            "course_id": cid,
+            "weekly_hours": float(weekly),
+            "notes": "تم إنشاؤه تلقائياً بمزامنة المقررات",
+            "created_at": now,
+            "updated_at": now,
+            "auto_synced": True,
+        }
+        if semester_id:
+            doc["semester_id"] = semester_id
+        elif c.get("semester_id"):
+            doc["semester_id"] = c["semester_id"]
+        to_insert.append(doc)
+
+    if to_insert:
+        await db.teaching_loads.insert_many(to_insert)
+    return len(to_insert)
+
+
+@router.post("/teaching-load/sync")
+async def sync_teaching_loads_endpoint(
+    teacher_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """مزامنة يدوية: إنشاء teaching_load مفقودة لكل مقرر له teacher_id.
+
+    - بدون فلاتر: مزامنة كل المعلمين النشطين.
+    - مع `teacher_id`: لمعلم واحد.
+    - مع `department_id`: لجميع معلمي قسم.
+    - مع `semester_id`: تقييد بفصل محدد.
+    """
+    if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    teacher_query: dict = {"is_active": {"$ne": False}}
+    if teacher_id:
+        try:
+            teacher_query = {"_id": ObjectId(teacher_id)}
+        except Exception:
+            raise HTTPException(status_code=400, detail="معرّف المعلم غير صحيح")
+    elif department_id:
+        teacher_query["department_id"] = department_id
+    teachers = await db.teachers.find(teacher_query, {"_id": 1}).to_list(1000)
+    teacher_ids = [str(t["_id"]) for t in teachers]
+    created = await _sync_teaching_loads_for_teachers(db, teacher_ids, semester_id=semester_id)
+    try:
+        await log_activity(
+            current_user, "sync_teaching_loads", "teaching_load",
+            "", f"تمت مزامنة أعباء التدريس (تم إنشاء {created} سجل)",
+            {"created": created, "teachers": len(teacher_ids)}
+        )
+    except Exception:
+        pass
+    return {"success": True, "created": created, "teachers_processed": len(teacher_ids)}
+
+
 @router.get("/teaching-load/report/advanced")
 async def advanced_teaching_load_report(
     department_id: Optional[str] = None,
@@ -698,6 +795,23 @@ async def advanced_teaching_load_report(
 
     teachers = await db.teachers.find(teacher_query).to_list(500)
     teacher_ids = [str(t["_id"]) for t in teachers]
+
+    # ⭐ مزامنة تلقائية: إنشاء teaching_load المفقودة للمقررات المسندة
+    # هذا يضمن أن الأرقام (assigned_weekly_hours) تتطابق مع courses_count
+    # تخطّ المزامنة عند عرض فصل مؤرشف (لا نريد تعديل الأرشيف)
+    sem_doc_check = None
+    if semester_id:
+        try:
+            sem_doc_check = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+        except Exception:
+            pass
+    is_archived_sem = bool(sem_doc_check and sem_doc_check.get("status") == "archived")
+    if not is_archived_sem and teacher_ids:
+        try:
+            await _sync_teaching_loads_for_teachers(db, teacher_ids, semester_id=semester_id)
+        except Exception as _e:
+            # المزامنة best-effort — لا نُفشل التقرير إن فشلت
+            pass
 
     # ⭐ التحقق إذا كان الفصل المختار مؤرشف — نقرأ من semester_archives بدلاً من الـ collection الحية
     is_archived = False
