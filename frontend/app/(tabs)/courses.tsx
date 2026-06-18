@@ -104,7 +104,7 @@ export default function AddCourseScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterDept, setFilterDept] = useState<string>('');
   const [filterLevel, setFilterLevel] = useState<string>('');
-  const [filterSemester, setFilterSemester] = useState<string>('all'); // 'all' = كل الفصول (افتراضي), '' = الفصل النشط فقط, أو semester_id
+  const [filterSemester, setFilterSemester] = useState<string>(''); // '' = الفصل النشط (افتراضي), 'all' = كل الفصول, أو semester_id محدد
   const [activeSemester, setActiveSemester] = useState<any>(null);
   const [allSemesters, setAllSemesters] = useState<any[]>([]);
   
@@ -1141,10 +1141,26 @@ export default function AddCourseScreen() {
                           </Picker>
                         </View>
                       </View>
+                      <View style={styles.filterField}>
+                        <Text style={styles.filterLbl}>الفصل</Text>
+                        <View style={styles.dropdown}>
+                          <Picker
+                            selectedValue={filterSemester}
+                            onValueChange={(v) => { setFilterSemester(v); setCurrentPage(1); }}
+                            style={styles.dropdownInner}
+                          >
+                            <Picker.Item label={activeSemester ? `الفصل النشط (${activeSemester.name})` : 'الفصل النشط'} value="" />
+                            <Picker.Item label="كل الفصول" value="all" />
+                            {allSemesters.filter(s => s.id !== activeSemester?.id).map(s => (
+                              <Picker.Item key={s.id} label={s.name} value={s.id} />
+                            ))}
+                          </Picker>
+                        </View>
+                      </View>
                       <View style={styles.filterBtns}>
-                        <TouchableOpacity style={styles.resetBtn} onPress={() => { setFilterDept(''); setSearchQuery(''); setCurrentPage(1); }} disabled={!filterDept && !searchQuery}>
-                          <Ionicons name="refresh" size={13} color={(filterDept || searchQuery) ? '#2962ff' : '#a8b1c2'} />
-                          <Text style={[styles.resetBtnText, !(filterDept || searchQuery) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
+                        <TouchableOpacity style={styles.resetBtn} onPress={() => { setFilterDept(''); setSearchQuery(''); setFilterSemester(''); setCurrentPage(1); }} disabled={!filterDept && !searchQuery && !filterSemester}>
+                          <Ionicons name="refresh" size={13} color={(filterDept || searchQuery || filterSemester) ? '#2962ff' : '#a8b1c2'} />
+                          <Text style={[styles.resetBtnText, !(filterDept || searchQuery || filterSemester) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { paddingHorizontal: 18 }]}>
                           <Text style={styles.btnPrimaryText}>تطبيق الفلتر</Text>
