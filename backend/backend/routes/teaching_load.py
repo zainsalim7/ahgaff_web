@@ -717,30 +717,54 @@ async def advanced_teaching_load_report(
             pass
 
     # فلتر المقررات
-    course_query = {"is_active": True}
+    # 🔧 ملاحظة: نحتاج قائمتين من المقررات
+    #   1. dept_courses: مقررات القسم/الكلية المختار (لحساب "مقررات بدون معلم" + total_courses)
+    #   2. teacher_courses: كل مقررات المعلمين المعروضين (للعرض في بطاقة كل معلم)
+    # الباغ السابق: كنا نستخدم نفس القائمة المفلترة حسب القسم لكل شيء، فإذا كان لمعلم
+    # مقررات في أقسام أخرى لا تظهر له. الإصلاح: تفصلهما.
+    dept_course_query = {"is_active": True}
     if department_id and not teacher_id:
-        course_query["department_id"] = department_id
+        dept_course_query["department_id"] = department_id
     if semester_id:
-        course_query["semester_id"] = semester_id
+        dept_course_query["semester_id"] = semester_id
     if term in (1, 2):
-        course_query["term"] = term
-    # عند فلترة معلم: نريد فقط مقرراته
-    if teacher_id:
-        course_query["teacher_id"] = teacher_id
+        dept_course_query["term"] = term
+
+    teacher_course_query = {"is_active": True}
+    if teacher_ids:
+        teacher_course_query["teacher_id"] = {"$in": teacher_ids}
+    elif teacher_id:
+        teacher_course_query["teacher_id"] = teacher_id
+    if semester_id:
+        teacher_course_query["semester_id"] = semester_id
+    if term in (1, 2):
+        teacher_course_query["term"] = term
 
     if is_archived:
         # فلترة المقررات المؤرشفة في الذاكرة
-        all_courses = []
+        dept_courses = []
+        teacher_courses_list = []
         for c in archived_courses:
-            if department_id and not teacher_id and c.get("department_id") != department_id:
-                continue
+            tc_match = True
             if term in (1, 2) and c.get("term") != term:
-                continue
-            if teacher_id and c.get("teacher_id") != teacher_id:
-                continue
-            all_courses.append(c)
+                tc_match = False
+            # dept_courses: محدودة بالقسم المختار
+            if tc_match:
+                dept_ok = True
+                if department_id and not teacher_id and c.get("department_id") != department_id:
+                    dept_ok = False
+                if dept_ok:
+                    dept_courses.append(c)
+            # teacher_courses: كل مقررات المعلمين المعروضين
+            if tc_match and teacher_ids and c.get("teacher_id") in teacher_ids:
+                teacher_courses_list.append(c)
+            elif tc_match and teacher_id and c.get("teacher_id") == teacher_id:
+                teacher_courses_list.append(c)
+        all_courses = dept_courses  # backwards compat for stats
     else:
-        all_courses = await db.courses.find(course_query).to_list(2000)
+        dept_courses = await db.courses.find(dept_course_query).to_list(2000)
+        teacher_courses_list = await db.courses.find(teacher_course_query).to_list(2000) if (teacher_ids or teacher_id) else []
+        all_courses = dept_courses  # backwards compat for stats
 
     # جلب الأعباء
     if is_archived:
@@ -767,7 +791,10 @@ async def advanced_teaching_load_report(
     for t in teachers:
         tid = str(t["_id"])
         t_loads = loads_by_teacher.get(tid, [])
-        assigned_courses = [c for c in all_courses if c.get("teacher_id") == tid]
+        # 🔧 استخدم teacher_courses_list (تشمل مقررات المعلم في جميع الأقسام)
+        # بدل all_courses (المحدودة بقسم التقرير) لإصلاح باغ عدم إظهار مقررات المعلم في أقسام أخرى
+        course_pool = teacher_courses_list if (teacher_courses_list or teacher_id) else all_courses
+        assigned_courses = [c for c in course_pool if c.get("teacher_id") == tid]
         total_weekly = sum(l.get("weekly_hours", 0) for l in t_loads)
         max_hours = t.get("weekly_hours", 12)
         usage_pct = round((total_weekly / max_hours * 100), 1) if max_hours > 0 else 0
@@ -782,7 +809,7 @@ async def advanced_teaching_load_report(
             "courses_count": len(assigned_courses),
             "usage_percentage": usage_pct,
             "status": "overload" if usage_pct > 100 else ("optimal" if usage_pct >= 70 else ("low" if usage_pct > 0 else "none")),
-            "courses": [{"name": c.get("name", ""), "code": c.get("code", ""), "section": c.get("section", "")} for c in assigned_courses],
+            "courses": [{"name": c.get("name", ""), "code": c.get("code", ""), "section": c.get("section", ""), "department_id": c.get("department_id", "")} for c in assigned_courses],
         }
         teacher_comparison.append(entry)
         if len(assigned_courses) == 0:
