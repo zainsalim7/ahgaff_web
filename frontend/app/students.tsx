@@ -1307,7 +1307,8 @@ export default function StudentsScreen() {
         )}
 
         {/* === بطاقة الجدول === */}
-        <View style={styles.tableCard}>
+        {hasAnyFilter ? (
+          <View style={styles.tableCard}>
           {/* رأس البطاقة */}
           <View style={styles.tableCardHeader}>
             <Text style={styles.tableCardTitle}>قائمة الطلاب</Text>
@@ -1414,6 +1415,33 @@ export default function StudentsScreen() {
             )}
           </View>
         </View>
+        ) : (
+          <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6', padding: 50, alignItems: 'center', gap: 14 }}>
+            <Ionicons name="filter-circle-outline" size={72} color="#cfd6e1" />
+            <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'center' }}>اختر فلتراً لعرض الطلاب</Text>
+            <Text style={{ fontSize: 13, color: '#8a95a8', textAlign: 'center', maxWidth: 460, lineHeight: 22 }}>
+              ابدأ بتحديد قسم أو مستوى أو حالة، أو اكتب اسم/رقم طالب في حقل البحث أعلاه لعرض النتائج.
+            </Text>
+            <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: '#e3f2fd' }}>
+                <Ionicons name="business-outline" size={11} color="#1565c0" />
+                <Text style={{ fontSize: 11, color: '#1565c0', fontWeight: '700' }}>القسم</Text>
+              </View>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: '#f3e5f5' }}>
+                <Ionicons name="school-outline" size={11} color="#6a1b9a" />
+                <Text style={{ fontSize: 11, color: '#6a1b9a', fontWeight: '700' }}>المستوى</Text>
+              </View>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: '#e8f5e9' }}>
+                <Ionicons name="checkmark-circle-outline" size={11} color="#2e7d32" />
+                <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '700' }}>الحالة</Text>
+              </View>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 10, backgroundColor: '#fff3e0' }}>
+                <Ionicons name="search-outline" size={11} color="#ef6c00" />
+                <Text style={{ fontSize: 11, color: '#ef6c00', fontWeight: '700' }}>البحث</Text>
+              </View>
+            </View>
+          </View>
+        )}
 
       </ScrollView>
 
