@@ -23,6 +23,7 @@ import { Course, Department } from '../../src/types';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import { useAuthStore } from '../../src/store/authStore';
 import { SortableHeader } from '../../src/components/SortableHeader';
+import { AssignTeacherModal } from '../../src/components/AssignTeacherModal';
 
 interface Teacher {
   id: string;
@@ -140,6 +141,11 @@ export default function AddCourseScreen() {
   const [showImportLecturesModal, setShowImportLecturesModal] = useState(false);
   const [importingLectures, setImportingLectures] = useState(false);
   const [importLecturesResult, setImportLecturesResult] = useState<any>(null);
+
+  // مودال إسناد معلم سريع
+  const [assignTeacherCourse, setAssignTeacherCourse] = useState<Course | null>(null);
+  // مودال اختيار معلم في نموذج الإضافة/التعديل (formMode)
+  const [showFormTeacherPicker, setShowFormTeacherPicker] = useState(false);
 
   // صلاحيات المستخدم
   const [userRole, setUserRole] = useState<string>('');
@@ -753,7 +759,30 @@ export default function AddCourseScreen() {
           <Text style={styles.levelChip}>{item.level}</Text>
         </View>
         <View style={[styles.cCol4, styles.cellPad]}>
-          <Text style={styles.tCell} numberOfLines={1}>{teacherName || '—'}</Text>
+          {canEdit ? (
+            item.teacher_id ? (
+              <TouchableOpacity
+                style={styles.teacherChipRow}
+                onPress={() => setAssignTeacherCourse(item)}
+                testID={`change-teacher-${item.id}`}
+              >
+                <Ionicons name="person-circle" size={16} color="#2962ff" />
+                <Text style={styles.teacherChipText} numberOfLines={1}>{teacherName}</Text>
+                <Ionicons name="pencil" size={11} color="#8a95a8" />
+              </TouchableOpacity>
+            ) : (
+              <TouchableOpacity
+                style={styles.assignTeacherBtn}
+                onPress={() => setAssignTeacherCourse(item)}
+                testID={`assign-teacher-${item.id}`}
+              >
+                <Ionicons name="person-add" size={13} color="#fff" />
+                <Text style={styles.assignTeacherBtnText}>إسناد معلم</Text>
+              </TouchableOpacity>
+            )
+          ) : (
+            <Text style={styles.tCell} numberOfLines={1}>{teacherName || '—'}</Text>
+          )}
         </View>
         <View style={[styles.cCol5, styles.cellPad]}>
           <View style={[styles.statChip, { backgroundColor: '#e7f0fe' }]}>
@@ -849,26 +878,25 @@ export default function AddCourseScreen() {
             </View>
 
             <Text style={styles.label}>المعلم</Text>
-            {Platform.OS === 'web' ? (
-              <TeacherSearchPicker
-                teachers={teachers}
-                selectedId={formData.teacher_id}
-                onSelect={(id) => setFormData({ ...formData, teacher_id: id })}
-              />
-            ) : (
-              <View style={styles.pickerWrapper}>
-                <Picker
-                  selectedValue={formData.teacher_id}
-                  onValueChange={(value) => setFormData({ ...formData, teacher_id: value })}
-                  style={styles.picker}
-                >
-                  <Picker.Item label="اختر المعلم..." value="" />
-                  {teachers.map(teacher => (
-                    <Picker.Item key={teacher.id} label={teacher.full_name} value={teacher.id} />
-                  ))}
-                </Picker>
+            <TouchableOpacity
+              style={styles.teacherPickerButton}
+              onPress={() => setShowFormTeacherPicker(true)}
+              testID="open-teacher-picker-btn"
+            >
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                {formData.teacher_id ? (
+                  <>
+                    <Text style={styles.teacherPickerName}>
+                      {teachers.find(t => t.id === formData.teacher_id)?.full_name || 'غير معروف'}
+                    </Text>
+                    <Text style={styles.teacherPickerHint}>اضغط للتغيير أو البحث</Text>
+                  </>
+                ) : (
+                  <Text style={styles.teacherPickerPlaceholder}>اختر معلماً (بحث متاح)...</Text>
+                )}
               </View>
-            )}
+              <Ionicons name="search" size={16} color="#5b6678" />
+            </TouchableOpacity>
 
             <Text style={styles.label}>المستوى *</Text>
             <View style={styles.pickerWrapper}>
@@ -1623,6 +1651,42 @@ export default function AddCourseScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 🔧 مودال إسناد سريع لمعلم - مباشرة من صف المقرر */}
+      <AssignTeacherModal
+        visible={!!assignTeacherCourse}
+        onClose={() => setAssignTeacherCourse(null)}
+        courseId={assignTeacherCourse?.id || ''}
+        courseName={assignTeacherCourse?.name}
+        courseDepartmentId={assignTeacherCourse?.department_id}
+        currentTeacherId={assignTeacherCourse?.teacher_id || ''}
+        teachers={teachers}
+        departments={departments}
+        onSaved={(newTeacherId, name) => {
+          // تحديث محلي للقائمة فوراً
+          setCourses(prev => prev.map(c =>
+            c.id === assignTeacherCourse?.id
+              ? { ...c, teacher_id: newTeacherId || '', teacher_name: name || '' }
+              : c
+          ));
+        }}
+      />
+
+      {/* 🔧 مودال اختيار معلم في النموذج (بحث + قسم) — formMode */}
+      <AssignTeacherModal
+        visible={showFormTeacherPicker}
+        onClose={() => setShowFormTeacherPicker(false)}
+        courseId={editingCourse?.id || ''}
+        courseName={formData.name}
+        courseDepartmentId={formData.department_id}
+        currentTeacherId={formData.teacher_id}
+        teachers={teachers}
+        departments={departments}
+        formMode
+        onSaved={(newTeacherId) => {
+          setFormData({ ...formData, teacher_id: newTeacherId || '' });
+        }}
+      />
     </SafeAreaView>
   );
 }
@@ -1698,6 +1762,14 @@ const styles = StyleSheet.create({
   statChip: { alignSelf: 'flex-end', flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   statChipText: { fontSize: 12, fontWeight: '700' },
   dotsBtn: { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
+  teacherChipRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingVertical: 4, paddingHorizontal: 6, borderRadius: 6, alignSelf: 'flex-end' },
+  teacherChipText: { fontSize: 13, color: '#1a2540', fontWeight: '600', maxWidth: 110 },
+  assignTeacherBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: '#2962ff', alignSelf: 'flex-end' },
+  assignTeacherBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  teacherPickerButton: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 12, borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#f8fafc', borderRadius: 8, marginBottom: 12 },
+  teacherPickerName: { fontSize: 14, color: '#1a2540', fontWeight: '700', textAlign: 'right' },
+  teacherPickerHint: { fontSize: 11, color: '#5b6678', marginTop: 2, textAlign: 'right' },
+  teacherPickerPlaceholder: { fontSize: 13, color: '#8a95a8', textAlign: 'right' },
   tableEmpty: { paddingVertical: 60, alignItems: 'center', gap: 12 },
   tableEmptyText: { fontSize: 14, color: '#8a95a8' },
   tableFooter: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderTopWidth: 1, borderTopColor: '#eef1f6', flexWrap: 'wrap', gap: 12 },

@@ -1,0 +1,34 @@
+{
+  "summary": "Frontend-only testing of the new AssignTeacherModal feature on /(tabs)/courses page. Verified inline teacher chip/button on each course row, the reusable modal (API mode + formMode), search filter, same-dept toggle, same-dept assignment, cross-dept assignment with window.confirm, removal of teacher, and embedded usage inside the course edit form. All 6 critical flows passed; backend PUT /api/courses/{id} was invoked with correct payloads.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_results": {
+    "row_inline_buttons": "PASS — 5 change-teacher chips + 5 assign-teacher buttons rendered after applying filter (semester=all, dept=all). testIDs change-teacher-{id} and assign-teacher-{id} present.",
+    "modal_open_and_testids": "PASS — assign-teacher-modal opens. teacher-search-input, same-dept-toggle, pick-no-teacher, save-assign-teacher-btn, cancel-assign-btn all present.",
+    "search_filter": "PASS — typing 'Saeed' filters to 1 row; typing 'zzzzzz' filters to 0 rows.",
+    "same_dept_toggle": "PASS — toggle ON reduces 3 rows -> 2 rows (cross-dept hidden).",
+    "badges": "PASS — modal showed 1 green 'نفس القسم' badge and 2 orange 'عابر للقسم' badges based on teacher dept vs. course dept.",
+    "save_same_dept": "PASS — picked same-dept teacher, modal closed, row updated immediately to change-teacher chip, PUT /api/courses/{id} body={\"teacher_id\":\"698e533beb4c6eb021c50302\"}.",
+    "save_cross_dept_confirm": "PASS — picked عابر للقسم teacher, window.confirm auto-accepted, modal closed, PUT body={\"teacher_id\":\"698bc0593a8982391e9ba188\"}.",
+    "remove_assignment": "PASS — pick-no-teacher then save; row reverted to 'إسناد معلم' blue button (assign-teacher-{id}); PUT body={\"teacher_id\":null}.",
+    "form_mode_picker_in_edit": "PASS — Edit modal shows open-teacher-picker-btn with current teacher name + 'اضغط للتغيير أو البحث'. Click opens same modal with formMode=true. Picking a teacher + save closes modal, updates form state (button text changes from Saeed -> زين سالم), and does NOT trigger a PUT call (0 PUT during formMode save) — exactly as expected."
+  },
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Initial UX requires user to manually change semester filter from default 'الفصل النشط' to 'كل الفصول' (or pick a dept) before clicking 'تطبيق الفلتر' to see courses; if only the default semester is left selected and 'تطبيق الفلتر' is clicked, the table stays empty without an explicit message — minor UX nit but not a regression caused by this feature.",
+    "AssignTeacherModal.tsx is 342 lines, clean and well-typed. No DRY issues; uses api service; correctly delegates to formMode without API call."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not tested per request)", "frontend": "100% (9/9 flows)"},
+  "test_credentials": "admin / admin123",
+  "seed_data_creation": "None — modified one existing course (دراسات حضرموت) teacher_id multiple times during test (same-dept -> cross-dept -> null). Final state for that course = null (no teacher).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Filter requires explicit selection (semester=all or dept=all + click تطبيق الفلتر) to render rows; the page intentionally starts with empty state. AssignTeacherModal is shared between row-quick-assign and the form's teacher picker via formMode prop. Active sem id = 6a21bee0ddb8d04530cf65f4. Note: the test mutated course id 69cd1f0b12f04e7c1d6a4992 (دراسات حضرموت) teacher_id to null at end — main agent may want to re-assign Saeed back if needed.",
+  "rca of the issue": "N/A — no bugs found."
+}
