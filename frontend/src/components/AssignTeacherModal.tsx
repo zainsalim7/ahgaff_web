@@ -37,6 +37,23 @@ export interface AssignTeacherDepartment {
   name: string;
 }
 
+export interface BulkCourseInfo {
+  id: string;
+  name: string;
+  code?: string;
+  credit_hours?: number;
+  department_id?: string;
+  current_teacher_id?: string;
+  current_teacher_name?: string;
+}
+
+export interface BulkResultItem {
+  course_id: string;
+  course_name: string;
+  ok: boolean;
+  error?: string;
+}
+
 interface Props {
   visible: boolean;
   onClose: () => void;
@@ -49,6 +66,12 @@ interface Props {
   onSaved: (newTeacherId: string | null, teacherName: string) => void;
   /** Form mode: skip API call, only return selection to caller (for embedded use in forms). */
   formMode?: boolean;
+  /** Bulk mode: a list of courses to assign at once. If non-empty, modal switches to bulk UI. */
+  bulkCourses?: BulkCourseInfo[];
+  /** Callback when bulk save completes — passes per-course results so caller updates the table. */
+  onBulkSaved?: (newTeacherId: string | null, teacherName: string, results: BulkResultItem[]) => void;
+  /** Current teaching load (sum of weekly_hours) per teacher in the active semester. */
+  teacherCurrentLoadMap?: Record<string, number>;
 }
 
 export function AssignTeacherModal({
@@ -62,19 +85,30 @@ export function AssignTeacherModal({
   departments,
   onSaved,
   formMode = false,
+  bulkCourses,
+  onBulkSaved,
+  teacherCurrentLoadMap = {},
 }: Props) {
+  const isBulk = !!(bulkCourses && bulkCourses.length > 0);
   const [query, setQuery] = useState('');
   const [pickedId, setPickedId] = useState<string>('');
   const [sameDeptOnly, setSameDeptOnly] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Bulk options
+  const [skipAlreadyAssigned, setSkipAlreadyAssigned] = useState(false);
+  const [customWeeklyHours, setCustomWeeklyHours] = useState<string>('');
+  const [bulkResults, setBulkResults] = useState<BulkResultItem[] | null>(null);
 
   useEffect(() => {
     if (visible) {
-      setPickedId(currentTeacherId || '');
+      setPickedId(isBulk ? '' : (currentTeacherId || ''));
       setQuery('');
       setSameDeptOnly(false);
+      setSkipAlreadyAssigned(false);
+      setCustomWeeklyHours('');
+      setBulkResults(null);
     }
-  }, [visible, currentTeacherId]);
+  }, [visible, currentTeacherId, isBulk]);
 
   const deptNameById = useMemo(() => {
     const map: Record<string, string> = {};
@@ -97,10 +131,58 @@ export function AssignTeacherModal({
     return ids.includes(courseDepartmentId);
   };
 
+  const teacherDeptIds = (t: AssignTeacherTeacher) => (
+    t.department_ids && t.department_ids.length > 0
+      ? t.department_ids
+      : (t.department_id ? [t.department_id] : [])
+  );
+
+  // 🔧 تحليل المقررات الجماعية مقابل المعلم المختار
+  const pickedTeacher = teachers.find(t => t.id === pickedId);
+  const bulkAnalysis = useMemo(() => {
+    if (!isBulk || !pickedTeacher || !bulkCourses) {
+      return null;
+    }
+    const ids = teacherDeptIds(pickedTeacher);
+    let sameDeptCount = 0;
+    let crossDeptCount = 0;
+    let alreadyAssignedCount = 0;
+    let alreadyAssignedToPicked = 0;
+    let totalHoursAdded = 0;
+    const custom = customWeeklyHours ? parseFloat(customWeeklyHours) : NaN;
+    for (const c of bulkCourses) {
+      const willSkip = skipAlreadyAssigned && !!c.current_teacher_id && c.current_teacher_id !== pickedId;
+      if (c.current_teacher_id) {
+        alreadyAssignedCount++;
+        if (c.current_teacher_id === pickedId) alreadyAssignedToPicked++;
+      }
+      if (willSkip) continue;
+      if (c.department_id && ids.includes(c.department_id)) sameDeptCount++;
+      else if (c.department_id) crossDeptCount++;
+      const hours = !isNaN(custom) ? custom : (c.credit_hours ?? 3);
+      totalHoursAdded += hours;
+    }
+    const currentLoad = teacherCurrentLoadMap[pickedId] || 0;
+    const maxHours = (teachers.find(t => t.id === pickedId) as any)?.weekly_hours ?? 12;
+    return {
+      sameDeptCount,
+      crossDeptCount,
+      alreadyAssignedCount,
+      alreadyAssignedToPicked,
+      totalHoursAdded,
+      currentLoad,
+      projectedTotal: currentLoad + totalHoursAdded,
+      maxHours,
+      overload: (currentLoad + totalHoursAdded) > maxHours,
+      coursesToProcess: bulkCourses.length - (skipAlreadyAssigned ? bulkCourses.filter(c => c.current_teacher_id && c.current_teacher_id !== pickedId).length : 0),
+    };
+  }, [isBulk, pickedTeacher, bulkCourses, pickedId, skipAlreadyAssigned, customWeeklyHours, teacherCurrentLoadMap, teachers]);
+
   const filtered = useMemo(() => {
     const q = query.trim();
     let list = teachers;
-    if (sameDeptOnly && courseDepartmentId) {
+    // In bulk mode, same-dept filter is disabled (each course has own dept)
+    if (!isBulk && sameDeptOnly && courseDepartmentId) {
       list = list.filter(isSameDept);
     }
     if (q) {
@@ -108,21 +190,84 @@ export function AssignTeacherModal({
         t.full_name?.includes(q) || t.teacher_id?.includes(q)
       );
     }
-    // Sort: same-dept first, then by name
     return [...list].sort((a, b) => {
-      const aSame = isSameDept(a) ? 0 : 1;
-      const bSame = isSameDept(b) ? 0 : 1;
-      if (aSame !== bSame) return aSame - bSame;
+      if (!isBulk) {
+        const aSame = isSameDept(a) ? 0 : 1;
+        const bSame = isSameDept(b) ? 0 : 1;
+        if (aSame !== bSame) return aSame - bSame;
+      }
       return a.full_name.localeCompare(b.full_name, 'ar');
     });
-  }, [teachers, query, sameDeptOnly, courseDepartmentId, deptNameById]);
+  }, [teachers, query, sameDeptOnly, courseDepartmentId, deptNameById, isBulk]);
 
   const showMsg = (title: string, message: string) => {
     if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
     else Alert.alert(title, message);
   };
 
+  const handleBulkSave = async () => {
+    if (!bulkCourses || bulkCourses.length === 0) return;
+    if (!bulkAnalysis) return;
+
+    const teacherName = pickedTeacher?.full_name || '';
+    const custom = customWeeklyHours ? parseFloat(customWeeklyHours) : NaN;
+
+    // Build list of courses to update (respecting skipAlreadyAssigned)
+    const targets = bulkCourses.filter(c => {
+      if (skipAlreadyAssigned && c.current_teacher_id && c.current_teacher_id !== pickedId) return false;
+      return true;
+    });
+
+    // Confirmation: cross-dept + overload + total count
+    const parts: string[] = [];
+    parts.push(`سيتم إسناد المعلم "${teacherName || 'بدون معلم'}" لـ ${targets.length} مقرر.`);
+    if (bulkAnalysis.crossDeptCount > 0) {
+      parts.push(`⚠️ ${bulkAnalysis.crossDeptCount} مقرر عابر للقسم.`);
+    }
+    if (bulkAnalysis.overload) {
+      parts.push(`⚠️ ساعات المعلم ستصبح ${bulkAnalysis.projectedTotal} (الحد الأقصى ${bulkAnalysis.maxHours}).`);
+    }
+    parts.push('هل تريد المتابعة؟');
+    const confirmMsg = parts.join('\n\n');
+    const ok = Platform.OS === 'web' ? window.confirm(confirmMsg) : await new Promise<boolean>(resolve => {
+      Alert.alert('تأكيد الإسناد الجماعي', confirmMsg, [
+        { text: 'إلغاء', style: 'cancel', onPress: () => resolve(false) },
+        { text: 'تأكيد', onPress: () => resolve(true) },
+      ]);
+    });
+    if (!ok) return;
+
+    try {
+      setSaving(true);
+      const payload: any = { teacher_id: pickedId || null };
+      if (!isNaN(custom) && pickedId) payload.weekly_hours = custom;
+
+      // Execute in parallel; collect per-course results
+      const settled = await Promise.allSettled(
+        targets.map(c => api.put(`/courses/${c.id}`, payload))
+      );
+      const results: BulkResultItem[] = targets.map((c, i) => {
+        const r = settled[i];
+        if (r.status === 'fulfilled') return { course_id: c.id, course_name: c.name, ok: true };
+        const reason: any = (r as PromiseRejectedResult).reason;
+        return {
+          course_id: c.id,
+          course_name: c.name,
+          ok: false,
+          error: reason?.response?.data?.detail || reason?.message || 'فشل غير معروف',
+        };
+      });
+      setBulkResults(results);
+      if (onBulkSaved) onBulkSaved(pickedId || null, teacherName, results);
+    } catch (e: any) {
+      showMsg('خطأ', e?.message || 'فشل التنفيذ');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleSave = async () => {
+    if (isBulk) return handleBulkSave();
     if (!courseId) return;
     // Detect cross-dept assignment for confirmation
     const target = teachers.find(t => t.id === pickedId);
@@ -165,14 +310,51 @@ export function AssignTeacherModal({
         <View style={styles.card} testID="assign-teacher-modal">
           <View style={styles.header}>
             <View style={{ flex: 1, alignItems: 'flex-end' }}>
-              <Text style={styles.title}>إسناد معلم للمقرر</Text>
-              {!!courseName && <Text style={styles.subtitle} numberOfLines={1}>{courseName}</Text>}
+              <Text style={styles.title}>
+                {isBulk ? `إسناد جماعي لـ ${bulkCourses!.length} مقرر` : 'إسناد معلم للمقرر'}
+              </Text>
+              {isBulk ? (
+                <Text style={styles.subtitle} numberOfLines={1}>
+                  {bulkCourses!.slice(0, 3).map(c => c.name).join('، ')}
+                  {bulkCourses!.length > 3 ? ` +${bulkCourses!.length - 3}` : ''}
+                </Text>
+              ) : (!!courseName && <Text style={styles.subtitle} numberOfLines={1}>{courseName}</Text>)}
             </View>
             <TouchableOpacity onPress={onClose} testID="close-assign-teacher-modal">
               <Ionicons name="close" size={22} color="#5b6678" />
             </TouchableOpacity>
           </View>
 
+          {/* عرض نتائج التنفيذ الجماعي بعد الحفظ */}
+          {isBulk && bulkResults ? (
+            <ScrollView style={styles.bulkResultsBox} contentContainerStyle={{ padding: 16 }}>
+              <View style={styles.bulkResultsSummary}>
+                <Ionicons name="checkmark-circle" size={20} color="#1b5e20" />
+                <Text style={styles.bulkResultsSummaryText}>
+                  نجح: {bulkResults.filter(r => r.ok).length}/{bulkResults.length}
+                </Text>
+                {bulkResults.some(r => !r.ok) && (
+                  <Text style={[styles.bulkResultsSummaryText, { color: '#bf360c' }]}>
+                    فشل: {bulkResults.filter(r => !r.ok).length}
+                  </Text>
+                )}
+              </View>
+              {bulkResults.map(r => (
+                <View key={r.course_id} style={styles.bulkResultRow}>
+                  <Ionicons
+                    name={r.ok ? 'checkmark-circle' : 'close-circle'}
+                    size={16}
+                    color={r.ok ? '#1b5e20' : '#c62828'}
+                  />
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={styles.bulkResultName}>{r.course_name}</Text>
+                    {!r.ok && !!r.error && <Text style={styles.bulkResultErr}>{r.error}</Text>}
+                  </View>
+                </View>
+              ))}
+            </ScrollView>
+          ) : (
+          <>
           {/* البحث */}
           <View style={styles.searchBox}>
             <Ionicons name="search" size={16} color="#8a95a8" />
@@ -191,8 +373,8 @@ export function AssignTeacherModal({
             )}
           </View>
 
-          {/* فلتر نفس القسم */}
-          {!!courseDepartmentId && (
+          {/* فلتر نفس القسم — يُخفى في الوضع الجماعي (كل مقرر له قسم مختلف) */}
+          {!isBulk && !!courseDepartmentId && (
             <TouchableOpacity
               style={styles.filterToggle}
               onPress={() => setSameDeptOnly(v => !v)}
@@ -205,6 +387,36 @@ export function AssignTeacherModal({
               />
               <Text style={styles.filterToggleText}>إظهار معلمي القسم فقط</Text>
             </TouchableOpacity>
+          )}
+
+          {/* 🔧 خيارات الإسناد الجماعي */}
+          {isBulk && (
+            <View style={styles.bulkOptions}>
+              <TouchableOpacity
+                style={styles.bulkOptionRow}
+                onPress={() => setSkipAlreadyAssigned(v => !v)}
+                testID="skip-assigned-toggle"
+              >
+                <Ionicons
+                  name={skipAlreadyAssigned ? 'checkbox' : 'square-outline'}
+                  size={16}
+                  color={skipAlreadyAssigned ? '#2962ff' : '#8a95a8'}
+                />
+                <Text style={styles.bulkOptionText}>تجاوز المقررات المُسندة سلفاً لمعلم آخر</Text>
+              </TouchableOpacity>
+              <View style={styles.bulkOptionRow}>
+                <TextInput
+                  style={styles.bulkHoursInput}
+                  placeholder="مثل: 3"
+                  placeholderTextColor="#a8b1c2"
+                  value={customWeeklyHours}
+                  onChangeText={setCustomWeeklyHours}
+                  keyboardType="numeric"
+                  testID="custom-weekly-hours-input"
+                />
+                <Text style={styles.bulkOptionText}>ساعات أسبوعية مخصصة (اختياري — افتراضي: ساعات المقرر)</Text>
+              </View>
+            </View>
           )}
 
           {/* القائمة */}
@@ -276,6 +488,55 @@ export function AssignTeacherModal({
               })
             )}
           </ScrollView>
+          </>
+          )}
+
+          {/* 🔧 ملخص الإسناد الجماعي قبل الحفظ */}
+          {isBulk && !bulkResults && bulkAnalysis && pickedTeacher && (
+            <View style={styles.bulkSummary}>
+              <View style={styles.bulkSummaryRow}>
+                <Text style={styles.bulkSummaryValue}>{bulkAnalysis.coursesToProcess}</Text>
+                <Text style={styles.bulkSummaryLabel}>سيتم إسنادها:</Text>
+              </View>
+              {bulkAnalysis.sameDeptCount > 0 && (
+                <View style={styles.bulkSummaryRow}>
+                  <View style={[styles.badge, styles.badgeSame]}>
+                    <Text style={[styles.badgeText, { color: '#1b5e20' }]}>{bulkAnalysis.sameDeptCount} نفس القسم</Text>
+                  </View>
+                </View>
+              )}
+              {bulkAnalysis.crossDeptCount > 0 && (
+                <View style={styles.bulkSummaryRow}>
+                  <View style={[styles.badge, styles.badgeCross]}>
+                    <Text style={[styles.badgeText, { color: '#bf360c' }]}>{bulkAnalysis.crossDeptCount} عابر للقسم</Text>
+                  </View>
+                </View>
+              )}
+              {bulkAnalysis.alreadyAssignedCount > 0 && (
+                <View style={styles.bulkSummaryRow}>
+                  <Text style={styles.bulkSummaryWarn}>
+                    ⚠️ {bulkAnalysis.alreadyAssignedCount} مقرر مُسند سلفاً
+                    {bulkAnalysis.alreadyAssignedToPicked > 0 ? ` (${bulkAnalysis.alreadyAssignedToPicked} لنفس المعلم)` : ''}
+                  </Text>
+                </View>
+              )}
+              {pickedId && (
+                <View style={[styles.bulkSummaryRow, styles.bulkLoadRow, bulkAnalysis.overload && styles.bulkLoadOverload]}>
+                  <Text style={[styles.bulkSummaryValue, bulkAnalysis.overload && { color: '#c62828' }]}>
+                    {bulkAnalysis.projectedTotal} / {bulkAnalysis.maxHours} ساعة
+                  </Text>
+                  <Text style={styles.bulkSummaryLabel}>
+                    عبء المعلم بعد الإسناد:
+                  </Text>
+                </View>
+              )}
+              {bulkAnalysis.overload && (
+                <Text style={styles.bulkOverloadText}>
+                  ⚠️ تجاوز الحد الأقصى لساعات المعلم بـ {bulkAnalysis.projectedTotal - bulkAnalysis.maxHours} ساعة
+                </Text>
+              )}
+            </View>
+          )}
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -285,23 +546,29 @@ export function AssignTeacherModal({
               disabled={saving}
               testID="cancel-assign-btn"
             >
-              <Text style={styles.btnGhostText}>إلغاء</Text>
+              <Text style={styles.btnGhostText}>{bulkResults ? 'إغلاق' : 'إلغاء'}</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.btn, styles.btnPrimary, saving && { opacity: 0.6 }]}
-              onPress={handleSave}
-              disabled={saving}
-              testID="save-assign-teacher-btn"
-            >
-              {saving ? (
-                <ActivityIndicator color="#fff" size="small" />
-              ) : (
-                <>
-                  <Ionicons name="checkmark" size={16} color="#fff" />
-                  <Text style={styles.btnPrimaryText}>حفظ</Text>
-                </>
-              )}
-            </TouchableOpacity>
+            {!bulkResults && (
+              <TouchableOpacity
+                style={[styles.btn, styles.btnPrimary, saving && { opacity: 0.6 }, isBulk && !pickedId && { opacity: 0.5 }]}
+                onPress={handleSave}
+                disabled={saving || (isBulk && !pickedId && !bulkCourses?.some(c => c.current_teacher_id))}
+                testID="save-assign-teacher-btn"
+              >
+                {saving ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <>
+                    <Ionicons name={isBulk ? 'people' : 'checkmark'} size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>
+                      {isBulk
+                        ? (pickedId ? `إسناد لـ ${bulkAnalysis?.coursesToProcess ?? bulkCourses!.length} مقرر` : `إلغاء إسناد ${bulkCourses!.filter(c => c.current_teacher_id).length} مقرر`)
+                        : 'حفظ'}
+                    </Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </View>
@@ -338,4 +605,23 @@ const styles = StyleSheet.create({
   btnPrimaryText: { color: '#fff', fontSize: 13, fontWeight: '700' },
   btnGhost: { backgroundColor: '#f6f8fb', borderWidth: 1, borderColor: '#eef1f5' },
   btnGhostText: { color: '#5b6678', fontSize: 13, fontWeight: '700' },
+  // 🔧 الإسناد الجماعي
+  bulkOptions: { marginHorizontal: 16, marginTop: 8, gap: 8 },
+  bulkOptionRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, padding: 10, backgroundColor: '#f6f8fb', borderRadius: 8 },
+  bulkOptionText: { fontSize: 12, color: '#1f2a37', flex: 1, textAlign: 'right' },
+  bulkHoursInput: { width: 60, fontSize: 13, color: '#1f2a37', textAlign: 'center', paddingVertical: 4, paddingHorizontal: 6, borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 6, backgroundColor: '#fff', outlineWidth: 0 as any },
+  bulkSummary: { marginHorizontal: 16, marginTop: 10, padding: 12, backgroundColor: '#f8fafc', borderRadius: 8, borderWidth: 1, borderColor: '#e3e7ee', gap: 6 },
+  bulkSummaryRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  bulkSummaryLabel: { fontSize: 12, color: '#5b6678' },
+  bulkSummaryValue: { fontSize: 14, color: '#1f2a37', fontWeight: '700' },
+  bulkSummaryWarn: { fontSize: 11, color: '#bf360c' },
+  bulkLoadRow: { paddingTop: 6, borderTopWidth: 1, borderTopColor: '#eef1f5', marginTop: 4 },
+  bulkLoadOverload: { backgroundColor: '#fff1f0', marginHorizontal: -4, paddingHorizontal: 8, borderRadius: 4 },
+  bulkOverloadText: { fontSize: 11, color: '#c62828', fontWeight: '700', textAlign: 'right' },
+  bulkResultsBox: { maxHeight: 380 },
+  bulkResultsSummary: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, padding: 10, backgroundColor: '#f1f8f4', borderRadius: 8, marginBottom: 10 },
+  bulkResultsSummaryText: { fontSize: 13, color: '#1b5e20', fontWeight: '700' },
+  bulkResultRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', gap: 8, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#eef1f5' },
+  bulkResultName: { fontSize: 13, color: '#1f2a37', textAlign: 'right', fontWeight: '600' },
+  bulkResultErr: { fontSize: 11, color: '#c62828', marginTop: 2, textAlign: 'right' },
 });

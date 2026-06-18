@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
   Text,
@@ -146,6 +146,8 @@ export default function AddCourseScreen() {
   const [assignTeacherCourse, setAssignTeacherCourse] = useState<Course | null>(null);
   // مودال اختيار معلم في نموذج الإضافة/التعديل (formMode)
   const [showFormTeacherPicker, setShowFormTeacherPicker] = useState(false);
+  // 🔧 الإسناد الجماعي — يستخدم selectionMode/selectedIds الموجودَين أصلاً
+  const [showBulkAssign, setShowBulkAssign] = useState(false);
 
   // صلاحيات المستخدم
   const [userRole, setUserRole] = useState<string>('');
@@ -232,6 +234,17 @@ export default function AddCourseScreen() {
       setCoursesLoading(false);
     }
   }, [activeSemester, filterSemester]);
+
+  // 🔧 حساب العبء الأسبوعي الحالي لكل معلم من المقررات المعروضة (تقدير)
+  const teacherLoadMap = useMemo<Record<string, number>>(() => {
+    const map: Record<string, number> = {};
+    for (const c of courses) {
+      if (!c.teacher_id) continue;
+      const ch = (c as any).credit_hours ?? 3;
+      map[c.teacher_id] = (map[c.teacher_id] || 0) + ch;
+    }
+    return map;
+  }, [courses]);
 
   useEffect(() => {
     fetchBaseData();
@@ -1106,6 +1119,15 @@ export default function AddCourseScreen() {
                       <Ionicons name={selectedIds.size > 0 ? 'close-circle-outline' : 'checkbox-outline'} size={16} color="#fff" />
                       <Text style={styles.btnPrimaryText}>{selectedIds.size > 0 ? `إلغاء التحديد (${selectedIds.size})` : 'تحديد الكل'}</Text>
                     </TouchableOpacity>
+                    <TouchableOpacity
+                      style={[styles.headerBtn, { backgroundColor: '#2962ff' }]}
+                      onPress={() => setShowBulkAssign(true)}
+                      disabled={selectedIds.size === 0}
+                      testID="open-bulk-assign-btn"
+                    >
+                      <Ionicons name="people" size={16} color="#fff" />
+                      <Text style={styles.btnPrimaryText}>إسناد جماعي ({selectedIds.size})</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity style={[styles.headerBtn, { backgroundColor: '#f44336' }]} onPress={handleBulkDelete} disabled={selectedIds.size === 0 || deleting}>
                       {deleting ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash" size={16} color="#fff" />}
                       <Text style={styles.btnPrimaryText}>حذف ({selectedIds.size})</Text>
@@ -1685,6 +1707,48 @@ export default function AddCourseScreen() {
         formMode
         onSaved={(newTeacherId) => {
           setFormData({ ...formData, teacher_id: newTeacherId || '' });
+        }}
+      />
+
+      {/* 🔧 مودال الإسناد الجماعي — لـ selectedIds */}
+      <AssignTeacherModal
+        visible={showBulkAssign && selectedIds.size > 0}
+        onClose={() => setShowBulkAssign(false)}
+        courseId=""
+        teachers={teachers}
+        departments={departments}
+        bulkCourses={Array.from(selectedIds).map(id => {
+          const c = courses.find(cc => cc.id === id);
+          if (!c) return null;
+          const tname = teachers.find(t => t.id === c.teacher_id)?.full_name || '';
+          return {
+            id: c.id,
+            name: c.name,
+            code: c.code,
+            credit_hours: (c as any).credit_hours ?? 3,
+            department_id: c.department_id,
+            current_teacher_id: c.teacher_id || undefined,
+            current_teacher_name: tname,
+          };
+        }).filter(Boolean) as any}
+        teacherCurrentLoadMap={teacherLoadMap}
+        onSaved={() => {}}
+        onBulkSaved={(newTeacherId, name, results) => {
+          // تحديث محلي للجدول لكل المقررات التي نجحت
+          const okIds = new Set(results.filter(r => r.ok).map(r => r.course_id));
+          if (okIds.size > 0) {
+            setCourses(prev => prev.map(c =>
+              okIds.has(c.id)
+                ? { ...c, teacher_id: newTeacherId || '', teacher_name: name || '' }
+                : c
+            ));
+            // خرج من وضع التحديد بعد النجاح الكامل
+            const failedCount = results.filter(r => !r.ok).length;
+            if (failedCount === 0) {
+              setSelectedIds(new Set());
+              setSelectionMode(false);
+            }
+          }
         }}
       />
     </SafeAreaView>
