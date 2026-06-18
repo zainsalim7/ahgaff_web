@@ -13,6 +13,43 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-18 **إصلاح جذري لتضارب بيانات الفصل النشط عبر كل النظام (Active Semester Consistency)**: المشكلة المُبلَّغة: "مقررات المعلم تعرض 0، بينما صفحة المقررات تعرضه مسؤولاً عن مقررات أخرى وبعدد محاضرات مختلف عن صفحة تفاصيل المقرر — نظام ملخبط".
+  - **التشخيص:** 5 endpoints كانت تطبّق فلتر الفصل النشط بطرق مختلفة:
+    - `/api/courses` lecture_count: بلا فلتر → كل المحاضرات تاريخياً
+    - `/api/lectures/{course_id}`: فلتر الفصل النشط
+    - `/api/courses/{id}/full-details`: فلتر الفصل النشط
+    - `/api/courses/{id}/lecture-stats`: لا فلتر افتراضي
+    - `/api/teachers/{id}/courses`: يعتمد على `teaching_loads` فقط (يخفي مقرراً مرتبطاً بـ `courses.teacher_id` بلا teaching_load)
+    - `/api/teachers/{id}/full-profile`: يستخدم `courses.teacher_id` فقط (بلا فلتر فصل) → يختلف عن أخوه `/courses`
+  - **الإصلاح:** إنشاء `/app/backend/backend/routes/_active_semester.py` كمصدر وحيد للحقيقة:
+    - `get_active_semester(db)` → جلب الفصل النشط مع التواريخ
+    - `lecture_active_semester_clauses(sem)` → بناء $or clauses (matches `semester_id` OR fallback date-range for legacy lectures with no semester_id)
+    - `apply_lecture_active_sem(match, sem)` → دمج آمن مع `$or` موجود (يحوّل إلى `$and` تلقائياً)
+    - `get_teacher_active_course_ids(db, teacher_id, sem)` → UNION (`courses.teacher_id` ∪ `teaching_loads.course_id`) في الفصل المستهدف
+    - `get_courses_lecture_counts(db, course_ids, sem)` → عدّ المحاضرات لجميع المقررات بنفس الفلتر
+  - **تغيير الـ Endpoints:**
+    - `/api/courses` (server.py:4852): lecture_count يستخدم نفس نطاق المقررات (لو فلتر فصل → نفس الفصل، لو all_semesters → بلا فلتر)
+    - `/api/lectures/{course_id}` (server.py:6813): يفلتر بـ **فصل المقرر نفسه** (وليس الفصل النشط العام) — UX أفضل: فتح مقرر مؤرشف يعرض محاضراته
+    - `/api/courses/{id}/lecture-stats` (server.py:5054): نفس منطق "فصل المقرر"
+    - `/api/courses/{id}/full-details` (entity_details.py): نفس منطق "فصل المقرر"
+    - `/api/teachers/{id}/courses` (server.py:4143): يستخدم UNION + lecture_count موحّد
+    - `/api/teachers/{id}/full-profile` (entity_details.py): UNION + lectures_total/completed موحّد + يدعم `?all_semesters=true`
+  - **الفرونت إند:**
+    - `/app/frontend/app/teacher-courses.tsx`: زر تبديل جديد (testID=toggle-all-semesters-btn) لعرض "الفصل النشط فقط" ↔ "كل الفصول (أرشيف)".
+    - `/app/frontend/src/services/api.ts`: `teachersAPI.getCourses(teacherId, params?)` يدعم `include_all` و `semester_id`.
+  - **التحقق:** Course `698f0000d803b27aab0120af` (دراسات حضرموت، 9 محاضرات في الفصل المغلق):
+    - `/api/courses?semester_id=ClosedSem` → 9 ✓
+    - `/api/courses/{id}/full-details` → 9 ✓
+    - `/api/courses/{id}/lecture-stats` → 9 ✓
+    - `/api/lectures/{id}` → 9 ✓
+    - **كل الأرقام متطابقة الآن!**
+    - Teacher `698e533beb4c6eb021c50302` (حسن صالح): default = 0 / include_all = 3 (`/courses` و `/full-profile` يتفقان).
+  - **الاختبارات:**
+    - `/app/backend/tests/test_active_semester_consistency.py` (8 اختبارات helper) — جميعها ✓
+    - `/app/backend/tests/test_active_sem_endpoint_consistency.py` (15 HTTP tests كتبها testing agent) — جميعها ✓
+    - Regression: `test_teaching_load_cross_dept.py`, `test_teaching_load_auto_sync.py` — جميعها ✓
+    - **25/25 backend tests pass.**
+
 - 2026-06-18 **مزامنة تلقائية لـ teaching_loads مع المقررات (إصلاح أرقام العبء غير المتطابقة)**: لكل مقرر له `teacher_id` وليس له entry في `teaching_loads` يُنشَأ entry تلقائياً بساعات = `credit_hours` (أو 3 افتراضياً). المزامنة تُنفّذ داخل `/api/teaching-load/report/advanced` قبل الحساب (تخطّى الفصول المؤرشفة لحماية الأرشيف). تمت إضافة endpoint يدوي: `POST /api/teaching-load/sync` يدعم فلاتر `teacher_id` و `department_id` و `semester_id`. النتيجة المُختبرة: `حسن صالح` كان يعرض 3 مقررات بـ 3 ساعات → الآن 9 ساعات (3 × credit_hours). idempotent: استدعاء ثانٍ ينشئ 0 سجل. اختبار: `/app/backend/tests/test_teaching_load_auto_sync.py`.
 - 2026-06-18 **إصلاح باغ تقرير العبء التدريسي (مقررات المعلم في أقسام أخرى لا تظهر)**: في `/api/teaching-load/report/advanced`، عند فلترة التقرير بقسم، كانت مقررات المعلم في أقسام أخرى تُحذف من القائمة لأن `course_query["department_id"] = department_id` كان يقصر المقررات على القسم المختار، ثم `assigned_courses = [c for c in all_courses if c.get("teacher_id") == tid]` يستخدم نفس القائمة. الإصلاح: تم فصل قائمتين — `dept_courses` (لإحصائيات القسم) و `teacher_courses_list` (لعرض مقررات كل معلم من جميع الأقسام). الآن إذا كان "زين سالم" له 6 مقررات في 3 أقسام، التقرير يعرضها كلها بـ `department_id` للمقرر مع كل courses entry. تم تعزيز ذلك باختبار regression: `/app/backend/tests/test_teaching_load_cross_dept.py`.
 - 2026-06-17 **توحيد صفحات المقرر في 4 تبويبات + تعديل/حذف**: إنشاء `<CourseTabBar>` كمكوّن مشترك (/src/components/CourseTabBar.tsx) يعرض في رأس course-details, course-lectures, course-students, manage-study-plan. يحوي: Breadcrumb + بطاقة معلومات المقرر + شريط تبويبات (نظرة عامة/المحاضرات/الطلاب/الخطة) + زرّا تعديل/حذف مع modals. النقر على تبويب يستدعي router.replace للمسار المقابل. النتيجة المختبرة: التبويبات الأربعة تعمل بسلاسة مع الحفاظ على كامل وظائف كل صفحة.
