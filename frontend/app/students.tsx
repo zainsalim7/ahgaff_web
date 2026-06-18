@@ -1242,24 +1242,6 @@ export default function StudentsScreen() {
               </View>
             </View>
 
-            <View style={[styles.filterField, { maxWidth: 280 }]}>
-              <Text style={styles.filterLbl}>فرز</Text>
-              <View style={styles.dropdown}>
-                <Picker
-                  selectedValue={sortBy}
-                  onValueChange={(v) => { setSortBy(v as any); setCurrentPage(1); }}
-                  style={styles.dropdownInner}
-                  testID="sort-picker"
-                >
-                  <Picker.Item label="الترتيب الافتراضي" value="none" />
-                  <Picker.Item label="حسب الاسم تصاعدياً (أ → ي)" value="name_asc" />
-                  <Picker.Item label="حسب الاسم تنازلياً (ي → أ)" value="name_desc" />
-                  <Picker.Item label="حسب نسبة الحضور (الأعلى أولاً)" value="attendance_desc" />
-                  <Picker.Item label="حسب نسبة الحضور (الأقل أولاً)" value="attendance_asc" />
-                </Picker>
-              </View>
-            </View>
-
             {/* أزرار اليسار */}
             <View style={styles.filterBtns}>
               <TouchableOpacity
@@ -1341,7 +1323,21 @@ export default function StudentsScreen() {
 
           {/* رؤوس الأعمدة */}
           <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
-            <View style={[styles.colStudent, styles.cellPad]}><Text style={styles.thText}>الطالب</Text></View>
+            <TouchableOpacity
+              style={[styles.colStudent, styles.cellPad, { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }]}
+              onPress={() => {
+                setSortBy(sortBy === 'name_asc' ? 'name_desc' : sortBy === 'name_desc' ? 'none' : 'name_asc');
+                setCurrentPage(1);
+              }}
+              data-testid="sort-by-name"
+            >
+              <Text style={[styles.thText, sortBy !== 'none' && { color: '#2962ff' }]}>الطالب</Text>
+              <Ionicons
+                name={sortBy === 'name_asc' ? 'arrow-up' : sortBy === 'name_desc' ? 'arrow-down' : 'swap-vertical'}
+                size={12}
+                color={sortBy === 'none' ? '#a8b1c2' : '#2962ff'}
+              />
+            </TouchableOpacity>
             <View style={[styles.colUniId, styles.cellPad]}><Text style={styles.thText}>الرقم الجامعي</Text></View>
             <View style={[styles.colInner, styles.cellPad]}><Text style={styles.thText}>الرقم الداخلي</Text></View>
             <View style={[styles.colProg, styles.cellPad]}><Text style={styles.thText}>البرنامج</Text></View>
