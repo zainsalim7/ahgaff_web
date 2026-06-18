@@ -791,12 +791,34 @@ export default function AddCourseScreen() {
         style={{ flex: 1 }}
       >
         {showForm ? (
-          <ScrollView style={styles.formContainer}>
-            <Text style={styles.formTitle}>
-              {editingCourse ? 'تعديل المقرر' : 'إضافة مقرر جديد'}
-            </Text>
-            
-            <Text style={styles.label}>اسم المقرر *</Text>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1 }]} showsVerticalScrollIndicator={true}>
+            <View style={styles.formCardModern}>
+              <View style={styles.formHeaderModern}>
+                <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                  <Text style={styles.formTitleModern}>
+                    {editingCourse ? 'تعديل المقرر' : 'إضافة مقرر جديد'}
+                  </Text>
+                  <View style={styles.breadcrumb}>
+                    <TouchableOpacity onPress={() => router.replace('/')}>
+                      <Text style={styles.breadcrumbLink}>الرئيسية</Text>
+                    </TouchableOpacity>
+                    <Ionicons name="chevron-back" size={11} color="#8a95a8" />
+                    <TouchableOpacity onPress={() => { setShowForm(false); setEditingCourse(null); resetForm(); }}>
+                      <Text style={styles.breadcrumbLink}>المقررات</Text>
+                    </TouchableOpacity>
+                    <Ionicons name="chevron-back" size={11} color="#8a95a8" />
+                    <Text style={styles.breadcrumbCurrent}>{editingCourse ? 'تعديل' : 'إضافة'}</Text>
+                  </View>
+                </View>
+                <TouchableOpacity
+                  style={styles.formCloseBtnModern}
+                  onPress={() => { setShowForm(false); setEditingCourse(null); resetForm(); }}
+                >
+                  <Ionicons name="close" size={20} color="#5b6678" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>اسم المقرر *</Text>
             <TextInput
               style={styles.input}
               value={formData.name}
@@ -982,6 +1004,7 @@ export default function AddCourseScreen() {
                   {saving ? 'جاري الحفظ...' : editingCourse ? 'تحديث' : 'حفظ'}
                 </Text>
               </TouchableOpacity>
+            </View>
             </View>
           </ScrollView>
         ) : (
@@ -1870,6 +1893,10 @@ const styles = StyleSheet.create({
   formContainer: {
     padding: 16,
   },
+  formCardModern: { backgroundColor: '#fff', borderRadius: 14, padding: 22, borderWidth: 1, borderColor: '#eef1f6', maxWidth: 800, alignSelf: 'center', width: '100%' },
+  formHeaderModern: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, paddingBottom: 14, borderBottomWidth: 1, borderBottomColor: '#f3f5f9' },
+  formTitleModern: { fontSize: 22, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
+  formCloseBtnModern: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f4f6fb' },
   formTitle: {
     fontSize: 20,
     fontWeight: 'bold',

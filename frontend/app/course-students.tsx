@@ -1115,33 +1115,57 @@ export default function CourseStudentsScreen() {
         {/* Add Students Modal — تبويبان: موجود / جديد */}
         {canManageStudents && showAddModal && (
           <Modal visible={showAddModal} transparent animationType="fade">
-            <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
-              <View style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: 540, maxHeight: '90%', overflow: 'hidden' }}>
-                {/* Header */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#eee' }}>
-                  <Text style={{ fontSize: 16, fontWeight: '700', color: '#1565c0' }}>إضافة طلاب — {course?.name}</Text>
-                  <TouchableOpacity onPress={() => setShowAddModal(false)} testID="close-add-modal-btn">
-                    <Ionicons name="close" size={24} color="#666" />
+            <View style={{ flex: 1, backgroundColor: 'rgba(20,30,55,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+              <View style={{ backgroundColor: '#fff', borderRadius: 14, width: '100%', maxWidth: 600, maxHeight: '92%', overflow: 'hidden', borderWidth: 1, borderColor: '#eef1f6' }}>
+                {/* Header — نمط حديث */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'flex-start', justifyContent: 'space-between', padding: 18, borderBottomWidth: 1, borderBottomColor: '#f3f5f9' }}>
+                  <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    <Text style={{ fontSize: 18, fontWeight: '700', color: '#1a2540', marginBottom: 4 }}>إضافة طلاب للمقرر</Text>
+                    <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                      <Text style={{ fontSize: 12, color: '#5b6678' }}>المقرر:</Text>
+                      <View style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8, backgroundColor: '#e3f2fd' }}>
+                        <Text style={{ fontSize: 12, color: '#1565c0', fontWeight: '700' }}>{course?.name}</Text>
+                      </View>
+                    </View>
+                  </View>
+                  <TouchableOpacity
+                    onPress={() => setShowAddModal(false)}
+                    testID="close-add-modal-btn"
+                    style={{ width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f4f6fb' }}
+                  >
+                    <Ionicons name="close" size={20} color="#5b6678" />
                   </TouchableOpacity>
                 </View>
 
-                {/* Tabs */}
-                <View style={{ flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: '#eee' }}>
+                {/* Tabs — نمط pill حديث */}
+                <View style={{ flexDirection: 'row-reverse', padding: 10, gap: 6, backgroundColor: '#fafbfd' }}>
                   <TouchableOpacity
-                    style={{ flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: addTab === 'existing' ? '#1565c0' : 'transparent' }}
+                    style={{
+                      flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10,
+                      backgroundColor: addTab === 'existing' ? '#2962ff' : '#fff',
+                      borderWidth: 1, borderColor: addTab === 'existing' ? '#2962ff' : '#e3e7ee',
+                    }}
                     onPress={() => setAddTab('existing')}
                     testID="tab-existing-students"
                   >
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: addTab === 'existing' ? '#1565c0' : '#666' }}>
+                    <Ionicons name="people-outline" size={15} color={addTab === 'existing' ? '#fff' : '#5b6678'} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: addTab === 'existing' ? '#fff' : '#5b6678' }}>
                       من القائمة ({filteredStudents.length})
                     </Text>
                   </TouchableOpacity>
                   <TouchableOpacity
-                    style={{ flex: 1, paddingVertical: 12, alignItems: 'center', borderBottomWidth: 3, borderBottomColor: addTab === 'new' ? '#1565c0' : 'transparent' }}
+                    style={{
+                      flex: 1, flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10,
+                      backgroundColor: addTab === 'new' ? '#2962ff' : '#fff',
+                      borderWidth: 1, borderColor: addTab === 'new' ? '#2962ff' : '#e3e7ee',
+                    }}
                     onPress={() => setAddTab('new')}
                     testID="tab-new-student"
                   >
-                    <Text style={{ fontSize: 14, fontWeight: '700', color: addTab === 'new' ? '#1565c0' : '#666' }}>
+                    <Ionicons name="person-add-outline" size={15} color={addTab === 'new' ? '#fff' : '#5b6678'} />
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: addTab === 'new' ? '#fff' : '#5b6678' }}>
                       إنشاء طالب جديد
                     </Text>
                   </TouchableOpacity>
