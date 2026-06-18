@@ -22,6 +22,7 @@ import api, { departmentsAPI, coursesAPI, teachersAPI, settingsAPI } from '../..
 import { Course, Department } from '../../src/types';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
 import { useAuthStore } from '../../src/store/authStore';
+import { SortableHeader } from '../../src/components/SortableHeader';
 
 interface Teacher {
   id: string;
@@ -105,6 +106,7 @@ export default function AddCourseScreen() {
   const [filterDept, setFilterDept] = useState<string>('');
   const [filterLevel, setFilterLevel] = useState<string>('');
   const [filterSemester, setFilterSemester] = useState<string>(''); // '' = الفصل النشط (افتراضي), 'all' = كل الفصول, أو semester_id محدد
+  const [sortBy, setSortBy] = useState<string | null>(null);
   const [activeSemester, setActiveSemester] = useState<any>(null);
   const [allSemesters, setAllSemesters] = useState<any[]>([]);
   
@@ -1071,6 +1073,17 @@ export default function AddCourseScreen() {
                 }
                 return true;
               });
+              // 🔤 فرز ديناميكي
+              if (sortBy) {
+                filtered.sort((a: any, b: any) => {
+                  let cmp = 0;
+                  if (sortBy.startsWith('name_')) cmp = (a.name || '').localeCompare((b.name || ''), 'ar');
+                  else if (sortBy.startsWith('level_')) cmp = ((a.level as number) || 0) - ((b.level as number) || 0);
+                  else if (sortBy.startsWith('students_')) cmp = (a.students_count || 0) - (b.students_count || 0);
+                  else if (sortBy.startsWith('lectures_')) cmp = ((a as any).lectures_count || 0) - ((b as any).lectures_count || 0);
+                  return sortBy.endsWith('_desc') ? -cmp : cmp;
+                });
+              }
               const totalStudents = courses.reduce((s, c) => s + (c.students_count ?? 0), 0);
               const totalLectures = courses.reduce((s, c) => s + ((c as any).lectures_count ?? 0), 0);
               const totalPages = Math.ceil(filtered.length / perPage);
@@ -1186,12 +1199,12 @@ export default function AddCourseScreen() {
                     ) : (
                       <>
                         <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
-                          <View style={[styles.cCol1, styles.cellPad]}><Text style={styles.thText}>المقرر</Text></View>
+                          <SortableHeader label="المقرر" field="name" currentSort={sortBy} onSort={(v) => { setSortBy(v); setCurrentPage(1); }} containerStyle={[styles.cCol1, styles.cellPad]} />
                           <View style={[styles.cCol2, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
-                          <View style={[styles.cCol3, styles.cellPad]}><Text style={styles.thText}>المستوى</Text></View>
+                          <SortableHeader label="المستوى" field="level" currentSort={sortBy} onSort={(v) => { setSortBy(v); setCurrentPage(1); }} containerStyle={[styles.cCol3, styles.cellPad]} />
                           <View style={[styles.cCol4, styles.cellPad]}><Text style={styles.thText}>المعلم</Text></View>
-                          <View style={[styles.cCol5, styles.cellPad]}><Text style={styles.thText}>الطلاب</Text></View>
-                          <View style={[styles.cCol6, styles.cellPad]}><Text style={styles.thText}>المحاضرات</Text></View>
+                          <SortableHeader label="الطلاب" field="students" currentSort={sortBy} onSort={(v) => { setSortBy(v); setCurrentPage(1); }} containerStyle={[styles.cCol5, styles.cellPad]} />
+                          <SortableHeader label="المحاضرات" field="lectures" currentSort={sortBy} onSort={(v) => { setSortBy(v); setCurrentPage(1); }} containerStyle={[styles.cCol6, styles.cellPad]} />
                           <View style={[styles.cCol7, styles.cellPad]}><Text style={styles.thText}>العمليات</Text></View>
                         </View>
                         {paged.length === 0 ? (

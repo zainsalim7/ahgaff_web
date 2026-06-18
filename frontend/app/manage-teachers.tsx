@@ -21,6 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { teachersAPI, departmentsAPI } from '../src/services/api';
 import { API_URL } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { SortableHeader } from '../src/components/SortableHeader';
 
 interface Teacher {
   id: string;
@@ -65,6 +66,7 @@ export default function ManageTeachersScreen() {
   // قائمة العمليات (3 نقاط)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [perPage, setPerPage] = useState(10);
+  const [sortBy, setSortBy] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     teacher_id: '',
@@ -452,6 +454,16 @@ export default function ManageTeachersScreen() {
       getTeacherId(t).includes(searchQuery)
     );
   }
+  // 🔤 فرز ديناميكي
+  if (sortBy) {
+    filteredTeachers = [...filteredTeachers].sort((a: any, b: any) => {
+      let cmp = 0;
+      if (sortBy.startsWith('name_')) cmp = getTeacherName(a).localeCompare(getTeacherName(b), 'ar');
+      else if (sortBy.startsWith('hours_')) cmp = ((a.weekly_hours as number) || 0) - ((b.weekly_hours as number) || 0);
+      else if (sortBy.startsWith('courses_')) cmp = ((a.courses_count as number) || 0) - ((b.courses_count as number) || 0);
+      return sortBy.endsWith('_desc') ? -cmp : cmp;
+    });
+  }
 
   // اسم الفصل النشط (للشارة في رأس الصفحة)
   const activeSemesterName = useMemo(
@@ -805,12 +817,12 @@ export default function ManageTeachersScreen() {
               </View>
 
               <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
-                <View style={[styles.colTeacher, styles.cellPad]}><Text style={styles.thText}>المعلم</Text></View>
+                <SortableHeader label="المعلم" field="name" currentSort={sortBy} onSort={(v) => { setSortBy(v); setCurrentPage(1); }} containerStyle={[styles.colTeacher, styles.cellPad]} />
                 <View style={[styles.colPhone, styles.cellPad]}><Text style={styles.thText}>رقم الجوال</Text></View>
                 <View style={[styles.colDept, styles.cellPad]}><Text style={styles.thText}>القسم</Text></View>
                 <View style={[styles.colSpec, styles.cellPad]}><Text style={styles.thText}>التخصص</Text></View>
-                <View style={[styles.colLoad, styles.cellPad]}><Text style={styles.thText}>النصاب</Text></View>
-                <View style={[styles.colCourses, styles.cellPad]}><Text style={styles.thText}>المقررات</Text></View>
+                <SortableHeader label="النصاب" field="hours" currentSort={sortBy} onSort={(v) => { setSortBy(v); setCurrentPage(1); }} containerStyle={[styles.colLoad, styles.cellPad]} />
+                <SortableHeader label="المقررات" field="courses" currentSort={sortBy} onSort={(v) => { setSortBy(v); setCurrentPage(1); }} containerStyle={[styles.colCourses, styles.cellPad]} />
                 <View style={[styles.colAcc, styles.cellPad]}><Text style={styles.thText}>الحساب</Text></View>
                 <View style={[styles.colActions, styles.cellPad]}><Text style={styles.thText}>العمليات</Text></View>
               </View>

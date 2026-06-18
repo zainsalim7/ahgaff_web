@@ -20,6 +20,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { departmentsAPI, studentsAPI, attendanceAPI, notificationsAPI, exportAPI } from '../src/services/api';
 import api from '../src/services/api';
+import { SortableHeader } from '../src/components/SortableHeader';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Department, Student } from '../src/types';
 import { LoadingScreen } from '../src/components/LoadingScreen';
@@ -292,23 +293,29 @@ export default function StudentsScreen() {
       
       return matchesDept && matchesLevel && matchesSection && matchesSearch && matchesStatus;
     });
-    // 🔤 فرز حسب الاسم (تصاعدي/تنازلي) — يستخدم localeCompare العربي لترتيب صحيح
-    if (sortBy === 'name_asc' || sortBy === 'name_desc') {
+    // 🔤 فرز ديناميكي حسب الحقل المختار
+    if (sortBy !== 'none') {
       filtered.sort((a, b) => {
-        const cmp = (a.full_name || '').localeCompare((b.full_name || ''), 'ar');
-        return sortBy === 'name_asc' ? cmp : -cmp;
-      });
-    }
-    // 📊 فرز حسب نسبة الحضور (تصاعدي/تنازلي) — الطلاب بلا سجلات يُوضَعون في الذيل
-    else if (sortBy === 'attendance_asc' || sortBy === 'attendance_desc') {
-      filtered.sort((a, b) => {
-        const pa = attendanceMap[a.id];
-        const pb = attendanceMap[b.id];
-        // طلاب بدون سجلات → دائماً في النهاية
-        if (pa == null && pb == null) return 0;
-        if (pa == null) return 1;
-        if (pb == null) return -1;
-        return sortBy === 'attendance_asc' ? pa - pb : pb - pa;
+        let cmp = 0;
+        if (sortBy.startsWith('name_')) {
+          cmp = (a.full_name || '').localeCompare((b.full_name || ''), 'ar');
+        } else if (sortBy.startsWith('student_id_')) {
+          cmp = (a.student_id || '').localeCompare((b.student_id || ''), 'ar', { numeric: true });
+        } else if (sortBy.startsWith('level_')) {
+          cmp = ((a.level as number) || 0) - ((b.level as number) || 0);
+        } else if (sortBy.startsWith('created_at_')) {
+          const ad = new Date((a as any).created_at || 0).getTime();
+          const bd = new Date((b as any).created_at || 0).getTime();
+          cmp = ad - bd;
+        } else if (sortBy.startsWith('attendance_')) {
+          const pa = attendanceMap[a.id];
+          const pb = attendanceMap[b.id];
+          if (pa == null && pb == null) cmp = 0;
+          else if (pa == null) return 1;
+          else if (pb == null) return -1;
+          else cmp = pa - pb;
+        }
+        return sortBy.endsWith('_desc') ? -cmp : cmp;
       });
     }
     return filtered;
@@ -1323,27 +1330,13 @@ export default function StudentsScreen() {
 
           {/* رؤوس الأعمدة */}
           <View dataSet={{ responsive: "table-header-row" }} style={styles.tableHeaderRow}>
-            <TouchableOpacity
-              style={[styles.colStudent, styles.cellPad, { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }]}
-              onPress={() => {
-                setSortBy(sortBy === 'name_asc' ? 'name_desc' : sortBy === 'name_desc' ? 'none' : 'name_asc');
-                setCurrentPage(1);
-              }}
-              data-testid="sort-by-name"
-            >
-              <Text style={[styles.thText, sortBy !== 'none' && { color: '#2962ff' }]}>الطالب</Text>
-              <Ionicons
-                name={sortBy === 'name_asc' ? 'arrow-up' : sortBy === 'name_desc' ? 'arrow-down' : 'swap-vertical'}
-                size={12}
-                color={sortBy === 'none' ? '#a8b1c2' : '#2962ff'}
-              />
-            </TouchableOpacity>
-            <View style={[styles.colUniId, styles.cellPad]}><Text style={styles.thText}>الرقم الجامعي</Text></View>
+            <SortableHeader label="الطالب" field="name" currentSort={sortBy === 'none' ? null : sortBy} onSort={(next) => { setSortBy((next as any) || 'none'); setCurrentPage(1); }} containerStyle={[styles.colStudent, styles.cellPad]} />
+            <SortableHeader label="الرقم الجامعي" field="student_id" currentSort={sortBy === 'none' ? null : sortBy} onSort={(next) => { setSortBy((next as any) || 'none'); setCurrentPage(1); }} containerStyle={[styles.colUniId, styles.cellPad]} />
             <View style={[styles.colInner, styles.cellPad]}><Text style={styles.thText}>الرقم الداخلي</Text></View>
             <View style={[styles.colProg, styles.cellPad]}><Text style={styles.thText}>البرنامج</Text></View>
-            <View style={[styles.colLevel, styles.cellPad]}><Text style={styles.thText}>المستوى</Text></View>
+            <SortableHeader label="المستوى" field="level" currentSort={sortBy === 'none' ? null : sortBy} onSort={(next) => { setSortBy((next as any) || 'none'); setCurrentPage(1); }} containerStyle={[styles.colLevel, styles.cellPad]} />
             <View style={[styles.colStatus, styles.cellPad]}><Text style={styles.thText}>الحالة</Text></View>
-            <View style={[styles.colDate, styles.cellPad]}><Text style={styles.thText}>تاريخ التسجيل</Text></View>
+            <SortableHeader label="تاريخ التسجيل" field="created_at" currentSort={sortBy === 'none' ? null : sortBy} onSort={(next) => { setSortBy((next as any) || 'none'); setCurrentPage(1); }} containerStyle={[styles.colDate, styles.cellPad]} />
             <View style={[styles.colActions, styles.cellPad]}><Text style={styles.thText}>العمليات</Text></View>
           </View>
 
