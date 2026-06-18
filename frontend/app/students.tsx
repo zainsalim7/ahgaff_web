@@ -103,6 +103,7 @@ export default function StudentsScreen() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<string>('');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [sortBy, setSortBy] = useState<'none' | 'name_asc' | 'name_desc'>('none');
   
   // Pagination
   const PAGE_SIZE = 10;
@@ -276,7 +277,7 @@ export default function StudentsScreen() {
 
   // تصفية الطلاب
   const filteredStudents = useMemo(() => {
-    return students.filter(student => {
+    const filtered = students.filter(student => {
       const matchesDept = !selectedDeptFilter || student.department_id === selectedDeptFilter;
       const matchesLevel = !selectedLevelFilter || String(student.level) === selectedLevelFilter;
       const matchesSection = !selectedSectionFilter || 
@@ -290,7 +291,15 @@ export default function StudentsScreen() {
       
       return matchesDept && matchesLevel && matchesSection && matchesSearch && matchesStatus;
     });
-  }, [students, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery, selectedStatusFilter]);
+    // 🔤 فرز حسب الاسم (تصاعدي/تنازلي) — يستخدم localeCompare العربي لترتيب صحيح
+    if (sortBy === 'name_asc' || sortBy === 'name_desc') {
+      filtered.sort((a, b) => {
+        const cmp = (a.full_name || '').localeCompare((b.full_name || ''), 'ar');
+        return sortBy === 'name_asc' ? cmp : -cmp;
+      });
+    }
+    return filtered;
+  }, [students, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery, selectedStatusFilter, sortBy]);
 
   // الشعب المتاحة
   const availableSections = useMemo(() => {
@@ -1024,10 +1033,11 @@ export default function StudentsScreen() {
     setSelectedSectionFilter('');
     setSelectedStatusFilter('');
     setSearchQuery('');
+    setSortBy('none');
     setCurrentPage(1);
   }, []);
 
-  const hasAnyFilter = !!(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery);
+  const hasAnyFilter = !!(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery || sortBy !== 'none');
 
   if (authLoading || loading) {
     return <LoadingScreen />;
@@ -1198,6 +1208,22 @@ export default function StudentsScreen() {
                 >
                   <Picker.Item label="الكل" value="" />
                   {STATUS_OPTIONS.map(o => <Picker.Item key={o.value} label={o.label} value={o.value} />)}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={[styles.filterField, { maxWidth: 200 }]}>
+              <Text style={styles.filterLbl}>فرز</Text>
+              <View style={styles.dropdown}>
+                <Picker
+                  selectedValue={sortBy}
+                  onValueChange={(v) => { setSortBy(v as any); setCurrentPage(1); }}
+                  style={styles.dropdownInner}
+                  testID="sort-picker"
+                >
+                  <Picker.Item label="الترتيب الافتراضي" value="none" />
+                  <Picker.Item label="حسب الاسم تصاعدياً (أ → ي)" value="name_asc" />
+                  <Picker.Item label="حسب الاسم تنازلياً (ي → أ)" value="name_desc" />
                 </Picker>
               </View>
             </View>
