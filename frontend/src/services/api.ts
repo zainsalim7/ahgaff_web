@@ -365,7 +365,8 @@ export const teachersAPI = {
   getAll: (params?: { department_id?: string }) =>
     api.get('/teachers', { params }),
   getById: (id: string) => api.get(`/teachers/${id}`),
-  getCourses: (teacherId: string) => api.get(`/teachers/${teacherId}/courses`),
+  getCourses: (teacherId: string, params?: { include_all?: boolean; semester_id?: string }) =>
+    api.get(`/teachers/${teacherId}/courses`, { params }),
   update: (id: string, data: any) => api.put(`/teachers/${id}`, data),
   delete: (id: string) => api.delete(`/teachers/${id}`),
   // تفعيل/إلغاء تفعيل حساب المعلم

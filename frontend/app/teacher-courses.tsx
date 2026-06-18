@@ -80,6 +80,8 @@ export default function TeacherCoursesScreen() {
   // Exporting PDF
   const [exportingPdf, setExportingPdf] = useState(false);
   const [exportingExcel, setExportingExcel] = useState(false);
+  // 🔧 عرض كل الفصول (للأرشيف) — افتراضياً يعرض الفصل النشط فقط
+  const [showAllSemesters, setShowAllSemesters] = useState(false);
 
   const showMessage = (title: string, message: string) => {
     if (Platform.OS === 'web') window.alert(`${title}\n\n${message}`);
@@ -90,7 +92,7 @@ export default function TeacherCoursesScreen() {
     if (!teacherId) return;
     try {
       const [coursesRes, teacherRes] = await Promise.all([
-        teachersAPI.getCourses(teacherId),
+        teachersAPI.getCourses(teacherId, showAllSemesters ? { include_all: true } : undefined),
         teachersAPI.getById(teacherId).catch(() => null),
       ]);
       setData(coursesRes.data);
@@ -102,7 +104,7 @@ export default function TeacherCoursesScreen() {
     } finally {
       setLoading(false);
     }
-  }, [teacherId]);
+  }, [teacherId, showAllSemesters]);
 
   useEffect(() => {
     fetchCourses();
@@ -308,6 +310,17 @@ export default function TeacherCoursesScreen() {
                   <Text style={styles.semesterBadgeText}>{data.semester_name}</Text>
                 </View>
               )}
+              {/* 🔧 زر تبديل عرض كل الفصول */}
+              <TouchableOpacity
+                onPress={() => setShowAllSemesters(v => !v)}
+                style={[styles.semesterBadge, showAllSemesters && { backgroundColor: '#fef3c7', borderColor: '#f59e0b' }]}
+                testID="toggle-all-semesters-btn"
+              >
+                <Ionicons name={showAllSemesters ? 'archive' : 'archive-outline'} size={11} color={showAllSemesters ? '#92400e' : '#1565c0'} />
+                <Text style={[styles.semesterBadgeText, showAllSemesters && { color: '#92400e' }]}>
+                  {showAllSemesters ? 'كل الفصول (أرشيف)' : 'الفصل النشط فقط'}
+                </Text>
+              </TouchableOpacity>
             </View>
             <View style={styles.breadcrumb}>
               <TouchableOpacity onPress={() => router.replace('/')}>

@@ -1,0 +1,34 @@
+{
+  "summary": "Backend-only verification of active-semester filtering consistency fix. Created new pytest file /app/backend/tests/test_active_sem_endpoint_consistency.py with 15 HTTP-level tests exercising every endpoint mentioned in the review_request. All 15 pass. Pre-existing unit-test file test_active_semester_consistency.py (8 tests) also fully green. Teaching-load regression smoke (cross-dept + auto-sync) also passes. TOTAL: 25/25 backend tests pass.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "/app/frontend/app/teacher-courses.tsx", "issue": "Metro build is currently failing with SyntaxError: Identifier 'exportingPdf' has already been declared (line 85). The new showAllSemesters block was added next to a duplicate declaration. Web bundle is broken until fixed. Spotted in /var/log/supervisor/expo.out.log. Frontend testing skipped per request, but this WILL break the new toggle-all-semesters-btn flow once user opens the page.", "selector": "n/a (compile-time)", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_active_sem_endpoint_consistency.py",
+    "/app/backend/tests/test_active_semester_consistency.py",
+    "/app/test_reports/pytest/active_sem_consistency.xml"
+  ],
+  "action_items": [
+    "Fix duplicate `const [exportingPdf, setExportingPdf] = useState(false)` declaration in /app/frontend/app/teacher-courses.tsx around line 85 — Metro bundling currently fails so the new toggle button is unreachable in the web build.",
+    "After the fix, retest the toggle-all-semesters-btn UI flow (frontend was skipped here per testing_type)."
+  ],
+  "critical_code_review_comments": [
+    "_active_semester.py is well-designed: single source of truth, idempotent $or merging via $and, and a UNION helper for teacher courses. No issues.",
+    "Endpoint contract verified end-to-end: courses-list, full-details, lecture-stats, lectures-by-course all return identical lecture counts (9) for closed-semester course 698f0000d803b27aab0120af — fix is working as intended.",
+    "Teacher endpoints: default returns 0 (active sem) and include_all/all_semesters returns 3 — both /teachers/{id}/courses and /teachers/{id}/full-profile agree (UNION logic confirmed)",
+    "The /api/lectures/{course_id}?all_semesters=true contract is intentional per problem statement (course's own semester always wins) and verified returning 9."
+  ],
+  "updated_files": ["/app/backend/tests/test_active_sem_endpoint_consistency.py"],
+  "success_rate": {"backend": "100% (25/25 — 15 new HTTP tests + 8 helper unit tests + 2 regression smoke)", "frontend": "skipped per request, but bundling error blocks teacher-courses page (see action_items)"},
+  "test_credentials": "admin / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None — used existing fixture data (course 698f0000d803b27aab0120af, teacher 698e533beb4c6eb021c50302).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All 4 lecture-count endpoints agree for course 698f0000d803b27aab0120af (=9). Teacher 698e533beb4c6eb021c50302 returns 0 by default / 3 with include_all (courses) and 0 by default / 3 with all_semesters (full-profile). /api/teaching-load/report/advanced still returns 200. Reusable test file: /app/backend/tests/test_active_sem_endpoint_consistency.py — runs in ~3 s. FRONTEND BLOCKER: teacher-courses.tsx has a duplicate `exportingPdf` declaration at line 85, Metro fails to bundle the page; main agent must fix before any frontend retest.",
+  "rca of the issue": "Backend fix verified working end-to-end. The shared helper module (_active_semester.py) ensures every endpoint applies the same filtering rule: (1) for course-scoped lecture queries, the COURSE's own semester is the filter (not global active sem) so closed-sem courses still show their lectures; (2) for teacher-scoped queries, the active semester is the default but include_all/all_semesters reveals every course via UNION of courses.teacher_id and teaching_loads.course_id. The pre-existing inconsistency (0 vs 5 vs 2 lectures for the same course) is no longer reproducible."
+}

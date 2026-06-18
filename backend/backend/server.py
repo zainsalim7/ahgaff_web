@@ -4152,6 +4152,9 @@ async def get_teacher_courses(
     Query params:
     - semester_id: لجلب مقررات فصل محدد (نشط أو مؤرشف)
     - include_all=true: لجلب كل المقررات من جميع الفصول (سلوك قديم)
+
+    🔧 يستخدم UNION (courses.teacher_id ∪ teaching_loads.course_id) لضمان عدم
+    إخفاء أي مقرر مرتبط بالمعلم سواءً عبر العلاقة المباشرة أو العبء التدريسي.
     """
     # التحقق من وجود المعلم
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
@@ -4159,36 +4162,68 @@ async def get_teacher_courses(
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
     
     # تحديد الفصل المستهدف: نشط افتراضياً، أو semester_id إن مُرّر
-    target_semester_id = semester_id
+    from routes._active_semester import (
+        get_active_semester as _get_act_sem,
+        get_teacher_active_course_ids as _get_tcr_ids,
+        get_courses_lecture_counts as _get_lec_counts,
+    )
+
+    target_sem = None
     semester_label = ""
-    if not include_all and not target_semester_id:
-        active_sem = await db.semesters.find_one({"status": "active"})
-        if active_sem:
-            target_semester_id = str(active_sem["_id"])
-            semester_label = active_sem.get("name", "")
-    elif target_semester_id:
-        try:
-            sem = await db.semesters.find_one({"_id": ObjectId(target_semester_id)})
-            if sem:
-                semester_label = sem.get("name", "")
-        except Exception:
-            pass
-    
-    # جلب العبء التدريسي للمعلم (مع تصفية الفصل إن وُجد)
+    if not include_all:
+        if semester_id:
+            try:
+                _s = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+                if _s:
+                    target_sem = {
+                        "id": str(_s["_id"]),
+                        "name": _s.get("name", ""),
+                        "start_date": _s.get("start_date"),
+                        "end_date": _s.get("end_date"),
+                    }
+                    semester_label = _s.get("name", "")
+            except Exception:
+                pass
+        else:
+            target_sem = await _get_act_sem(db)
+            if target_sem:
+                semester_label = target_sem["name"]
+
+    target_semester_id = target_sem["id"] if target_sem else None
+
+    # 🔧 جلب العبء التدريسي للمعلم (للحصول على weekly_hours)
     loads_query = {"teacher_id": teacher_id}
     if target_semester_id:
         loads_query["semester_id"] = target_semester_id
     teaching_loads = await db.teaching_loads.find(loads_query).to_list(500)
     loads_by_course = {tl.get("course_id"): tl.get("weekly_hours", 0) for tl in teaching_loads}
     load_id_by_course = {tl.get("course_id"): str(tl.get("_id")) for tl in teaching_loads}
-    
-    # جلب المقررات: من teaching_loads إن كان هناك فصل مستهدف، وإلا من courses.teacher_id
-    if target_semester_id:
-        course_ids = [ObjectId(cid) for cid in loads_by_course.keys() if cid]
-        courses = await db.courses.find({"_id": {"$in": course_ids}}).to_list(200) if course_ids else []
+
+    # 🔧 UNION للحصول على معرّفات المقررات
+    if target_sem:
+        course_ids_set = await _get_tcr_ids(db, teacher_id, target_sem)
     else:
-        courses = await db.courses.find({"teacher_id": teacher_id}).to_list(200)
-    
+        # include_all: ندمج كل مقررات teacher_id + كل teaching_loads
+        course_ids_set = set()
+        async for c in db.courses.find({"teacher_id": teacher_id}):
+            course_ids_set.add(str(c["_id"]))
+        for cid in loads_by_course.keys():
+            if cid:
+                course_ids_set.add(cid)
+
+    if course_ids_set:
+        try:
+            obj_ids = [ObjectId(cid) for cid in course_ids_set]
+            courses = await db.courses.find({"_id": {"$in": obj_ids}}).to_list(500)
+        except Exception:
+            courses = []
+    else:
+        courses = []
+
+    # 🔧 حساب lecture_counts دفعةً واحدة بنفس فلتر الفصل
+    course_ids_str = [str(c["_id"]) for c in courses]
+    lecture_counts_map = await _get_lec_counts(db, course_ids_str, target_sem)
+
     result = []
     total_weekly_hours = 0
     for course in courses:
@@ -4202,17 +4237,16 @@ async def get_teacher_courses(
                 if dept.get("faculty_id"):
                     faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
                     faculty_name = faculty.get("name", "") if faculty else ""
-        
-        # حساب عدد الطلاب المسجلين
-        students_count = await db.enrollments.count_documents({"course_id": str(course["_id"])})
-        
-        # حساب عدد المحاضرات
-        lectures_count = await db.lectures.count_documents({"course_id": str(course["_id"])})
-        
+
         course_id_str = str(course["_id"])
+        # حساب عدد الطلاب المسجلين
+        students_count = await db.enrollments.count_documents({"course_id": course_id_str})
+        # عدد المحاضرات (من الفلتر الموحّد)
+        lectures_count = lecture_counts_map.get(course_id_str, 0)
+
         weekly_hours = loads_by_course.get(course_id_str, course.get("credit_hours", 0)) or 0
         total_weekly_hours += weekly_hours
-        
+
         result.append({
             "id": course_id_str,
             "name": course["name"],
@@ -4887,12 +4921,29 @@ async def get_courses(
         enrollment_counts = {item["_id"]: item["count"] for item in counts}
 
     if course_ids and need_lecture_count:
-        lec_pipeline = [
-            {"$match": {"course_id": {"$in": course_ids}}},
-            {"$group": {"_id": "$course_id", "count": {"$sum": 1}}}
-        ]
-        lec_counts = await db.lectures.aggregate(lec_pipeline).to_list(None)
-        lecture_counts = {item["_id"]: item["count"] for item in lec_counts}
+        # 🔧 توحيد منطق الفلترة: عدد المحاضرات يجب أن يتطابق مع نطاق الفصل
+        # المعروض للمقررات نفسها.
+        # - إذا كان query يحتوي semester_id صريح (سواء مرّره المستخدم أو auto_filter)
+        #   → نفلتر المحاضرات بنفس الفصل.
+        # - إذا كان all_semesters → بلا فلتر.
+        from routes._active_semester import (
+            get_courses_lecture_counts as _get_lec_counts,
+        )
+        _target_sem = None
+        _effective_sem_id = query.get("semester_id")
+        if not all_semesters and _effective_sem_id:
+            try:
+                _s = await db.semesters.find_one({"_id": ObjectId(_effective_sem_id)})
+                if _s:
+                    _target_sem = {
+                        "id": str(_s["_id"]),
+                        "name": _s.get("name", ""),
+                        "start_date": _s.get("start_date"),
+                        "end_date": _s.get("end_date"),
+                    }
+            except Exception:
+                pass
+        lecture_counts = await _get_lec_counts(db, course_ids, _target_sem)
     
     # جلب أسماء المعلمين من collection المعلمين أو المستخدمين
     result = []
@@ -5025,8 +5076,37 @@ async def get_course_lecture_stats(
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     match: dict = {"course_id": course_id}
+    # 🔧 توحيد الفلترة: نطبّق فلتر فصل المقرر نفسه افتراضياً
+    # (وليس الفصل النشط) كي تتطابق الأرقام مع توقع المستخدم.
+    from routes._active_semester import (
+        get_active_semester as _get_act_sem,
+        apply_lecture_active_sem as _apply_sem,
+    )
+    _target_sem_doc = None
     if semester_id:
-        match["semester_id"] = semester_id
+        try:
+            _target_sem_doc = await db.semesters.find_one({"_id": ObjectId(semester_id)})
+        except Exception:
+            pass
+    else:
+        # افتراضياً: فصل المقرر نفسه إن وُجد، وإلا الفصل النشط
+        course_sem_id = course.get("semester_id")
+        if course_sem_id:
+            try:
+                _target_sem_doc = await db.semesters.find_one({"_id": ObjectId(course_sem_id)})
+            except Exception:
+                pass
+        if not _target_sem_doc:
+            _act = await _get_act_sem(db)
+            if _act:
+                _apply_sem(match, _act)
+    if _target_sem_doc:
+        _apply_sem(match, {
+            "id": str(_target_sem_doc["_id"]),
+            "name": _target_sem_doc.get("name", ""),
+            "start_date": _target_sem_doc.get("start_date"),
+            "end_date": _target_sem_doc.get("end_date"),
+        })
 
     pipeline = [
         {"$match": match},
@@ -6760,14 +6840,29 @@ async def get_course_lectures(
     # عدد المحاضرات الإجمالي (مع الفلتر)
     total = await db.lectures.count_documents(query)
     
-    # إحصائيات حسب الفصل الدراسي المُفعَّل (إن وُجد)
+    # 🔧 إحصائيات حسب فصل المقرر نفسه (وليس الفصل النشط)
+    # كي تكون متطابقة مع /courses/{id}/full-details و /lecture-stats
     base_query = {"course_id": course_id}
-    active_sem = await get_active_semester_with_dates(db)
-    if active_sem:
-        sem_id = active_sem["id"]
-        sd = active_sem["start_date"]
-        ed = active_sem["end_date"]
-        # نقبل: محاضرة بنفس semester_id، أو محاضرة قديمة بدون semester_id لكن ضمن نطاق التاريخ
+    course_sem_id = course.get("semester_id")
+    target_sem = None
+    if course_sem_id:
+        try:
+            _s = await db.semesters.find_one({"_id": ObjectId(course_sem_id)})
+            if _s:
+                target_sem = {
+                    "id": str(_s["_id"]),
+                    "name": _s.get("name", ""),
+                    "start_date": _s.get("start_date"),
+                    "end_date": _s.get("end_date"),
+                }
+        except Exception:
+            pass
+    if not target_sem:
+        target_sem = await get_active_semester_with_dates(db)
+    if target_sem:
+        sem_id = target_sem["id"]
+        sd = target_sem.get("start_date")
+        ed = target_sem.get("end_date")
         date_range = {}
         if sd:
             date_range["$gte"] = sd
@@ -6796,11 +6891,11 @@ async def get_course_lectures(
         "cancelled": await db.lectures.count_documents({**base_query, "status": "cancelled"}),
         "absent": await db.lectures.count_documents({**base_query, "status": "absent"}),
     }
-    if active_sem:
-        stats["semester_id"] = active_sem["id"]
-        stats["semester_name"] = active_sem["name"]
-        stats["semester_start_date"] = active_sem.get("start_date")
-        stats["semester_end_date"] = active_sem.get("end_date")
+    if target_sem:
+        stats["semester_id"] = target_sem["id"]
+        stats["semester_name"] = target_sem.get("name", "")
+        stats["semester_start_date"] = target_sem.get("start_date")
+        stats["semester_end_date"] = target_sem.get("end_date")
 
     # نُحدّث total ليتوافق مع query (الذي قد يحوي فلتر حالة + فصل)
     total = await db.lectures.count_documents(query)

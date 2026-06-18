@@ -150,17 +150,30 @@ async def get_month_lectures(year: int, month: int, current_user: dict = Depends
 async def get_course_lectures(
     course_id: str,
     status: Optional[str] = None,
+    all_semesters: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
-    """الحصول على محاضرات مقرر"""
+    """الحصول على محاضرات مقرر — يفلتر بالفصل النشط افتراضياً.
+
+    استخدم all_semesters=true لجلب جميع المحاضرات عبر كل الفصول (للأرشيف).
+    """
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
-    
-    query = {"course_id": course_id}
+
+    query: dict = {"course_id": course_id}
     if status:
         query["status"] = status
-    
+
+    # 🔧 توحيد منطق الفلترة: نطبّق فلتر الفصل النشط افتراضياً
+    if not all_semesters:
+        from ._active_semester import (
+            get_active_semester as _get_act_sem,
+            apply_lecture_active_sem as _apply_sem,
+        )
+        active_sem = await _get_act_sem(db)
+        _apply_sem(query, active_sem)
+
     lectures = await db.lectures.find(query).sort("date", 1).to_list(1000)
     
     result = []
