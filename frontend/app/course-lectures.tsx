@@ -931,21 +931,49 @@ export default function CourseLecturesScreen() {
               </View>
               <View style={styles.dateRangeBox}>
                 <Ionicons name="calendar-outline" size={14} color="#8a95a8" />
-                <TextInput
-                  style={styles.dateInput}
-                  placeholder="من"
-                  value={dateFrom}
-                  onChangeText={setDateFrom}
-                  placeholderTextColor="#a8b1c2"
-                />
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    onChange={(e: any) => setDateFrom(e.target.value)}
+                    style={{
+                      flex: 1, border: 'none', backgroundColor: 'transparent', fontSize: 13,
+                      color: dateFrom ? '#1a2540' : '#a8b1c2', padding: '4px 6px', textAlign: 'right',
+                      outline: 'none', fontFamily: 'inherit',
+                    } as any}
+                    data-testid="date-from-input"
+                  />
+                ) : (
+                  <TextInput
+                    style={styles.dateInput}
+                    placeholder="من"
+                    value={dateFrom}
+                    onChangeText={setDateFrom}
+                    placeholderTextColor="#a8b1c2"
+                  />
+                )}
                 <Text style={styles.dateSep}>–</Text>
-                <TextInput
-                  style={styles.dateInput}
-                  placeholder="إلى"
-                  value={dateTo}
-                  onChangeText={setDateTo}
-                  placeholderTextColor="#a8b1c2"
-                />
+                {Platform.OS === 'web' ? (
+                  <input
+                    type="date"
+                    value={dateTo}
+                    onChange={(e: any) => setDateTo(e.target.value)}
+                    style={{
+                      flex: 1, border: 'none', backgroundColor: 'transparent', fontSize: 13,
+                      color: dateTo ? '#1a2540' : '#a8b1c2', padding: '4px 6px', textAlign: 'right',
+                      outline: 'none', fontFamily: 'inherit',
+                    } as any}
+                    data-testid="date-to-input"
+                  />
+                ) : (
+                  <TextInput
+                    style={styles.dateInput}
+                    placeholder="إلى"
+                    value={dateTo}
+                    onChangeText={setDateTo}
+                    placeholderTextColor="#a8b1c2"
+                  />
+                )}
               </View>
               <TouchableOpacity
                 style={styles.filterApplyBtn}

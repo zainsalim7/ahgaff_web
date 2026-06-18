@@ -3,11 +3,12 @@
  * يعطي إحساس "تبويبات موحدة" مع الحفاظ على فصل المسارات (deep-linking).
  * يتضمن أيضاً: بطاقة معلومات المقرر، أزرار تعديل/حذف، breadcrumb.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, Modal, TextInput, ActivityIndicator, ScrollView, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { coursesAPI } from '../services/api';
+import { Picker } from '@react-native-picker/picker';
+import { coursesAPI, departmentsAPI, teachersAPI } from '../services/api';
 
 export type CourseTab = 'overview' | 'lectures' | 'students' | 'plan';
 
@@ -33,13 +34,36 @@ export function CourseTabBar({ courseId, course, activeTab, onCourseUpdated, can
   const [showDelete, setShowDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
   const [editForm, setEditForm] = useState<any>({
-    name: course?.name || '',
-    code: course?.code || '',
-    credit_hours: String(course?.credit_hours || 3),
-    level: String(course?.level || 1),
-    description: course?.description || '',
+    name: '',
+    code: '',
+    credit_hours: '3',
+    level: '1',
+    section: '',
+    description: '',
+    department_id: '',
+    teacher_id: '',
   });
+
+  // جلب الأقسام والمعلمين عند فتح modal التعديل
+  useEffect(() => {
+    if (showEdit && (departments.length === 0 || teachers.length === 0)) {
+      (async () => {
+        try {
+          const [d, t] = await Promise.all([
+            departmentsAPI.getAll().catch(() => ({ data: [] })),
+            teachersAPI.getAll().catch(() => ({ data: [] })),
+          ]);
+          setDepartments(d.data?.items || d.data || []);
+          setTeachers(t.data?.items || t.data || []);
+        } catch (e) {
+          // ignore
+        }
+      })();
+    }
+  }, [showEdit]);  // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (course) {
@@ -48,7 +72,10 @@ export function CourseTabBar({ courseId, course, activeTab, onCourseUpdated, can
         code: course.code || '',
         credit_hours: String(course.credit_hours || 3),
         level: String(course.level || 1),
+        section: course.section || '',
         description: course.description || '',
+        department_id: course.department_id || '',
+        teacher_id: course.teacher_id || '',
       });
     }
   }, [course?.id]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -70,13 +97,17 @@ export function CourseTabBar({ courseId, course, activeTab, onCourseUpdated, can
     }
     setSaving(true);
     try {
-      await coursesAPI.update(courseId, {
+      const payload: any = {
         name: editForm.name.trim(),
         code: editForm.code.trim(),
         credit_hours: parseInt(editForm.credit_hours) || 3,
         level: parseInt(editForm.level) || 1,
+        section: editForm.section?.trim() || null,
         description: editForm.description?.trim() || '',
-      });
+      };
+      if (editForm.department_id) payload.department_id = editForm.department_id;
+      if (editForm.teacher_id) payload.teacher_id = editForm.teacher_id;
+      await coursesAPI.update(courseId, payload);
       setShowEdit(false);
       onCourseUpdated?.();
       if (Platform.OS === 'web') window.alert('تم حفظ التعديلات');
@@ -173,6 +204,12 @@ export function CourseTabBar({ courseId, course, activeTab, onCourseUpdated, can
                   <Text style={s.metaChipText}>{course.department_name}</Text>
                 </View>
               )}
+              {course.section && (
+                <View style={[s.metaChip, { backgroundColor: '#e8f5e9' }]}>
+                  <Ionicons name="grid-outline" size={11} color="#2e7d32" />
+                  <Text style={[s.metaChipText, { color: '#2e7d32', fontWeight: '700' }]}>شعبة {course.section}</Text>
+                </View>
+              )}
               {course.semester_name && (
                 <View style={[s.metaChip, { backgroundColor: '#fff3e0' }]}>
                   <Ionicons name="calendar-outline" size={11} color="#ef6c00" />
@@ -265,6 +302,47 @@ export function CourseTabBar({ courseId, course, activeTab, onCourseUpdated, can
                     placeholderTextColor="#a8b1c2"
                   />
                 </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.label}>الشعبة</Text>
+                  <TextInput
+                    style={s.input}
+                    value={editForm.section}
+                    onChangeText={(v) => setEditForm({ ...editForm, section: v })}
+                    placeholder="أ"
+                    placeholderTextColor="#a8b1c2"
+                    testID="edit-section"
+                  />
+                </View>
+              </View>
+
+              <Text style={s.label}>القسم</Text>
+              <View style={s.dropdownWrap}>
+                <Picker
+                  selectedValue={editForm.department_id}
+                  onValueChange={(v) => setEditForm({ ...editForm, department_id: v })}
+                  style={s.dropdownPicker}
+                  enabled={departments.length > 0}
+                >
+                  <Picker.Item label="-- اختر القسم --" value="" />
+                  {departments.map((d: any) => (
+                    <Picker.Item key={d.id || d._id} label={d.name} value={d.id || d._id} />
+                  ))}
+                </Picker>
+              </View>
+
+              <Text style={s.label}>المعلم</Text>
+              <View style={s.dropdownWrap}>
+                <Picker
+                  selectedValue={editForm.teacher_id}
+                  onValueChange={(v) => setEditForm({ ...editForm, teacher_id: v })}
+                  style={s.dropdownPicker}
+                  enabled={teachers.length > 0}
+                >
+                  <Picker.Item label="-- بدون معلم --" value="" />
+                  {teachers.map((t: any) => (
+                    <Picker.Item key={t.id || t._id} label={`${t.full_name}${t.teacher_id ? ` (${t.teacher_id})` : ''}`} value={t.id || t._id} />
+                  ))}
+                </Picker>
               </View>
 
               <Text style={s.label}>الوصف</Text>
@@ -354,6 +432,8 @@ const s = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '600', color: '#1a2540', marginBottom: 5, marginTop: 8, textAlign: 'right' },
   required: { color: '#c62828' },
   input: { borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10, fontSize: 13, marginBottom: 4, textAlign: 'right', backgroundColor: '#fff', color: '#1a2540', outlineStyle: 'none' as any },
+  dropdownWrap: { borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 8, marginBottom: 4, backgroundColor: '#fff', overflow: 'hidden', height: 42, justifyContent: 'center' },
+  dropdownPicker: { height: 42, fontSize: 13, color: '#1a2540', textAlign: 'right', backgroundColor: 'transparent', borderWidth: 0, outlineStyle: 'none' as any },
   modalActions: { flexDirection: 'row-reverse', gap: 10, marginTop: 16 },
   modalBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   modalBtnCancel: { backgroundColor: '#f4f6fb', borderWidth: 1, borderColor: '#e3e7ee' },
