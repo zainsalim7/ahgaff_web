@@ -158,10 +158,41 @@ async def get_course_full_details(
             })
         students.sort(key=lambda x: x.get("full_name") or "")
 
-    # إحصائيات المحاضرات
+    # إحصائيات المحاضرات — 🔧 نطبق نفس فلتر الفصل النشط الذي تطبقه /lectures/{course_id}
+    # لضمان تطابق الأرقام بين صفحة "نظرة عامة" و"المحاضرات"
     lec_stats = {"total": 0, "completed": 0, "scheduled": 0, "cancelled": 0, "absent": 0}
+    lec_match: dict = {"course_id": course_id}
+    try:
+        # جلب الفصل النشط مباشرة من db (تجنّباً لاستيراد server.py)
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            sem_id = str(active_sem["_id"])
+            sd = active_sem.get("start_date")
+            ed = active_sem.get("end_date")
+            date_range = {}
+            if sd:
+                date_range["$gte"] = sd
+            if ed:
+                date_range["$lte"] = ed
+            or_clauses: list = [{"semester_id": sem_id}]
+            if date_range:
+                or_clauses.append({
+                    "$and": [
+                        {"$or": [
+                            {"semester_id": {"$exists": False}},
+                            {"semester_id": None},
+                            {"semester_id": ""},
+                        ]},
+                        {"date": date_range},
+                    ]
+                })
+            lec_match["$or"] = or_clauses
+    except Exception:
+        # في حال فشل الحصول على الفصل النشط، نعرض كل المحاضرات (السلوك القديم)
+        pass
+
     async for row in db.lectures.aggregate([
-        {"$match": {"course_id": course_id}},
+        {"$match": lec_match},
         {"$group": {"_id": "$status", "count": {"$sum": 1}}},
     ]):
         st = row.get("_id") or "scheduled"
