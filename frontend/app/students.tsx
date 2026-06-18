@@ -103,7 +103,8 @@ export default function StudentsScreen() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<string>('');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'none' | 'name_asc' | 'name_desc'>('none');
+  const [sortBy, setSortBy] = useState<'none' | 'name_asc' | 'name_desc' | 'attendance_asc' | 'attendance_desc'>('none');
+  const [attendanceMap, setAttendanceMap] = useState<Record<string, number | null>>({});
   
   // Pagination
   const PAGE_SIZE = 10;
@@ -298,8 +299,20 @@ export default function StudentsScreen() {
         return sortBy === 'name_asc' ? cmp : -cmp;
       });
     }
+    // 📊 فرز حسب نسبة الحضور (تصاعدي/تنازلي) — الطلاب بلا سجلات يُوضَعون في الذيل
+    else if (sortBy === 'attendance_asc' || sortBy === 'attendance_desc') {
+      filtered.sort((a, b) => {
+        const pa = attendanceMap[a.id];
+        const pb = attendanceMap[b.id];
+        // طلاب بدون سجلات → دائماً في النهاية
+        if (pa == null && pb == null) return 0;
+        if (pa == null) return 1;
+        if (pb == null) return -1;
+        return sortBy === 'attendance_asc' ? pa - pb : pb - pa;
+      });
+    }
     return filtered;
-  }, [students, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery, selectedStatusFilter, sortBy]);
+  }, [students, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery, selectedStatusFilter, sortBy, attendanceMap]);
 
   // الشعب المتاحة
   const availableSections = useMemo(() => {
@@ -1037,6 +1050,23 @@ export default function StudentsScreen() {
     setCurrentPage(1);
   }, []);
 
+  // 📊 Lazy-load attendance summary عند اختيار فرز نسبة الحضور
+  useEffect(() => {
+    if ((sortBy === 'attendance_asc' || sortBy === 'attendance_desc') && Object.keys(attendanceMap).length === 0) {
+      (async () => {
+        try {
+          const res = await api.get('/students-attendance-summary');
+          const data = res.data || [];
+          const map: Record<string, number | null> = {};
+          data.forEach((s: any) => { map[s.id] = s.attendance_pct; });
+          setAttendanceMap(map);
+        } catch (e) {
+          console.error('Failed to load attendance summary:', e);
+        }
+      })();
+    }
+  }, [sortBy, attendanceMap]);
+
   const hasAnyFilter = !!(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery || sortBy !== 'none');
 
   if (authLoading || loading) {
@@ -1212,7 +1242,7 @@ export default function StudentsScreen() {
               </View>
             </View>
 
-            <View style={[styles.filterField, { maxWidth: 200 }]}>
+            <View style={[styles.filterField, { maxWidth: 280 }]}>
               <Text style={styles.filterLbl}>فرز</Text>
               <View style={styles.dropdown}>
                 <Picker
@@ -1224,6 +1254,8 @@ export default function StudentsScreen() {
                   <Picker.Item label="الترتيب الافتراضي" value="none" />
                   <Picker.Item label="حسب الاسم تصاعدياً (أ → ي)" value="name_asc" />
                   <Picker.Item label="حسب الاسم تنازلياً (ي → أ)" value="name_desc" />
+                  <Picker.Item label="حسب نسبة الحضور (الأعلى أولاً)" value="attendance_desc" />
+                  <Picker.Item label="حسب نسبة الحضور (الأقل أولاً)" value="attendance_asc" />
                 </Picker>
               </View>
             </View>

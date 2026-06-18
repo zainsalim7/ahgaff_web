@@ -32,6 +32,79 @@ class StudentUpdate(BaseModel):
     is_active: Optional[bool] = None
 
 
+@router.get("/students-attendance-summary")
+async def students_attendance_summary(
+    department_id: Optional[str] = None,
+    semester_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """ملخص خفيف لنسبة الحضور لكل طالب — للاستخدام في الفرز/العرض.
+
+    Returns: list of {id, attendance_pct, total_sessions, present_count}
+    - يحسب: present + (late × 0.5) كنسبة من إجمالي السجلات (excluding excused بترك القرار للفرونت إذا أرادها).
+    - إذا لم يكن للطالب سجلات: pct = null (تُعالَج في الواجهة كأنها صفر أو "لا يوجد").
+    """
+    db = get_db()
+    # فلتر الطلاب
+    student_query: dict = {}
+    if department_id:
+        student_query["department_id"] = department_id
+    students_list = await db.students.find(student_query, {"_id": 1}).to_list(5000)
+    student_ids = [str(s["_id"]) for s in students_list]
+    if not student_ids:
+        return []
+
+    # ✨ aggregation لسجلات الحضور
+    match: dict = {"student_id": {"$in": student_ids}}
+    if semester_id:
+        match["semester_id"] = semester_id
+    pipeline = [
+        {"$match": match},
+        {"$group": {
+            "_id": "$student_id",
+            "total": {"$sum": 1},
+            "present": {"$sum": {"$cond": [{"$eq": ["$status", "present"]}, 1, 0]}},
+            "late": {"$sum": {"$cond": [{"$eq": ["$status", "late"]}, 1, 0]}},
+            "absent": {"$sum": {"$cond": [{"$eq": ["$status", "absent"]}, 1, 0]}},
+            "excused": {"$sum": {"$cond": [{"$eq": ["$status", "excused"]}, 1, 0]}},
+        }},
+    ]
+    cursor = db.attendance.aggregate(pipeline)
+    by_student: dict = {}
+    async for row in cursor:
+        total = row["total"]
+        if total == 0:
+            continue
+        # نستخدم scoring متوسط: present=1, late=0.5
+        rate = (row["present"] + row["late"] * 0.5) / total * 100
+        by_student[row["_id"]] = {
+            "id": row["_id"],
+            "attendance_pct": round(rate, 1),
+            "total_sessions": total,
+            "present_count": row["present"],
+            "absent_count": row["absent"],
+            "late_count": row["late"],
+            "excused_count": row["excused"],
+        }
+
+    # ضمّن كل الطلاب (بما فيهم بدون سجلات)
+    result = []
+    for sid in student_ids:
+        if sid in by_student:
+            result.append(by_student[sid])
+        else:
+            result.append({
+                "id": sid,
+                "attendance_pct": None,
+                "total_sessions": 0,
+                "present_count": 0,
+                "absent_count": 0,
+                "late_count": 0,
+                "excused_count": 0,
+            })
+    return result
+
+
 @router.get("/students")
 async def get_students(
     department_id: Optional[str] = None,
