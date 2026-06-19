@@ -169,6 +169,17 @@ export default function ProfileScreen() {
           <Ionicons name="chevron-back" size={20} color="#999" />
         </TouchableOpacity>
 
+        {/* 📘 دليل استخدام المنصة */}
+        <TouchableOpacity
+          style={styles.notificationsButton}
+          onPress={() => router.push('/help')}
+          data-testid="help-guide-btn"
+        >
+          <Ionicons name="book-outline" size={24} color="#16a34a" />
+          <Text style={styles.notificationsText}>دليل استخدام المنصة</Text>
+          <Ionicons name="chevron-back" size={20} color="#999" />
+        </TouchableOpacity>
+
         {/* Logout Button */}
         <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
           <Ionicons name="log-out-outline" size={24} color="#f44336" />
