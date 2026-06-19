@@ -85,6 +85,11 @@ export default function HelpScreen() {
                     <Text style={styles.idxText}>{idx + 1}</Text>
                   </View>
                   <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                    {!!s.roleLabel && (
+                      <View style={[styles.roleBadge, active && { backgroundColor: 'rgba(255,255,255,0.25)' }]}>
+                        <Text style={[styles.roleBadgeText, active && { color: '#fff' }]}>{s.roleLabel}</Text>
+                      </View>
+                    )}
                     <Text style={[styles.sidebarItemTitle, active && { color: '#fff' }]} numberOfLines={2}>
                       {s.title}
                     </Text>
@@ -332,6 +337,8 @@ const styles = StyleSheet.create({
   idxText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   sidebarItemTitle: { fontSize: 13, color: '#1f2a37', fontWeight: '700', textAlign: 'right' },
   sidebarItemSub: { fontSize: 10, color: '#5b6678', marginTop: 2, textAlign: 'right' },
+  roleBadge: { backgroundColor: '#06b6d4', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4, marginBottom: 4 },
+  roleBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
 
   // Content
   content: { flex: 1 },
