@@ -244,6 +244,16 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
 
           {/* Footer */}
           <View style={styles.menuFooter}>
+            {/* 📘 رابط الدليل قبل تسجيل الخروج */}
+            <TouchableOpacity
+              style={styles.helpBtn}
+              onPress={() => handleNavigate('/help')}
+              testID="side-menu-help-btn"
+            >
+              <Ionicons name="help-circle" size={20} color="#2962ff" />
+              <Text style={styles.helpText}>دليل استخدام المنصة</Text>
+              <Ionicons name="chevron-back" size={16} color="#2962ff" />
+            </TouchableOpacity>
             <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
               <Ionicons name="log-out" size={20} color="#f44336" />
               <Text style={styles.logoutText}>تسجيل الخروج</Text>
@@ -446,6 +456,23 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#ffebee',
     borderRadius: 8,
+  },
+  helpBtn: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    backgroundColor: '#e3f2fd',
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  helpText: {
+    flex: 1,
+    color: '#1565c0',
+    fontSize: 14,
+    fontWeight: '700',
+    textAlign: 'right',
   },
   logoutText: {
     color: '#f44336',

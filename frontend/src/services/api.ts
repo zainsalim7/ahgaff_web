@@ -236,6 +236,35 @@ api.interceptors.response.use(
       } catch {}
     }
 
+    // 🔒 403 (لا توجد صلاحية) — وجّه لصفحة "ليس لديك صلاحية"
+    // نتجنّب التوجيه إن كنا أصلاً عليها أو لو كانت auth call أو إن تكرر الـ403 سريعاً
+    if (status === 403 && !isAuthCall) {
+      try {
+        // debounce: لا توجّه أكثر من مرة كل 2.5 ثانية (يمنع flicker لو تكرر 403)
+        const w: any = (typeof globalThis !== 'undefined' ? globalThis : {});
+        const now = Date.now();
+        if (w.__last403Redirect && now - w.__last403Redirect < 2500) {
+          return Promise.reject(error);
+        }
+        w.__last403Redirect = now;
+
+        if (Platform.OS === 'web' && typeof window !== 'undefined') {
+          const path = window.location.pathname || '';
+          if (!path.includes('/no-permission') && !path.includes('/login')) {
+            const from = encodeURIComponent(path);
+            const reason = encodeURIComponent(error.response?.data?.detail || '');
+            window.location.replace(`/no-permission?from=${from}${reason ? `&reason=${reason}` : ''}`);
+          }
+        } else {
+          const { router } = await import('expo-router');
+          router.replace({
+            pathname: '/no-permission',
+            params: { reason: error.response?.data?.detail || '' },
+          } as any);
+        }
+      } catch {}
+    }
+
     // إذا لا يوجد استجابة (أوفلاين) وكان GET، حاول جلب من الكاش
     if (!error.response && error.config?.method === 'get' && shouldCache(error.config.url || '')) {
       const cacheKey = `cache_${error.config.url}`;
