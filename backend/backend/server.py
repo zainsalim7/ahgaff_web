@@ -1230,8 +1230,20 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
     if data.role_id and user.get("role") != UserRole.ADMIN:
         role = await db.roles.find_one({"_id": ObjectId(data.role_id)})
         if role:
+            # 🔧 استنتاج system_key الصحيح من system_key أو من الاسم العربي
+            # لمنع تخزين role="custom" الذي يُخفي المستخدم من فلتر القائمة
+            sys_key = (role.get("system_key") or "").strip()
+            if not sys_key:
+                ROLE_NAME_MAP = {
+                    "رئيس قسم": "department_head", "عميد كلية": "dean", "عميد": "dean",
+                    "مسجل": "registrar", "مدير التسجيل": "registration_manager",
+                    "موظف": "employee", "مدير النظام": "admin",
+                    "Department Head": "department_head", "Dean": "dean",
+                    "Registrar": "registrar", "Employee": "employee",
+                }
+                sys_key = ROLE_NAME_MAP.get((role.get("name") or "").strip(), "custom")
             update_data["role_id"] = data.role_id
-            update_data["role"] = role.get("system_key") or "custom"
+            update_data["role"] = sys_key
             update_data["permissions"] = role.get("permissions", [])
     
     if update_data:
@@ -1640,10 +1652,20 @@ async def assign_role_to_user(user_id: str, data: UserRoleUpdate, current_user: 
     if not role:
         raise HTTPException(status_code=404, detail="الدور غير موجود")
     
-    # تحديث دور المستخدم
+    # تحديث دور المستخدم — استنتاج system_key الصحيح من الاسم العربي إن لم يكن موجوداً
+    sys_key = (role.get("system_key") or "").strip()
+    if not sys_key:
+        ROLE_NAME_MAP = {
+            "رئيس قسم": "department_head", "عميد كلية": "dean", "عميد": "dean",
+            "مسجل": "registrar", "مدير التسجيل": "registration_manager",
+            "موظف": "employee", "مدير النظام": "admin",
+            "Department Head": "department_head", "Dean": "dean",
+            "Registrar": "registrar", "Employee": "employee",
+        }
+        sys_key = ROLE_NAME_MAP.get((role.get("name") or "").strip(), "custom")
     await db.users.update_one(
         {"_id": ObjectId(user_id)},
-        {"$set": {"role_id": data.role_id, "role": role.get("system_key") or "custom"}}
+        {"$set": {"role_id": data.role_id, "role": sys_key}}
     )
     
     return {
@@ -14916,39 +14938,28 @@ async def startup_event():
 
 
 async def migrate_broken_user_roles():
-    """يُصلح تلقائياً أي مستخدم محفوظ بـ role='custom' أو فارغ بناءً على role_id.
+    """يُصلح تلقائياً أي مستخدم role.role لا يطابق role_id.system_key.
     
-    يعمل عند كل startup ويمسح فقط المستخدمين المتأثرين (idempotent).
-    لا يُحدث أي مستخدم له role قياسي صحيح.
+    يعمل عند كل startup ويصلح ثلاث حالات:
+    1. role غير قياسي (custom/null/فارغ) — يستنتج من role_id أو اسم الدور العربي
+    2. role قديم لكن role_id يشير لدور آخر — يُحدِّث ليطابق role_id الحالي
+    3. مستخدم له role_id صالح لكن role متروك على القيمة القديمة بعد ترقية
+    
+    Idempotent: لا يُحدث المستخدمين الذين role/role_id متّسقَين.
     """
     try:
         VALID_SYSTEM_ROLES = {"admin", "dean", "department_head", "registrar",
                               "registration_manager", "employee", "teacher", "student"}
         ROLE_NAME_MAP = {
-            "رئيس قسم": "department_head",
-            "عميد كلية": "dean",
-            "عميد": "dean",
-            "مسجل": "registrar",
-            "مدير التسجيل": "registration_manager",
-            "موظف": "employee",
-            "مدير النظام": "admin",
-            "Department Head": "department_head",
-            "Dean": "dean",
-            "Registrar": "registrar",
+            "رئيس قسم": "department_head", "عميد كلية": "dean", "عميد": "dean",
+            "مسجل": "registrar", "مدير التسجيل": "registration_manager",
+            "موظف": "employee", "مدير النظام": "admin",
+            "Department Head": "department_head", "Dean": "dean", "Registrar": "registrar",
         }
         fixed_count = 0
-        # نفحص المستخدمين بـ role غير قياسي أو فارغ، شرط وجود role_id للاستنتاج
-        async for u in db.users.find({
-            "$and": [
-                {"role_id": {"$nin": [None, ""]}},
-                {"$or": [
-                    {"role": {"$nin": list(VALID_SYSTEM_ROLES)}},
-                    {"role": "custom"},
-                    {"role": {"$exists": False}},
-                    {"role": None},
-                ]},
-            ]
-        }):
+        # 🔧 نفحص كل مستخدم له role_id ونحدّث user.role ليطابق system_key للدور الحالي
+        # (يعالج: ترقية تُحدّث role_id ولا تُحدّث role)
+        async for u in db.users.find({"role_id": {"$nin": [None, ""]}}):
             try:
                 role = await db.roles.find_one({"_id": ObjectId(u["role_id"])})
                 if not role:
@@ -14957,18 +14968,26 @@ async def migrate_broken_user_roles():
                 if not sys_key:
                     role_name = (role.get("name") or "").strip()
                     sys_key = ROLE_NAME_MAP.get(role_name, "")
-                if sys_key and sys_key in VALID_SYSTEM_ROLES and sys_key not in ["teacher", "student"]:
-                    # لا نحدّث teacher/student تلقائياً (هذه شاشات خاصة)
+                if not sys_key or sys_key not in VALID_SYSTEM_ROLES:
+                    continue
+                # 🔒 لا نحوّل تلقائياً لـ teacher/student (شاشات مستقلة)
+                if sys_key in ["teacher", "student"]:
+                    continue
+                current_role = (u.get("role") or "").strip()
+                # نُحدِّث فقط إن كان مختلفاً — منع تحديثات لا داعي لها
+                if current_role != sys_key:
                     await db.users.update_one(
                         {"_id": u["_id"]},
                         {"$set": {"role": sys_key}}
                     )
                     fixed_count += 1
-                    logging.info(f"Migration: fixed role for user '{u.get('username')}' → {sys_key}")
+                    logging.info(f"Migration: '{u.get('username')}' role: '{current_role}' → '{sys_key}'")
             except Exception as e:
                 logging.warning(f"Migration: failed to fix user {u.get('username')}: {e}")
         if fixed_count > 0:
             logging.info(f"✅ User role migration: {fixed_count} user(s) fixed automatically.")
+        else:
+            logging.info("User role migration: all users consistent (no fixes needed).")
     except Exception as e:
         logging.error(f"User role migration failed (non-critical): {e}")
 

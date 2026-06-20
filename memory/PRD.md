@@ -13,6 +13,23 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-20 **إصلاح نهائي دائم لـ "حساب لا يظهر بعد ترقيته" (zain bug)**:
+  - **المشكلة المُبلَّغة:** "تمت ترقية الحساب إلى رئيس قسم، لكن صفحة المستخدمين تُظهر 0 حساب في فلتر رئيس قسم".
+  - **السبب الجذري:** في `PUT /api/users/{id}` و `PUT /api/users/{id}/role`، إذا كان الدور المخصص يفتقر لـ `system_key` (مثل دور أُنشئ باسم عربي فقط)، كان يُحفظ `role="custom"` بينما `role_id` يشير لدور بصلاحيات department_head. الفلتر `?role=department_head` لا يجده.
+  - **الإصلاح ثلاثي الطبقات:**
+    1. **Auto-migration عند كل startup** (`server.py:14918 migrate_broken_user_roles`):
+       - يفحص كل مستخدم له `role_id` صالح
+       - يستنتج `system_key` من الدور (أو من اسمه العربي عبر `ROLE_NAME_MAP`)
+       - يُزامِن حقل `role` ليطابق — Idempotent
+       - يُسجّل في اللوج: `Migration: 'zain' role: 'custom' → 'department_head'`
+    2. **إصلاح المصدر في `PUT /api/users/{id}` (server.py:1230)**: يستنتج `system_key` من الاسم العربي عند الإنشاء/التحديث (نفس `ROLE_NAME_MAP`).
+    3. **إصلاح المصدر في `PUT /api/users/{id}/role` (server.py:1655)**: نفس المنطق.
+  - **التحقق (3 اختبارات شاملة):**
+    - `/app/backend/tests/test_role_migration.py` — unit test على الـ migration ✅
+    - `/tmp/test_zain_e2e.py` — E2E: إدخال مستخدم معطوب → restart → /api/users?role=department_head يجده ✅
+    - تأكيد عبر curl حقيقي على API الإنتاج ✅
+  - **المستخدم لا يحتاج لأي إجراء يدوي** — عند نشر الإصلاح عبر "Save to Github"، يُصلَح zain تلقائياً عند أول startup للـ backend.
+
 - 2026-06-20 **إصلاح ثغرة RBAC حرجة: تسريب بيانات بين الكليات**:
   - **المشكلة المُبلَّغة:** "أي مستخدم لكلية معينة تظهر عنده كل أقسام الكليات الأخرى في صفحات المقررات والطلاب والمعلمين".
   - **التشخيص (عبر اختبار حسابات حقيقية):**
