@@ -119,8 +119,7 @@ class Permission:
     EXPORT_ARCHIVE = "export_archive"
 
     # صلاحيات الخطة الدراسية
-    VIEW_CURRICULUM = "view_curriculum"        # عرض خطة الأقسام فقط
-    MANAGE_CURRICULUM = "manage_curriculum"    # إضافة/تعديل/حذف مقررات الخطة + توليد للفصل النشط
+    MANAGE_CURRICULUM = "manage_curriculum"    # الوصول الكامل لصفحة الخطة الدراسية
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -329,8 +328,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_TEACHING_LOAD, "label": "إدارة العبء التدريسي", "category": "العبء التدريسي"},
     {"key": Permission.VIEW_TEACHING_LOAD, "label": "عرض العبء التدريسي", "category": "العبء التدريسي"},
     {"key": Permission.CROSS_UNIVERSITY_ASSIGNMENT, "label": "إسناد عابر للجامعة (إسناد أساتذة من كل الكليات)", "category": "العبء التدريسي"},
-    {"key": Permission.VIEW_CURRICULUM, "label": "عرض الخطة الدراسية", "category": "الخطة الدراسية"},
-    {"key": Permission.MANAGE_CURRICULUM, "label": "إدارة الخطة الدراسية (إضافة/تعديل/استيراد/توليد)", "category": "الخطة الدراسية"},
+    {"key": Permission.MANAGE_CURRICULUM, "label": "الخطة الدراسية", "category": "الخطة الدراسية"},
     {"key": Permission.VIEW_ARCHIVE, "label": "عرض الأرشيف", "category": "الأرشيف"},
     {"key": Permission.SEARCH_ARCHIVE, "label": "البحث في الأرشيف", "category": "الأرشيف"},
     {"key": Permission.EXPORT_ARCHIVE, "label": "تصدير من الأرشيف", "category": "الأرشيف"},

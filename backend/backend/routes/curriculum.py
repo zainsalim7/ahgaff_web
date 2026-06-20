@@ -34,12 +34,11 @@ def _has_manage(user: dict) -> bool:
 
 
 def _has_view(user: dict) -> bool:
-    """يقبل صلاحية عرض الخطة الخاصة، أو إدارة الخطة، أو إدارة/عرض المقررات العامة."""
+    """يقبل صلاحية الخطة، أو إدارة/عرض المقررات العامة."""
     if user.get("role") == "admin":
         return True
     perms = set(user.get("permissions") or [])
     return any(p in perms for p in [
-        Permission.VIEW_CURRICULUM,
         Permission.MANAGE_CURRICULUM,
         Permission.MANAGE_COURSES,
         Permission.VIEW_COURSES,
