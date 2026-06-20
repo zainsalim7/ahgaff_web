@@ -15,9 +15,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { teachingLoadAPI, teachersAPI, departmentsAPI } from '../src/services/api';
+import api, { teachingLoadAPI, teachersAPI, departmentsAPI, API_URL } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
-import { API_URL } from '../src/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface CourseLoad {
@@ -49,23 +48,50 @@ interface LoadItem {
   notes: string;
 }
 
-function TeacherSearch({ teachers, selectedId, onSelect, departments = [] }: { teachers: any[], selectedId: string, onSelect: (id: string) => void, departments?: any[] }) {
+function TeacherSearch({ teachers, selectedId, onSelect, departments = [], faculties = [], crossDept = false }: { teachers: any[], selectedId: string, onSelect: (id: string) => void, departments?: any[], faculties?: any[], crossDept?: boolean }) {
   const [q, setQ] = React.useState('');
   const [open, setOpen] = React.useState(false);
   const selectedTeacher = teachers.find(t => t.id === selectedId);
   const filtered = q ? teachers.filter(t => t.full_name?.includes(q) || t.teacher_id?.includes(q)) : teachers;
   const getDeptName = (deptId: string) => departments.find(d => d.id === deptId)?.name || '';
+  const facById = React.useMemo(() => Object.fromEntries(faculties.map((f:any) => [f.id, f.name])), [faculties]);
+  const deptToFaculty: Record<string, string> = React.useMemo(() => {
+    const m: Record<string,string> = {};
+    for (const d of departments as any[]) {
+      const fname = d.faculty_name || facById[d.faculty_id] || '';
+      if (fname) m[d.id] = fname;
+    }
+    return m;
+  }, [departments, facById]);
+  /** كل أقسام المعلم (يدمج department_ids مع department_id للتوافق) */
+  const getAllDeptIds = (t: any): string[] => {
+    const ids = Array.isArray(t.department_ids) && t.department_ids.length > 0
+      ? t.department_ids
+      : (t.department_id ? [t.department_id] : []);
+    return ids.filter(Boolean);
+  };
+  /** كلية المعلم: من faculty_id مباشرة أو عبر أول قسم */
+  const getTeacherFaculty = (t: any): string => {
+    if (t.faculty_name) return t.faculty_name;
+    if (t.faculty_id && facById[t.faculty_id]) return facById[t.faculty_id];
+    const ids = getAllDeptIds(t);
+    for (const did of ids) if (deptToFaculty[did]) return deptToFaculty[did];
+    return '';
+  };
 
   // إذا معلم مختار، اعرض بطاقته فقط مع زر تغيير
   if (selectedId && !open) {
+    const facName = selectedTeacher ? getTeacherFaculty(selectedTeacher) : '';
+    const deptNames = selectedTeacher ? getAllDeptIds(selectedTeacher).map(getDeptName).filter(Boolean) : [];
     return (
       <div style={{ direction: 'rtl' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 12px', border: '1px solid #1565c0', borderRadius: 8, backgroundColor: '#e3f2fd' }}>
           <div style={{ flex: 1, textAlign: 'right' }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: '#1565c0' }}>✓ {selectedTeacher?.full_name}</div>
-            {selectedTeacher && getDeptName(selectedTeacher.department_id) ? (
-              <div style={{ fontSize: 11, color: '#666', marginTop: 2 }}>🏢 {getDeptName(selectedTeacher.department_id)}</div>
-            ) : null}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 4, justifyContent: 'flex-end' }}>
+              {facName && <span style={{ fontSize: 11, color: '#0d47a1', background: '#bbdefb', padding: '2px 6px', borderRadius: 4, fontWeight: 700 }}>🏛️ {facName}</span>}
+              {deptNames.map((n, i) => <span key={i} style={{ fontSize: 11, color: '#4a148c', background: '#e1bee7', padding: '2px 6px', borderRadius: 4 }}>🏢 {n}</span>)}
+            </div>
           </div>
           <button onClick={() => { onSelect(''); setQ(''); setOpen(true); }} style={{ background: 'none', border: '1px solid #1565c0', color: '#1565c0', padding: '4px 10px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>
             تغيير
@@ -90,15 +116,21 @@ function TeacherSearch({ teachers, selectedId, onSelect, departments = [] }: { t
       </div>
       {/* قائمة المعلمين inline (تدفع التخطيط لأسفل) */}
       {open && (
-        <div style={{ marginTop: 4, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 260, overflowY: 'auto' }}>
+        <div style={{ marginTop: 4, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 320, overflowY: 'auto' }}>
           {filtered.length === 0 && <div style={{ padding: 16, color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
           {filtered.map((t: any) => {
-            const deptName = getDeptName(t.department_id);
+            const facName = getTeacherFaculty(t);
+            const deptIds = getAllDeptIds(t);
+            const deptNames = deptIds.map(getDeptName).filter(Boolean);
             return (
               <div key={t.id} onClick={() => { onSelect(t.id); setQ(''); setOpen(false); }}
                 style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', textAlign: 'right' }}>
                 <div style={{ fontSize: 14, fontWeight: 600, color: '#333' }}>{t.full_name}</div>
-                {deptName && <div style={{ fontSize: 11, color: '#1565c0', marginTop: 2 }}>🏢 {deptName}</div>}
+                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 3, justifyContent: 'flex-end' }}>
+                  {facName && <span style={{ fontSize: 10.5, color: '#0d47a1', background: '#e3f2fd', padding: '1px 6px', borderRadius: 3, fontWeight: 600 }}>🏛️ {facName}</span>}
+                  {deptNames.slice(0, 3).map((n, i) => <span key={i} style={{ fontSize: 10.5, color: '#4a148c', background: '#f3e5f5', padding: '1px 6px', borderRadius: 3 }}>🏢 {n}</span>)}
+                  {deptNames.length > 3 && <span style={{ fontSize: 10.5, color: '#5a6c7d' }}>+{deptNames.length - 3}</span>}
+                </div>
               </div>
             );
           })}
@@ -111,6 +143,7 @@ function TeacherSearch({ teachers, selectedId, onSelect, departments = [] }: { t
 export default function TeachingLoadPage() {
   const { user } = useAuth();
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
@@ -139,12 +172,16 @@ export default function TeachingLoadPage() {
   const [summaryAllSemesters, setSummaryAllSemesters] = useState(false); // عرض كل الفصول
   const [summaryExecuted, setSummaryExecuted] = useState(false); // هل تم الضغط على زر التنفيذ؟
 
-  // Load departments on mount
+  // Load departments + faculties on mount
   useEffect(() => {
     (async () => {
       try {
-        const res = await departmentsAPI.getAll();
-        setDepartments(res.data);
+        const [deptsRes, facsRes] = await Promise.all([
+          departmentsAPI.getAll(),
+          api.get('/faculties').catch(() => ({ data: [] })),
+        ]);
+        setDepartments(deptsRes.data);
+        setFaculties(Array.isArray(facsRes.data) ? facsRes.data : []);
       } catch (e) {
         console.error('Error loading departments:', e);
       } finally {
@@ -725,7 +762,7 @@ export default function TeachingLoadPage() {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Department Filter - shared */}
+        {/* Department Filter - shared, grouped by faculty */}
         <View style={styles.filterCard}>
           <Text style={styles.filterLabel}>القسم</Text>
           <View style={styles.pickerWrapper}>
@@ -737,9 +774,23 @@ export default function TeachingLoadPage() {
               data-testid="teaching-load-dept-picker"
             >
               <Picker.Item label="-- اختر القسم --" value="" />
-              {departments.map(d => (
-                <Picker.Item key={d.id} label={d.name} value={d.id} />
-              ))}
+              {(() => {
+                // 🔧 تجميع الأقسام حسب الكلية ليُظهر "[الكلية] القسم"
+                const byFac: Record<string, any[]> = {};
+                for (const d of departments) {
+                  const fname = d.faculty_name || faculties.find(f => f.id === d.faculty_id)?.name || 'بدون كلية';
+                  (byFac[fname] = byFac[fname] || []).push(d);
+                }
+                const items: any[] = [];
+                Object.keys(byFac).sort().forEach(fname => {
+                  byFac[fname].forEach((d: any) => {
+                    items.push(
+                      <Picker.Item key={d.id} label={`[${fname}] ${d.name}`} value={d.id} />
+                    );
+                  });
+                });
+                return items;
+              })()}
             </Picker>
           </View>
 
@@ -768,7 +819,7 @@ export default function TeachingLoadPage() {
           >
             <Ionicons name={crossDept ? 'checkbox' : 'square-outline'} size={20} color={crossDept ? '#1565c0' : '#888'} />
             <Text style={{ fontSize: 13, color: crossDept ? '#1565c0' : '#444', fontWeight: crossDept ? '700' : '500', flex: 1, textAlign: 'right' }}>
-              عرض أساتذة ومقررات من جميع الأقسام (للإسناد العابر للأقسام)
+              عرض كل أساتذة ومقررات الجامعة (لجميع الكليات والأقسام) — للإسناد العابر للحدود
             </Text>
           </TouchableOpacity>
         </View>
@@ -784,7 +835,7 @@ export default function TeachingLoadPage() {
                 {loadingTeachers ? (
                   <ActivityIndicator size="small" color="#1565c0" />
                 ) : Platform.OS === 'web' ? (
-                  <TeacherSearch teachers={teachers} selectedId={selectedTeacher} onSelect={setSelectedTeacher} departments={departments} />
+                  <TeacherSearch teachers={teachers} selectedId={selectedTeacher} onSelect={setSelectedTeacher} departments={departments} faculties={faculties} crossDept={crossDept} />
                 ) : (
                   <View style={styles.pickerWrapper}>
                     <Picker
@@ -864,7 +915,9 @@ export default function TeachingLoadPage() {
                     {showResults && searchResults.length > 0 && (
                       <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', zIndex: 1000, maxHeight: 280, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', direction: 'rtl' }}>
                         {searchResults.map(c => {
-                          const cDeptName = departments.find((d: any) => d.id === c.department_id)?.name;
+                          const cDept = departments.find((d: any) => d.id === c.department_id);
+                          const cDeptName = cDept?.name;
+                          const cFacName = cDept?.faculty_name || faculties.find(f => f.id === cDept?.faculty_id)?.name;
                           return (
                           <TouchableOpacity
                             key={c.course_id}
@@ -874,9 +927,14 @@ export default function TeachingLoadPage() {
                           >
                             <View style={{ flex: 1 }}>
                               <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', textAlign: 'right' }}>{c.course_name}</Text>
-                              <Text style={{ fontSize: 12, color: '#888', textAlign: 'right' }}>{c.course_code} - م{c.level} {c.section ? `(${c.section})` : ''}</Text>
-                              {cDeptName ? <Text style={{ fontSize: 11, color: '#1565c0', textAlign: 'right' }}>🏢 {cDeptName}</Text> : null}
-                              {c.current_teacher_name ? <Text style={{ fontSize: 11, color: '#e65100', textAlign: 'right' }}>مسند لـ: {c.current_teacher_name}</Text> : null}
+                              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
+                                {c.course_code && <Text style={{ fontSize: 10.5, color: '#5a6c7d', background: '#f0f3f7', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 3 }}>{c.course_code}</Text>}
+                                {c.level != null && <Text style={{ fontSize: 10.5, color: '#0277bd', background: '#e1f5fe', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 3 }}>المستوى {c.level}</Text>}
+                                {c.section && <Text style={{ fontSize: 10.5, color: '#558b2f', background: '#f1f8e9', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 3 }}>شعبة {c.section}</Text>}
+                                {cFacName && <Text style={{ fontSize: 10.5, color: '#0d47a1', background: '#e3f2fd', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 3, fontWeight: '600' }}>🏛️ {cFacName}</Text>}
+                                {cDeptName && <Text style={{ fontSize: 10.5, color: '#4a148c', background: '#f3e5f5', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 3 }}>🏢 {cDeptName}</Text>}
+                              </View>
+                              {c.current_teacher_name ? <Text style={{ fontSize: 11, color: '#e65100', textAlign: 'right', marginTop: 3 }}>⚠️ مسند حالياً لـ: {c.current_teacher_name}</Text> : null}
                             </View>
                             <Ionicons name="add-circle" size={26} color="#4caf50" style={{ marginLeft: 12 }} />
                           </TouchableOpacity>
