@@ -86,8 +86,11 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
     query = {}
     if role:
         query["role"] = role
+    else:
+        # 🔧 شاشة "إدارة المستخدمين" تستبعد الطلاب/المعلمين (لديها شاشات مستقلة)
+        query["role"] = {"$nin": ["student", "teacher"]}
     
-    users = await db.users.find(query).to_list(1000)
+    users = await db.users.find(query).to_list(10000)
     
     result = []
     for u in users:

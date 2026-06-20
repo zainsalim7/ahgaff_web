@@ -1045,8 +1045,13 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
     query = {}
     if role:
         query["role"] = role
+    else:
+        # 🔧 شاشة "إدارة المستخدمين" لا تعرض الطلاب/المعلمين (لديها شاشات مستقلة)
+        # استبعادهم في DB يمنع امتلاء الـ limit بهم وإخفاء الحسابات الإدارية
+        query["role"] = {"$nin": ["student", "teacher"]}
     
-    users = await db.users.find(query).to_list(1000)
+    # رفع الحد الأقصى لاستيعاب أكبر قاعدة بيانات (الإداريون قليلون عادة، الـ limit للحماية فقط)
+    users = await db.users.find(query).to_list(10000)
     
     # جلب أسماء الكليات والأقسام للعرض
     result = []

@@ -13,7 +13,16 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
-- 2026-06-20 **إصلاح نهائي دائم لـ "حساب لا يظهر بعد ترقيته" (zain bug)**:
+- 2026-06-20 **🎯 إصلاح حقيقي لمشكلة "الحساب لا يظهر" (السبب الحقيقي اكتُشف عبر فحص الإنتاج مباشرة)**:
+  - **التشخيص الفعلي عبر `api.ahgaff.net`:** zain و zain22 كانا موجودَين بشكل صحيح في DB (`role=department_head`, role_id صحيح، active=True). لكن `/api/users` بدون فلتر كان يُرجع 1000 سجل فقط.
+  - **السبب الجذري الفعلي:** السطر `users = await db.users.find(query).to_list(1000)` في `server.py:1049` و `routes/users.py:90`. مع ~893 طالب + 98 معلم + 9 إداريين = 1000+، الحسابات الإدارية تقع خارج الـ limit وتختفي.
+  - **الإصلاح:**
+    1. عند عدم وجود فلتر، استبعاد students/teachers على مستوى DB query: `{"role": {"$nin": ["student", "teacher"]}}`
+    2. رفع الحد إلى 10000 (الإداريون قليلون عادةً)
+  - **التحقق:** اختبار `/app/backend/tests/test_users_limit.py` — يدخل 1100 طالب وهمي ويتأكد أن الحسابات الإدارية مرئية ✅
+  - **ملاحظة:** الإصلاحات السابقة (auto-migration للأدوار، cleanup للأدوار المكررة، diagnose endpoint) محتفظ بها للحماية الإضافية لكنها لم تكن السبب الحقيقي.
+
+- 2026-06-20 **Auto-migration للأدوار وأدوات التشخيص (طبقة حماية إضافية)**:
   - **المشكلة المُبلَّغة:** "تمت ترقية الحساب إلى رئيس قسم، لكن صفحة المستخدمين تُظهر 0 حساب في فلتر رئيس قسم".
   - **السبب الجذري:** في `PUT /api/users/{id}` و `PUT /api/users/{id}/role`، إذا كان الدور المخصص يفتقر لـ `system_key` (مثل دور أُنشئ باسم عربي فقط)، كان يُحفظ `role="custom"` بينما `role_id` يشير لدور بصلاحيات department_head. الفلتر `?role=department_head` لا يجده.
   - **الإصلاح ثلاثي الطبقات:**
