@@ -13,6 +13,37 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-20 **إصلاح ثغرة RBAC حرجة: تسريب بيانات بين الكليات**:
+  - **المشكلة المُبلَّغة:** "أي مستخدم لكلية معينة تظهر عنده كل أقسام الكليات الأخرى في صفحات المقررات والطلاب والمعلمين".
+  - **التشخيص (عبر اختبار حسابات حقيقية):**
+    - `Saeed` (department_head, كلية البنات) كان يرى **كلتا** الكليتين في `/api/faculties` (تسريب)
+    - `registrar` لم يكن لديه فرع `teachers` في `get_user_scope_filter` → يرى **كل** المعلمين من كل الكليات
+    - لا توجد آلية لإظهار "المعلمين العابرين" الذين يدرّسون في كليتك لكن قسمهم الأصلي مختلف
+  - **الإصلاحات في `/app/backend/backend/server.py`:**
+    1. **`/api/faculties`** (line 14070): إعادة كتابة كاملة. الآن:
+       - `admin`: كل الكليات
+       - `dean` / `registrar` / `registration_manager`: كليته فقط (faculty_id)
+       - `department_head`: كلية قسمه (يُشتقّ من `department.faculty_id`)
+       - `custom`: كلياته (من faculty_id + departments)
+       - دور مقيَّد بلا بيانات → قائمة فارغة (بدلاً من رؤية الكل)
+    2. **`get_user_scope_filter`** (line 786): أضيف فرع `teachers` للـ `registrar`/`registration_manager` (كان مفقوداً تماماً).
+    3. **`/api/teachers`** (line 3926): استثناء "المعلمون العابرون للأقسام":
+       - يحسب أقسام المستخدم المسموح بها (من scope_filter)
+       - يجلب `course_ids` في تلك الأقسام
+       - يضيف معلميها (من `teaching_loads` + `courses.teacher_id`) عبر `$or` للنتائج
+       - النتيجة: تشاهد معلميك + المعلمين الذين يدرّسون عبر كليتك حتى لو قسمهم الأصلي مختلف
+  - **التحقق (curl حقيقي):**
+    | المستخدم | /api/faculties | /api/departments | /api/teachers |
+    |---|---|---|---|
+    | Saeed (dept_head) | ✅ كلية البنات فقط | ✅ الدراسات الإسلامية فقط | ✅ Saeed فقط |
+    | Salim (dean) | ✅ كلية الشريعة فقط | ✅ 3 أقسام كليته | ✅ حسن + زين فقط |
+    | admin | ✅ كل الكليات | ✅ كل الأقسام | ✅ كل المعلمين |
+  - **الاختبارات الجديدة:**
+    - `/app/backend/tests/test_rbac_scoping.py` (3 اختبارات تحققية على البنية والبيانات)
+  - **حسابات تجريبية موثَّقة في `test_credentials.md`:**
+    - `Salim` / `test1234` (dean)
+    - `Saeed` / `test1234` (department_head)
+
 - 2026-06-19 **دليل المستخدم المصور داخل المنصة (`/help`)**:
   - **الطلب:** "نويت اعمل دليل مصور لاستخدام المنصة على شكل خطوات منطقية وكل خطوة مبنية على الأخرى... من بداية فتح الموقع إلى أسس بناء المعلومات والاستخدام".
   - **التنفيذ:**

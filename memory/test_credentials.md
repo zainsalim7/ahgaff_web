@@ -6,7 +6,12 @@
 
 ## Dean
 - Username: Salim
-- Password: 123456
+- Password: test1234  (تم إعادة التعيين 2026-06-20 لاختبار RBAC)
+
+## Department Head
+- Username: Saeed
+- Password: test1234  (تم إعادة التعيين 2026-06-20 لاختبار RBAC)
+- Department: الدراسات الإسلامية / كلية البنات
 
 ## Teacher
 - Username: teacher180156

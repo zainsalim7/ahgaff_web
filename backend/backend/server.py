@@ -898,6 +898,11 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
                 query["department_id"] = {"$in": dept_ids}
         elif scope_type == "departments":
             query["faculty_id"] = faculty_id
+        elif scope_type == "teachers":
+            # 🔧 كان مفقوداً: المسجِّل يرى معلمي كليته فقط (+ المعلمين العابرين عبر teaching_loads)
+            dept_ids = await get_faculty_department_ids(faculty_id)
+            if dept_ids:
+                query["department_id"] = {"$in": dept_ids}
     
     # Teacher - يرى فقط مقرراته
     elif role == UserRole.TEACHER:
@@ -3935,7 +3940,64 @@ async def get_teachers(
                 query["department_id"] = department_id
         elif not query.get("department_id"):
             query["department_id"] = department_id
-    
+
+    # 🔧 استثناء "المعلمون العابرون للأقسام":
+    # إذا كان المستخدم محدوداً بقسم/كلية، نضيف للقائمة كل معلم لديه teaching_load
+    # في أحد الأقسام المسموح بها (حتى لو قسمه الإداري الأصلي مختلف).
+    # هذا يضمن أن المعلم الذي يدرّس في كليتك يظهر لك حتى لو هو إدارياً في كلية أخرى.
+    extra_teacher_ids: set = set()
+    role = current_user.get("role", "")
+    if role != UserRole.ADMIN and not department_id:
+        allowed_dept_ids: list = []
+        dept_q = scope_filter.get("department_id")
+        if isinstance(dept_q, dict) and "$in" in dept_q:
+            allowed_dept_ids = list(dept_q["$in"])
+        elif isinstance(dept_q, str):
+            allowed_dept_ids = [dept_q]
+        if allowed_dept_ids:
+            # جلب معلمي teaching_loads المرتبطين بأقسام المستخدم
+            try:
+                # نحتاج جلب course_ids في تلك الأقسام أولاً
+                course_ids_in_scope = []
+                async for c in db.courses.find(
+                    {"department_id": {"$in": allowed_dept_ids}, "is_active": True},
+                    {"_id": 1},
+                ):
+                    course_ids_in_scope.append(str(c["_id"]))
+                if course_ids_in_scope:
+                    async for tl in db.teaching_loads.find(
+                        {"course_id": {"$in": course_ids_in_scope}},
+                        {"teacher_id": 1},
+                    ):
+                        tid = tl.get("teacher_id")
+                        if tid:
+                            extra_teacher_ids.add(tid)
+                    # كذلك جلب معلمي المقررات مباشرة (في حال غاب teaching_load)
+                    async for c in db.courses.find(
+                        {"department_id": {"$in": allowed_dept_ids}, "is_active": True, "teacher_id": {"$ne": ""}},
+                        {"teacher_id": 1},
+                    ):
+                        tid = c.get("teacher_id")
+                        if tid:
+                            extra_teacher_ids.add(tid)
+            except Exception:
+                pass
+
+    # دمج: إما معلمون من نفس القسم/الكلية، أو معلمون عابرون لها
+    if extra_teacher_ids:
+        try:
+            extra_obj_ids = [ObjectId(t) for t in extra_teacher_ids]
+        except Exception:
+            extra_obj_ids = []
+        if extra_obj_ids:
+            # إذا كان query فيه شرط department_id، نحوّله إلى $or
+            if "department_id" in query:
+                dept_clause = {"department_id": query.pop("department_id")}
+                query["$or"] = [dept_clause, {"_id": {"$in": extra_obj_ids}}]
+            else:
+                # لا شرط قسم → نضمّن المعلمين العابرين فقط (مع إبقاء أي فلاتر أخرى)
+                query.setdefault("$or", []).append({"_id": {"$in": extra_obj_ids}})
+
     teachers = await db.teachers.find(query).to_list(1000)
     
     # جلب المقررات المسندة لكل المعلمين دفعة واحدة
@@ -14069,20 +14131,50 @@ async def serve_file(path: str, auth: str = Query(None)):
 
 @api_router.get("/faculties")
 async def get_faculties(current_user: dict = Depends(get_current_user)):
-    """جلب قائمة الكليات"""
-    query = {}
-    
-    # تطبيق scoping للعميد - يرى فقط كليته
-    if current_user.get("role") == "dean":
+    """جلب قائمة الكليات — مع تطبيق فلتر النطاق حسب دور المستخدم.
+
+    🔒 RBAC: كل مستخدم يرى فقط كليته (أو الكليات المرتبطة بأقسامه).
+    - admin: كل الكليات
+    - dean / registrar / registration_manager: كليته فقط (faculty_id)
+    - department_head: كلية قسمه (lookup عبر department.faculty_id)
+    - custom role: كليته (إن وُجد faculty_id) أو كليات أقسامه
+    - teacher / student: كل الكليات (للقراءة فقط في dropdowns العامة)
+    """
+    query: dict = {}
+    role = current_user.get("role", "")
+
+    if role != UserRole.ADMIN:
+        # نحتاج faculty_id (أو نشتقّه من أقسام المستخدم)
         user_data = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        if user_data and user_data.get("faculty_id"):
-            query["_id"] = ObjectId(user_data["faculty_id"])
-    # تطبيق scoping لمدير التسجيل/موظف التسجيل
-    elif current_user.get("role") in ["registration_manager", "registrar"]:
-        user_data = await db.users.find_one({"_id": ObjectId(current_user["id"])})
-        if user_data and user_data.get("faculty_id"):
-            query["_id"] = ObjectId(user_data["faculty_id"])
-    
+        if user_data:
+            allowed_faculty_ids: set = set()
+            # 1) المستخدم لديه faculty_id صريح (عميد/مسجِّل/custom-faculty)
+            if user_data.get("faculty_id"):
+                allowed_faculty_ids.add(user_data["faculty_id"])
+            # 2) المستخدم لديه أقسام → نشتقّ كلياتها
+            dept_ids = user_data.get("department_ids") or []
+            if not dept_ids and user_data.get("department_id"):
+                dept_ids = [user_data["department_id"]]
+            if dept_ids:
+                try:
+                    obj_ids = [ObjectId(d) for d in dept_ids if d]
+                    async for d in db.departments.find({"_id": {"$in": obj_ids}}, {"faculty_id": 1}):
+                        if d.get("faculty_id"):
+                            allowed_faculty_ids.add(d["faculty_id"])
+                except Exception:
+                    pass
+
+            # تطبيق الفلتر فقط إن كان المستخدم في دور مقيَّد بكلية
+            scoped_roles = {"dean", "department_head", "registration_manager", "registrar", "custom"}
+            if role in scoped_roles and allowed_faculty_ids:
+                try:
+                    query["_id"] = {"$in": [ObjectId(fid) for fid in allowed_faculty_ids]}
+                except Exception:
+                    pass
+            elif role in scoped_roles and not allowed_faculty_ids:
+                # دور مقيَّد لكن بلا بيانات → لا يرى شيئاً (بدلاً من رؤية الكل)
+                return []
+
     faculties = await db.faculties.find(query).to_list(100)
     result = []
     
