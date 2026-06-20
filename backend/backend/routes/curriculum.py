@@ -23,17 +23,27 @@ router = APIRouter(tags=["الخطة الدراسية"])
 
 
 def _has_manage(user: dict) -> bool:
+    """يقبل صلاحية الخطة الدراسية الخاصة أو صلاحية إدارة المقررات العامة."""
     if user.get("role") == "admin":
         return True
     perms = set(user.get("permissions") or [])
-    return Permission.MANAGE_COURSES in perms
+    return (
+        Permission.MANAGE_CURRICULUM in perms
+        or Permission.MANAGE_COURSES in perms
+    )
 
 
 def _has_view(user: dict) -> bool:
+    """يقبل صلاحية عرض الخطة الخاصة، أو إدارة الخطة، أو إدارة/عرض المقررات العامة."""
     if user.get("role") == "admin":
         return True
     perms = set(user.get("permissions") or [])
-    return any(p in perms for p in [Permission.MANAGE_COURSES, Permission.VIEW_COURSES])
+    return any(p in perms for p in [
+        Permission.VIEW_CURRICULUM,
+        Permission.MANAGE_CURRICULUM,
+        Permission.MANAGE_COURSES,
+        Permission.VIEW_COURSES,
+    ])
 
 
 def _clean_doc(d: dict) -> dict:
