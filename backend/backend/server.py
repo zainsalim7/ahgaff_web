@@ -4088,11 +4088,24 @@ async def reset_student_password(student_id: str, current_user: dict = Depends(g
 @api_router.get("/teachers")
 async def get_teachers(
     department_id: Optional[str] = None,
+    cross_university: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
-    """الحصول على جميع المعلمين"""
-    # تطبيق فلتر النطاق بناءً على دور المستخدم
-    scope_filter = await get_user_scope_filter(current_user, "teachers")
+    """الحصول على جميع المعلمين.
+    
+    - `cross_university=true`: يتجاهل فلتر النطاق ويُرجع كل أساتذة الجامعة
+      لكن فقط إذا كان المستخدم admin أو لديه صلاحية `cross_university_assignment`.
+    """
+    # 🌐 وضع "عابر للجامعة" — يتطلب إذناً صريحاً
+    role = current_user.get("role", "")
+    if cross_university and (
+        role == UserRole.ADMIN or has_permission(current_user, "cross_university_assignment")
+    ):
+        scope_filter: dict = {}  # لا قيود — كل أساتذة الجامعة
+        logging.info(f"cross_university teachers fetch by '{current_user.get('username')}' (role={role})")
+    else:
+        # تطبيق فلتر النطاق بناءً على دور المستخدم
+        scope_filter = await get_user_scope_filter(current_user, "teachers")
     query = {**scope_filter}
     
     # تطبيق فلتر القسم الإضافي

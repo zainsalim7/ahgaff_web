@@ -362,7 +362,8 @@ export default function TeachingLoadPage() {
       setLoadingTeachers(true);
       try {
         // إذا فعّل "كل الأقسام": احضر كل الأساتذة بدون فلتر قسم
-        const params = crossDept ? {} : { department_id: selectedDept };
+        // 🌐 cross_university=true → Backend يتجاوز RBAC إذا للمستخدم صلاحية cross_university_assignment أو admin
+        const params: any = crossDept ? { cross_university: true } : { department_id: selectedDept };
         const res = await teachersAPI.getAll(params);
         setTeachers(res.data);
       } catch (e) {

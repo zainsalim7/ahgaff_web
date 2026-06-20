@@ -109,6 +109,9 @@ class Permission:
     # صلاحيات العبء التدريسي
     MANAGE_TEACHING_LOAD = "manage_teaching_load"
     VIEW_TEACHING_LOAD = "view_teaching_load"
+    # 🌐 صلاحية خاصة: تسمح للمستخدم برؤية أساتذة ومقررات من خارج كليته
+    # فقط لغرض الإسناد (لا تكشف بيانات أخرى)
+    CROSS_UNIVERSITY_ASSIGNMENT = "cross_university_assignment"
     
     # صلاحيات الأرشيف
     VIEW_ARCHIVE = "view_archive"
