@@ -976,9 +976,25 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
     if user.role_id:
         role = await db.roles.find_one({"_id": ObjectId(user.role_id)})
         if role:
-            system_key = role.get("system_key") or "custom"
+            system_key = role.get("system_key") or ""
+            # 🔧 إذا كان الدور المخصّص بلا system_key، نحاول مطابقته باسم الدور
+            # مع دور نظام أصلي (مثلاً: "رئيس قسم" → department_head)
+            if not system_key:
+                ROLE_NAME_MAP = {
+                    "رئيس قسم": "department_head",
+                    "عميد كلية": "dean",
+                    "عميد": "dean",
+                    "مسجل": "registrar",
+                    "مدير التسجيل": "registration_manager",
+                    "موظف": "employee",
+                    "مدير النظام": "admin",
+                }
+                role_name = (role.get("name") or "").strip()
+                if role_name in ROLE_NAME_MAP:
+                    system_key = ROLE_NAME_MAP[role_name]
+                else:
+                    system_key = "custom"
             # 🔒 منع قطعي: لا يُسمح بإنشاء حسابات teacher/student من هذه الشاشة
-            # المعلمون يُضافون من "إدارة المعلمين"، والطلاب من "إدارة الطلاب"
             if system_key in ["teacher", "student"]:
                 raise HTTPException(
                     status_code=400,
