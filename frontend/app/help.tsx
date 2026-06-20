@@ -115,23 +115,28 @@ export default function HelpScreen() {
         <ScrollView style={styles.content} contentContainerStyle={{ padding: 24, paddingBottom: 80 }}>
           {activeSection ? (
             <>
-              <View style={styles.sectionHeader}>
-                <View style={[styles.sectionIcon, { backgroundColor: (activeSection.color || '#2962ff') + '22' }]}>
-                  <Ionicons name={activeSection.icon || 'book'} size={22} color={activeSection.color || '#2962ff'} />
-                </View>
-                <View style={{ flex: 1, alignItems: 'flex-end' }}>
-                  <Text style={styles.sectionTitle}>{activeSection.title}</Text>
-                  {!!activeSection.subtitle && (
-                    <Text style={styles.sectionSubtitle}>{activeSection.subtitle}</Text>
-                  )}
-                </View>
-              </View>
+              {/* 🔧 لقسم FAQ — لا نعرض الهيدر الخارجي لأن FAQSection له هيدر مميّز */}
+              {activeSection.id !== 'faq' && (
+                <>
+                  <View style={styles.sectionHeader}>
+                    <View style={[styles.sectionIcon, { backgroundColor: (activeSection.color || '#2962ff') + '22' }]}>
+                      <Ionicons name={activeSection.icon || 'book'} size={22} color={activeSection.color || '#2962ff'} />
+                    </View>
+                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                      <Text style={styles.sectionTitle}>{activeSection.title}</Text>
+                      {!!activeSection.subtitle && (
+                        <Text style={styles.sectionSubtitle}>{activeSection.subtitle}</Text>
+                      )}
+                    </View>
+                  </View>
 
-              {!!activeSection.intro && (
-                <View style={styles.introBox}>
-                  <Ionicons name="information-circle" size={18} color="#1976d2" />
-                  <Text style={styles.introText}>{activeSection.intro}</Text>
-                </View>
+                  {!!activeSection.intro && (
+                    <View style={styles.introBox}>
+                      <Ionicons name="information-circle" size={18} color="#1976d2" />
+                      <Text style={styles.introText}>{activeSection.intro}</Text>
+                    </View>
+                  )}
+                </>
               )}
 
               {!!activeSection.warning && (
