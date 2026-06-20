@@ -14911,6 +14911,66 @@ async def startup_event():
     await create_indexes()
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
+    # 🔧 Migration دائمة: إصلاح المستخدمين ذوي الأدوار الشاذة تلقائياً
+    await migrate_broken_user_roles()
+
+
+async def migrate_broken_user_roles():
+    """يُصلح تلقائياً أي مستخدم محفوظ بـ role='custom' أو فارغ بناءً على role_id.
+    
+    يعمل عند كل startup ويمسح فقط المستخدمين المتأثرين (idempotent).
+    لا يُحدث أي مستخدم له role قياسي صحيح.
+    """
+    try:
+        VALID_SYSTEM_ROLES = {"admin", "dean", "department_head", "registrar",
+                              "registration_manager", "employee", "teacher", "student"}
+        ROLE_NAME_MAP = {
+            "رئيس قسم": "department_head",
+            "عميد كلية": "dean",
+            "عميد": "dean",
+            "مسجل": "registrar",
+            "مدير التسجيل": "registration_manager",
+            "موظف": "employee",
+            "مدير النظام": "admin",
+            "Department Head": "department_head",
+            "Dean": "dean",
+            "Registrar": "registrar",
+        }
+        fixed_count = 0
+        # نفحص المستخدمين بـ role غير قياسي أو فارغ، شرط وجود role_id للاستنتاج
+        async for u in db.users.find({
+            "$and": [
+                {"role_id": {"$nin": [None, ""]}},
+                {"$or": [
+                    {"role": {"$nin": list(VALID_SYSTEM_ROLES)}},
+                    {"role": "custom"},
+                    {"role": {"$exists": False}},
+                    {"role": None},
+                ]},
+            ]
+        }):
+            try:
+                role = await db.roles.find_one({"_id": ObjectId(u["role_id"])})
+                if not role:
+                    continue
+                sys_key = (role.get("system_key") or "").strip()
+                if not sys_key:
+                    role_name = (role.get("name") or "").strip()
+                    sys_key = ROLE_NAME_MAP.get(role_name, "")
+                if sys_key and sys_key in VALID_SYSTEM_ROLES and sys_key not in ["teacher", "student"]:
+                    # لا نحدّث teacher/student تلقائياً (هذه شاشات خاصة)
+                    await db.users.update_one(
+                        {"_id": u["_id"]},
+                        {"$set": {"role": sys_key}}
+                    )
+                    fixed_count += 1
+                    logging.info(f"Migration: fixed role for user '{u.get('username')}' → {sys_key}")
+            except Exception as e:
+                logging.warning(f"Migration: failed to fix user {u.get('username')}: {e}")
+        if fixed_count > 0:
+            logging.info(f"✅ User role migration: {fixed_count} user(s) fixed automatically.")
+    except Exception as e:
+        logging.error(f"User role migration failed (non-critical): {e}")
 
 async def create_indexes():
     """إنشاء فهارس لتسريع الاستعلامات"""
