@@ -10,6 +10,10 @@ import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { coursesAPI, departmentsAPI, teachersAPI } from '../services/api';
 
+const LEVELS = ['1', '2', '3', '4', '5'];
+const SECTION_LABELS = ['أ', 'ب', 'ج', 'د', 'ه', 'و', 'ز', 'ح', 'ط', 'ي'];
+const CREDIT_HOURS_OPTIONS = ['1', '2', '3', '4', '5', '6'];
+
 export type CourseTab = 'overview' | 'lectures' | 'students' | 'plan';
 
 interface CourseTabBarProps {
@@ -282,36 +286,48 @@ export function CourseTabBar({ courseId, course, activeTab, onCourseUpdated, can
               <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={s.label}>الساعات المعتمدة</Text>
-                  <TextInput
-                    style={s.input}
-                    value={editForm.credit_hours}
-                    onChangeText={(v) => setEditForm({ ...editForm, credit_hours: v })}
-                    keyboardType="numeric"
-                    placeholder="3"
-                    placeholderTextColor="#a8b1c2"
-                  />
+                  <View style={s.dropdownWrap}>
+                    <Picker
+                      selectedValue={editForm.credit_hours}
+                      onValueChange={(v) => setEditForm({ ...editForm, credit_hours: v })}
+                      style={s.dropdownPicker}
+                    >
+                      {CREDIT_HOURS_OPTIONS.map(h => (
+                        <Picker.Item key={h} label={h} value={h} />
+                      ))}
+                    </Picker>
+                  </View>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.label}>المستوى</Text>
-                  <TextInput
-                    style={s.input}
-                    value={editForm.level}
-                    onChangeText={(v) => setEditForm({ ...editForm, level: v })}
-                    keyboardType="numeric"
-                    placeholder="1"
-                    placeholderTextColor="#a8b1c2"
-                  />
+                  <View style={s.dropdownWrap}>
+                    <Picker
+                      selectedValue={editForm.level}
+                      onValueChange={(v) => setEditForm({ ...editForm, level: v })}
+                      style={s.dropdownPicker}
+                      testID="edit-level"
+                    >
+                      {LEVELS.map(l => (
+                        <Picker.Item key={l} label={`م${l}`} value={l} />
+                      ))}
+                    </Picker>
+                  </View>
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={s.label}>الشعبة</Text>
-                  <TextInput
-                    style={s.input}
-                    value={editForm.section}
-                    onChangeText={(v) => setEditForm({ ...editForm, section: v })}
-                    placeholder="أ"
-                    placeholderTextColor="#a8b1c2"
-                    testID="edit-section"
-                  />
+                  <View style={s.dropdownWrap}>
+                    <Picker
+                      selectedValue={editForm.section}
+                      onValueChange={(v) => setEditForm({ ...editForm, section: v })}
+                      style={s.dropdownPicker}
+                      testID="edit-section"
+                    >
+                      <Picker.Item label="-- بدون --" value="" />
+                      {SECTION_LABELS.map(sec => (
+                        <Picker.Item key={sec} label={sec} value={sec} />
+                      ))}
+                    </Picker>
+                  </View>
                 </View>
               </View>
 
