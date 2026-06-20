@@ -925,6 +925,18 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
                 else:
                     query["_id"] = {"$in": []}  # لا يوجد طلاب
     
+    # 🔒 Fail-safe أمني حرج: إذا كان للدور نطاق محدود لكن لم يُطبَّق أي فلتر
+    # (مثلاً department_head بلا قسم مسنَد) → نمنع رؤية أي شيء بدلاً من إظهار الكل
+    SCOPED_ROLES = {"dean", "department_head", "registrar", "registration_manager",
+                    "custom", UserRole.TEACHER}
+    if role in SCOPED_ROLES and not query:
+        logging.warning(
+            f"RBAC: user '{user_data.get('username')}' (role={role}) has no scope data "
+            f"(faculty_id={faculty_id}, department_ids={department_ids}) — blocking all results."
+        )
+        # فلتر مستحيل التحقق: ObjectId غير موجود إطلاقاً
+        query["_id"] = ObjectId("000000000000000000000000")
+    
     return query
 
 async def get_faculty_department_ids(faculty_id: str) -> list:
