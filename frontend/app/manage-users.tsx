@@ -228,6 +228,15 @@ export default function ManageUsersScreen() {
       return;
     }
     
+    // 🔒 التحقق الإلزامي من القسم لرئيس القسم (يمنع سيناريو zain)
+    const isDeptHead = systemKey === 'department_head' || roleName.includes('رئيس قسم');
+    if (isDeptHead && formData.department_ids.length === 0) {
+      const msg = '⚠️ رئيس القسم يجب أن يكون له قسم واحد على الأقل.\nبدون قسم، لن يستطيع رؤية أي بيانات.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('خطأ', msg);
+      return;
+    }
+    
     // التحقق من اختيار قسم واحد على الأقل إذا كان المستوى "قسم"
     if (formData.permission_level === 'department' && formData.department_ids.length === 0) {
       if (Platform.OS === 'web') {
@@ -288,6 +297,26 @@ export default function ManageUsersScreen() {
 
   const handleEditUser = async () => {
     if (!selectedUser) return;
+    
+    // 🔒 التحقق الإلزامي من القسم لرئيس القسم (يمنع سيناريو zain)
+    const selectedRole = roles.find(r => r.id === formData.role_id);
+    const systemKey = (selectedRole as any)?.system_key || '';
+    const roleName = selectedRole?.name?.toLowerCase() || '';
+    const isDeptHead = systemKey === 'department_head' || roleName.includes('رئيس قسم');
+    if (isDeptHead && formData.department_ids.length === 0 && !formData.department_id) {
+      const msg = '⚠️ رئيس القسم يجب أن يكون له قسم واحد على الأقل.\nبدون قسم، لن يستطيع رؤية أي بيانات.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('خطأ', msg);
+      return;
+    }
+    const isFacultyScoped = ['dean', 'registrar', 'registration_manager'].includes(systemKey) ||
+                            roleName.includes('عميد') || roleName.includes('مسجل');
+    if (isFacultyScoped && !formData.faculty_id) {
+      const msg = '⚠️ هذا الدور يجب أن يكون له كلية مُسنَدة.';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('خطأ', msg);
+      return;
+    }
     
     setSaving(true);
     try {

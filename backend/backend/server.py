@@ -1015,6 +1015,22 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
             user_dict["role_id"] = user.role_id
             user_dict["role"] = system_key
             user_dict["permissions"] = role.get("permissions", [])
+
+    # 🔒 تحقق إلزامي: الأدوار محدودة النطاق يجب أن يكون لها نطاق مُسنَد (يمنع سيناريو zain)
+    _final_role = user_dict.get("role", "")
+    _has_dept = bool(user_dict.get("department_id") or user_dict.get("department_ids"))
+    _has_faculty = bool(user_dict.get("faculty_id"))
+    if _final_role == "department_head" and not _has_dept:
+        raise HTTPException(
+            status_code=400,
+            detail="رئيس القسم يجب أن يكون له قسم مُسنَد. اختر قسماً واحداً على الأقل."
+        )
+    if _final_role in ["dean", "registrar", "registration_manager"] and not _has_faculty:
+        role_ar = {"dean": "العميد", "registrar": "المسجِّل", "registration_manager": "مدير التسجيل"}[_final_role]
+        raise HTTPException(
+            status_code=400,
+            detail=f"{role_ar} يجب أن يكون له كلية مُسنَدة. اختر الكلية أولاً."
+        )
     elif user.role in ["teacher", "student"]:
         # نفس الحماية لو مُرّر role مباشرة
         raise HTTPException(
@@ -1262,6 +1278,26 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
             update_data["role_id"] = data.role_id
             update_data["role"] = sys_key
             update_data["permissions"] = role.get("permissions", [])
+    
+    # 🔒 تحقق إلزامي: لا يُسمح بحفظ مستخدم محدود النطاق بدون scope data (يمنع سيناريو zain)
+    # نحسب الحالة النهائية بعد التحديث
+    _final_role = update_data.get("role", user.get("role", ""))
+    _final_dept_ids = update_data.get("department_ids", user.get("department_ids", []))
+    _final_dept_id = update_data.get("department_id", user.get("department_id"))
+    _final_faculty_id = update_data.get("faculty_id", user.get("faculty_id"))
+    _has_dept = bool(_final_dept_ids) or bool(_final_dept_id)
+    _has_faculty = bool(_final_faculty_id)
+    if _final_role == "department_head" and not _has_dept:
+        raise HTTPException(
+            status_code=400,
+            detail="رئيس القسم يجب أن يكون له قسم مُسنَد. اختر قسماً واحداً على الأقل."
+        )
+    if _final_role in ["dean", "registrar", "registration_manager"] and not _has_faculty:
+        role_ar = {"dean": "العميد", "registrar": "المسجِّل", "registration_manager": "مدير التسجيل"}[_final_role]
+        raise HTTPException(
+            status_code=400,
+            detail=f"{role_ar} يجب أن يكون له كلية مُسنَدة. اختر الكلية أولاً."
+        )
     
     if update_data:
         await db.users.update_one(
