@@ -94,6 +94,7 @@ export default function AddCourseScreen() {
   const authUser = useAuthStore((state) => state.user);
   const [courses, setCourses] = useState<Course[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -189,12 +190,13 @@ export default function AddCourseScreen() {
 
   const fetchBaseData = useCallback(async () => {
     try {
-      const [deptsRes, teachersRes, settingsRes, semRes, semsRes] = await Promise.all([
+      const [deptsRes, teachersRes, settingsRes, semRes, semsRes, facultiesRes] = await Promise.all([
         departmentsAPI.getAll(),
         teachersAPI.getAll(),
         settingsAPI.get(),
         api.get('/semesters/current').catch(() => ({ data: null })),
         api.get('/semesters').catch(() => ({ data: [] })),
+        api.get('/faculties').catch(() => ({ data: [] })),
       ]);
       setDepartments(deptsRes.data);
       setTeachers(teachersRes.data);
@@ -202,6 +204,7 @@ export default function AddCourseScreen() {
       setActiveSemester(semRes.data);
       const sl = Array.isArray(semsRes.data) ? semsRes.data : (semsRes.data?.items || []);
       setAllSemesters(sl);
+      setFaculties(Array.isArray(facultiesRes.data) ? facultiesRes.data : []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -1681,9 +1684,13 @@ export default function AddCourseScreen() {
         courseId={assignTeacherCourse?.id || ''}
         courseName={assignTeacherCourse?.name}
         courseDepartmentId={assignTeacherCourse?.department_id}
+        courseCode={assignTeacherCourse?.code}
+        courseLevel={assignTeacherCourse?.level}
+        courseSection={assignTeacherCourse?.section}
         currentTeacherId={assignTeacherCourse?.teacher_id || ''}
         teachers={teachers}
         departments={departments}
+        faculties={faculties}
         onSaved={(newTeacherId, name) => {
           // تحديث محلي للقائمة فوراً
           setCourses(prev => prev.map(c =>
@@ -1701,9 +1708,13 @@ export default function AddCourseScreen() {
         courseId={editingCourse?.id || ''}
         courseName={formData.name}
         courseDepartmentId={formData.department_id}
+        courseCode={formData.code}
+        courseLevel={formData.level}
+        courseSection={formData.section}
         currentTeacherId={formData.teacher_id}
         teachers={teachers}
         departments={departments}
+        faculties={faculties}
         formMode
         onSaved={(newTeacherId) => {
           setFormData({ ...formData, teacher_id: newTeacherId || '' });
@@ -1722,6 +1733,7 @@ export default function AddCourseScreen() {
         courseId=""
         teachers={teachers}
         departments={departments}
+        faculties={faculties}
         bulkCourses={Array.from(selectedIds).map(id => {
           const c = courses.find(cc => cc.id === id);
           if (!c) return null;
@@ -1734,6 +1746,8 @@ export default function AddCourseScreen() {
             department_id: c.department_id,
             current_teacher_id: c.teacher_id || undefined,
             current_teacher_name: tname,
+            level: c.level,
+            section: c.section,
           };
         }).filter(Boolean) as any}
         teacherCurrentLoadMap={teacherLoadMap}

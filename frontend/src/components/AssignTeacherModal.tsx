@@ -30,9 +30,20 @@ export interface AssignTeacherTeacher {
   full_name: string;
   department_id?: string;
   department_ids?: string[];
+  faculty_id?: string;
+  faculty_name?: string;
+  specialization?: string;
+  academic_title?: string;
 }
 
 export interface AssignTeacherDepartment {
+  id: string;
+  name: string;
+  faculty_id?: string;
+  faculty_name?: string;
+}
+
+export interface AssignTeacherFaculty {
   id: string;
   name: string;
 }
@@ -45,6 +56,8 @@ export interface BulkCourseInfo {
   department_id?: string;
   current_teacher_id?: string;
   current_teacher_name?: string;
+  level?: number | string;
+  section?: string;
 }
 
 export interface BulkResultItem {
@@ -60,9 +73,15 @@ interface Props {
   courseId: string;
   courseName?: string;
   courseDepartmentId?: string;
+  /** Course extra context — displayed at modal top so user knows what they're assigning. */
+  courseCode?: string;
+  courseLevel?: number | string;
+  courseSection?: string;
   currentTeacherId?: string;
   teachers: AssignTeacherTeacher[];
   departments: AssignTeacherDepartment[];
+  /** Faculties for course/teacher context lookup. */
+  faculties?: AssignTeacherFaculty[];
   onSaved: (newTeacherId: string | null, teacherName: string) => void;
   /** Form mode: skip API call, only return selection to caller (for embedded use in forms). */
   formMode?: boolean;
@@ -80,9 +99,13 @@ export function AssignTeacherModal({
   courseId,
   courseName,
   courseDepartmentId,
+  courseCode,
+  courseLevel,
+  courseSection,
   currentTeacherId,
   teachers,
   departments,
+  faculties = [],
   onSaved,
   formMode = false,
   bulkCourses,
@@ -116,12 +139,48 @@ export function AssignTeacherModal({
     return map;
   }, [departments]);
 
+  const facultyNameById = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const f of faculties) map[f.id] = f.name;
+    return map;
+  }, [faculties]);
+
+  /** map department_id → faculty_name (للبحث السريع) */
+  const deptToFacultyName = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const d of departments) {
+      if (d.faculty_name) map[d.id] = d.faculty_name;
+      else if (d.faculty_id && facultyNameById[d.faculty_id]) map[d.id] = facultyNameById[d.faculty_id];
+    }
+    return map;
+  }, [departments, facultyNameById]);
+
   const getTeacherDeptName = (t: AssignTeacherTeacher) => {
     const ids = t.department_ids && t.department_ids.length > 0
       ? t.department_ids
       : (t.department_id ? [t.department_id] : []);
     return ids.map(id => deptNameById[id]).filter(Boolean).join(' / ');
   };
+
+  /** كلية المعلم: من faculty_id مباشرة أو عبر القسم */
+  const getTeacherFacultyName = (t: AssignTeacherTeacher): string => {
+    if (t.faculty_name) return t.faculty_name;
+    if (t.faculty_id && facultyNameById[t.faculty_id]) return facultyNameById[t.faculty_id];
+    const primaryDept = t.department_id || (t.department_ids && t.department_ids[0]);
+    if (primaryDept && deptToFacultyName[primaryDept]) return deptToFacultyName[primaryDept];
+    return '';
+  };
+
+  /** كلية المقرر: lookup عبر courseDepartmentId */
+  const courseFacultyName = useMemo((): string => {
+    if (!courseDepartmentId) return '';
+    return deptToFacultyName[courseDepartmentId] || '';
+  }, [courseDepartmentId, deptToFacultyName]);
+
+  const courseDepartmentName = useMemo((): string => {
+    if (!courseDepartmentId) return '';
+    return deptNameById[courseDepartmentId] || '';
+  }, [courseDepartmentId, deptNameById]);
 
   const isSameDept = (t: AssignTeacherTeacher) => {
     if (!courseDepartmentId) return false;
@@ -325,6 +384,46 @@ export function AssignTeacherModal({
             </TouchableOpacity>
           </View>
 
+          {/* 🔧 بطاقة معلومات المقرر — الكلية / القسم / المستوى / الشعبة / الكود */}
+          {!isBulk && (courseFacultyName || courseDepartmentName || courseLevel || courseSection || courseCode) && (
+            <View style={styles.courseInfoCard} testID="course-info-card">
+              {!!courseFacultyName && (
+                <View style={styles.infoChip}>
+                  <Ionicons name="school-outline" size={11} color="#1565c0" />
+                  <Text style={styles.infoChipLabel}>الكلية:</Text>
+                  <Text style={styles.infoChipValue} numberOfLines={1}>{courseFacultyName}</Text>
+                </View>
+              )}
+              {!!courseDepartmentName && (
+                <View style={styles.infoChip}>
+                  <Ionicons name="business-outline" size={11} color="#6a1b9a" />
+                  <Text style={styles.infoChipLabel}>القسم:</Text>
+                  <Text style={styles.infoChipValue} numberOfLines={1}>{courseDepartmentName}</Text>
+                </View>
+              )}
+              {!!courseLevel && (
+                <View style={styles.infoChip}>
+                  <Ionicons name="layers-outline" size={11} color="#0277bd" />
+                  <Text style={styles.infoChipLabel}>المستوى:</Text>
+                  <Text style={styles.infoChipValue}>{courseLevel}</Text>
+                </View>
+              )}
+              {!!courseSection && (
+                <View style={styles.infoChip}>
+                  <Ionicons name="people-outline" size={11} color="#558b2f" />
+                  <Text style={styles.infoChipLabel}>الشعبة:</Text>
+                  <Text style={styles.infoChipValue}>{courseSection}</Text>
+                </View>
+              )}
+              {!!courseCode && (
+                <View style={styles.infoChip}>
+                  <Ionicons name="barcode-outline" size={11} color="#5b6678" />
+                  <Text style={styles.infoChipValue}>{courseCode}</Text>
+                </View>
+              )}
+            </View>
+          )}
+
           {/* عرض نتائج التنفيذ الجماعي بعد الحفظ */}
           {isBulk && bulkResults ? (
             <ScrollView style={styles.bulkResultsBox} contentContainerStyle={{ padding: 16 }}>
@@ -448,6 +547,7 @@ export function AssignTeacherModal({
               filtered.map((t) => {
                 const same = isSameDept(t);
                 const deptName = getTeacherDeptName(t);
+                const facultyName = getTeacherFacultyName(t);
                 const isPicked = t.id === pickedId;
                 return (
                   <TouchableOpacity
@@ -480,7 +580,21 @@ export function AssignTeacherModal({
                       </View>
                       <View style={styles.rowMetaLine}>
                         {!!t.teacher_id && <Text style={styles.rowMeta}>#{t.teacher_id}</Text>}
-                        {!!deptName && <Text style={styles.rowMeta}>{deptName}</Text>}
+                        {!!facultyName && (
+                          <View style={styles.metaPair}>
+                            <Ionicons name="school-outline" size={10} color="#1565c0" />
+                            <Text style={[styles.rowMeta, { color: '#1565c0' }]}>{facultyName}</Text>
+                          </View>
+                        )}
+                        {!!deptName && (
+                          <View style={styles.metaPair}>
+                            <Ionicons name="business-outline" size={10} color="#6a1b9a" />
+                            <Text style={[styles.rowMeta, { color: '#6a1b9a' }]} numberOfLines={1}>{deptName}</Text>
+                          </View>
+                        )}
+                        {!!t.specialization && (
+                          <Text style={[styles.rowMeta, { fontStyle: 'italic' }]}>{t.specialization}</Text>
+                        )}
                       </View>
                     </View>
                   </TouchableOpacity>
@@ -582,6 +696,31 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row-reverse', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f5' },
   title: { fontSize: 16, fontWeight: '700', color: '#1f2a37', textAlign: 'right' },
   subtitle: { fontSize: 12, color: '#5b6678', marginTop: 2, textAlign: 'right' },
+  // 🔧 بطاقة معلومات المقرر — chips متعددة الألوان
+  courseInfoCard: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 6,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 4,
+    borderBottomWidth: 1,
+    borderBottomColor: '#eef1f5',
+  },
+  infoChip: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: '#f6f8fb',
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+  },
+  infoChipLabel: { fontSize: 10, color: '#8a95a8', fontWeight: '600' },
+  infoChipValue: { fontSize: 11, color: '#1f2a37', fontWeight: '700', maxWidth: 200 },
+  metaPair: { flexDirection: 'row-reverse', alignItems: 'center', gap: 3 },
   searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 16, marginTop: 12, backgroundColor: '#f6f8fb', borderRadius: 8, borderWidth: 1, borderColor: '#eef1f5' },
   searchInput: { flex: 1, fontSize: 13, color: '#1f2a37', textAlign: 'right', paddingVertical: 4, outlineWidth: 0 as any },
   filterToggle: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, padding: 12, marginHorizontal: 16, marginTop: 8, backgroundColor: '#f6f8fb', borderRadius: 8 },
