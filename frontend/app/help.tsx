@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { HELP_SECTIONS, HelpSection, HelpStep } from '../src/data/helpContent';
+import { FAQSection } from '../src/components/FAQSection';
 
 export default function HelpScreen() {
   const router = useRouter();
@@ -140,29 +141,36 @@ export default function HelpScreen() {
                 </View>
               )}
 
-              {/* الخطوات */}
-              <View style={styles.stepsList}>
-                {activeSection.steps.map((step, i) => (
-                  <StepCard key={i} step={step} index={i + 1} accent={activeSection.color || '#2962ff'} />
-                ))}
-              </View>
+              {/* 🔧 FAQ يُعرض كقسم خاص (accordion) — بدلاً من الخطوات */}
+              {activeSection.id === 'faq' ? (
+                <FAQSection />
+              ) : (
+                <>
+                  {/* الخطوات */}
+                  <View style={styles.stepsList}>
+                    {activeSection.steps.map((step, i) => (
+                      <StepCard key={i} step={step} index={i + 1} accent={activeSection.color || '#2962ff'} />
+                    ))}
+                  </View>
 
-              {/* روابط مرتبطة */}
-              {!!activeSection.links?.length && (
-                <View style={styles.linksBox}>
-                  <Text style={styles.linksTitle}>روابط سريعة:</Text>
-                  {activeSection.links.map((l, i) => (
-                    <TouchableOpacity
-                      key={i}
-                      style={styles.linkBtn}
-                      onPress={() => router.push(l.route as any)}
-                      testID={`help-link-${i}`}
-                    >
-                      <Ionicons name="arrow-back" size={14} color="#2962ff" />
-                      <Text style={styles.linkText}>{l.label}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
+                  {/* روابط مرتبطة */}
+                  {!!activeSection.links?.length && (
+                    <View style={styles.linksBox}>
+                      <Text style={styles.linksTitle}>روابط سريعة:</Text>
+                      {activeSection.links.map((l, i) => (
+                        <TouchableOpacity
+                          key={i}
+                          style={styles.linkBtn}
+                          onPress={() => router.push(l.route as any)}
+                          testID={`help-link-${i}`}
+                        >
+                          <Ionicons name="arrow-back" size={14} color="#2962ff" />
+                          <Text style={styles.linkText}>{l.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                  )}
+                </>
               )}
 
               {/* تنقّل بين الأقسام */}
