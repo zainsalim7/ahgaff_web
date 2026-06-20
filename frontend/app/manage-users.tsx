@@ -98,7 +98,6 @@ export default function ManageUsersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showTeachersStudents, setShowTeachersStudents] = useState(false);
   const [selectedRole, setSelectedRole] = useState<string>('all');
   
   // Modal states
@@ -169,10 +168,9 @@ export default function ManageUsersScreen() {
   }, [fetchData]);
 
   useEffect(() => {
-    // استبعاد الطلاب والمعلمين بالكامل - لأن لهم أقسام خاصة بهم
-    // (يمكن إظهارهم بزر toggle "إظهار المعلمين والطلاب")
+    // 🔒 استبعاد قطعي للطلاب والمعلمين — لا يظهرون هنا أبداً
+    // (لهم شاشات منفصلة: "إدارة المعلمين" و "إدارة الطلاب")
     let filtered = users.filter(u => {
-      if (showTeachersStudents) return true;
       if (u.role === 'student' || u.role === 'teacher') return false;
       return true;
     });
@@ -189,7 +187,7 @@ export default function ManageUsersScreen() {
     }
     
     setFilteredUsers(filtered);
-  }, [searchQuery, selectedRole, users, showTeachersStudents]);
+  }, [searchQuery, selectedRole, users]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -254,23 +252,10 @@ export default function ManageUsersScreen() {
         department_ids: formData.department_ids.length > 0 ? formData.department_ids : undefined,
       });
       
-      // 🔧 رسالة توضيحية لو الدور teacher/student — لأن هذه الشاشة تخفيهم افتراضياً
-      const createdRole = roles.find(r => r.id === formData.role_id);
-      const createdRoleKey = (createdRole as any)?.system_key || '';
-      let successMsg = '✅ تم إضافة المستخدم بنجاح';
-      if (createdRoleKey === 'teacher') {
-        successMsg = '✅ تم إنشاء حساب المعلم بنجاح.\n\nملاحظة: لرؤيته هنا اضغط زر "إظهارهم". أو افتح شاشة "إدارة المعلمين" لإدارته كاملاً.';
-      } else if (createdRoleKey === 'student') {
-        successMsg = '✅ تم إنشاء حساب الطالب بنجاح.\n\nملاحظة: لرؤيته هنا اضغط زر "إظهارهم". أو افتح شاشة "إدارة الطلاب" لإدارته كاملاً.';
-      }
       if (Platform.OS === 'web') {
-        window.alert(successMsg);
+        window.alert('✅ تم إضافة المستخدم بنجاح');
       } else {
-        Alert.alert('نجاح', successMsg);
-      }
-      // إذا كان الدور teacher/student، فعّل toggle العرض تلقائياً
-      if (createdRoleKey === 'teacher' || createdRoleKey === 'student') {
-        setShowTeachersStudents(true);
+        Alert.alert('نجاح', 'تم إضافة المستخدم بنجاح');
       }
       setShowAddModal(false);
       setFormData({
@@ -559,24 +544,6 @@ export default function ManageUsersScreen() {
             </TouchableOpacity>
           )}
         </View>
-      </View>
-
-      {/* 🔧 تنبيه + Toggle لإظهار حسابات المعلمين والطلاب */}
-      <View style={{ paddingHorizontal: 16, paddingVertical: 8, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: '#fff8e1', marginHorizontal: 16, borderRadius: 8, borderRightWidth: 4, borderRightColor: '#f59e0b' }}>
-        <Ionicons name="information-circle" size={18} color="#92400e" />
-        <Text style={{ flex: 1, fontSize: 12, color: '#92400e', textAlign: 'right' }}>
-          حسابات المعلمين والطلاب تُدار من شاشاتهم الخاصة. اضغط الزر لإظهارهم هنا أيضاً.
-        </Text>
-        <TouchableOpacity
-          onPress={() => setShowTeachersStudents(v => !v)}
-          style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: showTeachersStudents ? '#f59e0b' : '#fff', borderWidth: 1, borderColor: '#f59e0b', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 }}
-          data-testid="toggle-show-teachers-students"
-        >
-          <Ionicons name={showTeachersStudents ? 'eye' : 'eye-off'} size={13} color={showTeachersStudents ? '#fff' : '#92400e'} />
-          <Text style={{ fontSize: 11, fontWeight: '700', color: showTeachersStudents ? '#fff' : '#92400e' }}>
-            {showTeachersStudents ? 'إظهار الكل' : 'إظهارهم'}
-          </Text>
-        </TouchableOpacity>
       </View>
 
       {/* Role Filter - Dropdown */}

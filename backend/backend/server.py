@@ -976,9 +976,23 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
     if user.role_id:
         role = await db.roles.find_one({"_id": ObjectId(user.role_id)})
         if role:
+            system_key = role.get("system_key") or "custom"
+            # 🔒 منع قطعي: لا يُسمح بإنشاء حسابات teacher/student من هذه الشاشة
+            # المعلمون يُضافون من "إدارة المعلمين"، والطلاب من "إدارة الطلاب"
+            if system_key in ["teacher", "student"]:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"لا يمكن إنشاء حساب بدور '{system_key}' من شاشة المستخدمين. استخدم شاشة 'إدارة {'المعلمين' if system_key == 'teacher' else 'الطلاب'}' المخصصة."
+                )
             user_dict["role_id"] = user.role_id
-            user_dict["role"] = role.get("system_key") or "custom"
+            user_dict["role"] = system_key
             user_dict["permissions"] = role.get("permissions", [])
+    elif user.role in ["teacher", "student"]:
+        # نفس الحماية لو مُرّر role مباشرة
+        raise HTTPException(
+            status_code=400,
+            detail=f"لا يمكن إنشاء حساب بدور '{user.role}' من شاشة المستخدمين. استخدم شاشة 'إدارة {'المعلمين' if user.role == 'teacher' else 'الطلاب'}' المخصصة."
+        )
     elif not user.role:
         user_dict["role"] = "employee"  # افتراضي
         user_dict["permissions"] = []
