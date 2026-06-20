@@ -1114,6 +1114,63 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
     
     return {"message": "تم حذف المستخدم بنجاح"}
 
+
+# ═══════════════════════════════════════════════════════════════
+# 🛠️ Admin Tools: إصلاح/حذف مستخدم بالـ username (للحالات الطارئة)
+# يُستخدم عندما لا يظهر المستخدم في القائمة لخطأ في role
+# ═══════════════════════════════════════════════════════════════
+@api_router.get("/admin/find-user-by-username/{username}")
+async def admin_find_user_by_username(username: str, current_user: dict = Depends(get_current_user)):
+    """جلب مستخدم بـ username (للتشخيص). admin فقط."""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح — admin فقط")
+    u = await db.users.find_one({"username": {"$regex": f"^{username}$", "$options": "i"}})
+    if not u:
+        raise HTTPException(status_code=404, detail=f"المستخدم '{username}' غير موجود في قاعدة البيانات")
+    return {
+        "id": str(u["_id"]),
+        "username": u.get("username"),
+        "full_name": u.get("full_name"),
+        "role": u.get("role"),
+        "role_id": u.get("role_id"),
+        "faculty_id": u.get("faculty_id"),
+        "department_id": u.get("department_id"),
+        "is_active": u.get("is_active", True),
+        "created_at": u.get("created_at"),
+    }
+
+
+class AdminFixUserRequest(BaseModel):
+    username: str
+    action: str  # "delete" | "fix-role"
+    new_role: Optional[str] = None  # مطلوب لو action=fix-role
+
+
+@api_router.post("/admin/fix-user")
+async def admin_fix_user(req: AdminFixUserRequest, current_user: dict = Depends(get_current_user)):
+    """حذف أو إصلاح role لمستخدم لا يظهر في الواجهة. admin فقط."""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح — admin فقط")
+
+    u = await db.users.find_one({"username": {"$regex": f"^{req.username}$", "$options": "i"}})
+    if not u:
+        raise HTTPException(status_code=404, detail=f"المستخدم '{req.username}' غير موجود")
+
+    if req.action == "delete":
+        await db.users.delete_one({"_id": u["_id"]})
+        return {"message": f"✅ تم حذف المستخدم '{u['username']}' بنجاح", "deleted_id": str(u["_id"])}
+
+    if req.action == "fix-role":
+        if not req.new_role:
+            raise HTTPException(status_code=400, detail="new_role مطلوب لتعديل الدور")
+        valid_roles = ["admin", "dean", "department_head", "registrar", "registration_manager", "employee"]
+        if req.new_role not in valid_roles:
+            raise HTTPException(status_code=400, detail=f"دور غير مدعوم. المسموح: {', '.join(valid_roles)}")
+        await db.users.update_one({"_id": u["_id"]}, {"$set": {"role": req.new_role}})
+        return {"message": f"✅ تم تعديل دور '{u['username']}' إلى '{req.new_role}'", "user_id": str(u["_id"])}
+
+    raise HTTPException(status_code=400, detail="action غير صالح — استخدم 'delete' أو 'fix-role'")
+
 class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     email: Optional[str] = None
