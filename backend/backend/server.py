@@ -14891,6 +14891,59 @@ async def clear_all_trash(current_user: dict = Depends(get_current_user)):
     result = await db.trash.delete_many({})
     return {"message": f"تم تفريغ سلة المحذوفات ({result.deleted_count} عنصر)"}
 
+
+@api_router.get("/admin/diagnose-roles")
+async def diagnose_roles(current_user: dict = Depends(get_current_user)):
+    """تشخيص شامل: يُظهر كل الأدوار، عدد المستخدمين، وأي تكرارات أو عدم تطابق."""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك — admin فقط")
+    all_roles = await db.roles.find().to_list(1000)
+    all_users = await db.users.find().to_list(2000)
+    roles_summary = []
+    role_name_count = {}
+    for r in all_roles:
+        rid = str(r["_id"])
+        name = (r.get("name") or "").strip()
+        sys_key = (r.get("system_key") or "").strip()
+        role_name_count[name] = role_name_count.get(name, 0) + 1
+        users_by_id = [u for u in all_users if str(u.get("role_id") or "") == rid]
+        users_by_role = [u for u in all_users if sys_key and u.get("role") == sys_key]
+        inconsistent = [u for u in users_by_id if sys_key and u.get("role") != sys_key]
+        roles_summary.append({
+            "role_id": rid, "name": name,
+            "system_key": sys_key or "(none — custom)",
+            "users_with_role_id_matching": len(users_by_id),
+            "users_with_role_string_matching": len(users_by_role),
+            "inconsistent_users": [
+                {"username": u.get("username"), "role": u.get("role"), "role_id": u.get("role_id")}
+                for u in inconsistent
+            ],
+        })
+    duplicates = {n: c for n, c in role_name_count.items() if c > 1}
+    orphan_users = [
+        {"username": u.get("username"), "role": u.get("role"), "role_id": u.get("role_id")}
+        for u in all_users
+        if u.get("role") not in ["admin", "dean", "department_head", "registrar",
+                                  "registration_manager", "employee", "teacher", "student"]
+    ]
+    return {
+        "total_roles": len(all_roles), "total_users": len(all_users),
+        "duplicate_role_names": duplicates,
+        "users_with_non_standard_role": orphan_users,
+        "roles_detail": roles_summary,
+    }
+
+
+@api_router.post("/admin/cleanup-duplicate-roles-now")
+async def cleanup_duplicate_roles_now(current_user: dict = Depends(get_current_user)):
+    """يُشغل دمج الأدوار المكررة وإصلاح المستخدمين فوراً."""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="غير مصرح لك — admin فقط")
+    await cleanup_duplicate_roles_internal()
+    await migrate_broken_user_roles()
+    return {"message": "تم تنفيذ دمج الأدوار المكررة وإصلاح المستخدمين. أعد تحميل الصفحة."}
+
+
 # Include the router in the main app
 # إضافة الـ routers المنفصلة (المرحلة 2 من إعادة الهيكلة)
 # ملاحظة: api_router يجب أن يُضاف أولاً لأنه يحتوي على routes محددة مثل /departments/dashboard
@@ -14933,8 +14986,54 @@ async def startup_event():
     await create_indexes()
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
+    # 🔧 دمج الأدوار المكررة (مثل عدة "رئيس قسم") قبل مزامنة role
+    await cleanup_duplicate_roles_internal()
     # 🔧 Migration دائمة: إصلاح المستخدمين ذوي الأدوار الشاذة تلقائياً
     await migrate_broken_user_roles()
+
+
+async def cleanup_duplicate_roles_internal():
+    """يدمج الأدوار المكررة بنفس الاسم، يُبقي على دور النظام (system_key) ويُعيد ربط المستخدمين.
+    
+    يحل مشكلة: وجود دور نظام "رئيس قسم" (system_key=department_head) ودور مخصص مكرر
+    بنفس الاسم. المستخدم يُسند للمكرر فيصبح خارج فلتر النظام.
+    """
+    try:
+        all_roles = await db.roles.find().to_list(1000)
+        name_groups = {}
+        for role in all_roles:
+            name = (role.get("name") or "").strip()
+            if not name:
+                continue
+            name_groups.setdefault(name, []).append(role)
+
+        merged = 0
+        for name, roles in name_groups.items():
+            if len(roles) <= 1:
+                continue
+            # الأولوية: دور نظام له system_key صالح، ثم الأقدم
+            VALID_KEYS = {"admin", "dean", "department_head", "registrar",
+                          "registration_manager", "employee", "teacher", "student"}
+            roles.sort(key=lambda r: (
+                0 if (r.get("system_key") or "").strip() in VALID_KEYS else 1,
+                r.get("created_at") or ""
+            ))
+            keep = roles[0]
+            for dup in roles[1:]:
+                # نقل المستخدمين من الدور المكرر إلى الأصلي
+                await db.users.update_many(
+                    {"role_id": str(dup["_id"])},
+                    {"$set": {"role_id": str(keep["_id"])}}
+                )
+                await db.roles.delete_one({"_id": dup["_id"]})
+                merged += 1
+                logging.info(f"Cleanup duplicate role '{name}': merged dup {dup['_id']} → {keep['_id']}")
+        if merged > 0:
+            logging.info(f"✅ Duplicate roles cleanup: merged {merged} duplicate role(s).")
+        else:
+            logging.info("Duplicate roles cleanup: no duplicates found.")
+    except Exception as e:
+        logging.error(f"Duplicate roles cleanup failed (non-critical): {e}")
 
 
 async def migrate_broken_user_roles():
