@@ -15052,10 +15052,83 @@ async def startup_event():
     await create_indexes()
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
+    # 🔧 تنظيف الصلاحيات اليتيمة (التي أُلغيت من النظام) من الأدوار والمستخدمين
+    await cleanup_orphan_permissions()
     # 🔧 دمج الأدوار المكررة (مثل عدة "رئيس قسم") قبل مزامنة role
     await cleanup_duplicate_roles_internal()
     # 🔧 Migration دائمة: إصلاح المستخدمين ذوي الأدوار الشاذة تلقائياً
     await migrate_broken_user_roles()
+
+
+async def cleanup_orphan_permissions():
+    """يُزيل أي صلاحيات قديمة لم تعد موجودة في النظام من الأدوار والمستخدمين.
+    
+    يحل مشكلة: ظهور alert "صلاحية غير صالحة" في الواجهة عند تعديل دور لأنه يحتوي
+    على صلاحية قديمة (مثل view_curriculum) أُلغيت من الكود.
+    
+    أيضاً يُحوّل بعض الصلاحيات الملغاة إلى بديلها (مثل view_curriculum → manage_curriculum)
+    حتى لا يفقد المستخدمون السلوك المعتمد على تلك الصلاحية.
+    """
+    try:
+        # كل الصلاحيات الفعلية الحالية في النظام (من قائمة ALL_PERMISSIONS)
+        valid_keys = {p["key"] for p in ALL_PERMISSIONS}
+        # تحويلات: الصلاحية القديمة → البديل الحالي (للحفاظ على نية المنح)
+        ALIASES = {
+            "view_curriculum": "manage_curriculum",
+        }
+        
+        # 1) الأدوار
+        roles_fixed = 0
+        async for role in db.roles.find({}):
+            perms = role.get("permissions") or []
+            new_perms = []
+            changed = False
+            for p in perms:
+                if p in valid_keys:
+                    new_perms.append(p)
+                elif p in ALIASES:
+                    alias = ALIASES[p]
+                    if alias not in new_perms:
+                        new_perms.append(alias)
+                    changed = True
+                else:
+                    # صلاحية يتيمة لا alias لها — احذفها
+                    changed = True
+            if changed:
+                # أزل أي تكرارات
+                new_perms = list(dict.fromkeys(new_perms))
+                await db.roles.update_one({"_id": role["_id"]}, {"$set": {"permissions": new_perms}})
+                roles_fixed += 1
+        
+        # 2) المستخدمون (نفس المعالجة)
+        users_fixed = 0
+        async for user in db.users.find({"permissions": {"$exists": True, "$ne": []}}):
+            perms = user.get("permissions") or []
+            new_perms = []
+            changed = False
+            for p in perms:
+                if p in valid_keys:
+                    new_perms.append(p)
+                elif p in ALIASES:
+                    alias = ALIASES[p]
+                    if alias not in new_perms:
+                        new_perms.append(alias)
+                    changed = True
+                else:
+                    changed = True
+            if changed:
+                new_perms = list(dict.fromkeys(new_perms))
+                await db.users.update_one({"_id": user["_id"]}, {"$set": {"permissions": new_perms}})
+                users_fixed += 1
+        
+        if roles_fixed > 0 or users_fixed > 0:
+            logging.info(
+                f"✅ Orphan permissions cleanup: fixed {roles_fixed} role(s) and {users_fixed} user(s)."
+            )
+        else:
+            logging.info("Orphan permissions cleanup: no orphans found.")
+    except Exception as e:
+        logging.error(f"Orphan permissions cleanup failed (non-critical): {e}")
 
 
 async def cleanup_duplicate_roles_internal():
