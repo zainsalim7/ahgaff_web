@@ -500,60 +500,59 @@ export default function WeeklySchedulePage() {
   return (
     <SafeAreaView style={st.container} edges={['bottom']}>
       <View style={st.header}>
-        <TouchableOpacity onPress={() => goBack()}><Ionicons name="arrow-forward" size={24} color="#333" /></TouchableOpacity>
+        <TouchableOpacity onPress={() => goBack()}><Ionicons name="arrow-forward" size={18} color="#3f4b5c" /></TouchableOpacity>
         <Text style={st.headerTitle}>الجدول الأسبوعي</Text>
-        <View style={{ width: 24 }} />
+        <View style={{ width: 18 }} />
       </View>
 
-      {/* Tabs */}
-      <View style={{ flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee', paddingHorizontal: 8 }}>
+      {/* Tabs - underline style, compact */}
+      <View style={st.tabsBar}>
         {TABS.map(t => (
           <TouchableOpacity key={t.key} style={[st.tab, activeTab === t.key && st.tabActive]} onPress={() => setActiveTab(t.key as any)}>
-            <Ionicons name={t.icon as any} size={16} color={activeTab === t.key ? '#fff' : '#1565c0'} />
+            <Ionicons name={t.icon as any} size={13} color={activeTab === t.key ? '#1565c0' : '#5b6678'} />
             <Text style={[st.tabText, activeTab === t.key && st.tabTextActive]}>{t.label}</Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      <ScrollView style={{ flex: 1, padding: 12 }}>
+      <ScrollView style={{ flex: 1, padding: 10 }}>
 
         {/* ====== TAB: SCHEDULE ====== */}
         {activeTab === 'schedule' && (
           <>
-            {/* View mode selector */}
-            <View style={st.card}>
+            {/* View mode selector - compact chips */}
+            <View style={st.cardCompact}>
               <Text style={st.label}>نمط العرض</Text>
-              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+              <View style={{ flexDirection: 'row', gap: 5, flexWrap: 'wrap' }}>
                 {[
-                  { key: 'section', label: 'بالشعبة', icon: 'layers' },
-                  { key: 'department', label: 'بالقسم', icon: 'school' },
-                  { key: 'course', label: 'بالمقرر', icon: 'book' },
-                  { key: 'teacher', label: 'بالأستاذ', icon: 'person' },
-                ].map(m => (
-                  <TouchableOpacity
-                    key={m.key}
-                    onPress={() => setViewMode(m.key as any)}
-                    style={{
-                      flexDirection: 'row', alignItems: 'center', gap: 4,
-                      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 20,
-                      backgroundColor: viewMode === m.key ? '#1565c0' : '#f0f0f0',
-                    }}
-                    testID={`view-mode-${m.key}`}
-                  >
-                    <Ionicons name={m.icon as any} size={14} color={viewMode === m.key ? '#fff' : '#333'} />
-                    <Text style={{ color: viewMode === m.key ? '#fff' : '#333', fontSize: 13, fontWeight: '600' }}>{m.label}</Text>
-                  </TouchableOpacity>
-                ))}
+                  { key: 'section', label: 'بالشعبة', icon: 'layers-outline' },
+                  { key: 'department', label: 'بالقسم', icon: 'school-outline' },
+                  { key: 'course', label: 'بالمقرر', icon: 'book-outline' },
+                  { key: 'teacher', label: 'بالأستاذ', icon: 'person-outline' },
+                ].map(m => {
+                  const active = viewMode === m.key;
+                  return (
+                    <TouchableOpacity
+                      key={m.key}
+                      onPress={() => setViewMode(m.key as any)}
+                      style={[st.vmChip, active && st.vmChipActive]}
+                      testID={`view-mode-${m.key}`}
+                    >
+                      <Ionicons name={m.icon as any} size={12} color={active ? '#fff' : '#5b6678'} />
+                      <Text style={[st.vmChipText, active && st.vmChipTextActive]}>{m.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
               </View>
             </View>
 
-            {/* Filters */}
-            <View style={st.card}>
-              <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-                <View style={{ flex: 1, minWidth: 150 }}>
+            {/* Filters - compact */}
+            <View style={st.cardCompact}>
+              <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+                <View style={{ flex: 1, minWidth: 140 }}>
                   <Text style={st.label}>الكلية</Text>
                   <View style={st.pickerWrap}>
-                    <Picker selectedValue={selectedFaculty} onValueChange={v => { setSelectedFaculty(v); setSelectedDept(''); setScheduleTeacher(''); setScheduleCourse(''); }} style={{ height: 40 }}>
+                    <Picker selectedValue={selectedFaculty} onValueChange={v => { setSelectedFaculty(v); setSelectedDept(''); setScheduleTeacher(''); setScheduleCourse(''); }} style={{ height: 34, fontSize: 13 }}>
                       <Picker.Item label="-- الكلية --" value="" />
                       {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
                     </Picker>
@@ -563,19 +562,19 @@ export default function WeeklySchedulePage() {
                 {/* Section mode: dept + level + section */}
                 {viewMode === 'section' && (
                   <>
-                    <View style={{ flex: 1, minWidth: 150 }}>
+                    <View style={{ flex: 1, minWidth: 140 }}>
                       <Text style={st.label}>القسم (اختياري)</Text>
                       <View style={st.pickerWrap}>
-                        <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
+                        <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 34, fontSize: 13 }}>
                           <Picker.Item label="-- الكل --" value="" />
                           {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                         </Picker>
                       </View>
                     </View>
-                    <View style={{ flex: 0.5, minWidth: 80 }}>
+                    <View style={{ flex: 0.5, minWidth: 76 }}>
                       <Text style={st.label}>المستوى</Text>
                       <View style={st.pickerWrap}>
-                        <Picker selectedValue={selectedLevel} onValueChange={setSelectedLevel} style={{ height: 40 }}>
+                        <Picker selectedValue={selectedLevel} onValueChange={setSelectedLevel} style={{ height: 34, fontSize: 13 }}>
                           <Picker.Item label="الكل" value="" />
                           {[1,2,3,4,5,6].map(l => <Picker.Item key={l} label={`م${l}`} value={String(l)} />)}
                         </Picker>
@@ -586,10 +585,10 @@ export default function WeeklySchedulePage() {
 
                 {/* Department mode: pick one department */}
                 {viewMode === 'department' && (
-                  <View style={{ flex: 2, minWidth: 200 }}>
+                  <View style={{ flex: 2, minWidth: 180 }}>
                     <Text style={st.label}>القسم *</Text>
                     <View style={st.pickerWrap}>
-                      <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
+                      <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 34, fontSize: 13 }}>
                         <Picker.Item label="-- اختر القسم --" value="" />
                         {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                       </Picker>
@@ -600,19 +599,19 @@ export default function WeeklySchedulePage() {
                 {/* Course mode: pick one course */}
                 {viewMode === 'course' && (
                   <>
-                    <View style={{ flex: 1, minWidth: 150 }}>
+                    <View style={{ flex: 1, minWidth: 140 }}>
                       <Text style={st.label}>القسم (لتصفية المقررات)</Text>
                       <View style={st.pickerWrap}>
-                        <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
+                        <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 34, fontSize: 13 }}>
                           <Picker.Item label="-- كل الأقسام --" value="" />
                           {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                         </Picker>
                       </View>
                     </View>
-                    <View style={{ flex: 2, minWidth: 200 }}>
+                    <View style={{ flex: 2, minWidth: 180 }}>
                       <Text style={st.label}>المقرر *</Text>
                       <View style={st.pickerWrap}>
-                        <Picker selectedValue={scheduleCourse} onValueChange={setScheduleCourse} style={{ height: 40 }}>
+                        <Picker selectedValue={scheduleCourse} onValueChange={setScheduleCourse} style={{ height: 34, fontSize: 13 }}>
                           <Picker.Item label="-- اختر المقرر --" value="" />
                           {allCourses.filter((c: any) => !selectedDept || c.department_id === selectedDept).map((c: any) => (
                             <Picker.Item key={c.id} label={`${c.name}${c.section ? ` (${c.section})` : ''} - م${c.level || 1}`} value={c.id} />
@@ -797,9 +796,9 @@ export default function WeeklySchedulePage() {
             {loading ? (
               <View style={st.emptyCard}><ActivityIndicator size="large" color="#1565c0" /></View>
             ) : !selectedFaculty ? (
-              <View style={st.emptyCard}><Ionicons name="calendar-outline" size={48} color="#ccc" /><Text style={st.emptyText}>اختر الكلية لعرض الجدول</Text></View>
+              <View style={st.emptyCard}><Ionicons name="calendar-outline" size={28} color="#cdd5e0" /><Text style={st.emptyText}>اختر الكلية لعرض الجدول</Text></View>
             ) : schedule.length === 0 ? (
-              <View style={st.emptyCard}><Ionicons name="calendar-outline" size={48} color="#ccc" /><Text style={st.emptyText}>لا يوجد جدول - اضغط "توليد تلقائي"</Text></View>
+              <View style={st.emptyCard}><Ionicons name="calendar-outline" size={28} color="#cdd5e0" /><Text style={st.emptyText}>لا يوجد جدول - اضغط "توليد تلقائي"</Text></View>
             ) : Platform.OS === 'web' ? (
               <div style={{ overflowX: 'auto', direction: 'rtl' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
@@ -947,7 +946,7 @@ export default function WeeklySchedulePage() {
             ))}
             {selectedFaculty && rooms.length === 0 && <View style={st.emptyCard}><Text style={st.emptyText}>لا توجد قاعات لهذه الكلية</Text></View>}
 
-            {!selectedFaculty && <View style={st.emptyCard}><Ionicons name="business-outline" size={48} color="#ccc" /><Text style={st.emptyText}>اختر الكلية لعرض قاعاتها</Text></View>}
+            {!selectedFaculty && <View style={st.emptyCard}><Ionicons name="business-outline" size={28} color="#cdd5e0" /><Text style={st.emptyText}>اختر الكلية لعرض قاعاتها</Text></View>}
           </>
         )}
 
@@ -1438,19 +1437,31 @@ export default function WeeklySchedulePage() {
 }
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#333', flex: 1, textAlign: 'center' },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: 10, marginHorizontal: 2, borderRadius: 8, marginBottom: 4, marginTop: 4 },
-  tabActive: { backgroundColor: '#1565c0' },
-  tabText: { fontSize: 12, color: '#1565c0', fontWeight: '500' },
-  tabTextActive: { color: '#fff' },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 10, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 2, elevation: 1 },
-  label: { fontSize: 13, fontWeight: '600', color: '#333', marginBottom: 6, textAlign: 'right' },
-  miniLabel: { fontSize: 12, fontWeight: '600', color: '#666', marginBottom: 6, textAlign: 'right' },
-  pickerWrap: { backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#ddd', overflow: 'hidden' },
-  emptyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 40, alignItems: 'center' },
-  emptyText: { marginTop: 10, fontSize: 14, color: '#999', textAlign: 'center' },
-  btn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 8 },
-  btnText: { color: '#fff', fontSize: 13, fontWeight: '600' },
+  container: { flex: 1, backgroundColor: '#f6f8fb' },
+  // Header: compact + matching blue accent line bottom
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 14, paddingVertical: 10, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8edf3' },
+  headerTitle: { fontSize: 15, fontWeight: '700', color: '#1f2a37', flex: 1, textAlign: 'center' },
+  // Tabs: thin underline-style, no big buttons
+  tabsBar: { flexDirection: 'row', backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e8edf3', paddingHorizontal: 10, gap: 4 },
+  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingVertical: 9, borderBottomWidth: 2, borderBottomColor: 'transparent' },
+  tabActive: { borderBottomColor: '#1565c0' },
+  tabText: { fontSize: 12, color: '#5b6678', fontWeight: '500' },
+  tabTextActive: { color: '#1565c0', fontWeight: '700' },
+  // Cards: tighter
+  card: { backgroundColor: '#fff', borderRadius: 8, padding: 10, marginBottom: 8, borderWidth: 1, borderColor: '#e8edf3' },
+  cardCompact: { backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8, marginBottom: 8, borderWidth: 1, borderColor: '#e8edf3' },
+  label: { fontSize: 11, fontWeight: '600', color: '#5b6678', marginBottom: 4, textAlign: 'right' },
+  miniLabel: { fontSize: 11, fontWeight: '600', color: '#7c8898', marginBottom: 4, textAlign: 'right' },
+  // Smaller picker
+  pickerWrap: { backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#dfe5ec', overflow: 'hidden' },
+  // View-mode chips: small sharp, not big pills
+  vmChip: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 9, paddingVertical: 5, borderRadius: 6, borderWidth: 1, borderColor: '#dfe5ec', backgroundColor: '#fff' },
+  vmChipActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
+  vmChipText: { fontSize: 12, fontWeight: '600', color: '#3f4b5c' },
+  vmChipTextActive: { color: '#fff' },
+  // Empty state: small, subtle
+  emptyCard: { backgroundColor: '#fff', borderRadius: 8, paddingVertical: 32, paddingHorizontal: 14, alignItems: 'center', borderWidth: 1, borderColor: '#e8edf3' },
+  emptyText: { marginTop: 8, fontSize: 12, color: '#8a95a8', textAlign: 'center' },
+  btn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6 },
+  btnText: { color: '#fff', fontSize: 12, fontWeight: '600' },
 });
