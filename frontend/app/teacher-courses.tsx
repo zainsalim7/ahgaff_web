@@ -61,8 +61,23 @@ export default function TeacherCoursesScreen() {
   const router = useRouter();
 
   // 🔒 صلاحيات إسناد المقررات للمعلمين
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const canAssign = hasPermission(PERMISSIONS.MANAGE_TEACHING_LOAD);
+  const isAdmin = user?.role === 'admin';
+  // 🔒 ملكية القسم/الكلية: المستخدم يستطيع التحكم فقط بمقررات قسمه/كليته
+  const userDeptId = (user as any)?.department_id ? String((user as any).department_id) : '';
+  const userFacultyId = (user as any)?.faculty_id ? String((user as any).faculty_id) : '';
+  const canManageCourse = (course: any): boolean => {
+    if (isAdmin) return true;
+    if (!canAssign) return false;
+    // إن لم يكن للمستخدم نطاق (لا قسم ولا كلية) فهو global
+    if (!userDeptId && !userFacultyId) return true;
+    const courseDeptId = course?.department_id ? String(course.department_id) : '';
+    const courseFacultyId = course?.faculty_id ? String(course.faculty_id) : '';
+    if (userDeptId && courseDeptId) return courseDeptId === userDeptId;
+    if (userFacultyId && courseFacultyId) return courseFacultyId === userFacultyId;
+    return false;
+  };
 
   const [data, setData] = useState<TeacherCoursesData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -515,7 +530,7 @@ export default function TeacherCoursesScreen() {
                     <Ionicons name="chevron-back" size={20} color="#c0c8d4" />
                   </TouchableOpacity>
 
-                  {canAssign && (
+                  {canAssign && canManageCourse(course) ? (
                     <View style={styles.courseActions}>
                       <TouchableOpacity
                         style={[styles.actionBtn, styles.actionUnassign]}
@@ -526,7 +541,16 @@ export default function TeacherCoursesScreen() {
                         <Text style={styles.actionUnassignText}>إلغاء الإسناد</Text>
                       </TouchableOpacity>
                     </View>
-                  )}
+                  ) : canAssign && !canManageCourse(course) ? (
+                    <View style={styles.courseActions}>
+                      <View style={[styles.actionBtn, { backgroundColor: '#fff8e1', borderColor: '#ffe082' }]}>
+                        <Ionicons name="lock-closed" size={12} color="#ff8f00" />
+                        <Text style={{ fontSize: 11, color: '#e65100', fontWeight: '700', marginRight: 4 }}>
+                          من قسم آخر
+                        </Text>
+                      </View>
+                    </View>
+                  ) : null}
                 </View>
               ))}
             </View>

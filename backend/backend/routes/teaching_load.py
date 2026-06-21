@@ -270,7 +270,7 @@ async def delete_teaching_load(
     load_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """حذف عبء تدريسي"""
+    """حذف عبء تدريسي - مع التحقق من ملكية القسم/الكلية"""
     if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
@@ -278,6 +278,29 @@ async def delete_teaching_load(
     existing = await db.teaching_loads.find_one({"_id": ObjectId(load_id)})
     if not existing:
         raise HTTPException(status_code=404, detail="السجل غير موجود")
+
+    # 🔒 منع حذف إسناد مقرر لا ينتمي لقسم/كلية المستخدم (حماية ضد إساءة استخدام cross_university)
+    if current_user.get("role") != "admin":
+        course = await db.courses.find_one({"_id": ObjectId(existing["course_id"])})
+        if course:
+            user_dept_id = current_user.get("department_id")
+            user_faculty_id = current_user.get("faculty_id")
+            course_dept_id = str(course.get("department_id") or "")
+            course_faculty_id = str(course.get("faculty_id") or "")
+
+            # السماح إذا المستخدم بدون نطاق (يعني global)، أو المقرر ضمن نطاقه
+            if user_dept_id:
+                if course_dept_id and course_dept_id != str(user_dept_id):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="لا يمكنك إلغاء إسناد مقرر لا ينتمي لقسمك"
+                    )
+            elif user_faculty_id:
+                if course_faculty_id and course_faculty_id != str(user_faculty_id):
+                    raise HTTPException(
+                        status_code=403,
+                        detail="لا يمكنك إلغاء إسناد مقرر لا ينتمي لكليتك"
+                    )
 
     await db.teaching_loads.delete_one({"_id": ObjectId(load_id)})
 

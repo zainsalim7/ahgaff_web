@@ -721,7 +721,10 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         "email": user.get("email"),
         "phone": user.get("phone"),
         "is_active": user.get("is_active", True),
-        "permissions": user_permissions
+        "permissions": user_permissions,
+        # 🔒 ضرورية لفحص ملكية القسم/الكلية في endpoints الحماية
+        "faculty_id": str(user["faculty_id"]) if user.get("faculty_id") else None,
+        "department_id": str(user["department_id"]) if user.get("department_id") else None,
     }
 
 def get_user_permissions(user: dict) -> List[str]:
