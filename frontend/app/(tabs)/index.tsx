@@ -380,8 +380,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* قسم محاضرات اليوم — يظهر لمن لديه صلاحية تسجيل/أخذ الحضور (بغض النظر عن اسم الدور) */}
-        {can(['record_attendance', 'take_attendance']) && (
+        {/* قسم محاضرات اليوم — خاص بالمعلم (بياناته الشخصية كمدرّس) */}
+        {user?.role === 'teacher' && (
           <>
             {/* Today's Lectures Section */}
             <View style={styles.teacherSection}>
@@ -690,6 +690,19 @@ export default function HomeScreen() {
                     <Ionicons name="clipboard" size={28} color="#e91e63" />
                   </View>
                   <Text style={styles.adminRoleTitle}>التسجيلات</Text>
+                </TouchableOpacity>
+                )}
+
+                {can(['manage_attendance', 'record_attendance', 'take_attendance', 'edit_attendance', 'view_attendance']) && (
+                <TouchableOpacity
+                  style={styles.adminRoleCard}
+                  onPress={() => router.push('/manage-attendance' as any)}
+                  data-testid="dashboard-attendance-card"
+                >
+                  <View style={[styles.adminRoleIcon, { backgroundColor: '#e8f5e9' }]}>
+                    <Ionicons name="checkbox" size={28} color="#2e7d32" />
+                  </View>
+                  <Text style={styles.adminRoleTitle}>إدارة الحضور</Text>
                 </TouchableOpacity>
                 )}
 

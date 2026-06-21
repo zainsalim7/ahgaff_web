@@ -34,8 +34,11 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.MANAGE_STUDENTS, PERMISSIONS.MANAGE_TEACHERS
   ]},
   
-  { id: 'my-lectures', label: 'محاضراتي', icon: 'calendar', path: '/(tabs)/my-lectures', permissions: [
-    PERMISSIONS.RECORD_ATTENDANCE, 'take_attendance'
+  { id: 'my-lectures', label: 'محاضراتي', icon: 'calendar', path: '/(tabs)/my-lectures', permissions: [], teacherOnly: true },
+
+  // 📋 إدارة الحضور — صفحة مستقلة للموظف الإداري لتسجيل/تعديل حضور الطلاب في المحاضرات
+  { id: 'manage-attendance', label: 'إدارة الحضور', icon: 'checkbox', path: '/manage-attendance', permissions: [
+    PERMISSIONS.MANAGE_ATTENDANCE, 'record_attendance', 'take_attendance', 'edit_attendance', 'view_attendance'
   ]},
   
   // 📚 المقررات — صلاحيات المقررات فقط

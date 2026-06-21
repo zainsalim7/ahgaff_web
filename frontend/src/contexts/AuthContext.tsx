@@ -74,6 +74,12 @@ export const PERMISSIONS = {
   EXPORT_ARCHIVE: 'export_archive',
   // صلاحيات الخطة الدراسية
   MANAGE_CURRICULUM: 'manage_curriculum',
+  // صلاحيات الحضور
+  MANAGE_ATTENDANCE: 'manage_attendance',
+  RECORD_ATTENDANCE: 'record_attendance',
+  TAKE_ATTENDANCE: 'take_attendance',
+  VIEW_ATTENDANCE: 'view_attendance',
+  EDIT_ATTENDANCE: 'edit_attendance',
   // صلاحيات الجداول الدراسية (اليومي/الأسبوعي)
   VIEW_SCHEDULE: 'view_schedule',
   MANAGE_SCHEDULE: 'manage_schedule',

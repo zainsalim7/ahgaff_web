@@ -83,10 +83,8 @@ export default function TabsLayout() {
     permissions.includes('manage_courses') ||
     permissions.includes('view_courses'));
 
-  // 🔑 تبويب "محاضراتي" — مرتبط بصلاحية تسجيل الحضور (لا اسم دور)
-  const hasMyLecturesAccess = isReady && (
-    permissions.includes('record_attendance') ||
-    permissions.includes('take_attendance'));
+  // 🔑 تبويب "محاضراتي" — خاص بالمعلم فقط (بيانات شخصية: محاضراته الخاصة كمدرّس)
+  const hasMyLecturesAccess = isReady && role === 'teacher';
 
   // هل المستخدم طالب؟ (لتبويبات الطالب فقط: حضوري، جدولي)
   const isStudent = isReady && role === 'student';
