@@ -67,6 +67,10 @@ class Permission:
     OVERRIDE_LECTURE_STATUS = "override_lecture_status"
     RESCHEDULE_LECTURE = "reschedule_lecture"
     GENERATE_LECTURES = "generate_lectures"
+
+    # صلاحيات الجداول الدراسية (اليومي/الأسبوعي)
+    VIEW_SCHEDULE = "view_schedule"
+    MANAGE_SCHEDULE = "manage_schedule"
     
     # صلاحيات التسجيل
     MANAGE_ENROLLMENTS = "manage_enrollments"
@@ -300,6 +304,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.OVERRIDE_LECTURE_STATUS, "label": "تغيير حالة المحاضرة (غائب/مجدولة/منعقدة)", "category": "المحاضرات"},
     {"key": Permission.RESCHEDULE_LECTURE, "label": "إعادة جدولة المحاضرات", "category": "المحاضرات"},
     {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات"},
+    {"key": Permission.VIEW_SCHEDULE, "label": "عرض الجدول الدراسي (اليومي والأسبوعي)", "category": "الجداول الدراسية"},
+    {"key": Permission.MANAGE_SCHEDULE, "label": "إدارة كاملة للجداول الدراسية", "category": "الجداول الدراسية"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},
@@ -372,6 +378,9 @@ FULL_PERMISSION_MAPPING = {
     ],
     Permission.MANAGE_ENROLLMENTS: [
         Permission.VIEW_ENROLLMENTS, Permission.ADD_ENROLLMENT, Permission.DELETE_ENROLLMENT
+    ],
+    Permission.MANAGE_SCHEDULE: [
+        Permission.VIEW_SCHEDULE
     ],
 }
 

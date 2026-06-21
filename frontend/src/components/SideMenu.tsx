@@ -25,6 +25,7 @@ interface MenuItem {
 }
 
 // قائمة العناصر مرتبطة بالصلاحيات
+// 🔑 مبدأ ذهبي: كل عنصر مربوط فقط بصلاحياته الخاصة (الأم + الفرعية المباشرة)، بدون خلط مع صلاحيات لا تنتمي إليه
 const MENU_ITEMS: MenuItem[] = [
   { id: 'home', label: 'الرئيسية', icon: 'home', path: '/(tabs)', permissions: [], forAll: true },
   
@@ -37,42 +38,52 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.RECORD_ATTENDANCE
   ], teacherOnly: true },
   
+  // 📚 المقررات — صلاحيات المقررات فقط
   { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
-    PERMISSIONS.VIEW_ATTENDANCE, PERMISSIONS.MANAGE_COURSES
+    PERMISSIONS.MANAGE_COURSES, 'view_courses', 'add_course', 'edit_course', 'delete_course'
   ]},
 
+  // 📖 الخطة الدراسية — صلاحية الخطة الدراسية فقط (لا علاقة بالمقررات!)
   { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', permissions: [
-    PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_COURSES
+    PERMISSIONS.MANAGE_CURRICULUM
   ]},
-  
+
+  // 📅 الجدول الدراسي اليومي — صلاحيات الجداول فقط (لا علاقة بالمقررات!)
   { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', permissions: [
-    PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_REPORTS
+    'view_schedule', 'manage_schedule'
   ]},
-  
+
+  // 📆 الجدول الأسبوعي — صلاحيات الجداول فقط
+  { id: 'weekly-schedule', label: 'الجدول الأسبوعي', icon: 'calendar', path: '/weekly-schedule', permissions: [
+    'view_schedule', 'manage_schedule'
+  ]},
+
+  // 👨‍🎓 إدارة الطلاب
   { id: 'students', label: 'إدارة الطلاب', icon: 'people', path: '/students', permissions: [
-    PERMISSIONS.MANAGE_STUDENTS, PERMISSIONS.MANAGE_ENROLLMENTS
+    PERMISSIONS.MANAGE_STUDENTS, 'view_students', 'add_student', 'edit_student', 'delete_student', PERMISSIONS.MANAGE_ENROLLMENTS
   ]},
-  
+
+  // 👨‍🏫 إدارة المعلمين
   { id: 'teachers', label: 'إدارة المعلمين', icon: 'school', path: '/manage-teachers', permissions: [
-    PERMISSIONS.MANAGE_TEACHERS
+    PERMISSIONS.MANAGE_TEACHERS, 'view_teachers', 'add_teacher', 'edit_teacher', 'delete_teacher'
   ]},
-  
+
+  // 📊 العبء التدريسي
   { id: 'teaching-load', label: 'جدول العبء التدريسي', icon: 'grid', path: '/teaching-load', permissions: [
     PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
   ]},
   { id: 'teaching-load-report', label: 'تقارير العبء', icon: 'analytics', path: '/teaching-load-report', permissions: [
     PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
   ]},
-  { id: 'weekly-schedule', label: 'الجدول الأسبوعي', icon: 'calendar', path: '/weekly-schedule', permissions: [
-    PERMISSIONS.MANAGE_SETTINGS, PERMISSIONS.MANAGE_COURSES
-  ]},
-  
+
+  // 🏢 إدارة الأقسام
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [
     PERMISSIONS.MANAGE_DEPARTMENTS, 'view_departments', 'add_department', 'edit_department', 'delete_department'
   ]},
-  
+
+  // 👤 إدارة المستخدمين
   { id: 'users', label: 'إدارة المستخدمين', icon: 'person-add', path: '/manage-users', permissions: [
-    PERMISSIONS.MANAGE_USERS
+    PERMISSIONS.MANAGE_USERS, 'view_users', 'add_user', 'edit_user', 'delete_user'
   ]},
   
   { id: 'reports-divider', label: 'التقارير', icon: 'stats-chart', path: '', permissions: [

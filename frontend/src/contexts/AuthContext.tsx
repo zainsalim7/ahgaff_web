@@ -74,6 +74,9 @@ export const PERMISSIONS = {
   EXPORT_ARCHIVE: 'export_archive',
   // صلاحيات الخطة الدراسية
   MANAGE_CURRICULUM: 'manage_curriculum',
+  // صلاحيات الجداول الدراسية (اليومي/الأسبوعي)
+  VIEW_SCHEDULE: 'view_schedule',
+  MANAGE_SCHEDULE: 'manage_schedule',
   // صلاحيات أخرى
   CROSS_UNIVERSITY_ASSIGNMENT: 'cross_university_assignment',
   MANAGE_SETTINGS: 'manage_settings',

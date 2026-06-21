@@ -742,7 +742,7 @@ export default function HomeScreen() {
               </TouchableOpacity>
               )}
 
-              {can(['manage_courses', 'view_courses', 'view_reports']) && (
+              {can(['view_schedule', 'manage_schedule']) && (
               <TouchableOpacity
                 style={styles.actionCard}
                 onPress={() => router.push('/schedule')}
