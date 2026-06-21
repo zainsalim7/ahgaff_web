@@ -380,8 +380,8 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* Teacher Dashboard */}
-        {user?.role === 'teacher' && (
+        {/* قسم محاضرات اليوم — يظهر لمن لديه صلاحية تسجيل/أخذ الحضور (بغض النظر عن اسم الدور) */}
+        {can(['record_attendance', 'take_attendance']) && (
           <>
             {/* Today's Lectures Section */}
             <View style={styles.teacherSection}>

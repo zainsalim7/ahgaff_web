@@ -67,26 +67,28 @@ export default function TabsLayout() {
     initNotifications();
   }, [user]);
 
-  // التحقق من الصلاحيات الإدارية
-  const hasAdminPermissions = isReady && (role === 'admin' || 
-    permissions.includes('manage_users') || 
-    permissions.includes('manage_students') ||
-    permissions.includes('manage_faculties') ||
-    permissions.includes('manage_departments') ||
-    permissions.includes('manage_courses') ||
+  // 🔑 التحقق من الصلاحيات الإدارية — مبني على الصلاحيات فقط (لا الدور)
+  const hasAdminPermissions = isReady && (role === 'admin' ||
+    permissions.includes('manage_users') ||
+    permissions.includes('manage_students') || permissions.includes('view_students') ||
+    permissions.includes('manage_faculties') || permissions.includes('view_faculties') ||
+    permissions.includes('manage_departments') || permissions.includes('view_departments') ||
+    permissions.includes('manage_courses') || permissions.includes('view_courses') ||
+    permissions.includes('manage_teachers') || permissions.includes('view_teachers') ||
+    permissions.includes('manage_enrollments') || permissions.includes('view_enrollments') ||
     permissions.includes('manage_roles'));
-  
-  // التحقق من صلاحية المقررات
-  const hasCoursesPermission = isReady && (role === 'admin' || 
-    role === 'teacher' ||
-    permissions.includes('manage_courses') ||
-    permissions.includes('view_courses') ||
-    permissions.includes('view_attendance'));
 
-  // هل المستخدم معلم؟
-  const isTeacher = isReady && role === 'teacher';
-  
-  // هل المستخدم طالب؟
+  // 🔑 تبويب المقررات — صلاحيات المقررات فقط (لا اسم دور)
+  const hasCoursesPermission = isReady && (role === 'admin' ||
+    permissions.includes('manage_courses') ||
+    permissions.includes('view_courses'));
+
+  // 🔑 تبويب "محاضراتي" — مرتبط بصلاحية تسجيل الحضور (لا اسم دور)
+  const hasMyLecturesAccess = isReady && (
+    permissions.includes('record_attendance') ||
+    permissions.includes('take_attendance'));
+
+  // هل المستخدم طالب؟ (لتبويبات الطالب فقط: حضوري، جدولي)
   const isStudent = isReady && role === 'student';
 
   // جلب اسم المؤسسة حسب المستخدم
@@ -194,7 +196,7 @@ export default function TabsLayout() {
             <Ionicons name="calendar" size={size} color={color} />
           ),
           headerTitle: 'محاضراتي اليوم',
-          href: isTeacher ? undefined : null,
+          href: hasMyLecturesAccess ? undefined : null,
         }}
       />
 
