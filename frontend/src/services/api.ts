@@ -174,6 +174,12 @@ api.interceptors.request.use(async (config) => {
 
 api.interceptors.response.use(
   async (response) => {
+    // 🔧 سجّل وقت آخر طلب ناجح — يستخدمه interceptor الـ403 لإلغاء التوجيه إن كان 403 ثانوياً
+    try {
+      const w: any = (typeof globalThis !== 'undefined' ? globalThis : {});
+      w.__lastSuccessfulRequestAt = Date.now();
+    } catch {}
+
     // حفظ في الكاش إذا كان GET وقابل للتخزين (AsyncStorage - أوفلاين)
     if (response.config.method === 'get' && shouldCache(response.config.url || '')) {
       const cacheKey = `cache_${response.config.url}`;
@@ -237,31 +243,44 @@ api.interceptors.response.use(
     }
 
     // 🔒 403 (لا توجد صلاحية) — وجّه لصفحة "ليس لديك صلاحية"
-    // نتجنّب التوجيه إن كنا أصلاً عليها أو لو كانت auth call أو إن تكرر الـ403 سريعاً
+    // ⏱️ نُؤخّر التوجيه ~1.5 ثانية، وإن نجح أي طلب آخر خلال هذه الفترة، نُلغي
+    // التوجيه — لأن 403 كان ثانوياً (مثلاً /archives فشل لكن /curriculum نجح).
     if (status === 403 && !isAuthCall) {
       try {
-        // debounce: لا توجّه أكثر من مرة كل 2.5 ثانية (يمنع flicker لو تكرر 403)
         const w: any = (typeof globalThis !== 'undefined' ? globalThis : {});
         const now = Date.now();
         if (w.__last403Redirect && now - w.__last403Redirect < 2500) {
           return Promise.reject(error);
         }
         w.__last403Redirect = now;
+        const pendingId = ++(w.__pending403Id || (w.__pending403Id = 0));
 
-        if (Platform.OS === 'web' && typeof window !== 'undefined') {
-          const path = window.location.pathname || '';
-          if (!path.includes('/no-permission') && !path.includes('/login')) {
-            const from = encodeURIComponent(path);
-            const reason = encodeURIComponent(error.response?.data?.detail || '');
-            window.location.replace(`/no-permission?from=${from}${reason ? `&reason=${reason}` : ''}`);
+        const reason403 = error.response?.data?.detail || '';
+
+        setTimeout(() => {
+          // إذا حدث طلب ناجح بعد هذا 403 → ألغِ التوجيه
+          if (w.__lastSuccessfulRequestAt && w.__lastSuccessfulRequestAt > now) {
+            return;
           }
-        } else {
-          const { router } = await import('expo-router');
-          router.replace({
-            pathname: '/no-permission',
-            params: { reason: error.response?.data?.detail || '' },
-          } as any);
-        }
+          // إذا حدث 403 آخر جديد بعدنا → اترك المعالجة له
+          if (w.__pending403Id !== pendingId) return;
+
+          if (Platform.OS === 'web' && typeof window !== 'undefined') {
+            const path = window.location.pathname || '';
+            if (!path.includes('/no-permission') && !path.includes('/login')) {
+              const from = encodeURIComponent(path);
+              const reason = encodeURIComponent(reason403);
+              window.location.replace(`/no-permission?from=${from}${reason ? `&reason=${reason}` : ''}`);
+            }
+          } else {
+            import('expo-router').then(({ router }) => {
+              router.replace({
+                pathname: '/no-permission',
+                params: { reason: reason403 },
+              } as any);
+            });
+          }
+        }, 1500);
       } catch {}
     }
 
