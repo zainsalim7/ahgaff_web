@@ -4,228 +4,199 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  TouchableOpacity,
   RefreshControl,
-  Platform,
+  TouchableOpacity,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { usersAPI, studentsAPI, departmentsAPI, coursesAPI, scopeAPI } from '../../src/services/api';
+import { usersAPI, studentsAPI, departmentsAPI, coursesAPI, facultiesAPI } from '../../src/services/api';
 import { LoadingScreen } from '../../src/components/LoadingScreen';
+import { useAuth, PERMISSIONS } from '../../src/contexts/AuthContext';
 
-const checkPermission = (userRole: string, userPermissions: string[], requiredPermission: string): boolean => {
-  if (userRole === 'admin') return true;
-  return userPermissions?.includes(requiredPermission) || false;
-};
-
-export default function AdminScreen() {
+/**
+ * 📊 صفحة الإدارة — Dashboard إحصائيات فقط
+ *
+ * السبب: كان هناك تكرار لقائمة الروابط في 3 أماكن (السايدبار، الرئيسية، صفحة الإدارة)
+ * مما أدى إلى تناقضات في خرائط الصلاحيات. الحل: مصدر واحد للحقيقة.
+ *
+ * هذه الصفحة تعرض إحصائيات لمحة سريعة فقط. للوصول للصفحات استخدم:
+ *   - الصفحة الرئيسية (الكاردات)
+ *   - القائمة الجانبية (السايدبار)
+ */
+export default function AdminDashboardScreen() {
   const router = useRouter();
+  const { hasAnyPermission } = useAuth();
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [userRole, setUserRole] = useState<string>('');
-  const [userPermissions, setUserPermissions] = useState<string[]>([]);
-  const [userScope, setUserScope] = useState<any>(null);
   const [counts, setCounts] = useState({
-    teachers: 0, students: 0, departments: 0, courses: 0, faculties: 0,
+    teachers: 0,
+    students: 0,
+    departments: 0,
+    courses: 0,
+    faculties: 0,
+    users: 0,
   });
 
-  const loadUserData = useCallback(async () => {
-    try {
-      const storedUser = await AsyncStorage.getItem('user');
-      if (storedUser) {
-        const user = JSON.parse(storedUser);
-        setUserRole(user.role || '');
-        setUserPermissions(user.permissions || []);
-      }
-    } catch (error) {
-      console.error('Error loading user data:', error);
-    }
-  }, []);
-
   const fetchCounts = useCallback(async () => {
-    try {
-      try {
-        const scopeRes = await scopeAPI.get();
-        setUserScope(scopeRes.data);
-      } catch (e) {}
-      const [teachers, students, departments, courses] = await Promise.all([
-        usersAPI.getAll('teacher'),
-        studentsAPI.getAll(),
-        departmentsAPI.getAll(),
-        coursesAPI.getAll(),
-      ]);
-      setCounts({
-        teachers: teachers.data?.length || 0,
-        students: students.data?.length || 0,
-        departments: departments.data?.length || 0,
-        courses: courses.data?.length || 0,
-        faculties: 0,
-      });
-    } catch (error) {
-      setCounts({ teachers: 0, students: 0, departments: 0, courses: 0, faculties: 0 });
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    // 🛡️ Promise.allSettled: لو فشل أي API بـ 403، البقية تكمل
+    const results = await Promise.allSettled([
+      usersAPI.getAll('teacher'),
+      studentsAPI.getAll(),
+      departmentsAPI.getAll(),
+      coursesAPI.getAll(),
+      facultiesAPI.getAll(),
+      usersAPI.getAll(),
+    ]);
+    const get = (i: number) => (results[i].status === 'fulfilled' ? (results[i] as any).value.data : []);
+    setCounts({
+      teachers: get(0)?.length || 0,
+      students: get(1)?.length || 0,
+      departments: get(2)?.length || 0,
+      courses: get(3)?.length || 0,
+      faculties: get(4)?.length || 0,
+      users: get(5)?.length || 0,
+    });
+    setLoading(false);
+    setRefreshing(false);
   }, []);
 
   useEffect(() => {
-    loadUserData();
     fetchCounts();
-  }, [loadUserData, fetchCounts]);
+  }, [fetchCounts]);
 
-  const onRefresh = () => { setRefreshing(true); fetchCounts(); };
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchCounts();
+  };
 
   if (loading) return <LoadingScreen />;
 
-  // تعريف المجموعات
-  const allGroups = [
+  // 📌 كروت الإحصائيات — تظهر فقط ما لديه المستخدم صلاحية لرؤيته
+  const stats = [
     {
-      groupTitle: 'إدارة البيانات',
-      groupIcon: 'folder-open',
-      groupColor: '#1565c0',
-      items: [
-        { title: 'الكليات', icon: 'school', color: '#673ab7', bg: '#ede7f6', route: '/general-settings', permission: 'manage_faculties', count: counts.faculties },
-        { title: 'الأقسام', icon: 'business', color: '#e91e63', bg: '#fce4ec', route: '/add-department', permission: 'manage_departments', count: counts.departments },
-        { title: 'المعلمين', icon: 'person', color: '#4caf50', bg: '#e8f5e9', route: '/manage-teachers', permission: 'manage_users', count: counts.teachers },
-        { title: 'الطلاب', icon: 'people', color: '#1565c0', bg: '#e3f2fd', route: '/students', permission: 'manage_students', count: counts.students },
-        { title: 'المقررات', icon: 'book', color: '#ff9800', bg: '#fff3e0', route: '/courses', permission: 'manage_courses', count: counts.courses },
-      ],
+      key: 'students',
+      label: 'الطلاب',
+      count: counts.students,
+      icon: 'people',
+      color: '#1565c0',
+      bg: '#e3f2fd',
+      perms: [PERMISSIONS.MANAGE_STUDENTS, 'view_students'],
+      route: '/students',
     },
     {
-      groupTitle: 'الجدول والحضور',
-      groupIcon: 'calendar',
-      groupColor: '#9c27b0',
-      items: [
-        { title: 'جدول المحاضرات', icon: 'calendar', color: '#9c27b0', bg: '#f3e5f5', route: '/schedule', permission: 'view_schedule' },
-        { title: 'إدارة التقويم', icon: 'calendar-number', color: '#1565c0', bg: '#e3f2fd', route: '/university-calendar', permission: null, adminOnly: true },
-        { title: 'عرض التقويم', icon: 'eye', color: '#00838f', bg: '#e0f7fa', route: '/calendar', permission: null },
-        { title: 'الأقسام', icon: 'grid', color: '#009688', bg: '#e0f2f1', route: '/add-department', permission: 'view_reports' },
-        { title: 'الأوفلاين', icon: 'cloud-offline', color: '#607d8b', bg: '#eceff1', route: '/offline-sync', permission: null, teacherOnly: true },
-      ],
+      key: 'teachers',
+      label: 'المعلمون',
+      count: counts.teachers,
+      icon: 'person',
+      color: '#4caf50',
+      bg: '#e8f5e9',
+      perms: [PERMISSIONS.MANAGE_TEACHERS, 'view_teachers'],
+      route: '/manage-teachers',
     },
     {
-      groupTitle: 'التقارير',
-      groupIcon: 'bar-chart',
-      groupColor: '#00bcd4',
-      items: [
-        { title: 'التقارير والتصدير', icon: 'document-text', color: '#00bcd4', bg: '#e0f7fa', route: '/reports', permission: 'view_reports' },
-      ],
+      key: 'courses',
+      label: 'المقررات',
+      count: counts.courses,
+      icon: 'book',
+      color: '#ff9800',
+      bg: '#fff3e0',
+      perms: [PERMISSIONS.MANAGE_COURSES, 'view_courses'],
+      route: '/(tabs)/courses',
     },
     {
-      groupTitle: 'الإشعارات',
-      groupIcon: 'notifications',
-      groupColor: '#ff9800',
-      items: [
-        { title: 'إرسال إشعار', icon: 'send', color: '#4caf50', bg: '#e8f5e9', route: '/send-notification', permission: 'send_notifications' },
-        { title: 'إرسال نتائج القسم', icon: 'ribbon', color: '#7b1fa2', bg: '#f3e5f5', route: '/send-department-results', permission: 'send_notifications' },
-        { title: 'سجل الإشعارات', icon: 'notifications', color: '#1565c0', bg: '#e3f2fd', route: '/manage-notifications', permission: 'send_notifications' },
-      ],
+      key: 'departments',
+      label: 'الأقسام',
+      count: counts.departments,
+      icon: 'business',
+      color: '#e91e63',
+      bg: '#fce4ec',
+      perms: [PERMISSIONS.MANAGE_DEPARTMENTS, 'view_departments'],
+      route: '/add-department',
     },
     {
-      groupTitle: 'النظام والصلاحيات',
-      groupIcon: 'settings',
-      groupColor: '#f44336',
-      items: [
-        { title: 'الإعدادات', icon: 'settings', color: '#1565c0', bg: '#e3f2fd', route: '/general-settings', permission: null, adminOnly: true },
-        { title: 'المستخدمين', icon: 'people-circle', color: '#673ab7', bg: '#ede7f6', route: '/manage-users', permission: 'manage_users', adminOnly: true },
-        { title: 'الأدوار', icon: 'shield-checkmark', color: '#ff5722', bg: '#fbe9e7', route: '/manage-roles', permission: 'manage_roles', adminOnly: true },
-        { title: 'سجل النشاط', icon: 'list', color: '#3f51b5', bg: '#e8eaf6', route: '/activity-logs', permission: null, adminOnly: true },
-        { title: 'تنظيف سجلات الحضور اليتيمة', icon: 'trash-bin', color: '#c62828', bg: '#ffebee', route: '/cleanup-orphan-attendance', permission: null, adminOnly: true },
-        { title: 'تنظيف الإنجازات الوهمية', icon: 'construct', color: '#6a1b9a', bg: '#f3e5f5', route: '/cleanup-ghost-completions', permission: null, adminOnly: true },
-        { title: 'تعبئة شُعب المقررات', icon: 'construct', color: '#7b1fa2', bg: '#f3e5f5', route: '/backfill-sections', permission: null, adminOnly: true },
-        { title: 'إصلاح فصول المحاضرات', icon: 'calendar-outline', color: '#7b1fa2', bg: '#f3e5f5', route: '/backfill-lecture-semesters', permission: null, adminOnly: true },
-        { title: 'توليد الأرقام المرجعية للطلاب', icon: 'finger-print', color: '#1565c0', bg: '#e3f2fd', route: '/student-references', permission: null, adminOnly: true },
-        { title: 'ملء بيانات الطلاب تلقائياً', icon: 'sparkles', color: '#ef6c00', bg: '#fff3e0', route: '/student-autofill', permission: null, adminOnly: true },
-      ],
+      key: 'faculties',
+      label: 'الكليات',
+      count: counts.faculties,
+      icon: 'school',
+      color: '#673ab7',
+      bg: '#ede7f6',
+      perms: [PERMISSIONS.MANAGE_FACULTIES, 'view_faculties'],
+      route: '/general-settings',
+    },
+    {
+      key: 'users',
+      label: 'المستخدمون',
+      count: counts.users,
+      icon: 'people-circle',
+      color: '#7b1fa2',
+      bg: '#f3e5f5',
+      perms: [PERMISSIONS.MANAGE_USERS, 'view_users'],
+      route: '/manage-users',
     },
   ];
 
-  // فلترة حسب الصلاحيات
-  const canSee = (item: any) => {
-    if (userRole === 'admin') return true;
-    if (item.teacherOnly) return userRole === 'teacher' || userPermissions?.includes('record_attendance');
-    if (item.adminOnly) {
-      if (item.route === '/general-settings') return userScope?.can_manage_settings === true || userScope?.level === 'university';
-      if (item.route === '/activity-logs') return false;
-      if (item.route === '/manage-roles') return userPermissions?.includes('manage_roles');
-      return false;
-    }
-    if (item.permission) {
-      const has = checkPermission(userRole, userPermissions, item.permission);
-      if (!has) return false;
-      if (item.permission === 'manage_faculties') return userScope?.level === 'university' || userScope?.level === 'faculty';
-      if (item.permission === 'manage_departments') return ['university', 'faculty', 'department'].includes(userScope?.level);
-      return true;
-    }
-    return false;
-  };
-
-  const filteredGroups = allGroups
-    .map(g => ({ ...g, items: g.items.filter(canSee) }))
-    .filter(g => g.items.length > 0);
+  const visibleStats = stats.filter((s) => hasAnyPermission(s.perms));
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <ScrollView
-        style={styles.scrollView}
+        style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
         {/* Header */}
-        <View style={styles.pageHeader} data-testid="admin-header">
-          <Ionicons name="shield-checkmark" size={28} color="#1565c0" />
-          <Text style={styles.pageTitle}>لوحة التحكم</Text>
-        </View>
-
-        {/* Stats Row */}
-        <View style={styles.statsRow} data-testid="admin-stats">
-          {[
-            { label: 'المعلمين', count: counts.teachers, icon: 'person', color: '#4caf50' },
-            { label: 'الطلاب', count: counts.students, icon: 'people', color: '#1565c0' },
-            { label: 'المقررات', count: counts.courses, icon: 'book', color: '#ff9800' },
-            { label: 'الأقسام', count: counts.departments, icon: 'business', color: '#e91e63' },
-          ].map((stat, i) => (
-            <View key={i} style={styles.statItem}>
-              <View style={[styles.statIcon, { backgroundColor: stat.color + '15' }]}>
-                <Ionicons name={stat.icon as any} size={18} color={stat.color} />
-              </View>
-              <Text style={styles.statNum}>{stat.count}</Text>
-              <Text style={styles.statLabel}>{stat.label}</Text>
-            </View>
-          ))}
-        </View>
-
-        {/* Groups */}
-        {filteredGroups.map((group, gi) => (
-          <View key={gi} style={styles.groupContainer} data-testid={`admin-group-${gi}`}>
-            <View style={styles.groupHeader}>
-              <Ionicons name={group.groupIcon as any} size={18} color={group.groupColor} />
-              <Text style={[styles.groupTitle, { color: group.groupColor }]}>{group.groupTitle}</Text>
-            </View>
-            <View style={styles.grid}>
-              {group.items.map((item, ii) => (
-                <TouchableOpacity
-                  key={ii}
-                  style={styles.gridItem}
-                  onPress={() => router.push(item.route as any)}
-                  activeOpacity={0.7}
-                  data-testid={`admin-btn-${item.route.replace(/\//g, '-').slice(1)}`}
-                >
-                  <View style={[styles.gridIcon, { backgroundColor: item.bg }]}>
-                    <Ionicons name={item.icon as any} size={26} color={item.color} />
-                  </View>
-                  <Text style={styles.gridTitle} numberOfLines={1}>{item.title}</Text>
-                  {item.count > 0 && (
-                    <Text style={styles.gridCount}>{item.count}</Text>
-                  )}
-                </TouchableOpacity>
-              ))}
-            </View>
+        <View style={styles.header}>
+          <View style={styles.headerIcon}>
+            <Ionicons name="analytics" size={28} color="#fff" />
           </View>
-        ))}
+          <View style={{ flex: 1, marginRight: 12 }}>
+            <Text style={styles.headerTitle}>لوحة الإحصائيات</Text>
+            <Text style={styles.headerSubtitle}>نظرة عامة على بيانات الجامعة</Text>
+          </View>
+        </View>
+
+        {/* Stats Grid */}
+        {visibleStats.length > 0 ? (
+          <View style={styles.grid}>
+            {visibleStats.map((stat) => (
+              <TouchableOpacity
+                key={stat.key}
+                style={styles.card}
+                onPress={() => router.push(stat.route as any)}
+                activeOpacity={0.7}
+                data-testid={`stat-card-${stat.key}`}
+              >
+                <View style={[styles.cardIcon, { backgroundColor: stat.bg }]}>
+                  <Ionicons name={stat.icon as any} size={28} color={stat.color} />
+                </View>
+                <Text style={styles.cardCount}>{stat.count.toLocaleString('ar-EG')}</Text>
+                <Text style={styles.cardLabel}>{stat.label}</Text>
+                <View style={styles.cardArrow}>
+                  <Ionicons name="arrow-back" size={14} color={stat.color} />
+                  <Text style={[styles.cardArrowText, { color: stat.color }]}>عرض</Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        ) : (
+          <View style={styles.empty}>
+            <Ionicons name="lock-closed-outline" size={64} color="#cfd6e1" />
+            <Text style={styles.emptyTitle}>لا توجد إحصائيات متاحة</Text>
+            <Text style={styles.emptyText}>
+              ليس لديك صلاحية لرؤية أي إحصائيات هنا.
+              {'\n'}يمكنك الوصول لما لديك صلاحية له من القائمة الجانبية أو الرئيسية.
+            </Text>
+          </View>
+        )}
+
+        {/* Info Note */}
+        <View style={styles.note}>
+          <Ionicons name="information-circle-outline" size={18} color="#5b6678" />
+          <Text style={styles.noteText}>
+            للوصول لجميع الصفحات والأدوات، استخدم القائمة الجانبية (☰) أو الصفحة الرئيسية.
+          </Text>
+        </View>
 
         <View style={{ height: 30 }} />
       </ScrollView>
@@ -235,103 +206,133 @@ export default function AdminScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
-  scrollView: { flex: 1 },
+  scroll: { flex: 1 },
   scrollContent: { padding: 16 },
-  pageHeader: {
-    flexDirection: 'row',
+
+  header: {
+    flexDirection: 'row-reverse',
     alignItems: 'center',
-    gap: 10,
+    backgroundColor: '#1565c0',
+    borderRadius: 16,
+    padding: 18,
     marginBottom: 20,
+    shadowColor: '#1565c0',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.2,
+    shadowRadius: 8,
+    elevation: 4,
   },
-  pageTitle: {
-    fontSize: 22,
-    fontWeight: 'bold',
-    color: '#1a1a2e',
+  headerIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-  statsRow: {
-    flexDirection: 'row',
+  headerTitle: {
+    fontSize: 19,
+    fontWeight: '800',
+    color: '#fff',
+    textAlign: 'right',
+  },
+  headerSubtitle: {
+    fontSize: 12,
+    color: 'rgba(255,255,255,0.85)',
+    marginTop: 3,
+    textAlign: 'right',
+  },
+
+  grid: {
+    flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginBottom: 16,
+  },
+  card: {
+    width: 'calc(50% - 6px)' as any,
+    minWidth: 140,
     backgroundColor: '#fff',
-    borderRadius: 14,
-    padding: 14,
-    marginBottom: 20,
+    borderRadius: 16,
+    padding: 18,
+    alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.06,
-    shadowRadius: 4,
+    shadowRadius: 6,
     elevation: 2,
   },
-  statItem: {
-    flex: 1,
-    alignItems: 'center',
-  },
-  statIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
+  cardIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 14,
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 12,
   },
-  statNum: {
-    fontSize: 18,
-    fontWeight: 'bold',
+  cardCount: {
+    fontSize: 28,
+    fontWeight: '800',
     color: '#1a1a2e',
   },
-  statLabel: {
-    fontSize: 11,
-    color: '#888',
-    marginTop: 2,
-  },
-  groupContainer: {
-    marginBottom: 20,
-  },
-  groupHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
-    paddingHorizontal: 4,
-  },
-  groupTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-  },
-  gridItem: {
-    width: Platform.OS === 'web' ? 'calc(25% - 8px)' as any : '47%' as any,
-    minWidth: 90,
-    backgroundColor: '#fff',
-    borderRadius: 14,
-    paddingVertical: 18,
-    paddingHorizontal: 10,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
-  },
-  gridIcon: {
-    width: 52,
-    height: 52,
-    borderRadius: 14,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  gridTitle: {
+  cardLabel: {
     fontSize: 13,
-    fontWeight: '600',
-    color: '#333',
-    textAlign: 'center',
-  },
-  gridCount: {
-    fontSize: 12,
-    color: '#888',
+    color: '#5b6678',
     marginTop: 4,
+    fontWeight: '600',
+  },
+  cardArrow: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#eef1f5',
+    width: '100%',
+    justifyContent: 'center',
+  },
+  cardArrowText: {
+    fontSize: 11,
+    fontWeight: '600',
+  },
+
+  note: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 10,
+    borderRightWidth: 3,
+    borderRightColor: '#5b6678',
+  },
+  noteText: {
+    fontSize: 12,
+    color: '#5b6678',
+    flex: 1,
+    textAlign: 'right',
+    lineHeight: 18,
+  },
+
+  empty: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 40,
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#1a1a2e',
+    marginTop: 16,
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#8a95a8',
+    marginTop: 8,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

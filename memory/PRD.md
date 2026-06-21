@@ -13,6 +13,34 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-21 **🏗️ توحيد المعمار (الخيار ب) + فحص شامل للصلاحيات**:
+  - **صفحة الإدارة `(tabs)/admin.tsx`** أُعيد كتابتها كاملاً → Dashboard إحصائيات فقط (بدلاً من قائمة 20+ رابط مكرر)
+  - **الصفحة الرئيسية** كانت تشترط دور معين (`['dean', 'department_head', ...].includes(user.role)`) لإظهار البطاقات → استُبدِل بشرط الصلاحيات: أي مستخدم لديه صلاحية إدارية يرى البطاقات
+  - **السايدبار** أُصلحت أخطاء ربط:
+    - "إدارة الإشعارات" مرتبطة بـ `MANAGE_USERS/MANAGE_DEPARTMENTS` ❌ → أصبحت `SEND_NOTIFICATIONS/manage_notifications` ✅
+    - "الإعدادات العامة" كانت `adminOnly` فقط ❌ → أصبحت `MANAGE_SETTINGS` ✅
+    - "محاضراتي" كانت `teacherOnly` ❌ → أصبحت تقبل أي مستخدم لديه `record_attendance` ✅
+    - "سجلات النشاط" حذف `VIEW_REPORTS` الخادع (كان adminOnly فعلياً)
+  - **`(tabs)/admin.tsx` السابقة:** زر "جدول المحاضرات" أُعيد ربطه بـ `view_schedule` بدلاً من `manage_lectures` (المحاضرات الآن فرعية)
+  - **تقرير شامل** للصلاحيات الـ72 في `/app/memory/PERMISSIONS_AUDIT_REPORT.md` يوثق: المشاكل المكتشفة، الإصلاحات التي تمت، والمسائل التي تحتاج قراراً من المستخدم
+
+- 2026-06-21 **🎯 دمج صلاحيات المحاضرات تحت `manage_courses` (الخيار ب)**:
+  - 8 صلاحيات للمحاضرات (manage_lectures, view_lectures, add/edit/delete_lecture, override_lecture_status, reschedule_lecture, generate_lectures) أصبحت **مخفية** من واجهة منح الصلاحيات
+  - تُمنح تلقائياً مع `manage_courses` (مدرجة في `FULL_PERMISSION_MAPPING`)
+  - Backend `/permissions/available` يفلتر الصلاحيات المخفية (`hidden: True`)
+  - **Migration v1 تلقائي لمرة واحدة** استعاد صلاحيات المحاضرات لـ 5 أدوار افتراضية (TEACHER, DEAN, DEPARTMENT_HEAD, ADMIN, EMPLOYEE) التي كانت قد فقدتها
+
+- 2026-06-21 **🔑 إصلاح Backend `/roles` + صفحة إدارة المستخدمين**:
+  - GET `/roles` كان يفحص `admin` فقط ❌ → أصبح يقبل `manage_users` أو `manage_roles` ✅
+  - POST/PUT/DELETE `/roles` تقبل `manage_roles` للمنح المرن
+  - صفحة `manage-users.tsx` استبدلت `Promise.all` بـ `Promise.allSettled` (لو فشل API واحد، البقية تكمل عملها)
+  - السايدبار: "الأدوار" أُعيد ربطها بـ `manage_roles` بدلاً من `manage_users`
+  - إصلاح خطأ سابق في server.py سطر 15337 (`fo(...)` بدلاً من `logging.info`)
+
+- 2026-06-21 **🆕 صلاحيتين جديدتين للجداول الدراسية**:
+  - `VIEW_SCHEDULE` و `MANAGE_SCHEDULE` كصلاحيات منفصلة عن المقررات
+  - فُصِل ربط الجدول اليومي والأسبوعي عن `manage_courses` (كان خلط)
+
 - 2026-06-21 **🔒 إصلاح RBAC شامل لصلاحيات إدارة الأقسام (Sub-Permission Awareness)**:
   - **المشكلة:** المستخدم منح صلاحيات `add_department/edit_department/delete_department` (فرعية) لكن backend/frontend كانا يتحققان فقط من `manage_departments` (الأم) → لم يستطع تحرير/إضافة الأقسام رغم وجود الصلاحيات.
   - **مشكلة إضافية:** صفحة تفاصيل القسم كانت تعرض المعلمين والمقررات وتسمح بالنقر للوصول لإسناد المقررات لأي مستخدم بدون فحص أي صلاحية.

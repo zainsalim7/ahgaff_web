@@ -652,8 +652,16 @@ export default function HomeScreen() {
           </>
         )}
 
-        {/* Dashboard for Dean, Department Head, and other administrative roles */}
-        {user?.role && ['dean', 'department_head', 'registration_manager', 'registrar', 'employee'].includes(user.role) && (
+        {/* لوحة التحكم — تظهر لأي مستخدم لديه أي صلاحية إدارية (بغض النظر عن اسم دوره) */}
+        {!isAdmin && user?.role !== 'student' && user?.role !== 'teacher' && can([
+          'manage_students', 'view_students',
+          'manage_courses', 'view_courses',
+          'manage_teachers', 'view_teachers',
+          'view_reports', 'export_reports', 'report_attendance_overview',
+          'manage_curriculum',
+          'manage_departments', 'view_departments',
+          'view_schedule', 'manage_schedule',
+        ]) && (
           <>
             {/* Administrative Stats */}
             <View style={styles.adminRoleSection}>

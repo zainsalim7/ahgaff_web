@@ -35,8 +35,8 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
   
   { id: 'my-lectures', label: 'محاضراتي', icon: 'calendar', path: '/(tabs)/my-lectures', permissions: [
-    PERMISSIONS.RECORD_ATTENDANCE
-  ], teacherOnly: true },
+    PERMISSIONS.RECORD_ATTENDANCE, 'take_attendance'
+  ]},
   
   // 📚 المقررات — صلاحيات المقررات فقط
   { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
@@ -111,12 +111,12 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
   
   { id: 'notifications', label: 'إدارة الإشعارات', icon: 'notifications', path: '/manage-notifications', permissions: [
-    PERMISSIONS.MANAGE_USERS, PERMISSIONS.MANAGE_DEPARTMENTS
+    PERMISSIONS.SEND_NOTIFICATIONS, 'manage_notifications'
   ]},
-  { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [], adminOnly: true },
-  { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: [], adminOnly: true },
+  { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
+  { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
   { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', permissions: [PERMISSIONS.MANAGE_ROLES] },
-  { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', permissions: [PERMISSIONS.VIEW_REPORTS], adminOnly: true },
+  { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', permissions: [], adminOnly: true },
   // الأرشيف الدراسي
   { id: 'archives-divider', label: 'الأرشيف الدراسي', icon: 'archive', path: '', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
   { id: 'archives', label: 'الفصول المؤرشفة', icon: 'archive', path: '/archives', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
