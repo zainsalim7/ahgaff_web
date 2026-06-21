@@ -253,7 +253,9 @@ api.interceptors.response.use(
           return Promise.reject(error);
         }
         w.__last403Redirect = now;
-        const pendingId = ++(w.__pending403Id || (w.__pending403Id = 0));
+        if (typeof w.__pending403Id !== 'number') w.__pending403Id = 0;
+        w.__pending403Id += 1;
+        const pendingId = w.__pending403Id;
 
         const reason403 = error.response?.data?.detail || '';
 

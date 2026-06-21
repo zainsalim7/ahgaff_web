@@ -39,17 +39,17 @@ export default function CurriculumScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [d, s, a] = await Promise.all([
+        const [d, s] = await Promise.all([
           api.get('/departments'),
           api.get('/semesters?status=active').catch(() => ({ data: [] })),
-          api.get('/archives').catch(() => ({ data: { items: [] } })),
         ]);
         const deptItems = d.data?.items || d.data || [];
         setDepartments(deptItems);
         const sems = s.data?.items || s.data || [];
         const active = (Array.isArray(sems) ? sems : []).find((x: any) => x.status === 'active') || sems[0];
         setActiveSemester(active);
-        setArchives(a.data?.items || []);
+        // 🔧 أزلنا /archives من التحميل الأساسي — يُستدعى فقط عند فتح زر "استيراد من أرشيف"
+        // (يمنع 403 ثانوياً لمستخدمين بلا صلاحية الأرشيف)
         if (!params.departmentId && deptItems.length > 0) {
           setSelectedDept(deptItems[0].id || deptItems[0]._id);
         }
@@ -58,6 +58,16 @@ export default function CurriculumScreen() {
       }
     })();
   }, [params.departmentId]);
+
+  /** يُحمَّل الأرشيف بشكل lazy فقط عند الحاجة (زر "استيراد من أرشيف") */
+  const loadArchivesLazy = async () => {
+    try {
+      const a = await api.get('/archives');
+      setArchives(a.data?.items || []);
+    } catch {
+      setArchives([]);
+    }
+  };
 
   const fetchGrid = useCallback(async () => {
     if (!selectedDept) return;
