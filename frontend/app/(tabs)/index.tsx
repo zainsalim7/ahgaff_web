@@ -200,7 +200,7 @@ export default function HomeDashboardScreen() {
                 <View style={styles.statRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.statCount} numberOfLines={1}>
-                      {stat.count.toLocaleString('ar-EG')}
+                      {stat.count}
                     </Text>
                     <Text style={styles.statLabel}>{stat.label}</Text>
                   </View>
@@ -394,7 +394,7 @@ const styles = StyleSheet.create({
     width: 52, height: 52, borderRadius: 14,
     justifyContent: 'center', alignItems: 'center',
   },
-  statCount: { fontSize: 30, fontWeight: '800', color: '#0f172a', textAlign: 'right' },
+  statCount: { fontSize: 30, fontWeight: '800', color: '#0f172a', textAlign: 'right', fontFamily: 'system-ui, -apple-system, Arial, sans-serif' as any },
   statLabel: { fontSize: 13, color: '#64748b', marginTop: 2, fontWeight: '600', textAlign: 'right' },
   statFoot: {
     flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center',
