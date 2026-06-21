@@ -58,6 +58,14 @@ interface TodayLecture {
 export default function HomeScreen() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
+  // 🔧 helper لفحص الصلاحيات
+  const userPerms: string[] = (user as any)?.permissions || [];
+  const isAdmin = user?.role === 'admin';
+  const can = (perm: string | string[]) => {
+    if (isAdmin) return true;
+    const list = Array.isArray(perm) ? perm : [perm];
+    return list.some(p => userPerms.includes(p));
+  };
   const { pendingAttendance, isOnline } = useOfflineStore();
   
   const [summary, setSummary] = useState<any>(null);
@@ -652,6 +660,7 @@ export default function HomeScreen() {
               <Text style={styles.sectionTitle}>لوحة التحكم</Text>
               
               <View style={styles.adminRoleGrid}>
+                {can(['manage_students', 'view_students']) && (
                 <TouchableOpacity
                   style={styles.adminRoleCard}
                   onPress={() => router.push('/students')}
@@ -661,7 +670,9 @@ export default function HomeScreen() {
                   </View>
                   <Text style={styles.adminRoleTitle}>الطلاب</Text>
                 </TouchableOpacity>
+                )}
 
+                {can(['manage_courses', 'view_courses']) && (
                 <TouchableOpacity
                   style={styles.adminRoleCard}
                   onPress={() => router.push('/(tabs)/courses' as any)}
@@ -671,7 +682,9 @@ export default function HomeScreen() {
                   </View>
                   <Text style={styles.adminRoleTitle}>المقررات</Text>
                 </TouchableOpacity>
+                )}
 
+                {can(['manage_teachers', 'view_teachers']) && (
                 <TouchableOpacity
                   style={styles.adminRoleCard}
                   onPress={() => router.push('/manage-teachers')}
@@ -681,7 +694,9 @@ export default function HomeScreen() {
                   </View>
                   <Text style={styles.adminRoleTitle}>المعلمين</Text>
                 </TouchableOpacity>
+                )}
 
+                {can(['view_reports', 'export_reports', 'report_attendance_overview']) && (
                 <TouchableOpacity
                   style={styles.adminRoleCard}
                   onPress={() => router.push('/reports')}
@@ -691,6 +706,19 @@ export default function HomeScreen() {
                   </View>
                   <Text style={styles.adminRoleTitle}>التقارير</Text>
                 </TouchableOpacity>
+                )}
+
+                {can(['manage_curriculum']) && (
+                <TouchableOpacity
+                  style={styles.adminRoleCard}
+                  onPress={() => router.push('/curriculum' as any)}
+                >
+                  <View style={[styles.adminRoleIcon, { backgroundColor: '#ede7f6' }]}>
+                    <Ionicons name="library" size={28} color="#673ab7" />
+                  </View>
+                  <Text style={styles.adminRoleTitle}>الخطة الدراسية</Text>
+                </TouchableOpacity>
+                )}
               </View>
             </View>
 
@@ -698,6 +726,7 @@ export default function HomeScreen() {
             <View style={styles.quickActions}>
               <Text style={styles.sectionTitle}>إجراءات سريعة</Text>
               
+              {can(['manage_departments', 'view_departments']) && (
               <TouchableOpacity
                 style={styles.actionCard}
                 onPress={() => router.push('/add-department')}
@@ -711,7 +740,9 @@ export default function HomeScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={24} color="#999" />
               </TouchableOpacity>
+              )}
 
+              {can(['manage_courses', 'view_courses', 'view_reports']) && (
               <TouchableOpacity
                 style={styles.actionCard}
                 onPress={() => router.push('/schedule')}
@@ -725,6 +756,7 @@ export default function HomeScreen() {
                 </View>
                 <Ionicons name="chevron-forward" size={24} color="#999" />
               </TouchableOpacity>
+              )}
             </View>
           </>
         )}
