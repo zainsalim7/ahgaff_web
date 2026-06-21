@@ -12,6 +12,7 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 import { useAuthStore } from '../../src/store/authStore';
 import { useAuth, PERMISSIONS } from '../../src/contexts/AuthContext';
 import {
@@ -34,6 +35,52 @@ const todayInArabic = () => {
   const now = new Date();
   return `${days[now.getDay()]} ${now.getDate()} ${months[now.getMonth()]} ${now.getFullYear()}`;
 };
+
+/** 🥧 مكوّن Pie Chart بسيط بـ SVG لتوزيع الجنس */
+function PieChart({ male, female }: { male: number; female: number }) {
+  const total = male + female;
+  if (total === 0) {
+    return (
+      <View style={{ width: 140, height: 140, justifyContent: 'center', alignItems: 'center' }}>
+        <Text style={{ color: '#94a3b8', fontSize: 12 }}>لا توجد بيانات</Text>
+      </View>
+    );
+  }
+  const size = 140;
+  const radius = 55;
+  const cx = size / 2;
+  const cy = size / 2;
+  const malePct = male / total;
+  const maleEndAngle = malePct * Math.PI * 2;
+  // Pie slice path for male (start at top)
+  const maleX1 = cx;
+  const maleY1 = cy - radius;
+  const maleX2 = cx + radius * Math.sin(maleEndAngle);
+  const maleY2 = cy - radius * Math.cos(maleEndAngle);
+  const largeArc = malePct > 0.5 ? 1 : 0;
+  const malePath = total === male
+    ? `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.01} ${cy - radius} Z`
+    : `M ${cx} ${cy} L ${maleX1} ${maleY1} A ${radius} ${radius} 0 ${largeArc} 1 ${maleX2} ${maleY2} Z`;
+  const femalePath = total === female
+    ? `M ${cx} ${cy - radius} A ${radius} ${radius} 0 1 1 ${cx - 0.01} ${cy - radius} Z`
+    : `M ${cx} ${cy} L ${maleX2} ${maleY2} A ${radius} ${radius} 0 ${1 - largeArc} 1 ${maleX1} ${maleY1} Z`;
+  const malePctText = Math.round(malePct * 100);
+  return (
+    <View style={{ alignItems: 'center' }}>
+      <Svg width={size} height={size}>
+        {male > 0 && <Path d={malePath} fill="#1565c0" />}
+        {female > 0 && <Path d={femalePath} fill="#ec4899" />}
+        <Circle cx={cx} cy={cy} r={28} fill="#fff" />
+        <SvgText x={cx} y={cy + 5} fontSize="14" fontWeight="700" fill="#0f172a" textAnchor="middle">
+          {`${total}`}
+        </SvgText>
+      </Svg>
+      <Text style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+        {male > 0 && female > 0 ? `${malePctText}% ذكور` : ''}
+      </Text>
+    </View>
+  );
+}
 
 interface StatCard {
   key: string;
@@ -64,6 +111,8 @@ export default function HomeDashboardScreen() {
   });
   const [notifications, setNotifications] = useState<any[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [students, setStudents] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
 
   const fetchData = useCallback(async () => {
     const results = await Promise.allSettled([
@@ -76,13 +125,17 @@ export default function HomeDashboardScreen() {
       notificationsAPI.getAll({ limit: 5 }).catch(() => ({ data: [] })),
     ]);
     const get = (i: number) => (results[i].status === 'fulfilled' ? (results[i] as any).value.data : []);
+    const studentsData = get(1) || [];
+    const facultiesData = get(5) || [];
+    setStudents(studentsData);
+    setFaculties(facultiesData);
     setCounts({
       teachers: (get(0) || []).length,
-      students: (get(1) || []).length,
+      students: studentsData.length,
       courses: (get(2) || []).length,
       departments: (get(3) || []).length,
       users: (get(4) || []).length,
-      faculties: (get(5) || []).length,
+      faculties: facultiesData.length,
     });
     const notifsRaw = get(6);
     const notifs = Array.isArray(notifsRaw)
@@ -148,6 +201,38 @@ export default function HomeDashboardScreen() {
     if (user?.role === 'admin') return stats;
     return stats.filter((s) => hasAnyPermission(s.perms));
   }, [stats, hasAnyPermission, user]);
+
+  // 📊 توزيع الطلاب على الكليات (Bar Chart)
+  const studentsByFaculty = useMemo(() => {
+    if (!students.length || !faculties.length) return [];
+    const facultyMap = new Map<string, string>();
+    faculties.forEach((f: any) => facultyMap.set(String(f.id), f.name || 'بدون اسم'));
+    const counts: Record<string, number> = {};
+    students.forEach((s: any) => {
+      const fid = String(s.faculty_id || '');
+      const name = facultyMap.get(fid) || 'غير محدد';
+      counts[name] = (counts[name] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 6);
+  }, [students, faculties]);
+
+  // 📊 توزيع الطلاب حسب الجنس (Pie Chart)
+  const studentsByGender = useMemo(() => {
+    if (!students.length) return { male: 0, female: 0 };
+    let male = 0, female = 0;
+    students.forEach((s: any) => {
+      const g = (s.gender || '').toLowerCase();
+      if (g === 'male' || g === 'm' || g === 'ذكر') male++;
+      else if (g === 'female' || g === 'f' || g === 'أنثى') female++;
+    });
+    return { male, female };
+  }, [students]);
+
+  const showCharts = (user?.role === 'admin' || hasAnyPermission([PERMISSIONS.MANAGE_STUDENTS, 'view_students']))
+    && students.length > 0;
 
   // مقطع الإشعارات
   const canViewNotifications = hasAnyPermission([
@@ -230,6 +315,59 @@ export default function HomeDashboardScreen() {
             <Text style={styles.emptyText}>
               ليس لديك صلاحية لعرض الإحصائيات.{'\n'}يمكنك الوصول لما لديك من القائمة الجانبية.
             </Text>
+          </View>
+        )}
+
+        {/* Charts Row */}
+        {showCharts && (
+          <View style={styles.chartsRow}>
+            {/* Bar Chart: توزيع الطلاب على الكليات */}
+            <View style={[styles.chartCard, { flex: 2 }]}>
+              <Text style={styles.chartTitle}>توزيع الطلاب حسب الكلية</Text>
+              <View style={{ marginTop: 14 }}>
+                {studentsByFaculty.length === 0 ? (
+                  <Text style={{ color: '#94a3b8', textAlign: 'center', padding: 20 }}>لا توجد بيانات</Text>
+                ) : (
+                  studentsByFaculty.map((item, i) => {
+                    const max = studentsByFaculty[0]?.count || 1;
+                    const pct = (item.count / max) * 100;
+                    const colors = ['#1565c0', '#22c55e', '#f97316', '#ef4444', '#7c3aed', '#0ea5e9'];
+                    const color = colors[i % colors.length];
+                    return (
+                      <View key={item.name} style={styles.barRow}>
+                        <Text style={styles.barLabel} numberOfLines={1}>{item.name}</Text>
+                        <View style={styles.barTrack}>
+                          <View style={[styles.barFill, { width: `${pct}%`, backgroundColor: color }]} />
+                        </View>
+                        <Text style={[styles.barCount, { fontFamily: 'system-ui, Arial, sans-serif' }]}>
+                          {item.count}
+                        </Text>
+                      </View>
+                    );
+                  })
+                )}
+              </View>
+            </View>
+
+            {/* Pie Chart: توزيع حسب الجنس */}
+            <View style={[styles.chartCard, { flex: 1 }]}>
+              <Text style={styles.chartTitle}>التوزيع حسب الجنس</Text>
+              <View style={{ alignItems: 'center', marginTop: 14 }}>
+                <PieChart male={studentsByGender.male} female={studentsByGender.female} />
+                <View style={styles.legend}>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#1565c0' }]} />
+                    <Text style={styles.legendText}>ذكور</Text>
+                    <Text style={[styles.legendCount, { fontFamily: 'system-ui, Arial, sans-serif' }]}>{studentsByGender.male}</Text>
+                  </View>
+                  <View style={styles.legendItem}>
+                    <View style={[styles.legendDot, { backgroundColor: '#ec4899' }]} />
+                    <Text style={styles.legendText}>إناث</Text>
+                    <Text style={[styles.legendCount, { fontFamily: 'system-ui, Arial, sans-serif' }]}>{studentsByGender.female}</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
           </View>
         )}
 
@@ -459,4 +597,25 @@ const styles = StyleSheet.create({
     borderTopWidth: 1, borderTopColor: '#f1f5f9',
   },
   viewAllText: { color: '#1565c0', fontSize: 12, fontWeight: '700' },
+
+  /* Charts */
+  chartsRow: { flexDirection: 'row-reverse', gap: 12, marginBottom: 14, flexWrap: 'wrap' as any },
+  chartCard: {
+    backgroundColor: '#fff', borderRadius: 16, padding: 16, minWidth: 280,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2,
+  },
+  chartTitle: { fontSize: 15, fontWeight: '800', color: '#0f172a', textAlign: 'right' },
+  barRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 10 },
+  barLabel: { width: 80, fontSize: 11, color: '#0f172a', textAlign: 'right', fontWeight: '600' },
+  barTrack: { flex: 1, height: 18, backgroundColor: '#f1f5f9', borderRadius: 9, overflow: 'hidden' },
+  barFill: { height: '100%', borderRadius: 9 },
+  barCount: { minWidth: 30, fontSize: 12, fontWeight: '800', color: '#0f172a', textAlign: 'left' },
+  legend: { marginTop: 14, gap: 8, alignSelf: 'stretch' },
+  legendItem: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
+    backgroundColor: '#f8fafc', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8,
+  },
+  legendDot: { width: 10, height: 10, borderRadius: 5 },
+  legendText: { flex: 1, fontSize: 12, color: '#0f172a', textAlign: 'right' },
+  legendCount: { fontSize: 13, fontWeight: '800', color: '#0f172a' },
 });
