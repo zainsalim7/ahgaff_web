@@ -36,17 +36,27 @@ interface Role {
 }
 
 // الصلاحيات الكاملة والصلاحيات الفرعية التابعة لها
+// 🔑 يطابق models/permissions.py في الـ Backend بالضبط
 const FULL_PERMISSION_MAPPING: Record<string, string[]> = {
   'manage_departments': ['view_departments', 'add_department', 'edit_department', 'delete_department'],
-  'manage_courses': ['view_courses', 'add_course', 'edit_course', 'delete_course'],
+  // manage_courses تشمل المحاضرات (مدمجة كصلاحيات فرعية مخفية)
+  'manage_courses': [
+    'view_courses', 'add_course', 'edit_course', 'delete_course',
+    'manage_lectures', 'view_lectures', 'add_lecture', 'edit_lecture', 'delete_lecture',
+    'override_lecture_status', 'reschedule_lecture', 'generate_lectures',
+  ],
   'manage_students': ['view_students', 'add_student', 'edit_student', 'delete_student', 'import_students'],
   'manage_teachers': ['view_teachers', 'add_teacher', 'edit_teacher', 'delete_teacher'],
   'manage_users': ['view_users', 'add_user', 'edit_user', 'delete_user', 'reset_password'],
   'manage_faculties': ['view_faculties', 'add_faculty', 'edit_faculty', 'delete_faculty'],
-  'manage_lectures': ['view_lectures', 'add_lecture', 'edit_lecture', 'delete_lecture'],
+  'manage_lectures': [
+    'view_lectures', 'add_lecture', 'edit_lecture', 'delete_lecture',
+    'override_lecture_status', 'reschedule_lecture', 'generate_lectures',
+  ],
   'manage_enrollments': ['view_enrollments', 'add_enrollment', 'delete_enrollment'],
   'manage_attendance': ['record_attendance', 'take_attendance', 'view_attendance', 'edit_attendance'],
   'manage_roles': ['view_roles', 'add_role', 'edit_role', 'delete_role'],
+  'manage_schedule': ['view_schedule'],
 };
 
 // عند تحميل الصلاحيات، توسيع الصلاحيات الأم تلقائياً
@@ -407,7 +417,13 @@ export default function ManageRolesScreen() {
           <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
         }
       >
-        {roles.map((role) => (
+        {roles.map((role) => {
+          // 🔒 فلترة الصلاحيات المخفية (مثل صلاحيات المحاضرات المدمجة تحت manage_courses)
+          // لا تُعرض في القائمة لأنها تُمنح تلقائياً عبر الصلاحية الأم
+          const visibleKeys = new Set(allPermissions.map(p => p.key));
+          const visiblePerms = (role.permissions || []).filter(p => visibleKeys.has(p));
+
+          return (
           <View key={role.id} style={styles.roleCard}>
             <View style={styles.roleHeader}>
               <View style={styles.roleInfo}>
@@ -432,7 +448,7 @@ export default function ManageRolesScreen() {
                   </View>
                   <View style={styles.statItem}>
                     <Ionicons name="key" size={16} color="#666" />
-                    <Text style={styles.statText}>{role.permissions.length} صلاحية</Text>
+                    <Text style={styles.statText}>{visiblePerms.length} صلاحية</Text>
                   </View>
                 </View>
               </View>
@@ -462,7 +478,7 @@ export default function ManageRolesScreen() {
             <View style={styles.permissionsPreview}>
               <Text style={styles.permissionsLabel}>الصلاحيات:</Text>
               <View style={styles.permissionsTags}>
-                {role.permissions.slice(0, 5).map((perm) => {
+                {visiblePerms.slice(0, 5).map((perm) => {
                   const permInfo = allPermissions.find(p => p.key === perm);
                   return (
                     <View key={perm} style={styles.permTag}>
@@ -472,15 +488,16 @@ export default function ManageRolesScreen() {
                     </View>
                   );
                 })}
-                {role.permissions.length > 5 && (
+                {visiblePerms.length > 5 && (
                   <View style={[styles.permTag, styles.moreTag]}>
-                    <Text style={styles.permTagText}>+{role.permissions.length - 5}</Text>
+                    <Text style={styles.permTagText}>+{visiblePerms.length - 5}</Text>
                   </View>
                 )}
               </View>
             </View>
           </View>
-        ))}
+          );
+        })}
 
         {roles.length === 0 && (
           <View style={styles.emptyState}>
