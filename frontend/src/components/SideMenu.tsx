@@ -42,7 +42,7 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
 
   { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', permissions: [
-    PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_COURSES
+    PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_COURSES
   ]},
   
   { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', permissions: [

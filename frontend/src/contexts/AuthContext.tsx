@@ -72,6 +72,14 @@ export const PERMISSIONS = {
   VIEW_ARCHIVE: 'view_archive',
   SEARCH_ARCHIVE: 'search_archive',
   EXPORT_ARCHIVE: 'export_archive',
+  // صلاحيات الخطة الدراسية
+  MANAGE_CURRICULUM: 'manage_curriculum',
+  // صلاحيات أخرى
+  CROSS_UNIVERSITY_ASSIGNMENT: 'cross_university_assignment',
+  MANAGE_SETTINGS: 'manage_settings',
+  MANAGE_SEMESTERS: 'manage_semesters',
+  MANAGE_ROLES: 'manage_roles',
+  SEND_NOTIFICATIONS: 'send_notifications',
 } as const;
 
 // متغير عام للتخزين المؤقت
