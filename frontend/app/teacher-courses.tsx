@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { teachersAPI, teachingLoadAPI, coursesAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 
 interface Course {
   id: string;
