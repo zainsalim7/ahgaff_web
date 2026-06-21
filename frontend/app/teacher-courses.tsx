@@ -110,13 +110,19 @@ export default function TeacherCoursesScreen() {
   const fetchCourses = useCallback(async () => {
     if (!teacherId) return;
     try {
-      const [coursesRes, teacherRes] = await Promise.all([
+      // 🛡️ Promise.allSettled: لو فشل أي API (مثلاً 403/404)، الصفحة لا تنهار
+      const [coursesRes, teacherRes] = await Promise.allSettled([
         teachersAPI.getCourses(teacherId, showAllSemesters ? { include_all: true } : undefined),
-        teachersAPI.getById(teacherId).catch(() => null),
+        teachersAPI.getById(teacherId),
       ]);
-      setData(coursesRes.data);
-      if (teacherRes?.data?.department_id) {
-        setTeacherDept(teacherRes.data.department_id);
+      if (coursesRes.status === 'fulfilled') {
+        setData(coursesRes.value.data);
+      } else {
+        console.warn('Failed to fetch teacher courses:', coursesRes.reason);
+        setData(null);
+      }
+      if (teacherRes.status === 'fulfilled' && teacherRes.value?.data?.department_id) {
+        setTeacherDept(teacherRes.value.data.department_id);
       }
     } catch (error) {
       console.error('Error fetching teacher courses:', error);
