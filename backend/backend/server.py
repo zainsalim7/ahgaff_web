@@ -925,10 +925,35 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
                 else:
                     query["_id"] = {"$in": []}  # لا يوجد طلاب
     
+    # Employee (موظف) — يخضع لنفس قواعد scope حسب ما هو مُسنَد له:
+    # إذا كان له قسم → يرى قسمه/أقسامه فقط (مثل department_head)
+    # إذا كان له كلية فقط → يرى الكلية كلها (مثل dean بحدود الكلية)
+    elif role == "employee":
+        user_dept_ids = department_ids if department_ids else ([department_id] if department_id else [])
+        if user_dept_ids:
+            if scope_type in ["students", "courses", "teachers"]:
+                if len(user_dept_ids) == 1:
+                    query["department_id"] = user_dept_ids[0]
+                else:
+                    query["department_id"] = {"$in": user_dept_ids}
+            elif scope_type == "departments":
+                if len(user_dept_ids) == 1:
+                    query["_id"] = ObjectId(user_dept_ids[0])
+                else:
+                    query["_id"] = {"$in": [ObjectId(did) for did in user_dept_ids]}
+        elif faculty_id:
+            # موظف الكلية: يرى كل أقسامها
+            if scope_type in ["students", "courses", "teachers"]:
+                dept_ids = await get_faculty_department_ids(faculty_id)
+                if dept_ids:
+                    query["department_id"] = {"$in": dept_ids}
+            elif scope_type == "departments":
+                query["faculty_id"] = faculty_id
+
     # 🔒 Fail-safe أمني حرج: إذا كان للدور نطاق محدود لكن لم يُطبَّق أي فلتر
-    # (مثلاً department_head بلا قسم مسنَد) → نمنع رؤية أي شيء بدلاً من إظهار الكل
+    # (مثلاً employee/department_head بلا قسم مسنَد) → نمنع رؤية أي شيء بدلاً من إظهار الكل
     SCOPED_ROLES = {"dean", "department_head", "registrar", "registration_manager",
-                    "custom", UserRole.TEACHER}
+                    "custom", "employee", UserRole.TEACHER}
     if role in SCOPED_ROLES and not query:
         logging.warning(
             f"RBAC: user '{user_data.get('username')}' (role={role}) has no scope data "
