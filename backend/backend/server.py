@@ -13967,9 +13967,10 @@ async def root():
 
 @api_router.get("/permissions/available")
 async def get_available_permissions(current_user: dict = Depends(get_current_user)):
-    """الحصول على قائمة الصلاحيات المتاحة"""
+    """الحصول على قائمة الصلاحيات المتاحة (تستبعد الصلاحيات المخفية hidden)"""
+    visible_perms = [p for p in ALL_PERMISSIONS if not p.get("hidden", False)]
     return {
-        "permissions": ALL_PERMISSIONS,
+        "permissions": visible_perms,
         "scope_types": [
             {"key": "global", "label": "عامة (كل النظام)"},
             {"key": "department", "label": "قسم معين"},
@@ -15077,12 +15078,63 @@ async def startup_event():
     await create_indexes()
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
+    # 🔧 Migration لمرة واحدة: استعادة صلاحيات المحاضرات للأدوار التي فقدتها بالخطأ
+    await restore_lecture_permissions_v1()
     # 🔧 تنظيف الصلاحيات اليتيمة (التي أُلغيت من النظام) من الأدوار والمستخدمين
     await cleanup_orphan_permissions()
     # 🔧 دمج الأدوار المكررة (مثل عدة "رئيس قسم") قبل مزامنة role
     await cleanup_duplicate_roles_internal()
     # 🔧 Migration دائمة: إصلاح المستخدمين ذوي الأدوار الشاذة تلقائياً
     await migrate_broken_user_roles()
+
+
+async def restore_lecture_permissions_v1():
+    """Migration لمرة واحدة: استعادة صلاحيات المحاضرات للأدوار الافتراضية
+    التي فقدتها أثناء orphan cleanup عند تحويل manage_lectures إلى صلاحية مخفية.
+    يعمل مرة واحدة فقط (محفوظ في meta.lectures_migration_v1).
+    """
+    try:
+        meta = await db.meta.find_one({"_id": "lectures_migration_v1"})
+        if meta and meta.get("done"):
+            return  # تم التشغيل سابقاً
+
+        LECTURE_PERMS = [
+            Permission.MANAGE_LECTURES, Permission.VIEW_LECTURES,
+            Permission.ADD_LECTURE, Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
+            Permission.OVERRIDE_LECTURE_STATUS, Permission.RESCHEDULE_LECTURE,
+            Permission.GENERATE_LECTURES,
+        ]
+        role_map = {
+            "admin": UserRole.ADMIN, "teacher": UserRole.TEACHER,
+            "employee": UserRole.EMPLOYEE, "dean": UserRole.DEAN,
+            "department_head": UserRole.DEPARTMENT_HEAD,
+        }
+        restored = 0
+        for system_key, role_enum in role_map.items():
+            default_perms = DEFAULT_PERMISSIONS.get(role_enum, [])
+            missing = [p for p in LECTURE_PERMS if p in default_perms]
+            if not missing:
+                continue
+            role = await db.roles.find_one({"system_key": system_key})
+            if not role:
+                continue
+            current = role.get("permissions") or []
+            to_add = [p for p in missing if p not in current]
+            if to_add:
+                new_perms = list(dict.fromkeys(current + to_add))
+                await db.roles.update_one({"_id": role["_id"]}, {"$set": {"permissions": new_perms}})
+                restored += 1
+                logging.info(f"✅ استعادة {len(to_add)} صلاحية محاضرات للدور {system_key}")
+
+        await db.meta.update_one(
+            {"_id": "lectures_migration_v1"},
+            {"$set": {"done": True, "restored_roles": restored, "at": get_yemen_time()}},
+            upsert=True,
+        )
+        if restored:
+            logging.info(f"✅ Lectures migration v1: restored permissions in {restored} role(s).")
+    except Exception as e:
+        logging.error(f"Lectures migration v1 failed (non-critical): {e}")
 
 
 async def cleanup_orphan_permissions():

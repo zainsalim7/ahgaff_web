@@ -296,15 +296,16 @@ ALL_PERMISSIONS = [
     {"key": Permission.ADD_FACULTY, "label": "إضافة كلية", "category": "الكليات"},
     {"key": Permission.EDIT_FACULTY, "label": "تعديل كلية", "category": "الكليات"},
     {"key": Permission.DELETE_FACULTY, "label": "حذف كلية", "category": "الكليات"},
-    {"key": Permission.MANAGE_LECTURES, "label": "إدارة كاملة للمحاضرات", "category": "المحاضرات"},
-    {"key": Permission.VIEW_LECTURES, "label": "عرض المحاضرات", "category": "المحاضرات"},
-    {"key": Permission.ADD_LECTURE, "label": "إضافة محاضرة", "category": "المحاضرات"},
-    {"key": Permission.EDIT_LECTURE, "label": "تعديل محاضرة", "category": "المحاضرات"},
-    {"key": Permission.DELETE_LECTURE, "label": "حذف محاضرة", "category": "المحاضرات"},
-    {"key": Permission.OVERRIDE_LECTURE_STATUS, "label": "تغيير حالة المحاضرة (غائب/مجدولة/منعقدة)", "category": "المحاضرات"},
-    {"key": Permission.RESCHEDULE_LECTURE, "label": "إعادة جدولة المحاضرات", "category": "المحاضرات"},
-    {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات"},
     {"key": Permission.VIEW_SCHEDULE, "label": "عرض الجدول الدراسي (اليومي والأسبوعي)", "category": "الجداول الدراسية"},
+    # صلاحيات المحاضرات: مخفية من الواجهة (تُمنح تلقائياً مع manage_courses) لكن صالحة في الـ Backend
+    {"key": Permission.MANAGE_LECTURES, "label": "إدارة كاملة للمحاضرات", "category": "المحاضرات", "hidden": True},
+    {"key": Permission.VIEW_LECTURES, "label": "عرض المحاضرات", "category": "المحاضرات", "hidden": True},
+    {"key": Permission.ADD_LECTURE, "label": "إضافة محاضرة", "category": "المحاضرات", "hidden": True},
+    {"key": Permission.EDIT_LECTURE, "label": "تعديل محاضرة", "category": "المحاضرات", "hidden": True},
+    {"key": Permission.DELETE_LECTURE, "label": "حذف محاضرة", "category": "المحاضرات", "hidden": True},
+    {"key": Permission.OVERRIDE_LECTURE_STATUS, "label": "تغيير حالة المحاضرة", "category": "المحاضرات", "hidden": True},
+    {"key": Permission.RESCHEDULE_LECTURE, "label": "إعادة جدولة المحاضرات", "category": "المحاضرات", "hidden": True},
+    {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات", "hidden": True},
     {"key": Permission.MANAGE_SCHEDULE, "label": "إدارة كاملة للجداول الدراسية", "category": "الجداول الدراسية"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
@@ -347,8 +348,13 @@ FULL_PERMISSION_MAPPING = {
         Permission.EDIT_DEPARTMENT, Permission.DELETE_DEPARTMENT
     ],
     Permission.MANAGE_COURSES: [
-        Permission.VIEW_COURSES, Permission.ADD_COURSE, 
-        Permission.EDIT_COURSE, Permission.DELETE_COURSE
+        Permission.VIEW_COURSES, Permission.ADD_COURSE,
+        Permission.EDIT_COURSE, Permission.DELETE_COURSE,
+        # المحاضرات صلاحيات فرعية تحت إدارة المقررات (لا تُمنح مستقلة)
+        Permission.MANAGE_LECTURES, Permission.VIEW_LECTURES,
+        Permission.ADD_LECTURE, Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
+        Permission.OVERRIDE_LECTURE_STATUS, Permission.RESCHEDULE_LECTURE,
+        Permission.GENERATE_LECTURES
     ],
     Permission.MANAGE_STUDENTS: [
         Permission.VIEW_STUDENTS, Permission.ADD_STUDENT, 
@@ -365,6 +371,12 @@ FULL_PERMISSION_MAPPING = {
     Permission.MANAGE_FACULTIES: [
         Permission.VIEW_FACULTIES, Permission.ADD_FACULTY, 
         Permission.EDIT_FACULTY, Permission.DELETE_FACULTY
+    ],
+    Permission.MANAGE_LECTURES: [
+        Permission.VIEW_LECTURES, Permission.ADD_LECTURE, 
+        Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
+        Permission.OVERRIDE_LECTURE_STATUS, Permission.RESCHEDULE_LECTURE,
+        Permission.GENERATE_LECTURES
     ],
     Permission.MANAGE_LECTURES: [
         Permission.VIEW_LECTURES, Permission.ADD_LECTURE, 

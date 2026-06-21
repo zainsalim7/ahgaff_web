@@ -99,7 +99,7 @@ export default function AdminScreen() {
       groupIcon: 'calendar',
       groupColor: '#9c27b0',
       items: [
-        { title: 'جدول المحاضرات', icon: 'calendar', color: '#9c27b0', bg: '#f3e5f5', route: '/schedule', permission: 'manage_lectures' },
+        { title: 'جدول المحاضرات', icon: 'calendar', color: '#9c27b0', bg: '#f3e5f5', route: '/schedule', permission: 'view_schedule' },
         { title: 'إدارة التقويم', icon: 'calendar-number', color: '#1565c0', bg: '#e3f2fd', route: '/university-calendar', permission: null, adminOnly: true },
         { title: 'عرض التقويم', icon: 'eye', color: '#00838f', bg: '#e0f7fa', route: '/calendar', permission: null },
         { title: 'الأقسام', icon: 'grid', color: '#009688', bg: '#e0f2f1', route: '/add-department', permission: 'view_reports' },
