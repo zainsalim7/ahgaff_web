@@ -117,12 +117,24 @@ export default function ManageTeachersScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [teachersRes, deptsRes] = await Promise.all([
+      // 🛡️ Promise.allSettled: لو فشل أي API (مثلاً 403)، البقية تكمل عملها
+      const results = await Promise.allSettled([
         teachersAPI.getAll(),
         departmentsAPI.getAll(),
       ]);
-      setTeachers(teachersRes.data);
-      setDepartments(deptsRes.data);
+      const [teachersRes, deptsRes] = results;
+      if (teachersRes.status === 'fulfilled') {
+        setTeachers(teachersRes.value.data || []);
+      } else {
+        console.warn('Failed to fetch teachers:', teachersRes.reason);
+        setTeachers([]);
+      }
+      if (deptsRes.status === 'fulfilled') {
+        setDepartments(deptsRes.value.data || []);
+      } else {
+        console.warn('Failed to fetch departments:', deptsRes.reason);
+        setDepartments([]);
+      }
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
