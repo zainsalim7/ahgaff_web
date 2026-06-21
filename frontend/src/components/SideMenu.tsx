@@ -115,7 +115,7 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [], adminOnly: true },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: [], adminOnly: true },
-  { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', permissions: [PERMISSIONS.MANAGE_USERS] },
+  { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', permissions: [PERMISSIONS.MANAGE_ROLES] },
   { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', permissions: [PERMISSIONS.VIEW_REPORTS], adminOnly: true },
   // الأرشيف الدراسي
   { id: 'archives-divider', label: 'الأرشيف الدراسي', icon: 'archive', path: '', permissions: [PERMISSIONS.VIEW_ARCHIVE] },

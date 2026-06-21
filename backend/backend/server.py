@@ -1472,7 +1472,7 @@ async def get_all_roles(current_user: dict = Depends(get_current_user)):
 @api_router.post("/roles")
 async def create_role(role_data: RoleCreate, current_user: dict = Depends(get_current_user)):
     """إنشاء دور جديد"""
-    if current_user["role"] != "admin":
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_roles"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من عدم وجود دور بنفس الاسم
@@ -1527,7 +1527,7 @@ async def get_role(role_id: str, current_user: dict = Depends(get_current_user))
 @api_router.put("/roles/{role_id}")
 async def update_role(role_id: str, role_data: RoleUpdate, current_user: dict = Depends(get_current_user)):
     """تحديث دور"""
-    if current_user["role"] != "admin":
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_roles"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     role = await db.roles.find_one({"_id": ObjectId(role_id)})
@@ -1577,7 +1577,7 @@ async def update_role(role_id: str, role_data: RoleUpdate, current_user: dict = 
 @api_router.delete("/roles/{role_id}")
 async def delete_role(role_id: str, current_user: dict = Depends(get_current_user)):
     """حذف دور"""
-    if current_user["role"] != "admin":
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_roles"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     role = await db.roles.find_one({"_id": ObjectId(role_id)})

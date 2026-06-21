@@ -136,7 +136,8 @@ export default function ManageUsersScreen() {
 
   const fetchData = useCallback(async () => {
     try {
-      const [usersRes, permsRes, deptsRes, coursesRes, rolesRes, facultiesRes] = await Promise.all([
+      // 🛡️ Promise.allSettled: لو فشل أي API (مثلاً 403 على /roles)، البقية تكمل عملها
+      const results = await Promise.allSettled([
         usersAPI.getAll(),
         permissionsAPI.getAvailable(),
         departmentsAPI.getAll(),
@@ -144,17 +145,28 @@ export default function ManageUsersScreen() {
         rolesAPI.getAll(),
         facultiesAPI.getAll(),
       ]);
-      
-      setUsers(usersRes.data);
-      setFilteredUsers(usersRes.data);
-      setPermissions(permsRes.data.permissions || []);
-      setScopeTypes(permsRes.data.scope_types || []);
-      setRoles(rolesRes.data || []);
-      console.log('Roles loaded:', rolesRes.data?.length, 'roles');
-      console.log('Roles data:', JSON.stringify(rolesRes.data?.slice(0, 3)));
-      setDepartments(deptsRes.data);
-      setCourses(coursesRes.data);
-      setFaculties(facultiesRes.data || []);
+
+      const [usersRes, permsRes, deptsRes, coursesRes, rolesRes, facultiesRes] = results;
+
+      if (usersRes.status === 'fulfilled') {
+        setUsers(usersRes.value.data);
+        setFilteredUsers(usersRes.value.data);
+      } else {
+        console.warn('Failed to fetch users:', usersRes.reason);
+      }
+      if (permsRes.status === 'fulfilled') {
+        setPermissions(permsRes.value.data.permissions || []);
+        setScopeTypes(permsRes.value.data.scope_types || []);
+      }
+      if (rolesRes.status === 'fulfilled') {
+        setRoles(rolesRes.value.data || []);
+      } else {
+        console.warn('Failed to fetch roles (user may lack manage_roles):', rolesRes.reason);
+        setRoles([]);
+      }
+      if (deptsRes.status === 'fulfilled') setDepartments(deptsRes.value.data);
+      if (coursesRes.status === 'fulfilled') setCourses(coursesRes.value.data);
+      if (facultiesRes.status === 'fulfilled') setFaculties(facultiesRes.value.data || []);
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
