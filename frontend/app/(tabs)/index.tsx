@@ -680,6 +680,19 @@ export default function HomeScreen() {
                 </TouchableOpacity>
                 )}
 
+                {can(['manage_enrollments', 'view_enrollments', 'add_enrollment', 'delete_enrollment']) && (
+                <TouchableOpacity
+                  style={styles.adminRoleCard}
+                  onPress={() => router.push('/manage-enrollments' as any)}
+                  data-testid="dashboard-enrollments-card"
+                >
+                  <View style={[styles.adminRoleIcon, { backgroundColor: '#fce4ec' }]}>
+                    <Ionicons name="clipboard" size={28} color="#e91e63" />
+                  </View>
+                  <Text style={styles.adminRoleTitle}>التسجيلات</Text>
+                </TouchableOpacity>
+                )}
+
                 {can(['manage_courses', 'view_courses']) && (
                 <TouchableOpacity
                   style={styles.adminRoleCard}
