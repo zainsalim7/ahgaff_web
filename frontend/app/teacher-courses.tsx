@@ -60,6 +60,10 @@ export default function TeacherCoursesScreen() {
   const { teacherId, teacherName } = useLocalSearchParams<{ teacherId: string; teacherName?: string }>();
   const router = useRouter();
 
+  // 🔒 صلاحيات إسناد المقررات للمعلمين
+  const { hasPermission } = useAuth();
+  const canAssign = hasPermission(PERMISSIONS.MANAGE_TEACHING_LOAD);
+
   const [data, setData] = useState<TeacherCoursesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [teacherDept, setTeacherDept] = useState<string>('');
@@ -370,8 +374,9 @@ export default function TeacherCoursesScreen() {
               <Text style={styles.btnPrimaryText}>{exportingPdf ? 'جاري التصدير...' : 'تصدير PDF'}</Text>
             </TouchableOpacity>
             <TouchableOpacity
-              style={[styles.headerBtn, styles.btnPrimary]}
-              onPress={openAssignModal}
+              style={[styles.headerBtn, styles.btnPrimary, !canAssign && { opacity: 0.4 }]}
+              onPress={() => { if (!canAssign) { showMessage('غير مصرح', 'ليس لديك صلاحية إسناد المقررات'); return; } openAssignModal(); }}
+              disabled={!canAssign}
               testID="assign-course-btn"
             >
               <Ionicons name="add" size={16} color="#fff" />
@@ -447,7 +452,7 @@ export default function TeacherCoursesScreen() {
             <View style={styles.emptyState}>
               <Ionicons name="book-outline" size={56} color="#cfd6e1" />
               <Text style={styles.emptyText}>لا توجد مقررات مسندة لهذا المعلم</Text>
-              <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { marginTop: 14 }]} onPress={openAssignModal}>
+              <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { marginTop: 14 }, !canAssign && { opacity: 0.4 }]} onPress={() => { if (!canAssign) { showMessage('غير مصرح', 'ليس لديك صلاحية إسناد المقررات'); return; } openAssignModal(); }} disabled={!canAssign}>
                 <Ionicons name="add" size={16} color="#fff" />
                 <Text style={styles.btnPrimaryText}>إسناد أول مقرر</Text>
               </TouchableOpacity>
@@ -510,16 +515,18 @@ export default function TeacherCoursesScreen() {
                     <Ionicons name="chevron-back" size={20} color="#c0c8d4" />
                   </TouchableOpacity>
 
-                  <View style={styles.courseActions}>
-                    <TouchableOpacity
-                      style={[styles.actionBtn, styles.actionUnassign]}
-                      onPress={() => setUnassignTarget(course)}
-                      testID={`unassign-btn-${course.id}`}
-                    >
-                      <Ionicons name="close-circle-outline" size={14} color="#f44336" />
-                      <Text style={styles.actionUnassignText}>إلغاء الإسناد</Text>
-                    </TouchableOpacity>
-                  </View>
+                  {canAssign && (
+                    <View style={styles.courseActions}>
+                      <TouchableOpacity
+                        style={[styles.actionBtn, styles.actionUnassign]}
+                        onPress={() => setUnassignTarget(course)}
+                        testID={`unassign-btn-${course.id}`}
+                      >
+                        <Ionicons name="close-circle-outline" size={14} color="#f44336" />
+                        <Text style={styles.actionUnassignText}>إلغاء الإسناد</Text>
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>

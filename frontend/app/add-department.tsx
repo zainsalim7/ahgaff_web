@@ -63,6 +63,9 @@ export default function AddDepartmentScreen() {
   // صلاحيات
   const { hasPermission, user } = useAuth();
   const canManageDepts = hasPermission(PERMISSIONS.MANAGE_DEPARTMENTS);
+  const canAddDept = canManageDepts || hasPermission('add_department');
+  const canEditDept = canManageDepts || hasPermission('edit_department');
+  const canDeleteDept = canManageDepts || hasPermission('delete_department');
 
   // Delete confirmation modal
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
@@ -392,7 +395,7 @@ export default function AddDepartmentScreen() {
               </View>
 
               <View dataSet={{ responsive: "page-header-actions" }} style={styles.pageHeaderActions}>
-                {canManageDepts && (
+                {canAddDept && (
                   <TouchableOpacity
                     style={[styles.headerBtn, styles.btnPrimary]}
                     onPress={() => { resetForm(); setEditingDept(null); setShowForm(true); }}
@@ -514,7 +517,7 @@ export default function AddDepartmentScreen() {
                   <Text style={styles.tableEmptyText}>
                     {searchQuery || filterFacultyId ? 'لا توجد نتائج مطابقة' : 'لا توجد أقسام بعد'}
                   </Text>
-                  {canManageDepts && !searchQuery && !filterFacultyId && (
+                  {canAddDept && !searchQuery && !filterFacultyId && (
                     <TouchableOpacity
                       style={[styles.headerBtn, styles.btnPrimary, { marginTop: 10 }]}
                       onPress={() => { resetForm(); setEditingDept(null); setShowForm(true); }}
@@ -581,24 +584,28 @@ export default function AddDepartmentScreen() {
                         >
                           <Ionicons name="eye-outline" size={16} color="#2962ff" />
                         </TouchableOpacity>
-                        {canManageDepts && (
+                        {(canEditDept || canDeleteDept) && (
                           <>
-                            <TouchableOpacity
-                              style={[styles.actionIconBtn, { backgroundColor: '#fff3e0', borderColor: '#ffe0b2' }]}
-                              onPress={() => handleEdit(item)}
-                              accessibilityLabel="تعديل"
-                              data-testid={`edit-dept-${item.id}`}
-                            >
-                              <Ionicons name="pencil-outline" size={16} color="#ff9800" />
-                            </TouchableOpacity>
-                            <TouchableOpacity
-                              style={[styles.actionIconBtn, { backgroundColor: '#ffebee', borderColor: '#ffcdd2' }]}
-                              onPress={() => handleDelete(item.id, item.name)}
-                              accessibilityLabel="حذف"
-                              data-testid={`delete-dept-${item.id}`}
-                            >
-                              <Ionicons name="trash-outline" size={16} color="#f44336" />
-                            </TouchableOpacity>
+                            {canEditDept && (
+                              <TouchableOpacity
+                                style={[styles.actionIconBtn, { backgroundColor: '#fff3e0', borderColor: '#ffe0b2' }]}
+                                onPress={() => handleEdit(item)}
+                                accessibilityLabel="تعديل"
+                                data-testid={`edit-dept-${item.id}`}
+                              >
+                                <Ionicons name="pencil-outline" size={16} color="#ff9800" />
+                              </TouchableOpacity>
+                            )}
+                            {canDeleteDept && (
+                              <TouchableOpacity
+                                style={[styles.actionIconBtn, { backgroundColor: '#ffebee', borderColor: '#ffcdd2' }]}
+                                onPress={() => handleDelete(item.id, item.name)}
+                                accessibilityLabel="حذف"
+                                data-testid={`delete-dept-${item.id}`}
+                              >
+                                <Ionicons name="trash-outline" size={16} color="#f44336" />
+                              </TouchableOpacity>
+                            )}
                           </>
                         )}
                       </View>

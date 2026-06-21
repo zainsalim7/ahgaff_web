@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import api from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 
 interface TeacherItem {
   id: string;
@@ -54,12 +55,24 @@ interface DeptSummary {
 export default function DepartmentDetailsScreen() {
   const { departmentId } = useLocalSearchParams<{ departmentId: string }>();
   const router = useRouter();
+  const { hasAnyPermission } = useAuth();
+  // 🔒 صلاحيات عرض التبويبات داخل القسم
+  const canViewTeachers = hasAnyPermission([
+    PERMISSIONS.MANAGE_TEACHERS, 'view_teachers', 'add_teacher', 'edit_teacher', 'delete_teacher'
+  ]);
+  const canViewCourses = hasAnyPermission([
+    PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_COURSES, 'add_course', 'edit_course', 'delete_course'
+  ]);
+  // 🔒 السماح بالانتقال لصفحة إسناد المقررات فقط لمن لديه صلاحية العبء التدريسي
+  const canOpenTeacherCourses = hasAnyPermission([
+    PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
+  ]);
   const [data, setData] = useState<DeptSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
-  const [tab, setTab] = useState<'teachers' | 'courses'>('teachers');
+  const [tab, setTab] = useState<'teachers' | 'courses'>(canViewTeachers ? 'teachers' : 'courses');
 
   const fetchData = useCallback(async () => {
     if (!departmentId) return;
@@ -224,26 +237,38 @@ export default function DepartmentDetailsScreen() {
         {/* تبويبات + بحث */}
         <View style={styles.sectionCard}>
           <View style={styles.tabsRow}>
-            <TouchableOpacity
-              style={[styles.tab, tab === 'teachers' && styles.tabActive]}
-              onPress={() => setTab('teachers')}
-              testID="tab-teachers"
-            >
-              <Ionicons name="school" size={14} color={tab === 'teachers' ? '#fff' : '#5b6678'} />
-              <Text style={[styles.tabText, tab === 'teachers' && { color: '#fff' }]}>
-                المعلمون ({data.teachers.length})
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[styles.tab, tab === 'courses' && styles.tabActive]}
-              onPress={() => setTab('courses')}
-              testID="tab-courses"
-            >
-              <Ionicons name="book" size={14} color={tab === 'courses' ? '#fff' : '#5b6678'} />
-              <Text style={[styles.tabText, tab === 'courses' && { color: '#fff' }]}>
-                المقررات ({data.courses.length})
-              </Text>
-            </TouchableOpacity>
+            {canViewTeachers && (
+              <TouchableOpacity
+                style={[styles.tab, tab === 'teachers' && styles.tabActive]}
+                onPress={() => setTab('teachers')}
+                testID="tab-teachers"
+              >
+                <Ionicons name="school" size={14} color={tab === 'teachers' ? '#fff' : '#5b6678'} />
+                <Text style={[styles.tabText, tab === 'teachers' && { color: '#fff' }]}>
+                  المعلمون ({data.teachers.length})
+                </Text>
+              </TouchableOpacity>
+            )}
+            {canViewCourses && (
+              <TouchableOpacity
+                style={[styles.tab, tab === 'courses' && styles.tabActive]}
+                onPress={() => setTab('courses')}
+                testID="tab-courses"
+              >
+                <Ionicons name="book" size={14} color={tab === 'courses' ? '#fff' : '#5b6678'} />
+                <Text style={[styles.tabText, tab === 'courses' && { color: '#fff' }]}>
+                  المقررات ({data.courses.length})
+                </Text>
+              </TouchableOpacity>
+            )}
+            {!canViewTeachers && !canViewCourses && (
+              <View style={{ padding: 16, alignItems: 'center', flex: 1 }}>
+                <Ionicons name="lock-closed-outline" size={32} color="#cfd6e1" />
+                <Text style={{ color: '#8a95a8', fontSize: 13, marginTop: 8, textAlign: 'center' }}>
+                  ليس لديك صلاحية عرض المعلمين أو المقررات
+                </Text>
+              </View>
+            )}
           </View>
 
           <View style={styles.searchWrap}>
@@ -255,6 +280,7 @@ export default function DepartmentDetailsScreen() {
               value={search}
               onChangeText={setSearch}
               testID="search-input"
+              editable={canViewTeachers || canViewCourses}
             />
             {!!search && (
               <TouchableOpacity onPress={() => setSearch('')}>
@@ -264,7 +290,7 @@ export default function DepartmentDetailsScreen() {
           </View>
 
           {/* قائمة المعلمين */}
-          {tab === 'teachers' && (
+          {tab === 'teachers' && canViewTeachers && (
             <View style={styles.listWrap}>
               {teachersList.length === 0 ? (
                 <View style={styles.emptyState}>
@@ -277,11 +303,15 @@ export default function DepartmentDetailsScreen() {
                 teachersList.map(t => (
                   <TouchableOpacity
                     key={t.id}
-                    style={styles.itemRow}
-                    onPress={() => router.push({
-                      pathname: '/teacher-courses',
-                      params: { teacherId: t.id, teacherName: t.full_name },
-                    } as any)}
+                    style={[styles.itemRow, !canOpenTeacherCourses && { opacity: 0.95 }]}
+                    onPress={() => {
+                      if (!canOpenTeacherCourses) return; // 🔒 لا يفتح صفحة إسناد المقررات بدون صلاحية
+                      router.push({
+                        pathname: '/teacher-courses',
+                        params: { teacherId: t.id, teacherName: t.full_name },
+                      } as any);
+                    }}
+                    activeOpacity={canOpenTeacherCourses ? 0.5 : 1}
                     testID={`teacher-row-${t.id}`}
                   >
                     <View style={[styles.itemIconBox, { backgroundColor: '#f3e5f5' }]}>
@@ -316,7 +346,7 @@ export default function DepartmentDetailsScreen() {
           )}
 
           {/* قائمة المقررات */}
-          {tab === 'courses' && (
+          {tab === 'courses' && canViewCourses && (
             <View style={styles.listWrap}>
               {coursesList.length === 0 ? (
                 <View style={styles.emptyState}>

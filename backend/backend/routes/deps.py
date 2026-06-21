@@ -13,7 +13,7 @@ from typing import List, Optional
 import os
 import logging
 
-from models.permissions import UserRole, DEFAULT_PERMISSIONS
+from models.permissions import UserRole, DEFAULT_PERMISSIONS, FULL_PERMISSION_MAPPING
 
 # Rate Limiting
 import time as time_module
@@ -227,16 +227,29 @@ async def log_activity(
 
 
 def get_user_permissions(user: dict) -> List[str]:
-    """الحصول على صلاحيات المستخدم"""
-    return user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
+    """الحصول على صلاحيات المستخدم مع توسيع الصلاحيات الكاملة لتشمل الصلاحيات الفرعية"""
+    base_permissions = user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
+    expanded = set(base_permissions)
+    for perm in base_permissions:
+        if perm in FULL_PERMISSION_MAPPING:
+            expanded.update(FULL_PERMISSION_MAPPING[perm])
+    return list(expanded)
 
 
 def has_permission(user: dict, permission: str) -> bool:
-    """التحقق من أن المستخدم لديه صلاحية معينة"""
+    """التحقق من أن المستخدم لديه صلاحية معينة (مع دعم الصلاحيات الكاملة)"""
     if user["role"] == UserRole.ADMIN:
         return True
     permissions = get_user_permissions(user)
     return permission in permissions
+
+
+def has_any_permission(user: dict, perms: List[str]) -> bool:
+    """التحقق من أن المستخدم لديه على الأقل واحدة من الصلاحيات"""
+    if user["role"] == UserRole.ADMIN:
+        return True
+    permissions = get_user_permissions(user)
+    return any(p in permissions for p in perms)
 
 
 def require_permission(permission: str):

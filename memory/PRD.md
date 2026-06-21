@@ -13,6 +13,18 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-21 **🔒 إصلاح RBAC شامل لصلاحيات إدارة الأقسام (Sub-Permission Awareness)**:
+  - **المشكلة:** المستخدم منح صلاحيات `add_department/edit_department/delete_department` (فرعية) لكن backend/frontend كانا يتحققان فقط من `manage_departments` (الأم) → لم يستطع تحرير/إضافة الأقسام رغم وجود الصلاحيات.
+  - **مشكلة إضافية:** صفحة تفاصيل القسم كانت تعرض المعلمين والمقررات وتسمح بالنقر للوصول لإسناد المقررات لأي مستخدم بدون فحص أي صلاحية.
+  - **الإصلاحات:**
+    1. **Backend `server.py`:** POST/PUT/DELETE `/departments` تقبل الآن `manage_departments` OR الصلاحية الفرعية المناسبة (`add_department`/`edit_department`/`delete_department`)
+    2. **Backend `routes/deps.py`:** `has_permission` يوسّع `FULL_PERMISSION_MAPPING` (manage_departments → view/add/edit/delete) — كان يفتقد التوسعة
+    3. **Frontend `add-department.tsx`:** أزرار الإضافة/التعديل/الحذف تستخدم `canAddDept`/`canEditDept`/`canDeleteDept` بدلاً من check واحد
+    4. **Frontend `SideMenu.tsx`:** عنصر "إدارة الأقسام" يقبل أي من 5 صلاحيات (الأم + الفرعية الأربع)
+    5. **Frontend `department-details.tsx`:** تبويبات المعلمين/المقررات مفلترة بـ `view_teachers`/`view_courses` — رسالة قفل واضحة إذا لا توجد صلاحية
+    6. **Frontend `teacher-courses.tsx`:** زر "إسناد مقرر" و"إلغاء الإسناد" مفلتران بـ `manage_teaching_load` — النقر على المعلم في تفاصيل القسم لا يفتح صفحة الإسناد بدون صلاحية
+
+
 - 2026-06-20 **🌐 تحسين "الإسناد العابر" ليشمل كل الكليات (Cross-University)**:
   - **المشكلة:** في صفحة العبء التدريسي، عند تفعيل "عابر للأقسام":
     - كل معلم يُظهر قسم واحد فقط (`department_id`) رغم أن لديه عدة أقسام (`department_ids`)

@@ -1778,7 +1778,7 @@ async def reset_user_permissions(user_id: str, current_user: dict = Depends(get_
 
 @api_router.post("/departments", response_model=DepartmentResponse)
 async def create_department(dept: DepartmentCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "add_department"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     dept_dict = dept.dict()
@@ -1817,7 +1817,7 @@ async def get_departments(current_user: dict = Depends(get_current_user)):
 
 @api_router.delete("/departments/{dept_id}")
 async def delete_department(dept_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "delete_department"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
@@ -1845,7 +1845,7 @@ async def delete_department(dept_id: str, current_user: dict = Depends(get_curre
 
 @api_router.put("/departments/{dept_id}", response_model=DepartmentResponse)
 async def update_department(dept_id: str, dept: DepartmentCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments"):
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "edit_department"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     existing = await db.departments.find_one({"_id": ObjectId(dept_id)})

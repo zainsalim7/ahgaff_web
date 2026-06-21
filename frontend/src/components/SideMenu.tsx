@@ -68,7 +68,7 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
   
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [
-    PERMISSIONS.MANAGE_DEPARTMENTS
+    PERMISSIONS.MANAGE_DEPARTMENTS, 'view_departments', 'add_department', 'edit_department', 'delete_department'
   ]},
   
   { id: 'users', label: 'إدارة المستخدمين', icon: 'person-add', path: '/manage-users', permissions: [
