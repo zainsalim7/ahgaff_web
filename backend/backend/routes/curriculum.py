@@ -1042,31 +1042,48 @@ async def wipe_department_curriculum(
 async def get_curriculum_template(current_user: dict = Depends(get_current_user)):
     """تحميل نموذج Excel لرفع الخطة الدراسية لقسم.
     أعمدة: رمز المقرر | اسم المقرر | الساعات المعتمدة | المستوى | الفصل
-    'الفصل' يقبل: 1 / 2 / الأول / الثاني / first / second
+    'الفصل' يقبل: 1=الأول، 2=الثاني، 3=الصيفي
     """
     if not _has_manage(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     df = pd.DataFrame({
-        "رمز المقرر": ["FIB101", "FIB102", "ARB101", "NAH102", "AQD201"],
+        "رمز المقرر": ["FIB101", "FIB102", "ARB101", "NAH102", "AQD201", "SUM301"],
         "اسم المقرر": [
             "فقه عبادات (1)",
             "فقه عبادات (2)",
             "الكتابة العربية",
             "النحو (2)",
             "العقيدة الإسلامية",
+            "مقرر صيفي مكثّف",
         ],
-        "الساعات المعتمدة": [3, 3, 3, 2, 3],
-        "المستوى": [1, 1, 1, 1, 2],
-        "الفصل": [1, 2, 1, 2, "الأول"],
+        "الساعات المعتمدة": [3, 3, 3, 2, 3, 2],
+        "المستوى": [1, 1, 1, 1, 2, 2],
+        # 1=الفصل الأول، 2=الفصل الثاني، 3=الفصل الصيفي
+        "الفصل": [1, 2, 1, 2, "الأول", 3],
     })
     output = BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name="الخطة الدراسية")
-        # تعديل عرض الأعمدة
+        # تعديل عرض الأعمدة + إضافة ورقة "تعليمات"
         ws = writer.sheets["الخطة الدراسية"]
         widths = {"A": 18, "B": 35, "C": 18, "D": 12, "E": 12}
         for col, w in widths.items():
             ws.column_dimensions[col].width = w
+        # ورقة تعليمات لتوضيح قيم الفصل
+        instructions = pd.DataFrame({
+            "العمود": ["رمز المقرر", "اسم المقرر", "الساعات المعتمدة", "المستوى", "الفصل"],
+            "الوصف": [
+                "رمز فريد للمقرر (مثل FIB101)",
+                "اسم المقرر بالعربية",
+                "عدد الساعات المعتمدة (رقم)",
+                "المستوى الدراسي (1-6)",
+                "1=الأول، 2=الثاني، 3=الصيفي (يقبل أيضاً النصوص: الأول/الثاني/الصيفي)",
+            ],
+        })
+        instructions.to_excel(writer, index=False, sheet_name="تعليمات")
+        ws2 = writer.sheets["تعليمات"]
+        ws2.column_dimensions["A"].width = 22
+        ws2.column_dimensions["B"].width = 65
     output.seek(0)
     return StreamingResponse(
         output,
@@ -1078,7 +1095,9 @@ async def get_curriculum_template(current_user: dict = Depends(get_current_user)
 # ==================== Upload Helpers ====================
 
 def _normalize_term(value) -> Optional[int]:
-    """يحوّل القيمة إلى رقم فصل (1 أو 2) — يقبل النص والرقم."""
+    """يحوّل القيمة إلى رقم فصل (1 أو 2 أو 3) — يقبل النص والرقم.
+    1 = الفصل الأول، 2 = الفصل الثاني، 3 = الفصل الصيفي
+    """
     if value is None:
         return None
     s = str(value).strip().lower()
@@ -1089,10 +1108,12 @@ def _normalize_term(value) -> Optional[int]:
         return 1
     if s in ("2", "2.0", "ثاني", "الثاني", "second", "2nd"):
         return 2
+    if s in ("3", "3.0", "صيفي", "الصيفي", "صيف", "الصيف", "summer", "3rd"):
+        return 3
     # محاولة كرقم
     try:
         n = int(float(s))
-        if n in (1, 2):
+        if n in (1, 2, 3):
             return n
     except Exception:
         pass
@@ -1157,7 +1178,7 @@ def _parse_curriculum_excel(contents: bytes, filename: str) -> tuple[list, list]
             continue
         term = _normalize_term(row[col_map["term"]])
         if term is None:
-            errors.append(f"السطر {line_num}: الفصل غير معروف (المقبول: 1 أو 2 أو الأول أو الثاني)")
+            errors.append(f"السطر {line_num}: الفصل غير معروف (المقبول: 1=أول، 2=ثاني، 3=صيفي)")
             continue
 
         prereqs = []
