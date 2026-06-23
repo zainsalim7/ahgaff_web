@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuthStore } from '../../src/store/authStore';
 import { notificationsAPI } from '../../src/services/api';
+import { getRoleLabel } from '../../src/utils/roleLabels';
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -63,18 +64,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const getRoleLabel = (role?: string) => {
-    switch (role) {
-      case 'admin':
-        return 'مشرف';
-      case 'teacher':
-        return 'معلم';
-      case 'student':
-        return 'طالب';
-      default:
-        return 'مستخدم';
-    }
-  };
+  const getRoleLabelLocal = (role?: string) => getRoleLabel(role);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -86,7 +76,7 @@ export default function ProfileScreen() {
           </View>
           <Text style={styles.userName}>{user?.full_name}</Text>
           <View style={styles.roleBadge}>
-            <Text style={styles.roleText}>{getRoleLabel(user?.role)}</Text>
+            <Text style={styles.roleText}>{getRoleLabelLocal(user?.role)}</Text>
           </View>
         </View>
 

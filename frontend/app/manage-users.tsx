@@ -20,6 +20,7 @@ import { Picker } from '@react-native-picker/picker';
 import { usersAPI, permissionsAPI, departmentsAPI, coursesAPI, rolesAPI, facultiesAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth } from '../src/contexts/AuthContext';
+import { ROLE_LABELS, ROLE_COLORS } from '../src/utils/roleLabels';
 
 interface User {
   id: string;
@@ -57,30 +58,6 @@ interface Role {
   permissions: string[];
   is_system: boolean;
 }
-
-const ROLE_LABELS: Record<string, string> = {
-  admin: 'مدير النظام',
-  university_president: 'رئيس الجامعة',
-  dean: 'عميد كلية',
-  department_head: 'رئيس قسم',
-  registration_manager: 'مدير التسجيل',
-  registrar: 'موظف تسجيل',
-  teacher: 'مدرس',
-  employee: 'موظف',
-  student: 'طالب',
-};
-
-const ROLE_COLORS: Record<string, string> = {
-  admin: '#9c27b0',
-  university_president: '#1a237e',
-  dean: '#0d47a1',
-  department_head: '#1565c0',
-  registration_manager: '#00838f',
-  registrar: '#00695c',
-  teacher: '#2e7d32',
-  employee: '#ff9800',
-  student: '#4caf50',
-};
 
 export default function ManageUsersScreen() {
   const router = useRouter();

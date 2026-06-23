@@ -10,6 +10,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, Stack } from 'expo-router';
 import { API_URL } from '../src/services/api';
+import { getRoleLabel } from '../src/utils/roleLabels';
 
 export default function VerifyReportScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
@@ -53,13 +54,7 @@ export default function VerifyReportScreen() {
     } catch { return iso; }
   };
 
-  const roleLabel = (r?: string) => ({
-    admin: 'مدير النظام',
-    dean: 'عميد',
-    department_head: 'رئيس قسم',
-    registrar: 'مسجل',
-    registration_manager: 'مدير تسجيل',
-  }[r || ''] || r || '-');
+  const roleLabel = (r?: string) => getRoleLabel(r, '-');
 
   return (
     <>

@@ -13,6 +13,13 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-23 **🏷️ توحيد أسماء الأدوار العربية في الواجهة**:
+  - أنشئ `/app/frontend/src/utils/roleLabels.ts` كمصدر حقيقة وحيد لـ `ROLE_LABELS`/`ROLE_COLORS`/`getRoleLabel()`
+  - يدعم: admin, university_president, dean, department_head, registration_manager, registrar, teacher, employee, student, custom
+  - حدِّثت الملفات: `(tabs)/profile.tsx`، `src/components/SideMenu.tsx`، `manage-users.tsx`، `verify-report.tsx`
+  - الآن `registrar` يظهر "مسجِّل" بدلاً من "مستخدم"، و `employee` يظهر "موظف"، إلخ.
+  - الأسماء العربية المخصَّصة من Backend (`role` كاسم بالعربية) تُعرض كما هي
+
 - 2026-06-23 **🔍 إصلاح البحث الشامل للأدوار غير الإدارية**:
   - السبب الجذري: `routes/global_search.py` كان مقيَّداً بـ `is_admin or is_teacher` فقط → يمنع كل المسجلين/العمداء/رؤساء الأقسام/الموظفين من رؤية أي نتيجة
   - استُبدلت الفحوص الصلبة بفحوص صلاحيات دقيقة (`view_students`, `view_teachers`, `manage_enrollments`, إلخ.)

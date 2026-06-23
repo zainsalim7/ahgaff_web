@@ -13,6 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { useAuth, PERMISSIONS } from '../contexts/AuthContext';
+import { getRoleLabel } from '../utils/roleLabels';
 
 interface MenuItem {
   id: string;
@@ -208,14 +209,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
               <View>
                 <Text style={styles.userName}>{user?.full_name || 'مستخدم'}</Text>
                 <Text style={styles.userRole}>
-                  {userRole === 'admin' ? 'مدير النظام' :
-                   userRole === 'teacher' ? 'معلم' :
-                   userRole === 'student' ? 'طالب' :
-                   userRole === 'dean' ? 'عميد' :
-                   userRole === 'department_head' ? 'رئيس قسم' :
-                   userRole === 'registration_manager' ? 'مدير التسجيل' :
-                   userRole === 'registrar' ? 'موظف تسجيل' :
-                   'مستخدم'}
+                  {getRoleLabel(userRole)}
                 </Text>
               </View>
             </View>
