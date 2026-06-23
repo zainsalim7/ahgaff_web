@@ -638,13 +638,22 @@ export default function TeachingLoadPage() {
     }
   };
 
-  // Group summary by teacher
-  const groupedByTeacher = existingLoads.reduce((acc: Record<string, { name: string; empId: string; items: LoadItem[]; totalHours: number }>, item) => {
+  // Group summary by teacher + حساب ساعات داخل/خارج القسم
+  const groupedByTeacher = existingLoads.reduce((acc: Record<string, { name: string; empId: string; teacherDeptId: string; items: LoadItem[]; totalHours: number; inHours: number; outHours: number }>, item) => {
     if (!acc[item.teacher_id]) {
-      acc[item.teacher_id] = { name: item.teacher_name, empId: item.teacher_employee_id, items: [], totalHours: 0 };
+      const t = teachers.find(tt => tt.id === item.teacher_id) as any;
+      const tDept = String(t?.department_id || (Array.isArray(t?.department_ids) ? t.department_ids[0] : '') || '');
+      acc[item.teacher_id] = { name: item.teacher_name, empId: item.teacher_employee_id, teacherDeptId: tDept, items: [], totalHours: 0, inHours: 0, outHours: 0 };
     }
     acc[item.teacher_id].items.push(item);
     acc[item.teacher_id].totalHours += item.weekly_hours;
+    const courseDept = String((item as any).course_department_id || '');
+    const teacherDept = acc[item.teacher_id].teacherDeptId;
+    if (teacherDept && courseDept && courseDept !== teacherDept) {
+      acc[item.teacher_id].outHours += item.weekly_hours;
+    } else {
+      acc[item.teacher_id].inHours += item.weekly_hours;
+    }
     return acc;
   }, {});
 
@@ -1262,8 +1271,20 @@ export default function TeachingLoadPage() {
                     <Text style={styles.summaryTeacherName}>{group.name}</Text>
                     {group.empId ? <Text style={styles.summaryEmpId}>الرقم الوظيفي: {group.empId}</Text> : null}
                   </View>
-                  <View style={styles.summaryBadge}>
-                    <Text style={styles.summaryBadgeText}>{group.totalHours} ساعة/أسبوع</Text>
+                  <View style={{ alignItems: 'flex-start' }}>
+                    <View style={styles.summaryBadge}>
+                      <Text style={styles.summaryBadgeText}>{group.totalHours} ساعة/أسبوع</Text>
+                    </View>
+                    {group.outHours > 0 && (
+                      <View style={{ flexDirection: 'row-reverse', gap: 6, marginTop: 6 }}>
+                        <View style={{ backgroundColor: '#dcfce7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 10.5, color: '#15803d', fontWeight: '700' }}>داخل القسم: {group.inHours}</Text>
+                        </View>
+                        <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6 }}>
+                          <Text style={{ fontSize: 10.5, color: '#a16207', fontWeight: '700' }}>خارج القسم: {group.outHours}</Text>
+                        </View>
+                      </View>
+                    )}
                   </View>
                 </View>
                 <View style={styles.summaryTableHeader}>
@@ -1273,9 +1294,19 @@ export default function TeachingLoadPage() {
                   <Text style={[styles.summaryTableHeaderCell, { flex: 1 }]}>الساعات</Text>
                   <Text style={[styles.summaryTableHeaderCell, { flex: 0.5 }]}></Text>
                 </View>
-                {group.items.map((item) => (
-                  <View key={item.id} style={styles.summaryTableRow}>
-                    <Text style={[styles.summaryTableCell, { flex: 2 }]}>{item.course_name}</Text>
+                {group.items.map((item) => {
+                  const cDept = String((item as any).course_department_id || '');
+                  const isOutside = !!(group.teacherDeptId && cDept && cDept !== group.teacherDeptId);
+                  return (
+                  <View key={item.id} style={[styles.summaryTableRow, isOutside && { backgroundColor: '#fffbeb' }]}>
+                    <View style={{ flex: 2, flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                      <Text style={[styles.summaryTableCell, { flex: 0 }]}>{item.course_name}</Text>
+                      {isOutside && (
+                        <View style={{ backgroundColor: '#fef3c7', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                          <Text style={{ fontSize: 9.5, color: '#a16207', fontWeight: '800' }}>🏛️ خارج القسم</Text>
+                        </View>
+                      )}
+                    </View>
                     <Text style={[styles.summaryTableCell, { flex: 1, color: '#666' }]}>{item.course_code}</Text>
                     <Text style={[styles.summaryTableCell, { flex: 1, color: '#888' }]}>{item.course_section || '-'}</Text>
                     <Text style={[styles.summaryTableCell, { flex: 1, textAlign: 'center', fontWeight: '600' }]}>{item.weekly_hours}</Text>
@@ -1288,7 +1319,14 @@ export default function TeachingLoadPage() {
                       </TouchableOpacity>
                     </View>
                   </View>
-                ))}
+                  );
+                })}
+                {/* صف المجموع */}
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 10, backgroundColor: '#f1f5f9', borderTopWidth: 2, borderTopColor: '#cbd5e1', marginTop: 4 }}>
+                  <Text style={{ flex: 3, fontSize: 13, fontWeight: '800', color: '#0f172a', textAlign: 'right' }}>المجموع الكلي</Text>
+                  <Text style={{ flex: 1, fontSize: 14, fontWeight: '800', color: '#1565c0', textAlign: 'center' }}>{group.totalHours} ساعة</Text>
+                  <View style={{ flex: 0.5 }} />
+                </View>
               </View>
             ))
         }
