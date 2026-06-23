@@ -36,6 +36,15 @@ class GraduateRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class BulkGraduateRequest(BaseModel):
+    student_ids: list[str] = Field(..., description="قائمة معرفات الطلاب للتخريج")
+    graduation_year: int = Field(..., description="سنة التخرج (مشتركة لجميع المختارين)")
+    graduation_date: Optional[str] = None
+    graduation_semester: Optional[str] = None
+    honors: Optional[str] = None
+    notes: Optional[str] = None
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -138,6 +147,91 @@ async def graduate_student(
     return {
         "message": f"تم تخريج الطالب '{student.get('full_name')}' بنجاح",
         "student_id": student_id,
+        "graduation_year": body.graduation_year,
+    }
+
+
+# ============================
+# 1.5) Bulk Graduate
+# ============================
+@router.post("/students/bulk-graduate")
+async def bulk_graduate_students(
+    body: BulkGraduateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """تخريج عدة طلاب دفعة واحدة بنفس السنة المشتركة."""
+    _ensure_can_manage_students(current_user)
+    db = get_db()
+
+    if not body.student_ids:
+        raise HTTPException(status_code=400, detail="قائمة الطلاب فارغة")
+
+    graduated = 0
+    failed: list[dict] = []
+    skipped: list[dict] = []
+    now = _now()
+
+    for sid in body.student_ids:
+        try:
+            student = await db.students.find_one({"_id": ObjectId(sid)})
+        except Exception:
+            failed.append({"id": sid, "error": "معرف غير صحيح"})
+            continue
+        if not student:
+            failed.append({"id": sid, "error": "الطالب غير موجود"})
+            continue
+        if student.get("is_alumni") is True:
+            skipped.append({"id": sid, "name": student.get("full_name"), "reason": "متخرج بالفعل"})
+            continue
+        try:
+            await _ensure_student_in_user_scope(db, current_user, student)
+        except HTTPException as e:
+            failed.append({"id": sid, "name": student.get("full_name"), "error": e.detail})
+            continue
+
+        graduation_data = {
+            "year": body.graduation_year,
+            "date": body.graduation_date,
+            "semester": body.graduation_semester,
+            "final_gpa": None,
+            "total_credit_hours": None,
+            "certificate_number": None,
+            "honors": body.honors,
+            "notes": body.notes,
+            "graduated_at": now,
+            "graduated_by_user_id": current_user.get("id"),
+            "graduated_by_username": current_user.get("username"),
+            "bulk_graduation": True,
+        }
+        await db.students.update_one(
+            {"_id": ObjectId(sid)},
+            {"$set": {
+                "is_alumni": True,
+                "status": "graduated",
+                "graduation_date": body.graduation_date,
+                "graduated_from_level": student.get("level"),
+                "graduation_data": graduation_data,
+                "status_changed_at": now,
+            }},
+        )
+        graduated += 1
+
+    try:
+        await db.activity_logs.insert_one({
+            "user_id": current_user.get("id"),
+            "username": current_user.get("username"),
+            "action": "bulk_graduate",
+            "details": f"تخريج جماعي - سنة {body.graduation_year} - نجح {graduated} من {len(body.student_ids)}",
+            "timestamp": now,
+        })
+    except Exception:
+        pass
+
+    return {
+        "message": f"تم تخريج {graduated} طالب بنجاح",
+        "graduated": graduated,
+        "failed": failed,
+        "skipped": skipped,
         "graduation_year": body.graduation_year,
     }
 

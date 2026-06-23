@@ -66,16 +66,24 @@ interface AttendanceRecord {
   method: string;
 }
 
-// حالات الطالب
+// حالات الطالب (graduated مستثنى - يُعيَّن تلقائياً عند التخريج عبر زر تخريج)
 const STATUS_OPTIONS = [
   { value: 'active', label: 'مستمر', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' as const },
   { value: 'repeat', label: 'إعادة', color: '#ef6c00', bg: '#fff3e0', icon: 'refresh-circle' as const },
-  { value: 'graduated', label: 'متخرج', color: '#1565c0', bg: '#e3f2fd', icon: 'school' as const },
   { value: 'expelled', label: 'مفصول', color: '#c62828', bg: '#ffebee', icon: 'close-circle' as const },
   { value: 'frozen', label: 'مجمَّد', color: '#5e35b1', bg: '#ede7f6', icon: 'snow' as const },
 ];
+// خريطة كاملة للحالات (للعرض فقط - graduated يظهر هنا للطلاب المتخرجين سابقاً)
+const ALL_STATUS_INFO: Record<string, { label: string; color: string; bg: string; icon: any }> = {
+  active: { label: 'مستمر', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' },
+  repeat: { label: 'إعادة', color: '#ef6c00', bg: '#fff3e0', icon: 'refresh-circle' },
+  graduated: { label: 'متخرج', color: '#1565c0', bg: '#e3f2fd', icon: 'school' },
+  expelled: { label: 'مفصول', color: '#c62828', bg: '#ffebee', icon: 'close-circle' },
+  frozen: { label: 'مجمَّد', color: '#5e35b1', bg: '#ede7f6', icon: 'snow' },
+  inactive: { label: 'غير نشط', color: '#666', bg: '#f5f5f5', icon: 'help-circle' },
+};
 const getStatusInfo = (s: string) =>
-  STATUS_OPTIONS.find(o => o.value === s) || STATUS_OPTIONS[0];
+  ALL_STATUS_INFO[s] || ALL_STATUS_INFO.active;
 
 const LEVELS = ['1', '2', '3', '4', '5'];
 

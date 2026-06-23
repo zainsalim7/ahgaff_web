@@ -20,6 +20,8 @@ router = APIRouter(tags=["حالات الطلاب"])
 # ==================== Constants ====================
 
 VALID_STATUSES = {"active", "repeat", "graduated", "expelled", "frozen"}
+# الحالات المسموح تعيينها يدوياً عبر تغيير الحالة (graduated مستثنى - يجب استخدام /graduate)
+USER_SETTABLE_STATUSES = {"active", "repeat", "expelled", "frozen"}
 
 STATUS_LABELS = {
     "active": "مستمر",
@@ -61,6 +63,12 @@ def _validate_status(status: str) -> str:
         raise HTTPException(
             status_code=400,
             detail=f"حالة غير صحيحة: '{status}'. القيم المقبولة: {', '.join(VALID_STATUSES)}"
+        )
+    # 🆕 منع تعيين "متخرج" يدوياً - يجب استخدام endpoint التخريج مع بيانات السنة
+    if status == "graduated":
+        raise HTTPException(
+            status_code=400,
+            detail="لا يمكن تعيين حالة 'متخرج' يدوياً. استخدم زر 'تخريج الطالب' لإدخال بيانات التخرج الكاملة (السنة، المعدل، رقم الشهادة)."
         )
     return status
 

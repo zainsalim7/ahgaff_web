@@ -173,6 +173,15 @@ export default function StudentsScreen() {
   const [statusReason, setStatusReason] = useState('');
   const [applyingStatus, setApplyingStatus] = useState(false);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('');
+
+  // 🆕 التخريج الجماعي
+  const [showBulkGraduateModal, setShowBulkGraduateModal] = useState(false);
+  const [bulkGradYear, setBulkGradYear] = useState(String(new Date().getFullYear()));
+  const [bulkGradSemester, setBulkGradSemester] = useState('second');
+  const [bulkGradDate, setBulkGradDate] = useState('');
+  const [bulkGradHonors, setBulkGradHonors] = useState('');
+  const [bulkGradNotes, setBulkGradNotes] = useState('');
+  const [bulkGraduating, setBulkGraduating] = useState(false);
   // سجل التاريخ لطالب
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -488,6 +497,43 @@ export default function StudentsScreen() {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل تغيير الحالة');
     } finally {
       setApplyingStatus(false);
+    }
+  };
+
+  // 🆕 تخريج جماعي
+  const handleBulkGraduate = async () => {
+    if (selectedIds.size === 0) return;
+    const year = parseInt(bulkGradYear);
+    if (isNaN(year) || year < 2000 || year > 2100) {
+      showMessage('خطأ', 'سنة التخرج إلزامية وتكون بين 2000 و 2100');
+      return;
+    }
+    if (Platform.OS === 'web' && !window.confirm(
+      `🎓 تخريج ${selectedIds.size} طالب لسنة ${year}؟\nسينتقلون إلى قائمة الخريجين.`
+    )) return;
+    setBulkGraduating(true);
+    try {
+      const body: any = {
+        student_ids: Array.from(selectedIds),
+        graduation_year: year,
+      };
+      if (bulkGradDate) body.graduation_date = bulkGradDate;
+      if (bulkGradSemester) body.graduation_semester = bulkGradSemester;
+      if (bulkGradHonors) body.honors = bulkGradHonors;
+      if (bulkGradNotes) body.notes = bulkGradNotes;
+      const res = await api.post('/students/bulk-graduate', body);
+      const d = res.data;
+      const failedTxt = d.failed?.length ? `\nفشل: ${d.failed.length}` : '';
+      const skippedTxt = d.skipped?.length ? `\nتُجاوز: ${d.skipped.length}` : '';
+      showMessage('تم', `${d.message}${failedTxt}${skippedTxt}`);
+      setShowBulkGraduateModal(false);
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      fetchData();
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل التخريج');
+    } finally {
+      setBulkGraduating(false);
     }
   };
 
@@ -1293,6 +1339,11 @@ export default function StudentsScreen() {
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#5e35b1' }]} onPress={() => { setStatusToApply('repeat'); setStatusNewLevel(''); setStatusReason(''); setShowStatusModal(true); }} testID="bulk-change-status-btn">
                   <Ionicons name="shuffle" size={14} color="#fff" />
                   <Text style={styles.selActionText}>تغيير الحالة</Text>
+                </TouchableOpacity>
+                {/* 🆕 زر التخريج الجماعي */}
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#0d47a1' }]} onPress={() => setShowBulkGraduateModal(true)} testID="bulk-graduate-btn">
+                  <Ionicons name="school" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تخريج جماعي</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#f44336' }]} onPress={handleBulkDelete} disabled={deleting}>
                   {deleting ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash" size={14} color="#fff" />}
@@ -2473,6 +2524,130 @@ export default function StudentsScreen() {
         </View>
       </Modal>
       )}
+
+      {/* 🆕 ============ مودال التخريج الجماعي ============ */}
+      <Modal
+        visible={showBulkGraduateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBulkGraduateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 520 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="school" size={20} color="#0d47a1" />
+                <Text style={styles.modalTitle}>تخريج جماعي</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowBulkGraduateModal(false)} testID="close-bulk-grad">
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ backgroundColor: '#e3f2fd', padding: 10, borderRadius: 8, marginBottom: 10 }}>
+              <Text style={{ fontSize: 12, fontWeight: '600', color: '#0d47a1', textAlign: 'right' }}>
+                سيتم تخريج {selectedIds.size} طالب وإسناد سنة التخرج المختارة لجميعهم.
+              </Text>
+              <Text style={{ fontSize: 11, color: '#5a6c7d', textAlign: 'right', marginTop: 4 }}>
+                المعدل ورقم الشهادة يُضاف لكل طالب لاحقاً من تفاصيله.
+              </Text>
+            </View>
+
+            {/* سنة التخرج */}
+            <Text style={styles.label}>سنة التخرج * (إلزامي)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="2025"
+              value={bulkGradYear}
+              onChangeText={(v) => setBulkGradYear(v.replace(/[^0-9]/g, '').slice(0, 4))}
+              keyboardType="numeric"
+              maxLength={4}
+              testID="bulk-grad-year"
+            />
+
+            {/* الفصل */}
+            <Text style={styles.label}>الفصل الذي تخرّجوا فيه</Text>
+            <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: 8 }}>
+              {[
+                { v: 'first', label: 'الفصل الأول' },
+                { v: 'second', label: 'الفصل الثاني' },
+                { v: 'summer', label: 'الفصل الصيفي' },
+              ].map(s => (
+                <TouchableOpacity
+                  key={s.v}
+                  onPress={() => setBulkGradSemester(s.v)}
+                  style={{
+                    flex: 1,
+                    paddingVertical: 8,
+                    borderRadius: 6,
+                    borderWidth: 1.5,
+                    borderColor: bulkGradSemester === s.v ? '#0d47a1' : '#e0e7ee',
+                    backgroundColor: bulkGradSemester === s.v ? '#0d47a1' : '#fff',
+                    alignItems: 'center',
+                  }}
+                >
+                  <Text style={{ color: bulkGradSemester === s.v ? '#fff' : '#333', fontSize: 12, fontWeight: '700' }}>{s.label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {/* تاريخ */}
+            <Text style={styles.label}>تاريخ التخرج (اختياري)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="YYYY-MM-DD"
+              value={bulkGradDate}
+              onChangeText={setBulkGradDate}
+              testID="bulk-grad-date"
+            />
+
+            {/* التقدير */}
+            <Text style={styles.label}>التقدير الافتراضي (اختياري)</Text>
+            <TextInput
+              style={styles.input}
+              placeholder="دفعة 2025 / ممتاز / ..."
+              value={bulkGradHonors}
+              onChangeText={setBulkGradHonors}
+              testID="bulk-grad-honors"
+            />
+
+            {/* ملاحظات */}
+            <Text style={styles.label}>ملاحظات (اختياري)</Text>
+            <TextInput
+              style={[styles.input, { minHeight: 50, textAlignVertical: 'top' }]}
+              placeholder="..."
+              value={bulkGradNotes}
+              onChangeText={setBulkGradNotes}
+              multiline
+              testID="bulk-grad-notes"
+            />
+
+            <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#eee' }]}
+                onPress={() => setShowBulkGraduateModal(false)}
+                testID="bulk-grad-cancel"
+              >
+                <Text style={{ fontWeight: '700', color: '#333' }}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#0d47a1' }]}
+                onPress={handleBulkGraduate}
+                disabled={bulkGraduating}
+                testID="bulk-grad-confirm"
+              >
+                {bulkGraduating ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <>
+                    <Ionicons name="school" size={16} color="#fff" />
+                    <Text style={{ fontWeight: '700', color: '#fff' }}>تخريج {selectedIds.size} طالب</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

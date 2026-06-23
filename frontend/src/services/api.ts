@@ -415,6 +415,9 @@ export const studentsAPI = {
   // 🆕 تخريج طالب → ينقله إلى قائمة الخريجين
   graduate: (studentId: string, data: { graduation_year: number; graduation_date?: string; graduation_semester?: string; final_gpa?: number; total_credit_hours?: number; certificate_number?: string; honors?: string; notes?: string }) =>
     api.post(`/students/${studentId}/graduate`, data),
+  // 🆕 تخريج جماعي
+  bulkGraduate: (data: { student_ids: string[]; graduation_year: number; graduation_date?: string; graduation_semester?: string; honors?: string; notes?: string }) =>
+    api.post('/students/bulk-graduate', data),
 };
 
 // 🆕 Alumni API (الخريجون)
