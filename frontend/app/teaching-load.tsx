@@ -929,15 +929,42 @@ export default function TeachingLoadPage() {
                           // أولوية لاسم القسم/الكلية من الـ API (يعمل حتى لو كان القسم خارج نطاق المستخدم)
                           const cDeptName = (c as any).department_name || cDept?.name;
                           const cFacName = (c as any).faculty_name || cDept?.faculty_name || faculties.find(f => f.id === cDept?.faculty_id)?.name;
+                          // 🔒 تحديد إن كان المقرر "ضيف" (خارج كلية/أقسام المستخدم الحالي)
+                          const userRole = (user as any)?.role;
+                          const isAdminRole = userRole === 'admin' || userRole === 'university_president';
+                          const userFacultyId = (user as any)?.faculty_id || '';
+                          const userDeptIds: string[] = (user as any)?.department_ids
+                            || ((user as any)?.department_id ? [(user as any).department_id] : []);
+                          const courseFacultyId = (c as any).faculty_id || cDept?.faculty_id || '';
+                          const courseDeptId = c.department_id || '';
+                          // المقرر "ضيف" إذا: المستخدم ليس admin، وكليته/قسمه لا يطابق
+                          let isOutsideScope = false;
+                          if (!isAdminRole) {
+                            if (userDeptIds.length > 0) {
+                              // رئيس قسم: يقارن بقسمه
+                              isOutsideScope = courseDeptId ? !userDeptIds.includes(courseDeptId) : false;
+                            } else if (userFacultyId) {
+                              // عميد/مسجل/إلخ: يقارن بكليته
+                              isOutsideScope = courseFacultyId ? courseFacultyId !== userFacultyId : false;
+                            }
+                          }
                           return (
                           <TouchableOpacity
                             key={c.course_id}
-                            style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0' }}
+                            style={{ flexDirection: 'row-reverse', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#f0f0f0', backgroundColor: isOutsideScope ? '#fff8e1' : 'transparent' }}
                             onPress={() => addCourseToList(c)}
                             data-testid={`search-result-${c.course_id}`}
                           >
                             <View style={{ flex: 1 }}>
-                              <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', textAlign: 'right' }}>{c.course_name}</Text>
+                              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                                <Text style={{ fontSize: 14, fontWeight: '600', color: '#333', textAlign: 'right' }}>{c.course_name}</Text>
+                                {isOutsideScope && (
+                                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 3, backgroundColor: '#fff3cd', borderWidth: 1, borderColor: '#f0ad4e', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4 }}>
+                                    <Ionicons name="lock-closed" size={11} color="#b26a00" />
+                                    <Text style={{ fontSize: 10, color: '#b26a00', fontWeight: '700' }}>ضيف (خارج نطاقك)</Text>
+                                  </View>
+                                )}
+                              </View>
                               <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 4, marginTop: 3 }}>
                                 {c.course_code && <Text style={{ fontSize: 10.5, color: '#5a6c7d', background: '#f0f3f7', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 3 }}>{c.course_code}</Text>}
                                 {c.level != null && <Text style={{ fontSize: 10.5, color: '#0277bd', background: '#e1f5fe', paddingHorizontal: 6, paddingVertical: 1, borderRadius: 3 }}>المستوى {c.level}</Text>}
