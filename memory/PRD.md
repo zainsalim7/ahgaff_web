@@ -13,6 +13,12 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-23 **🏷️ إصلاح عرض القسم/الكلية لكل المقررات في صفحة العبء التدريسي**:
+  - السبب الجذري: `GET /api/teaching-load/search-courses` كان يُرجع فقط `department_id`، والواجهة تبحث عن الاسم في قائمة `departments` المحلية (المقصورة على نطاق المستخدم). أي مقرر بقسم خارج النطاق أو بـ `department_id` فارغ → لا يظهر اسم القسم/الكلية
+  - أُثري الـ Backend بجلب `department_name`/`faculty_id`/`faculty_name` لكل مقرر مباشرة
+  - حُدِّثت الواجهة لاستخدام الأسماء من الـ API كأولوية مع fallback للقائمة المحلية
+  - الآن كل المقررات تعرض القسم والكلية بشكل صحيح
+
 - 2026-06-23 **🏷️ توحيد أسماء الأدوار العربية في الواجهة**:
   - أنشئ `/app/frontend/src/utils/roleLabels.ts` كمصدر حقيقة وحيد لـ `ROLE_LABELS`/`ROLE_COLORS`/`getRoleLabel()`
   - يدعم: admin, university_president, dean, department_head, registration_manager, registrar, teacher, employee, student, custom

@@ -450,6 +450,32 @@ async def search_courses_for_load(
         except Exception:
             pass
 
+    # 🆕 إثراء بأسماء الأقسام والكليات (لتجاوز قصور الـ scope في الـ frontend)
+    dept_ids_set = {c.get("department_id") for c in courses if c.get("department_id")}
+    dept_map: dict = {}
+    faculty_ids_set: set = set()
+    if dept_ids_set:
+        try:
+            dept_obj_ids = [ObjectId(x) for x in dept_ids_set if x]
+            async for d in db.departments.find(
+                {"_id": {"$in": dept_obj_ids}}, {"name": 1, "faculty_id": 1}
+            ):
+                dept_map[str(d["_id"])] = d
+                if d.get("faculty_id"):
+                    faculty_ids_set.add(str(d.get("faculty_id")))
+        except Exception:
+            pass
+    faculty_map: dict = {}
+    if faculty_ids_set:
+        try:
+            fac_obj_ids = [ObjectId(x) for x in faculty_ids_set if x]
+            async for f in db.faculties.find(
+                {"_id": {"$in": fac_obj_ids}}, {"name": 1}
+            ):
+                faculty_map[str(f["_id"])] = f.get("name", "")
+        except Exception:
+            pass
+
     result = []
     for c in courses:
         teacher_name = ""
@@ -464,6 +490,12 @@ async def search_courses_for_load(
         wh = c.get("weekly_hours")
         if wh is None:
             wh = cc_hours_map.get(c.get("curriculum_course_id", ""))
+        # 🆕 استخراج بيانات القسم والكلية للمقرر (يعمل حتى لو القسم خارج نطاق المستخدم)
+        c_dept_id = str(c.get("department_id", "") or "")
+        c_dept_doc = dept_map.get(c_dept_id) if c_dept_id else None
+        c_dept_name = c_dept_doc.get("name", "") if c_dept_doc else ""
+        c_fac_id = str(c_dept_doc.get("faculty_id", "")) if c_dept_doc and c_dept_doc.get("faculty_id") else ""
+        c_fac_name = faculty_map.get(c_fac_id, "") if c_fac_id else ""
         result.append({
             "course_id": str(c["_id"]),
             "course_name": c.get("name", ""),
@@ -472,7 +504,10 @@ async def search_courses_for_load(
             "level": c.get("level", 1),
             "credit_hours": c.get("credit_hours", 3),
             "weekly_hours": wh,  # 🆕 يُستخدم كافتراضي في فورم الإسناد
-            "department_id": c.get("department_id", ""),
+            "department_id": c_dept_id,
+            "department_name": c_dept_name,   # 🆕
+            "faculty_id": c_fac_id,            # 🆕
+            "faculty_name": c_fac_name,        # 🆕
             "current_teacher_name": teacher_name,
             "semester_id": c.get("semester_id", ""),
         })

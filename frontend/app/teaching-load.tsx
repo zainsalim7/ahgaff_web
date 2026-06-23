@@ -926,8 +926,9 @@ export default function TeachingLoadPage() {
                       <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', zIndex: 1000, maxHeight: 280, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', direction: 'rtl' }}>
                         {searchResults.map(c => {
                           const cDept = departments.find((d: any) => d.id === c.department_id);
-                          const cDeptName = cDept?.name;
-                          const cFacName = cDept?.faculty_name || faculties.find(f => f.id === cDept?.faculty_id)?.name;
+                          // أولوية لاسم القسم/الكلية من الـ API (يعمل حتى لو كان القسم خارج نطاق المستخدم)
+                          const cDeptName = (c as any).department_name || cDept?.name;
+                          const cFacName = (c as any).faculty_name || cDept?.faculty_name || faculties.find(f => f.id === cDept?.faculty_id)?.name;
                           return (
                           <TouchableOpacity
                             key={c.course_id}
