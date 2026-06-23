@@ -526,6 +526,37 @@ export default function TeachingLoadPage() {
       return;
     }
 
+    // 🆕 رسالة تأكيد قبل الإسناد - تعرض ملخص العملية
+    const teacherObj = teachers.find(t => t.id === selectedTeacher);
+    const teacherName = teacherObj?.full_name || 'المعلم';
+    const totalHours = items.reduce((s, i) => s + (i.weekly_hours || 0), 0);
+    const newCount = items.filter(i => {
+      const c = selectedCourses.find(x => x.course_id === i.course_id);
+      return c && !c.existing_load_id;
+    }).length;
+    const updateCount = items.length - newCount;
+    const summaryLines = [
+      `📝 تأكيد إسناد العبء التدريسي`,
+      ``,
+      `👤 المعلم: ${teacherName}`,
+      `📚 عدد المقررات: ${items.length}${newCount ? ` (${newCount} جديد)` : ''}${updateCount ? ` (${updateCount} تحديث)` : ''}`,
+      `⏱️ إجمالي الساعات: ${totalHours}`,
+      ``,
+      `هل تريد المتابعة؟`,
+    ];
+    const confirmMessage = summaryLines.join('\n');
+    if (Platform.OS === 'web') {
+      if (!window.confirm(confirmMessage)) return;
+    } else {
+      const ok = await new Promise<boolean>(resolve => {
+        Alert.alert('تأكيد الإسناد', confirmMessage, [
+          { text: 'إلغاء', style: 'cancel', onPress: () => resolve(false) },
+          { text: 'تأكيد', onPress: () => resolve(true) },
+        ]);
+      });
+      if (!ok) return;
+    }
+
     setSaving(true);
     try {
       const res = await teachingLoadAPI.bulkSave(items);

@@ -245,7 +245,12 @@ api.interceptors.response.use(
     // 🔒 403 (لا توجد صلاحية) — وجّه لصفحة "ليس لديك صلاحية"
     // ⏱️ نُؤخّر التوجيه ~1.5 ثانية، وإن نجح أي طلب آخر خلال هذه الفترة، نُلغي
     // التوجيه — لأن 403 كان ثانوياً (مثلاً /archives فشل لكن /curriculum نجح).
-    if (status === 403 && !isAuthCall) {
+    // 🚫 استثناء: العمليات الكتابية (POST/PUT/PATCH/DELETE) لا تُحوِّل الصفحة.
+    //    السبب: غالباً تكون عمليات سياقية (مثل حذف مقرر خارج النطاق) — الواجهة
+    //    تعرض Alert/Toast مناسب ولا داعي لطرد المستخدم خارج الصفحة.
+    const reqMethod = (error.config?.method || '').toLowerCase();
+    const isWriteOp = ['post', 'put', 'patch', 'delete'].includes(reqMethod);
+    if (status === 403 && !isAuthCall && !isWriteOp) {
       try {
         const w: any = (typeof globalThis !== 'undefined' ? globalThis : {});
         const now = Date.now();
