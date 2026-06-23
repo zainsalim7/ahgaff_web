@@ -13,6 +13,14 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Parallel deployments: Railway + Google Cloud Run
 
 ## Implemented (selected, recent)
+- 2026-06-23 **🔍 إصلاح البحث الشامل للأدوار غير الإدارية**:
+  - السبب الجذري: `routes/global_search.py` كان مقيَّداً بـ `is_admin or is_teacher` فقط → يمنع كل المسجلين/العمداء/رؤساء الأقسام/الموظفين من رؤية أي نتيجة
+  - استُبدلت الفحوص الصلبة بفحوص صلاحيات دقيقة (`view_students`, `view_teachers`, `manage_enrollments`, إلخ.)
+  - أُضيف نطاق الكلية/القسم لكل أنواع البحث (طلاب، معلمين، مقررات، أقسام، كليات، محاضرات)
+  - أُضيفت آلية تسجيل `set_scope_filter` في `routes/deps.py` لاستيراد `get_user_scope_filter` من `server.py` بشكل آمن (الخادم يُحمَّل عبر `importlib` كـ `_actual_server`)
+  - استنتاج `faculty_id` من `department_id` لرؤساء الأقسام بدون كلية مباشرة
+  - مسجِّل التسجيل مع `manage_enrollments`/`view_enrollments` يحصل تلقائياً على البحث في معلمي كليته (لازم لإدارة التسجيل)
+
 - 2026-06-21 **🏗️ توحيد المعمار (الخيار ب) + فحص شامل للصلاحيات**:
   - **صفحة الإدارة `(tabs)/admin.tsx`** أُعيد كتابتها كاملاً → Dashboard إحصائيات فقط (بدلاً من قائمة 20+ رابط مكرر)
   - **الصفحة الرئيسية** كانت تشترط دور معين (`['dean', 'department_head', ...].includes(user.role)`) لإظهار البطاقات → استُبدِل بشرط الصلاحيات: أي مستخدم لديه صلاحية إدارية يرى البطاقات

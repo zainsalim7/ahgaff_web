@@ -986,6 +986,13 @@ async def get_teacher_course_ids(user_id: str, teacher_record_id: str = None) ->
     courses = await db.courses.find(query, {"_id": 1}).to_list(100)
     return [str(c["_id"]) for c in courses]
 
+# تسجيل دالة فلتر النطاق في deps لاستخدامها من ملفات الـ routes الأخرى
+try:
+    from routes.deps import set_scope_filter as _set_scope_filter
+    _set_scope_filter(get_user_scope_filter)
+except Exception as _e:
+    logging.warning(f"Could not register scope_filter to deps: {_e}")
+
 # ==================== Auth Routes ====================
 # تم نقل هذه الـ routes إلى routes/auth.py
 # الـ endpoints التالية متاحة عبر auth_router:

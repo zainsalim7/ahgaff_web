@@ -1,7 +1,7 @@
 """
 Global Search Route - بحث عام موحَّد
 - يبحث في: الطلاب، المعلمين، المقررات، الأقسام، الكليات، المحاضرات
-- يحترم صلاحيات المستخدم (RBAC)
+- يحترم صلاحيات المستخدم (RBAC) ونطاق الكلية/القسم
 - سريع: limit صغير لكل نوع + اختصار الحقول
 """
 import re
@@ -11,10 +11,15 @@ from urllib.parse import quote
 from bson import ObjectId
 from fastapi import APIRouter, Depends, Query
 
-from .deps import get_current_user, get_db
-from models.permissions import UserRole
+from .deps import get_current_user, get_db, has_any_permission, get_scope_filter
+from models.permissions import UserRole, Permission
 
 router = APIRouter(tags=["البحث الشامل"])
+
+
+async def _scope_filter(current_user: dict, scope_type: str) -> dict:
+    """فلتر النطاق حسب كلية/قسم المستخدم - يستخدم الدالة المسجَّلة في deps."""
+    return await get_scope_filter(current_user, scope_type)
 
 
 def _normalize_arabic(text: str) -> str:
@@ -63,6 +68,19 @@ def _esc(text: str) -> str:
     return re.escape(text or "")
 
 
+def _merge_query(base: dict, scope: dict) -> dict:
+    """دمج فلتر النطاق مع query البحث.
+    - إذا كان scope يحتوي على department_id/faculty_id/_id فإنه يُدمج بـ AND منطقي.
+    - يحافظ على $or البحث النصي.
+    """
+    if not scope:
+        return base
+    merged = dict(base)
+    for k, v in scope.items():
+        merged[k] = v
+    return merged
+
+
 @router.get("/search")
 async def global_search(
     q: str = Query(..., min_length=1, description="نص البحث"),
@@ -73,7 +91,7 @@ async def global_search(
     limit_per_type: int = Query(8, ge=1, le=20),
     current_user: dict = Depends(get_current_user),
 ):
-    """بحث شامل في النظام مع احترام صلاحيات المستخدم.
+    """بحث شامل في النظام مع احترام صلاحيات المستخدم ونطاقه (كلية/قسم).
 
     أمثلة:
         /api/search?q=أحمد                        → كل الأنواع
@@ -94,6 +112,36 @@ async def global_search(
     is_admin = role == UserRole.ADMIN
     is_teacher = role == UserRole.TEACHER
     is_student = role == UserRole.STUDENT
+
+    # فحص الصلاحيات الدقيقة لكل نوع
+    # ملاحظة: المستخدمون المرتبطون بكلية/قسم يمكنهم رؤيتها في البحث
+    # حتى لو لم يكن لديهم صلاحية MANAGE_FACULTIES صراحةً
+    has_scope = bool(current_user.get("faculty_id") or current_user.get("department_id"))
+
+    can_search_students = is_admin or is_teacher or has_any_permission(
+        current_user, [Permission.VIEW_STUDENTS, Permission.MANAGE_STUDENTS]
+    )
+    can_search_teachers = is_admin or is_teacher or has_scope or has_any_permission(
+        current_user, [Permission.VIEW_TEACHERS, Permission.MANAGE_TEACHERS,
+                       Permission.VIEW_TEACHING_LOAD, Permission.MANAGE_TEACHING_LOAD,
+                       # المسجِّلون ومن يديرون التسجيل/الإحصاءات يحتاجون
+                       # رؤية معلمي كليتهم في البحث (مقيَّدون بالـ scope)
+                       Permission.MANAGE_ENROLLMENTS, Permission.VIEW_ENROLLMENTS,
+                       Permission.VIEW_REPORTS, Permission.VIEW_STATISTICS]
+    )
+    can_search_courses = is_admin or is_teacher or is_student or has_any_permission(
+        current_user, [Permission.VIEW_COURSES, Permission.MANAGE_COURSES]
+    )
+    can_search_departments = is_admin or is_teacher or has_scope or has_any_permission(
+        current_user, [Permission.VIEW_DEPARTMENTS, Permission.MANAGE_DEPARTMENTS]
+    )
+    can_search_faculties = is_admin or is_teacher or has_scope or has_any_permission(
+        current_user, [Permission.VIEW_FACULTIES, Permission.MANAGE_FACULTIES]
+    )
+    can_search_lectures = is_admin or is_teacher or is_student or has_any_permission(
+        current_user, [Permission.VIEW_LECTURES, Permission.MANAGE_LECTURES,
+                       Permission.VIEW_COURSES, Permission.MANAGE_COURSES]
+    )
 
     regex = _build_smart_regex(q_clean)
     code_regex = {"$regex": _esc(q_clean), "$options": "i"}  # للأكواد (لا تطبيع)
@@ -136,7 +184,7 @@ async def global_search(
     # =========================================
     # 1) الطلاب
     # =========================================
-    if "students" in requested_types:
+    if "students" in requested_types and can_search_students and not is_student:
         student_query: dict = {
             "is_active": True,
             "$or": [
@@ -145,92 +193,95 @@ async def global_search(
                 {"reference_number": code_regex},
             ],
         }
-        # المعلم لا يرى الطلاب من خلال البحث العام (يستخدم صفحات المقرر)
-        if is_student:
-            student_query = None  # type: ignore
-        if student_query is not None and (is_admin or is_teacher):
-            cursor = db.students.find(student_query).limit(limit_per_type)
-            students_list = await cursor.to_list(limit_per_type)
-            dept_ids = {str(s.get("department_id", "")) for s in students_list if s.get("department_id")}
-            fac_ids = {str(s.get("faculty_id", "")) for s in students_list if s.get("faculty_id")}
-            depts_map, facs_map = await _resolve_names(dept_ids, fac_ids)
-            items: List[dict] = []
-            for s in students_list:
-                parts = [f"رقم القيد: {s.get('student_id', '')}"]
-                dept_doc = depts_map.get(str(s.get("department_id", "")))
-                if dept_doc:
-                    parts.append(f"قسم: {dept_doc.get('name', '')}")
-                    fac_id_from_dept = str(dept_doc.get("faculty_id", "") or "")
-                    fac_name = facs_map.get(fac_id_from_dept) or facs_map.get(str(s.get("faculty_id", "")))
-                    if fac_name:
-                        parts.append(f"كلية: {fac_name}")
-                if s.get("level"):
-                    parts.append(f"م{s.get('level')}")
-                if s.get("section"):
-                    parts.append(f"شعبة {s.get('section')}")
-                st = s.get("status") or ("active" if s.get("is_active", True) else "inactive")
-                parts.append(f"الحالة: {status_label.get(st, st)}")
-                items.append({
-                    "id": str(s["_id"]),
-                    "title": s.get("full_name", ""),
-                    "subtitle": " · ".join(parts),
-                    "route": f"/student-details?studentId={str(s['_id'])}",
-                    "type": "student",
-                    "icon": "person",
-                })
-            if items:
-                results["students"] = items
-                total += len(items)
+        # تطبيق نطاق الكلية/القسم للأدوار غير الإدارية
+        scope = await _scope_filter(current_user, "students")
+        student_query = _merge_query(student_query, scope)
+
+        cursor = db.students.find(student_query).limit(limit_per_type)
+        students_list = await cursor.to_list(limit_per_type)
+        dept_ids = {str(s.get("department_id", "")) for s in students_list if s.get("department_id")}
+        fac_ids = {str(s.get("faculty_id", "")) for s in students_list if s.get("faculty_id")}
+        depts_map, facs_map = await _resolve_names(dept_ids, fac_ids)
+        items: List[dict] = []
+        for s in students_list:
+            parts = [f"رقم القيد: {s.get('student_id', '')}"]
+            dept_doc = depts_map.get(str(s.get("department_id", "")))
+            if dept_doc:
+                parts.append(f"قسم: {dept_doc.get('name', '')}")
+                fac_id_from_dept = str(dept_doc.get("faculty_id", "") or "")
+                fac_name = facs_map.get(fac_id_from_dept) or facs_map.get(str(s.get("faculty_id", "")))
+                if fac_name:
+                    parts.append(f"كلية: {fac_name}")
+            if s.get("level"):
+                parts.append(f"م{s.get('level')}")
+            if s.get("section"):
+                parts.append(f"شعبة {s.get('section')}")
+            st = s.get("status") or ("active" if s.get("is_active", True) else "inactive")
+            parts.append(f"الحالة: {status_label.get(st, st)}")
+            items.append({
+                "id": str(s["_id"]),
+                "title": s.get("full_name", ""),
+                "subtitle": " · ".join(parts),
+                "route": f"/student-details?studentId={str(s['_id'])}",
+                "type": "student",
+                "icon": "person",
+            })
+        if items:
+            results["students"] = items
+            total += len(items)
 
     # =========================================
     # 2) المعلمون
     # =========================================
-    if "teachers" in requested_types:
-        if is_admin or is_teacher:
-            tq = {
-                "$or": [
-                    {"full_name": regex},
-                    {"teacher_id": code_regex},
-                    {"email": code_regex},
-                ],
-            }
-            cursor = db.teachers.find(tq).limit(limit_per_type)
-            teachers_list = await cursor.to_list(limit_per_type)
-            dept_ids = {str(t.get("department_id", "")) for t in teachers_list if t.get("department_id")}
-            fac_ids = {str(t.get("faculty_id", "")) for t in teachers_list if t.get("faculty_id")}
-            depts_map, facs_map = await _resolve_names(dept_ids, fac_ids)
-            items = []
-            for t in teachers_list:
-                title = t.get("academic_title") or ""
-                parts = [f"رقم المعلم: {t.get('teacher_id', '')}"]
-                if title:
-                    parts.append(title)
-                dept_doc = depts_map.get(str(t.get("department_id", "")))
-                if dept_doc:
-                    parts.append(f"قسم: {dept_doc.get('name', '')}")
-                fac_name = facs_map.get(str(t.get("faculty_id", ""))) or (
-                    facs_map.get(str(dept_doc.get("faculty_id", ""))) if dept_doc else None
-                )
-                if fac_name:
-                    parts.append(f"كلية: {fac_name}")
-                # تشفير اسم المعلم لاستخدامه كرابط URL آمن
-                teacher_name_enc = quote(t.get("full_name", ""))
-                items.append({
-                    "id": str(t["_id"]),
-                    "title": t.get("full_name", ""),
-                    "subtitle": " · ".join(parts),
-                    "route": f"/teacher-courses?teacherId={str(t['_id'])}&teacherName={teacher_name_enc}",
-                    "type": "teacher",
-                    "icon": "school",
-                })
-            if items:
-                results["teachers"] = items
-                total += len(items)
+    if "teachers" in requested_types and can_search_teachers:
+        tq = {
+            "$or": [
+                {"full_name": regex},
+                {"teacher_id": code_regex},
+                {"email": code_regex},
+            ],
+        }
+        # تطبيق نطاق الكلية/القسم
+        scope = await _scope_filter(current_user, "teachers")
+        tq = _merge_query(tq, scope)
+
+        cursor = db.teachers.find(tq).limit(limit_per_type)
+        teachers_list = await cursor.to_list(limit_per_type)
+        dept_ids = {str(t.get("department_id", "")) for t in teachers_list if t.get("department_id")}
+        fac_ids = {str(t.get("faculty_id", "")) for t in teachers_list if t.get("faculty_id")}
+        depts_map, facs_map = await _resolve_names(dept_ids, fac_ids)
+        items = []
+        for t in teachers_list:
+            title = t.get("academic_title") or ""
+            parts = [f"رقم المعلم: {t.get('teacher_id', '')}"]
+            if title:
+                parts.append(title)
+            dept_doc = depts_map.get(str(t.get("department_id", "")))
+            if dept_doc:
+                parts.append(f"قسم: {dept_doc.get('name', '')}")
+            fac_name = facs_map.get(str(t.get("faculty_id", ""))) or (
+                facs_map.get(str(dept_doc.get("faculty_id", ""))) if dept_doc else None
+            )
+            if fac_name:
+                parts.append(f"كلية: {fac_name}")
+            # تشفير اسم المعلم لاستخدامه كرابط URL آمن
+            teacher_name_enc = quote(t.get("full_name", ""))
+            items.append({
+                "id": str(t["_id"]),
+                "title": t.get("full_name", ""),
+                "subtitle": " · ".join(parts),
+                "route": f"/teacher-courses?teacherId={str(t['_id'])}&teacherName={teacher_name_enc}",
+                "type": "teacher",
+                "icon": "school",
+            })
+        if items:
+            results["teachers"] = items
+            total += len(items)
 
     # =========================================
     # 3) المقررات
     # =========================================
-    if "courses" in requested_types:
+    if "courses" in requested_types and can_search_courses:
         cq = {
             "is_active": True,
             "$or": [
@@ -257,6 +308,10 @@ async def global_search(
                     cq = None  # type: ignore
             else:
                 cq = None  # type: ignore
+        else:
+            # أي دور آخر يستخدم scope filter
+            scope = await _scope_filter(current_user, "courses")
+            cq = _merge_query(cq, scope)
 
         if cq is not None:
             cursor = db.courses.find(cq).limit(limit_per_type)
@@ -293,8 +348,10 @@ async def global_search(
     # =========================================
     # 4) الأقسام
     # =========================================
-    if "departments" in requested_types and (is_admin or is_teacher):
+    if "departments" in requested_types and can_search_departments:
         dq = {"$or": [{"name": regex}, {"code": code_regex}]}
+        scope = await _scope_filter(current_user, "departments")
+        dq = _merge_query(dq, scope)
         cursor = db.departments.find(dq).limit(limit_per_type)
         items = []
         async for d in cursor:
@@ -313,8 +370,36 @@ async def global_search(
     # =========================================
     # 5) الكليات
     # =========================================
-    if "faculties" in requested_types and (is_admin or is_teacher):
+    if "faculties" in requested_types and can_search_faculties:
         fq = {"$or": [{"name": regex}, {"code": code_regex}]}
+        # قصر النتائج على كلية المستخدم لغير الإدمن
+        if not is_admin and not is_teacher:
+            user_faculty_id = current_user.get("faculty_id")
+            user_dept_id = current_user.get("department_id")
+            # اقرأ من DB لجلب faculty_id وdepartment_id الكاملة
+            try:
+                udoc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+                if udoc:
+                    user_faculty_id = udoc.get("faculty_id") or user_faculty_id
+                    user_dept_id = udoc.get("department_id") or user_dept_id
+                    # إن لم يوجد faculty_id لكن يوجد department_id، استنتج من القسم
+                    if not user_faculty_id and user_dept_id:
+                        try:
+                            dept_doc = await db.departments.find_one({"_id": ObjectId(user_dept_id)})
+                            if dept_doc and dept_doc.get("faculty_id"):
+                                user_faculty_id = dept_doc.get("faculty_id")
+                        except Exception:
+                            pass
+            except Exception:
+                pass
+            if user_faculty_id:
+                try:
+                    fq["_id"] = ObjectId(user_faculty_id)
+                except Exception:
+                    fq["_id"] = ObjectId("000000000000000000000000")
+            else:
+                # Fail-safe: لا نعرض شيئاً إذا لم نتمكن من تحديد كلية المستخدم
+                fq["_id"] = ObjectId("000000000000000000000000")
         cursor = db.faculties.find(fq).limit(limit_per_type)
         items = []
         async for f in cursor:
@@ -333,21 +418,23 @@ async def global_search(
     # =========================================
     # 6) المحاضرات (بحث بالتاريخ أو اسم المقرر)
     # =========================================
-    if "lectures" in requested_types:
+    if "lectures" in requested_types and can_search_lectures:
         # تحقّق إن كان النص تاريخ
-        lq: dict = {}
+        lq: Optional[dict] = {}
         if re.match(r"^\d{4}-\d{2}-\d{2}$", q_clean):
             lq["date"] = q_clean
         else:
-            # اربط بالمقررات التي تطابق
-            course_match_cursor = db.courses.find(
-                {"$or": [{"name": regex}, {"code": code_regex}]}, {"_id": 1}
-            ).limit(20)
+            # اربط بالمقررات التي تطابق (مع تطبيق scope على المقررات)
+            course_match_query = {"$or": [{"name": regex}, {"code": code_regex}]}
+            if not is_admin and not is_teacher and not is_student:
+                course_scope = await _scope_filter(current_user, "courses")
+                course_match_query = _merge_query(course_match_query, course_scope)
+            course_match_cursor = db.courses.find(course_match_query, {"_id": 1}).limit(20)
             matching_course_ids = []
             async for c in course_match_cursor:
                 matching_course_ids.append(str(c["_id"]))
             if not matching_course_ids:
-                lq = None  # type: ignore
+                lq = None
             else:
                 lq["course_id"] = {"$in": matching_course_ids}
 
@@ -365,7 +452,7 @@ async def global_search(
                 if isinstance(existing, dict) and "$in" in existing:
                     existing["$in"] = [c for c in existing["$in"] if c in allowed]
                     if not existing["$in"]:
-                        lq = None  # type: ignore
+                        lq = None
                 else:
                     lq["course_id"] = {"$in": allowed}
             elif is_student:
@@ -379,18 +466,18 @@ async def global_search(
                     if isinstance(existing, dict) and "$in" in existing:
                         existing["$in"] = [c for c in existing["$in"] if c in allowed]
                         if not existing["$in"]:
-                            lq = None  # type: ignore
+                            lq = None
                     elif lq is not None:
                         lq["course_id"] = {"$in": allowed}
                 else:
-                    lq = None  # type: ignore
+                    lq = None
 
         if lq is not None:
             cursor = db.lectures.find(lq).sort("date", -1).limit(limit_per_type)
             items = []
             # خريطة المقررات لاسم سريع
             lecs = await cursor.to_list(limit_per_type)
-            cids = list({l.get("course_id") for l in lecs if l.get("course_id")})
+            cids = list({lec.get("course_id") for lec in lecs if lec.get("course_id")})
             course_map: dict = {}
             if cids:
                 try:
@@ -400,8 +487,8 @@ async def global_search(
                         course_map[str(c["_id"])] = c
                 except Exception:
                     pass
-            for l in lecs:
-                cinfo = course_map.get(l.get("course_id"), {})
+            for lec in lecs:
+                cinfo = course_map.get(lec.get("course_id"), {})
                 lvl = cinfo.get("level")
                 sec = cinfo.get("section")
                 code = cinfo.get("code", "")
@@ -412,16 +499,16 @@ async def global_search(
                     subtitle_parts.append(f"م{lvl}")
                 if sec:
                     subtitle_parts.append(f"شعبة {sec}")
-                time_part = f"{l.get('start_time', '')} → {l.get('end_time', '')}"
+                time_part = f"{lec.get('start_time', '')} → {lec.get('end_time', '')}"
                 if time_part.strip() != "→":
                     subtitle_parts.append(time_part)
-                if l.get('room'):
-                    subtitle_parts.append(l.get('room'))
+                if lec.get('room'):
+                    subtitle_parts.append(lec.get('room'))
                 items.append({
-                    "id": str(l["_id"]),
-                    "title": f"{cinfo.get('name', 'محاضرة')} - {l.get('date', '')}",
+                    "id": str(lec["_id"]),
+                    "title": f"{cinfo.get('name', 'محاضرة')} - {lec.get('date', '')}",
                     "subtitle": " · ".join(subtitle_parts),
-                    "route": f"/course-lectures?courseId={l.get('course_id', '')}",
+                    "route": f"/course-lectures?courseId={lec.get('course_id', '')}",
                     "type": "lecture",
                     "icon": "calendar",
                 })

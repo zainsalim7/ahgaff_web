@@ -53,6 +53,9 @@ security = HTTPBearer()
 # Database reference - will be set from main app
 _db: Optional[AsyncIOMotorDatabase] = None
 
+# Scope filter function reference - يُسجَّل من server.py عند الإقلاع
+_scope_filter_fn = None
+
 
 def set_database(database: AsyncIOMotorDatabase):
     """تعيين قاعدة البيانات من التطبيق الرئيسي"""
@@ -65,6 +68,24 @@ def get_db() -> AsyncIOMotorDatabase:
     if _db is None:
         raise RuntimeError("Database not initialized. Call set_database() first.")
     return _db
+
+
+def set_scope_filter(fn):
+    """تسجيل دالة فلتر النطاق (Faculty/Department scoping) من server.py"""
+    global _scope_filter_fn
+    _scope_filter_fn = fn
+
+
+async def get_scope_filter(current_user: dict, scope_type: str) -> dict:
+    """جلب فلتر النطاق للـ MongoDB حسب دور المستخدم وكليته/قسمه.
+    يُرجع {} إذا لم تُسجَّل الدالة (لن يُطبَّق نطاق - يجب التسجيل عند startup).
+    """
+    if _scope_filter_fn is None:
+        return {}
+    try:
+        return await _scope_filter_fn(current_user, scope_type)
+    except Exception:
+        return {}
 
 
 # ترجمة أنواع الأنشطة إلى العربية
