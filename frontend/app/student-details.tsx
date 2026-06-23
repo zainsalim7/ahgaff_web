@@ -705,10 +705,14 @@ export default function StudentDetailsScreen() {
 
         {/* ============ بطاقات الإحصائيات المدمجة ============ */}
         <View style={styles.compactStatsRow}>
-          <View style={styles.compactStatChip}>
-            <Ionicons name="book" size={14} color="#2962ff" />
-            <Text style={styles.compactStatValue}>{courses.length}</Text>
-            <Text style={styles.compactStatLabel}>مقرر</Text>
+          <View style={[styles.compactStatChip, coursesInferred && { backgroundColor: '#ffebee', borderColor: '#c62828' }]}>
+            <Ionicons name="book" size={14} color={coursesInferred ? '#c62828' : '#2962ff'} />
+            <Text style={[styles.compactStatValue, coursesInferred && { color: '#c62828' }]}>
+              {coursesInferred ? 0 : courses.length}
+            </Text>
+            <Text style={[styles.compactStatLabel, coursesInferred && { color: '#c62828' }]}>
+              {coursesInferred ? 'غير مسجَّل' : 'مقرر'}
+            </Text>
           </View>
           <View style={styles.compactStatChip}>
             <Ionicons name="time" size={14} color="#e65100" />
@@ -828,9 +832,14 @@ export default function StudentDetailsScreen() {
         {/* ============ المقررات ============ */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionCardHeader}>
-            <Text style={styles.sectionCardTitle}>المقررات المسجَّلة</Text>
+            <Text style={styles.sectionCardTitle}>
+              {coursesInferred ? 'المقررات المقترَحة (تطابق القسم والمستوى)' : 'المقررات المسجَّلة'}
+            </Text>
             <Text style={styles.sectionCardCount}>
-              <Text style={styles.countAccent}>{courses.length}</Text> مقرر
+              <Text style={[styles.countAccent, coursesInferred && { color: '#c62828' }]}>
+                {coursesInferred ? 0 : courses.length}
+              </Text>{' '}
+              {coursesInferred ? 'مقرر مسجَّل' : 'مقرر'}
             </Text>
           </View>
 
@@ -842,11 +851,16 @@ export default function StudentDetailsScreen() {
           ) : (
             <View style={styles.coursesList}>
               {coursesInferred && (
-                <View style={styles.inferredBanner}>
-                  <Ionicons name="information-circle" size={16} color="#ef6c00" />
-                  <Text style={styles.inferredBannerText}>
-                    لا توجد تسجيلات صريحة. عُرضت المقررات المطابقة لقسم ومستوى الطالب.
-                  </Text>
+                <View style={[styles.inferredBanner, { backgroundColor: '#ffebee', borderColor: '#c62828' }]}>
+                  <Ionicons name="warning" size={18} color="#c62828" />
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.inferredBannerText, { color: '#c62828', fontWeight: '700' }]}>
+                      ⚠️ هذا الطالب غير مسجَّل في أي مقرر بشكل صريح
+                    </Text>
+                    <Text style={[styles.inferredBannerText, { color: '#5a6c7d', marginTop: 2, fontSize: 11 }]}>
+                      المقررات أدناه هي مجرد اقتراحات مطابقة لقسم ومستوى الطالب، ولن تظهر في عداد طلاب المقرر حتى يُسجَّل صراحة.
+                    </Text>
+                  </View>
                 </View>
               )}
               {courses.map(course => {

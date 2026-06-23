@@ -1,0 +1,28 @@
+{
+  "summary": "Verified the student-details UI clarity fix for the inferred-courses case. Backend behavior for GET /api/students/{id}/courses is unchanged (still returns is_inferred:true with suggested courses when student has no explicit enrollments). Frontend correctly displays red chip '0 غير مسجَّل', section title 'المقررات المقترَحة (تطابق القسم والمستوى)', counter '0 مقرر مسجَّل' in red, and red warning banner '⚠️ هذا الطالب غير مسجَّل في أي مقرر بشكل صريح'. Suggested courses remain listed below the banner for informational purposes.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_student_courses_inferred.py",
+    "/app/test_reports/pytest/iter37_inferred.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Note: dev DB has 91 students and ALL hit the inferred fallback path (is_inferred:true). No student currently has explicit enrollments, so the OLD behavior (blue 'N مقرر', title 'المقررات المسجَّلة', no red banner) could not be empirically validated through the live UI. Code review of /app/frontend/app/student-details.tsx (lines 706-720, 832-865) confirms the ternary on `coursesInferred` correctly falls back to the previous styles when false. Main agent may want to seed at least one student with explicit StudentCourseEnrollment rows to enable end-to-end verification of the unchanged path.",
+    "Backend response shape: GET /api/students/{id}/courses returns a dict { is_inferred: bool, courses: [...] } in inferred case; verify frontend handles both shapes consistently (dict vs legacy list)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_student_courses_inferred.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin / admin123",
+  "seed_data_creation": "None. Used existing inferred student 698e57518cfb2f14627a285e (طالب اختبار 1, level 1).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Inferred student id for UI testing: 698e57518cfb2f14627a285e. URL pattern: /student-details?studentId=<id>. To test the EXPLICIT-enrollment path (is_inferred:false), main agent must first seed a student with explicit course enrollments — no such student exists in the current dev DB. The user's original screenshot referenced student id 1026091 (نيل المخى مسرون روستام) but that id does NOT exist in this preview DB; backend returns 400 'معرّف الطالب غير صحيح'.",
+  "rca of the issue": "Original visual contradiction (12 مقرر vs 0 طلاب) was caused by frontend counting fallback/inferred courses as if they were enrollments. UI fix in student-details.tsx now reflects 0 enrollments with red chip + red banner whenever response has is_inferred:true. Verified inferred student 698e57518cfb2f14627a285e: top chip = '0 غير مسجَّل' (red), section title = 'المقررات المقترَحة (تطابق القسم والمستوى)', counter = '0 مقرر مسجَّل' (red), warning banner '⚠️ هذا الطالب غير مسجَّل في أي مقرر بشكل صريح' visible, 1 suggested course still listed."
+}
