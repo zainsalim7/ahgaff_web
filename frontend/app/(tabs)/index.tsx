@@ -22,6 +22,7 @@ import {
   coursesAPI,
   facultiesAPI,
   notificationsAPI,
+  teachersAPI,
 } from '../../src/services/api';
 
 /**
@@ -116,7 +117,7 @@ export default function HomeDashboardScreen() {
 
   const fetchData = useCallback(async () => {
     const results = await Promise.allSettled([
-      usersAPI.getAll('teacher'),
+      teachersAPI.getAll(),
       studentsAPI.getAll(),
       coursesAPI.getAll(),
       departmentsAPI.getAll(),
@@ -259,8 +260,18 @@ export default function HomeDashboardScreen() {
         {/* Hero Header */}
         <View style={styles.hero}>
           <View style={styles.heroContent}>
-            <Text style={styles.heroTitle}>لوحة الإحصائيات</Text>
-            <Text style={styles.heroSubtitle}>نظرة عامة على بيانات الجامعة</Text>
+            <Text style={styles.heroTitle}>
+              {user?.full_name ? `مرحباً، ${user.full_name}` : 'لوحة الإحصائيات'}
+            </Text>
+            <Text style={styles.heroSubtitle}>
+              {(() => {
+                const userFacId = (user as any)?.faculty_id ? String((user as any).faculty_id) : '';
+                const fac = userFacId ? faculties.find((f: any) => String(f.id) === userFacId) : null;
+                if (fac?.name) return `${fac.name} • نظرة عامة على بيانات الجامعة`;
+                if (user?.role === 'admin') return 'مدير النظام • نظرة عامة على بيانات الجامعة';
+                return 'نظرة عامة على بيانات الجامعة';
+              })()}
+            </Text>
             <View style={styles.heroDate}>
               <Ionicons name="calendar-outline" size={14} color="#fff" />
               <Text style={styles.heroDateText}>{todayInArabic()}</Text>
