@@ -978,12 +978,15 @@ async def import_curriculum_from_archive(
 @router.delete("/curriculum/department/{department_id}/wipe")
 async def wipe_department_curriculum(
     department_id: str,
+    level: Optional[int] = Query(None, description="مسح مستوى معين فقط (اختياري)"),
+    term: Optional[int] = Query(None, description="مسح فصل معين فقط 1/2/3 (اختياري)"),
     current_user: dict = Depends(get_current_user),
 ):
-    """مسح كامل لخطة قسم معين (حذف ناعم — يحفظ نسخة في trash للاسترجاع).
-    - يُعلّم كل curriculum_courses لذلك القسم بـ is_active=False
-    - يُلغي كل teacher_assignments المرتبطة
-    - يُسجَّل في activity_logs لإمكانية المراجعة
+    """مسح خطة قسم (حذف ناعم — يحفظ نسخة في trash للاسترجاع).
+    - بدون معاملات: يمسح كل الخطة
+    - مع level: يمسح المستوى المحدد فقط
+    - مع term: يمسح الفصل المحدد فقط
+    - يمكن دمج level و term معاً (مستوى + فصل محدد)
     """
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="هذه العملية متاحة للأدمن فقط")
@@ -995,17 +998,29 @@ async def wipe_department_curriculum(
     if not dept:
         raise HTTPException(status_code=404, detail="القسم غير موجود")
 
+    # بناء فلتر الاستعلام مع المعاملات الاختيارية
+    base_filter: dict = {"department_id": department_id, "is_active": {"$ne": False}}
+    scope_label_parts = []
+    if level is not None:
+        base_filter["level"] = level
+        scope_label_parts.append(f"المستوى {level}")
+    if term is not None:
+        base_filter["term"] = term
+        term_name = {1: "الفصل الأول", 2: "الفصل الثاني", 3: "الفصل الصيفي"}.get(term, f"الفصل {term}")
+        scope_label_parts.append(term_name)
+    scope_label = " - ".join(scope_label_parts) if scope_label_parts else "كامل الخطة"
+
     # جلب الـ ids قبل التعليم لإلغاء الإسنادات
     cc_ids = []
-    async for c in db.curriculum_courses.find({"department_id": department_id, "is_active": {"$ne": False}}, {"_id": 1}):
+    async for c in db.curriculum_courses.find(base_filter, {"_id": 1}):
         cc_ids.append(str(c["_id"]))
 
     if not cc_ids:
-        return {"message": "لا توجد خطة لمسحها", "wiped": 0, "assignments_cleared": 0}
+        return {"message": f"لا توجد مقررات لمسحها ({scope_label})", "wiped": 0, "assignments_cleared": 0}
 
     now = _now()
     r1 = await db.curriculum_courses.update_many(
-        {"department_id": department_id, "is_active": {"$ne": False}},
+        base_filter,
         {"$set": {"is_active": False, "deleted_at": now, "deleted_by": current_user.get("id"),
                    "wiped_in_bulk": True}}
     )
@@ -1022,17 +1037,18 @@ async def wipe_department_curriculum(
             "action": "wipe_curriculum",
             "target_type": "department",
             "target_id": department_id,
-            "details": f"مسح خطة قسم {dept.get('name')} - {r1.modified_count} مقرر",
+            "details": f"مسح خطة قسم {dept.get('name')} ({scope_label}) - {r1.modified_count} مقرر",
             "timestamp": now,
         })
     except Exception:
         pass
 
     return {
-        "message": f"تم مسح خطة قسم '{dept.get('name')}' - {r1.modified_count} مقرر",
+        "message": f"تم مسح {scope_label} لقسم '{dept.get('name')}' - {r1.modified_count} مقرر",
         "wiped": r1.modified_count,
         "assignments_cleared": r2.modified_count,
         "department_name": dept.get("name"),
+        "scope": scope_label,
     }
 
 

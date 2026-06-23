@@ -35,6 +35,15 @@ export default function CurriculumScreen() {
   const [activeSemester, setActiveSemester] = useState<any>(null);
   const [archives, setArchives] = useState<any[]>([]);
   const [showImport, setShowImport] = useState(false);
+  // 🆕 الحذف المتعدد
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  // 🆕 مودال مسح الخطة
+  const [showWipeModal, setShowWipeModal] = useState(false);
+  const [wipeMode, setWipeMode] = useState<'all' | 'level' | 'term' | 'level_term'>('all');
+  const [wipeLevel, setWipeLevel] = useState<number>(1);
+  const [wipeTerm, setWipeTerm] = useState<number>(1);
+  const [wipingScoped, setWipingScoped] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -178,29 +187,119 @@ export default function CurriculumScreen() {
     }
   };
 
-  const wipeDepartment = async () => {
+  // 🆕 دوال الحذف المتعدد
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const deleteSelectedBulk = async () => {
+    if (selectedIds.size === 0) return;
+    const count = selectedIds.size;
+    const ok = Platform.OS === 'web'
+      ? window.confirm(`حذف ${count} مقرر من الخطة؟ (يمكن استرجاعها لاحقاً)`)
+      : await new Promise<boolean>((resolve) => {
+          Alert.alert('تأكيد الحذف المتعدد', `حذف ${count} مقرر؟`, [
+            { text: 'إلغاء', onPress: () => resolve(false) },
+            { text: 'حذف', style: 'destructive', onPress: () => resolve(true) },
+          ]);
+        });
+    if (!ok) return;
+    setBulkDeleting(true);
+    const ids = Array.from(selectedIds);
+    let success = 0;
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        await api.delete(`/curriculum/courses/${id}`);
+        success += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    setBulkDeleting(false);
+    clearSelection();
+    fetchGrid();
+    const msg = `تم حذف ${success} مقرر${failed > 0 ? ` (فشل ${failed})` : ''}`;
+    if (Platform.OS === 'web') window.alert(msg);
+    else Alert.alert('تم', msg);
+  };
+
+  // 🆕 مسح بنطاق (الكل / مستوى / فصل / مستوى+فصل)
+  const performScopedWipe = async () => {
     if (!selectedDept) return;
     const deptObj = departments.find((d: any) => (d.id || d._id) === selectedDept);
     const deptName = deptObj?.name || 'القسم';
-    if (Platform.OS === 'web') {
-      const c1 = window.confirm(`⚠️ تحذير خطير\n\nستحذف كامل خطة قسم "${deptName}" نهائياً.\nهل أنت متأكد؟`);
-      if (!c1) return;
-      const c2 = window.prompt(`للتأكيد، اكتب اسم القسم بالضبط:\n"${deptName}"`);
-      if (c2 !== deptName) {
-        window.alert('الاسم غير مطابق - تم إلغاء العملية');
-        return;
-      }
+    const params: any = {};
+    let scopeLabel = '';
+    if (wipeMode === 'level') {
+      params.level = wipeLevel;
+      scopeLabel = `المستوى ${wipeLevel}`;
+    } else if (wipeMode === 'term') {
+      params.term = wipeTerm;
+      scopeLabel = wipeTerm === 1 ? 'الفصل الأول' : wipeTerm === 2 ? 'الفصل الثاني' : 'الفصل الصيفي';
+    } else if (wipeMode === 'level_term') {
+      params.level = wipeLevel;
+      params.term = wipeTerm;
+      const tn = wipeTerm === 1 ? 'الفصل الأول' : wipeTerm === 2 ? 'الفصل الثاني' : 'الفصل الصيفي';
+      scopeLabel = `المستوى ${wipeLevel} - ${tn}`;
+    } else {
+      scopeLabel = 'كامل الخطة';
     }
+    const confirmMsg = `⚠️ تحذير\n\nسيتم مسح ${scopeLabel} لقسم "${deptName}".\nهل أنت متأكد؟`;
+    if (Platform.OS === 'web') {
+      if (!window.confirm(confirmMsg)) return;
+      if (wipeMode === 'all') {
+        const c2 = window.prompt(`للتأكيد، اكتب اسم القسم بالضبط:\n"${deptName}"`);
+        if (c2 !== deptName) {
+          window.alert('الاسم غير مطابق - تم إلغاء العملية');
+          return;
+        }
+      }
+    } else {
+      const ok = await new Promise<boolean>((resolve) => {
+        Alert.alert('تأكيد المسح', confirmMsg, [
+          { text: 'إلغاء', onPress: () => resolve(false) },
+          { text: 'مسح', style: 'destructive', onPress: () => resolve(true) },
+        ]);
+      });
+      if (!ok) return;
+    }
+    setWipingScoped(true);
     try {
-      const res = await api.delete(`/curriculum/department/${selectedDept}/wipe`);
+      const queryParts: string[] = [];
+      if (params.level !== undefined) queryParts.push(`level=${params.level}`);
+      if (params.term !== undefined) queryParts.push(`term=${params.term}`);
+      const qs = queryParts.length ? `?${queryParts.join('&')}` : '';
+      const res = await api.delete(`/curriculum/department/${selectedDept}/wipe${qs}`);
       const r = res.data;
       const msg = `${r.message}\nتم إلغاء ${r.assignments_cleared} إسناد معلم`;
-      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('تم', msg);
+      setShowWipeModal(false);
       fetchGrid();
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشل المسح';
-      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('خطأ', msg);
+    } finally {
+      setWipingScoped(false);
     }
+  };
+
+  const wipeDepartment = async () => {
+    if (!selectedDept) return;
+    // افتح المودال بدلاً من التنفيذ المباشر
+    setWipeMode('all');
+    setWipeLevel(1);
+    setWipeTerm(1);
+    setShowWipeModal(true);
   };
 
   const downloadTemplate = async () => {
@@ -473,6 +572,42 @@ export default function CurriculumScreen() {
                 )}
               </View>
 
+              {/* 🆕 شريط الحذف المتعدد - يظهر فقط عند الاختيار */}
+              {selectedIds.size > 0 && (
+                <View style={{
+                  flexDirection: 'row-reverse',
+                  alignItems: 'center',
+                  gap: 8,
+                  backgroundColor: '#fff3e0',
+                  borderWidth: 1,
+                  borderColor: '#ef6c00',
+                  padding: 10,
+                  borderRadius: 8,
+                  marginBottom: 12,
+                }} testID="bulk-delete-bar">
+                  <Ionicons name="checkbox" size={18} color="#ef6c00" />
+                  <Text style={{ flex: 1, fontSize: 13, fontWeight: '700', color: '#bf360c', textAlign: 'right' }}>
+                    تم اختيار {selectedIds.size} مقرر
+                  </Text>
+                  <TouchableOpacity
+                    onPress={clearSelection}
+                    style={{ paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#fff', borderRadius: 6, borderWidth: 1, borderColor: '#ef6c00' }}
+                    testID="clear-selection-btn"
+                  >
+                    <Text style={{ fontSize: 12, color: '#ef6c00', fontWeight: '700' }}>إلغاء التحديد</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    onPress={deleteSelectedBulk}
+                    disabled={bulkDeleting}
+                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, backgroundColor: '#c62828', borderRadius: 6 }}
+                    testID="bulk-delete-btn"
+                  >
+                    {bulkDeleting ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash" size={14} color="#fff" />}
+                    <Text style={{ fontSize: 12, color: '#fff', fontWeight: '700' }}>حذف المحدد</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
               {loading ? (
                 <View style={styles.center}><ActivityIndicator size="large" color="#6a1b9a" /></View>
               ) : !grid ? (
@@ -509,11 +644,14 @@ export default function CurriculumScreen() {
                       </View>
                       <View style={styles.termsRow}>
                         <TermColumn label="الفصل الأول" courses={row.term1} onDelete={deleteCourse}
-                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#1565c0" />
+                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#1565c0"
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} />
                         <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse}
-                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#6a1b9a" />
+                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#6a1b9a"
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} />
                         <TermColumn label="الفصل الصيفي" courses={row.term3 || []} onDelete={deleteCourse}
-                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#ef6c00" />
+                          sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#ef6c00"
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} />
                       </View>
                     </View>
                   ))}
@@ -769,12 +907,145 @@ export default function CurriculumScreen() {
             </View>
           </View>
         </Modal>
+
+        {/* 🆕 Modal مسح الخطة بنطاق محدد */}
+        <Modal visible={showWipeModal} transparent animationType="fade" onRequestClose={() => setShowWipeModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modal, { maxWidth: 480 }]}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Ionicons name="warning" size={22} color="#c62828" />
+                <Text style={[styles.modalTitle, { marginBottom: 0 }]}>مسح خطة القسم</Text>
+              </View>
+              <Text style={{ fontSize: 13, color: '#666', textAlign: 'right', marginBottom: 12 }}>
+                اختر نطاق المسح. (الحذف ناعم — يمكن استرجاعه لاحقاً)
+              </Text>
+
+              {/* خيارات النطاق */}
+              <Text style={[styles.modalLabel, { marginTop: 0 }]}>نطاق المسح</Text>
+              <View style={{ gap: 6 }}>
+                {[
+                  { key: 'all', label: 'مسح كامل الخطة', icon: 'trash' as const, color: '#c62828' },
+                  { key: 'level', label: 'مسح مستوى معين', icon: 'layers' as const, color: '#0277bd' },
+                  { key: 'term', label: 'مسح فصل معين', icon: 'calendar' as const, color: '#6a1b9a' },
+                  { key: 'level_term', label: 'مسح مستوى + فصل معاً', icon: 'filter' as const, color: '#ef6c00' },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    onPress={() => setWipeMode(opt.key as any)}
+                    testID={`wipe-mode-${opt.key}`}
+                    style={{
+                      flexDirection: 'row-reverse',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: 10,
+                      borderWidth: 1.5,
+                      borderColor: wipeMode === opt.key ? opt.color : '#e0e0e0',
+                      backgroundColor: wipeMode === opt.key ? opt.color + '12' : '#fafafa',
+                      borderRadius: 8,
+                    }}
+                  >
+                    <Ionicons
+                      name={wipeMode === opt.key ? 'radio-button-on' : 'radio-button-off'}
+                      size={18}
+                      color={wipeMode === opt.key ? opt.color : '#90a4ae'}
+                    />
+                    <Ionicons name={opt.icon} size={16} color={opt.color} />
+                    <Text style={{ flex: 1, textAlign: 'right', fontSize: 13, fontWeight: '600', color: '#333' }}>
+                      {opt.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* اختيار المستوى (إذا level أو level_term) */}
+              {(wipeMode === 'level' || wipeMode === 'level_term') && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.modalLabel}>المستوى</Text>
+                  <View style={{ flexDirection: 'row-reverse', gap: 6, flexWrap: 'wrap' }}>
+                    {[1, 2, 3, 4, 5].map(lv => (
+                      <TouchableOpacity
+                        key={lv}
+                        onPress={() => setWipeLevel(lv)}
+                        testID={`wipe-level-${lv}`}
+                        style={{
+                          paddingHorizontal: 14,
+                          paddingVertical: 8,
+                          borderRadius: 8,
+                          borderWidth: 1.5,
+                          borderColor: wipeLevel === lv ? '#0277bd' : '#e0e0e0',
+                          backgroundColor: wipeLevel === lv ? '#0277bd' : '#fff',
+                        }}
+                      >
+                        <Text style={{ color: wipeLevel === lv ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>
+                          مستوى {lv}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {/* اختيار الفصل (إذا term أو level_term) */}
+              {(wipeMode === 'term' || wipeMode === 'level_term') && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.modalLabel}>الفصل</Text>
+                  <View style={{ flexDirection: 'row-reverse', gap: 6 }}>
+                    {[
+                      { v: 1, label: 'الأول', c: '#1565c0' },
+                      { v: 2, label: 'الثاني', c: '#6a1b9a' },
+                      { v: 3, label: 'الصيفي', c: '#ef6c00' },
+                    ].map(t => (
+                      <TouchableOpacity
+                        key={t.v}
+                        onPress={() => setWipeTerm(t.v)}
+                        testID={`wipe-term-${t.v}`}
+                        style={{
+                          flex: 1,
+                          paddingVertical: 10,
+                          borderRadius: 8,
+                          borderWidth: 1.5,
+                          borderColor: wipeTerm === t.v ? t.c : '#e0e0e0',
+                          backgroundColor: wipeTerm === t.v ? t.c : '#fff',
+                          alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ color: wipeTerm === t.v ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>
+                          {t.label}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+                <TouchableOpacity
+                  style={[styles.modalBtn, styles.modalBtnCancel]}
+                  onPress={() => setShowWipeModal(false)}
+                  testID="wipe-cancel"
+                >
+                  <Text style={styles.modalBtnCancelText}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[styles.modalBtn, { backgroundColor: '#c62828' }]}
+                  onPress={performScopedWipe}
+                  disabled={wipingScoped}
+                  testID="wipe-execute"
+                >
+                  {wipingScoped ? <ActivityIndicator size="small" color="#fff" /> : (
+                    <Text style={styles.modalBtnPrimaryText}>تنفيذ المسح</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </SafeAreaView>
     </>
   );
 }
 
-const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor }: any) => (
+const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor, selectedIds, onToggleSelect }: any) => (
   <View style={styles.termCol}>
     <View style={[styles.termHeader, { borderBottomColor: accentColor }]}>
       <View style={[styles.termHeaderDot, { backgroundColor: accentColor }]} />
@@ -787,8 +1058,29 @@ const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, acc
         <Text style={styles.emptyTermText}>لا توجد مقررات</Text>
       </View>
     ) : (
-      courses.map((c: any) => (
-        <View key={c.id} style={styles.courseCard} testID={`curr-${c.id}`}>
+      courses.map((c: any, idx: number) => {
+        const isSelected = selectedIds?.has(c.id) || false;
+        return (
+        <View key={c.id} style={[styles.courseCard, isSelected && { backgroundColor: '#fff3e0', borderColor: '#ef6c00' }]} testID={`curr-${c.id}`}>
+          {/* 🆕 Checkbox للحذف المتعدد */}
+          {onToggleSelect && (
+            <TouchableOpacity
+              onPress={() => onToggleSelect(c.id)}
+              testID={`chk-${c.id}`}
+              style={{ marginRight: 4, padding: 2 }}
+              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+            >
+              <Ionicons
+                name={isSelected ? 'checkbox' : 'square-outline'}
+                size={18}
+                color={isSelected ? '#ef6c00' : '#90a4ae'}
+              />
+            </TouchableOpacity>
+          )}
+          {/* 🆕 ترقيم المقرر داخل الفصل */}
+          <View style={[styles.rowNumBadge, { backgroundColor: accentColor + '15', borderColor: accentColor }]}>
+            <Text style={[styles.rowNumText, { color: accentColor }]}>{idx + 1}</Text>
+          </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.courseName} numberOfLines={2}>{c.name}</Text>
             <View style={styles.courseMetaRow}>
@@ -826,7 +1118,8 @@ const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, acc
             <Ionicons name="trash-outline" size={15} color="#c62828" />
           </TouchableOpacity>
         </View>
-      ))
+        );
+      })
     )}
   </View>
 );
@@ -904,6 +1197,8 @@ const styles = StyleSheet.create({
 
   // Course card
   courseCard: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#fff', padding: 10, borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: '#eef1f6' },
+  rowNumBadge: { minWidth: 24, height: 24, borderRadius: 12, borderWidth: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 4 },
+  rowNumText: { fontSize: 11, fontWeight: '800' },
   courseName: { fontSize: 13, fontWeight: '700', color: '#1a2540', textAlign: 'right' },
   courseMetaRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 4 },
   codeChip: { paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: '#e3f2fd' },
