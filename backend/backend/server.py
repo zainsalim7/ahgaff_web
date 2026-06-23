@@ -5572,7 +5572,20 @@ async def restore_course(request: Request, current_user: dict = Depends(get_curr
 async def delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "delete_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بحذف المقرر")
-    
+
+    # 🔒 ملكية القسم: لا يحذف مقرراً ليس من قسمه/كليته
+    if current_user.get("role") != UserRole.ADMIN:
+        course_doc = await db.courses.find_one({"_id": ObjectId(course_id)})
+        if course_doc:
+            user_dept = current_user.get("department_id")
+            user_fac = current_user.get("faculty_id")
+            c_dept = str(course_doc.get("department_id") or "")
+            c_fac = str(course_doc.get("faculty_id") or "")
+            if user_dept and c_dept and c_dept != str(user_dept):
+                raise HTTPException(status_code=403, detail="لا يمكنك حذف مقرر لا ينتمي لقسمك")
+            if not user_dept and user_fac and c_fac and c_fac != str(user_fac):
+                raise HTTPException(status_code=403, detail="لا يمكنك حذف مقرر لا ينتمي لكليتك")
+
     # التحقق من وجود طلاب مسجلين
     enrollments_count = await db.enrollments.count_documents({"course_id": course_id})
     if enrollments_count > 0:
@@ -6143,11 +6156,22 @@ class CourseUpdate(BaseModel):
 async def update_course(course_id: str, data: CourseUpdate, current_user: dict = Depends(get_current_user)):
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "edit_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل المقرر")
-    
+
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
-    
+
+    # 🔒 ملكية القسم: لا يعدّل مقرراً ليس من قسمه/كليته
+    if current_user.get("role") != UserRole.ADMIN:
+        user_dept = current_user.get("department_id")
+        user_fac = current_user.get("faculty_id")
+        c_dept = str(course.get("department_id") or "")
+        c_fac = str(course.get("faculty_id") or "")
+        if user_dept and c_dept and c_dept != str(user_dept):
+            raise HTTPException(status_code=403, detail="لا يمكنك تعديل مقرر لا ينتمي لقسمك")
+        if not user_dept and user_fac and c_fac and c_fac != str(user_fac):
+            raise HTTPException(status_code=403, detail="لا يمكنك تعديل مقرر لا ينتمي لكليتك")
+
     update_data = data.dict(exclude_unset=True)
     
     # تنبيه عند تعيين معلم من قسم آخر

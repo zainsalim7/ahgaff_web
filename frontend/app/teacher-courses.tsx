@@ -481,14 +481,23 @@ export default function TeacherCoursesScreen() {
             </View>
           ) : (
             <View style={styles.coursesList}>
-              {data.courses.map((course) => (
+              {data.courses.map((course) => {
+                const isOwned = canManageCourse(course);
+                return (
                 <View key={course.id} style={styles.courseRow}>
                   <TouchableOpacity
                     style={styles.courseMain}
-                    onPress={() => router.push({
-                      pathname: '/course-lectures',
-                      params: { courseId: course.id, courseName: course.name },
-                    })}
+                    onPress={() => {
+                      // 🔒 منع فتح مقرر من قسم آخر للتحكم به (تحرير/حذف/توليد محاضرات)
+                      if (!isOwned && !isAdmin) {
+                        showMessage('للعرض فقط', 'هذا المقرر تابع لقسم آخر. لا يمكنك التحكم فيه (تحرير/حذف/توليد محاضرات).');
+                        return;
+                      }
+                      router.push({
+                        pathname: '/course-lectures',
+                        params: { courseId: course.id, courseName: course.name },
+                      });
+                    }}
                     testID={`course-card-${course.id}`}
                   >
                     <View style={styles.courseIconBox}>
@@ -559,7 +568,8 @@ export default function TeacherCoursesScreen() {
                     </View>
                   ) : null}
                 </View>
-              ))}
+                );
+              })}
             </View>
           )}
         </View>
