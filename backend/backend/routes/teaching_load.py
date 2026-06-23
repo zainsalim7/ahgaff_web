@@ -27,6 +27,46 @@ class TeachingLoadUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+async def _ensure_course_in_user_scope(db, current_user: dict, course: dict):
+    """🔒 يتأكد أن المقرر ضمن نطاق المستخدم (قسمه/كليته).
+    - admin: سماح كامل
+    - مستخدم بـ department_id: المقرر يجب أن يكون من نفس القسم
+    - مستخدم بـ faculty_id فقط: المقرر يجب أن يكون من كلية المستخدم
+    - مستخدم بدون نطاق: يُسمح فقط لـ admin (آمن افتراضياً - يرفض)
+    """
+    if current_user.get("role") == "admin":
+        return
+    user_dept_id = current_user.get("department_id")
+    user_faculty_id = current_user.get("faculty_id")
+    course_dept_id = str(course.get("department_id") or "")
+    course_faculty_id = str(course.get("faculty_id") or "")
+
+    # إذا لم يكن لدى المقرر department/faculty، نستنتج faculty_id من القسم
+    if course_dept_id and not course_faculty_id:
+        try:
+            dept_doc = await db.departments.find_one({"_id": ObjectId(course_dept_id)})
+            if dept_doc and dept_doc.get("faculty_id"):
+                course_faculty_id = str(dept_doc.get("faculty_id"))
+        except Exception:
+            pass
+
+    if user_dept_id:
+        # رئيس قسم: يجب أن يكون المقرر من قسمه
+        if course_dept_id and course_dept_id != str(user_dept_id):
+            raise HTTPException(
+                status_code=403,
+                detail="لا يمكنك إسناد مقرر لا ينتمي لقسمك"
+            )
+    elif user_faculty_id:
+        # عميد/مسجل/إلخ: يجب أن يكون المقرر من كليته
+        if course_faculty_id and course_faculty_id != str(user_faculty_id):
+            raise HTTPException(
+                status_code=403,
+                detail="لا يمكنك إسناد مقرر لا ينتمي لكليتك"
+            )
+    # مستخدم بدون نطاق ولكنه يملك الصلاحية = مستخدم عام (مثل رئيس الجامعة) → يُسمح
+
+
 @router.get("/teaching-load")
 async def get_teaching_loads(
     department_id: Optional[str] = None,
@@ -165,6 +205,9 @@ async def create_teaching_load(
     course = await db.courses.find_one({"_id": ObjectId(data.course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # 🔒 منع إسناد مقرر خارج نطاق المستخدم (كلية/قسم)
+    await _ensure_course_in_user_scope(db, current_user, course)
 
     # التحقق: هل هذا المقرر (الشعبة) مسند لمعلم آخر؟
     assigned_to_other = await db.teaching_loads.find_one({
@@ -532,6 +575,18 @@ async def bulk_save_teaching_load(
     errors = []
 
     for item in items:
+        # 🔒 منع إسناد مقرر خارج نطاق المستخدم (كلية/قسم)
+        course = await db.courses.find_one({"_id": ObjectId(item.course_id)})
+        if not course:
+            errors.append(f"مقرر غير موجود: {item.course_id}")
+            continue
+        try:
+            await _ensure_course_in_user_scope(db, current_user, course)
+        except HTTPException as scope_err:
+            course_label = f"{course.get('name', '')} ({course.get('code', '')})"
+            errors.append(f"{course_label}: {scope_err.detail}")
+            continue
+
         # التحقق: هل المقرر مسند لمعلم آخر؟ (ضمن نفس الفصل فقط)
         check_query = {
             "course_id": item.course_id,
@@ -541,9 +596,8 @@ async def bulk_save_teaching_load(
             check_query["semester_id"] = item.semester_id
         assigned_to_other = await db.teaching_loads.find_one(check_query)
         if assigned_to_other:
-            course = await db.courses.find_one({"_id": ObjectId(item.course_id)})
             other_teacher = await db.teachers.find_one({"_id": ObjectId(assigned_to_other["teacher_id"])})
-            course_name = course.get("name", "") if course else ""
+            course_name = course.get("name", "")
             other_name = other_teacher.get("full_name", "معلم آخر") if other_teacher else "معلم آخر"
             errors.append(f"{course_name} مسند لـ {other_name}")
             continue
