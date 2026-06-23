@@ -144,6 +144,18 @@ export default function StudentDetailsScreen() {
   const [statusNewLevel, setStatusNewLevel] = useState('');
   const [savingStatus, setSavingStatus] = useState(false);
 
+  // 🆕 Graduate Modal
+  const [showGraduateModal, setShowGraduateModal] = useState(false);
+  const [gradYear, setGradYear] = useState<string>(String(new Date().getFullYear()));
+  const [gradDate, setGradDate] = useState<string>('');
+  const [gradSemester, setGradSemester] = useState<string>('second');
+  const [gradGpa, setGradGpa] = useState<string>('');
+  const [gradHours, setGradHours] = useState<string>('');
+  const [gradCertNum, setGradCertNum] = useState<string>('');
+  const [gradHonors, setGradHonors] = useState<string>('');
+  const [gradNotes, setGradNotes] = useState<string>('');
+  const [savingGraduate, setSavingGraduate] = useState(false);
+
   // Export Excel + PDF
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
@@ -327,6 +339,36 @@ export default function StudentDetailsScreen() {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل تغيير الحالة');
     } finally {
       setSavingStatus(false);
+    }
+  };
+
+  // 🆕 تخريج الطالب
+  const handleGraduate = async () => {
+    if (!student) return;
+    const yearNum = parseInt(gradYear);
+    if (isNaN(yearNum) || yearNum < 2000 || yearNum > 2100) {
+      showMessage('خطأ', 'سنة التخرج مطلوبة وتكون بين 2000 و 2100');
+      return;
+    }
+    setSavingGraduate(true);
+    try {
+      const body: any = { graduation_year: yearNum };
+      if (gradDate) body.graduation_date = gradDate;
+      if (gradSemester) body.graduation_semester = gradSemester;
+      if (gradGpa) body.final_gpa = parseFloat(gradGpa);
+      if (gradHours) body.total_credit_hours = parseInt(gradHours);
+      if (gradCertNum) body.certificate_number = gradCertNum;
+      if (gradHonors) body.honors = gradHonors;
+      if (gradNotes) body.notes = gradNotes;
+      await studentsAPI.graduate(student.id, body);
+      showMessage('تم', `تم تخريج "${student.full_name}" بنجاح وانتقل إلى قائمة الخريجين`);
+      setShowGraduateModal(false);
+      // إعادة تحميل أو الانتقال إلى صفحة الخريجين
+      setTimeout(() => router.replace('/alumni' as any), 800);
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل التخريج');
+    } finally {
+      setSavingGraduate(false);
     }
   };
 
@@ -704,6 +746,17 @@ export default function StudentDetailsScreen() {
                 <Ionicons name="swap-horizontal" size={18} color="#e65100" />
                 <Text style={[styles.actionBtnText, { color: '#e65100' }]}>تغيير الحالة</Text>
               </TouchableOpacity>
+              {/* 🆕 زر تخريج الطالب */}
+              {!student?.is_alumni && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#e3f2fd' }]}
+                  onPress={() => setShowGraduateModal(true)}
+                  testID="graduate-student-btn"
+                >
+                  <Ionicons name="school" size={18} color="#0d47a1" />
+                  <Text style={[styles.actionBtnText, { color: '#0d47a1' }]}>تخريج الطالب</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.actionBtn, { backgroundColor: '#e8eaf6' }]}
                 onPress={openLevelModal}
@@ -1270,6 +1323,163 @@ export default function StudentDetailsScreen() {
                 )}
                 <Text style={styles.btnPrimaryText}>
                   {savingLevel ? 'جاري الحفظ...' : 'تطبيق'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🆕 ============ مودال تخريج الطالب ============ */}
+      <Modal
+        visible={showGraduateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowGraduateModal(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={[styles.modalCard, { maxWidth: 520 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="school" size={20} color="#0d47a1" />
+                <Text style={styles.modalTitle}>تخريج الطالب</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowGraduateModal(false)} testID="close-graduate-modal">
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+            <Text style={{ fontSize: 12, color: '#5a6c7d', textAlign: 'right', marginBottom: 12 }}>
+              ستُنقل بيانات "{student?.full_name}" إلى قائمة الخريجين مرتبطة بسنة التخرج المختارة.
+            </Text>
+
+            <View style={styles.modalBody}>
+              {/* سنة التخرج - مطلوب */}
+              <Text style={styles.modalLabel}>سنة التخرج * (إلزامي)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="2025"
+                value={gradYear}
+                onChangeText={(v) => setGradYear(v.replace(/[^0-9]/g, '').slice(0, 4))}
+                keyboardType="numeric"
+                maxLength={4}
+                testID="grad-year-input"
+              />
+
+              {/* الفصل */}
+              <Text style={styles.modalLabel}>الفصل الذي تخرّج فيه</Text>
+              <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: 4 }}>
+                {[
+                  { v: 'first', label: 'الفصل الأول' },
+                  { v: 'second', label: 'الفصل الثاني' },
+                  { v: 'summer', label: 'الفصل الصيفي' },
+                ].map(s => (
+                  <TouchableOpacity
+                    key={s.v}
+                    onPress={() => setGradSemester(s.v)}
+                    style={{
+                      flex: 1,
+                      paddingVertical: 8,
+                      borderRadius: 6,
+                      borderWidth: 1.5,
+                      borderColor: gradSemester === s.v ? '#0d47a1' : '#e0e7ee',
+                      backgroundColor: gradSemester === s.v ? '#0d47a1' : '#fff',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Text style={{ color: gradSemester === s.v ? '#fff' : '#333', fontSize: 12, fontWeight: '700' }}>{s.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* تاريخ التخرج */}
+              <Text style={styles.modalLabel}>تاريخ التخرج (اختياري)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="YYYY-MM-DD"
+                value={gradDate}
+                onChangeText={setGradDate}
+                testID="grad-date-input"
+              />
+
+              {/* صف ثنائي: GPA + Hours */}
+              <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>المعدل التراكمي (0 - 4.0)</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="3.85"
+                    value={gradGpa}
+                    onChangeText={setGradGpa}
+                    keyboardType="decimal-pad"
+                    testID="grad-gpa-input"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.modalLabel}>الساعات المعتمدة</Text>
+                  <TextInput
+                    style={styles.modalInput}
+                    placeholder="132"
+                    value={gradHours}
+                    onChangeText={(v) => setGradHours(v.replace(/[^0-9]/g, ''))}
+                    keyboardType="numeric"
+                    testID="grad-hours-input"
+                  />
+                </View>
+              </View>
+
+              {/* رقم الشهادة */}
+              <Text style={styles.modalLabel}>رقم الشهادة (اختياري)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="AHG-2025-XXXX"
+                value={gradCertNum}
+                onChangeText={setGradCertNum}
+                testID="grad-cert-input"
+              />
+
+              {/* مرتبة الشرف */}
+              <Text style={styles.modalLabel}>التقدير / مرتبة الشرف (اختياري)</Text>
+              <TextInput
+                style={styles.modalInput}
+                placeholder="ممتاز / جيد جداً / مع مرتبة الشرف"
+                value={gradHonors}
+                onChangeText={setGradHonors}
+                testID="grad-honors-input"
+              />
+
+              {/* ملاحظات */}
+              <Text style={styles.modalLabel}>ملاحظات (اختياري)</Text>
+              <TextInput
+                style={[styles.modalInput, { minHeight: 50, textAlignVertical: 'top' }]}
+                placeholder="..."
+                value={gradNotes}
+                onChangeText={setGradNotes}
+                multiline
+                testID="grad-notes-input"
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.btnCancel}
+                onPress={() => setShowGraduateModal(false)}
+                testID="grad-cancel-btn"
+              >
+                <Text style={styles.btnCancelText}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnPrimary, { backgroundColor: '#0d47a1' }]}
+                onPress={handleGraduate}
+                disabled={savingGraduate}
+                testID="grad-confirm-btn"
+              >
+                {savingGraduate ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="school" size={16} color="#fff" />
+                )}
+                <Text style={styles.btnPrimaryText}>
+                  {savingGraduate ? 'جاري التخريج...' : 'تأكيد التخريج'}
                 </Text>
               </TouchableOpacity>
             </View>

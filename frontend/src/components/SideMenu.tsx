@@ -67,6 +67,11 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.MANAGE_STUDENTS, 'view_students', 'add_student', 'edit_student', 'delete_student'
   ]},
 
+  // 🎓 الخريجون
+  { id: 'alumni', label: 'الخريجون', icon: 'school', path: '/alumni', permissions: [
+    PERMISSIONS.MANAGE_STUDENTS, 'view_students'
+  ]},
+
   // 📋 إدارة التسجيلات — صفحة مستقلة لتسجيل الطلاب في المقررات
   { id: 'enrollments', label: 'إدارة التسجيلات', icon: 'clipboard', path: '/manage-enrollments', permissions: [
     PERMISSIONS.MANAGE_ENROLLMENTS, 'view_enrollments', 'add_enrollment', 'delete_enrollment'

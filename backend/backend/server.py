@@ -186,6 +186,7 @@ from routes.archives import router as archives_router
 from routes.archive_pdf import router as archive_pdf_router
 from routes.curriculum import router as curriculum_router
 from routes.student_status import router as student_status_router
+from routes.alumni import router as alumni_router
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -3263,6 +3264,7 @@ async def get_students(
     section: Optional[str] = None,
     status: Optional[str] = None,
     is_active: Optional[bool] = None,
+    include_alumni: bool = False,  # 🆕 افتراضياً يُستثنى الخريجون من القائمة
     include_enrollments: bool = False,  # 🚀 أداء: غير مفعّل افتراضياً لأن جلب enrollments مكلف جداً
     current_user: dict = Depends(get_current_user)
 ):
@@ -3274,6 +3276,9 @@ async def get_students(
         query["is_active"] = is_active
     if status:
         query["status"] = status
+    # 🆕 استثناء الخريجين من قائمة الطلاب الافتراضية
+    if not include_alumni:
+        query["is_alumni"] = {"$ne": True}
     
     # تطبيق فلتر النطاق بناءً على دور المستخدم
     scope_filter = await get_user_scope_filter(current_user, "students")
@@ -15090,6 +15095,7 @@ app.include_router(admin_tools_router, prefix="/api")
 app.include_router(dashboard_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(global_search_router, prefix="/api")
+app.include_router(alumni_router, prefix="/api")
 app.include_router(entity_details_router, prefix="/api")
 app.include_router(archives_router, prefix="/api")
 app.include_router(archive_pdf_router, prefix="/api")
@@ -15420,3 +15426,4 @@ async def sync_default_roles():
 @app.on_event("shutdown")
 async def shutdown_db_client():
     client.close()
+

@@ -412,6 +412,17 @@ export const studentsAPI = {
     api.post(`/students/${studentId}/reset-password`),
   bulkActivate: () => api.post('/students/bulk-activate'),
   bulkDeactivate: () => api.post('/students/bulk-deactivate'),
+  // 🆕 تخريج طالب → ينقله إلى قائمة الخريجين
+  graduate: (studentId: string, data: { graduation_year: number; graduation_date?: string; graduation_semester?: string; final_gpa?: number; total_credit_hours?: number; certificate_number?: string; honors?: string; notes?: string }) =>
+    api.post(`/students/${studentId}/graduate`, data),
+};
+
+// 🆕 Alumni API (الخريجون)
+export const alumniAPI = {
+  getAll: (params?: { year?: number; faculty_id?: string; department_id?: string; q?: string }) =>
+    api.get('/alumni', { params }),
+  getById: (id: string) => api.get(`/alumni/${id}`),
+  restore: (id: string) => api.put(`/alumni/${id}/restore`),
 };
 
 // Teachers API (المعلمين)
