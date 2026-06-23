@@ -1,0 +1,35 @@
+{
+  "summary": "Verified the active-semester filter fix in /api/search for courses & lectures. Created pytest test_global_search_active_semester.py with 5 tests covering: (1) admin course search returns only active-semester courses (تفسير => 0 results since no تفسير course exists in active semester الفصل الصيفي 2024-2025; before the fix this leaked old templates like TFS201-أ); (2) broader queries 'م','10','ا' return 2/1/2 courses ALL with semester_id == active_semester_id (verified by GET /api/courses/{id}); (3) other search types (departments, faculties, teachers, students, lectures) still return data correctly; (4) Dean Salim scope works AND active-semester filter is applied (2 courses, all in his faculty + active semester); (5) lecture search restricted to courses of active semester (0 results, matching DB state). All 5 tests PASSED.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_global_search_active_semester.py",
+    "/app/test_reports/pytest/global_search_active_semester.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Fix in /app/backend/backend/routes/global_search.py is correctly applied: lines ~154-160 fetch active_semester_id once, lines ~305-306 apply it to course search query, lines ~444-446 apply it to lecture's course_match_query.",
+    "Edge case: if NO active semester exists in DB, active_semester_id stays None and the filter is skipped (search returns all courses). The fix is graceful (no crash), matching the requirement. Could be hardened to refuse course search or warn UI, but currently acceptable.",
+    "active_semester_id is stored as string from str(ObjectId). The course documents' semester_id field is also stored as string in this codebase (verified by returned course detail), so the equality match works correctly."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_global_search_active_semester.py (new)"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "not tested (backend-only request)"
+  },
+  "test_credentials": "admin/admin123 and Salim/test1234 (from /app/memory/test_credentials.md). Both worked.",
+  "seed_data_creation": "None. Read-only tests against existing data.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Active semester in dev DB is الفصل الصيفي 2024-2025 (_id 6a21bee0ddb8d04530cf65f4) with only 2 courses. /api/search response shape: { query, results: { courses: [...], lectures: [...], ... }, total }. Each course item exposes 'id' (string) and full course doc is reachable via GET /api/courses/{id} which includes semester_id (string). Login API: POST /api/auth/login returns access_token. Dean Salim's faculty_id is 698e4f9297fef774e66e93a4.",
+  "rca of the issue": "Global Search /api/search was returning ALL db.courses documents matching the query — including old curriculum-template course rows (codes ending with -أ/-ب) from previous semesters or templates that were not actual semester offerings. Reproduction (pre-fix): GET /api/search?q=تفسير&types=courses returned curriculum templates such as TFS201-أ even though these are not in the active semester's offerings (which use suffix S like TFS201S). Mitigation (applied & verified): fetch active semester once at start of search and add semester_id == active_semester_id filter to courses query and to the lecture's course_match_query. Verified post-fix: تفسير => 0 (no تفسير course in active semester), and every returned course for other queries has semester_id matching the active semester."
+}

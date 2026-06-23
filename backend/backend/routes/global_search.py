@@ -148,6 +148,17 @@ async def global_search(
     results: dict = {}
     total = 0
 
+    # 🆕 جلب الفصل النشط مرة واحدة لاستخدامه في فلترة المقررات والمحاضرات
+    # المقررات/العروض في DB لها semester_id يربطها بفصل دراسي. القوالب القديمة
+    # (curriculum templates) لا تنتمي للفصل النشط فيجب استثناؤها من البحث.
+    active_semester_id: Optional[str] = None
+    try:
+        active_sem = await db.semesters.find_one({"status": "active"})
+        if active_sem:
+            active_semester_id = str(active_sem["_id"])
+    except Exception:
+        active_semester_id = None
+
     # خرائط مرجعية تُجلب عند الحاجة لإثراء العناوين الفرعية بأسماء الأقسام/الكليات
     async def _resolve_names(dept_ids: set, faculty_ids: set):
         depts_map, facs_map = {}, {}
@@ -279,16 +290,20 @@ async def global_search(
             total += len(items)
 
     # =========================================
-    # 3) المقررات
+    # 3) المقررات (تقتصر على الفصل النشط فقط)
     # =========================================
     if "courses" in requested_types and can_search_courses:
-        cq = {
+        cq: Optional[dict] = {
             "is_active": True,
             "$or": [
                 {"name": regex},
                 {"code": code_regex},
             ],
         }
+        # 🆕 فلتر الفصل النشط - لاستبعاد القوالب القديمة (curriculum templates)
+        # والمقررات من فصول سابقة
+        if active_semester_id:
+            cq["semester_id"] = active_semester_id
         # المعلم يرى مقرراته فقط
         if is_teacher:
             user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
@@ -425,7 +440,10 @@ async def global_search(
             lq["date"] = q_clean
         else:
             # اربط بالمقررات التي تطابق (مع تطبيق scope على المقررات)
-            course_match_query = {"$or": [{"name": regex}, {"code": code_regex}]}
+            course_match_query: dict = {"$or": [{"name": regex}, {"code": code_regex}]}
+            # 🆕 فلتر الفصل النشط للمحاضرات أيضاً
+            if active_semester_id:
+                course_match_query["semester_id"] = active_semester_id
             if not is_admin and not is_teacher and not is_student:
                 course_scope = await _scope_filter(current_user, "courses")
                 course_match_query = _merge_query(course_match_query, course_scope)
