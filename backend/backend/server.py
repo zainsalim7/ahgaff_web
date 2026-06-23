@@ -3493,10 +3493,7 @@ async def get_student_courses_admin(
     student_id: str,
     current_user: dict = Depends(get_current_user),
 ):
-    """جلب مقررات طالب محدد (للإدارة/المعلمين).
-    
-    يدعم: التسجيلات الصريحة + الاستنتاج من القسم/المستوى/الشعبة.
-    """
+    """جلب مقررات طالب محدد - فقط التسجيلات الصريحة في الفصل النشط (بدون استنتاج)."""
     # التحقق من الصلاحيات
     if current_user["role"] not in [UserRole.ADMIN] and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_teachers"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -3511,40 +3508,26 @@ async def get_student_courses_admin(
     # الفصل النشط
     active_sem = await db.semesters.find_one({"status": "active"})
     active_sem_id = str(active_sem["_id"]) if active_sem else None
+    active_sem_oid = active_sem["_id"] if active_sem else None
     
-    # جلب التسجيلات (مفلترة بالفصل النشط إن وُجد)
-    enroll_query: dict = {"student_id": student_id}
-    if active_sem_id:
-        enroll_query["semester_id"] = active_sem_id
-    enrollments = await db.enrollments.find(enroll_query).to_list(200)
-    course_ids = [e["course_id"] for e in enrollments]
+    # جلب جميع تسجيلات الطالب الصريحة (بدون فلتر semester_id على enrollment
+    # لأن enrollments قديمة كثيرة لها semester_id=None، لكن الـ course الخاص بها
+    # موسوم بـ semester_id الصحيح)
+    enrollments = await db.enrollments.find({"student_id": student_id}).to_list(500)
+    course_ids = [e["course_id"] for e in enrollments if e.get("course_id")]
     
-    # إذا لا يوجد تسجيلات، نستنتج من القسم/المستوى/الشعبة (مفلترة بالفصل النشط)
-    inferred = False
-    if not course_ids:
-        inferred = True
-        query: dict = {
-            "department_id": student.get("department_id"),
-            "level": student.get("level"),
-            "is_active": True,
-        }
+    courses_list: list = []
+    if course_ids:
+        # جلب المقررات لتسجيلات الطالب، مع فلترة بالفصل النشط على مستوى المقرر
+        course_filter: dict = {"_id": {"$in": [ObjectId(cid) for cid in course_ids if cid]}}
         if active_sem_id:
-            query["semester_id"] = active_sem_id
-        if student.get("section"):
-            query["$or"] = [
-                {"section": {"$in": [None, "", student["section"]]}},
-                {"section": {"$exists": False}},
-            ]
-        courses_list = await db.courses.find(query).to_list(200)
-    else:
-        courses_list = []
-        for cid in course_ids:
-            try:
-                c = await db.courses.find_one({"_id": ObjectId(cid)})
-                if c:
-                    courses_list.append(c)
-            except Exception:
-                pass
+            # يقبل string + ObjectId
+            course_filter["semester_id"] = {"$in": [active_sem_id, active_sem_oid]}
+        async for c in db.courses.find(course_filter):
+            courses_list.append(c)
+    
+    # ⚠️ لا يوجد fallback / inference - إذا لا توجد تسجيلات → قائمة فارغة
+    inferred = False
     
     result = []
     for c in courses_list:

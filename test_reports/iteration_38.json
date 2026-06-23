@@ -1,0 +1,31 @@
+{
+  "summary": "Verified the inferred-courses fallback has been fully removed. Backend GET /api/students/{id}/courses now returns ONLY explicitly-enrolled courses filtered by active_semester_id ($in [string, ObjectId]) with is_inferred=false; empty list when no explicit enrollments or only-inactive enrollments. Frontend student-details renders the unified 'المقررات المسجَّلة' title with a regular blue count chip — no red warning banner, no 'غير مسجَّل' chip, no 'المقررات المقترَحة' title — for both populated (1 course) and empty (0 courses) cases. Course-enrollments endpoint /api/enrollments/{course_id} continues to return the enrolled students list with full_name/student_id/level/section.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_student_courses_explicit.py",
+    "/app/test_reports/pytest/iter38_explicit.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Several React Native Web console warnings remain noise (text-node-as-View-child, deprecated shadow*/pointerEvents props). Cosmetic; not blocking. Main agent may want to clean these up at some point.",
+    "GET /api/students/{id}/courses returns a dict shape {is_inferred, total_courses, courses, student_id}. is_inferred is now always false; consider removing the field entirely in a future cleanup since it conveys no information anymore. Frontend still reads cData.is_inferred safely (defaults to false).",
+    "server.py is 15412 lines — well above the recommended 700-line module size. Recommend splitting into routes/services modules. Not blocking the current fix.",
+    "The endpoint filters courses with semester_id $in [string, ObjectId] to handle legacy data; consider a one-off migration to normalize semester_id storage type so this dual-form filter can be simplified."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_student_courses_explicit.py",
+    "/app/test_reports/iteration_38.json"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin / admin123",
+  "seed_data_creation": "None. Used existing students: 698e57518cfb2f14627a285e (طالب اختبار 1, has 1 active enrollment → course 6a343eaf15515862788eddab) and 698e50c797fef774e66e93aa (خالد, has enrollments only in inactive semesters → empty result).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Active semester id: 6a21bee0ddb8d04530cf65f4. Student 698e57518cfb2f14627a285e is the canonical EXPLICITLY-enrolled student (1 active course). Student 698e50c797fef774e66e93aa is the canonical EMPTY-case student (enrollments exist but only in inactive semesters → backend returns 0 courses). All 92 students in dev DB have ≥1 enrollment row, so the truly-no-enrollments path was not exercised via UI but is logically equivalent to the empty inactive case (both yield course_filter that returns no docs). Backend test for that exact path is currently SKIPPED due to seed-data shape; not blocking.",
+  "rca of the issue": "Previous iteration (37) confirmed that the OLD inferred-fallback path could not be empirically suppressed in UI because every student in dev DB had no explicit enrollments. After main agent removed the fallback in server.py and the red banner/inferred chip in student-details.tsx, this iteration verified both paths render cleanly: populated case shows blue '1 مقرر' + 'المقررات المسجَّلة' + course card; empty case shows blue '0 مقرر' + 'المقررات المسجَّلة' + empty illustration 'لا توجد مقررات مسجلة'. No suggestion text, no red warning, no inferred banner anywhere."
+}
