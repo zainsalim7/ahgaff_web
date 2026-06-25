@@ -1,0 +1,65 @@
+{
+  "summary": "Backend curriculum-export endpoint is fully working (9/9 pytest tests pass: xlsx & pdf for all/level/level+term combos, empty filter, invalid id 400, missing id 404, permission 403 for student, no-auth 401/403). xlsx has RTL sheet view + Arabic preserved, PDF embeds Amiri TTF (FontFile2 present) and contains %PDF/%%EOF markers. FRONTEND IS BROKEN: the /curriculum page crashes with 'Uncaught Error: showExportModal is not defined' because the state hooks for the export modal (showExportModal, exportFormat, exportScope, exportLevel, exportTerm, exporting) were NEVER declared with useState in curriculum.tsx. The new 'تصدير الخطة' button never renders, and the entire curriculum screen is broken for all users.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "/app/frontend/app/curriculum.tsx (CurriculumScreen)",
+        "issue": "Uncaught Error: showExportModal is not defined. State hooks for the export modal were never declared. References on lines 309-346 (performExport) and 1095+ (Modal JSX) use showExportModal/exportFormat/exportScope/exportLevel/exportTerm/exporting/setShowExportModal/setExportFormat/setExportScope/setExportLevel/setExportTerm/setExporting but useState() declarations are missing. The component throws on render → whole /curriculum page broken (dev overlay full-screen). The new 'تصدير الخطة' button never appears in the DOM.",
+        "selector": "[data-testid=\"export-curriculum-btn\"]",
+        "priority": "CRITICAL"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Export Curriculum (web download)",
+        "issue": "Cannot exercise the frontend flow at all because the page crashes before the Modal renders. Backend endpoint is reachable and verified independently via pytest. Once useState declarations are added, the flow should work because performExport() already builds the right URL and uses Bearer auth.",
+        "affected_selectors": [
+          "[data-testid=\"export-curriculum-btn\"]",
+          "[data-testid=\"export-format-xlsx\"]",
+          "[data-testid=\"export-format-pdf\"]",
+          "[data-testid=\"export-scope-all\"]",
+          "[data-testid=\"export-scope-level\"]",
+          "[data-testid=\"export-scope-term\"]",
+          "[data-testid=\"export-scope-level_term\"]",
+          "[data-testid=\"export-execute\"]",
+          "[data-testid=\"export-cancel\"]"
+        ]
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_curriculum_export.py",
+    "/app/test_reports/pytest/curriculum_export_results.xml"
+  ],
+  "action_items": [
+    "MAIN AGENT MUST FIX: Add the missing useState declarations near the top of CurriculumScreen() in /app/frontend/app/curriculum.tsx. Suggested defaults:\n  const [showExportModal, setShowExportModal] = useState(false);\n  const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf'>('xlsx');\n  const [exportScope, setExportScope] = useState<'all' | 'level' | 'term' | 'level_term'>('all');\n  const [exportLevel, setExportLevel] = useState<number>(1);\n  const [exportTerm, setExportTerm] = useState<number>(1);\n  const [exporting, setExporting] = useState(false);\nWithout these, the WHOLE /curriculum page is broken (not just the export feature).",
+    "After adding the hooks, restart expo (CI=true disables HMR) so the new bundle is served: sudo supervisorctl restart expo",
+    "Then retest: open /curriculum as admin → ensure page renders → click 'تصدير الخطة' → Modal opens → choose scope=level_term, level=1, term=2, format=pdf → 'تصدير' triggers a real PDF download (verify Amiri Arabic rendering, RTL)."
+  ],
+  "critical_code_review_comments": [
+    "Backend export endpoint is well-implemented: uses ObjectId try/except → 400, dept-not-found → 404, role gate via _has_manage() OR dean/department_head, openpyxl sheet_view.rightToLeft=True for RTL, reportlab+Amiri+arabic_reshaper+bidi for PDF. Arabic text preserved correctly (no mojibake), Amiri TTF embedded (FontFile2 present in PDF body).",
+    "FRONTEND CRITICAL: 6 missing useState declarations in curriculum.tsx. This is a hard ReferenceError that crashes the page on first render. Reproduces 100% after expo bundle is fresh. Likely cause: main agent added the JSX, handler, and toolbar button but skipped the state-hook block. This kind of regression should be caught by a basic typecheck (`tsc --noEmit`) before commit — TypeScript would flag every reference to the undeclared identifiers.",
+    "Suggestion: Add a TypeScript pre-commit/CI step for the frontend so missing identifiers don't ship.",
+    "Filename construction in performExport uses Arabic characters and the dept name verbatim (`الخطة_${deptName}_${suffix}.${exportFormat}`). On some browsers this works via the Blob → a.download path, but a slug/sanitization step would be safer (replace spaces/slashes). Not blocking.",
+    "curriculum.py is 1670 lines — well beyond the 700-line guideline. Recommend splitting into curriculum/_export.py, curriculum/_io.py, etc."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_curriculum_export.py",
+    "/app/test_reports/iteration_39.json"
+  ],
+  "success_rate": {
+    "backend": "100%",
+    "frontend": "0% (page crashes — feature cannot be exercised)"
+  },
+  "test_credentials": "admin / admin123 (used). Student 234/234 used to verify 403.",
+  "seed_data_creation": "None. Used existing department 698e500997fef774e66e93a8 (الشريعة والقانون) per main agent context.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_curriculum_export.py — 9 tests, all green. Frontend test was blocked by the missing-useState crash; once main agent adds the 6 hooks (defaults: showExportModal=false, exportFormat='xlsx', exportScope='all', exportLevel=1, exportTerm=1, exporting=false), restart expo (sudo supervisorctl restart expo), then verify Modal opens, scope/level/term chips appear conditionally, and a real file download triggers from web. Active dept: 698e500997fef774e66e93a8.",
+  "rca of the issue": "Root cause: in /app/frontend/app/curriculum.tsx, the new export feature added (a) the toolbar button at line 603, (b) the performExport handler at lines 306-348, and (c) the Modal JSX at lines 1095-1212 — all of which reference 6 state identifiers (showExportModal, exportFormat, exportScope, exportLevel, exportTerm, exporting) and their setters. However the corresponding `const [x, setX] = useState(...)` declarations were NEVER added to the state-hook block (lines 26-47). React/JS therefore throws ReferenceError on first render evaluation of the Modal JSX, which is fatal — the entire CurriculumScreen unmounts to the error boundary. Reproduction: log in as admin, navigate to /curriculum (after a fresh expo bundle). Expected: page renders with dept dropdown and 6 action buttons including 'تصدير الخطة'. Actual: full-screen Expo dev error overlay 'Uncaught Error: showExportModal is not defined' at app/curriculum.tsx:1095:25. Mitigation: add the 6 useState declarations listed in action_items. After the fix, the existing performExport handler should already work (correct URL, Bearer token, Blob download via web Platform), and the backend is verified to deliver well-formed xlsx/pdf with Arabic + RTL."
+}

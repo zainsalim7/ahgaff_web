@@ -17,7 +17,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
-import api from '../src/services/api';
+import api, { API_URL } from '../src/services/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function CurriculumScreen() {
   const params = useLocalSearchParams<{ departmentId?: string }>();
@@ -302,6 +303,50 @@ export default function CurriculumScreen() {
     setShowWipeModal(true);
   };
 
+  // 🆕 تنفيذ التصدير (Excel أو PDF)
+  const performExport = async () => {
+    if (!selectedDept) return;
+    setExporting(true);
+    try {
+      const params = new URLSearchParams({ format: exportFormat });
+      if (exportScope === 'level' || exportScope === 'level_term') {
+        params.set('level', String(exportLevel));
+      }
+      if (exportScope === 'term' || exportScope === 'level_term') {
+        params.set('term', String(exportTerm));
+      }
+      const url = `${API_URL}/api/curriculum/department/${selectedDept}/export?${params.toString()}`;
+      const token = (await AsyncStorage.getItem('authToken')) || (await AsyncStorage.getItem('token'));
+      const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (!res.ok) {
+        const txt = await res.text();
+        throw new Error(txt || 'فشل التصدير');
+      }
+      const blob = await res.blob();
+      const deptName = (departments.find((d: any) => (d.id || d._id) === selectedDept)?.name || 'curriculum').replace(/\s+/g, '_');
+      let suffix = 'all';
+      if (exportScope === 'level') suffix = `level_${exportLevel}`;
+      else if (exportScope === 'term') suffix = `term_${exportTerm}`;
+      else if (exportScope === 'level_term') suffix = `L${exportLevel}_T${exportTerm}`;
+      const filename = `الخطة_${deptName}_${suffix}.${exportFormat}`;
+      if (Platform.OS === 'web') {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(blobUrl);
+      }
+      setShowExportModal(false);
+    } catch (e: any) {
+      const msg = e?.message || 'فشل التصدير';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('خطأ', msg);
+    } finally {
+      setExporting(false);
+    }
+  };
+
   const downloadTemplate = async () => {
     try {
       const res = await api.get('/template/curriculum', { responseType: 'blob' as any });
@@ -553,6 +598,11 @@ export default function CurriculumScreen() {
                 <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#ffebee' }]} onPress={wipeDepartment} testID="wipe-dept-btn">
                   <Ionicons name="trash" size={18} color="#c62828" />
                   <Text style={[styles.toolBtnText, { color: '#c62828' }]}>مسح خطة القسم</Text>
+                </TouchableOpacity>
+                {/* 🆕 زر تصدير الخطة */}
+                <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#f3e5f5' }]} onPress={() => setShowExportModal(true)} testID="export-curriculum-btn" disabled={!selectedDept}>
+                  <Ionicons name="document-text" size={18} color="#6a1b9a" />
+                  <Text style={[styles.toolBtnText, { color: '#6a1b9a' }]}>تصدير الخطة</Text>
                 </TouchableOpacity>
               </View>
               {activeSemester && (
@@ -1034,6 +1084,129 @@ export default function CurriculumScreen() {
                 >
                   {wipingScoped ? <ActivityIndicator size="small" color="#fff" /> : (
                     <Text style={styles.modalBtnPrimaryText}>تنفيذ المسح</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* 🆕 Modal تصدير الخطة */}
+        <Modal visible={showExportModal} transparent animationType="fade" onRequestClose={() => setShowExportModal(false)}>
+          <View style={styles.modalOverlay}>
+            <View style={[styles.modal, { maxWidth: 480 }]}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+                <Ionicons name="document-text" size={22} color="#6a1b9a" />
+                <Text style={[styles.modalTitle, { marginBottom: 0 }]}>تصدير الخطة الدراسية</Text>
+              </View>
+              <Text style={{ fontSize: 12, color: '#666', textAlign: 'right', marginBottom: 12 }}>
+                اختر صيغة التصدير ونطاقه (عربي RTL + محاذاة يمين)
+              </Text>
+
+              {/* الصيغة */}
+              <Text style={[styles.modalLabel, { marginTop: 0 }]}>الصيغة</Text>
+              <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 8 }}>
+                {[
+                  { key: 'xlsx', label: 'Excel', icon: 'grid' as const, color: '#2e7d32' },
+                  { key: 'pdf', label: 'PDF', icon: 'document' as const, color: '#c62828' },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    onPress={() => setExportFormat(opt.key as any)}
+                    testID={`export-format-${opt.key}`}
+                    style={{
+                      flex: 1, paddingVertical: 12, borderRadius: 8,
+                      borderWidth: 1.5, borderColor: exportFormat === opt.key ? opt.color : '#e0e0e0',
+                      backgroundColor: exportFormat === opt.key ? opt.color + '15' : '#fff',
+                      flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6,
+                    }}
+                  >
+                    <Ionicons name={opt.icon} size={18} color={opt.color} />
+                    <Text style={{ fontWeight: '700', color: '#333', fontSize: 14 }}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {/* النطاق */}
+              <Text style={styles.modalLabel}>النطاق</Text>
+              <View style={{ gap: 6 }}>
+                {[
+                  { key: 'all', label: 'كامل خطة القسم' },
+                  { key: 'level', label: 'مستوى معين فقط' },
+                  { key: 'term', label: 'فصل معين فقط' },
+                  { key: 'level_term', label: 'مستوى + فصل محدد' },
+                ].map(opt => (
+                  <TouchableOpacity
+                    key={opt.key}
+                    onPress={() => setExportScope(opt.key as any)}
+                    testID={`export-scope-${opt.key}`}
+                    style={{
+                      flexDirection: 'row-reverse', alignItems: 'center', gap: 8, padding: 10,
+                      borderWidth: 1.5, borderColor: exportScope === opt.key ? '#6a1b9a' : '#e0e0e0',
+                      backgroundColor: exportScope === opt.key ? '#f3e5f5' : '#fafafa', borderRadius: 8,
+                    }}
+                  >
+                    <Ionicons name={exportScope === opt.key ? 'radio-button-on' : 'radio-button-off'} size={18} color={exportScope === opt.key ? '#6a1b9a' : '#90a4ae'} />
+                    <Text style={{ flex: 1, textAlign: 'right', fontSize: 13, fontWeight: '600', color: '#333' }}>{opt.label}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              {(exportScope === 'level' || exportScope === 'level_term') && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.modalLabel}>المستوى</Text>
+                  <View style={{ flexDirection: 'row-reverse', gap: 6, flexWrap: 'wrap' }}>
+                    {[1, 2, 3, 4, 5].map(lv => (
+                      <TouchableOpacity
+                        key={lv}
+                        onPress={() => setExportLevel(lv)}
+                        testID={`export-level-${lv}`}
+                        style={{
+                          paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
+                          borderWidth: 1.5, borderColor: exportLevel === lv ? '#0277bd' : '#e0e0e0',
+                          backgroundColor: exportLevel === lv ? '#0277bd' : '#fff',
+                        }}
+                      >
+                        <Text style={{ color: exportLevel === lv ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>مستوى {lv}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              {(exportScope === 'term' || exportScope === 'level_term') && (
+                <View style={{ marginTop: 12 }}>
+                  <Text style={styles.modalLabel}>الفصل</Text>
+                  <View style={{ flexDirection: 'row-reverse', gap: 6 }}>
+                    {[
+                      { v: 1, label: 'الأول', c: '#1565c0' },
+                      { v: 2, label: 'الثاني', c: '#6a1b9a' },
+                      { v: 3, label: 'الصيفي', c: '#ef6c00' },
+                    ].map(t => (
+                      <TouchableOpacity
+                        key={t.v}
+                        onPress={() => setExportTerm(t.v)}
+                        testID={`export-term-${t.v}`}
+                        style={{
+                          flex: 1, paddingVertical: 10, borderRadius: 8,
+                          borderWidth: 1.5, borderColor: exportTerm === t.v ? t.c : '#e0e0e0',
+                          backgroundColor: exportTerm === t.v ? t.c : '#fff', alignItems: 'center',
+                        }}
+                      >
+                        <Text style={{ color: exportTerm === t.v ? '#fff' : '#333', fontWeight: '700', fontSize: 13 }}>{t.label}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                </View>
+              )}
+
+              <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+                <TouchableOpacity style={[styles.modalBtn, styles.modalBtnCancel]} onPress={() => setShowExportModal(false)} testID="export-cancel">
+                  <Text style={styles.modalBtnCancelText}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.modalBtn, { backgroundColor: '#6a1b9a' }]} onPress={performExport} disabled={exporting} testID="export-execute">
+                  {exporting ? <ActivityIndicator size="small" color="#fff" /> : (
+                    <Text style={styles.modalBtnPrimaryText}>تصدير</Text>
                   )}
                 </TouchableOpacity>
               </View>

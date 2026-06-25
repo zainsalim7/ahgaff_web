@@ -1419,3 +1419,252 @@ async def upload_curriculum(
         "mode": mode,
         "sample": created_items[:20],
     }
+
+
+# =====================================================================
+# 📤 تصدير الخطة الدراسية (PDF / Excel) - عربي RTL + محاذاة يمين
+# =====================================================================
+def _term_label(t):
+    return {1: "الفصل الأول", 2: "الفصل الثاني", 3: "الفصل الصيفي"}.get(int(t) if t else 0, "—")
+
+
+async def _gather_curriculum_rows(db, department_id: str, level=None, term=None):
+    """يجمع مقررات الخطة لقسم مع فلاتر اختيارية، مع إثراء أسماء المعلمين."""
+    q: dict = {"department_id": department_id, "is_active": {"$ne": False}}
+    if level is not None:
+        q["level"] = int(level)
+    if term is not None:
+        q["term"] = int(term)
+    docs = await db.curriculum_courses.find(q).sort([("level", 1), ("term", 1), ("name", 1)]).to_list(2000)
+    # خريطة معلمين من teacher_assignments الفعَّالة
+    cc_ids = [str(d["_id"]) for d in docs]
+    teach_map: dict = {}
+    if cc_ids:
+        async for a in db.teacher_assignments.find(
+            {"curriculum_course_id": {"$in": cc_ids}, "is_active": {"$ne": False}}
+        ):
+            teach_map.setdefault(a["curriculum_course_id"], []).append(a.get("teacher_name", ""))
+    rows = []
+    for d in docs:
+        rows.append({
+            "id": str(d["_id"]),
+            "level": d.get("level"),
+            "term": d.get("term"),
+            "code": d.get("code", ""),
+            "name": d.get("name", ""),
+            "credit_hours": d.get("credit_hours", 0),
+            "weekly_hours": d.get("weekly_hours") or 0,
+            "teachers": "، ".join([t for t in teach_map.get(str(d["_id"]), []) if t]) or "—",
+        })
+    return rows
+
+
+@router.get("/curriculum/department/{department_id}/export")
+async def export_curriculum(
+    department_id: str,
+    format: str = Query("xlsx", description="xlsx أو pdf"),
+    level: Optional[int] = None,
+    term: Optional[int] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تصدير الخطة الدراسية للقسم بصيغة Excel أو PDF مع دعم العربية + RTL."""
+    if not _has_manage(current_user) and current_user.get("role") not in ("dean", "department_head"):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية للتصدير")
+
+    db = get_db()
+    try:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف القسم غير صحيح")
+    if not dept:
+        raise HTTPException(status_code=404, detail="القسم غير موجود")
+    fac = None
+    if dept.get("faculty_id"):
+        try:
+            fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
+        except Exception:
+            pass
+
+    rows = await _gather_curriculum_rows(db, department_id, level=level, term=term)
+    dept_name = dept.get("name", "")
+    fac_name = (fac or {}).get("name", "")
+
+    scope_parts = []
+    if level is not None:
+        scope_parts.append(f"المستوى {level}")
+    if term is not None:
+        scope_parts.append(_term_label(term))
+    scope_label = " - ".join(scope_parts) if scope_parts else "كامل الخطة"
+    filename_safe = f"curriculum_{department_id}"
+    if level is not None:
+        filename_safe += f"_L{level}"
+    if term is not None:
+        filename_safe += f"_T{term}"
+
+    if format.lower() == "pdf":
+        return _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe)
+    return _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe)
+
+
+def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
+    """Excel - RTL + محاذاة يمين + فواصل مستوى/فصل."""
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الخطة الدراسية"
+    ws.sheet_view.rightToLeft = True  # RTL
+
+    # العناوين الكبيرة
+    ws["A1"] = "الخطة الدراسية"
+    ws["A1"].font = Font(name="Arial", size=18, bold=True, color="0d47a1")
+    ws["A1"].alignment = Alignment(horizontal="right", vertical="center")
+    ws.merge_cells("A1:G1")
+    ws["A2"] = f"الكلية: {fac_name} - القسم: {dept_name}"
+    ws["A2"].font = Font(name="Arial", size=12, bold=True)
+    ws["A2"].alignment = Alignment(horizontal="right")
+    ws.merge_cells("A2:G2")
+    ws["A3"] = f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"
+    ws["A3"].font = Font(name="Arial", size=11, italic=True, color="5a6c7d")
+    ws["A3"].alignment = Alignment(horizontal="right")
+    ws.merge_cells("A3:G3")
+
+    # رأس الأعمدة
+    headers = ["#", "المستوى", "الفصل", "الكود", "اسم المقرر", "ساعات معتمدة", "ساعات أسبوعية"]
+    header_row = 5
+    header_fill = PatternFill("solid", fgColor="1565c0")
+    header_font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
+    thin = Side(border_style="thin", color="b0bec5")
+    border = Border(top=thin, left=thin, right=thin, bottom=thin)
+    for i, h in enumerate(headers, start=1):
+        cell = ws.cell(row=header_row, column=i, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = border
+
+    # البيانات
+    row_num = header_row + 1
+    last_level = None
+    last_term = None
+    for idx, r in enumerate(rows, start=1):
+        # فاصل مستوى/فصل عند التغيير
+        if last_level != r["level"] or last_term != r["term"]:
+            sep = ws.cell(row=row_num, column=1,
+                         value=f"المستوى {r['level']} - {_term_label(r['term'])}")
+            sep.font = Font(name="Arial", size=12, bold=True, color="FFFFFF")
+            sep.fill = PatternFill("solid", fgColor="ef6c00")
+            sep.alignment = Alignment(horizontal="right", vertical="center")
+            ws.merge_cells(start_row=row_num, start_column=1, end_row=row_num, end_column=7)
+            row_num += 1
+            last_level, last_term = r["level"], r["term"]
+        values = [idx, r["level"], _term_label(r["term"]), r["code"], r["name"], r["credit_hours"], r["weekly_hours"]]
+        for ci, v in enumerate(values, start=1):
+            cell = ws.cell(row=row_num, column=ci, value=v)
+            cell.font = Font(name="Arial", size=11)
+            cell.alignment = Alignment(horizontal="right" if ci == 5 else "center", vertical="center", wrap_text=True)
+            cell.border = border
+            if row_num % 2 == 0:
+                cell.fill = PatternFill("solid", fgColor="f5f7fa")
+        row_num += 1
+
+    # عرض الأعمدة
+    widths = [5, 10, 14, 16, 40, 14, 14]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.row_dimensions[1].height = 30
+    ws.row_dimensions[header_row].height = 26
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename_safe}.xlsx"'},
+    )
+
+
+def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
+    """PDF - عربي مع خط Amiri + RTL + محاذاة يمين."""
+    import os
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+
+    font_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fonts", "Amiri-Regular.ttf")
+    if "Amiri" not in pdfmetrics.getRegisteredFontNames():
+        pdfmetrics.registerFont(TTFont("Amiri", font_path))
+
+    def ar(s):
+        try:
+            return get_display(arabic_reshaper.reshape(str(s)))
+        except Exception:
+            return str(s)
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    elements: list = []
+    title_style = ParagraphStyle("Title", fontName="Amiri", fontSize=20, alignment=2, textColor=colors.HexColor("#0d47a1"), spaceAfter=6)
+    sub_style = ParagraphStyle("Sub", fontName="Amiri", fontSize=13, alignment=2, textColor=colors.HexColor("#1565c0"), spaceAfter=4)
+    info_style = ParagraphStyle("Info", fontName="Amiri", fontSize=11, alignment=2, textColor=colors.HexColor("#5a6c7d"), spaceAfter=10)
+    elements.append(Paragraph(ar("الخطة الدراسية"), title_style))
+    elements.append(Paragraph(ar(f"الكلية: {fac_name} — القسم: {dept_name}"), sub_style))
+    elements.append(Paragraph(ar(f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"), info_style))
+    elements.append(Spacer(1, 6))
+
+    # تجميع حسب (level, term)
+    groups: dict = {}
+    for r in rows:
+        key = (r["level"], r["term"])
+        groups.setdefault(key, []).append(r)
+
+    section_style = ParagraphStyle("Sec", fontName="Amiri", fontSize=14, alignment=2,
+                                    textColor=colors.white, backColor=colors.HexColor("#ef6c00"),
+                                    leftIndent=4, rightIndent=4, spaceBefore=8, spaceAfter=4, borderPadding=4)
+
+    for (lv, tm), grp in sorted(groups.items(), key=lambda x: (x[0][0] or 0, x[0][1] or 0)):
+        elements.append(Paragraph(ar(f"المستوى {lv} — {_term_label(tm)}  ({len(grp)} مقرر)"), section_style))
+        # رأس الجدول (مقلوب بالعربية للقراءة من اليمين)
+        header = [ar(h) for h in ["س. أسبوعية", "س. معتمدة", "اسم المقرر", "الكود", "#"]]
+        data = [header]
+        for idx, r in enumerate(grp, start=1):
+            data.append([
+                ar(str(r["weekly_hours"] or "—")),
+                ar(str(r["credit_hours"] or "—")),
+                ar(r["name"]),
+                ar(r["code"] or "—"),
+                ar(str(idx)),
+            ])
+        table = Table(data, colWidths=[22*mm, 22*mm, 80*mm, 30*mm, 10*mm])
+        table.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), "Amiri"),
+            ("FONTSIZE", (0, 0), (-1, -1), 11),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("ALIGN", (2, 1), (2, -1), "RIGHT"),  # اسم المقرر يمين
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#b0bec5")),
+            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#1565c0")),
+            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
+            ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+            ("TOPPADDING", (0, 0), (-1, 0), 8),
+        ]))
+        elements.append(table)
+        elements.append(Spacer(1, 4))
+
+    doc.build(elements)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename_safe}.pdf"'},
+    )
