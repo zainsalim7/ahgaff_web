@@ -46,6 +46,14 @@ export default function CurriculumScreen() {
   const [wipeTerm, setWipeTerm] = useState<number>(1);
   const [wipingScoped, setWipingScoped] = useState(false);
 
+  // 🆕 مودال التصدير
+  const [showExportModal, setShowExportModal] = useState(false);
+  const [exportFormat, setExportFormat] = useState<'xlsx' | 'pdf'>('xlsx');
+  const [exportScope, setExportScope] = useState<'all' | 'level' | 'term' | 'level_term'>('all');
+  const [exportLevel, setExportLevel] = useState<number>(1);
+  const [exportTerm, setExportTerm] = useState<number>(1);
+  const [exporting, setExporting] = useState(false);
+
   useEffect(() => {
     (async () => {
       try {

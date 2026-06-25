@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend retest of curriculum export feature PASSED 100%. After main agent added the 6 missing useState declarations (lines 50-55 in /app/frontend/app/curriculum.tsx) and restarted expo, the /curriculum page now renders without ReferenceError. The purple 'تصدير الخطة' button is present and clickable. The export Modal opens correctly with title 'تصدير الخطة الدراسية'. Format chips (Excel/PDF) and all 4 scope radios (all, level, term, level_term) are present. Conditional chips work as expected: scope=level shows only level chips (1-5), scope=term shows only term chips (الأول/الثاني/الصيفي), scope=level_term shows BOTH. Both real downloads triggered successfully: XLSX (5958 bytes, valid PK/ZIP header) for scope=all+xlsx, and PDF (21396 bytes, %PDF-1.4 header, %%EOF tail, embeds FontFile2 + Amiri TTF) for scope=level_term+level=1+term=2+pdf. Cancel button closes the modal without download. End-to-end feature is fully working.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_curriculum_export.py",
+    "/app/test_reports/pytest/curriculum_export_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Filename construction uses Arabic chars verbatim (الخطة_<deptName>_<suffix>.<ext>). Browsers handle this via Blob+a.download fine (verified: 'الخطة_الشريعة_والقانون__all.xlsx' and 'الخطة_الشريعة_والقانون__L1_T2.pdf' both downloaded correctly). Note the double underscore due to space-replace then explicit '_'+suffix — cosmetic, not blocking.",
+    "Suggestion (from prev iteration, still valid): add a TypeScript pre-commit step (tsc --noEmit) so undeclared identifiers like the previous missing useState block are caught before they ship.",
+    "Suggestion (from prev iteration, still valid): /app/backend/backend/routes/curriculum.py is 1670 lines — recommend splitting export logic into a sub-module."
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (no backend retest required; iteration_39 verified 9/9 pytest pass)",
+    "frontend": "100% (7/7 acceptance criteria pass: page renders, button present, modal opens, format chips, scope radios, conditional level/term chips, xlsx download, pdf download with Amiri+RTL, cancel closes modal)"
+  },
+  "test_credentials": "admin / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Used existing department 698e500997fef774e66e93a8 (الشريعة والقانون).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Curriculum export feature is now fully working end-to-end. Frontend testIDs that exist and were verified: export-curriculum-btn, export-format-xlsx, export-format-pdf, export-scope-all, export-scope-level, export-scope-term, export-scope-level_term, export-level-1..5, export-term-1..3, export-execute, export-cancel. Downloaded files: /tmp/export_test.xlsx (5958B, valid PK), /tmp/export_test.pdf (21396B, %PDF-1.4 ... %%EOF, contains FontFile2 + Amiri).",
+  "rca of the issue": "Previous-iteration bug (missing useState declarations) is now fixed. Confirmed at lines 50-55 of /app/frontend/app/curriculum.tsx: showExportModal=false, exportFormat='xlsx', exportScope='all', exportLevel=1, exportTerm=1, exporting=false. After expo restart the new bundle is served and the page renders cleanly. Real Playwright download events fired for both XLSX and PDF, with correct file signatures verified by python binary inspection."
+}
