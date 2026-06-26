@@ -78,6 +78,11 @@ export default function AlumniScreen() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [editForm, setEditForm] = useState<any>({});
 
+  // 🆕 Selection mode for bulk actions
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkRestoring, setBulkRestoring] = useState(false);
+
   const canView = isAdmin || hasAnyPermission([PERMISSIONS.VIEW_STUDENTS, PERMISSIONS.MANAGE_STUDENTS]);
   const canManage = isAdmin || hasAnyPermission([PERMISSIONS.MANAGE_STUDENTS]);
 
@@ -252,6 +257,38 @@ export default function AlumniScreen() {
     setSearchQ('');
   };
 
+  // 🆕 Bulk restore
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
+      return n;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selectedIds.size === visibleItems.length) setSelectedIds(new Set());
+    else setSelectedIds(new Set(visibleItems.map(a => a.id)));
+  };
+  const handleBulkRestore = async () => {
+    if (selectedIds.size === 0) return;
+    const ok = Platform.OS === 'web'
+      ? window.confirm(`استرجاع ${selectedIds.size} خريج إلى قائمة الطلاب؟\n(ستُحذف بيانات تخرجهم)`)
+      : true;
+    if (!ok) return;
+    setBulkRestoring(true);
+    const ids = Array.from(selectedIds);
+    let ok_count = 0, fail = 0;
+    for (const id of ids) {
+      try { await alumniAPI.restore(id); ok_count++; } catch { fail++; }
+    }
+    if (Platform.OS === 'web') window.alert(`تم استرجاع ${ok_count}${fail ? ` · فشل ${fail}` : ''}`);
+    setBulkRestoring(false);
+    setSelectedIds(new Set());
+    setSelectionMode(false);
+    fetchData();
+  };
+
   if (authLoading || !canView) {
     return (
       <SafeAreaView style={styles.container}>
@@ -298,62 +335,79 @@ export default function AlumniScreen() {
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Stack.Screen options={{ title: 'الخريجون', headerShown: false }} />
 
-      {/* Header bar */}
-      <View style={styles.headerBar}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} data-testid="alumni-back-btn">
-          <Ionicons name="search" size={18} color="#fff" />
-        </TouchableOpacity>
-        <View style={{ flex: 1, alignItems: 'flex-end' }}>
-          <Text style={styles.headerTitle}>الخريجون</Text>
-          <Text style={styles.headerSubtitle}>قائمة الطلاب الخريجين</Text>
-        </View>
-        <TouchableOpacity
-          onPress={() => handleExport('excel')}
-          disabled={exporting !== null}
-          style={[styles.exportBtn, { backgroundColor: '#1b5e20' }]}
-          data-testid="alumni-export-excel"
-        >
-          {exporting === 'excel' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document-text" size={15} color="#fff" />}
-          <Text style={styles.exportBtnText}>Excel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={() => handleExport('pdf')}
-          disabled={exporting !== null}
-          style={[styles.exportBtn, { backgroundColor: '#b71c1c' }]}
-          data-testid="alumni-export-pdf"
-        >
-          {exporting === 'pdf' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document-text" size={15} color="#fff" />}
-          <Text style={styles.exportBtnText}>PDF</Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
-        {/* ---------- Hero Card ---------- */}
-        <View style={styles.heroCard}>
-          <View style={styles.heroLeft}>
-            <View style={styles.heroIllustration}>
-              <Ionicons name="school" size={64} color="#1565c0" />
-            </View>
-          </View>
-          <View style={styles.heroRight}>
-            <View style={styles.heroCircle}>
-              <Ionicons name="school" size={26} color="#1565c0" />
-            </View>
-            <Text style={styles.heroTitle}>الخريجون</Text>
-            <View style={styles.heroStatLine}>
-              <Text style={styles.heroStatLabel}>إجمالي الخريجين:</Text>
-              <Text style={styles.heroStatValue}>{items.length}</Text>
+        {/* ---------- Compact header (مثل صفحة الطلاب) ---------- */}
+        <View style={styles.compactHeader}>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+              <Ionicons name="school" size={22} color="#0d47a1" />
+              <Text style={styles.pageTitle}>الخريجون</Text>
+              <View style={styles.totalBadge}>
+                <Text style={styles.totalBadgeText}>{items.length}</Text>
+              </View>
             </View>
             {latestYear && (
-              <View style={styles.heroStatLine}>
-                <Text style={styles.heroStatLabel}>أحدث دفعة:</Text>
-                <Text style={styles.heroStatValue}>{latestYear}</Text>
-                <Text style={styles.heroStatLabel}>· بعدد</Text>
-                <Text style={styles.heroStatValue}>{byYear[String(latestYear)]}</Text>
-              </View>
+              <Text style={styles.pageSubtitle}>
+                أحدث دفعة: <Text style={{ color: '#1565c0', fontWeight: '700' }}>{latestYear}</Text>
+                {' '}بعدد <Text style={{ color: '#1565c0', fontWeight: '700' }}>{byYear[String(latestYear)]}</Text>
+              </Text>
             )}
           </View>
+          <View style={styles.compactActions}>
+            {canManage && (
+              <TouchableOpacity
+                onPress={() => { setSelectionMode(v => !v); setSelectedIds(new Set()); }}
+                style={[styles.compactActionBtn, selectionMode && { backgroundColor: '#1565c0' }]}
+                data-testid="toggle-select-mode"
+              >
+                <Ionicons name="checkmark-done" size={15} color={selectionMode ? '#fff' : '#1565c0'} />
+                <Text style={[styles.compactActionBtnText, selectionMode && { color: '#fff' }]}>تحديد</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity
+              onPress={() => handleExport('excel')}
+              disabled={exporting !== null}
+              style={[styles.compactActionBtn, { backgroundColor: '#e8f5e9', borderColor: '#a5d6a7' }]}
+              data-testid="alumni-export-excel"
+            >
+              {exporting === 'excel' ? <ActivityIndicator size="small" color="#2e7d32" /> : <Ionicons name="document-text" size={15} color="#2e7d32" />}
+              <Text style={[styles.compactActionBtnText, { color: '#2e7d32' }]}>Excel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => handleExport('pdf')}
+              disabled={exporting !== null}
+              style={[styles.compactActionBtn, { backgroundColor: '#ffebee', borderColor: '#ef9a9a' }]}
+              data-testid="alumni-export-pdf"
+            >
+              {exporting === 'pdf' ? <ActivityIndicator size="small" color="#c62828" /> : <Ionicons name="document-text" size={15} color="#c62828" />}
+              <Text style={[styles.compactActionBtnText, { color: '#c62828' }]}>PDF</Text>
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {/* ---------- Bulk action bar ---------- */}
+        {selectionMode && (
+          <View style={styles.bulkActionBar}>
+            <Text style={styles.bulkSelectedText}>{selectedIds.size} محدّد من {visibleItems.length}</Text>
+            <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+              <TouchableOpacity onPress={toggleSelectAll} style={styles.bulkSecBtn}>
+                <Text style={styles.bulkSecBtnText}>
+                  {selectedIds.size === visibleItems.length && visibleItems.length > 0 ? 'إلغاء الكل' : 'تحديد الكل'}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleBulkRestore}
+                disabled={selectedIds.size === 0 || bulkRestoring}
+                style={[styles.bulkActionBtn, (selectedIds.size === 0 || bulkRestoring) && { opacity: 0.5 }]}
+                data-testid="bulk-restore-btn"
+              >
+                {bulkRestoring ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="arrow-undo" size={14} color="#fff" />}
+                <Text style={styles.bulkActionBtnText}>استرجاع المحددين</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+
 
         {/* ---------- Year chips selector ---------- */}
         {availableYears.length > 0 && (
@@ -467,6 +521,15 @@ export default function AlumniScreen() {
           <View style={styles.tableCard}>
             {/* Header */}
             <View style={styles.tableHeader}>
+              {selectionMode && (
+                <TouchableOpacity onPress={toggleSelectAll} style={styles.checkboxCol}>
+                  <View style={[styles.checkbox, selectedIds.size === visibleItems.length && visibleItems.length > 0 && styles.checkboxOn]}>
+                    {selectedIds.size === visibleItems.length && visibleItems.length > 0 && (
+                      <Ionicons name="checkmark" size={12} color="#fff" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              )}
               <Text style={styles.th_idx}>#</Text>
               <Text style={[styles.th, { flex: 2 }]}>الاسم</Text>
               <Text style={styles.th}>رقم القيد</Text>
@@ -484,6 +547,13 @@ export default function AlumniScreen() {
               const g = gradeFromGPA(a.final_gpa);
               return (
                 <View key={a.id} style={[styles.tr, idx % 2 === 1 && { backgroundColor: '#fafbfd' }]}>
+                  {selectionMode && (
+                    <TouchableOpacity onPress={() => toggleSelect(a.id)} style={styles.checkboxCol} data-testid={`select-alumni-${a.id}`}>
+                      <View style={[styles.checkbox, selectedIds.has(a.id) && styles.checkboxOn]}>
+                        {selectedIds.has(a.id) && <Ionicons name="checkmark" size={12} color="#fff" />}
+                      </View>
+                    </TouchableOpacity>
+                  )}
                   <Text style={styles.td_idx}>{globalIdx}</Text>
                   <View style={[styles.td_cell, { flex: 2 }]}>
                     <View style={styles.avatarMini}>
@@ -741,47 +811,53 @@ export default function AlumniScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f6fa' },
 
-  // Header bar
-  headerBar: {
-    flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
-    backgroundColor: '#0d47a1', paddingHorizontal: 18, paddingVertical: 14,
+  // ===== Compact header (مثل صفحة الطلاب) =====
+  compactHeader: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 10,
+    backgroundColor: '#fff', padding: 14, borderRadius: 12,
+    borderWidth: 1, borderColor: '#e7ebf1', marginBottom: 12,
   },
-  backBtn: {
-    width: 38, height: 38, borderRadius: 19,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    alignItems: 'center', justifyContent: 'center',
+  pageTitle: { fontSize: 18, fontWeight: '800', color: '#0d47a1' },
+  pageSubtitle: { fontSize: 12, color: '#5b6678', textAlign: 'right', marginTop: 4 },
+  totalBadge: {
+    backgroundColor: '#e3f2fd', paddingHorizontal: 10, paddingVertical: 3,
+    borderRadius: 12, minWidth: 28, alignItems: 'center',
   },
-  headerTitle: { fontSize: 19, fontWeight: '800', color: '#fff', textAlign: 'right' },
-  headerSubtitle: { fontSize: 12, color: '#bbdefb', textAlign: 'right', marginTop: 2 },
-  exportBtn: {
+  totalBadgeText: { fontSize: 13, fontWeight: '800', color: '#1565c0' },
+  compactActions: { flexDirection: 'row-reverse', gap: 8 },
+  compactActionBtn: {
     flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    backgroundColor: '#f0f6ff', borderWidth: 1, borderColor: '#bbdefb',
   },
-  exportBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  compactActionBtnText: { color: '#1565c0', fontSize: 12, fontWeight: '700' },
 
-  // Hero card
-  heroCard: {
-    backgroundColor: '#fff', borderRadius: 16, padding: 20,
-    flexDirection: 'row-reverse', alignItems: 'center', gap: 16,
-    marginBottom: 16,
-    borderWidth: 1, borderColor: '#e7ebf1',
+  // ===== Bulk action bar =====
+  bulkActionBar: {
+    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: '#fff8e1', borderWidth: 1, borderColor: '#ffe082',
+    padding: 12, borderRadius: 10, marginBottom: 12, gap: 8,
   },
-  heroLeft: { flex: 1, alignItems: 'flex-start' },
-  heroIllustration: {
-    width: 120, height: 120, borderRadius: 12,
-    backgroundColor: '#f5f9ff', alignItems: 'center', justifyContent: 'center',
+  bulkSelectedText: { fontSize: 13, fontWeight: '700', color: '#e65100' },
+  bulkSecBtn: {
+    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 6,
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#ffcc80',
   },
-  heroRight: { flex: 1.6, gap: 6, alignItems: 'flex-end' },
-  heroCircle: {
-    width: 52, height: 52, borderRadius: 26,
-    backgroundColor: '#e3f2fd',
-    alignItems: 'center', justifyContent: 'center',
-    marginBottom: 6,
+  bulkSecBtnText: { fontSize: 12, color: '#e65100', fontWeight: '700' },
+  bulkActionBtn: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
+    backgroundColor: '#ef6c00', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 6,
   },
-  heroTitle: { fontSize: 28, fontWeight: '800', color: '#0d47a1', textAlign: 'right' },
-  heroStatLine: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
-  heroStatLabel: { fontSize: 13, color: '#5b6678' },
-  heroStatValue: { fontSize: 15, fontWeight: '700', color: '#0d47a1' },
+  bulkActionBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+
+  // Checkboxes
+  checkboxCol: { width: 32, alignItems: 'center', justifyContent: 'center' },
+  checkbox: {
+    width: 18, height: 18, borderRadius: 4,
+    borderWidth: 1.5, borderColor: '#a8b1c2',
+    backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center',
+  },
+  checkboxOn: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
 
   // Year chips
   yearChipsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 14, justifyContent: 'flex-start' },
