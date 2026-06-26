@@ -2550,104 +2550,126 @@ export default function StudentsScreen() {
         onRequestClose={() => setShowBulkGraduateModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 520 }]}>
+          <View style={[styles.modalContent, { maxWidth: 540, maxHeight: '90%' }]}>
+            {/* الرأس */}
             <View style={styles.modalHeader}>
               <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="school" size={20} color="#0d47a1" />
                 <Text style={styles.modalTitle}>تخريج جماعي</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowBulkGraduateModal(false)} testID="close-bulk-grad">
+              <TouchableOpacity onPress={() => setShowBulkGraduateModal(false)} testID="close-bulk-grad" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={22} color="#666" />
               </TouchableOpacity>
             </View>
-            <View style={{ backgroundColor: '#e3f2fd', padding: 10, borderRadius: 8, marginBottom: 10 }}>
-              <Text style={{ fontSize: 12, fontWeight: '600', color: '#0d47a1', textAlign: 'right' }}>
-                سيتم تخريج {selectedIds.size} طالب وإسناد سنة التخرج المختارة لجميعهم.
-              </Text>
-              <Text style={{ fontSize: 11, color: '#5a6c7d', textAlign: 'right', marginTop: 4 }}>
-                المعدل ورقم الشهادة يُضاف لكل طالب لاحقاً من تفاصيله.
-              </Text>
-            </View>
 
-            {/* سنة التخرج */}
-            <Text style={styles.label}>سنة التخرج * (إلزامي)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="2025"
-              value={bulkGradYear}
-              onChangeText={(v) => setBulkGradYear(v.replace(/[^0-9]/g, '').slice(0, 4))}
-              keyboardType="numeric"
-              maxLength={4}
-              testID="bulk-grad-year"
-            />
+            {/* الجسم — قابل للتمرير */}
+            <ScrollView
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 12 }}
+              showsVerticalScrollIndicator={false}
+            >
+              <View style={styles.bulkInfoBox}>
+                <Text style={styles.bulkInfoTitle}>
+                  سيتم تخريج {selectedIds.size} طالب وإسناد سنة التخرج المختارة لجميعهم.
+                </Text>
+                <Text style={styles.bulkInfoSub}>
+                  المعدل ورقم الشهادة يُضاف لكل طالب لاحقاً من تفاصيله.
+                </Text>
+              </View>
 
-            {/* الفصل */}
-            <Text style={styles.label}>الفصل الذي تخرّجوا فيه</Text>
-            <View style={{ flexDirection: 'row-reverse', gap: 6, marginBottom: 8 }}>
-              {[
-                { v: 'first', label: 'الفصل الأول' },
-                { v: 'second', label: 'الفصل الثاني' },
-                { v: 'summer', label: 'الفصل الصيفي' },
-              ].map(s => (
-                <TouchableOpacity
-                  key={s.v}
-                  onPress={() => setBulkGradSemester(s.v)}
-                  style={{
-                    flex: 1,
-                    paddingVertical: 8,
-                    borderRadius: 6,
-                    borderWidth: 1.5,
-                    borderColor: bulkGradSemester === s.v ? '#0d47a1' : '#e0e7ee',
-                    backgroundColor: bulkGradSemester === s.v ? '#0d47a1' : '#fff',
-                    alignItems: 'center',
-                  }}
-                >
-                  <Text style={{ color: bulkGradSemester === s.v ? '#fff' : '#333', fontSize: 12, fontWeight: '700' }}>{s.label}</Text>
-                </TouchableOpacity>
-              ))}
-            </View>
+              {/* سنة التخرج */}
+              <View>
+                <Text style={styles.fieldLabel}>سنة التخرج <Text style={{ color: '#c62828' }}>*</Text></Text>
+                <TextInput
+                  style={styles.fieldInput}
+                  placeholder="2025"
+                  placeholderTextColor="#a8b1c2"
+                  value={bulkGradYear}
+                  onChangeText={(v) => setBulkGradYear(v.replace(/[^0-9]/g, '').slice(0, 4))}
+                  keyboardType="numeric"
+                  maxLength={4}
+                  testID="bulk-grad-year"
+                />
+              </View>
 
-            {/* تاريخ */}
-            <Text style={styles.label}>تاريخ التخرج (اختياري)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="YYYY-MM-DD"
-              value={bulkGradDate}
-              onChangeText={setBulkGradDate}
-              testID="bulk-grad-date"
-            />
+              {/* الفصل */}
+              <View>
+                <Text style={styles.fieldLabel}>الفصل الذي تخرّجوا فيه</Text>
+                <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                  {[
+                    { v: 'first', label: 'الفصل الأول' },
+                    { v: 'second', label: 'الفصل الثاني' },
+                    { v: 'summer', label: 'الفصل الصيفي' },
+                  ].map(s => {
+                    const active = bulkGradSemester === s.v;
+                    return (
+                      <TouchableOpacity
+                        key={s.v}
+                        onPress={() => setBulkGradSemester(s.v)}
+                        style={[styles.segBtn, active && styles.segBtnActive]}
+                        testID={`bulk-grad-sem-${s.v}`}
+                      >
+                        <Text style={[styles.segBtnText, active && styles.segBtnTextActive]}>{s.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
 
-            {/* التقدير */}
-            <Text style={styles.label}>التقدير الافتراضي (اختياري)</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="دفعة 2025 / ممتاز / ..."
-              value={bulkGradHonors}
-              onChangeText={setBulkGradHonors}
-              testID="bulk-grad-honors"
-            />
+              {/* تاريخ + تقدير في صف واحد */}
+              <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>تاريخ التخرج <Text style={styles.optionalTag}>(اختياري)</Text></Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#a8b1c2"
+                    value={bulkGradDate}
+                    onChangeText={setBulkGradDate}
+                    testID="bulk-grad-date"
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.fieldLabel}>التقدير <Text style={styles.optionalTag}>(اختياري)</Text></Text>
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="ممتاز / جيد جداً"
+                    placeholderTextColor="#a8b1c2"
+                    value={bulkGradHonors}
+                    onChangeText={setBulkGradHonors}
+                    testID="bulk-grad-honors"
+                  />
+                </View>
+              </View>
 
-            {/* ملاحظات */}
-            <Text style={styles.label}>ملاحظات (اختياري)</Text>
-            <TextInput
-              style={[styles.input, { minHeight: 50, textAlignVertical: 'top' }]}
-              placeholder="..."
-              value={bulkGradNotes}
-              onChangeText={setBulkGradNotes}
-              multiline
-              testID="bulk-grad-notes"
-            />
+              {/* ملاحظات */}
+              <View>
+                <Text style={styles.fieldLabel}>ملاحظات <Text style={styles.optionalTag}>(اختياري)</Text></Text>
+                <TextInput
+                  style={[styles.fieldInput, { minHeight: 80, textAlignVertical: 'top', paddingTop: 10 }]}
+                  placeholder="ملاحظات إضافية..."
+                  placeholderTextColor="#a8b1c2"
+                  value={bulkGradNotes}
+                  onChangeText={setBulkGradNotes}
+                  multiline
+                  numberOfLines={3}
+                  testID="bulk-grad-notes"
+                />
+              </View>
+            </ScrollView>
 
-            <View style={{ flexDirection: 'row', gap: 8, marginTop: 16 }}>
+            {/* الذيل — أزرار ثابتة */}
+            <View style={styles.modalActionsFooter}>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#eee' }]}
+                style={styles.modalCancelBtn}
                 onPress={() => setShowBulkGraduateModal(false)}
                 testID="bulk-grad-cancel"
+                disabled={bulkGraduating}
               >
-                <Text style={{ fontWeight: '700', color: '#333' }}>إلغاء</Text>
+                <Text style={styles.modalCancelBtnText}>إلغاء</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalBtn, { backgroundColor: '#0d47a1' }]}
+                style={[styles.modalConfirmBtn, bulkGraduating && { opacity: 0.6 }]}
                 onPress={handleBulkGraduate}
                 disabled={bulkGraduating}
                 testID="bulk-grad-confirm"
@@ -2657,7 +2679,7 @@ export default function StudentsScreen() {
                 ) : (
                   <>
                     <Ionicons name="school" size={16} color="#fff" />
-                    <Text style={{ fontWeight: '700', color: '#fff' }}>تخريج {selectedIds.size} طالب</Text>
+                    <Text style={styles.modalConfirmBtnText}>تخريج {selectedIds.size} طالب</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -3581,6 +3603,111 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
+  },
+  // ====== مودال التخريج الجماعي — تنسيقات منظّمة ======
+  bulkInfoBox: {
+    backgroundColor: '#e3f2fd',
+    padding: 12,
+    borderRadius: 10,
+    borderRightWidth: 3,
+    borderRightColor: '#1565c0',
+  },
+  bulkInfoTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#0d47a1',
+    textAlign: 'right',
+    lineHeight: 20,
+  },
+  bulkInfoSub: {
+    fontSize: 11,
+    color: '#5b6678',
+    textAlign: 'right',
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  fieldLabel: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1a2540',
+    marginBottom: 6,
+    textAlign: 'right',
+  },
+  optionalTag: {
+    fontSize: 11,
+    fontWeight: '400',
+    color: '#8a95a8',
+  },
+  fieldInput: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    color: '#1a2540',
+    textAlign: 'right',
+    borderWidth: 1,
+    borderColor: '#d6dde6',
+  },
+  segBtn: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: '#d6dde6',
+    backgroundColor: '#fff',
+    alignItems: 'center',
+  },
+  segBtnActive: {
+    borderColor: '#0d47a1',
+    backgroundColor: '#0d47a1',
+  },
+  segBtnText: {
+    color: '#5b6678',
+    fontSize: 12.5,
+    fontWeight: '700',
+  },
+  segBtnTextActive: {
+    color: '#fff',
+  },
+  modalActionsFooter: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderTopWidth: 1,
+    borderTopColor: '#e7ebf1',
+    backgroundColor: '#fafbfd',
+    borderBottomLeftRadius: 12,
+    borderBottomRightRadius: 12,
+  },
+  modalConfirmBtn: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 12,
+    borderRadius: 8,
+    backgroundColor: '#0d47a1',
+  },
+  modalConfirmBtnText: {
+    color: '#fff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  modalCancelBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderRadius: 8,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d6dde6',
+  },
+  modalCancelBtnText: {
+    color: '#5b6678',
+    fontWeight: '700',
+    fontSize: 14,
   },
   modalBody: {
     padding: 16,
