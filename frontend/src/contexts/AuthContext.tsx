@@ -232,7 +232,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // التحقق من وجود أي صلاحية من القائمة
   const hasAnyPermission = useCallback((permissions: string[]): boolean => {
-    const currentUser = cachedUser || user;
+    let currentUser = cachedUser || user;
+    
+    // 🆕 fallback إلى localStorage لو لم يُحمَّل المستخدم في الـ context بعد
+    if (!currentUser) {
+      try {
+        const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          cachedUser = parsed;
+          currentUser = parsed;
+        }
+      } catch {}
+    }
     
     if (!currentUser && isLoading) return true;
     if (!currentUser) return false;
@@ -244,7 +256,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // التحقق من وجود جميع الصلاحيات في القائمة
   const hasAllPermissions = useCallback((permissions: string[]): boolean => {
-    const currentUser = cachedUser || user;
+    let currentUser = cachedUser || user;
+    
+    // 🆕 fallback إلى localStorage لو لم يُحمَّل المستخدم في الـ context بعد
+    if (!currentUser) {
+      try {
+        const storedUser = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
+        if (storedUser) {
+          const parsed = JSON.parse(storedUser);
+          cachedUser = parsed;
+          currentUser = parsed;
+        }
+      } catch {}
+    }
     
     if (!currentUser && isLoading) return true;
     if (!currentUser) return false;
