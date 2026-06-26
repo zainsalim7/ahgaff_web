@@ -1667,77 +1667,88 @@ export default function StudentDetailsScreen() {
         onRequestClose={() => setShowNotifModal(false)}
       >
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalContent, { maxWidth: 520 }]}>
+          <View style={styles.modalCard}>
             <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
                 <Ionicons name="notifications" size={20} color="#f57f17" />
                 <Text style={styles.modalTitle}>إرسال إشعار للطالب</Text>
               </View>
-              <TouchableOpacity onPress={() => setShowNotifModal(false)} testID="close-notif-modal">
+              <TouchableOpacity onPress={() => setShowNotifModal(false)} testID="close-notif-modal" hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                 <Ionicons name="close" size={24} color="#5b6678" />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.modalBody}>
+            <ScrollView
+              style={{ flexGrow: 0 }}
+              contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 16, gap: 14 }}
+              showsVerticalScrollIndicator={false}
+            >
               {/* نوع الإشعار */}
-              <Text style={styles.modalLabel}>نوع الإشعار</Text>
-              <View style={styles.typeChipsRow}>
-                {[
-                  { val: 'warning', label: 'إنذار', color: '#f57f17', bg: '#fff8e1' },
-                  { val: 'announcement', label: 'إعلان', color: '#1565c0', bg: '#e3f2fd' },
-                  { val: 'absence', label: 'غياب', color: '#c62828', bg: '#ffebee' },
-                  { val: 'info', label: 'معلومة', color: '#5e35b1', bg: '#ede7f6' },
-                ].map((opt) => {
-                  const active = notifForm.type === opt.val;
-                  return (
-                    <TouchableOpacity
-                      key={opt.val}
-                      style={[styles.typeChip, { backgroundColor: active ? opt.bg : '#fff', borderColor: active ? opt.color : '#d6dde6' }]}
-                      onPress={() => setNotifForm(p => ({ ...p, type: opt.val }))}
-                      testID={`notif-type-${opt.val}`}
-                    >
-                      <Text style={{ color: active ? opt.color : '#5b6678', fontWeight: active ? '700' : '500', fontSize: 13 }}>{opt.label}</Text>
-                    </TouchableOpacity>
-                  );
-                })}
+              <View>
+                <Text style={styles.inputLabel}>نوع الإشعار</Text>
+                <View style={styles.typeChipsRow}>
+                  {[
+                    { val: 'warning', label: 'إنذار', color: '#f57f17', bg: '#fff8e1' },
+                    { val: 'announcement', label: 'إعلان', color: '#1565c0', bg: '#e3f2fd' },
+                    { val: 'absence', label: 'غياب', color: '#c62828', bg: '#ffebee' },
+                    { val: 'info', label: 'معلومة', color: '#5e35b1', bg: '#ede7f6' },
+                  ].map((opt) => {
+                    const active = notifForm.type === opt.val;
+                    return (
+                      <TouchableOpacity
+                        key={opt.val}
+                        style={[styles.typeChip, { backgroundColor: active ? opt.bg : '#fff', borderColor: active ? opt.color : '#d6dde6' }]}
+                        onPress={() => setNotifForm(p => ({ ...p, type: opt.val }))}
+                        testID={`notif-type-${opt.val}`}
+                      >
+                        <Text style={{ color: active ? opt.color : '#5b6678', fontWeight: active ? '700' : '500', fontSize: 13 }}>{opt.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
               </View>
 
               {/* العنوان */}
-              <Text style={[styles.modalLabel, { marginTop: 14 }]}>العنوان</Text>
-              <TextInput
-                style={styles.input}
-                value={notifForm.title}
-                onChangeText={(t) => setNotifForm(p => ({ ...p, title: t }))}
-                placeholder="مثال: تنبيه بشأن الحضور"
-                placeholderTextColor="#a8b1c2"
-                testID="notif-title-input"
-              />
+              <View>
+                <Text style={styles.inputLabel}>العنوان</Text>
+                <TextInput
+                  style={styles.input}
+                  value={notifForm.title}
+                  onChangeText={(t) => setNotifForm(p => ({ ...p, title: t }))}
+                  placeholder="مثال: تنبيه بشأن الحضور"
+                  placeholderTextColor="#a8b1c2"
+                  testID="notif-title-input"
+                />
+              </View>
 
               {/* الرسالة */}
-              <Text style={[styles.modalLabel, { marginTop: 14 }]}>نص الإشعار</Text>
-              <TextInput
-                style={[styles.input, { minHeight: 120, textAlignVertical: 'top' }]}
-                value={notifForm.message}
-                onChangeText={(t) => setNotifForm(p => ({ ...p, message: t }))}
-                placeholder="اكتب محتوى الإشعار هنا..."
-                placeholderTextColor="#a8b1c2"
-                multiline
-                numberOfLines={5}
-                testID="notif-message-input"
-              />
-            </View>
+              <View>
+                <Text style={styles.inputLabel}>نص الإشعار</Text>
+                <TextInput
+                  style={[styles.input, { minHeight: 130, textAlignVertical: 'top', paddingTop: 10 }]}
+                  value={notifForm.message}
+                  onChangeText={(t) => setNotifForm(p => ({ ...p, message: t }))}
+                  placeholder="اكتب محتوى الإشعار هنا..."
+                  placeholderTextColor="#a8b1c2"
+                  multiline
+                  numberOfLines={5}
+                  testID="notif-message-input"
+                />
+              </View>
+            </ScrollView>
 
+            {/* الذيل — أزرار ثابتة عريضة */}
             <View style={styles.modalFooter}>
               <TouchableOpacity
-                style={[styles.btnGhost]}
+                style={styles.notifCancelBtn}
                 onPress={() => setShowNotifModal(false)}
                 disabled={sendingNotif}
                 testID="cancel-notif-btn"
               >
-                <Text style={styles.btnGhostText}>إلغاء</Text>
+                <Text style={styles.notifCancelBtnText}>إلغاء</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.btnPrimary, { backgroundColor: '#f57f17' }]}
+                style={[styles.notifSendBtn, sendingNotif && { opacity: 0.6 }]}
                 onPress={handleSendNotification}
                 disabled={sendingNotif}
                 testID="confirm-send-notif-btn"
@@ -1747,7 +1758,7 @@ export default function StudentDetailsScreen() {
                 ) : (
                   <Ionicons name="send" size={16} color="#fff" />
                 )}
-                <Text style={styles.btnPrimaryText}>
+                <Text style={styles.notifSendBtnText}>
                   {sendingNotif ? 'جاري الإرسال...' : 'إرسال الإشعار'}
                 </Text>
               </TouchableOpacity>
@@ -2009,6 +2020,28 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#ffcdd2',
   },
+  // أزرار مودال الإشعار (عريضة بإطار محدد)
+  notifSendBtn: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 10,
+    backgroundColor: '#f57f17',
+  },
+  notifSendBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+  notifCancelBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#d6dde6',
+  },
+  notifCancelBtnText: { color: '#5b6678', fontWeight: '700', fontSize: 14 },
   typeChipsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginTop: 6 },
   typeChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5 },
 
