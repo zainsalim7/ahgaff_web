@@ -381,7 +381,7 @@ export default function BasicSettingsScreen() {
   const totalItems = visibleSections.reduce((acc, s) => acc + s.items.length, 0);
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']} data-testid="basic-settings-screen">
+    <SafeAreaView style={styles.container} edges={['bottom']} testID="basic-settings-screen">
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
@@ -413,7 +413,7 @@ export default function BasicSettingsScreen() {
           </View>
         ) : (
           visibleSections.map(section => (
-            <View key={section.id} style={styles.section} data-testid={`section-${section.id}`}>
+            <View key={section.id} style={styles.section} testID={`section-${section.id}`}>
               {/* Section Header */}
               <View style={styles.sectionHeader}>
                 <View style={[styles.sectionIcon, { backgroundColor: `${section.tint}15` }]}>
@@ -435,7 +435,7 @@ export default function BasicSettingsScreen() {
                     style={styles.card}
                     onPress={() => router.push(item.route as any)}
                     activeOpacity={0.7}
-                    data-testid={`tool-${item.id}`}
+                    testID={`tool-${item.id}`}
                   >
                     <View style={[styles.cardIcon, { backgroundColor: item.bg }]}>
                       <Ionicons name={item.icon as any} size={22} color={item.color} />
