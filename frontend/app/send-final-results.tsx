@@ -49,6 +49,11 @@ export default function SendFinalResultsScreen() {
   const [grades, setGrades] = useState<Record<string, string>>({});
   const [search, setSearch] = useState('');
 
+  // Course-picker state (when opened without courseId)
+  const [allCourses, setAllCourses] = useState<any[]>([]);
+  const [coursesLoading, setCoursesLoading] = useState(false);
+  const [courseSearch, setCourseSearch] = useState('');
+
   const canSend =
     user?.role === 'admin' ||
     user?.permissions?.includes('send_notifications') ||
@@ -56,7 +61,6 @@ export default function SendFinalResultsScreen() {
     user?.permissions?.includes('manage_grades');
 
   useEffect(() => {
-    if (!courseId) return;
     // wait for user to be hydrated before checking permissions
     if (!user) return;
     if (!canSend) {
@@ -64,9 +68,27 @@ export default function SendFinalResultsScreen() {
       router.back();
       return;
     }
+    if (!courseId) {
+      // no course selected → show course picker
+      setLoading(false);
+      void loadCourses();
+      return;
+    }
     void loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [courseId, user]);
+
+  const loadCourses = async () => {
+    try {
+      setCoursesLoading(true);
+      const r = await api.get('/courses');
+      setAllCourses(r.data || []);
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'تعذر تحميل المقررات');
+    } finally {
+      setCoursesLoading(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -236,6 +258,76 @@ export default function SendFinalResultsScreen() {
           <Text style={{ marginTop: 12 }}>جارٍ التحميل...</Text>
         </View>
       </SafeAreaView>
+    );
+  }
+
+  // 🎓 شاشة اختيار المقرر (تظهر عند فتح الصفحة بدون courseId)
+  if (!courseId) {
+    const filtered = allCourses.filter((c: any) => {
+      const q = courseSearch.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.code || '').toLowerCase().includes(q)
+      );
+    });
+    return (
+      <>
+        <Stack.Screen options={{ title: 'إرسال النتائج النهائية', headerBackTitle: 'رجوع' }} />
+        <SafeAreaView style={styles.container} edges={['bottom']}>
+          <View style={styles.pickerHeader}>
+            <Ionicons name="paper-plane" size={28} color="#1565c0" />
+            <Text style={styles.pickerTitle}>اختر المقرر لإرسال نتائجه</Text>
+            <Text style={styles.pickerSubtitle}>
+              لإرسال النتائج النهائية يلزم تحديد المقرر أولاً
+            </Text>
+          </View>
+
+          <View style={styles.searchBox}>
+            <Ionicons name="search" size={18} color="#94a3b8" />
+            <TextInput
+              style={styles.searchInput}
+              placeholder="ابحث باسم المقرر أو رمزه..."
+              placeholderTextColor="#94a3b8"
+              value={courseSearch}
+              onChangeText={setCourseSearch}
+              testID="course-search-input"
+            />
+          </View>
+
+          {coursesLoading ? (
+            <View style={styles.center}>
+              <ActivityIndicator size="large" color="#1565c0" />
+              <Text style={{ marginTop: 12 }}>جارٍ تحميل المقررات...</Text>
+            </View>
+          ) : filtered.length === 0 ? (
+            <View style={styles.center}>
+              <Ionicons name="book-outline" size={56} color="#cbd5e1" />
+              <Text style={{ marginTop: 12, color: '#64748b' }}>لا توجد مقررات</Text>
+            </View>
+          ) : (
+            <ScrollView contentContainerStyle={{ padding: 14, paddingBottom: 60 }}>
+              {filtered.map((c: any) => (
+                <TouchableOpacity
+                  key={c.id}
+                  style={styles.coursePickerCard}
+                  onPress={() => router.replace({ pathname: '/send-final-results', params: { courseId: c.id } })}
+                  testID={`pick-course-${c.id}`}
+                >
+                  <View style={styles.coursePickerIcon}>
+                    <Ionicons name="book" size={20} color="#1565c0" />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.coursePickerName} numberOfLines={1}>{c.name}</Text>
+                    {c.code ? <Text style={styles.coursePickerCode}>{c.code}</Text> : null}
+                  </View>
+                  <Ionicons name="chevron-back" size={20} color="#94a3b8" />
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          )}
+        </SafeAreaView>
+      </>
     );
   }
 
@@ -546,4 +638,55 @@ const styles = StyleSheet.create({
   },
   submitBtnDisabled: { backgroundColor: '#90a4ae' },
   submitBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
+
+  /* 🎓 Course Picker styles (no courseId mode) */
+  pickerHeader: {
+    backgroundColor: '#fff',
+    padding: 22,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e2e8f0',
+  },
+  pickerTitle: {
+    fontSize: 17, fontWeight: '800', color: '#0f172a',
+    marginTop: 10, textAlign: 'center',
+  },
+  pickerSubtitle: {
+    fontSize: 12, color: '#64748b',
+    marginTop: 6, textAlign: 'center',
+  },
+  searchBox: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    margin: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  coursePickerCard: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    marginBottom: 10,
+    gap: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  coursePickerIcon: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: '#dbeafe',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  coursePickerName: { fontSize: 14, fontWeight: '700', color: '#0f172a', textAlign: 'right' },
+  coursePickerCode: { fontSize: 12, color: '#64748b', marginTop: 3, textAlign: 'right' },
 });
