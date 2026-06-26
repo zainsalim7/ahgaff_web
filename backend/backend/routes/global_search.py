@@ -226,11 +226,11 @@ async def global_search(
             parts = [f"رقم القيد: {s.get('student_id', '')}"]
             dept_doc = depts_map.get(str(s.get("department_id", "")))
             if dept_doc:
-                parts.append(f"قسم: {dept_doc.get('name', '')}")
+                parts.append(f"قسم: {(dept_doc.get('name', '') or '').strip()}")
                 fac_id_from_dept = str(dept_doc.get("faculty_id", "") or "")
                 fac_name = facs_map.get(fac_id_from_dept) or facs_map.get(str(s.get("faculty_id", "")))
                 if fac_name:
-                    parts.append(f"كلية: {fac_name}")
+                    parts.append(f"كلية: {(fac_name or '').strip()}")
             if s.get("level"):
                 parts.append(f"م{s.get('level')}")
             if s.get("section"):
@@ -277,12 +277,12 @@ async def global_search(
                 parts.append(title)
             dept_doc = depts_map.get(str(t.get("department_id", "")))
             if dept_doc:
-                parts.append(f"قسم: {dept_doc.get('name', '')}")
+                parts.append(f"قسم: {(dept_doc.get('name', '') or '').strip()}")
             fac_name = facs_map.get(str(t.get("faculty_id", ""))) or (
                 facs_map.get(str(dept_doc.get("faculty_id", ""))) if dept_doc else None
             )
             if fac_name:
-                parts.append(f"كلية: {fac_name}")
+                parts.append(f"كلية: {(fac_name or '').strip()}")
             # تشفير اسم المعلم لاستخدامه كرابط URL آمن
             teacher_name_enc = quote(t.get("full_name", ""))
             items.append({
@@ -348,10 +348,10 @@ async def global_search(
                 subtitle_parts = [f"كود: {c.get('code', '')}"]
                 dept_doc = depts_map.get(str(c.get("department_id", "")))
                 if dept_doc:
-                    subtitle_parts.append(f"قسم: {dept_doc.get('name', '')}")
+                    subtitle_parts.append(f"قسم: {(dept_doc.get('name', '') or '').strip()}")
                     fac_name = facs_map.get(str(dept_doc.get("faculty_id", "")))
                     if fac_name:
-                        subtitle_parts.append(f"كلية: {fac_name}")
+                        subtitle_parts.append(f"كلية: {(fac_name or '').strip()}")
                 if lvl:
                     subtitle_parts.append(f"م{lvl}")
                 if sec:
@@ -376,12 +376,20 @@ async def global_search(
         scope = await _scope_filter(current_user, "departments")
         dq = _merge_query(dq, scope)
         cursor = db.departments.find(dq).limit(limit_per_type)
+        depts_list = await cursor.to_list(limit_per_type)
+        # إثراء العناوين الفرعية بأسماء الكليات الأم
+        fac_ids = {str(d.get("faculty_id", "")) for d in depts_list if d.get("faculty_id")}
+        _, facs_map = await _resolve_names(set(), fac_ids)
         items = []
-        async for d in cursor:
+        for d in depts_list:
+            sub_parts = [f"كود: {d.get('code', '')}"]
+            fac_name = facs_map.get(str(d.get("faculty_id", "") or ""))
+            if fac_name:
+                sub_parts.append(f"كلية: {(fac_name or '').strip()}")
             items.append({
                 "id": str(d["_id"]),
-                "title": d.get("name", ""),
-                "subtitle": f"كود: {d.get('code', '')}",
+                "title": (d.get("name", "") or "").strip(),
+                "subtitle": " · ".join(sub_parts),
                 "route": f"/department-details?departmentId={str(d['_id'])}",
                 "type": "department",
                 "icon": "grid",
@@ -428,7 +436,7 @@ async def global_search(
         async for f in cursor:
             items.append({
                 "id": str(f["_id"]),
-                "title": f.get("name", ""),
+                "title": (f.get("name", "") or "").strip(),
                 "subtitle": f"كود: {f.get('code', '')}",
                 "route": f"/faculty-details?facultyId={str(f['_id'])}",
                 "type": "faculty",
@@ -508,11 +516,16 @@ async def global_search(
             if cids:
                 try:
                     async for c in db.courses.find(
-                        {"_id": {"$in": [ObjectId(cid) for cid in cids]}}, {"name": 1, "code": 1}
+                        {"_id": {"$in": [ObjectId(cid) for cid in cids]}},
+                        {"name": 1, "code": 1, "level": 1, "section": 1, "department_id": 1, "faculty_id": 1},
                     ):
                         course_map[str(c["_id"])] = c
                 except Exception:
                     pass
+            # إثراء بأسماء الأقسام/الكليات للمحاضرات
+            lec_dept_ids = {str(c.get("department_id", "")) for c in course_map.values() if c.get("department_id")}
+            lec_fac_ids = {str(c.get("faculty_id", "")) for c in course_map.values() if c.get("faculty_id")}
+            lec_depts_map, lec_facs_map = await _resolve_names(lec_dept_ids, lec_fac_ids)
             for lec in lecs:
                 cinfo = course_map.get(lec.get("course_id"), {})
                 lvl = cinfo.get("level")
@@ -521,6 +534,12 @@ async def global_search(
                 subtitle_parts = []
                 if code:
                     subtitle_parts.append(f"كود: {code}")
+                dept_doc = lec_depts_map.get(str(cinfo.get("department_id", "")))
+                if dept_doc:
+                    subtitle_parts.append(f"قسم: {(dept_doc.get('name', '') or '').strip()}")
+                    fac_name = lec_facs_map.get(str(dept_doc.get("faculty_id", "")))
+                    if fac_name:
+                        subtitle_parts.append(f"كلية: {(fac_name or '').strip()}")
                 if lvl:
                     subtitle_parts.append(f"م{lvl}")
                 if sec:

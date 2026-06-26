@@ -1612,9 +1612,9 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
     buf = BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
     elements: list = []
-    title_style = ParagraphStyle("Title", fontName="Amiri", fontSize=20, alignment=2, textColor=colors.HexColor("#0d47a1"), spaceAfter=6)
-    sub_style = ParagraphStyle("Sub", fontName="Amiri", fontSize=13, alignment=2, textColor=colors.HexColor("#1565c0"), spaceAfter=4)
-    info_style = ParagraphStyle("Info", fontName="Amiri", fontSize=11, alignment=2, textColor=colors.HexColor("#5a6c7d"), spaceAfter=10)
+    title_style = ParagraphStyle("Title", fontName="Amiri", fontSize=20, leading=30, alignment=2, textColor=colors.HexColor("#0d47a1"), spaceAfter=6)
+    sub_style = ParagraphStyle("Sub", fontName="Amiri", fontSize=13, leading=22, alignment=2, textColor=colors.HexColor("#1565c0"), spaceAfter=4)
+    info_style = ParagraphStyle("Info", fontName="Amiri", fontSize=11, leading=18, alignment=2, textColor=colors.HexColor("#5a6c7d"), spaceAfter=10)
     elements.append(Paragraph(ar("الخطة الدراسية"), title_style))
     elements.append(Paragraph(ar(f"الكلية: {fac_name} — القسم: {dept_name}"), sub_style))
     elements.append(Paragraph(ar(f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"), info_style))
@@ -1626,11 +1626,11 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
         lv = r.get("level") or 0
         by_level.setdefault(lv, []).append(r)
 
-    level_style = ParagraphStyle("Lvl", fontName="Amiri", fontSize=15, alignment=2, textColor=colors.white,
-                                  backColor=colors.HexColor("#0d47a1"), borderPadding=6, spaceBefore=2, spaceAfter=6)
-    section_style = ParagraphStyle("Sec", fontName="Amiri", fontSize=14, alignment=2,
+    level_style = ParagraphStyle("Lvl", fontName="Amiri", fontSize=15, leading=24, alignment=2, textColor=colors.white,
+                                  backColor=colors.HexColor("#0d47a1"), borderPadding=10, spaceBefore=2, spaceAfter=8)
+    section_style = ParagraphStyle("Sec", fontName="Amiri", fontSize=14, leading=22, alignment=2,
                                     textColor=colors.white, backColor=colors.HexColor("#ef6c00"),
-                                    leftIndent=4, rightIndent=4, spaceBefore=6, spaceAfter=4, borderPadding=4)
+                                    leftIndent=4, rightIndent=4, spaceBefore=8, spaceAfter=6, borderPadding=8)
 
     sorted_levels = sorted(by_level.keys())
     for li, lv in enumerate(sorted_levels):

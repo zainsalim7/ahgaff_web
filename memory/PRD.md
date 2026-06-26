@@ -659,6 +659,9 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - (P2) Automatic Teaching Load templates during curriculum generation
 - (P2) Fix orphaned `teaching_loads` cleanup on semester archive
 
+## Recently completed (2026-02)
+- ✅ Global Search subtitles polished: dept/faculty names stripped of trailing whitespace; Departments now include parent `كلية` in subtitle; Lectures now display `قسم/كلية` context. RBAC scoping verified intact for Saeed (dept head). File: `/app/backend/backend/routes/global_search.py`.
+
 ## P3 / Backlog
 - server.py modularization (Phase 2: Reports; Phase 3+: Templates, Courses, Lectures…)
 - Migrate Atlas cluster AWS Oregon → GCP Doha (latency)
