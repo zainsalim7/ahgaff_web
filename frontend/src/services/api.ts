@@ -431,6 +431,11 @@ export const alumniAPI = {
     api.get('/alumni', { params }),
   getById: (id: string) => api.get(`/alumni/${id}`),
   restore: (id: string) => api.put(`/alumni/${id}/restore`),
+  update: (id: string, data: any) => api.put(`/alumni/${id}`, data),
+  exportExcel: (params?: { year?: number; faculty_id?: string; department_id?: string; q?: string }) =>
+    api.get('/alumni/export/excel', { params, responseType: 'blob' }),
+  exportPDF: (params?: { year?: number; faculty_id?: string; department_id?: string; q?: string }) =>
+    api.get('/alumni/export/pdf', { params, responseType: 'blob' }),
 };
 
 // Teachers API (المعلمين)

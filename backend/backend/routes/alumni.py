@@ -45,6 +45,18 @@ class BulkGraduateRequest(BaseModel):
     notes: Optional[str] = None
 
 
+class AlumniUpdateRequest(BaseModel):
+    """تحديث بيانات تخرّج خريج موجود."""
+    graduation_year: Optional[int] = Field(None, ge=1900, le=2200)
+    graduation_date: Optional[str] = None
+    graduation_semester: Optional[str] = None
+    final_gpa: Optional[float] = Field(None, ge=0, le=4.0)
+    total_credit_hours: Optional[int] = Field(None, ge=0)
+    certificate_number: Optional[str] = None
+    honors: Optional[str] = None
+    notes: Optional[str] = None
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat()
 
@@ -430,3 +442,381 @@ async def restore_alumni_to_student(
         pass
 
     return {"message": f"تم استرجاع '{s.get('full_name')}' إلى قائمة الطلاب", "student_id": alumni_id}
+
+
+# ============================
+# 5) Update Alumni Graduation Data
+# ============================
+@router.put("/alumni/{alumni_id}")
+async def update_alumni(
+    alumni_id: str,
+    body: AlumniUpdateRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """تحديث بيانات تخرج خريج (السنة، المعدل، الشهادة، التقدير، الفصل، الملاحظات).
+    
+    الحقول المرسلة فقط هي التي تُحدَّث (partial update). لا يلمس بيانات الطالب الأساسية.
+    """
+    _ensure_can_manage_students(current_user)
+    db = get_db()
+
+    try:
+        s = await db.students.find_one({"_id": ObjectId(alumni_id)})
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف غير صحيح")
+    if not s:
+        raise HTTPException(status_code=404, detail="الخريج غير موجود")
+    if not s.get("is_alumni"):
+        raise HTTPException(status_code=400, detail="هذا الطالب ليس خريجاً")
+
+    await _ensure_student_in_user_scope(db, current_user, s)
+
+    gd = dict(s.get("graduation_data") or {})
+    payload = body.dict(exclude_unset=True, exclude_none=False)
+    # خريطة من حقول الـ API إلى مفاتيح المخزّن
+    field_map = {
+        "graduation_year": "year",
+        "graduation_date": "date",
+        "graduation_semester": "semester",
+        "final_gpa": "final_gpa",
+        "total_credit_hours": "total_credit_hours",
+        "certificate_number": "certificate_number",
+        "honors": "honors",
+        "notes": "notes",
+    }
+    for api_key, store_key in field_map.items():
+        if api_key in payload:
+            gd[store_key] = payload[api_key]
+    gd["updated_at"] = _now()
+    gd["updated_by_user_id"] = current_user.get("id")
+    gd["updated_by_username"] = current_user.get("username")
+
+    update_set: dict = {"graduation_data": gd}
+    if "graduation_date" in payload:
+        update_set["graduation_date"] = payload["graduation_date"]
+
+    await db.students.update_one(
+        {"_id": ObjectId(alumni_id)},
+        {"$set": update_set},
+    )
+
+    try:
+        await db.activity_logs.insert_one({
+            "user_id": current_user.get("id"),
+            "username": current_user.get("username"),
+            "action": "update_alumni",
+            "target_type": "student",
+            "target_id": alumni_id,
+            "details": f"تحديث بيانات تخرج الخريج {s.get('full_name', '')}",
+            "timestamp": _now(),
+        })
+    except Exception:
+        pass
+
+    return {"message": "تم تحديث بيانات الخريج بنجاح", "id": alumni_id}
+
+
+# ============================
+# 6) Export Alumni (Excel/PDF)
+# ============================
+async def _build_alumni_export_rows(
+    db, current_user: dict,
+    year: Optional[int], faculty_id: Optional[str],
+    department_id: Optional[str], q: Optional[str],
+):
+    """ينفّذ نفس استعلام list_alumni لكن يعيد قائمة مسطّحة جاهزة للتصدير."""
+    query: dict = {"is_alumni": True}
+    scope = await get_scope_filter(current_user, "students")
+    for k, v in scope.items():
+        query[k] = v
+    if year is not None:
+        query["graduation_data.year"] = year
+    if faculty_id:
+        query["faculty_id"] = faculty_id
+    if department_id:
+        query["department_id"] = department_id
+    if q:
+        import re as _re
+        rx = {"$regex": _re.escape(q), "$options": "i"}
+        query["$or"] = [{"full_name": rx}, {"student_id": rx}, {"reference_number": rx}]
+
+    alumni = await db.students.find(query).sort([("graduation_data.year", -1), ("full_name", 1)]).to_list(10000)
+    dept_ids = list({str(s.get("department_id", "")) for s in alumni if s.get("department_id")})
+    dept_map: dict = {}
+    fac_ids_set: set = set()
+    if dept_ids:
+        try:
+            async for d in db.departments.find(
+                {"_id": {"$in": [ObjectId(x) for x in dept_ids if x]}}, {"name": 1, "faculty_id": 1},
+            ):
+                dept_map[str(d["_id"])] = d
+                if d.get("faculty_id"):
+                    fac_ids_set.add(str(d["faculty_id"]))
+        except Exception:
+            pass
+    fac_map: dict = {}
+    if fac_ids_set:
+        try:
+            async for f in db.faculties.find(
+                {"_id": {"$in": [ObjectId(x) for x in fac_ids_set if x]}}, {"name": 1},
+            ):
+                fac_map[str(f["_id"])] = (f.get("name", "") or "").strip()
+        except Exception:
+            pass
+
+    rows = []
+    for s in alumni:
+        gd = s.get("graduation_data") or {}
+        dept_id = str(s.get("department_id", "") or "")
+        dept_doc = dept_map.get(dept_id) if dept_id else None
+        fac_name = ""
+        if dept_doc and dept_doc.get("faculty_id"):
+            fac_name = fac_map.get(str(dept_doc["faculty_id"]), "")
+        rows.append({
+            "student_id": s.get("student_id") or "",
+            "full_name": (s.get("full_name") or "").strip(),
+            "department": ((dept_doc or {}).get("name") or "").strip() if dept_doc else "",
+            "faculty": fac_name,
+            "graduation_year": gd.get("year") or "",
+            "graduation_semester": gd.get("semester") or "",
+            "graduation_date": gd.get("date") or s.get("graduation_date") or "",
+            "level_graduated": s.get("graduated_from_level") or s.get("level") or "",
+            "final_gpa": gd.get("final_gpa") if gd.get("final_gpa") is not None else "",
+            "total_credit_hours": gd.get("total_credit_hours") if gd.get("total_credit_hours") is not None else "",
+            "certificate_number": gd.get("certificate_number") or "",
+            "honors": gd.get("honors") or "",
+            "phone": s.get("phone") or "",
+            "email": s.get("email") or "",
+        })
+    return rows
+
+
+@router.get("/alumni/export/excel")
+async def export_alumni_excel(
+    year: Optional[int] = None,
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    q: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تصدير قائمة الخريجين إلى Excel."""
+    from fastapi.responses import StreamingResponse
+    import openpyxl
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from io import BytesIO
+
+    if not (current_user.get("role") == "admin" or has_any_permission(
+        current_user, [Permission.VIEW_STUDENTS, Permission.MANAGE_STUDENTS]
+    )):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+
+    db = get_db()
+    rows = await _build_alumni_export_rows(db, current_user, year, faculty_id, department_id, q)
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "الخريجون"
+    ws.sheet_view.rightToLeft = True
+
+    BLUE = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
+    GREY = PatternFill(start_color='F5F5F5', end_color='F5F5F5', fill_type='solid')
+    thin = Side(style='thin', color='B0BEC5')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    BOLD = Font(bold=True, size=11)
+    WHITE_BOLD = Font(bold=True, color='FFFFFF', size=11)
+
+    NUM_COLS = 13
+    # Title
+    ws.merge_cells(start_row=1, end_row=1, start_column=1, end_column=NUM_COLS)
+    title_cell = ws.cell(row=1, column=1, value="قائمة الخريجين")
+    title_cell.font = Font(bold=True, size=15, color='1565C0')
+    title_cell.alignment = center
+    ws.row_dimensions[1].height = 28
+
+    # Subtitle (filters summary + total)
+    parts = [f"الإجمالي: {len(rows)} خريج"]
+    if year:
+        parts.append(f"السنة: {year}")
+    ws.merge_cells(start_row=2, end_row=2, start_column=1, end_column=NUM_COLS)
+    sub = ws.cell(row=2, column=1, value=" · ".join(parts))
+    sub.font = Font(bold=True, size=11, color='5B6678')
+    sub.alignment = center
+    ws.row_dimensions[2].height = 20
+
+    # Header
+    headers = [
+        "#", "الاسم", "رقم القيد", "القسم", "الكلية", "سنة التخرج",
+        "الفصل", "تاريخ التخرج", "المستوى", "المعدل", "الساعات المعتمدة",
+        "رقم الشهادة", "التقدير",
+    ]
+    for i, h in enumerate(headers, start=1):
+        c = ws.cell(row=4, column=i, value=h)
+        c.fill = BLUE
+        c.font = WHITE_BOLD
+        c.alignment = center
+        c.border = border
+    ws.row_dimensions[4].height = 24
+
+    sem_label = {"first": "الأول", "second": "الثاني", "summer": "الصيفي"}
+    cur = 5
+    for idx, r in enumerate(rows, start=1):
+        vals = [
+            idx, r["full_name"], r["student_id"], r["department"], r["faculty"],
+            r["graduation_year"],
+            sem_label.get(str(r.get("graduation_semester") or ""), r.get("graduation_semester") or ""),
+            r["graduation_date"], r["level_graduated"], r["final_gpa"],
+            r["total_credit_hours"], r["certificate_number"], r["honors"],
+        ]
+        for i, v in enumerate(vals, start=1):
+            c = ws.cell(row=cur, column=i, value=v)
+            c.alignment = center
+            c.border = border
+            if idx % 2 == 0:
+                c.fill = GREY
+        cur += 1
+
+    if not rows:
+        ws.merge_cells(start_row=cur, end_row=cur, start_column=1, end_column=NUM_COLS)
+        c = ws.cell(row=cur, column=1, value="لا يوجد خريجون مطابقون للفلاتر")
+        c.alignment = center
+        c.font = Font(italic=True, color='8A95A8')
+
+    widths = [4, 26, 13, 18, 20, 11, 10, 13, 8, 9, 13, 14, 13]
+    for i, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + i)].width = w
+
+    out = BytesIO()
+    wb.save(out)
+    out.seek(0)
+    return StreamingResponse(
+        out,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=alumni.xlsx"},
+    )
+
+
+@router.get("/alumni/export/pdf")
+async def export_alumni_pdf(
+    year: Optional[int] = None,
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    q: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تصدير قائمة الخريجين إلى PDF (RTL عربي)."""
+    from fastapi.responses import StreamingResponse
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+    from io import BytesIO
+    from pathlib import Path
+
+    if not (current_user.get("role") == "admin" or has_any_permission(
+        current_user, [Permission.VIEW_STUDENTS, Permission.MANAGE_STUDENTS]
+    )):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
+
+    db = get_db()
+    rows = await _build_alumni_export_rows(db, current_user, year, faculty_id, department_id, q)
+
+    font_path = Path(__file__).parent.parent / "fonts" / "Amiri-Regular.ttf"
+    if font_path.exists():
+        try:
+            pdfmetrics.registerFont(TTFont('Amiri', str(font_path)))
+        except Exception:
+            pass
+        arabic_font = 'Amiri'
+    else:
+        arabic_font = 'Helvetica'
+
+    def ar(t):
+        return get_display(arabic_reshaper.reshape(str(t or "")))
+
+    buf = BytesIO()
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        rightMargin=12 * mm, leftMargin=12 * mm,
+        topMargin=12 * mm, bottomMargin=12 * mm,
+    )
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle(
+        'AlumniTitle', parent=styles['Title'], fontName=arabic_font,
+        fontSize=18, alignment=TA_CENTER, textColor=colors.HexColor('#1565c0'),
+    )
+    sub_style = ParagraphStyle(
+        'AlumniSub', parent=styles['Normal'], fontName=arabic_font,
+        fontSize=11, alignment=TA_CENTER, textColor=colors.HexColor('#5b6678'),
+    )
+
+    elements = [Paragraph(ar("قائمة الخريجين"), title_style), Spacer(1, 3 * mm)]
+    parts = [f"الإجمالي: {len(rows)} خريج"]
+    if year:
+        parts.append(f"السنة: {year}")
+    elements.append(Paragraph(ar(" · ".join(parts)), sub_style))
+    elements.append(Spacer(1, 6 * mm))
+
+    sem_label = {"first": "الأول", "second": "الثاني", "summer": "الصيفي"}
+
+    if not rows:
+        elements.append(Paragraph(ar("لا يوجد خريجون مطابقون للفلاتر"), sub_style))
+    else:
+        # ترتيب الأعمدة من اليسار → اليمين على PDF (RTL محتوى):
+        # [التقدير | المعدل | المستوى | تاريخ التخرج | الفصل | سنة التخرج | الكلية | القسم | رقم القيد | الاسم | #]
+        header = [
+            ar("التقدير"), ar("المعدل"), ar("المستوى"),
+            ar("تاريخ التخرج"), ar("الفصل"), ar("سنة التخرج"),
+            ar("الكلية"), ar("القسم"), ar("رقم القيد"), ar("الاسم"), ar("#"),
+        ]
+        data = [header]
+        for idx, r in enumerate(rows, start=1):
+            data.append([
+                ar(r["honors"] or "-"),
+                ar(str(r["final_gpa"]) if r["final_gpa"] != "" else "-"),
+                ar(str(r["level_graduated"]) if r["level_graduated"] != "" else "-"),
+                ar(r["graduation_date"] or "-"),
+                ar(sem_label.get(str(r.get("graduation_semester") or ""), r.get("graduation_semester") or "-")),
+                ar(str(r["graduation_year"]) if r["graduation_year"] != "" else "-"),
+                ar(r["faculty"] or "-"),
+                ar(r["department"] or "-"),
+                ar(r["student_id"] or "-"),
+                ar(r["full_name"] or "-"),
+                str(idx),
+            ])
+        total_w = doc.width
+        col_widths = [
+            total_w * 0.09, total_w * 0.06, total_w * 0.05,
+            total_w * 0.08, total_w * 0.06, total_w * 0.06,
+            total_w * 0.12, total_w * 0.12, total_w * 0.08,
+            total_w * 0.24, total_w * 0.04,
+        ]
+        t = Table(data, colWidths=col_widths, repeatRows=1)
+        t.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), arabic_font),
+            ('FONTSIZE', (0, 0), (-1, 0), 10.5),
+            ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#cfd6e1')),
+            ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#fafbfd')]),
+            ('TOPPADDING', (0, 0), (-1, -1), 5),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 5),
+        ]))
+        elements.append(t)
+
+    doc.build(elements)
+    buf.seek(0)
+    return StreamingResponse(
+        buf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": "attachment; filename=alumni.pdf"},
+    )
