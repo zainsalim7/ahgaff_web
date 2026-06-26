@@ -107,6 +107,7 @@ export default function AddCourseScreen() {
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [filterDept, setFilterDept] = useState<string>('');
   const [filterLevel, setFilterLevel] = useState<string>('');
+  const [filterSection, setFilterSection] = useState<string>('');
   const [filterSemester, setFilterSemester] = useState<string>(''); // '' = الفصل النشط (افتراضي), 'all' = كل الفصول, أو semester_id محدد
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [activeSemester, setActiveSemester] = useState<any>(null);
@@ -1147,6 +1148,8 @@ export default function AddCourseScreen() {
                   const q = searchQuery.toLowerCase();
                   if (!c.name?.toLowerCase().includes(q) && !c.code?.toLowerCase().includes(q)) return false;
                 }
+                if (filterLevel && String(c.level) !== filterLevel) return false;
+                if (filterSection && (c.section || '') !== filterSection) return false;
                 return true;
               });
               // 🔤 فرز ديناميكي
@@ -1246,10 +1249,38 @@ export default function AddCourseScreen() {
                           </Picker>
                         </View>
                       </View>
+                      <View style={[styles.filterField, { maxWidth: 130 }]}>
+                        <Text style={styles.filterLbl}>المستوى</Text>
+                        <View style={styles.dropdown}>
+                          <Picker
+                            selectedValue={filterLevel}
+                            onValueChange={(v) => { setFilterLevel(v); setCurrentPage(1); }}
+                            style={styles.dropdownInner}
+                          >
+                            <Picker.Item label="الكل" value="" />
+                            {LEVELS.map(l => <Picker.Item key={l} label={`م${l}`} value={l} />)}
+                          </Picker>
+                        </View>
+                      </View>
+                      <View style={[styles.filterField, { maxWidth: 130 }]}>
+                        <Text style={styles.filterLbl}>الشعبة</Text>
+                        <View style={styles.dropdown}>
+                          <Picker
+                            selectedValue={filterSection}
+                            onValueChange={(v) => { setFilterSection(v); setCurrentPage(1); }}
+                            style={styles.dropdownInner}
+                          >
+                            <Picker.Item label="الكل" value="" />
+                            {Array.from(new Set(courses.map(c => c.section).filter(Boolean))).sort().map(s => (
+                              <Picker.Item key={s} label={s} value={s} />
+                            ))}
+                          </Picker>
+                        </View>
+                      </View>
                       <View style={styles.filterBtns}>
-                        <TouchableOpacity style={styles.resetBtn} onPress={() => { setFilterDept(''); setSearchQuery(''); setFilterSemester(''); setCurrentPage(1); }} disabled={!filterDept && !searchQuery && !filterSemester}>
-                          <Ionicons name="refresh" size={13} color={(filterDept || searchQuery || filterSemester) ? '#2962ff' : '#a8b1c2'} />
-                          <Text style={[styles.resetBtnText, !(filterDept || searchQuery || filterSemester) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
+                        <TouchableOpacity style={styles.resetBtn} onPress={() => { setFilterDept(''); setSearchQuery(''); setFilterSemester(''); setFilterLevel(''); setFilterSection(''); setCurrentPage(1); }} disabled={!filterDept && !searchQuery && !filterSemester && !filterLevel && !filterSection}>
+                          <Ionicons name="refresh" size={13} color={(filterDept || searchQuery || filterSemester || filterLevel || filterSection) ? '#2962ff' : '#a8b1c2'} />
+                          <Text style={[styles.resetBtnText, !(filterDept || searchQuery || filterSemester || filterLevel || filterSection) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { paddingHorizontal: 18 }]}>
                           <Text style={styles.btnPrimaryText}>تطبيق الفلتر</Text>
@@ -1259,7 +1290,7 @@ export default function AddCourseScreen() {
                   </View>
 
                   {/* بطاقة الجدول — لا تعرض حتى يختار المستخدم فلتراً */}
-                  {!(filterDept || searchQuery || filterSemester) ? (
+                  {!(filterDept || searchQuery || filterSemester || filterLevel || filterSection) ? (
                     <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6', padding: 50, alignItems: 'center', gap: 14 }}>
                       <Ionicons name="filter-circle-outline" size={72} color="#cfd6e1" />
                       <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'center' }}>اختر فلتراً لعرض المقررات</Text>
