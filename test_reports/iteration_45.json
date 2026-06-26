@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 45 — Verified BOTH fixes from this round: (A) the curriculum sidebar visibility bug for view_curr_user is RESOLVED, and (B) the new 'الإعدادات الأساسية' page at /admin renders correctly for both admin (24 tools across 7 sections) and view_curr_user (9 tools across 3 sections, with admin-only/maintenance tools correctly hidden). Side-menu label and bottom-tab label both show 'الإعدادات الأساسية' (not the old 'لوحة الإدارة'). Navigation tiles 'إدارة التقويم الجامعي' → /university-calendar and 'إرسال النتائج النهائية' → /send-final-results both navigate successfully without error UI.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "(post-login)", "issue": "One generic 403 console error observed after login as view_curr_user (carry-over from iter 44; non-fatal, no visible UI impact)"}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "verifications_performed": [
+    "Login view_curr_user/test1234 → side menu OPEN → 'الخطة الدراسية' VISIBLE ✅ (iter-44 bug fixed via AuthContext cachedUser||user fallback in hasAnyPermission/hasAllPermissions)",
+    "view_curr_user → side menu also shows 'الإعدادات الأساسية' ✅",
+    "view_curr_user bottom-tab 'الإعدادات الأساسية' click → /admin opens NEW Basic Settings screen (NOT a home dashboard copy) ✅",
+    "view_curr_user /admin hero text: 'الأدوات الإدارية المتاحة لك • 9 أداة' ✅",
+    "view_curr_user /admin sections visible: الإدارة الأكاديمية(1: مراجع الطلاب), التقويم والجداول(2: عرض التقويم، تقرير توفّر القاعات), التقارير المتقدّمة(6) — empty sections (results, attendance-cards, system, maintenance) correctly hidden ✅",
+    "RBAC check view_curr_user: admin-only/maintenance tools (student-autofill, cleanup-ghost-completions, cleanup-orphan-attendance, backfill-lecture-semesters, backfill-sections, university-calendar, permissions-tree, offline-sync) NONE visible ✅",
+    "admin/admin123 /admin hero text: '24 أداة' ✅",
+    "admin /admin: all 7 sections present (الإدارة الأكاديمية, التقويم والجداول, التقارير المتقدّمة, النتائج والإشعارات, الحضور وبطاقات الطلاب, إعدادات النظام, أدوات الصيانة (مدير النظام)) ✅",
+    "admin clicks 'إدارة التقويم الجامعي' → URL = /university-calendar, no error UI ✅",
+    "admin clicks 'إرسال النتائج النهائية' → URL = /send-final-results, no error UI (loader visible) ✅",
+    "admin side menu shows 'الإعدادات الأساسية' AND does NOT contain old label 'لوحة الإدارة' ✅",
+    "admin side menu still shows 'الخطة الدراسية' ✅",
+    "Bottom tab label 'الإعدادات الأساسية' visible on tabs bar for both users ✅"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "[LOW/Testability] data-testid attributes ('basic-settings-screen', 'section-{id}', 'tool-{id}') were NOT queryable via DOM selectors during Playwright tests (count=0) because React Native Web does not forward arbitrary 'data-testid' props on View/TouchableOpacity by default — it converts only the 'testID' prop. Recommend renaming 'data-testid={...}' to 'testID={...}' in /app/frontend/app/(tabs)/admin.tsx so QA tooling can reliably target sections and tiles. Functional behavior is correct; this is purely a test-hook issue. Tests had to fall back to text-based selectors.",
+    "[LOW] Investigate the residual 403 on post-login for view_curr_user (carry-over from iter 44; not blocking)."
+  ],
+  "critical_code_review_comments": [
+    "admin.tsx uses 'data-testid' literal props on RN primitives. React Native Web only converts the camelCase 'testID' prop to a 'data-testid' DOM attribute. Using 'data-testid' directly may work in some configs but is unreliable — observed 0 matches in Playwright. Migrate to testID={...} for portability.",
+    "canSeeItem (admin.tsx:365-372): when item has no permissions/adminOnly/teacherOnly/forAll AND user is non-admin, it returns false silently. That's the intended RBAC behavior but worth documenting explicitly.",
+    "admin.tsx is ~540 lines — acceptable, but SECTIONS could be moved to a separate data file (e.g., adminSections.ts) to keep the screen component lean and easier to maintain.",
+    "AuthContext fix (cachedUser || user) addresses the symptom; the deeper architectural issue (two parallel user sources — useAuthStore + AuthContext) noted in iter 44 still stands. Long-term: consolidate to one source of truth."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (frontend-only round)", "frontend": "100% on the 8 acceptance items in the review request"},
+  "test_credentials": "admin/admin123 (OK); view_curr_user/test1234 (OK)",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Both targeted fixes are verified end-to-end via Expo Web on the public REACT_APP_BACKEND_URL. Curriculum sidebar visibility and the new Basic Settings (/admin) page (24 tools admin / 9 tools view_curr_user) both work. Only optional follow-up: migrate admin.tsx 'data-testid' to 'testID' for RN Web compatibility so data-testid selectors work in future Playwright runs (currently QA must rely on visible Arabic text)."
+}
