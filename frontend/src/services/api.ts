@@ -390,6 +390,11 @@ export const notificationsAPI = {
     api.post('/notifications/manual', data),
   getStudentNotifications: (studentId: string) =>
     api.get(`/students/${studentId}/notifications`),
+  // حذف إشعار محدد أُرسل لطالب (يتطلب صلاحية SEND_NOTIFICATIONS أو admin)
+  deleteForStudent: (studentId: string, notifId: string) =>
+    api.delete(`/students/${studentId}/notifications/${notifId}`),
+  // عدد الإشعارات غير المقروءة لكل طالب
+  getUnreadCounts: () => api.get('/students/notifications/unread-counts'),
 };
 
 // Students API

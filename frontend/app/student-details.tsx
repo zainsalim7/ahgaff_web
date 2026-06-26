@@ -19,6 +19,7 @@ import {
   departmentsAPI,
   attendanceAPI,
   reportsAPI,
+  notificationsAPI,
 } from '../src/services/api';
 import api from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
@@ -168,6 +169,13 @@ export default function StudentDetailsScreen() {
   const [exportingExcel, setExportingExcel] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
 
+  // 🆕 Notifications (إشعارات/إنذارات الطالب)
+  const [studentNotifications, setStudentNotifications] = useState<any[]>([]);
+  const [notifsLoading, setNotifsLoading] = useState(false);
+  const [showNotifModal, setShowNotifModal] = useState(false);
+  const [notifForm, setNotifForm] = useState({ title: '', message: '', type: 'warning' });
+  const [sendingNotif, setSendingNotif] = useState(false);
+
   // ============== Fetch ==============
   const fetchStudent = useCallback(async () => {
     if (!studentId) {
@@ -222,6 +230,83 @@ export default function StudentDetailsScreen() {
   useEffect(() => {
     fetchStudent();
   }, [fetchStudent]);
+
+  // 🆕 جلب الإشعارات المرسلة للطالب
+  const fetchStudentNotifications = useCallback(async () => {
+    if (!studentId) return;
+    setNotifsLoading(true);
+    try {
+      const res = await notificationsAPI.getStudentNotifications(String(studentId));
+      setStudentNotifications(res.data?.notifications || []);
+    } catch (e: any) {
+      // 403 صامت - بعض الأدوار قد لا يكون لها صلاحية القراءة
+      setStudentNotifications([]);
+    } finally {
+      setNotifsLoading(false);
+    }
+  }, [studentId]);
+
+  useEffect(() => {
+    fetchStudentNotifications();
+  }, [fetchStudentNotifications]);
+
+  // 🆕 حذف إشعار محدد (لمن لديه صلاحية SEND_NOTIFICATIONS)
+  const canSendNotifications =
+    user?.role === 'admin' || (user && hasPermission(PERMISSIONS.SEND_NOTIFICATIONS));
+
+  const handleDeleteNotification = (notif: any) => {
+    if (!student) return;
+    showConfirm('حذف الإشعار', `هل أنت متأكد من حذف إشعار "${notif.title}"؟`, async () => {
+      try {
+        await notificationsAPI.deleteForStudent(student.id, notif.id);
+        setStudentNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+      } catch (e: any) {
+        showMessage('خطأ', e?.response?.data?.detail || 'فشل حذف الإشعار');
+      }
+    });
+  };
+
+  // 🆕 فتح مودال إرسال إشعار جديد
+  const openNotifModal = () => {
+    if (!student) return;
+    setNotifForm({
+      title: `⚠️ إنذار للطالب ${student.full_name}`,
+      message: '',
+      type: 'warning',
+    });
+    setShowNotifModal(true);
+  };
+
+  // 🆕 إرسال الإشعار
+  const handleSendNotification = async () => {
+    if (!student) return;
+    if (!notifForm.message.trim()) {
+      showMessage('خطأ', 'يرجى كتابة نص الإشعار');
+      return;
+    }
+    if (!notifForm.title.trim()) {
+      showMessage('خطأ', 'يرجى كتابة عنوان الإشعار');
+      return;
+    }
+    setSendingNotif(true);
+    try {
+      await notificationsAPI.sendManual({
+        student_id: student.id,
+        title: notifForm.title.trim(),
+        message: notifForm.message.trim(),
+        type: notifForm.type,
+      });
+      showMessage('تم', `تم إرسال الإشعار للطالب ${student.full_name}`);
+      setShowNotifModal(false);
+      setNotifForm({ title: '', message: '', type: 'warning' });
+      // تحديث قائمة الإشعارات
+      fetchStudentNotifications();
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل في إرسال الإشعار');
+    } finally {
+      setSendingNotif(false);
+    }
+  };
 
   // ============== Actions ==============
   const handleLoadAttendanceRecords = async () => {
@@ -821,6 +906,15 @@ export default function StudentDetailsScreen() {
                 <Ionicons name="document-text" size={18} color="#5e35b1" />
                 <Text style={[styles.actionBtnText, { color: '#5e35b1' }]}>التقرير المفصّل</Text>
               </TouchableOpacity>
+              {/* 🆕 زر إرسال إشعار / إنذار */}
+              <TouchableOpacity
+                style={[styles.actionBtn, { backgroundColor: '#fff8e1' }]}
+                onPress={openNotifModal}
+                testID="send-notification-btn"
+              >
+                <Ionicons name="notifications" size={18} color="#f57f17" />
+                <Text style={[styles.actionBtnText, { color: '#f57f17' }]}>إرسال إشعار</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -958,6 +1052,84 @@ export default function StudentDetailsScreen() {
                     </View>
                   )}
                 </View>
+                );
+              })}
+            </View>
+          )}
+        </View>
+
+        {/* ============ 🆕 سجل الإشعارات/الإنذارات ============ */}
+        <View style={styles.sectionCard}>
+          <View style={styles.sectionCardHeader}>
+            <Text style={styles.sectionCardTitle}>سجل الإشعارات</Text>
+            <Text style={styles.sectionSubCount}>{studentNotifications.length} إشعار</Text>
+          </View>
+          {notifsLoading ? (
+            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+              <ActivityIndicator size="small" color="#f57f17" />
+            </View>
+          ) : studentNotifications.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Ionicons name="notifications-off-outline" size={48} color="#cfd6e1" />
+              <Text style={styles.emptyText}>لا توجد إشعارات لهذا الطالب</Text>
+            </View>
+          ) : (
+            <View style={{ gap: 10, paddingHorizontal: 14, paddingBottom: 14 }}>
+              {studentNotifications.map((n) => {
+                const color =
+                  n.type === 'warning' ? '#f57f17'
+                  : n.type === 'absence' ? '#c62828'
+                  : n.type === 'announcement' ? '#1565c0'
+                  : '#5e35b1';
+                const bg =
+                  n.type === 'warning' ? '#fff8e1'
+                  : n.type === 'absence' ? '#ffebee'
+                  : n.type === 'announcement' ? '#e3f2fd'
+                  : '#ede7f6';
+                const icon: any =
+                  n.type === 'warning' ? 'warning'
+                  : n.type === 'absence' ? 'alert-circle'
+                  : n.type === 'announcement' ? 'megaphone'
+                  : 'information-circle';
+                return (
+                  <View key={n.id} style={[styles.notifCard, { backgroundColor: bg, borderRightColor: color }]} testID={`notif-${n.id}`}>
+                    <View style={styles.notifHeader}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 }}>
+                        <Ionicons name={icon} size={16} color={color} />
+                        <Text style={[styles.notifTitle, { color }]} numberOfLines={1}>{n.title}</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                        {n.is_read ? (
+                          <View style={[styles.notifBadge, { backgroundColor: '#e8f5e9' }]}>
+                            <Text style={[styles.notifBadgeText, { color: '#2e7d32' }]}>مقروء</Text>
+                          </View>
+                        ) : (
+                          <View style={[styles.notifBadge, { backgroundColor: '#fbe9e7' }]}>
+                            <Text style={[styles.notifBadgeText, { color: '#d84315' }]}>جديد</Text>
+                          </View>
+                        )}
+                        {canSendNotifications && (
+                          <TouchableOpacity
+                            onPress={() => handleDeleteNotification(n)}
+                            style={styles.notifDeleteBtn}
+                            testID={`delete-notif-${n.id}`}
+                          >
+                            <Ionicons name="trash-outline" size={15} color="#c62828" />
+                          </TouchableOpacity>
+                        )}
+                      </View>
+                    </View>
+                    <Text style={styles.notifMessage}>{n.message}</Text>
+                    <View style={styles.notifFooter}>
+                      <Text style={styles.notifMeta}>{formatGregorianDate(new Date(n.created_at))}</Text>
+                      {n.sent_by_name ? (
+                        <Text style={styles.notifMeta}>· بواسطة: {n.sent_by_name}</Text>
+                      ) : null}
+                      {n.is_manual ? (
+                        <Text style={[styles.notifMeta, { color: '#5e35b1' }]}>· يدوي</Text>
+                      ) : null}
+                    </View>
+                  </View>
                 );
               })}
             </View>
@@ -1486,6 +1658,103 @@ export default function StudentDetailsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* 🆕 ============ مودال إرسال إشعار ============ */}
+      <Modal
+        visible={showNotifModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowNotifModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalContent, { maxWidth: 520 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="notifications" size={20} color="#f57f17" />
+                <Text style={styles.modalTitle}>إرسال إشعار للطالب</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowNotifModal(false)} testID="close-notif-modal">
+                <Ionicons name="close" size={24} color="#5b6678" />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalBody}>
+              {/* نوع الإشعار */}
+              <Text style={styles.modalLabel}>نوع الإشعار</Text>
+              <View style={styles.typeChipsRow}>
+                {[
+                  { val: 'warning', label: 'إنذار', color: '#f57f17', bg: '#fff8e1' },
+                  { val: 'announcement', label: 'إعلان', color: '#1565c0', bg: '#e3f2fd' },
+                  { val: 'absence', label: 'غياب', color: '#c62828', bg: '#ffebee' },
+                  { val: 'info', label: 'معلومة', color: '#5e35b1', bg: '#ede7f6' },
+                ].map((opt) => {
+                  const active = notifForm.type === opt.val;
+                  return (
+                    <TouchableOpacity
+                      key={opt.val}
+                      style={[styles.typeChip, { backgroundColor: active ? opt.bg : '#fff', borderColor: active ? opt.color : '#d6dde6' }]}
+                      onPress={() => setNotifForm(p => ({ ...p, type: opt.val }))}
+                      testID={`notif-type-${opt.val}`}
+                    >
+                      <Text style={{ color: active ? opt.color : '#5b6678', fontWeight: active ? '700' : '500', fontSize: 13 }}>{opt.label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              {/* العنوان */}
+              <Text style={[styles.modalLabel, { marginTop: 14 }]}>العنوان</Text>
+              <TextInput
+                style={styles.input}
+                value={notifForm.title}
+                onChangeText={(t) => setNotifForm(p => ({ ...p, title: t }))}
+                placeholder="مثال: تنبيه بشأن الحضور"
+                placeholderTextColor="#a8b1c2"
+                testID="notif-title-input"
+              />
+
+              {/* الرسالة */}
+              <Text style={[styles.modalLabel, { marginTop: 14 }]}>نص الإشعار</Text>
+              <TextInput
+                style={[styles.input, { minHeight: 120, textAlignVertical: 'top' }]}
+                value={notifForm.message}
+                onChangeText={(t) => setNotifForm(p => ({ ...p, message: t }))}
+                placeholder="اكتب محتوى الإشعار هنا..."
+                placeholderTextColor="#a8b1c2"
+                multiline
+                numberOfLines={5}
+                testID="notif-message-input"
+              />
+            </View>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.btnGhost]}
+                onPress={() => setShowNotifModal(false)}
+                disabled={sendingNotif}
+                testID="cancel-notif-btn"
+              >
+                <Text style={styles.btnGhostText}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.btnPrimary, { backgroundColor: '#f57f17' }]}
+                onPress={handleSendNotification}
+                disabled={sendingNotif}
+                testID="confirm-send-notif-btn"
+              >
+                {sendingNotif ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
+                  <Ionicons name="send" size={16} color="#fff" />
+                )}
+                <Text style={styles.btnPrimaryText}>
+                  {sendingNotif ? 'جاري الإرسال...' : 'إرسال الإشعار'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -1714,6 +1983,34 @@ const styles = StyleSheet.create({
 
   emptyState: { alignItems: 'center', paddingVertical: 50, gap: 12 },
   emptyText: { fontSize: 14, color: '#8a95a8' },
+  emptyBox: { alignItems: 'center', paddingVertical: 40, gap: 10 },
+
+  // الإشعارات
+  sectionSubCount: { fontSize: 12, color: '#5b6678', fontWeight: '500' },
+  notifCard: {
+    backgroundColor: '#fff8e1',
+    borderRadius: 10,
+    padding: 12,
+    borderRightWidth: 4,
+    borderRightColor: '#f57f17',
+    gap: 6,
+  },
+  notifHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between' },
+  notifTitle: { fontSize: 14, fontWeight: '700', textAlign: 'right' },
+  notifMessage: { fontSize: 13, color: '#1a2540', lineHeight: 20, textAlign: 'right' },
+  notifFooter: { flexDirection: 'row-reverse', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginTop: 4 },
+  notifMeta: { fontSize: 11, color: '#8a95a8' },
+  notifBadge: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  notifBadgeText: { fontSize: 10, fontWeight: '700' },
+  notifDeleteBtn: {
+    padding: 6,
+    borderRadius: 8,
+    backgroundColor: '#ffebee',
+    borderWidth: 1,
+    borderColor: '#ffcdd2',
+  },
+  typeChipsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginTop: 6 },
+  typeChip: { paddingHorizontal: 14, paddingVertical: 6, borderRadius: 16, borderWidth: 1.5 },
 
   // الحضور
   attendanceCta: { alignItems: 'center', paddingVertical: 36, paddingHorizontal: 18, gap: 8 },

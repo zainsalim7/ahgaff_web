@@ -3128,6 +3128,63 @@ async def get_student_notifications(
     
     return {"notifications": result, "count": len(result)}
 
+
+@api_router.delete("/students/{student_id}/notifications/{notification_id}")
+async def delete_student_notification(
+    student_id: str,
+    notification_id: str,
+    current_user: dict = Depends(get_current_user)
+):
+    """حذف إشعار محدد أُرسل لطالب — مخصّص لمن لديه صلاحية إرسال الإشعارات.
+    
+    لا يلمس endpoint المستلم (المستخدم لحذف إشعاراته الخاصة).
+    """
+    # نفس فحص الصلاحيات المستخدم في GET أعلاه + صلاحية SEND_NOTIFICATIONS
+    if current_user["role"] != UserRole.ADMIN:
+        user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        user_perms = (user_doc or {}).get("permissions", [])
+        if Permission.SEND_NOTIFICATIONS not in user_perms:
+            raise HTTPException(status_code=403, detail="غير مصرح لك بحذف الإشعارات")
+    
+    result = await db.notifications.delete_one(
+        {"_id": ObjectId(notification_id), "student_id": student_id}
+    )
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="الإشعار غير موجود")
+    return {"message": "تم حذف الإشعار", "id": notification_id}
+
+
+@api_router.get("/students/notifications/unread-counts")
+async def get_students_unread_notifications_counts(
+    current_user: dict = Depends(get_current_user)
+):
+    """جلب عدد الإشعارات غير المقروءة لكل طالب (للمدير ومن لديه صلاحية SEND_NOTIFICATIONS).
+    
+    يُرجع: {"counts": {student_id: count, ...}, "total": number}
+    """
+    if current_user["role"] != UserRole.ADMIN:
+        user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        user_perms = (user_doc or {}).get("permissions", [])
+        if Permission.SEND_NOTIFICATIONS not in user_perms:
+            # نُرجع كائناً فارغاً بدل 403 لتجنّب تعطيل واجهة قائمة الطلاب
+            return {"counts": {}, "total": 0}
+    
+    pipeline = [
+        {"$match": {"is_read": {"$ne": True}, "student_id": {"$exists": True, "$ne": None}}},
+        {"$group": {"_id": "$student_id", "count": {"$sum": 1}}},
+    ]
+    cursor = db.notifications.aggregate(pipeline)
+    counts: dict = {}
+    total = 0
+    async for row in cursor:
+        sid = row.get("_id")
+        c = int(row.get("count", 0))
+        if sid:
+            counts[str(sid)] = c
+            total += c
+    return {"counts": counts, "total": total}
+
+
 # ==================== Student Routes ====================
 
 @api_router.post("/students/bulk-change-level")

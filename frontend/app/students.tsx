@@ -150,6 +150,9 @@ export default function StudentsScreen() {
   });
   const [sendingWarning, setSendingWarning] = useState(false);
 
+  // 🆕 عدد الإشعارات غير المقروءة لكل طالب
+  const [unreadCounts, setUnreadCounts] = useState<Record<string, number>>({});
+
   // حذف آمن
   const [deleteTarget, setDeleteTarget] = useState<Student | null>(null);
   const [deleteInfo, setDeleteInfo] = useState<any>(null);
@@ -276,6 +279,13 @@ export default function StudentsScreen() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // 🆕 جلب عدد الإشعارات غير المقروءة لكل طالب
+  useEffect(() => {
+    notificationsAPI.getUnreadCounts()
+      .then((r) => setUnreadCounts(r.data?.counts || {}))
+      .catch(() => setUnreadCounts({}));
+  }, []);
 
   // إعادة توجيه تلقائي إلى صفحة تفاصيل الطالب عند تمرير ?openStudent=ID
   useEffect(() => {
@@ -1028,6 +1038,13 @@ export default function StudentsScreen() {
             </View>
           )}
           <Text style={styles.studentNameCell} numberOfLines={1}>{item.full_name}</Text>
+          {/* 🆕 شارة الإشعارات غير المقروءة */}
+          {unreadCounts[item.id] > 0 && (
+            <View style={styles.unreadNotifBadge} testID={`unread-notif-${item.id}`}>
+              <Ionicons name="notifications" size={10} color="#fff" />
+              <Text style={styles.unreadNotifBadgeText}>{unreadCounts[item.id]}</Text>
+            </View>
+          )}
         </TouchableOpacity>
 
         {/* العمود 2: الرقم الجامعي - badge أخضر */}
@@ -1081,7 +1098,7 @@ export default function StudentsScreen() {
         </View>
       </View>
     );
-  }, [selectedIds, selectionMode, canManageStudents, getDepartmentName, openMenuId, formatRegDate]);
+  }, [selectedIds, selectionMode, canManageStudents, getDepartmentName, openMenuId, formatRegDate, unreadCounts]);
 
   // الطالب الحالي للقائمة المنبثقة
   const menuStudent = useMemo(() => students.find(s => s.id === openMenuId) || null, [students, openMenuId]);
@@ -2981,6 +2998,22 @@ const styles = StyleSheet.create({
     color: '#1a2540',
     flex: 1,
     textAlign: 'right',
+  },
+  // 🆕 شارة الإشعارات غير المقروءة (بجانب اسم الطالب)
+  unreadNotifBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#d84315',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 6,
+  },
+  unreadNotifBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
   },
   uniIdBadge: {
     alignSelf: 'flex-end',
