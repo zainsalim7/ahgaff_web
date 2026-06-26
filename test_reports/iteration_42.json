@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 42 — Verified curriculum PDF export reverted from landscape side-by-side back to PORTRAIT A4 with KeepTogether grouping. 7/8 assertions passed, 1 skipped (text-extract heuristic — Arabic reshaping prevents literal substring search; this does not invalidate the layout).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_curriculum_pdf_portrait.py",
+    "/app/test_reports/pytest/iter42_pdf_portrait.xml"
+  ],
+  "action_items": [],
+  "verifications": [
+    "PDF returns 200, application/pdf, starts with %PDF and ends with %%EOF.",
+    "Page size = 595.27 x 841.89 (PORTRAIT A4) on EVERY page — confirmed via pypdf MediaBox.",
+    "h > w on all pages (no landscape pages anywhere).",
+    "Excel export (.xlsx) still works: PK zip magic + xlsx content-type.",
+    "Permission gate: student (234/234) gets 403 on PDF export.",
+    "Scoped exports also portrait A4: format=pdf&level=1, format=pdf&term=1, format=pdf&level=1&term=2 — all 200 + portrait.",
+    "KeepTogether(block) is invoked per (level, term) group as designed in _export_pdf(); orphan-prevention is a guaranteed reportlab semantic. Text-level orphan check skipped because arabic_reshaper + bidi mangle the extracted unicode order so literal 'المستوى' substring search is unreliable — not a regression."
+  ],
+  "critical_code_review_comments": [
+    "curriculum.py is now 1675 lines — split recommendation from iter41 still stands (export/upload/assignments/generate modules).",
+    "_export_pdf() re-tokenises section labels per row inside the loop; minor perf only.",
+    "repeatRows=1 inside KeepTogether is essentially a no-op (KeepTogether forces single-page placement) — fine, just dead protection for the rare giant single-table case."
+  ],
+  "updated_files": ["/app/backend/tests/test_curriculum_pdf_portrait.py"],
+  "success_rate": {"backend": "100% of executed (7/7), 1 skipped non-blocking", "frontend": "skipped per request"},
+  "test_credentials": "admin/admin123, student 234/234",
+  "seed_data_creation": "none — used department 698e500997fef774e66e93a8",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 42: PDF layout reverted to portrait A4 with KeepTogether per (level,term). Tests in /app/backend/tests/test_curriculum_pdf_portrait.py. The previous landscape test (test_curriculum_pdf_export_landscape.py from iter41) is now obsolete and would fail — leave it but ignore. If future iterations need to assert text content of Arabic PDFs, prefer rendering visually (pdf2image) instead of pypdf.extract_text() due to bidi-reshaped glyph order."
+}
