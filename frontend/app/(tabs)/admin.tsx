@@ -385,7 +385,7 @@ export default function BasicSettingsScreen() {
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
+        showsVerticalScrollIndicator={true}
       >
         {/* Hero */}
         <View style={styles.hero}>
@@ -427,26 +427,20 @@ export default function BasicSettingsScreen() {
                 </View>
               </View>
 
-              {/* Items */}
+              {/* Items as compact icon grid */}
               <View style={styles.grid}>
                 {section.items.map(item => (
                   <TouchableOpacity
                     key={item.id}
-                    style={styles.card}
+                    style={styles.tile}
                     onPress={() => router.push(item.route as any)}
-                    activeOpacity={0.7}
+                    activeOpacity={0.75}
                     testID={`tool-${item.id}`}
                   >
-                    <View style={[styles.cardIcon, { backgroundColor: item.bg }]}>
-                      <Ionicons name={item.icon as any} size={22} color={item.color} />
+                    <View style={[styles.tileIcon, { backgroundColor: item.bg }]}>
+                      <Ionicons name={item.icon as any} size={24} color={item.color} />
                     </View>
-                    <View style={{ flex: 1 }}>
-                      <Text style={styles.cardLabel} numberOfLines={1}>{item.label}</Text>
-                      {item.description && (
-                        <Text style={styles.cardDesc} numberOfLines={2}>{item.description}</Text>
-                      )}
-                    </View>
-                    <Ionicons name="chevron-back" size={18} color="#cbd5e1" />
+                    <Text style={styles.tileLabel} numberOfLines={2}>{item.label}</Text>
                   </TouchableOpacity>
                 ))}
               </View>
@@ -517,25 +511,36 @@ const styles = StyleSheet.create({
   },
   sectionCountText: { fontSize: 12, fontWeight: '800' },
 
-  /* Grid */
-  grid: { gap: 8 },
-  card: {
+  /* Grid — compact icon tiles */
+  grid: {
     flexDirection: 'row-reverse',
+    flexWrap: 'wrap',
+    gap: 10,
+  },
+  tile: {
+    width: 96,
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 14,
-    padding: 12,
-    gap: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
     elevation: 1,
   },
-  cardIcon: {
-    width: 44, height: 44, borderRadius: 12,
+  tileIcon: {
+    width: 52, height: 52, borderRadius: 14,
     justifyContent: 'center', alignItems: 'center',
+    marginBottom: 8,
   },
-  cardLabel: { fontSize: 14, fontWeight: '700', color: '#0f172a', textAlign: 'right' },
-  cardDesc: { fontSize: 11, color: '#64748b', marginTop: 3, textAlign: 'right' },
+  tileLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#0f172a',
+    textAlign: 'center',
+    lineHeight: 14,
+    minHeight: 28,
+  },
 });

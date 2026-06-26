@@ -22,6 +22,7 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - كل عنصر مفلتر فردياً عبر `hasAnyPermission`/`adminOnly`/`teacherOnly`/`forAll` (RBAC ثابت)
   - تم تحديث `(tabs)/_layout.tsx` (عنوان التبويب والـ header) وعنصر القائمة الجانبية في `SideMenu.tsx` بالاسم الجديد
   - أُضيفت ثوابت `MANAGE_NOTIFICATIONS` و `REPORT_LESSON_COMPLETION` في `PERMISSIONS` بـ `AuthContext.tsx`
+  - **2026-06-26 تحسين تصميم**: تحويل التخطيط من قائمة عمودية (rows مع وصف) إلى **شبكة أيقونات مدمجة** (3 أعمدة على الجوال، 5+ على الديسكتوب) — أيقونة + اسم فقط لكل أداة، تمرير سلس مع `showsVerticalScrollIndicator={true}`
 
 ## Implemented (selected, recent)
 - 2026-06-23 **🏷️ إصلاح عرض القسم/الكلية لكل المقررات في صفحة العبء التدريسي**:
