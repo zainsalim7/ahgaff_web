@@ -1,0 +1,23 @@
+{
+  "summary": "Iteration 41 - Verified PDF curriculum export layout changes. All 6 PDF requirements PASSED: (1) landscape A4 (842x595 pt), (2) side-by-side terms within each level via outer wrapper Table, (3) single # column per term-table (no duplication), (4) KeepTogether + PageBreak between levels — each level fits exactly 1 page (2 distinct levels → 2 pages, no splits), (5) Excel format unchanged (xlsx still works, PK header valid), (6) permission gate works (student gets 403, unauthenticated gets 401/403). Full export size 24032 bytes (matches main agent's confirmation).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_curriculum_pdf_export_landscape.py",
+    "/app/test_reports/pytest/iter41_pdf_landscape.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "curriculum.py is 1736 lines — consider splitting into modules (export, upload, assignments, generate) per code review guideline (>700 lines should be split).",
+    "_export_pdf() registers Amiri font on every call without thread safety, fine in practice but could use a module-level guard pattern; current `if 'Amiri' not in pdfmetrics.getRegisteredFontNames()` check is acceptable.",
+    "Side-by-side wrapper uses fixed 90mm or 135mm column widths — may overflow if course names are very long; current dataset (2 levels) renders correctly within page width."
+  ],
+  "updated_files": ["/app/backend/tests/test_curriculum_pdf_export_landscape.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "skipped (per request)"},
+  "test_credentials": "admin/admin123 (used); student 234/234 (used for 403 check)",
+  "seed_data_creation": "none — used existing department 698e500997fef774e66e93a8 with 2 levels of curriculum data",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "PDF export endpoint /api/curriculum/department/{dept_id}/export?format=pdf validated as landscape A4 with one-page-per-level layout. Test file at /app/backend/tests/test_curriculum_pdf_export_landscape.py uses pypdf to inspect page count and MediaBox dimensions. If curriculum data changes (more levels/courses), the test_pdf_pages_match_distinct_levels assertion auto-adjusts to actual distinct level count.",
+  "rca of the issue": "N/A — feature verification, no bug found. All 4 user-requested PDF changes (page-per-level, side-by-side terms, single # column, no row-splits) confirmed working as specified."
+}

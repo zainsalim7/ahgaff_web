@@ -1587,15 +1587,15 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
 
 
 def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
-    """PDF - عربي مع خط Amiri + RTL + محاذاة يمين."""
+    """PDF - عربي + RTL. كل مستوى في صفحة، فصلي المستوى جنباً إلى جنب."""
     import os
-    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib import colors
     from reportlab.lib.styles import ParagraphStyle
     from reportlab.lib.units import mm
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak, KeepTogether
     import arabic_reshaper
     from bidi.algorithm import get_display
 
@@ -1610,56 +1610,121 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
             return str(s)
 
     buf = BytesIO()
-    doc = SimpleDocTemplate(buf, pagesize=A4, rightMargin=15*mm, leftMargin=15*mm, topMargin=15*mm, bottomMargin=15*mm)
+    # استخدم landscape لاستيعاب الفصلين جنباً إلى جنب
+    doc = SimpleDocTemplate(
+        buf, pagesize=landscape(A4),
+        rightMargin=12*mm, leftMargin=12*mm, topMargin=12*mm, bottomMargin=12*mm,
+    )
     elements: list = []
-    title_style = ParagraphStyle("Title", fontName="Amiri", fontSize=20, alignment=2, textColor=colors.HexColor("#0d47a1"), spaceAfter=6)
-    sub_style = ParagraphStyle("Sub", fontName="Amiri", fontSize=13, alignment=2, textColor=colors.HexColor("#1565c0"), spaceAfter=4)
-    info_style = ParagraphStyle("Info", fontName="Amiri", fontSize=11, alignment=2, textColor=colors.HexColor("#5a6c7d"), spaceAfter=10)
+    title_style = ParagraphStyle("Title", fontName="Amiri", fontSize=20, alignment=2, textColor=colors.HexColor("#0d47a1"), spaceAfter=4)
+    sub_style = ParagraphStyle("Sub", fontName="Amiri", fontSize=13, alignment=2, textColor=colors.HexColor("#1565c0"), spaceAfter=2)
+    info_style = ParagraphStyle("Info", fontName="Amiri", fontSize=11, alignment=2, textColor=colors.HexColor("#5a6c7d"), spaceAfter=6)
+    level_style = ParagraphStyle("Lvl", fontName="Amiri", fontSize=16, alignment=2, textColor=colors.white,
+                                  backColor=colors.HexColor("#0d47a1"), borderPadding=8, spaceBefore=4, spaceAfter=6)
+
+    # تجميع حسب المستوى → فصل
+    by_level: dict = {}
+    for r in rows:
+        lv = r.get("level") or 0
+        tm = r.get("term") or 0
+        by_level.setdefault(lv, {1: [], 2: [], 3: []})
+        if tm in (1, 2, 3):
+            by_level[lv][tm].append(r)
+
     elements.append(Paragraph(ar("الخطة الدراسية"), title_style))
     elements.append(Paragraph(ar(f"الكلية: {fac_name} — القسم: {dept_name}"), sub_style))
-    elements.append(Paragraph(ar(f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"), info_style))
-    elements.append(Spacer(1, 6))
+    elements.append(Paragraph(ar(f"النطاق: {scope_label}  |  عدد المقررات: {len(rows)}"), info_style))
 
-    # تجميع حسب (level, term)
-    groups: dict = {}
-    for r in rows:
-        key = (r["level"], r["term"])
-        groups.setdefault(key, []).append(r)
+    sorted_levels = sorted(by_level.keys())
+    first = True
 
-    section_style = ParagraphStyle("Sec", fontName="Amiri", fontSize=14, alignment=2,
-                                    textColor=colors.white, backColor=colors.HexColor("#ef6c00"),
-                                    leftIndent=4, rightIndent=4, spaceBefore=8, spaceAfter=4, borderPadding=4)
-
-    for (lv, tm), grp in sorted(groups.items(), key=lambda x: (x[0][0] or 0, x[0][1] or 0)):
-        elements.append(Paragraph(ar(f"المستوى {lv} — {_term_label(tm)}  ({len(grp)} مقرر)"), section_style))
-        # رأس الجدول (مقلوب بالعربية للقراءة من اليمين)
-        header = [ar(h) for h in ["س. أسبوعية", "س. معتمدة", "اسم المقرر", "الكود", "#"]]
+    def _term_table(term_rows, accent_hex):
+        """جدول داخلي لفصل واحد بعمودين: #, الكود+الاسم+الساعات."""
+        if not term_rows:
+            placeholder = Table([[ar("— لا توجد مقررات —")]], colWidths=[110*mm])
+            placeholder.setStyle(TableStyle([
+                ("FONTNAME", (0,0), (-1,-1), "Amiri"),
+                ("FONTSIZE", (0,0), (-1,-1), 11),
+                ("TEXTCOLOR", (0,0), (-1,-1), colors.HexColor("#90a4ae")),
+                ("ALIGN", (0,0), (-1,-1), "CENTER"),
+                ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 14),
+                ("TOPPADDING", (0,0), (-1,-1), 14),
+            ]))
+            return placeholder
+        header = [ar(h) for h in ["س.م", "اسم المقرر", "الكود", "#"]]
         data = [header]
-        for idx, r in enumerate(grp, start=1):
+        for idx, r in enumerate(term_rows, start=1):
             data.append([
-                ar(str(r["weekly_hours"] or "—")),
-                ar(str(r["credit_hours"] or "—")),
-                ar(r["name"]),
-                ar(r["code"] or "—"),
+                ar(str(r.get("credit_hours") or "—")),
+                ar(r.get("name") or ""),
+                ar(r.get("code") or "—"),
                 ar(str(idx)),
             ])
-        table = Table(data, colWidths=[22*mm, 22*mm, 80*mm, 30*mm, 10*mm])
-        table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), "Amiri"),
-            ("FONTSIZE", (0, 0), (-1, -1), 11),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("ALIGN", (2, 1), (2, -1), "RIGHT"),  # اسم المقرر يمين
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#b0bec5")),
-            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#1565c0")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-            ("TOPPADDING", (0, 0), (-1, 0), 8),
+        t = Table(data, colWidths=[14*mm, 64*mm, 22*mm, 10*mm])
+        t.setStyle(TableStyle([
+            ("FONTNAME", (0,0), (-1,-1), "Amiri"),
+            ("FONTSIZE", (0,0), (-1,-1), 10.5),
+            ("BACKGROUND", (0,0), (-1,0), colors.HexColor(accent_hex)),
+            ("TEXTCOLOR", (0,0), (-1,0), colors.white),
+            ("ALIGN", (0,0), (-1,-1), "CENTER"),
+            ("ALIGN", (1,1), (1,-1), "RIGHT"),
+            ("VALIGN", (0,0), (-1,-1), "MIDDLE"),
+            ("INNERGRID", (0,0), (-1,-1), 0.3, colors.HexColor("#cfd8dc")),
+            ("BOX", (0,0), (-1,-1), 0.6, colors.HexColor(accent_hex)),
+            ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, colors.HexColor("#f5f7fa")]),
+            ("TOPPADDING", (0,0), (-1,-1), 4),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 4),
         ]))
-        elements.append(table)
-        elements.append(Spacer(1, 4))
+        return t
+
+    for lv in sorted_levels:
+        terms = by_level[lv]
+        if not first:
+            elements.append(PageBreak())
+        first = False
+        level_block: list = []
+        total_in_level = sum(len(terms[t]) for t in (1, 2, 3))
+        level_block.append(Paragraph(ar(f"المستوى {lv}  —  {total_in_level} مقرر"), level_style))
+
+        # جدول الـ side-by-side: عمود (أو عمودان) - الفصل الأول والثاني (والصيفي إن وُجد)
+        has_summer = bool(terms[3])
+        # رؤوس الفصول
+        if has_summer:
+            header_row = [
+                Paragraph(ar(f"الفصل الصيفي ({len(terms[3])})"), ParagraphStyle("Th", fontName="Amiri", fontSize=12, alignment=1, textColor=colors.white)),
+                Paragraph(ar(f"الفصل الثاني ({len(terms[2])})"), ParagraphStyle("Th", fontName="Amiri", fontSize=12, alignment=1, textColor=colors.white)),
+                Paragraph(ar(f"الفصل الأول ({len(terms[1])})"), ParagraphStyle("Th", fontName="Amiri", fontSize=12, alignment=1, textColor=colors.white)),
+            ]
+            body_row = [_term_table(terms[3], "#ef6c00"), _term_table(terms[2], "#6a1b9a"), _term_table(terms[1], "#1565c0")]
+            col_widths = [90*mm, 90*mm, 90*mm]
+            header_bg = [colors.HexColor("#ef6c00"), colors.HexColor("#6a1b9a"), colors.HexColor("#1565c0")]
+        else:
+            header_row = [
+                Paragraph(ar(f"الفصل الثاني ({len(terms[2])})"), ParagraphStyle("Th", fontName="Amiri", fontSize=12, alignment=1, textColor=colors.white)),
+                Paragraph(ar(f"الفصل الأول ({len(terms[1])})"), ParagraphStyle("Th", fontName="Amiri", fontSize=12, alignment=1, textColor=colors.white)),
+            ]
+            body_row = [_term_table(terms[2], "#6a1b9a"), _term_table(terms[1], "#1565c0")]
+            col_widths = [135*mm, 135*mm]
+            header_bg = [colors.HexColor("#6a1b9a"), colors.HexColor("#1565c0")]
+
+        wrapper = Table([header_row, body_row], colWidths=col_widths)
+        wrapper_style = [
+            ("VALIGN", (0,0), (-1,-1), "TOP"),
+            ("ALIGN", (0,0), (-1,-1), "CENTER"),
+            ("TOPPADDING", (0,0), (-1,0), 6),
+            ("BOTTOMPADDING", (0,0), (-1,0), 6),
+            ("TOPPADDING", (0,1), (-1,1), 4),
+            ("BOTTOMPADDING", (0,1), (-1,1), 4),
+            ("LEFTPADDING", (0,1), (-1,1), 3),
+            ("RIGHTPADDING", (0,1), (-1,1), 3),
+        ]
+        for ci, bg in enumerate(header_bg):
+            wrapper_style.append(("BACKGROUND", (ci, 0), (ci, 0), bg))
+        wrapper.setStyle(TableStyle(wrapper_style))
+        level_block.append(wrapper)
+        # KeepTogether يمنع تقطّع المستوى - إن لم يَسَع في الصفحة سينتقل كاملاً
+        elements.append(KeepTogether(level_block))
 
     doc.build(elements)
     buf.seek(0)
