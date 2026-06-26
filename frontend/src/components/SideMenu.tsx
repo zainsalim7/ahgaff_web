@@ -30,9 +30,14 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   { id: 'home', label: 'الرئيسية', icon: 'home', path: '/(tabs)', permissions: [], forAll: true },
   
-  { id: 'admin', label: 'لوحة الإدارة', icon: 'settings', path: '/(tabs)/admin', permissions: [
+  { id: 'admin', label: 'الإعدادات الأساسية', icon: 'settings', path: '/(tabs)/admin', permissions: [
     PERMISSIONS.MANAGE_USERS, PERMISSIONS.MANAGE_DEPARTMENTS, PERMISSIONS.MANAGE_COURSES,
-    PERMISSIONS.MANAGE_STUDENTS, PERMISSIONS.MANAGE_TEACHERS
+    PERMISSIONS.MANAGE_STUDENTS, PERMISSIONS.MANAGE_TEACHERS,
+    PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.MANAGE_SETTINGS, PERMISSIONS.MANAGE_ROLES,
+    PERMISSIONS.SEND_NOTIFICATIONS, PERMISSIONS.MANAGE_NOTIFICATIONS,
+    PERMISSIONS.MANAGE_ATTENDANCE, PERMISSIONS.MANAGE_SCHEDULE,
+    PERMISSIONS.VIEW_REPORTS, PERMISSIONS.REPORT_COURSE, PERMISSIONS.REPORT_ABSENT_STUDENTS,
+    PERMISSIONS.REPORT_DAILY, PERMISSIONS.REPORT_LESSON_COMPLETION
   ]},
   
   { id: 'my-lectures', label: 'محاضراتي', icon: 'calendar', path: '/(tabs)/my-lectures', permissions: [], teacherOnly: true },

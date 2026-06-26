@@ -90,6 +90,8 @@ export const PERMISSIONS = {
   MANAGE_SEMESTERS: 'manage_semesters',
   MANAGE_ROLES: 'manage_roles',
   SEND_NOTIFICATIONS: 'send_notifications',
+  MANAGE_NOTIFICATIONS: 'manage_notifications',
+  REPORT_LESSON_COMPLETION: 'report_lesson_completion',
 } as const;
 
 // متغير عام للتخزين المؤقت

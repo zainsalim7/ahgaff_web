@@ -146,7 +146,7 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="admin"
         options={{
-          title: 'الإدارة',
+          title: 'الإعدادات الأساسية',
           tabBarIcon: ({ color, size }) => (
             <View>
               <Ionicons name="settings" size={size} color={color} />
@@ -157,7 +157,7 @@ export default function TabsLayout() {
               )}
             </View>
           ),
-          headerTitle: 'لوحة الإدارة',
+          headerTitle: 'الإعدادات الأساسية',
           href: hasAdminPermissions ? undefined : null,
         }}
       />

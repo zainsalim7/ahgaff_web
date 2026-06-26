@@ -12,6 +12,17 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - Verifiable digital reporting (PDF + QR)
 - Parallel deployments: Railway + Google Cloud Run
 
+
+## Implemented (selected, recent)
+- 2026-06-26 **🛠️ صفحة "الإعدادات الأساسية" (إعادة بناء `(tabs)/admin.tsx`)**:
+  - **السبب**: توحيد رابط البار السفلي مع الصفحة الرئيسية كان غير منطقي وفقد المستخدمون الوصول لكثير من الأدوات
+  - أُعيد بناء `(tabs)/admin.tsx` كصفحة أدوات إدارية موحّدة باسم "الإعدادات الأساسية"
+  - 7 أقسام منظّمة: الإدارة الأكاديمية / التقويم والجداول / التقارير المتقدّمة / النتائج والإشعارات / الحضور وبطاقات الطلاب / إعدادات النظام / أدوات الصيانة
+  - ضمّت كل الأدوات المفقودة من القائمة الجانبية والرئيسية: `manage-study-plan`, `teacher-courses`, `student-references`, `university-calendar`, `calendar`, `availability-report`, `report-course`, `report-absent-students`, `report-teacher-summary`, `report-lesson-completion`, `report-daily`, `verify-report`, `send-final-results`, `send-department-results`, `send-notification`, `take-attendance`, `qr-scanner`, `offline-sync`, `permissions`, `student-autofill`, `backfill-*`, `cleanup-*` (≈24 أداة)
+  - كل عنصر مفلتر فردياً عبر `hasAnyPermission`/`adminOnly`/`teacherOnly`/`forAll` (RBAC ثابت)
+  - تم تحديث `(tabs)/_layout.tsx` (عنوان التبويب والـ header) وعنصر القائمة الجانبية في `SideMenu.tsx` بالاسم الجديد
+  - أُضيفت ثوابت `MANAGE_NOTIFICATIONS` و `REPORT_LESSON_COMPLETION` في `PERMISSIONS` بـ `AuthContext.tsx`
+
 ## Implemented (selected, recent)
 - 2026-06-23 **🏷️ إصلاح عرض القسم/الكلية لكل المقررات في صفحة العبء التدريسي**:
   - السبب الجذري: `GET /api/teaching-load/search-courses` كان يُرجع فقط `department_id`، والواجهة تبحث عن الاسم في قائمة `departments` المحلية (المقصورة على نطاق المستخدم). أي مقرر بقسم خارج النطاق أو بـ `department_id` فارغ → لا يظهر اسم القسم/الكلية

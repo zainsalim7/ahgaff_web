@@ -16,9 +16,12 @@
 ## View-Curriculum Test User (Added 2026-06-26)
 - Username: view_curr_user
 - Password: test1234
-- Role: employee (with custom_permissions=['view_curriculum'])
+- Role: employee
 - Faculty: كلية الشريعة والقانون · Department: الشريعة والقانون
-- Purpose: اختبار ظهور رابط "الخطة الدراسية" في القائمة الجانبية لأي مستخدم يملك صلاحية view_curriculum فقط
+- Actual permissions (15): view_students, report_warnings, view_attendance, manage_students,
+  report_absent_students, export_reports, view_curriculum, edit_student, report_student,
+  view_lectures, add_student, import_students, delete_student, import_data, view_reports
+- Purpose: اختبار ظهور رابط "الخطة الدراسية" و"الإعدادات الأساسية" + النطاق الكلوي
 
 ## Teacher
 - Username: teacher180156
