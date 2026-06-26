@@ -1280,7 +1280,41 @@ async def export_teaching_load_excel(
     ws.cell(row=2, column=3).alignment = center
     ws.row_dimensions[2].height = 22
 
-    cur = 4  # نبدأ كتل المعلمين من الصف 4
+    # ----- شريط ملخّص (Stats Bar) -----
+    total_teachers = len(grouped)
+    total_courses = sum(len(b["courses"]) for b in grouped)
+    sum_weekly = sum(b["total_weekly"] for b in grouped)
+    sum_semester = sum(b["total_semester"] for b in grouped)
+    cross_dept_n = sum(1 for b in grouped for c in b["courses"] if (c.get("note") or "").startswith("↻"))
+    cross_fac_n = sum(1 for b in grouped for c in b["courses"] if (c.get("note") or "").startswith("⚑"))
+
+    STATS_FILL = PatternFill(start_color='E7F0FE', end_color='E7F0FE', fill_type='solid')
+    STATS_FONT = Font(bold=True, size=11, color='1565C0')
+    LABEL_FONT = Font(size=10, color='5B6678')
+    # كل خانة تحتوي على سطر معاً (label + value) كقيمة نصية واحدة
+    stats_items = [
+        ("المعلمون", str(total_teachers)),
+        ("المقررات", str(total_courses)),
+        ("ساعات/أسبوع", str(round(sum_weekly, 2))),
+        (f"ساعات/{weeks}", str(round(sum_semester, 2))),
+        ("من قسم آخر", str(cross_dept_n)),
+        ("من كلية أخرى", str(cross_fac_n)),
+    ]
+    # نوزع 6 خانات على 7 أعمدة: ندمج العمود الأخير ضمن الأخيرة
+    # نتيح خلية واحدة لكل بطاقة بدون دمج (6 خلايا + خلية فارغة)
+    for i, (label, val) in enumerate(stats_items, start=1):
+        cell = ws.cell(row=3, column=i, value=f"{label}\n{val}")
+        cell.font = STATS_FONT
+        cell.fill = STATS_FILL
+        cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        cell.border = border
+    # العمود السابع (الأخير) فارغ بنفس التنسيق
+    last_cell = ws.cell(row=3, column=7, value="")
+    last_cell.fill = STATS_FILL
+    last_cell.border = border
+    ws.row_dimensions[3].height = 36
+
+    cur = 5  # سطر فارغ في R4 ثم نبدأ كتل المعلمين من R5
 
     # عرض الأعمدة - 7 أعمدة: الرمز | المقرر | المستوى | الشعبة | ساعات أسبوعية | الساعات | ملاحظات
     widths = [13, 26, 11, 11, 15, 16, 22]
@@ -1493,6 +1527,59 @@ async def export_teaching_load_pdf(
     if not grouped:
         elements.append(Paragraph(ar("لا توجد بيانات"), sub_header_style))
     else:
+        # ----- شريط ملخّص (Stats Bar) -----
+        total_teachers = len(grouped)
+        total_courses = sum(len(b["courses"]) for b in grouped)
+        sum_weekly = sum(b["total_weekly"] for b in grouped)
+        sum_semester = sum(b["total_semester"] for b in grouped)
+        cross_dept_n = sum(1 for b in grouped for c in b["courses"] if (c.get("note") or "").startswith("↻"))
+        cross_fac_n = sum(1 for b in grouped for c in b["courses"] if (c.get("note") or "").startswith("⚑"))
+
+        # كل بطاقة = خليّتان (label + value) في عمودين متجاورين
+        stats_cards = [
+            ("المعلمون", str(total_teachers)),
+            ("المقررات", str(total_courses)),
+            ("ساعات/أسبوع", str(round(sum_weekly, 2))),
+            (f"ساعات/{weeks}", str(round(sum_semester, 2))),
+            ("من قسم آخر", str(cross_dept_n)),
+            ("من كلية أخرى", str(cross_fac_n)),
+        ]
+        # نبني صفّاً واحداً (value فوق label لكل بطاقة)
+        values_row = [str(v) for _, v in stats_cards]
+        labels_row = [ar(lbl) for lbl, _ in stats_cards]
+        total_w = doc.width
+        card_w = total_w / len(stats_cards)
+        stats_tbl = Table(
+            [values_row, labels_row],
+            colWidths=[card_w] * len(stats_cards),
+        )
+        stats_tbl.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), arabic_font),
+            ('FONTSIZE', (0, 0), (-1, 0), 14),
+            ('FONTSIZE', (0, 1), (-1, 1), 10),
+            ('TEXTCOLOR', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
+            ('TEXTCOLOR', (0, 1), (-1, 1), colors.HexColor('#5b6678')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#e7f0fe')),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('GRID', (0, 0), (-1, -1), 0.5, colors.white),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        # تلوين خاص لبطاقتي خارج النطاق إن وُجدت قيم
+        if cross_dept_n > 0:
+            stats_tbl.setStyle(TableStyle([
+                ('BACKGROUND', (4, 0), (4, 1), colors.HexColor('#fff3e0')),
+                ('TEXTCOLOR', (4, 0), (4, 0), colors.HexColor('#e65100')),
+            ]))
+        if cross_fac_n > 0:
+            stats_tbl.setStyle(TableStyle([
+                ('BACKGROUND', (5, 0), (5, 1), colors.HexColor('#ffebee')),
+                ('TEXTCOLOR', (5, 0), (5, 0), colors.HexColor('#c62828')),
+            ]))
+        elements.append(stats_tbl)
+        elements.append(Spacer(1, 6 * mm))
+
         # عرض الجدول الموحد لكل المعلمين
         total_w = doc.width
         # ترتيب الأعمدة على PDF (من اليسار → اليمين بصرياً):
