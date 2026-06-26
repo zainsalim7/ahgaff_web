@@ -123,7 +123,8 @@ class Permission:
     EXPORT_ARCHIVE = "export_archive"
 
     # صلاحيات الخطة الدراسية
-    MANAGE_CURRICULUM = "manage_curriculum"    # الوصول الكامل لصفحة الخطة الدراسية
+    MANAGE_CURRICULUM = "manage_curriculum"    # الوصول الكامل لصفحة الخطة الدراسية (إنشاء/تعديل/حذف)
+    VIEW_CURRICULUM = "view_curriculum"        # عرض الخطة الدراسية فقط (قراءة، تصدير)
 
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
@@ -336,6 +337,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.VIEW_TEACHING_LOAD, "label": "عرض العبء التدريسي", "category": "العبء التدريسي"},
     {"key": Permission.CROSS_UNIVERSITY_ASSIGNMENT, "label": "إسناد عابر للجامعة (إسناد أساتذة من كل الكليات)", "category": "العبء التدريسي"},
     {"key": Permission.MANAGE_CURRICULUM, "label": "إدارة الخطة الدراسية", "category": "الخطة الدراسية"},
+    {"key": Permission.VIEW_CURRICULUM, "label": "عرض الخطة الدراسية", "category": "الخطة الدراسية"},
     {"key": Permission.VIEW_ARCHIVE, "label": "عرض الأرشيف", "category": "الأرشيف"},
     {"key": Permission.SEARCH_ARCHIVE, "label": "البحث في الأرشيف", "category": "الأرشيف"},
     {"key": Permission.EXPORT_ARCHIVE, "label": "تصدير من الأرشيف", "category": "الأرشيف"},
@@ -393,6 +395,9 @@ FULL_PERMISSION_MAPPING = {
     ],
     Permission.MANAGE_SCHEDULE: [
         Permission.VIEW_SCHEDULE
+    ],
+    Permission.MANAGE_CURRICULUM: [
+        Permission.VIEW_CURRICULUM
     ],
 }
 
