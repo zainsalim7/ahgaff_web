@@ -1,0 +1,36 @@
+{
+  "summary": "Iteration 43 — Verified curriculum PDF: PageBreak between levels, each level on its own page. 9/9 tests passed. Dev DB has distinct levels [1, 2] (6 courses) → PDF has exactly 2 pages, both portrait A4 (595.27 x 841.89). Scoped exports remain portrait; scoped to single level produces exactly 1 page. Excel unchanged; student gets 403.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_curriculum_pdf_pagebreak_per_level.py",
+    "/app/test_reports/pytest/iter43_pagebreak.xml"
+  ],
+  "action_items": [],
+  "verifications": [
+    "GET /api/curriculum/department/{id}/export?format=pdf → 200, content-type application/pdf, starts %PDF, ends %%EOF, size ≈ 23.7 KB.",
+    "Distinct levels in dept 698e500997fef774e66e93a8 computed independently = [1, 2] (6 total courses).",
+    "PDF page count == 2 == distinct level count (KEY assertion of this iteration).",
+    "All pages portrait A4: width≈595.27, height≈841.89, h>w on every page.",
+    "Scoped exports portrait: format=pdf&level=1, format=pdf&term=1, format=pdf&level=1&term=2 — all 200 + portrait.",
+    "Scoped to single level (level=1) → exactly 1 PDF page.",
+    "Excel xlsx export still PK-magic + spreadsheet content-type.",
+    "Permission gate: student 234/234 → 403 on PDF export."
+  ],
+  "critical_code_review_comments": [
+    "curriculum.py is 1691 lines — still recommend splitting into export/upload/assignments/generate submodules.",
+    "_export_pdf() now groups rows twice (by level, then by term inside) — fine performance-wise for typical curricula.",
+    "PageBreak() condition `if li > 0` correctly avoids a leading blank page when only one level exists.",
+    "KeepTogether per (level, term) block is preserved; still a no-op for current small dataset but provides safety for large terms.",
+    "Empty levels (e.g., level present but with 0 courses) are not iterated since by_level only contains rows that exist — matches the user's spec ('NEXT level still starts on a NEW page' is satisfied because empty levels simply don't appear).",
+    "Note: if a level has rows but missing summer term, the current logic still produces a single page for that level (الفصل الأول + الفصل الثاني only) which matches the spec."
+  ],
+  "updated_files": [],
+  "new_files": ["/app/backend/tests/test_curriculum_pdf_pagebreak_per_level.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "skipped per request"},
+  "test_credentials": "admin/admin123 ; student 234/234",
+  "seed_data_creation": "none — used existing dept 698e500997fef774e66e93a8 (2 levels, 6 courses)",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 43: PageBreak-between-levels behavior verified. Page count assertion: distinct levels (computed from /api/curriculum/courses fallback inside fixture) MUST equal len(reader.pages). The fixture has multi-shape fallbacks (structured endpoint → xlsx parse). Future regressions in this area should reuse /app/backend/tests/test_curriculum_pdf_pagebreak_per_level.py. Older test_curriculum_pdf_portrait.py (iter42) still passes alongside; older landscape test (iter41) is obsolete."
+}

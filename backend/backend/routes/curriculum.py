@@ -1595,7 +1595,7 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
     from reportlab.lib.units import mm
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
-    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether, PageBreak
     import arabic_reshaper
     from bidi.algorithm import get_display
 
@@ -1620,50 +1620,66 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
     elements.append(Paragraph(ar(f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"), info_style))
     elements.append(Spacer(1, 6))
 
-    # تجميع حسب (level, term)
-    groups: dict = {}
+    # تجميع حسب المستوى ثم الفصل
+    by_level: dict = {}
     for r in rows:
-        key = (r["level"], r["term"])
-        groups.setdefault(key, []).append(r)
+        lv = r.get("level") or 0
+        by_level.setdefault(lv, []).append(r)
 
+    level_style = ParagraphStyle("Lvl", fontName="Amiri", fontSize=15, alignment=2, textColor=colors.white,
+                                  backColor=colors.HexColor("#0d47a1"), borderPadding=6, spaceBefore=2, spaceAfter=6)
     section_style = ParagraphStyle("Sec", fontName="Amiri", fontSize=14, alignment=2,
                                     textColor=colors.white, backColor=colors.HexColor("#ef6c00"),
-                                    leftIndent=4, rightIndent=4, spaceBefore=8, spaceAfter=4, borderPadding=4)
+                                    leftIndent=4, rightIndent=4, spaceBefore=6, spaceAfter=4, borderPadding=4)
 
-    for (lv, tm), grp in sorted(groups.items(), key=lambda x: (x[0][0] or 0, x[0][1] or 0)):
-        # كل (مستوى, فصل) في كتلة واحدة لا تنقسم عبر الصفحات
-        block: list = []
-        block.append(Paragraph(ar(f"المستوى {lv} — {_term_label(tm)}  ({len(grp)} مقرر)"), section_style))
-        header = [ar(h) for h in ["س. أسبوعية", "س. معتمدة", "اسم المقرر", "الكود", "#"]]
-        data = [header]
-        for idx, r in enumerate(grp, start=1):
-            data.append([
-                ar(str(r["weekly_hours"] or "—")),
-                ar(str(r["credit_hours"] or "—")),
-                ar(r["name"]),
-                ar(r["code"] or "—"),
-                ar(str(idx)),
-            ])
-        table = Table(data, colWidths=[22*mm, 22*mm, 80*mm, 30*mm, 10*mm], repeatRows=1)
-        table.setStyle(TableStyle([
-            ("FONTNAME", (0, 0), (-1, -1), "Amiri"),
-            ("FONTSIZE", (0, 0), (-1, -1), 11),
-            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
-            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-            ("ALIGN", (2, 1), (2, -1), "RIGHT"),
-            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#b0bec5")),
-            ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#1565c0")),
-            ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
-            ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
-            ("TOPPADDING", (0, 0), (-1, 0), 8),
-        ]))
-        block.append(table)
-        block.append(Spacer(1, 4))
-        # KeepTogether يضمن أن العنوان + الجدول لا ينقسمان عبر صفحتين.
-        # إن لم يَسَع في باقي الصفحة الحالية، ينتقل كاملاً للصفحة التالية.
-        elements.append(KeepTogether(block))
+    sorted_levels = sorted(by_level.keys())
+    for li, lv in enumerate(sorted_levels):
+        # PageBreak بين المستويات (بعد الأول)
+        if li > 0:
+            elements.append(PageBreak())
+        # العنوان الرئيسي للمستوى
+        level_rows = by_level[lv]
+        total_in_level = len(level_rows)
+        elements.append(Paragraph(ar(f"المستوى {lv}  —  {total_in_level} مقرر"), level_style))
+        # تجميع الفصول داخل المستوى
+        term_groups: dict = {}
+        for r in level_rows:
+            tm = r.get("term") or 0
+            term_groups.setdefault(tm, []).append(r)
+        for tm in sorted(term_groups.keys()):
+            grp = term_groups[tm]
+            # كل (مستوى, فصل) في كتلة واحدة لا تنقسم عبر الصفحات
+            block: list = []
+            block.append(Paragraph(ar(f"{_term_label(tm)}  ({len(grp)} مقرر)"), section_style))
+            header = [ar(h) for h in ["س. أسبوعية", "س. معتمدة", "اسم المقرر", "الكود", "#"]]
+            data = [header]
+            for idx, r in enumerate(grp, start=1):
+                data.append([
+                    ar(str(r["weekly_hours"] or "—")),
+                    ar(str(r["credit_hours"] or "—")),
+                    ar(r["name"]),
+                    ar(r["code"] or "—"),
+                    ar(str(idx)),
+                ])
+            table = Table(data, colWidths=[22*mm, 22*mm, 80*mm, 30*mm, 10*mm], repeatRows=1)
+            table.setStyle(TableStyle([
+                ("FONTNAME", (0, 0), (-1, -1), "Amiri"),
+                ("FONTSIZE", (0, 0), (-1, -1), 11),
+                ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
+                ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+                ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+                ("ALIGN", (2, 1), (2, -1), "RIGHT"),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#b0bec5")),
+                ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#1565c0")),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
+                ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
+                ("TOPPADDING", (0, 0), (-1, 0), 8),
+            ]))
+            block.append(table)
+            block.append(Spacer(1, 4))
+            # KeepTogether: عنوان الفصل + جدوله لا ينقسمان عبر صفحتين
+            elements.append(KeepTogether(block))
 
     doc.build(elements)
     buf.seek(0)
