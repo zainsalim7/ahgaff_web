@@ -14,6 +14,7 @@ import {
   StyleSheet,
   ScrollView,
   TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -359,8 +360,19 @@ export default function BasicSettingsScreen() {
   const router = useRouter();
   const { user } = useAuthStore();
   const { hasAnyPermission } = useAuth();
+  const { width: winWidth } = useWindowDimensions();
   const isAdmin = user?.role === 'admin';
   const isTeacher = user?.role === 'teacher';
+
+  // عدد الأعمدة حسب عرض النافذة
+  // < 480px (موبايل) = 3 أعمدة، 480-768 = 4، 768-1024 = 5، 1024-1400 = 6، 1400+ = 8
+  const cols = winWidth < 480 ? 3 : winWidth < 768 ? 4 : winWidth < 1024 ? 5 : winWidth < 1400 ? 6 : 8;
+  const containerMaxWidth = winWidth < 768 ? winWidth : Math.min(1280, winWidth);
+  // عرض البلاطة = (container - paddings - gaps) / cols
+  const PADDING = 14;
+  const GAP = 10;
+  const usableW = containerMaxWidth - PADDING * 2;
+  const tileWidth = (usableW - GAP * (cols - 1)) / cols;
 
   const canSeeItem = (item: ToolItem): boolean => {
     if (item.forAll) return true;
@@ -387,6 +399,7 @@ export default function BasicSettingsScreen() {
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={true}
       >
+        <View style={[styles.contentWrap, { maxWidth: containerMaxWidth }]}>
         {/* Hero */}
         <View style={styles.hero}>
           <View style={styles.heroIconBox}>
@@ -432,7 +445,7 @@ export default function BasicSettingsScreen() {
                 {section.items.map(item => (
                   <TouchableOpacity
                     key={item.id}
-                    style={styles.tile}
+                    style={[styles.tile, { width: tileWidth }]}
                     onPress={() => router.push(item.route as any)}
                     activeOpacity={0.75}
                     testID={`tool-${item.id}`}
@@ -449,6 +462,7 @@ export default function BasicSettingsScreen() {
         )}
 
         <View style={{ height: 30 }} />
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -457,7 +471,8 @@ export default function BasicSettingsScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f1f5f9' },
   scroll: { flex: 1 },
-  scrollContent: { padding: 14 },
+  scrollContent: { padding: 14, alignItems: 'center' },
+  contentWrap: { width: '100%', alignSelf: 'center' },
 
   /* Hero */
   hero: {
@@ -518,7 +533,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   tile: {
-    width: 96,
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 14,
