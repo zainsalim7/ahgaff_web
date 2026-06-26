@@ -668,6 +668,12 @@ async def _get_export_data(
     Args:
         teacher_id: لتصدير عبء معلم واحد فقط.
         semester_id: لفلترة على فصل دراسي محدد.
+    
+    Returns:
+        (rows, weeks, period_label, grouped_teachers)
+        - rows: قائمة مسطّحة (للتوافق مع كود قديم لو وُجد)
+        - grouped_teachers: قائمة [{teacher_name, employee_id, courses[], total_weekly, total_semester}]
+          مرتّبة حسب اسم المعلم.
     """
     from math import ceil
 
@@ -685,7 +691,7 @@ async def _get_export_data(
 
     loads = await db.teaching_loads.find(query).to_list(1000)
     if not loads:
-        return [], 0, "", ""
+        return [], 0, "", []
 
     # حساب الأسابيع في الفترة
     weeks = 16  # افتراضي للفصل الدراسي
@@ -747,9 +753,22 @@ async def _get_export_data(
         })
         grouped[tid]["total_weekly"] += wh
 
-    # تسطيح للتصدير
+    # تسطيح للتصدير (للتوافق مع الكود القديم لو احتاج)
     rows = []
-    for tid, g in grouped.items():
+    grouped_list = []
+    # ترتيب المعلمين ابجدياً بالاسم
+    sorted_items = sorted(grouped.items(), key=lambda kv: kv[1]["teacher_name"] or "")
+    for tid, g in sorted_items:
+        total_period = round(g["total_weekly"] * weeks, 2)
+        # نسخة منظمة للتصدير الجديد (block per teacher)
+        grouped_list.append({
+            "teacher_name": g["teacher_name"],
+            "employee_id": g["employee_id"],
+            "courses": list(g["rows"]),
+            "total_weekly": round(g["total_weekly"], 2),
+            "total_semester": total_period,
+        })
+        # نسخة مسطّحة قديمة
         for r in g["rows"]:
             rows.append({
                 "teacher_name": g["teacher_name"],
@@ -760,8 +779,6 @@ async def _get_export_data(
                 "weekly_hours": r["weekly_hours"],
                 "total_hours": r["total_hours"],
             })
-        # سطر الإجمالي
-        total_period = round(g["total_weekly"] * weeks, 2)
         rows.append({
             "teacher_name": g["teacher_name"],
             "employee_id": g["employee_id"],
@@ -772,7 +789,7 @@ async def _get_export_data(
             "total_hours": total_period,
         })
 
-    return rows, weeks, period_label, ""
+    return rows, weeks, period_label, grouped_list
 
 
 async def _sync_teaching_loads_for_teachers(db, teacher_ids: list, semester_id: Optional[str] = None) -> int:
@@ -1113,84 +1130,145 @@ async def export_teaching_load_excel(
     semester_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """تصدير جدول العبء التدريسي إلى Excel"""
+    """تصدير جدول العبء التدريسي إلى Excel - تنسيق Block per teacher."""
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     import openpyxl
-    from openpyxl.styles import Font, Alignment, PatternFill
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
     from io import BytesIO
 
     db = get_db()
-    rows, weeks, period_label, _ = await _get_export_data(
+    _, weeks, period_label, grouped = await _get_export_data(
         db, department_id, start_date, end_date, teacher_id=teacher_id, semester_id=semester_id,
     )
+
+    # جلب الكلية + القسم
+    dept_name = ""
+    faculty_name = ""
+    effective_dept_id = department_id
+    # إن لم يوجد department_id لكن teacher_id موجود، نستنتج من المعلم
+    if not effective_dept_id and teacher_id:
+        try:
+            t_doc = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+            if t_doc and t_doc.get("department_id"):
+                effective_dept_id = str(t_doc.get("department_id"))
+        except Exception:
+            pass
+    if effective_dept_id:
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(effective_dept_id)})
+            if dept:
+                dept_name = (dept.get("name", "") or "").strip()
+                fac_id = dept.get("faculty_id")
+                if fac_id:
+                    fac = await db.faculties.find_one({"_id": ObjectId(fac_id)})
+                    if fac:
+                        faculty_name = (fac.get("name", "") or "").strip()
+        except Exception:
+            pass
 
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = "العبء التدريسي"
     ws.sheet_view.rightToLeft = True
 
-    # Title
-    ws.merge_cells('A1:G1')
-    ws['A1'] = 'جدول العبء التدريسي'
-    ws['A1'].font = Font(bold=True, size=14)
-    ws['A1'].alignment = Alignment(horizontal='center')
+    # ----- ألوان وحدود ثابتة -----
+    BLUE = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
+    LIGHT_BLUE = PatternFill(start_color='E3F2FD', end_color='E3F2FD', fill_type='solid')
+    LIGHT_GREY = PatternFill(start_color='F5F5F5', end_color='F5F5F5', fill_type='solid')
+    thin = Side(style='thin', color='B0BEC5')
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    right = Alignment(horizontal='right', vertical='center', wrap_text=True)
+    BOLD = Font(bold=True, size=11)
+    WHITE_BOLD = Font(bold=True, color='FFFFFF', size=11)
+    TITLE_FONT = Font(bold=True, size=14, color='1565C0')
+    SUB_FONT = Font(bold=True, size=12)
 
-    # Period info
-    ws.merge_cells('A2:G2')
-    ws['A2'] = period_label
-    ws['A2'].font = Font(size=11, color='666666')
-    ws['A2'].alignment = Alignment(horizontal='center')
+    NUM_COLS = 5  # A..E
 
-    # Department name
-    dept_name = ""
-    if department_id:
-        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
-        if dept:
-            dept_name = dept.get("name", "")
-    if dept_name:
-        ws.merge_cells('A3:G3')
-        ws['A3'] = f'القسم: {dept_name}'
-        ws['A3'].font = Font(size=11)
-        ws['A3'].alignment = Alignment(horizontal='center')
+    def style_row(r, fill=None, font=None, align=center, with_border=True):
+        for c in range(1, NUM_COLS + 1):
+            cell = ws.cell(row=r, column=c)
+            if fill is not None:
+                cell.fill = fill
+            if font is not None:
+                cell.font = font
+            cell.alignment = align
+            if with_border:
+                cell.border = border
 
-    # Headers
-    headers = ['اسم المعلم', 'الرقم الوظيفي', 'المقرر', 'الرمز', 'الشعبة', 'ساعات أسبوعية', f'إجمالي الساعات ({weeks} أسبوع)']
-    header_fill = PatternFill(start_color='1565C0', end_color='1565C0', fill_type='solid')
-    header_font = Font(bold=True, color='FFFFFF')
+    # ----- Header (Title + Faculty + Department) -----
+    title_text = f"جدول العبء التدريسي - {period_label}" if period_label else "جدول العبء التدريسي"
+    ws.merge_cells(start_row=1, end_row=1, start_column=1, end_column=NUM_COLS)
+    ws.cell(row=1, column=1, value=title_text).font = TITLE_FONT
+    ws.cell(row=1, column=1).alignment = center
+    ws.row_dimensions[1].height = 28
 
-    start_row = 5
-    for col, h in enumerate(headers, 1):
-        cell = ws.cell(row=start_row, column=col, value=h)
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.alignment = Alignment(horizontal='center')
+    # Row 2: الكلية | القسم
+    ws.merge_cells(start_row=2, end_row=2, start_column=1, end_column=2)
+    ws.cell(row=2, column=1, value=f"القسم: {dept_name}" if dept_name else "القسم: -").font = SUB_FONT
+    ws.cell(row=2, column=1).alignment = center
+    ws.merge_cells(start_row=2, end_row=2, start_column=3, end_column=NUM_COLS)
+    ws.cell(row=2, column=3, value=f"الكلية: {faculty_name}" if faculty_name else "الكلية: -").font = SUB_FONT
+    ws.cell(row=2, column=3).alignment = center
+    ws.row_dimensions[2].height = 22
 
-    # Data
-    summary_fill = PatternFill(start_color='E3F2FD', end_color='E3F2FD', fill_type='solid')
-    for i, row in enumerate(rows):
-        r = start_row + 1 + i
-        ws.cell(row=r, column=1, value=row["teacher_name"])
-        ws.cell(row=r, column=2, value=row["employee_id"])
-        ws.cell(row=r, column=3, value=row["course_name"])
-        ws.cell(row=r, column=4, value=row["course_code"])
-        ws.cell(row=r, column=5, value=row["section"])
-        ws.cell(row=r, column=6, value=row["weekly_hours"])
-        ws.cell(row=r, column=7, value=row["total_hours"])
+    cur = 4  # نبدأ كتل المعلمين من الصف 4
 
-        if "الإجمالي" in row["course_name"]:
-            for col in range(1, 8):
-                ws.cell(row=r, column=col).fill = summary_fill
-                ws.cell(row=r, column=col).font = Font(bold=True)
+    # عرض الأعمدة (مناسب للنص العربي)
+    widths = [26, 18, 14, 18, 22]  # A..E
+    for col_idx, w in enumerate(widths, start=1):
+        ws.column_dimensions[chr(64 + col_idx)].width = w
 
-    # Column widths
-    widths = [22, 16, 24, 12, 10, 16, 20]
-    for col, w in enumerate(widths, 1):
-        ws.column_dimensions[chr(64 + col)].width = w
+    if not grouped:
+        ws.merge_cells(start_row=cur, end_row=cur, start_column=1, end_column=NUM_COLS)
+        ws.cell(row=cur, column=1, value="لا توجد بيانات").alignment = center
+    else:
+        for block in grouped:
+            # ---- Row: Teacher meta ----
+            # A=المعلم , B=teacher_name (merged with C wider) , D=الرقم الوظيفي , E=employee_id
+            ws.cell(row=cur, column=1, value="المعلم").font = BOLD
+            ws.cell(row=cur, column=2, value=block["teacher_name"] or "-").font = BOLD
+            ws.merge_cells(start_row=cur, end_row=cur, start_column=2, end_column=3)
+            ws.cell(row=cur, column=4, value="الرقم الوظيفي").font = BOLD
+            ws.cell(row=cur, column=5, value=block["employee_id"] or "-").font = BOLD
+            style_row(cur, fill=LIGHT_GREY, font=BOLD)
+            ws.cell(row=cur, column=2).alignment = right  # اسم المعلم يمينياً
+            ws.row_dimensions[cur].height = 22
+            cur += 1
 
-    if not rows:
-        ws.cell(row=start_row + 1, column=1, value="لا توجد بيانات")
+            # ---- Row: Courses Header (blue) ----
+            headers = ["المقرر", "الرمز", "الشعبة", "ساعات أسبوعية", f"الساعات ({weeks})"]
+            for i, h in enumerate(headers, start=1):
+                ws.cell(row=cur, column=i, value=h)
+            style_row(cur, fill=BLUE, font=WHITE_BOLD)
+            ws.row_dimensions[cur].height = 22
+            cur += 1
+
+            # ---- Course rows ----
+            for course in block["courses"]:
+                ws.cell(row=cur, column=1, value=course["course_name"] or "-")
+                ws.cell(row=cur, column=2, value=course["course_code"] or "-")
+                ws.cell(row=cur, column=3, value=course["section"] or "-")
+                ws.cell(row=cur, column=4, value=course["weekly_hours"])
+                ws.cell(row=cur, column=5, value=course["total_hours"])
+                style_row(cur)
+                ws.cell(row=cur, column=1).alignment = right
+                cur += 1
+
+            # ---- Row: Total ----
+            ws.cell(row=cur, column=1, value="*** الإجمالي ***")
+            ws.cell(row=cur, column=2, value="")
+            ws.cell(row=cur, column=3, value="")
+            ws.cell(row=cur, column=4, value=block["total_weekly"])
+            ws.cell(row=cur, column=5, value=block["total_semester"])
+            style_row(cur, fill=LIGHT_BLUE, font=BOLD)
+            cur += 1
+
+            # ---- Empty separator row ----
+            cur += 1
 
     output = BytesIO()
     wb.save(output)
@@ -1212,17 +1290,17 @@ async def export_teaching_load_pdf(
     semester_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
 ):
-    """تصدير جدول العبء التدريسي إلى PDF.
+    """تصدير جدول العبء التدريسي إلى PDF - تنسيق Block per teacher.
     
     يدعم تصدير عبء معلم واحد فقط عبر `teacher_id`.
     """
     if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
-    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, KeepTogether
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_RIGHT
     from reportlab.pdfbase import pdfmetrics
@@ -1233,9 +1311,34 @@ async def export_teaching_load_pdf(
     from pathlib import Path
 
     db = get_db()
-    rows, weeks, period_label, _ = await _get_export_data(
+    _, weeks, period_label, grouped = await _get_export_data(
         db, department_id, start_date, end_date, teacher_id=teacher_id, semester_id=semester_id,
     )
+
+    # جلب الكلية + القسم
+    dept_name = ""
+    faculty_name = ""
+    effective_dept_id = department_id
+    # إن لم يوجد department_id لكن teacher_id موجود، نستنتج من المعلم
+    if not effective_dept_id and teacher_id:
+        try:
+            t_doc = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+            if t_doc and t_doc.get("department_id"):
+                effective_dept_id = str(t_doc.get("department_id"))
+        except Exception:
+            pass
+    if effective_dept_id:
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(effective_dept_id)})
+            if dept:
+                dept_name = (dept.get("name", "") or "").strip()
+                fac_id = dept.get("faculty_id")
+                if fac_id:
+                    fac = await db.faculties.find_one({"_id": ObjectId(fac_id)})
+                    if fac:
+                        faculty_name = (fac.get("name", "") or "").strip()
+        except Exception:
+            pass
 
     # جلب اسم المعلم في حالة تقرير معلم واحد
     teacher_name_label = None
@@ -1243,7 +1346,7 @@ async def export_teaching_load_pdf(
         try:
             t = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
             if t:
-                teacher_name_label = t.get("full_name", "")
+                teacher_name_label = (t.get("full_name", "") or "").strip()
         except Exception:
             pass
 
@@ -1259,75 +1362,152 @@ async def export_teaching_load_pdf(
         arabic_font = 'Helvetica'
 
     def ar(text):
-        reshaped = arabic_reshaper.reshape(str(text))
+        reshaped = arabic_reshaper.reshape(str(text or ""))
         return get_display(reshaped)
 
     buffer = BytesIO()
-    doc = SimpleDocTemplate(buffer, pagesize=landscape(A4), rightMargin=20, leftMargin=20, topMargin=30, bottomMargin=30)
+    doc = SimpleDocTemplate(
+        buffer, pagesize=A4,
+        rightMargin=15 * mm, leftMargin=15 * mm,
+        topMargin=15 * mm, bottomMargin=15 * mm,
+    )
 
     styles = getSampleStyleSheet()
-    title_style = ParagraphStyle('ArabicTitle', parent=styles['Title'], fontName=arabic_font, fontSize=16, alignment=TA_CENTER)
-    subtitle_style = ParagraphStyle('ArabicSubtitle', parent=styles['Normal'], fontName=arabic_font, fontSize=11, alignment=TA_CENTER, textColor=colors.grey)
+    title_style = ParagraphStyle(
+        'ArabicTitle', parent=styles['Title'],
+        fontName=arabic_font, fontSize=18, alignment=TA_CENTER, textColor=colors.HexColor('#1565c0'),
+        spaceAfter=4,
+    )
+    sub_header_style = ParagraphStyle(
+        'ArabicSubHeader', parent=styles['Normal'],
+        fontName=arabic_font, fontSize=12, alignment=TA_RIGHT, textColor=colors.HexColor('#1a2540'),
+    )
 
     elements = []
-    pdf_title = f"عبء المعلم: {teacher_name_label}" if teacher_name_label else "جدول العبء التدريسي"
-    elements.append(Paragraph(ar(pdf_title), title_style))
-    elements.append(Spacer(1, 4 * mm))
-    elements.append(Paragraph(ar(period_label), subtitle_style))
 
-    # اسم القسم
-    if department_id and not teacher_id:
-        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
-        if dept:
-            elements.append(Paragraph(ar(f"القسم: {dept.get('name', '')}"), subtitle_style))
+    # العنوان الرئيسي
+    title_text = f"جدول العبء التدريسي - {period_label}" if period_label else "جدول العبء التدريسي"
+    if teacher_name_label:
+        title_text = f"عبء المعلم: {teacher_name_label} - {period_label}" if period_label else f"عبء المعلم: {teacher_name_label}"
+    elements.append(Paragraph(ar(title_text), title_style))
+    elements.append(Spacer(1, 3 * mm))
 
-    elements.append(Spacer(1, 8 * mm))
+    # صف الكلية والقسم بجانب بعض (RTL: الكلية يمين، القسم يساره)
+    if faculty_name or dept_name:
+        meta_table_data = [[
+            ar(f"القسم: {dept_name}" if dept_name else "القسم: -"),
+            ar(f"الكلية: {faculty_name}" if faculty_name else "الكلية: -"),
+        ]]
+        meta_table = Table(meta_table_data, colWidths=[doc.width / 2, doc.width / 2])
+        meta_table.setStyle(TableStyle([
+            ('FONTNAME', (0, 0), (-1, -1), arabic_font),
+            ('FONTSIZE', (0, 0), (-1, -1), 12),
+            ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+            ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+            ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1a2540')),
+        ]))
+        elements.append(meta_table)
+        elements.append(Spacer(1, 7 * mm))
 
-    # Table
-    header = [ar(h) for h in [f'إجمالي ({weeks} أسبوع)', 'ساعات أسبوعية', 'الشعبة', 'الرمز', 'المقرر', 'الرقم الوظيفي', 'اسم المعلم']]
-    table_data = [header]
+    if not grouped:
+        elements.append(Paragraph(ar("لا توجد بيانات"), sub_header_style))
+    else:
+        # عرض الجدول الموحد لكل المعلمين
+        total_w = doc.width
+        # توزيع الأعمدة 5 (من اليسار للوحدة الإنجليزية - reportlab):
+        # نريد RTL: العمود الأول (index 0) = أقصى اليسار في reportlab، لكن في النص العربي
+        # سيُعرض كأقصى اليمين بصرياً لو رتبنا البيانات بالعكس.
+        # لتسهيل الأمر: نحدد الأعمدة كما تُعرض على PDF من اليسار لليمين، ونملأ البيانات معكوسة:
+        # [الساعات | ساعات أسبوعية | الشعبة | الرمز | المقرر]  → سيظهر بصرياً (مع الـ RTL في النص فقط)
+        # لكن لتجنب الالتباس: نُنشئ الجدول بترتيب منطقي عربي ونعطي الأعمدة عرض مناسب.
+        col_widths = [total_w * 0.18, total_w * 0.16, total_w * 0.12, total_w * 0.18, total_w * 0.36]
+        # هذه الأعمدة (بترتيب اليسار→اليمين على PDF): الساعات | ساعات أسبوعية | الشعبة | الرمز | المقرر
 
-    for row in rows:
-        is_summary = "الإجمالي" in row["course_name"]
-        table_data.append([
-            str(row["total_hours"]),
-            str(row["weekly_hours"]),
-            ar(row["section"] or "-"),
-            ar(row["course_code"]),
-            ar(row["course_name"]),
-            ar(row["employee_id"]),
-            ar(row["teacher_name"]),
-        ])
+        for block in grouped:
+            block_elements = []
 
-    if not rows:
-        table_data.append([ar("لا توجد بيانات"), "", "", "", "", "", ""])
+            # --- صف بيانات المعلم ---
+            teacher_row_data = [[
+                ar(block["employee_id"] or "-"),
+                ar("الرقم الوظيفي"),
+                ar(block["teacher_name"] or "-"),
+                "",
+                ar("المعلم"),
+            ]]
+            # دمج العمودين الوسطين (اسم المعلم يأخذ خانتين)
+            t_row = Table(teacher_row_data, colWidths=col_widths)
+            t_row.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), arabic_font),
+                ('FONTSIZE', (0, 0), (-1, -1), 11),
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f5f5f5')),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1a2540')),
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cfd6e1')),
+                ('SPAN', (2, 0), (3, 0)),  # دمج اسم المعلم
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+                ('FONTNAME', (4, 0), (4, 0), arabic_font),
+                ('FONTNAME', (1, 0), (1, 0), arabic_font),
+            ]))
+            block_elements.append(t_row)
 
-    col_widths = [80, 80, 60, 70, 150, 90, 140]
-    t = Table(table_data, colWidths=col_widths, repeatRows=1)
+            # --- جدول المقررات (رأس أزرق + صفوف + إجمالي) ---
+            # ترتيب الأعمدة (يسار→يمين على PDF):
+            # [الساعات (16) | ساعات أسبوعية | الشعبة | الرمز | المقرر]
+            data = []
+            # Header
+            data.append([
+                ar(f"الساعات ({weeks})"),
+                ar("ساعات أسبوعية"),
+                ar("الشعبة"),
+                ar("الرمز"),
+                ar("المقرر"),
+            ])
+            # Courses
+            for c in block["courses"]:
+                data.append([
+                    str(c["total_hours"]),
+                    str(c["weekly_hours"]),
+                    ar(c["section"] or "-"),
+                    ar(c["course_code"] or "-"),
+                    ar(c["course_name"] or "-"),
+                ])
+            # Total row
+            data.append([
+                str(block["total_semester"]),
+                str(block["total_weekly"]),
+                "",
+                "",
+                ar("*** الإجمالي ***"),
+            ])
 
-    # Style
-    style_commands = [
-        ('FONTNAME', (0, 0), (-1, -1), arabic_font),
-        ('FONTSIZE', (0, 0), (-1, 0), 10),
-        ('FONTSIZE', (0, 1), (-1, -1), 9),
-        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
-        ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
-        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
-        ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
-        ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cccccc')),
-        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f5f5f5')]),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
-    ]
+            tbl = Table(data, colWidths=col_widths)
+            n_rows = len(data)
+            last_idx = n_rows - 1
+            tbl.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), arabic_font),
+                ('FONTSIZE', (0, 0), (-1, 0), 11),
+                ('FONTSIZE', (0, 1), (-1, -1), 10),
+                # Header
+                ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#1565c0')),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.white),
+                # Total row
+                ('BACKGROUND', (0, last_idx), (-1, last_idx), colors.HexColor('#e3f2fd')),
+                ('FONTSIZE', (0, last_idx), (-1, last_idx), 11),
+                ('TEXTCOLOR', (0, last_idx), (-1, last_idx), colors.HexColor('#1a2540')),
+                # Common
+                ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#cfd6e1')),
+                ('TOPPADDING', (0, 0), (-1, -1), 6),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            block_elements.append(tbl)
+            block_elements.append(Spacer(1, 8 * mm))
 
-    # Highlight summary rows
-    for i, row in enumerate(rows):
-        if "الإجمالي" in row["course_name"]:
-            style_commands.append(('BACKGROUND', (0, i + 1), (-1, i + 1), colors.HexColor('#e3f2fd')))
-            style_commands.append(('FONTSIZE', (0, i + 1), (-1, i + 1), 10))
-
-    t.setStyle(TableStyle(style_commands))
-    elements.append(t)
+            # نضمن أن كتلة المعلم لا تنقسم على صفحتين إذا كانت صغيرة
+            elements.append(KeepTogether(block_elements))
 
     doc.build(elements)
     buffer.seek(0)

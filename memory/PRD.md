@@ -660,6 +660,7 @@ Comprehensive student/teacher management system for Ahgaff University with:
 - (P2) Fix orphaned `teaching_loads` cleanup on semester archive
 
 ## Recently completed (2026-02)
+- ✅ **Teaching Load Report — Excel/PDF block-per-teacher layout**: Restructured department-wide teaching load exports to render one mini-table per teacher with: teacher info row (المعلم/الرقم الوظيفي) + course header row (blue) + course rows + total row (light blue). Top header now shows الكلية + القسم side-by-side. PDF switched from landscape to portrait. Single-teacher mode also inherits dept/faculty from teacher record. File: `/app/backend/backend/routes/teaching_load.py` (`_get_export_data`, `export_teaching_load_excel`, `export_teaching_load_pdf`). Tests pass: `tests/test_teaching_load_report.py` (6/6).
 - ✅ Global Search subtitles polished: dept/faculty names stripped of trailing whitespace; Departments now include parent `كلية` in subtitle; Lectures now display `قسم/كلية` context. RBAC scoping verified intact for Saeed (dept head). File: `/app/backend/backend/routes/global_search.py`.
 
 ## P3 / Backlog
