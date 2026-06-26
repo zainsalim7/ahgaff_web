@@ -13,6 +13,13 @@
 - Password: test1234  (تم إعادة التعيين 2026-06-20 لاختبار RBAC)
 - Department: الدراسات الإسلامية / كلية البنات
 
+## View-Curriculum Test User (Added 2026-06-26)
+- Username: view_curr_user
+- Password: test1234
+- Role: employee (with custom_permissions=['view_curriculum'])
+- Faculty: كلية الشريعة والقانون · Department: الشريعة والقانون
+- Purpose: اختبار ظهور رابط "الخطة الدراسية" في القائمة الجانبية لأي مستخدم يملك صلاحية view_curriculum فقط
+
 ## Teacher
 - Username: teacher180156
 - Password: teacher123

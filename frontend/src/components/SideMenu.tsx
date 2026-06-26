@@ -47,9 +47,10 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.MANAGE_COURSES, 'view_courses', 'add_course', 'edit_course', 'delete_course'
   ]},
 
-  // 📖 الخطة الدراسية — صلاحية الخطة الدراسية فقط (لا علاقة بالمقررات!)
+  // 📖 الخطة الدراسية — صلاحية الخطة الدراسية (إدارة أو عرض)
   { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', permissions: [
-    PERMISSIONS.MANAGE_CURRICULUM
+    PERMISSIONS.MANAGE_CURRICULUM,
+    PERMISSIONS.VIEW_CURRICULUM
   ]},
 
   // 📅 الجدول الدراسي اليومي — صلاحيات الجداول فقط (لا علاقة بالمقررات!)
