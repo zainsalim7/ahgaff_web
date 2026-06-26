@@ -1,9 +1,10 @@
 /**
- * صفحة الخريجين - إدارة شاملة
- * - فلاتر: السنة + الكلية + القسم + البحث
- * - تحرير بيانات التخرج (المعدل، التقدير، الشهادة، الفصل، الملاحظات)
- * - تصدير Excel + PDF
- * - استرجاع لقائمة الطلاب (حالات نادرة)
+ * صفحة الخريجين — تصميم محدّث 2026
+ * - Hero card مع رسم توضيحي
+ * - Filter card احترافي مع dropdowns
+ * - جدول بألوان معبرة + شارة تقدير
+ * - Pagination + per-page selector
+ * - تحرير + استرجاع + تصدير Excel/PDF
  */
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
@@ -19,18 +20,14 @@ import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 interface AlumniRow {
   id: string;
   student_id: string;
-  reference_number?: string;
   full_name: string;
-  phone?: string;
-  email?: string;
   department_id?: string;
   department_name?: string;
   faculty_id?: string;
   faculty_name?: string;
-  level_graduated?: number;
   graduation_year?: number;
-  graduation_date?: string;
   graduation_semester?: string;
+  graduation_date?: string;
   final_gpa?: number;
   total_credit_hours?: number;
   certificate_number?: string;
@@ -40,6 +37,24 @@ interface AlumniRow {
 
 const SEM_LABEL: Record<string, string> = { first: 'الأول', second: 'الثاني', summer: 'الصيفي' };
 
+// تحويل GPA → شارة "الحالة/الشهادة" (تقدير)
+const gradeFromGPA = (gpa?: number) => {
+  if (gpa == null) return { label: '-', color: '#5b6678', bg: '#f0f3f7', border: '#e0e7ee' };
+  if (gpa >= 3.6) return { label: 'ممتاز', color: '#2e7d32', bg: '#e8f5e9', border: '#a5d6a7' };
+  if (gpa >= 3.0) return { label: 'جيد جداً', color: '#2e7d32', bg: '#e8f5e9', border: '#a5d6a7' };
+  if (gpa >= 2.5) return { label: 'جيد', color: '#1565c0', bg: '#e3f2fd', border: '#90caf9' };
+  if (gpa >= 2.0) return { label: 'مقبول', color: '#ef6c00', bg: '#fff3e0', border: '#ffcc80' };
+  return { label: 'ضعيف', color: '#c62828', bg: '#ffebee', border: '#ef9a9a' };
+};
+
+const STATUS_OPTIONS = [
+  { v: '', label: 'الكل' },
+  { v: 'excellent', label: 'ممتاز / جيد جداً' },
+  { v: 'good', label: 'جيد' },
+  { v: 'pass', label: 'مقبول' },
+  { v: 'weak', label: 'ضعيف' },
+];
+
 export default function AlumniScreen() {
   const router = useRouter();
   const { hasAnyPermission, isLoading: authLoading, isAdmin } = useAuth();
@@ -48,12 +63,15 @@ export default function AlumniScreen() {
   const [byYear, setByYear] = useState<Record<string, number>>({});
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const [yearFilter, setYearFilter] = useState<number | null>(null);
+  const [yearFilter, setYearFilter] = useState<string>('');
   const [facultyFilter, setFacultyFilter] = useState<string>('');
   const [deptFilter, setDeptFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
   const [searchQ, setSearchQ] = useState('');
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(10);
 
   // Edit modal
   const [editing, setEditing] = useState<AlumniRow | null>(null);
@@ -71,13 +89,14 @@ export default function AlumniScreen() {
     setLoading(true);
     try {
       const params: any = {};
-      if (yearFilter) params.year = yearFilter;
+      if (yearFilter) params.year = parseInt(yearFilter, 10);
       if (facultyFilter) params.faculty_id = facultyFilter;
       if (deptFilter) params.department_id = deptFilter;
       if (searchQ.trim()) params.q = searchQ.trim();
       const r = await alumniAPI.getAll(params);
       setItems(r.data.items || []);
       setByYear(r.data.by_year || {});
+      setPage(1);
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشل تحميل قائمة الخريجين';
       if (Platform.OS === 'web') window.alert(msg);
@@ -89,10 +108,7 @@ export default function AlumniScreen() {
 
   useEffect(() => {
     if (!canView) return;
-    Promise.allSettled([
-      facultiesAPI.getAll(),
-      departmentsAPI.getAll(),
-    ]).then(([fRes, dRes]: any[]) => {
+    Promise.allSettled([facultiesAPI.getAll(), departmentsAPI.getAll()]).then(([fRes, dRes]: any[]) => {
       setFaculties(fRes.status === 'fulfilled' ? (fRes.value.data || []) : []);
       setDepartments(dRes.status === 'fulfilled' ? (dRes.value.data || []) : []);
     });
@@ -113,6 +129,27 @@ export default function AlumniScreen() {
     if (!facultyFilter) return departments;
     return departments.filter((d: any) => String(d.faculty_id || '') === facultyFilter);
   }, [departments, facultyFilter]);
+
+  // فلترة محلية بالحالة (لأن الـ API لا يدعمها)
+  const visibleItems = useMemo(() => {
+    if (!statusFilter) return items;
+    return items.filter(a => {
+      const g = gradeFromGPA(a.final_gpa);
+      switch (statusFilter) {
+        case 'excellent': return g.label === 'ممتاز' || g.label === 'جيد جداً';
+        case 'good': return g.label === 'جيد';
+        case 'pass': return g.label === 'مقبول';
+        case 'weak': return g.label === 'ضعيف';
+        default: return true;
+      }
+    });
+  }, [items, statusFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(visibleItems.length / perPage));
+  const pageItems = useMemo(
+    () => visibleItems.slice((page - 1) * perPage, page * perPage),
+    [visibleItems, page, perPage]
+  );
 
   const handleRestore = async (a: AlumniRow) => {
     const ok = Platform.OS === 'web'
@@ -182,7 +219,7 @@ export default function AlumniScreen() {
     setExporting(kind);
     try {
       const params: any = {};
-      if (yearFilter) params.year = yearFilter;
+      if (yearFilter) params.year = parseInt(yearFilter, 10);
       if (facultyFilter) params.faculty_id = facultyFilter;
       if (deptFilter) params.department_id = deptFilter;
       if (searchQ.trim()) params.q = searchQ.trim();
@@ -208,9 +245,10 @@ export default function AlumniScreen() {
   };
 
   const resetFilters = () => {
-    setYearFilter(null);
+    setYearFilter('');
     setFacultyFilter('');
     setDeptFilter('');
+    setStatusFilter('');
     setSearchQ('');
   };
 
@@ -222,29 +260,60 @@ export default function AlumniScreen() {
     );
   }
 
-  const hasActiveFilter = !!yearFilter || !!facultyFilter || !!deptFilter || !!searchQ.trim();
+  const hasActiveFilter = !!yearFilter || !!facultyFilter || !!deptFilter || !!statusFilter || !!searchQ.trim();
+  const latestYear = availableYears[0];
+
+  // Helper to render a styled web <select>
+  const renderSelect = (value: string, onChange: (v: string) => void, options: { value: string; label: string }[], testId: string) => {
+    if (Platform.OS === 'web') {
+      return (
+        <select
+          value={value}
+          onChange={(e: any) => onChange(e.target.value)}
+          data-testid={testId}
+          style={{
+            width: '100%', padding: '10px 12px', fontSize: 14, color: '#1a2540',
+            backgroundColor: '#fff', border: '1px solid #d6dde6', borderRadius: 8,
+            textAlign: 'right', direction: 'rtl', outline: 'none', cursor: 'pointer',
+            appearance: 'none', backgroundImage: 'url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'12\' height=\'7\' viewBox=\'0 0 12 7\'%3E%3Cpath fill=\'%235b6678\' d=\'M6 7L0 0h12z\'/%3E%3C/svg%3E")',
+            backgroundRepeat: 'no-repeat', backgroundPosition: 'left 12px center', backgroundSize: '12px',
+            paddingLeft: 32,
+          }}
+        >
+          {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+        </select>
+      );
+    }
+    // Fallback for native: simple TextInput-like row (rarely used since this is web admin)
+    return (
+      <TextInput
+        style={styles.fieldInput}
+        value={options.find(o => o.value === value)?.label || ''}
+        editable={false}
+      />
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <Stack.Screen options={{ title: 'الخريجون', headerShown: false }} />
 
-      {/* Header */}
+      {/* Header bar */}
       <View style={styles.headerBar}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} data-testid="alumni-back-btn">
-          <Ionicons name="arrow-forward" size={22} color="#fff" />
+          <Ionicons name="search" size={18} color="#fff" />
         </TouchableOpacity>
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1, alignItems: 'flex-end' }}>
           <Text style={styles.headerTitle}>الخريجون</Text>
-          <Text style={styles.headerSubtitle}>قائمة الطلاب المتخرجين</Text>
+          <Text style={styles.headerSubtitle}>قائمة الطلاب الخريجين</Text>
         </View>
-        {/* Export buttons */}
         <TouchableOpacity
           onPress={() => handleExport('excel')}
           disabled={exporting !== null}
           style={[styles.exportBtn, { backgroundColor: '#1b5e20' }]}
           data-testid="alumni-export-excel"
         >
-          {exporting === 'excel' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document" size={15} color="#fff" />}
+          {exporting === 'excel' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document-text" size={15} color="#fff" />}
           <Text style={styles.exportBtnText}>Excel</Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -258,172 +327,281 @@ export default function AlumniScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={{ padding: 16 }}>
-        {/* رأس مختصر */}
+      <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 32 }}>
+        {/* ---------- Hero Card ---------- */}
         <View style={styles.heroCard}>
-          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
-            <Ionicons name="school" size={28} color="#0d47a1" />
-            <View style={{ flex: 1 }}>
-              <Text style={styles.heroTitle}>الخريجون</Text>
-              <Text style={styles.heroSub}>إجمالي: {items.length} خريج · {availableYears.length} سنة تخرج</Text>
+          <View style={styles.heroLeft}>
+            <View style={styles.heroIllustration}>
+              <Ionicons name="school" size={64} color="#1565c0" />
             </View>
+          </View>
+          <View style={styles.heroRight}>
+            <View style={styles.heroCircle}>
+              <Ionicons name="school" size={26} color="#1565c0" />
+            </View>
+            <Text style={styles.heroTitle}>الخريجون</Text>
+            <View style={styles.heroStatLine}>
+              <Text style={styles.heroStatLabel}>إجمالي الخريجين:</Text>
+              <Text style={styles.heroStatValue}>{items.length}</Text>
+            </View>
+            {latestYear && (
+              <View style={styles.heroStatLine}>
+                <Text style={styles.heroStatLabel}>أحدث دفعة:</Text>
+                <Text style={styles.heroStatValue}>{latestYear}</Text>
+                <Text style={styles.heroStatLabel}>· بعدد</Text>
+                <Text style={styles.heroStatValue}>{byYear[String(latestYear)]}</Text>
+              </View>
+            )}
           </View>
         </View>
 
-        {/* رقائق السنوات */}
+        {/* ---------- Year chips selector ---------- */}
         {availableYears.length > 0 && (
-          <View style={styles.statsRow}>
+          <View style={styles.yearChipsRow}>
+            <TouchableOpacity
+              onPress={() => setYearFilter('')}
+              style={[styles.yearChip, !yearFilter && styles.yearChipActive]}
+              data-testid="year-chip-all"
+            >
+              <Ionicons name="calendar" size={14} color={!yearFilter ? '#fff' : '#1565c0'} />
+              <Text style={[styles.yearChipText, !yearFilter && styles.yearChipTextActive]}>كل السنوات</Text>
+              <View style={[styles.yearChipCount, !yearFilter && styles.yearChipCountActive]}>
+                <Text style={[styles.yearChipCountText, !yearFilter && { color: '#1565c0' }]}>{items.length}</Text>
+              </View>
+            </TouchableOpacity>
             {availableYears.map(y => (
               <TouchableOpacity
                 key={y}
-                onPress={() => setYearFilter(yearFilter === y ? null : y)}
-                style={[styles.yearChip, yearFilter === y && styles.yearChipActive]}
+                onPress={() => setYearFilter(String(y))}
+                style={[styles.yearChip, yearFilter === String(y) && styles.yearChipActive]}
                 data-testid={`year-chip-${y}`}
               >
-                <Text style={[styles.yearChipText, yearFilter === y && styles.yearChipTextActive]}>{y}</Text>
-                <Text style={[styles.yearChipCount, yearFilter === y && styles.yearChipCountActive]}>{byYear[String(y)]}</Text>
+                <Ionicons name="calendar" size={14} color={yearFilter === String(y) ? '#fff' : '#1565c0'} />
+                <Text style={[styles.yearChipText, yearFilter === String(y) && styles.yearChipTextActive]}>{y}</Text>
+                <View style={[styles.yearChipCount, yearFilter === String(y) && styles.yearChipCountActive]}>
+                  <Text style={[styles.yearChipCountText, yearFilter === String(y) && { color: '#1565c0' }]}>{byYear[String(y)]}</Text>
+                </View>
               </TouchableOpacity>
             ))}
           </View>
         )}
 
-        {/* الفلاتر */}
+        {/* ---------- Filter card ---------- */}
         <View style={styles.filterCard}>
-          <View style={styles.filterRow}>
-            <View style={{ flex: 1, minWidth: 200 }}>
+          <View style={styles.filterGrid}>
+            <View style={styles.filterFieldWide}>
               <Text style={styles.filterLabel}>بحث</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="اسم أو رقم القيد"
-                placeholderTextColor="#a8b1c2"
-                value={searchQ}
-                onChangeText={setSearchQ}
-                data-testid="alumni-search-input"
-              />
+              <View style={styles.searchInputWrap}>
+                <Ionicons name="search" size={16} color="#8a95a8" style={styles.searchIcon} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="بـاسم أو رقم القيد..."
+                  placeholderTextColor="#a8b1c2"
+                  value={searchQ}
+                  onChangeText={setSearchQ}
+                  data-testid="alumni-search-input"
+                />
+              </View>
             </View>
-            <View style={{ flex: 1.2, minWidth: 200 }}>
+            <View style={styles.filterField}>
               <Text style={styles.filterLabel}>الكلية</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                <TouchableOpacity
-                  onPress={() => { setFacultyFilter(''); setDeptFilter(''); }}
-                  style={[styles.chip, !facultyFilter && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, !facultyFilter && styles.chipTextActive]}>الكل</Text>
-                </TouchableOpacity>
-                {faculties.map((f: any) => (
-                  <TouchableOpacity
-                    key={f.id}
-                    onPress={() => { setFacultyFilter(f.id); setDeptFilter(''); }}
-                    style={[styles.chip, facultyFilter === f.id && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, facultyFilter === f.id && styles.chipTextActive]} numberOfLines={1}>{f.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              {renderSelect(
+                facultyFilter,
+                (v) => { setFacultyFilter(v); setDeptFilter(''); },
+                [{ value: '', label: 'كل الكليات' }, ...faculties.map((f: any) => ({ value: f.id, label: f.name }))],
+                'faculty-select'
+              )}
             </View>
-            <View style={{ flex: 1.2, minWidth: 200 }}>
+            <View style={styles.filterField}>
               <Text style={styles.filterLabel}>القسم</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 6 }}>
-                <TouchableOpacity
-                  onPress={() => setDeptFilter('')}
-                  style={[styles.chip, !deptFilter && styles.chipActive]}
-                >
-                  <Text style={[styles.chipText, !deptFilter && styles.chipTextActive]}>الكل</Text>
-                </TouchableOpacity>
-                {filteredDepts.map((d: any) => (
-                  <TouchableOpacity
-                    key={d.id}
-                    onPress={() => setDeptFilter(d.id)}
-                    style={[styles.chip, deptFilter === d.id && styles.chipActive]}
-                  >
-                    <Text style={[styles.chipText, deptFilter === d.id && styles.chipTextActive]} numberOfLines={1}>{d.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+              {renderSelect(
+                deptFilter,
+                setDeptFilter,
+                [{ value: '', label: 'كل الأقسام' }, ...filteredDepts.map((d: any) => ({ value: d.id, label: d.name }))],
+                'department-select'
+              )}
             </View>
-            {hasActiveFilter && (
-              <TouchableOpacity onPress={resetFilters} style={styles.resetFilterBtn} data-testid="reset-filters-btn">
-                <Ionicons name="refresh" size={14} color="#c62828" />
-                <Text style={{ fontSize: 12, color: '#c62828', fontWeight: '700' }}>إعادة تعيين</Text>
+            <View style={styles.filterField}>
+              <Text style={styles.filterLabel}>سنة التخرج</Text>
+              {renderSelect(
+                yearFilter,
+                setYearFilter,
+                [{ value: '', label: 'كل السنوات' }, ...availableYears.map(y => ({ value: String(y), label: String(y) }))],
+                'year-select'
+              )}
+            </View>
+            <View style={styles.filterField}>
+              <Text style={styles.filterLabel}>الحالة</Text>
+              {renderSelect(
+                statusFilter,
+                setStatusFilter,
+                STATUS_OPTIONS.map(o => ({ value: o.v, label: o.label })),
+                'status-select'
+              )}
+            </View>
+            <View style={styles.filterActions}>
+              {hasActiveFilter && (
+                <TouchableOpacity onPress={resetFilters} style={styles.resetBtn} data-testid="reset-filters-btn">
+                  <Ionicons name="refresh" size={14} color="#5b6678" />
+                  <Text style={styles.resetBtnText}>إعادة تعيين</Text>
+                </TouchableOpacity>
+              )}
+              <TouchableOpacity onPress={fetchData} style={styles.applyBtn} data-testid="apply-filter-btn">
+                <Ionicons name="filter" size={14} color="#fff" />
+                <Text style={styles.applyBtnText}>تصفية</Text>
               </TouchableOpacity>
-            )}
+            </View>
           </View>
         </View>
 
-        {/* الجدول */}
+        {/* ---------- Table ---------- */}
         {loading ? (
           <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 40 }} />
-        ) : items.length === 0 ? (
+        ) : visibleItems.length === 0 ? (
           <View style={styles.emptyBox}>
-            <Ionicons name="school-outline" size={42} color="#cfd6e1" />
+            <Ionicons name="school-outline" size={56} color="#cfd6e1" />
             <Text style={styles.emptyText}>لا يوجد خريجون مطابقون</Text>
             <Text style={styles.emptyHint}>عدّل الفلاتر أو خرّج طلاباً جدد من صفحة الطلاب</Text>
           </View>
         ) : (
           <View style={styles.tableCard}>
+            {/* Header */}
             <View style={styles.tableHeader}>
-              <Text style={styles.thIdx}>#</Text>
-              <Text style={[styles.thName, { flex: 2 }]}>الاسم</Text>
+              <Text style={styles.th_idx}>#</Text>
+              <Text style={[styles.th, { flex: 2 }]}>الاسم</Text>
               <Text style={styles.th}>رقم القيد</Text>
-              <Text style={styles.th}>القسم</Text>
-              <Text style={styles.th}>الكلية</Text>
-              <Text style={styles.th}>سنة</Text>
-              <Text style={styles.th}>الفصل</Text>
+              <Text style={[styles.th, { flex: 1.4 }]}>الكلية</Text>
+              <Text style={[styles.th, { flex: 1.3 }]}>القسم</Text>
+              <Text style={styles.th}>سنة التخرج</Text>
               <Text style={styles.th}>المعدل</Text>
               <Text style={styles.th}>الشهادة</Text>
               <Text style={styles.th}>التقدير</Text>
               {canManage && <Text style={[styles.th, { width: 110, flex: 0 }]}>إجراءات</Text>}
             </View>
-            {items.map((a, idx) => (
-              <View key={a.id} style={[styles.tableRow, idx % 2 === 0 && { backgroundColor: '#fafbfc' }]}>
-                <Text style={styles.tdIdx}>{idx + 1}</Text>
-                <Text style={[styles.tdName, { flex: 2 }]} numberOfLines={1}>{a.full_name}</Text>
-                <Text style={styles.td}>{a.student_id}</Text>
-                <Text style={styles.td} numberOfLines={1}>{a.department_name || '-'}</Text>
-                <Text style={styles.td} numberOfLines={1}>{a.faculty_name || '-'}</Text>
-                <View style={[styles.td, { alignItems: 'flex-end' }]}>
-                  <View style={styles.yearBadge}>
-                    <Text style={styles.yearBadgeText}>{a.graduation_year || '-'}</Text>
+            {/* Rows */}
+            {pageItems.map((a, idx) => {
+              const globalIdx = (page - 1) * perPage + idx + 1;
+              const g = gradeFromGPA(a.final_gpa);
+              return (
+                <View key={a.id} style={[styles.tr, idx % 2 === 1 && { backgroundColor: '#fafbfd' }]}>
+                  <Text style={styles.td_idx}>{globalIdx}</Text>
+                  <View style={[styles.td_cell, { flex: 2 }]}>
+                    <View style={styles.avatarMini}>
+                      <Ionicons name="person" size={14} color="#1565c0" />
+                    </View>
+                    <Text style={styles.td_name} numberOfLines={1}>{a.full_name}</Text>
                   </View>
+                  <Text style={styles.td}>{a.student_id || '-'}</Text>
+                  <View style={[styles.td_cell, { flex: 1.4 }]}>
+                    <View style={styles.entityIcon}>
+                      <Ionicons name="business" size={12} color="#5b6678" />
+                    </View>
+                    <Text style={styles.td_text} numberOfLines={1}>{a.faculty_name || '-'}</Text>
+                  </View>
+                  <View style={[styles.td_cell, { flex: 1.3 }]}>
+                    <View style={styles.entityIcon}>
+                      <Ionicons name="business-outline" size={12} color="#5b6678" />
+                    </View>
+                    <Text style={styles.td_text} numberOfLines={1}>{a.department_name || '-'}</Text>
+                  </View>
+                  <View style={[styles.td, { alignItems: 'flex-end' }]}>
+                    <View style={styles.yearBadge}>
+                      <Text style={styles.yearBadgeText}>{a.graduation_year || '-'}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.td, { fontWeight: '700', color: g.color, fontSize: 14 }]}>
+                    {a.final_gpa != null ? a.final_gpa.toFixed(2) : '-'}
+                  </Text>
+                  <View style={[styles.td, { alignItems: 'flex-end' }]}>
+                    <View style={[styles.gradeBadge, { backgroundColor: g.bg, borderColor: g.border }]}>
+                      <Text style={[styles.gradeBadgeText, { color: g.color }]}>{g.label}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.td} numberOfLines={1}>{a.honors || 'البكالوريوس'}</Text>
+                  {canManage && (
+                    <View style={[styles.tdActions, { width: 110, flex: 0 }]}>
+                      <TouchableOpacity onPress={() => openEdit(a)} style={styles.iconBtnBlue} data-testid={`edit-alumni-${a.id}`}>
+                        <Ionicons name="create" size={14} color="#1565c0" />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleRestore(a)}
+                        disabled={restoringId === a.id}
+                        style={styles.iconBtnOrange}
+                        data-testid={`restore-${a.id}`}
+                      >
+                        {restoringId === a.id
+                          ? <ActivityIndicator size="small" color="#ef6c00" />
+                          : <Ionicons name="ellipsis-vertical" size={14} color="#5b6678" />}
+                      </TouchableOpacity>
+                    </View>
+                  )}
                 </View>
-                <Text style={styles.td}>{SEM_LABEL[a.graduation_semester || ''] || '-'}</Text>
-                <Text style={[styles.td, { fontWeight: '700', color: '#1565c0' }]}>{a.final_gpa != null ? a.final_gpa.toFixed(2) : '-'}</Text>
-                <Text style={styles.td} numberOfLines={1}>{a.certificate_number || '-'}</Text>
-                <Text style={styles.td} numberOfLines={1}>{a.honors || '-'}</Text>
-                {canManage && (
-                  <View style={[styles.tdActions, { width: 110, flex: 0 }]}>
-                    <TouchableOpacity
-                      onPress={() => openEdit(a)}
-                      style={styles.editBtn}
-                      data-testid={`edit-alumni-${a.id}`}
-                    >
-                      <Ionicons name="create-outline" size={14} color="#1565c0" />
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handleRestore(a)}
-                      disabled={restoringId === a.id}
-                      style={styles.restoreBtn}
-                      data-testid={`restore-${a.id}`}
-                    >
-                      {restoringId === a.id
-                        ? <ActivityIndicator size="small" color="#ef6c00" />
-                        : <Ionicons name="arrow-undo" size={14} color="#ef6c00" />}
-                    </TouchableOpacity>
-                  </View>
-                )}
-              </View>
-            ))}
+              );
+            })}
+          </View>
+        )}
+
+        {/* Pagination Footer */}
+        {visibleItems.length > 0 && (
+          <View style={styles.paginationBar}>
+            <View style={styles.paginationLeft}>
+              <Text style={styles.paginationInfo}>
+                عرض {(page - 1) * perPage + 1} إلى {Math.min(page * perPage, visibleItems.length)} من {visibleItems.length} خريجين
+              </Text>
+            </View>
+            <View style={styles.paginationCenter}>
+              <TouchableOpacity
+                onPress={() => setPage(p => Math.max(1, p - 1))}
+                disabled={page === 1}
+                style={[styles.pageArrow, page === 1 && { opacity: 0.4 }]}
+              >
+                <Ionicons name="chevron-forward" size={16} color="#1565c0" />
+              </TouchableOpacity>
+              {Array.from({ length: totalPages }).slice(0, 5).map((_, i) => {
+                const n = i + 1;
+                const active = n === page;
+                return (
+                  <TouchableOpacity
+                    key={n}
+                    onPress={() => setPage(n)}
+                    style={[styles.pageNum, active && styles.pageNumActive]}
+                  >
+                    <Text style={[styles.pageNumText, active && styles.pageNumTextActive]}>{n}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <TouchableOpacity
+                onPress={() => setPage(p => Math.min(totalPages, p + 1))}
+                disabled={page === totalPages}
+                style={[styles.pageArrow, page === totalPages && { opacity: 0.4 }]}
+              >
+                <Ionicons name="chevron-back" size={16} color="#1565c0" />
+              </TouchableOpacity>
+            </View>
+            <View style={styles.paginationRight}>
+              {Platform.OS === 'web' && (
+                <select
+                  value={String(perPage)}
+                  onChange={(e: any) => { setPerPage(parseInt(e.target.value, 10)); setPage(1); }}
+                  style={{
+                    padding: '6px 24px 6px 10px', border: '1px solid #d6dde6', borderRadius: 6,
+                    fontSize: 13, color: '#1a2540', backgroundColor: '#fff', outline: 'none', cursor: 'pointer',
+                  }}
+                >
+                  <option value="10">10</option>
+                  <option value="25">25</option>
+                  <option value="50">50</option>
+                  <option value="100">100</option>
+                </select>
+              )}
+              <Text style={styles.paginationInfo}>لكل صفحة</Text>
+            </View>
           </View>
         )}
       </ScrollView>
 
       {/* ============ مودال التحرير ============ */}
-      <Modal
-        visible={editing !== null}
-        animationType="fade"
-        transparent
-        onRequestClose={() => setEditing(null)}
-      >
+      <Modal visible={editing !== null} animationType="fade" transparent onRequestClose={() => setEditing(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
@@ -435,18 +613,13 @@ export default function AlumniScreen() {
                 <Ionicons name="close" size={22} color="#5b6678" />
               </TouchableOpacity>
             </View>
-
-            <ScrollView
-              style={{ flexGrow: 0 }}
-              contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 12 }}
-            >
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ paddingHorizontal: 18, paddingVertical: 14, gap: 12 }}>
               {editing && (
                 <View style={styles.editStudentInfo}>
                   <Text style={styles.editStudentName}>{editing.full_name}</Text>
                   <Text style={styles.editStudentMeta}>رقم القيد: {editing.student_id} · {editing.department_name || '-'}</Text>
                 </View>
               )}
-
               <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>سنة التخرج</Text>
@@ -457,7 +630,6 @@ export default function AlumniScreen() {
                     keyboardType="numeric"
                     placeholder="2025"
                     placeholderTextColor="#a8b1c2"
-                    data-testid="edit-year"
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -469,19 +641,13 @@ export default function AlumniScreen() {
                     keyboardType="decimal-pad"
                     placeholder="3.85"
                     placeholderTextColor="#a8b1c2"
-                    data-testid="edit-gpa"
                   />
                 </View>
               </View>
-
               <View>
                 <Text style={styles.fieldLabel}>الفصل</Text>
                 <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                  {[
-                    { v: 'first', label: 'الأول' },
-                    { v: 'second', label: 'الثاني' },
-                    { v: 'summer', label: 'الصيفي' },
-                  ].map(s => {
+                  {[{ v: 'first', label: 'الأول' }, { v: 'second', label: 'الثاني' }, { v: 'summer', label: 'الصيفي' }].map(s => {
                     const active = editForm.graduation_semester === s.v;
                     return (
                       <TouchableOpacity
@@ -495,7 +661,6 @@ export default function AlumniScreen() {
                   })}
                 </View>
               </View>
-
               <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
                 <View style={{ flex: 1 }}>
                   <Text style={styles.fieldLabel}>تاريخ التخرج</Text>
@@ -505,7 +670,6 @@ export default function AlumniScreen() {
                     onChangeText={(v) => setEditForm((p: any) => ({ ...p, graduation_date: v }))}
                     placeholder="YYYY-MM-DD"
                     placeholderTextColor="#a8b1c2"
-                    data-testid="edit-date"
                   />
                 </View>
                 <View style={{ flex: 1 }}>
@@ -517,11 +681,9 @@ export default function AlumniScreen() {
                     keyboardType="numeric"
                     placeholder="132"
                     placeholderTextColor="#a8b1c2"
-                    data-testid="edit-hours"
                   />
                 </View>
               </View>
-
               <View>
                 <Text style={styles.fieldLabel}>رقم الشهادة</Text>
                 <TextInput
@@ -530,22 +692,18 @@ export default function AlumniScreen() {
                   onChangeText={(v) => setEditForm((p: any) => ({ ...p, certificate_number: v }))}
                   placeholder="AHG-2025-0001"
                   placeholderTextColor="#a8b1c2"
-                  data-testid="edit-cert"
                 />
               </View>
-
               <View>
-                <Text style={styles.fieldLabel}>التقدير</Text>
+                <Text style={styles.fieldLabel}>التقدير / الدرجة</Text>
                 <TextInput
                   style={styles.fieldInput}
                   value={editForm.honors}
                   onChangeText={(v) => setEditForm((p: any) => ({ ...p, honors: v }))}
-                  placeholder="ممتاز / جيد جداً / مع مرتبة الشرف"
+                  placeholder="البكالوريوس / الماجستير / مع مرتبة الشرف"
                   placeholderTextColor="#a8b1c2"
-                  data-testid="edit-honors"
                 />
               </View>
-
               <View>
                 <Text style={styles.fieldLabel}>ملاحظات</Text>
                 <TextInput
@@ -556,17 +714,11 @@ export default function AlumniScreen() {
                   numberOfLines={3}
                   placeholder="ملاحظات إضافية..."
                   placeholderTextColor="#a8b1c2"
-                  data-testid="edit-notes"
                 />
               </View>
             </ScrollView>
-
             <View style={styles.modalFooter}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => setEditing(null)}
-                disabled={savingEdit}
-              >
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setEditing(null)} disabled={savingEdit}>
                 <Text style={styles.modalCancelBtnText}>إلغاء</Text>
               </TouchableOpacity>
               <TouchableOpacity
@@ -575,9 +727,7 @@ export default function AlumniScreen() {
                 disabled={savingEdit}
                 data-testid="save-edit-btn"
               >
-                {savingEdit
-                  ? <ActivityIndicator size="small" color="#fff" />
-                  : <Ionicons name="checkmark" size={16} color="#fff" />}
+                {savingEdit ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="checkmark" size={16} color="#fff" />}
                 <Text style={styles.modalConfirmBtnText}>{savingEdit ? 'جاري الحفظ...' : 'حفظ التعديلات'}</Text>
               </TouchableOpacity>
             </View>
@@ -589,79 +739,178 @@ export default function AlumniScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f7fa' },
+  container: { flex: 1, backgroundColor: '#f4f6fa' },
+
+  // Header bar
   headerBar: {
     flexDirection: 'row-reverse', alignItems: 'center', gap: 8,
-    backgroundColor: '#0d47a1', paddingHorizontal: 14, paddingVertical: 10,
+    backgroundColor: '#0d47a1', paddingHorizontal: 18, paddingVertical: 14,
   },
-  backBtn: { padding: 6 },
-  headerTitle: { fontSize: 17, fontWeight: '700', color: '#fff', textAlign: 'right' },
-  headerSubtitle: { fontSize: 11, color: '#cfd8dc', textAlign: 'right', marginTop: 2 },
+  backBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  headerTitle: { fontSize: 19, fontWeight: '800', color: '#fff', textAlign: 'right' },
+  headerSubtitle: { fontSize: 12, color: '#bbdefb', textAlign: 'right', marginTop: 2 },
   exportBtn: {
     flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
-    paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8,
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8,
   },
-  exportBtnText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  exportBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+
+  // Hero card
   heroCard: {
-    backgroundColor: '#fff', padding: 14, borderRadius: 10,
-    borderWidth: 1, borderColor: '#e0e7ee', marginBottom: 12,
+    backgroundColor: '#fff', borderRadius: 16, padding: 20,
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 16,
+    marginBottom: 16,
+    borderWidth: 1, borderColor: '#e7ebf1',
   },
-  heroTitle: { fontSize: 18, fontWeight: '700', color: '#0d47a1', textAlign: 'right' },
-  heroSub: { fontSize: 12, color: '#5a6c7d', textAlign: 'right', marginTop: 2 },
-  statsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginBottom: 12 },
+  heroLeft: { flex: 1, alignItems: 'flex-start' },
+  heroIllustration: {
+    width: 120, height: 120, borderRadius: 12,
+    backgroundColor: '#f5f9ff', alignItems: 'center', justifyContent: 'center',
+  },
+  heroRight: { flex: 1.6, gap: 6, alignItems: 'flex-end' },
+  heroCircle: {
+    width: 52, height: 52, borderRadius: 26,
+    backgroundColor: '#e3f2fd',
+    alignItems: 'center', justifyContent: 'center',
+    marginBottom: 6,
+  },
+  heroTitle: { fontSize: 28, fontWeight: '800', color: '#0d47a1', textAlign: 'right' },
+  heroStatLine: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, flexWrap: 'wrap' },
+  heroStatLabel: { fontSize: 13, color: '#5b6678' },
+  heroStatValue: { fontSize: 15, fontWeight: '700', color: '#0d47a1' },
+
+  // Year chips
+  yearChipsRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 14, justifyContent: 'flex-start' },
   yearChip: {
     flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
-    paddingHorizontal: 10, paddingVertical: 6, borderRadius: 18,
-    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#e0e7ee',
+    backgroundColor: '#fff', borderWidth: 1.5, borderColor: '#bbdefb',
+    paddingHorizontal: 14, paddingVertical: 8, borderRadius: 24,
   },
-  yearChipActive: { backgroundColor: '#0d47a1', borderColor: '#0d47a1' },
-  yearChipText: { fontSize: 13, fontWeight: '700', color: '#0d47a1' },
+  yearChipActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
+  yearChipText: { fontSize: 14, fontWeight: '700', color: '#1565c0' },
   yearChipTextActive: { color: '#fff' },
-  yearChipCount: { fontSize: 11, color: '#5a6c7d', backgroundColor: '#f0f3f7', paddingHorizontal: 6, borderRadius: 8 },
-  yearChipCountActive: { color: '#0d47a1', backgroundColor: '#fff' },
-  filterCard: {
-    backgroundColor: '#fff', padding: 12, borderRadius: 10,
-    borderWidth: 1, borderColor: '#e0e7ee', marginBottom: 12,
+  yearChipCount: {
+    backgroundColor: '#e3f2fd', paddingHorizontal: 8, paddingVertical: 1, borderRadius: 12, minWidth: 22, alignItems: 'center',
   },
-  filterRow: { flexDirection: 'row-reverse', gap: 12, flexWrap: 'wrap' },
-  filterLabel: { fontSize: 12, color: '#5a6c7d', fontWeight: '600', textAlign: 'right', marginBottom: 4 },
-  input: {
-    backgroundColor: '#f5f7fa', borderRadius: 6,
-    paddingHorizontal: 10, paddingVertical: 8, fontSize: 13,
-    color: '#1a2540', textAlign: 'right', borderWidth: 1, borderColor: '#e0e7ee',
-  },
-  chip: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 6, backgroundColor: '#f5f7fa', borderWidth: 1, borderColor: '#e0e7ee' },
-  chipActive: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
-  chipText: { fontSize: 12, color: '#333', fontWeight: '600' },
-  chipTextActive: { color: '#fff' },
-  resetFilterBtn: {
-    flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
-    paddingHorizontal: 10, paddingVertical: 8, borderRadius: 6,
-    backgroundColor: '#ffebee', borderWidth: 1, borderColor: '#ffcdd2',
-    alignSelf: 'flex-end',
-  },
-  emptyBox: {
-    backgroundColor: '#fff', padding: 40, borderRadius: 10, alignItems: 'center',
-    gap: 8, borderWidth: 1, borderColor: '#e0e7ee',
-  },
-  emptyText: { fontSize: 14, color: '#5a6c7d', fontWeight: '600' },
-  emptyHint: { fontSize: 11, color: '#90a4ae' },
-  tableCard: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e0e7ee', overflow: 'hidden' },
-  tableHeader: { flexDirection: 'row-reverse', backgroundColor: '#e3f2fd', padding: 10, gap: 6 },
-  th: { flex: 1, fontSize: 11, fontWeight: '700', color: '#0d47a1', textAlign: 'right' },
-  thIdx: { width: 32, fontSize: 11, fontWeight: '700', color: '#0d47a1', textAlign: 'right' },
-  thName: { fontSize: 11, fontWeight: '700', color: '#0d47a1', textAlign: 'right' },
-  tableRow: { flexDirection: 'row-reverse', padding: 10, gap: 6, alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#f0f3f7' },
-  td: { flex: 1, fontSize: 12, color: '#333', textAlign: 'right' },
-  tdIdx: { width: 32, fontSize: 11, color: '#90a4ae', fontWeight: '700', textAlign: 'right' },
-  tdName: { fontSize: 13, fontWeight: '600', color: '#0d47a1', textAlign: 'right' },
-  yearBadge: { backgroundColor: '#fff3e0', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, borderWidth: 1, borderColor: '#ef6c00' },
-  yearBadgeText: { fontSize: 11, fontWeight: '700', color: '#ef6c00' },
-  tdActions: { flexDirection: 'row-reverse', gap: 6, justifyContent: 'flex-end' },
-  editBtn: { padding: 6, borderRadius: 6, backgroundColor: '#e3f2fd', borderWidth: 1, borderColor: '#bbdefb' },
-  restoreBtn: { padding: 6, borderRadius: 6, backgroundColor: '#fff3e0', borderWidth: 1, borderColor: '#ffe0b2' },
+  yearChipCountActive: { backgroundColor: '#fff' },
+  yearChipCountText: { fontSize: 11, fontWeight: '700', color: '#1565c0' },
 
-  // Modal
+  // Filter card
+  filterCard: {
+    backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16,
+    borderWidth: 1, borderColor: '#e7ebf1',
+  },
+  filterGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12, alignItems: 'flex-end' },
+  filterField: { minWidth: 160, flex: 1 },
+  filterFieldWide: { minWidth: 220, flex: 1.4 },
+  filterLabel: { fontSize: 12, color: '#5b6678', fontWeight: '600', textAlign: 'right', marginBottom: 6 },
+  fieldInput: {
+    backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
+    fontSize: 14, color: '#1a2540', textAlign: 'right',
+    borderWidth: 1, borderColor: '#d6dde6',
+  },
+  searchInputWrap: { position: 'relative' },
+  searchIcon: { position: 'absolute' as any, right: 12, top: 13, zIndex: 1 },
+  searchInput: {
+    backgroundColor: '#fff', borderRadius: 8,
+    paddingHorizontal: 12, paddingVertical: 10, paddingRight: 36,
+    fontSize: 14, color: '#1a2540', textAlign: 'right',
+    borderWidth: 1, borderColor: '#d6dde6',
+  },
+  filterActions: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  applyBtn: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 6,
+    backgroundColor: '#1565c0', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8,
+  },
+  applyBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
+  resetBtn: {
+    flexDirection: 'row-reverse', alignItems: 'center', gap: 5,
+    backgroundColor: '#f4f6fa', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 8,
+    borderWidth: 1, borderColor: '#d6dde6',
+  },
+  resetBtnText: { color: '#5b6678', fontWeight: '700', fontSize: 13 },
+
+  // Table
+  tableCard: {
+    backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden',
+    borderWidth: 1, borderColor: '#e7ebf1',
+  },
+  tableHeader: {
+    flexDirection: 'row-reverse', backgroundColor: '#0d47a1',
+    paddingVertical: 14, paddingHorizontal: 12, gap: 8, alignItems: 'center',
+  },
+  th: { flex: 1, fontSize: 13, fontWeight: '700', color: '#fff', textAlign: 'right' },
+  th_idx: { width: 32, fontSize: 13, fontWeight: '700', color: '#fff', textAlign: 'center' },
+  tr: {
+    flexDirection: 'row-reverse', alignItems: 'center',
+    paddingVertical: 12, paddingHorizontal: 12, gap: 8,
+    borderBottomWidth: 1, borderBottomColor: '#f0f3f7',
+  },
+  td: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right' },
+  td_idx: { width: 32, fontSize: 12, color: '#8a95a8', fontWeight: '700', textAlign: 'center' },
+  td_cell: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 8 },
+  td_name: { fontSize: 14, fontWeight: '700', color: '#0d47a1', flex: 1, textAlign: 'right' },
+  td_text: { fontSize: 13, color: '#1a2540', flex: 1, textAlign: 'right' },
+  avatarMini: {
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: '#e3f2fd', alignItems: 'center', justifyContent: 'center',
+  },
+  entityIcon: {
+    width: 24, height: 24, borderRadius: 12,
+    backgroundColor: '#f0f3f7', alignItems: 'center', justifyContent: 'center',
+  },
+  yearBadge: {
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#bbdefb',
+    paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6,
+  },
+  yearBadgeText: { fontSize: 12, fontWeight: '700', color: '#1565c0' },
+  gradeBadge: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 6, borderWidth: 1 },
+  gradeBadgeText: { fontSize: 12, fontWeight: '700' },
+  tdActions: { flexDirection: 'row-reverse', gap: 6, justifyContent: 'flex-end' },
+  iconBtnBlue: {
+    width: 30, height: 30, borderRadius: 6,
+    backgroundColor: '#e3f2fd', alignItems: 'center', justifyContent: 'center',
+  },
+  iconBtnOrange: {
+    width: 30, height: 30, borderRadius: 6,
+    backgroundColor: '#f5f7fa', borderWidth: 1, borderColor: '#e0e7ee',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  // Empty
+  emptyBox: {
+    backgroundColor: '#fff', padding: 60, borderRadius: 12, alignItems: 'center', gap: 10,
+    borderWidth: 1, borderColor: '#e7ebf1',
+  },
+  emptyText: { fontSize: 16, color: '#5b6678', fontWeight: '700' },
+  emptyHint: { fontSize: 12, color: '#8a95a8' },
+
+  // Pagination
+  paginationBar: {
+    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 4, paddingVertical: 14, gap: 12, flexWrap: 'wrap',
+  },
+  paginationLeft: { flex: 1, alignItems: 'flex-end' },
+  paginationCenter: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
+  paginationRight: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', gap: 8, justifyContent: 'flex-start' },
+  paginationInfo: { fontSize: 12, color: '#5b6678' },
+  pageArrow: {
+    width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#d6dde6',
+  },
+  pageNum: {
+    width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center',
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#d6dde6',
+  },
+  pageNumActive: { backgroundColor: '#0d47a1', borderColor: '#0d47a1' },
+  pageNumText: { fontSize: 13, fontWeight: '700', color: '#5b6678' },
+  pageNumTextActive: { color: '#fff' },
+
+  // Modal (reused from previous)
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 16 },
   modalContent: { backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: 560, maxHeight: '90%', overflow: 'hidden' },
   modalHeader: {
@@ -676,11 +925,6 @@ const styles = StyleSheet.create({
   editStudentName: { fontSize: 14, fontWeight: '700', color: '#0d47a1', textAlign: 'right' },
   editStudentMeta: { fontSize: 11, color: '#5b6678', textAlign: 'right', marginTop: 3 },
   fieldLabel: { fontSize: 13, fontWeight: '600', color: '#1a2540', marginBottom: 5, textAlign: 'right' },
-  fieldInput: {
-    backgroundColor: '#fff', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 10,
-    fontSize: 14, color: '#1a2540', textAlign: 'right',
-    borderWidth: 1, borderColor: '#d6dde6',
-  },
   segBtn: { flex: 1, paddingVertical: 10, borderRadius: 8, borderWidth: 1.5, borderColor: '#d6dde6', backgroundColor: '#fff', alignItems: 'center' },
   segBtnActive: { borderColor: '#0d47a1', backgroundColor: '#0d47a1' },
   segBtnText: { color: '#5b6678', fontSize: 12.5, fontWeight: '700' },
