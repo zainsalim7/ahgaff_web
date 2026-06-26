@@ -175,6 +175,7 @@ export default function StudentDetailsScreen() {
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifForm, setNotifForm] = useState({ title: '', message: '', type: 'warning' });
   const [sendingNotif, setSendingNotif] = useState(false);
+  const [notifsExpanded, setNotifsExpanded] = useState(false); // 🆕 مطوي افتراضياً
 
   // ============== Fetch ==============
   const fetchStudent = useCallback(async () => {
@@ -1058,24 +1059,49 @@ export default function StudentDetailsScreen() {
           )}
         </View>
 
-        {/* ============ 🆕 سجل الإشعارات/الإنذارات ============ */}
+        {/* ============ 🆕 سجل الإشعارات/الإنذارات — قابل للطي ============ */}
         <View style={styles.sectionCard}>
-          <View style={styles.sectionCardHeader}>
-            <Text style={styles.sectionCardTitle}>سجل الإشعارات</Text>
-            <Text style={styles.sectionSubCount}>{studentNotifications.length} إشعار</Text>
-          </View>
-          {notifsLoading ? (
-            <View style={{ paddingVertical: 20, alignItems: 'center' }}>
-              <ActivityIndicator size="small" color="#f57f17" />
+          <TouchableOpacity
+            style={styles.sectionCardHeader}
+            onPress={() => setNotifsExpanded(v => !v)}
+            activeOpacity={0.7}
+            testID="toggle-notifs-section"
+          >
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flex: 1 }}>
+              <Ionicons
+                name={notifsExpanded ? 'chevron-down' : 'chevron-back'}
+                size={18}
+                color="#5b6678"
+              />
+              <Text style={styles.sectionCardTitle}>سجل الإشعارات</Text>
+              {/* شارة عدد الإشعارات */}
+              <View style={styles.notifCountChip}>
+                <Text style={styles.notifCountChipText}>{studentNotifications.length}</Text>
+              </View>
+              {/* شارة الإشعارات غير المقروءة */}
+              {studentNotifications.filter(n => !n.is_read).length > 0 && (
+                <View style={styles.notifUnreadChip}>
+                  <Text style={styles.notifUnreadChipText}>
+                    {studentNotifications.filter(n => !n.is_read).length} جديد
+                  </Text>
+                </View>
+              )}
             </View>
-          ) : studentNotifications.length === 0 ? (
-            <View style={styles.emptyBox}>
-              <Ionicons name="notifications-off-outline" size={48} color="#cfd6e1" />
-              <Text style={styles.emptyText}>لا توجد إشعارات لهذا الطالب</Text>
-            </View>
-          ) : (
-            <View style={{ gap: 10, paddingHorizontal: 14, paddingBottom: 14 }}>
-              {studentNotifications.map((n) => {
+          </TouchableOpacity>
+          {notifsExpanded && (
+            <>
+              {notifsLoading ? (
+                <View style={{ paddingVertical: 20, alignItems: 'center' }}>
+                  <ActivityIndicator size="small" color="#f57f17" />
+                </View>
+              ) : studentNotifications.length === 0 ? (
+                <View style={styles.emptyBox}>
+                  <Ionicons name="notifications-off-outline" size={48} color="#cfd6e1" />
+                  <Text style={styles.emptyText}>لا توجد إشعارات لهذا الطالب</Text>
+                </View>
+              ) : (
+                <View style={{ gap: 10, paddingHorizontal: 14, paddingBottom: 14 }}>
+                  {studentNotifications.map((n) => {
                 const color =
                   n.type === 'warning' ? '#f57f17'
                   : n.type === 'absence' ? '#c62828'
@@ -1133,6 +1159,8 @@ export default function StudentDetailsScreen() {
                 );
               })}
             </View>
+          )}
+            </>
           )}
         </View>
 
@@ -1998,6 +2026,23 @@ const styles = StyleSheet.create({
 
   // الإشعارات
   sectionSubCount: { fontSize: 12, color: '#5b6678', fontWeight: '500' },
+  // شارات داخل رأس قسم الإشعارات
+  notifCountChip: {
+    backgroundColor: '#eef1f6',
+    paddingHorizontal: 9,
+    paddingVertical: 2,
+    borderRadius: 10,
+    minWidth: 22,
+    alignItems: 'center',
+  },
+  notifCountChipText: { fontSize: 11, fontWeight: '700', color: '#5b6678' },
+  notifUnreadChip: {
+    backgroundColor: '#fbe9e7',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+  },
+  notifUnreadChipText: { fontSize: 10, fontWeight: '700', color: '#d84315' },
   notifCard: {
     backgroundColor: '#fff8e1',
     borderRadius: 10,
