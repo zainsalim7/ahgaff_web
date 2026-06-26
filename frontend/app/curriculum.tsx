@@ -19,10 +19,15 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import api, { API_URL } from '../src/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 
 export default function CurriculumScreen() {
   const params = useLocalSearchParams<{ departmentId?: string }>();
   const router = useRouter();
+  const { user, hasPermission } = useAuth();
+  // 🔐 تحديد صلاحيات الإدارة (إضافة/تعديل/حذف/توليد/استيراد/مسح)
+  // المستخدم بصلاحية "العرض فقط" يرى الخطة ويصدّرها لكن لا يستطيع التعديل
+  const canManage = user?.role === 'admin' || hasPermission(PERMISSIONS.MANAGE_CURRICULUM);
   const [departments, setDepartments] = useState<any[]>([]);
   const [selectedDept, setSelectedDept] = useState<string>(params.departmentId || '');
   const [grid, setGrid] = useState<any>(null);
@@ -483,15 +488,23 @@ export default function CurriculumScreen() {
               </View>
 
               <View style={styles.pageHeaderActions}>
-                <TouchableOpacity
-                  style={[styles.headerBtn, styles.btnPrimary]}
-                  onPress={() => setShowAdd(true)}
-                  testID="add-curr-btn"
-                  disabled={!selectedDept}
-                >
-                  <Ionicons name="add" size={16} color="#fff" />
-                  <Text style={styles.btnPrimaryText}>إضافة مقرر</Text>
-                </TouchableOpacity>
+                {canManage && (
+                  <TouchableOpacity
+                    style={[styles.headerBtn, styles.btnPrimary]}
+                    onPress={() => setShowAdd(true)}
+                    testID="add-curr-btn"
+                    disabled={!selectedDept}
+                  >
+                    <Ionicons name="add" size={16} color="#fff" />
+                    <Text style={styles.btnPrimaryText}>إضافة مقرر</Text>
+                  </TouchableOpacity>
+                )}
+                {!canManage && (
+                  <View style={[styles.headerBtn, { backgroundColor: '#e0f2f1', borderWidth: 1, borderColor: '#26a69a' }]} testID="view-only-badge">
+                    <Ionicons name="eye" size={14} color="#00695c" />
+                    <Text style={{ color: '#00695c', fontSize: 12, fontWeight: '700' }}>وضع العرض فقط</Text>
+                  </View>
+                )}
                 <TouchableOpacity style={[styles.headerBtn, styles.btnGhost]} onPress={() => fetchGrid()}>
                   <Ionicons name="refresh" size={16} color="#1a2540" />
                   <Text style={styles.btnGhostText}>تحديث</Text>
@@ -577,40 +590,50 @@ export default function CurriculumScreen() {
             <View style={styles.toolbarCard}>
               <Text style={styles.toolbarTitle}>إجراءات الخطة</Text>
               <View style={styles.toolbarGrid}>
-                <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#e3f2fd' }]} onPress={downloadTemplate} testID="dl-template-btn">
-                  <Ionicons name="download" size={18} color="#1565c0" />
-                  <Text style={[styles.toolBtnText, { color: '#1565c0' }]}>تحميل نموذج Excel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#e8f5e9' }]} onPress={pickAndPreview} disabled={uploading} testID="upload-excel-btn">
-                  {uploading ? <ActivityIndicator size="small" color="#2e7d32" /> : <Ionicons name="cloud-upload" size={18} color="#2e7d32" />}
-                  <Text style={[styles.toolBtnText, { color: '#2e7d32' }]}>رفع من Excel</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toolBtn, { backgroundColor: '#fff3e0' }]}
-                  onPress={() => setShowImport(true)}
-                  testID="open-import-btn"
-                  disabled={archives.length === 0}
-                >
-                  <Ionicons name="archive" size={18} color="#ef6c00" />
-                  <Text style={[styles.toolBtnText, { color: '#ef6c00' }]}>استيراد من أرشيف</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.toolBtn, { backgroundColor: '#e1f5fe' }]}
-                  onPress={() => generateOfferings()}
-                  disabled={generating || !activeSemester}
-                  testID="gen-offerings-btn"
-                >
-                  {generating ? <ActivityIndicator size="small" color="#0277bd" /> : <Ionicons name="play-circle" size={18} color="#0277bd" />}
-                  <Text style={[styles.toolBtnText, { color: '#0277bd' }]}>توليد للفصل النشط</Text>
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#ffebee' }]} onPress={wipeDepartment} testID="wipe-dept-btn">
-                  <Ionicons name="trash" size={18} color="#c62828" />
-                  <Text style={[styles.toolBtnText, { color: '#c62828' }]}>مسح خطة القسم</Text>
-                </TouchableOpacity>
-                {/* 🆕 زر تصدير الخطة */}
+                {canManage && (
+                  <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#e3f2fd' }]} onPress={downloadTemplate} testID="dl-template-btn">
+                    <Ionicons name="download" size={18} color="#1565c0" />
+                    <Text style={[styles.toolBtnText, { color: '#1565c0' }]}>تحميل نموذج Excel</Text>
+                  </TouchableOpacity>
+                )}
+                {canManage && (
+                  <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#e8f5e9' }]} onPress={pickAndPreview} disabled={uploading} testID="upload-excel-btn">
+                    {uploading ? <ActivityIndicator size="small" color="#2e7d32" /> : <Ionicons name="cloud-upload" size={18} color="#2e7d32" />}
+                    <Text style={[styles.toolBtnText, { color: '#2e7d32' }]}>رفع من Excel</Text>
+                  </TouchableOpacity>
+                )}
+                {canManage && (
+                  <TouchableOpacity
+                    style={[styles.toolBtn, { backgroundColor: '#fff3e0' }]}
+                    onPress={() => setShowImport(true)}
+                    testID="open-import-btn"
+                    disabled={archives.length === 0}
+                  >
+                    <Ionicons name="archive" size={18} color="#ef6c00" />
+                    <Text style={[styles.toolBtnText, { color: '#ef6c00' }]}>استيراد من أرشيف</Text>
+                  </TouchableOpacity>
+                )}
+                {canManage && (
+                  <TouchableOpacity
+                    style={[styles.toolBtn, { backgroundColor: '#e1f5fe' }]}
+                    onPress={() => generateOfferings()}
+                    disabled={generating || !activeSemester}
+                    testID="gen-offerings-btn"
+                  >
+                    {generating ? <ActivityIndicator size="small" color="#0277bd" /> : <Ionicons name="play-circle" size={18} color="#0277bd" />}
+                    <Text style={[styles.toolBtnText, { color: '#0277bd' }]}>توليد للفصل النشط</Text>
+                  </TouchableOpacity>
+                )}
+                {canManage && (
+                  <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#ffebee' }]} onPress={wipeDepartment} testID="wipe-dept-btn">
+                    <Ionicons name="trash" size={18} color="#c62828" />
+                    <Text style={[styles.toolBtnText, { color: '#c62828' }]}>مسح خطة القسم</Text>
+                  </TouchableOpacity>
+                )}
+                {/* 🆕 زر تصدير الخطة — متاح للجميع (بمن فيهم مستخدمي العرض فقط) */}
                 <TouchableOpacity style={[styles.toolBtn, { backgroundColor: '#f3e5f5' }]} onPress={() => setShowExportModal(true)} testID="export-curriculum-btn" disabled={!selectedDept}>
                   <Ionicons name="document-text" size={18} color="#6a1b9a" />
-                  <Text style={[styles.toolBtnText, { color: '#6a1b9a' }]}>تصدير الخطة</Text>
+                  <Text style={[styles.toolBtnText, { color: '#6a1b9a' }]}>تصدير / طباعة الخطة</Text>
                 </TouchableOpacity>
               </View>
               {activeSemester && (
@@ -630,8 +653,8 @@ export default function CurriculumScreen() {
                 )}
               </View>
 
-              {/* 🆕 شريط الحذف المتعدد - يظهر فقط عند الاختيار */}
-              {selectedIds.size > 0 && (
+              {/* 🆕 شريط الحذف المتعدد - يظهر فقط عند الاختيار (وفقط لمن يملك صلاحية الإدارة) */}
+              {canManage && selectedIds.size > 0 && (
                 <View style={{
                   flexDirection: 'row-reverse',
                   alignItems: 'center',
@@ -677,13 +700,15 @@ export default function CurriculumScreen() {
                 <View style={styles.center}>
                   <Ionicons name="document-text-outline" size={48} color="#cfd6e1" />
                   <Text style={styles.emptyText}>لا توجد مقررات في الخطة بعد</Text>
-                  <TouchableOpacity
-                    style={[styles.headerBtn, styles.btnPrimary, { marginTop: 10 }]}
-                    onPress={() => setShowAdd(true)}
-                  >
-                    <Ionicons name="add" size={16} color="#fff" />
-                    <Text style={styles.btnPrimaryText}>إضافة أول مقرر</Text>
-                  </TouchableOpacity>
+                  {canManage && (
+                    <TouchableOpacity
+                      style={[styles.headerBtn, styles.btnPrimary, { marginTop: 10 }]}
+                      onPress={() => setShowAdd(true)}
+                    >
+                      <Ionicons name="add" size={16} color="#fff" />
+                      <Text style={styles.btnPrimaryText}>إضافة أول مقرر</Text>
+                    </TouchableOpacity>
+                  )}
                 </View>
               ) : (
                 <View style={{ padding: 14 }}>
@@ -703,13 +728,13 @@ export default function CurriculumScreen() {
                       <View style={styles.termsRow}>
                         <TermColumn label="الفصل الأول" courses={row.term1} onDelete={deleteCourse}
                           sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#1565c0"
-                          selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage} />
                         <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse}
                           sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#6a1b9a"
-                          selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage} />
                         <TermColumn label="الفصل الصيفي" courses={row.term3 || []} onDelete={deleteCourse}
                           sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#ef6c00"
-                          selectedIds={selectedIds} onToggleSelect={toggleSelect} />
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage} />
                       </View>
                     </View>
                   ))}
@@ -1226,7 +1251,7 @@ export default function CurriculumScreen() {
   );
 }
 
-const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor, selectedIds, onToggleSelect }: any) => (
+const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor, selectedIds, onToggleSelect, canManage = true }: any) => (
   <View style={styles.termCol}>
     <View style={[styles.termHeader, { borderBottomColor: accentColor }]}>
       <View style={[styles.termHeaderDot, { backgroundColor: accentColor }]} />
@@ -1243,8 +1268,8 @@ const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, acc
         const isSelected = selectedIds?.has(c.id) || false;
         return (
         <View key={c.id} style={[styles.courseCard, isSelected && { backgroundColor: '#fff3e0', borderColor: '#ef6c00' }]} testID={`curr-${c.id}`}>
-          {/* 🆕 Checkbox للحذف المتعدد */}
-          {onToggleSelect && (
+          {/* 🆕 Checkbox للحذف المتعدد — يظهر فقط لمن يملك صلاحية الإدارة */}
+          {canManage && onToggleSelect && (
             <TouchableOpacity
               onPress={() => onToggleSelect(c.id)}
               testID={`chk-${c.id}`}
@@ -1281,23 +1306,27 @@ const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, acc
           </View>
           <View style={styles.sectionsBoxWrap} testID={`sections-wrap-${c.id}`}>
             <TextInput
-              style={styles.sectionsBox}
+              style={[styles.sectionsBox, !canManage && { backgroundColor: '#f1f5f9', color: '#64748b' }]}
               placeholder="1"
               placeholderTextColor="#cfd6e1"
               keyboardType="numeric"
               maxLength={2}
               value={sectionsMap?.[c.id] ?? ''}
               onChangeText={(v) => {
+                if (!canManage) return;
                 const cleaned = v.replace(/[^0-9]/g, '');
                 setSectionsMap?.((prev: any) => ({ ...prev, [c.id]: cleaned }));
               }}
+              editable={canManage}
               testID={`sections-input-${c.id}`}
             />
             <Text style={styles.sectionsBoxLabel}>شعب</Text>
           </View>
-          <TouchableOpacity onPress={() => onDelete(c.id, c.name)} testID={`del-${c.id}`} style={styles.delBtn}>
-            <Ionicons name="trash-outline" size={15} color="#c62828" />
-          </TouchableOpacity>
+          {canManage && (
+            <TouchableOpacity onPress={() => onDelete(c.id, c.name)} testID={`del-${c.id}`} style={styles.delBtn}>
+              <Ionicons name="trash-outline" size={15} color="#c62828" />
+            </TouchableOpacity>
+          )}
         </View>
         );
       })
