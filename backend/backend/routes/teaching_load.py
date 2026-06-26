@@ -729,8 +729,9 @@ async def _get_export_data(
         for c in docs:
             courses_map[str(c["_id"])] = c
 
-    # خريطة dept→faculty_id لاستنتاج كلية المقرر/المعلم عند الحاجة
-    dept_to_faculty: dict = {}
+    # خريطة dept→(faculty_id, name) ومخرج names للكليات لاستنتاج كلية المقرر/المعلم عند الحاجة
+    dept_info: dict = {}  # dept_id -> {"faculty_id": str, "name": str}
+    fac_names: dict = {}  # faculty_id -> name
     all_dept_ids = set()
     for t in teachers_map.values():
         if t.get("department_id"):
@@ -742,10 +743,29 @@ async def _get_export_data(
         try:
             async for d in db.departments.find(
                 {"_id": {"$in": [ObjectId(x) for x in all_dept_ids if x]}},
-                {"faculty_id": 1},
+                {"faculty_id": 1, "name": 1},
             ):
-                if d.get("faculty_id"):
-                    dept_to_faculty[str(d["_id"])] = str(d["faculty_id"])
+                dept_info[str(d["_id"])] = {
+                    "faculty_id": str(d.get("faculty_id") or ""),
+                    "name": (d.get("name", "") or "").strip(),
+                }
+        except Exception:
+            pass
+    all_fac_ids = {v["faculty_id"] for v in dept_info.values() if v.get("faculty_id")}
+    # أضف faculty_id من سجلات المعلمين/المقررات نفسها (لو كانت موجودة على الكيان)
+    for t in teachers_map.values():
+        if t.get("faculty_id"):
+            all_fac_ids.add(str(t["faculty_id"]))
+    for c in courses_map.values():
+        if c.get("faculty_id"):
+            all_fac_ids.add(str(c["faculty_id"]))
+    if all_fac_ids:
+        try:
+            async for f in db.faculties.find(
+                {"_id": {"$in": [ObjectId(x) for x in all_fac_ids if x]}},
+                {"name": 1},
+            ):
+                fac_names[str(f["_id"])] = (f.get("name", "") or "").strip()
         except Exception:
             pass
 
@@ -755,8 +775,8 @@ async def _get_export_data(
         if fid:
             return str(fid)
         did = entity.get("department_id")
-        if did:
-            return dept_to_faculty.get(str(did), "")
+        if did and str(did) in dept_info:
+            return dept_info[str(did)].get("faculty_id") or ""
         return ""
 
     # تجميع حسب المعلم
@@ -767,16 +787,18 @@ async def _get_export_data(
         course = courses_map.get(load["course_id"], {})
         wh = load.get("weekly_hours", 0)
 
-        # 🆕 حساب ملاحظات التكليف خارج القسم/الكلية
+        # 🆕 حساب ملاحظات التكليف خارج القسم/الكلية (مع ذكر الاسم)
         note = ""
         t_dept = str(teacher.get("department_id") or "")
         c_dept = str(course.get("department_id") or "")
         t_fac = _resolve_faculty(teacher)
         c_fac = _resolve_faculty(course)
         if t_fac and c_fac and t_fac != c_fac:
-            note = "⚑ من كلية أخرى"
+            c_fac_name = fac_names.get(c_fac, "")
+            note = f"⚑ من كلية: {c_fac_name}" if c_fac_name else "⚑ من كلية أخرى"
         elif t_dept and c_dept and t_dept != c_dept:
-            note = "↻ من قسم آخر"
+            c_dept_name = dept_info.get(c_dept, {}).get("name", "")
+            note = f"↻ من قسم: {c_dept_name}" if c_dept_name else "↻ من قسم آخر"
 
         if tid not in grouped:
             grouped[tid] = {
@@ -1260,8 +1282,8 @@ async def export_teaching_load_excel(
 
     cur = 4  # نبدأ كتل المعلمين من الصف 4
 
-    # عرض الأعمدة (مناسب للنص العربي) - 7 أعمدة: المقرر | المستوى | الرمز | الشعبة | ساعات أسبوعية | الساعات | ملاحظات
-    widths = [26, 11, 13, 11, 15, 16, 18]
+    # عرض الأعمدة - 7 أعمدة: الرمز | المقرر | المستوى | الشعبة | ساعات أسبوعية | الساعات | ملاحظات
+    widths = [13, 26, 11, 11, 15, 16, 22]
     for col_idx, w in enumerate(widths, start=1):
         ws.column_dimensions[chr(64 + col_idx)].width = w
 
@@ -1270,17 +1292,24 @@ async def export_teaching_load_excel(
         ws.cell(row=cur, column=1, value="لا توجد بيانات").alignment = center
     else:
         for block in grouped:
-            # ---- صف عنوان المعلم (دمج كامل + نص بصيغة "المعلم : ...  الرقم الوظيفي : ...") ----
-            heading_text = f"المعلم : {block['teacher_name'] or '-'}          الرقم الوظيفي : {block['employee_id'] or '-'}"
-            ws.merge_cells(start_row=cur, end_row=cur, start_column=1, end_column=NUM_COLS)
-            head_cell = ws.cell(row=cur, column=1, value=heading_text)
-            head_cell.font = Font(bold=True, size=12, color='1A2540')
-            head_cell.alignment = right
+            # ---- صف عنوان المعلم: خليتان (يمين: المعلم/الاسم, يسار: الرقم الوظيفي/الرقم) ----
+            # نقسم الصف على عمود 4 (الشعبة) كنقطة وسطية تقريبية
+            mid = 4
+            # خلية يمين (المعلم): الأعمدة 1..mid
+            ws.merge_cells(start_row=cur, end_row=cur, start_column=1, end_column=mid)
+            right_cell = ws.cell(row=cur, column=1, value=f"المعلم : {block['teacher_name'] or '-'}")
+            right_cell.font = Font(bold=True, size=12, color='1A2540')
+            right_cell.alignment = right
+            # خلية يسار (الرقم الوظيفي): الأعمدة mid+1..NUM_COLS
+            ws.merge_cells(start_row=cur, end_row=cur, start_column=mid + 1, end_column=NUM_COLS)
+            left_cell = ws.cell(row=cur, column=mid + 1, value=f"الرقم الوظيفي : {block['employee_id'] or '-'}")
+            left_cell.font = Font(bold=True, size=12, color='1A2540')
+            left_cell.alignment = right
             ws.row_dimensions[cur].height = 24
             cur += 1
 
             # ---- Row: Courses Header (blue) ----
-            headers = ["المقرر", "المستوى", "الرمز", "الشعبة", "ساعات أسبوعية", f"الساعات ({weeks})", "ملاحظات"]
+            headers = ["الرمز", "المقرر", "المستوى", "الشعبة", "ساعات أسبوعية", f"الساعات ({weeks})", "ملاحظات"]
             for i, h in enumerate(headers, start=1):
                 ws.cell(row=cur, column=i, value=h)
             style_row(cur, fill=BLUE, font=WHITE_BOLD)
@@ -1291,15 +1320,15 @@ async def export_teaching_load_excel(
             for course in block["courses"]:
                 lvl = course.get("level")
                 lvl_text = f"المستوى {lvl}" if lvl else "-"
-                ws.cell(row=cur, column=1, value=course["course_name"] or "-")
-                ws.cell(row=cur, column=2, value=lvl_text)
-                ws.cell(row=cur, column=3, value=course["course_code"] or "-")
+                ws.cell(row=cur, column=1, value=course["course_code"] or "-")
+                ws.cell(row=cur, column=2, value=course["course_name"] or "-")
+                ws.cell(row=cur, column=3, value=lvl_text)
                 ws.cell(row=cur, column=4, value=course["section"] or "-")
                 ws.cell(row=cur, column=5, value=course["weekly_hours"])
                 ws.cell(row=cur, column=6, value=course["total_hours"])
                 ws.cell(row=cur, column=7, value=course.get("note") or "")
                 style_row(cur)
-                ws.cell(row=cur, column=1).alignment = right
+                ws.cell(row=cur, column=2).alignment = right
                 # تلوين خانة الملاحظات إذا كانت غير فارغة
                 if course.get("note"):
                     note_cell = ws.cell(row=cur, column=7)
@@ -1308,13 +1337,15 @@ async def export_teaching_load_excel(
                 cur += 1
 
             # ---- Row: Total ----
-            ws.cell(row=cur, column=1, value="*** الإجمالي ***")
-            for col_i in range(2, 5):
+            ws.cell(row=cur, column=1, value="")
+            ws.cell(row=cur, column=2, value="*** الإجمالي ***")
+            for col_i in range(3, 5):
                 ws.cell(row=cur, column=col_i, value="")
             ws.cell(row=cur, column=5, value=block["total_weekly"])
             ws.cell(row=cur, column=6, value=block["total_semester"])
             ws.cell(row=cur, column=7, value="")
             style_row(cur, fill=LIGHT_BLUE, font=BOLD)
+            ws.cell(row=cur, column=2).alignment = right
             cur += 1
 
             # ---- Empty separator row ----
@@ -1465,34 +1496,39 @@ async def export_teaching_load_pdf(
         # عرض الجدول الموحد لكل المعلمين
         total_w = doc.width
         # ترتيب الأعمدة على PDF (من اليسار → اليمين بصرياً):
-        # [ملاحظات | الساعات | ساعات أسبوعية | الشعبة | الرمز | المستوى | المقرر]
+        # [ملاحظات | الساعات (16) | ساعات أسبوعية | الشعبة | المستوى | المقرر | الرمز]
+        # (الترتيب RTL: الرمز يمين الصفحة، الملاحظات يسارها)
         col_widths = [
-            total_w * 0.16,  # ملاحظات
-            total_w * 0.11,  # الساعات
+            total_w * 0.18,  # ملاحظات
+            total_w * 0.10,  # الساعات
             total_w * 0.11,  # ساعات أسبوعية
             total_w * 0.08,  # الشعبة
-            total_w * 0.12,  # الرمز
             total_w * 0.11,  # المستوى
-            total_w * 0.31,  # المقرر
+            total_w * 0.30,  # المقرر (اسم)
+            total_w * 0.12,  # الرمز
         ]
-
-        # ستايل خاص لعنوان المعلم
-        teacher_heading_style = ParagraphStyle(
-            'TeacherHeading', parent=styles['Normal'],
-            fontName=arabic_font, fontSize=13, alignment=TA_RIGHT,
-            textColor=colors.HexColor('#1a2540'), spaceBefore=2, spaceAfter=4, leading=18,
-        )
 
         for block in grouped:
             block_elements = []
 
-            # --- عنوان المعلم (نص بصيغة "المعلم : ...   الرقم الوظيفي : ...") ---
-            heading_html = (
-                f"<b>المعلم :</b> {block['teacher_name'] or '-'}"
-                f" &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp; &nbsp;"
-                f"<b>الرقم الوظيفي :</b> {block['employee_id'] or '-'}"
-            )
-            block_elements.append(Paragraph(ar(heading_html), teacher_heading_style))
+            # --- صف عنوان المعلم: جدول من خليتين (RTL: يمين=المعلم, يسار=الرقم الوظيفي) ---
+            # ReportLab يضع index 0 على اليسار، لذا لجعل "المعلم" يظهر يميناً نضعه في index 1
+            teacher_heading_row = [[
+                ar(f"الرقم الوظيفي : {block['employee_id'] or '-'}"),
+                ar(f"المعلم : {block['teacher_name'] or '-'}"),
+            ]]
+            th_table = Table(teacher_heading_row, colWidths=[total_w * 0.4, total_w * 0.6])
+            th_table.setStyle(TableStyle([
+                ('FONTNAME', (0, 0), (-1, -1), arabic_font),
+                ('FONTSIZE', (0, 0), (-1, -1), 12),
+                ('TEXTCOLOR', (0, 0), (-1, -1), colors.HexColor('#1a2540')),
+                ('ALIGN', (0, 0), (0, 0), 'LEFT'),   # الرقم الوظيفي يساراً
+                ('ALIGN', (1, 0), (1, 0), 'RIGHT'),  # المعلم يميناً
+                ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            block_elements.append(th_table)
 
             # --- جدول المقررات (رأس أزرق + صفوف + إجمالي) ---
             data = []
@@ -1502,9 +1538,9 @@ async def export_teaching_load_pdf(
                 ar(f"الساعات ({weeks})"),
                 ar("ساعات أسبوعية"),
                 ar("الشعبة"),
-                ar("الرمز"),
                 ar("المستوى"),
                 ar("المقرر"),
+                ar("الرمز"),
             ])
             # Courses
             note_row_indices = []
@@ -1519,9 +1555,9 @@ async def export_teaching_load_pdf(
                     str(c["total_hours"]),
                     str(c["weekly_hours"]),
                     ar(c["section"] or "-"),
-                    ar(c["course_code"] or "-"),
                     ar(lvl_text),
                     ar(c["course_name"] or "-"),
+                    ar(c["course_code"] or "-"),
                 ])
             # Total row
             data.append([
@@ -1530,8 +1566,8 @@ async def export_teaching_load_pdf(
                 str(block["total_weekly"]),
                 "",
                 "",
-                "",
                 ar("*** الإجمالي ***"),
+                "",
             ])
 
             tbl = Table(data, colWidths=col_widths)
