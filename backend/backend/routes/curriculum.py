@@ -1532,7 +1532,7 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
     ws.merge_cells("A2:G2")
     ws["A3"] = (
         f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}    "
-        f"|    إجمالي الساعات الفصلية: {total_credit}    "
+        f"|    إجمالي الساعات المعتمدة: {total_credit}    "
         f"|    إجمالي الساعات الأسبوعية: {total_weekly}"
     )
     ws["A3"].font = Font(name="Arial", size=11, italic=True, color="5a6c7d")
@@ -1540,7 +1540,7 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
     ws.merge_cells("A3:G3")
 
     # رأس الأعمدة
-    headers = ["#", "المستوى", "الفصل", "الكود", "اسم المقرر", "الساعات الفصلية", "الساعات الأسبوعية"]
+    headers = ["#", "المستوى", "الفصل", "الكود", "اسم المقرر", "الساعات المعتمدة", "الساعات الأسبوعية"]
     header_row = 5
     header_fill = PatternFill("solid", fgColor="1565c0")
     header_font = Font(name="Arial", size=11, bold=True, color="FFFFFF")
@@ -1703,7 +1703,7 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
     elements.append(Paragraph(ar(f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"), info_style))
     # 🆕 شريط الإجماليات الكلية
     elements.append(Paragraph(
-        ar(f"الإجمالي الكلي للخطة:  الساعات الفصلية = {grand_credit}    •    الساعات الأسبوعية = {grand_weekly}"),
+        ar(f"الإجمالي الكلي للخطة:  الساعات المعتمدة = {grand_credit}    •    الساعات الأسبوعية = {grand_weekly}"),
         totals_style
     ))
     elements.append(Spacer(1, 6))
@@ -1742,7 +1742,7 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
             # كل (مستوى, فصل) في كتلة واحدة لا تنقسم عبر الصفحات
             block: list = []
             block.append(Paragraph(ar(f"{_term_label(tm)}  ({len(grp)} مقرر)"), section_style))
-            header = [ar(h) for h in ["الساعات الأسبوعية", "الساعات الفصلية", "اسم المقرر", "الكود", "#"]]
+            header = [ar(h) for h in ["الساعات الأسبوعية", "الساعات المعتمدة", "اسم المقرر", "الكود", "#"]]
             data = [header]
             for idx, r in enumerate(grp, start=1):
                 data.append([
