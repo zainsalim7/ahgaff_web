@@ -1508,7 +1508,7 @@ async def export_curriculum(
 
 
 def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
-    """Excel - RTL + محاذاة يمين + فواصل مستوى/فصل."""
+    """Excel - RTL + محاذاة يمين + فواصل مستوى/فصل + إجماليات."""
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
@@ -1516,6 +1516,10 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
     ws = wb.active
     ws.title = "الخطة الدراسية"
     ws.sheet_view.rightToLeft = True  # RTL
+
+    # 🆕 حساب الإجماليات
+    total_credit = sum(int(r.get("credit_hours") or 0) for r in rows)
+    total_weekly = sum(int(r.get("weekly_hours") or 0) for r in rows)
 
     # العناوين الكبيرة
     ws["A1"] = "الخطة الدراسية"
@@ -1526,7 +1530,11 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
     ws["A2"].font = Font(name="Arial", size=12, bold=True)
     ws["A2"].alignment = Alignment(horizontal="right")
     ws.merge_cells("A2:G2")
-    ws["A3"] = f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"
+    ws["A3"] = (
+        f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}    "
+        f"|    إجمالي الساعات المعتمدة: {total_credit}    "
+        f"|    إجمالي الساعات الأسبوعية: {total_weekly}"
+    )
     ws["A3"].font = Font(name="Arial", size=11, italic=True, color="5a6c7d")
     ws["A3"].alignment = Alignment(horizontal="right")
     ws.merge_cells("A3:G3")
@@ -1545,13 +1553,49 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
         cell.alignment = Alignment(horizontal="center", vertical="center")
         cell.border = border
 
-    # البيانات
+    # البيانات + إجماليات لكل فصل
     row_num = header_row + 1
     last_level = None
     last_term = None
+    group_credit = 0   # 🆕 مجموع الفصل الحالي
+    group_weekly = 0   # 🆕 مجموع الفصل الحالي
+    group_count = 0    # 🆕 عدد مقررات الفصل الحالي
+
+    def _flush_group_totals(target_row, lvl, trm, gc, gw, gcount):
+        """يكتب صف إجمالي للفصل المنتهي."""
+        if gcount == 0:
+            return target_row
+        label_cell = ws.cell(row=target_row, column=1,
+                              value=f"إجمالي المستوى {lvl} - {_term_label(trm)} ({gcount} مقرر)")
+        label_cell.font = Font(name="Arial", size=11, bold=True, color="0d47a1")
+        label_cell.fill = PatternFill("solid", fgColor="e3f2fd")
+        label_cell.alignment = Alignment(horizontal="right", vertical="center")
+        label_cell.border = border
+        ws.merge_cells(start_row=target_row, start_column=1, end_row=target_row, end_column=5)
+        # عمود ساعات معتمدة
+        c1 = ws.cell(row=target_row, column=6, value=gc)
+        c1.font = Font(name="Arial", size=11, bold=True, color="0d47a1")
+        c1.fill = PatternFill("solid", fgColor="e3f2fd")
+        c1.alignment = Alignment(horizontal="center", vertical="center")
+        c1.border = border
+        # عمود ساعات أسبوعية
+        c2 = ws.cell(row=target_row, column=7, value=gw)
+        c2.font = Font(name="Arial", size=11, bold=True, color="0d47a1")
+        c2.fill = PatternFill("solid", fgColor="e3f2fd")
+        c2.alignment = Alignment(horizontal="center", vertical="center")
+        c2.border = border
+        return target_row + 1
+
     for idx, r in enumerate(rows, start=1):
         # فاصل مستوى/فصل عند التغيير
         if last_level != r["level"] or last_term != r["term"]:
+            # أولاً: اكتب إجمالي الفصل السابق إن وجد
+            if last_level is not None:
+                row_num = _flush_group_totals(row_num, last_level, last_term, group_credit, group_weekly, group_count)
+                group_credit = 0
+                group_weekly = 0
+                group_count = 0
+
             sep = ws.cell(row=row_num, column=1,
                          value=f"المستوى {r['level']} - {_term_label(r['term'])}")
             sep.font = Font(name="Arial", size=12, bold=True, color="FFFFFF")
@@ -1568,7 +1612,37 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
             cell.border = border
             if row_num % 2 == 0:
                 cell.fill = PatternFill("solid", fgColor="f5f7fa")
+        # تراكم إجمالي الفصل الحالي
+        group_credit += int(r.get("credit_hours") or 0)
+        group_weekly += int(r.get("weekly_hours") or 0)
+        group_count += 1
         row_num += 1
+
+    # إجمالي آخر مجموعة
+    if last_level is not None:
+        row_num = _flush_group_totals(row_num, last_level, last_term, group_credit, group_weekly, group_count)
+
+    # 🆕 الإجمالي الكلي
+    if rows:
+        row_num += 1  # سطر فارغ
+        grand_label = ws.cell(row=row_num, column=1,
+                               value=f"الإجمالي الكلي للخطة ({len(rows)} مقرر)")
+        grand_label.font = Font(name="Arial", size=13, bold=True, color="FFFFFF")
+        grand_label.fill = PatternFill("solid", fgColor="2e7d32")
+        grand_label.alignment = Alignment(horizontal="right", vertical="center")
+        grand_label.border = border
+        ws.merge_cells(start_row=row_num, start_column=1, end_row=row_num, end_column=5)
+        gc = ws.cell(row=row_num, column=6, value=total_credit)
+        gc.font = Font(name="Arial", size=13, bold=True, color="FFFFFF")
+        gc.fill = PatternFill("solid", fgColor="2e7d32")
+        gc.alignment = Alignment(horizontal="center", vertical="center")
+        gc.border = border
+        gw = ws.cell(row=row_num, column=7, value=total_weekly)
+        gw.font = Font(name="Arial", size=13, bold=True, color="FFFFFF")
+        gw.fill = PatternFill("solid", fgColor="2e7d32")
+        gw.alignment = Alignment(horizontal="center", vertical="center")
+        gw.border = border
+        ws.row_dimensions[row_num].height = 30
 
     # عرض الأعمدة
     widths = [5, 10, 14, 16, 40, 14, 14]
@@ -1616,9 +1690,22 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
     title_style = ParagraphStyle("Title", fontName="Amiri", fontSize=20, leading=30, alignment=2, textColor=colors.HexColor("#0d47a1"), spaceAfter=6)
     sub_style = ParagraphStyle("Sub", fontName="Amiri", fontSize=13, leading=22, alignment=2, textColor=colors.HexColor("#1565c0"), spaceAfter=4)
     info_style = ParagraphStyle("Info", fontName="Amiri", fontSize=11, leading=18, alignment=2, textColor=colors.HexColor("#5a6c7d"), spaceAfter=10)
+    totals_style = ParagraphStyle("Totals", fontName="Amiri", fontSize=12, leading=22, alignment=2,
+                                    textColor=colors.white, backColor=colors.HexColor("#2e7d32"),
+                                    borderPadding=10, spaceBefore=4, spaceAfter=14)
+
+    # 🆕 حساب الإجمالي الكلي
+    grand_credit = sum(int(r.get("credit_hours") or 0) for r in rows)
+    grand_weekly = sum(int(r.get("weekly_hours") or 0) for r in rows)
+
     elements.append(Paragraph(ar("الخطة الدراسية"), title_style))
     elements.append(Paragraph(ar(f"الكلية: {fac_name} — القسم: {dept_name}"), sub_style))
     elements.append(Paragraph(ar(f"النطاق: {scope_label}    |    عدد المقررات: {len(rows)}"), info_style))
+    # 🆕 شريط الإجماليات الكلية
+    elements.append(Paragraph(
+        ar(f"الإجمالي الكلي للخطة:  ساعات معتمدة = {grand_credit}    •    ساعات أسبوعية = {grand_weekly}"),
+        totals_style
+    ))
     elements.append(Spacer(1, 6))
 
     # تجميع حسب المستوى ثم الفصل
@@ -1649,6 +1736,9 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
             term_groups.setdefault(tm, []).append(r)
         for tm in sorted(term_groups.keys()):
             grp = term_groups[tm]
+            # 🆕 حساب إجمالي هذا (المستوى, الفصل)
+            term_credit = sum(int(r.get("credit_hours") or 0) for r in grp)
+            term_weekly = sum(int(r.get("weekly_hours") or 0) for r in grp)
             # كل (مستوى, فصل) في كتلة واحدة لا تنقسم عبر الصفحات
             block: list = []
             block.append(Paragraph(ar(f"{_term_label(tm)}  ({len(grp)} مقرر)"), section_style))
@@ -1662,6 +1752,14 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
                     ar(r["code"] or "—"),
                     ar(str(idx)),
                 ])
+            # 🆕 صف الإجمالي
+            data.append([
+                ar(str(term_weekly)),
+                ar(str(term_credit)),
+                ar(f"إجمالي {_term_label(tm)}"),
+                ar(""),
+                ar(""),
+            ])
             table = Table(data, colWidths=[22*mm, 22*mm, 80*mm, 30*mm, 10*mm], repeatRows=1)
             table.setStyle(TableStyle([
                 ("FONTNAME", (0, 0), (-1, -1), "Amiri"),
@@ -1673,9 +1771,15 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
                 ("INNERGRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#b0bec5")),
                 ("BOX", (0, 0), (-1, -1), 0.5, colors.HexColor("#1565c0")),
-                ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f5f7fa")]),
+                ("ROWBACKGROUNDS", (0, 1), (-1, -2), [colors.white, colors.HexColor("#f5f7fa")]),
                 ("BOTTOMPADDING", (0, 0), (-1, 0), 8),
                 ("TOPPADDING", (0, 0), (-1, 0), 8),
+                # 🆕 تنسيق صف الإجمالي (آخر صف)
+                ("BACKGROUND", (0, -1), (-1, -1), colors.HexColor("#e3f2fd")),
+                ("TEXTCOLOR", (0, -1), (-1, -1), colors.HexColor("#0d47a1")),
+                ("FONTSIZE", (0, -1), (-1, -1), 12),
+                ("BOTTOMPADDING", (0, -1), (-1, -1), 6),
+                ("TOPPADDING", (0, -1), (-1, -1), 6),
             ]))
             block.append(table)
             block.append(Spacer(1, 4))
