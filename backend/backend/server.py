@@ -187,6 +187,7 @@ from routes.archive_pdf import router as archive_pdf_router
 from routes.curriculum import router as curriculum_router
 from routes.student_status import router as student_status_router
 from routes.alumni import router as alumni_router
+from routes.student_transfer import router as student_transfer_router
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -15141,7 +15142,7 @@ app.include_router(archives_router, prefix="/api")
 app.include_router(archive_pdf_router, prefix="/api")
 app.include_router(curriculum_router, prefix="/api")
 app.include_router(student_status_router, prefix="/api")
-
+app.include_router(student_transfer_router, prefix="/api")
 
 @app.on_event("startup")
 async def startup_event():

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import {
   studentsAPI,
@@ -164,6 +165,18 @@ export default function StudentDetailsScreen() {
   const [gradHonors, setGradHonors] = useState<string>('');
   const [gradNotes, setGradNotes] = useState<string>('');
   const [savingGraduate, setSavingGraduate] = useState(false);
+
+  // 🔄 Transfer Modal — نقل الطالب لكلية/قسم/مستوى/شعبة جديدة
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [transferFaculties, setTransferFaculties] = useState<any[]>([]);
+  const [transferDepts, setTransferDepts] = useState<any[]>([]);
+  const [trgFacId, setTrgFacId] = useState<string>('');
+  const [trgDeptId, setTrgDeptId] = useState<string>('');
+  const [trgLevel, setTrgLevel] = useState<string>('1');
+  const [trgSection, setTrgSection] = useState<string>('');
+  const [trgReason, setTrgReason] = useState<string>('');
+  const [savingTransfer, setSavingTransfer] = useState(false);
+  const [transferHistory, setTransferHistory] = useState<any[]>([]);
 
   // Export Excel + PDF
   const [exportingExcel, setExportingExcel] = useState(false);
@@ -463,6 +476,56 @@ export default function StudentDetailsScreen() {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل التخريج');
     } finally {
       setSavingGraduate(false);
+    }
+  };
+
+  // 🔄 نقل الطالب — فتح المودال وتحميل الكليات
+  const openTransferModal = async () => {
+    if (!student) return;
+    setTrgFacId(student.faculty_id || '');
+    setTrgDeptId(student.department_id || '');
+    setTrgLevel(String(student.level || 1));
+    setTrgSection(student.section || '');
+    setTrgReason('');
+    try {
+      const [facsRes, deptsRes, histRes] = await Promise.all([
+        api.get('/faculties'),
+        api.get('/departments'),
+        api.get(`/students/${student.id}/transfer-history`).catch(() => ({ data: { items: [] } })),
+      ]);
+      setTransferFaculties(facsRes.data || []);
+      setTransferDepts(deptsRes.data || []);
+      setTransferHistory(histRes.data?.items || []);
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل تحميل بيانات النقل');
+      return;
+    }
+    setShowTransferModal(true);
+  };
+
+  // 🔄 تنفيذ النقل
+  const handleTransfer = async () => {
+    if (!student) return;
+    if (!trgDeptId) { showMessage('خطأ', 'اختر القسم الهدف'); return; }
+    const lvl = parseInt(trgLevel);
+    if (isNaN(lvl) || lvl < 1 || lvl > 10) { showMessage('خطأ', 'المستوى غير صالح (1-10)'); return; }
+    if (!trgSection.trim()) { showMessage('خطأ', 'الشعبة مطلوبة'); return; }
+    setSavingTransfer(true);
+    try {
+      await api.post(`/students/${student.id}/transfer`, {
+        target_faculty_id: trgFacId || undefined,
+        target_department_id: trgDeptId,
+        target_level: lvl,
+        target_section: trgSection.trim(),
+        reason: trgReason.trim() || undefined,
+      });
+      showMessage('تم النقل ✅', `تم نقل "${student.full_name}" بنجاح`);
+      setShowTransferModal(false);
+      fetchStudent();
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل النقل');
+    } finally {
+      setSavingTransfer(false);
     }
   };
 
@@ -859,6 +922,17 @@ export default function StudentDetailsScreen() {
                 <Ionicons name="layers" size={18} color="#3949ab" />
                 <Text style={[styles.actionBtnText, { color: '#3949ab' }]}>تغيير المستوى</Text>
               </TouchableOpacity>
+              {/* 🔄 نقل الطالب */}
+              {!student?.is_alumni && (
+                <TouchableOpacity
+                  style={[styles.actionBtn, { backgroundColor: '#fff3e0' }]}
+                  onPress={openTransferModal}
+                  testID="transfer-student-btn"
+                >
+                  <Ionicons name="swap-horizontal" size={18} color="#e65100" />
+                  <Text style={[styles.actionBtnText, { color: '#e65100' }]}>نقل الطالب</Text>
+                </TouchableOpacity>
+              )}
               {isAccountActive ? (
                 <TouchableOpacity
                   style={[styles.actionBtn, { backgroundColor: '#ffebee' }]}
@@ -1687,6 +1761,142 @@ export default function StudentDetailsScreen() {
         </View>
       </Modal>
 
+      {/* 🔄 ============ مودال نقل الطالب ============ */}
+      <Modal
+        visible={showTransferModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowTransferModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="swap-horizontal" size={20} color="#e65100" />
+                <Text style={styles.modalTitle}>نقل الطالب</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowTransferModal(false)} testID="close-transfer-modal">
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ paddingBottom: 6 }}>
+              {/* العرض الحالي */}
+              <View style={styles.transferCurrentBox}>
+                <Text style={styles.transferSectionTitle}>الوضع الحالي</Text>
+                <Text style={styles.transferCurrentText} numberOfLines={2}>
+                  {student?.faculty_name || '—'} • {student?.department_name || '—'} • م{student?.level} • شعبة "{student?.section || '—'}"
+                </Text>
+              </View>
+
+              {/* الكلية */}
+              <Text style={styles.label}>الكلية الهدف</Text>
+              <View style={styles.pickerWrap}>
+                <Picker
+                  selectedValue={trgFacId}
+                  onValueChange={(v) => { setTrgFacId(v); setTrgDeptId(''); }}
+                  style={styles.picker as any}
+                >
+                  <Picker.Item label="-- اختر كلية --" value="" />
+                  {transferFaculties.map((f) => (
+                    <Picker.Item key={f.id} label={f.name} value={f.id} />
+                  ))}
+                </Picker>
+              </View>
+
+              {/* القسم (يُفلتر حسب الكلية) */}
+              <Text style={styles.label}>القسم الهدف</Text>
+              <View style={styles.pickerWrap}>
+                <Picker
+                  selectedValue={trgDeptId}
+                  onValueChange={(v) => setTrgDeptId(v)}
+                  style={styles.picker as any}
+                  enabled={!!trgFacId}
+                >
+                  <Picker.Item label={trgFacId ? '-- اختر قسماً --' : '-- اختر الكلية أولاً --'} value="" />
+                  {transferDepts
+                    .filter((d) => !trgFacId || d.faculty_id === trgFacId)
+                    .map((d) => (
+                      <Picker.Item key={d.id} label={d.name} value={d.id} />
+                    ))}
+                </Picker>
+              </View>
+
+              {/* المستوى + الشعبة */}
+              <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>المستوى</Text>
+                  <View style={styles.pickerWrap}>
+                    <Picker selectedValue={trgLevel} onValueChange={setTrgLevel} style={styles.picker as any}>
+                      {[1,2,3,4,5,6,7,8].map(n => <Picker.Item key={n} label={`المستوى ${n}`} value={String(n)} />)}
+                    </Picker>
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.label}>الشعبة</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={trgSection}
+                    onChangeText={setTrgSection}
+                    placeholder="مثل: أ"
+                    testID="transfer-section-input"
+                  />
+                </View>
+              </View>
+
+              {/* السبب (اختياري) */}
+              <Text style={styles.label}>سبب النقل (اختياري)</Text>
+              <TextInput
+                style={[styles.input, { minHeight: 60 }]}
+                value={trgReason}
+                onChangeText={setTrgReason}
+                placeholder="مثل: طلب الطالب، إعادة توزيع شعب..."
+                multiline
+                testID="transfer-reason-input"
+              />
+
+              {/* سجل النقل السابق */}
+              {transferHistory.length > 0 && (
+                <View style={{ marginTop: 14 }}>
+                  <Text style={styles.transferSectionTitle}>سجل النقل السابق ({transferHistory.length})</Text>
+                  {transferHistory.slice(0, 5).map((h) => (
+                    <View key={h.id} style={styles.historyItem}>
+                      <Text style={styles.historyText} numberOfLines={2}>
+                        {h.from?.department_name || '—'} م{h.from?.level} ش{h.from?.section || '—'} ← {h.to?.department_name || '—'} م{h.to?.level} ش{h.to?.section || '—'}
+                      </Text>
+                      <Text style={styles.historyMeta}>
+                        {(h.transferred_at || '').slice(0, 10)} • {h.transferred_by_name || '—'}
+                        {h.reason ? ` • ${h.reason}` : ''}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              )}
+            </ScrollView>
+
+            <View style={styles.modalFooter}>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#eceff1' }]}
+                onPress={() => setShowTransferModal(false)}
+                disabled={savingTransfer}
+              >
+                <Text style={{ color: '#37474f', fontWeight: '700' }}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalBtn, { backgroundColor: '#e65100' }]}
+                onPress={handleTransfer}
+                disabled={savingTransfer}
+                testID="confirm-transfer-btn"
+              >
+                <Text style={{ color: '#fff', fontWeight: '700' }}>
+                  {savingTransfer ? 'جاري النقل...' : 'تأكيد النقل'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
       {/* 🆕 ============ مودال إرسال إشعار ============ */}
       <Modal
         visible={showNotifModal}
@@ -2210,4 +2420,42 @@ const styles = StyleSheet.create({
 
   notFoundWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   notFoundText: { fontSize: 16, color: '#5b6678', marginTop: 12, textAlign: 'center' },
+
+  // 🔄 Transfer modal styles
+  label: { fontSize: 13, color: '#5b6678', textAlign: 'right', marginBottom: 6, marginTop: 10, fontWeight: '600' },
+  modalBtn: {
+    flex: 1,
+    paddingVertical: 11,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  pickerWrap: {
+    backgroundColor: '#fafbfd',
+    borderWidth: 1,
+    borderColor: '#e3e7ee',
+    borderRadius: 8,
+    overflow: 'hidden',
+  },
+  picker: { color: '#1a2540', height: 42, paddingHorizontal: 8 },
+  transferCurrentBox: {
+    backgroundColor: '#fff3e0',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+    borderRightWidth: 3,
+    borderRightColor: '#e65100',
+  },
+  transferCurrentText: { fontSize: 13, color: '#5d4037', textAlign: 'right', lineHeight: 20 },
+  transferSectionTitle: { fontSize: 13, fontWeight: '800', color: '#37474f', textAlign: 'right', marginBottom: 6 },
+  historyItem: {
+    backgroundColor: '#fafbfd',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 6,
+    borderWidth: 1,
+    borderColor: '#eceff1',
+  },
+  historyText: { fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', lineHeight: 18 },
+  historyMeta: { fontSize: 11, color: '#78909c', textAlign: 'right', marginTop: 3 },
 });
