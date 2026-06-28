@@ -6267,16 +6267,18 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
             if not existing_load:
                 # إنشاء سجل عبء تدريسي جديد بساعات المقرر المعتمدة
                 credit_hours = course.get("credit_hours", 3)
-                # 🔧 يجب تعبئة semester_id حتى يظهر السجل في صفحة العبء التدريسي
-                # (GET /teaching-load يفلتر افتراضياً حسب الفصل النشط)
-                course_sem_id = course.get("semester_id")
+                # 🔧 نُفضّل الفصل النشط دائماً حتى يظهر الإسناد فوراً في صفحة العبء التدريسي
+                # (لو أخذنا semester_id من مقرر مؤرشف، لن يظهر للمستخدم)
+                course_sem_id = None
+                try:
+                    active_sem = await db.semesters.find_one({"status": "active"})
+                    if active_sem:
+                        course_sem_id = str(active_sem["_id"])
+                except Exception:
+                    pass
+                # احتياطي: إن لم يوجد فصل نشط، استخدم فصل المقرر
                 if not course_sem_id:
-                    try:
-                        active_sem = await db.semesters.find_one({"status": "active"})
-                        if active_sem:
-                            course_sem_id = str(active_sem["_id"])
-                    except Exception:
-                        pass
+                    course_sem_id = course.get("semester_id")
                 new_load_doc = {
                     "teacher_id": new_teacher_id,
                     "course_id": course_id,
