@@ -528,7 +528,8 @@ async def generate_offerings_from_curriculum(
         if ccid and ccid not in assignments_map:
             assignments_map[ccid] = a.get("teacher_id")
 
-    created, skipped = 0, 0
+    created, skipped, updated = 0, 0, 0
+    updated_course_ids: list[str] = []
     created_items = []
     for cc in curriculum_list:
         cc_id = str(cc["_id"])
@@ -547,7 +548,39 @@ async def generate_offerings_from_curriculum(
                     "section": section_label,
                 })
                 if exists:
-                    skipped += 1
+                    # 🔧 بدلاً من تجاهل المقرر الموجود، نحدّث الساعات والاسم/الكود من المصدر
+                    # حتى تنتشر تعديلات الخطة (مثل تعديل الساعات المعتمدة) إلى المقررات والإسنادات
+                    new_credit = cc.get("credit_hours", 3)
+                    new_weekly = cc.get("weekly_hours")
+                    needs_update = (
+                        exists.get("credit_hours") != new_credit
+                        or exists.get("weekly_hours") != new_weekly
+                        or exists.get("name") != cc.get("name")
+                        or exists.get("code") != cc.get("code")
+                    )
+                    if needs_update:
+                        await db.courses.update_one(
+                            {"_id": exists["_id"]},
+                            {"$set": {
+                                "credit_hours": new_credit,
+                                "weekly_hours": new_weekly,
+                                "name": cc.get("name"),
+                                "code": cc.get("code"),
+                                "updated_at": _now(),
+                            }}
+                        )
+                        # 🔧 وأيضاً تحديث teaching_loads.weekly_hours لكل المعلمين المرتبطين بهذا المقرر
+                        try:
+                            await db.teaching_loads.update_many(
+                                {"course_id": str(exists["_id"])},
+                                {"$set": {"weekly_hours": (new_weekly or new_credit), "updated_at": _now()}}
+                            )
+                        except Exception:
+                            pass
+                        updated += 1
+                        updated_course_ids.append(str(exists["_id"]))
+                    else:
+                        skipped += 1
                     continue
 
             doc = {
@@ -581,10 +614,11 @@ async def generate_offerings_from_curriculum(
             })
 
     return {
-        "message": f"تم توليد {created} جلسة من الخطة الدراسية",
+        "message": f"تم توليد {created} جلسة من الخطة الدراسية" + (f" وتحديث {updated} مقرر موجود" if updated else ""),
         "semester_id": semester_id,
         "semester_name": sem.get("name"),
         "created": created,
+        "updated": updated,
         "skipped": skipped,
         "total_curriculum": len(curriculum_list),
         "items": created_items[:50],  # عينة للعرض

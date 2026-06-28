@@ -1,0 +1,50 @@
+{
+  "summary": "Verified the curriculum → courses → teaching_loads propagation fix in POST /api/curriculum/generate-offerings against the public REACT_APP_BACKEND_URL. All 3 backend tests PASSED. Confirmed: (1) Response now includes `updated` int field alongside `created` and `skipped`. (2) When no diff exists in curriculum_course, existing offerings are still 'skipped' (updated=0). (3) Editing curriculum_course.credit_hours and re-running generate-offerings now UPDATES the linked course in the active semester (credit_hours propagates from 3→5) AND updates teaching_loads.weekly_hours for any teacher assigned to that course. Message text contains 'تحديث N مقرر' when updates occur.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/teaching-load?course_id=...",
+        "issue": "The `course_id` query param appears to be ignored by the listing endpoint — passing it returns teaching_loads for the same teacher across other courses, not filtered by course_id. Worked around in test via client-side filter. Worth fixing or documenting if course_id is intended as a supported filter."
+      },
+      {
+        "endpoint": "GET /api/courses",
+        "issue": "List response does NOT include `curriculum_course_id` on each item (single-course GET /api/courses/{id} also omits it). This forced the test to use /api/curriculum/auto-generated-courses to discover the linkage. Consider exposing curriculum_course_id in /api/courses responses for client-side navigation/debugging."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verifications_performed": [
+    "POST /api/curriculum/generate-offerings response shape contains {created, updated, skipped} as integers ✅",
+    "Idempotent second call with no curriculum_course changes → updated=0, created=0, skipped>=1 ✅",
+    "PUT /api/curriculum/courses/{cc_id} {credit_hours: 5} then generate-offerings → updated>=1, message contains 'تحديث' ✅",
+    "GET /api/courses/{course_id} after propagation → credit_hours == 5 (was 3) ✅",
+    "teaching_loads.weekly_hours updated to match new value where assignment exists (filtered by exact course_id) ✅",
+    "Cleanup restored curriculum_course.credit_hours and course.credit_hours back to 3 ✅"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_curriculum_propagation.py",
+    "/app/test_reports/pytest/curriculum_propagation.xml"
+  ],
+  "action_items": [
+    "[LOW] Consider supporting course_id filter in GET /api/teaching-load — currently it appears ignored.",
+    "[LOW] Expose curriculum_course_id in GET /api/courses (list and single) responses for traceability.",
+    "[INFO] Frontend should refresh /courses and /teaching-load views after the 'توليد للفصل النشط' button is clicked — backend now propagates correctly, but a stale client cache would still show old credit_hours."
+  ],
+  "critical_code_review_comments": [
+    "routes/curriculum.py L572-579: teaching_loads.weekly_hours is updated using (new_weekly or new_credit). Good fallback. But the failsafe try/except swallows ALL exceptions silently — consider logging the exception for observability.",
+    "routes/curriculum.py L555-560: `needs_update` checks 4 fields (credit_hours, weekly_hours, name, code) — if more curriculum_course fields are added later (e.g., level, term, description), they will NOT trigger propagation. Consider centralising the 'propagated fields' list.",
+    "routes/curriculum.py L617: message string concatenates Arabic + count via f-string — ok, but consider returning structured 'updated_course_ids' for clients that want to highlight changes (currently collected at L532/581 but not returned).",
+    "passlib bcrypt warning still appears in backend.err.log on every login (cosmetic — login succeeds)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_curriculum_propagation.py (new regression test, 3 tests)"
+  ],
+  "success_rate": {"backend": "100% (3/3 tests passed)", "frontend": "n/a (backend-only as requested)"},
+  "test_credentials": "admin / admin123 (login OK, returns access_token)",
+  "seed_data_creation": "Test seeds one auto-generated course via generate-offerings for the active summer semester (dept الشريعة والقانون, cc id 6a21bee0ddb8d04530cf65f5). Cleanup restores curriculum_course.credit_hours and re-runs generate-offerings to propagate the restoration; verified both cc and course credit_hours are back to 3. The auto-generated course (id 6a41b4c98e068b2ac9773458) is left in place because deleting it requires the dedicated endpoint and is harmless.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression test at /app/backend/tests/test_curriculum_propagation.py is reusable. It auto-discovers an active semester, a dept with a matching curriculum_course (by term), seeds a linked course, validates the propagation chain, and restores state. Run: pytest /app/backend/tests/test_curriculum_propagation.py -v. Note: uses /api/curriculum/auto-generated-courses to surface curriculum_course_id linkage because /api/courses doesn't include it.",
+  "rca of the issue": "Original bug: editing curriculum_course.credit_hours then clicking 'توليد للفصل النشط' did not change credit_hours in /courses or weekly_hours in /teaching-load. Root cause: routes/curriculum.py POST /generate-offerings (the `if exists:` branch around L549-551) was doing `skipped += 1; continue` whenever a course already existed for the (semester, curriculum_course_id, section) tuple — so any edits to the curriculum_course were never propagated downstream. Fix verified: the branch now (a) diffs 4 fields (credit_hours/weekly_hours/name/code), (b) when different, updates db.courses with new values AND updates db.teaching_loads.weekly_hours via update_many({course_id:...}), (c) increments a new `updated` counter and returns it in the response along with an updated message. The fix is correct, idempotent, and only updates when there is a real diff."
+}
