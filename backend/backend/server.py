@@ -217,20 +217,6 @@ class SecurityHeadersMiddleware:
                     (b"referrer-policy", b"strict-origin-when-cross-origin"),
                     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
                 ]
-                # 🆕 منع أي CDN/Browser cache على استجابات /api/* (Cloudflare وغيره)
-                # يضمن أن أي تعديل (إسناد، نقل، ...) يظهر فوراً بدون تأخير 5-60 دقيقة
-                try:
-                    path = scope.get("path", "")
-                    if isinstance(path, str) and path.startswith("/api"):
-                        extra.extend([
-                            (b"cache-control", b"no-store, no-cache, must-revalidate, max-age=0"),
-                            (b"pragma", b"no-cache"),
-                            (b"expires", b"0"),
-                            (b"cdn-cache-control", b"no-store"),
-                            (b"cloudflare-cdn-cache-control", b"no-store"),
-                        ])
-                except Exception:
-                    pass
                 message["headers"] = list(message.get("headers", [])) + extra
             await send(message)
 
@@ -6281,14 +6267,27 @@ async def update_course(course_id: str, data: CourseUpdate, current_user: dict =
             if not existing_load:
                 # إنشاء سجل عبء تدريسي جديد بساعات المقرر المعتمدة
                 credit_hours = course.get("credit_hours", 3)
-                await db.teaching_loads.insert_one({
+                # 🔧 يجب تعبئة semester_id حتى يظهر السجل في صفحة العبء التدريسي
+                # (GET /teaching-load يفلتر افتراضياً حسب الفصل النشط)
+                course_sem_id = course.get("semester_id")
+                if not course_sem_id:
+                    try:
+                        active_sem = await db.semesters.find_one({"status": "active"})
+                        if active_sem:
+                            course_sem_id = str(active_sem["_id"])
+                    except Exception:
+                        pass
+                new_load_doc = {
                     "teacher_id": new_teacher_id,
                     "course_id": course_id,
                     "weekly_hours": credit_hours,
                     "created_by": current_user["id"],
                     "created_at": datetime.now(timezone.utc),
                     "updated_at": datetime.now(timezone.utc),
-                })
+                }
+                if course_sem_id:
+                    new_load_doc["semester_id"] = course_sem_id
+                await db.teaching_loads.insert_one(new_load_doc)
 
     updated = await db.courses.find_one({"_id": ObjectId(course_id)})
     result = {

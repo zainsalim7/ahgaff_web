@@ -262,6 +262,17 @@ async def create_teaching_load(
         "created_at": datetime.now(timezone.utc),
         "updated_at": datetime.now(timezone.utc),
     }
+    # 🔧 إن لم يُمرّر semester_id من العميل، نأخذه من المقرر أو من الفصل النشط
+    # (وإلا فإن GET /teaching-load الافتراضي يفلتر حسب الفصل النشط ولن يظهر السجل)
+    if not doc["semester_id"]:
+        doc["semester_id"] = course.get("semester_id")
+    if not doc["semester_id"]:
+        try:
+            active_sem = await db.semesters.find_one({"status": "active"})
+            if active_sem:
+                doc["semester_id"] = str(active_sem["_id"])
+        except Exception:
+            pass
     result = await db.teaching_loads.insert_one(doc)
 
     # ربط المعلم بالمقرر في courses
@@ -913,6 +924,49 @@ async def _sync_teaching_loads_for_teachers(db, teacher_ids: list, semester_id: 
     if to_insert:
         await db.teaching_loads.insert_many(to_insert)
     return len(to_insert)
+
+
+@router.post("/teaching-load/backfill-semester")
+async def backfill_teaching_load_semester(current_user: dict = Depends(get_current_user)):
+    """🔧 إصلاح مرّة واحدة: تعبئة `semester_id` للسجلات التي تفتقده.
+    
+    يأخذ semester_id من المقرر، وإن لم يكن للمقرر، من الفصل النشط.
+    هذا يحلّ مشكلة الإسنادات التي لا تظهر في صفحة العبء التدريسي.
+    """
+    if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    
+    orphans = await db.teaching_loads.find({
+        "$or": [{"semester_id": None}, {"semester_id": ""}, {"semester_id": {"$exists": False}}]
+    }).to_list(5000)
+    
+    if not orphans:
+        return {"success": True, "fixed": 0, "message": "لا توجد سجلات بحاجة للإصلاح"}
+    
+    active_sem = await db.semesters.find_one({"status": "active"})
+    active_sem_id = str(active_sem["_id"]) if active_sem else None
+    
+    fixed = 0
+    for load in orphans:
+        try:
+            course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
+            sem_id = (course.get("semester_id") if course else None) or active_sem_id
+            if sem_id:
+                await db.teaching_loads.update_one(
+                    {"_id": load["_id"]},
+                    {"$set": {"semester_id": sem_id, "updated_at": datetime.now(timezone.utc)}}
+                )
+                fixed += 1
+        except Exception:
+            continue
+    
+    return {
+        "success": True,
+        "fixed": fixed,
+        "total_orphans": len(orphans),
+        "message": f"تم إصلاح {fixed} سجل من {len(orphans)}"
+    }
 
 
 @router.post("/teaching-load/sync")
