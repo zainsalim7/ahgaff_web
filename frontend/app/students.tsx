@@ -2762,94 +2762,153 @@ export default function StudentsScreen() {
         transparent
         onRequestClose={() => setShowBulkTransferModal(false)}
       >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.modalCard, { maxWidth: 480 }]}>
-            <View style={styles.modalHeader}>
-              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
-                <Ionicons name="swap-horizontal" size={20} color="#e65100" />
-                <Text style={styles.modalTitle}>نقل جماعي ({selectedIds.size} طالب)</Text>
+        <View style={styles.btModalOverlay}>
+          <View style={styles.btModalCard}>
+            {/* Header مع gradient */}
+            <View style={styles.btHeader}>
+              <View style={styles.btHeaderIconBox}>
+                <Ionicons name="swap-horizontal" size={22} color="#fff" />
               </View>
-              <TouchableOpacity onPress={() => setShowBulkTransferModal(false)} testID="close-bulk-transfer">
-                <Ionicons name="close" size={22} color="#666" />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.btHeaderTitle}>نقل جماعي للطلاب</Text>
+                <Text style={styles.btHeaderSub}>{selectedIds.size} طالب محدد للنقل</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowBulkTransferModal(false)} style={styles.btHeaderClose} testID="close-bulk-transfer">
+                <Ionicons name="close" size={20} color="#fff" />
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ padding: 16, gap: 10 }}>
-              <View style={{ backgroundColor: '#fff3e0', borderRightWidth: 3, borderRightColor: '#e65100', padding: 12, borderRadius: 10 }}>
-                <Text style={{ fontSize: 13, fontWeight: '800', color: '#5d4037', textAlign: 'right' }}>
-                  سيتم نقل {selectedIds.size} طالب إلى الوجهة المحددة
-                </Text>
-                <Text style={{ fontSize: 11, color: '#8d6e63', textAlign: 'right', marginTop: 4, lineHeight: 16 }}>
-                  • تسجيل المقررات للفصل النشط سيُلغى تلقائياً{'\n'}
-                  • سيتم إنشاء سجل نقل لكل طالب{'\n'}
-                  • إن وُجد طالب بنفس البيانات سيُتخطّى
-                </Text>
+            <ScrollView
+              style={{ flexShrink: 1 }}
+              contentContainerStyle={{ padding: 18, gap: 14 }}
+              showsVerticalScrollIndicator
+            >
+              {/* بطاقة معلومات: مايحدث عند النقل */}
+              <View style={styles.btInfoCard}>
+                <View style={styles.btInfoIcon}>
+                  <Ionicons name="information-circle" size={18} color="#fff" />
+                </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={styles.btInfoTitle}>ماذا يحدث عند تنفيذ النقل؟</Text>
+                  <Text style={styles.btInfoLine}>•  يُلغى تسجيل المقررات للفصل النشط تلقائياً</Text>
+                  <Text style={styles.btInfoLine}>•  يُحفظ سجل نقل دائم لكل طالب (للمراجعة)</Text>
+                  <Text style={styles.btInfoLine}>•  الطلاب بنفس البيانات الحالية سيُتخطّون</Text>
+                </View>
               </View>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginTop: 6 }}>الكلية الهدف</Text>
-              <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10 }}>
-                <Picker selectedValue={bulkTrgFacId} onValueChange={(v) => { setBulkTrgFacId(v); setBulkTrgDeptId(''); }} style={{ height: 44, paddingHorizontal: 8 }}>
-                  <Picker.Item label="-- اختر كلية --" value="" />
-                  {bulkTrgFacs.map((f: any) => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
-                </Picker>
-              </View>
+              {/* القسم: الوجهة الجديدة */}
+              <View style={styles.btSection}>
+                <View style={styles.btSectionHeader}>
+                  <View style={[styles.btSectionDot, { backgroundColor: '#1565c0' }]} />
+                  <Ionicons name="navigate" size={15} color="#1565c0" />
+                  <Text style={styles.btSectionTitle}>الوجهة الجديدة</Text>
+                </View>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginTop: 6 }}>القسم الهدف</Text>
-              <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10 }}>
-                <Picker selectedValue={bulkTrgDeptId} onValueChange={setBulkTrgDeptId} enabled={!!bulkTrgFacId} style={{ height: 44, paddingHorizontal: 8 }}>
-                  <Picker.Item label={bulkTrgFacId ? '-- اختر قسماً --' : '-- اختر كلية أولاً --'} value="" />
-                  {departments.filter((d: any) => !bulkTrgFacId || d.faculty_id === bulkTrgFacId).map((d: any) => (
-                    <Picker.Item key={d.id} label={d.name} value={d.id} />
-                  ))}
-                </Picker>
-              </View>
-
-              <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginBottom: 6 }}>المستوى</Text>
-                  <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10 }}>
-                    <Picker selectedValue={bulkTrgLevel} onValueChange={setBulkTrgLevel} style={{ height: 44, paddingHorizontal: 8 }}>
-                      {[1,2,3,4,5,6,7,8].map(n => <Picker.Item key={n} label={`المستوى ${n}`} value={String(n)} />)}
+                <View style={styles.btField}>
+                  <Text style={styles.btLabel}>الكلية</Text>
+                  <View style={styles.btPickerWrap}>
+                    <Picker
+                      selectedValue={bulkTrgFacId}
+                      onValueChange={(v) => { setBulkTrgFacId(v); setBulkTrgDeptId(''); }}
+                      style={styles.btPicker as any}
+                    >
+                      <Picker.Item label="— اختر الكلية —" value="" />
+                      {bulkTrgFacs.map((f: any) => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
                     </Picker>
+                    <Ionicons name="chevron-down" size={14} color="#90a4ae" style={styles.btPickerChevron} />
                   </View>
                 </View>
-                <View style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginBottom: 6 }}>الشعبة</Text>
-                  <TextInput
-                    value={bulkTrgSection}
-                    onChangeText={setBulkTrgSection}
-                    placeholder="مثل: أ"
-                    style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, textAlign: 'right' }}
-                    testID="bulk-transfer-section-input"
-                  />
+
+                <View style={styles.btField}>
+                  <Text style={styles.btLabel}>القسم</Text>
+                  <View style={[styles.btPickerWrap, !bulkTrgFacId && styles.btPickerDisabled]}>
+                    <Picker
+                      selectedValue={bulkTrgDeptId}
+                      onValueChange={setBulkTrgDeptId}
+                      enabled={!!bulkTrgFacId}
+                      style={styles.btPicker as any}
+                    >
+                      <Picker.Item label={bulkTrgFacId ? '— اختر القسم —' : '— يلزم اختيار الكلية أولاً —'} value="" />
+                      {departments
+                        .filter((d: any) => !bulkTrgFacId || d.faculty_id === bulkTrgFacId)
+                        .map((d: any) => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                    </Picker>
+                    <Ionicons name="chevron-down" size={14} color="#90a4ae" style={styles.btPickerChevron} />
+                  </View>
                 </View>
               </View>
 
-              <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginTop: 6 }}>سبب النقل (اختياري)</Text>
-              <TextInput
-                value={bulkTrgReason}
-                onChangeText={setBulkTrgReason}
-                placeholder="مثل: إعادة توزيع الشعب، ترقية مستوى..."
-                multiline
-                style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, textAlign: 'right', minHeight: 60 }}
-                testID="bulk-transfer-reason-input"
-              />
+              {/* القسم: تفاصيل التسجيل */}
+              <View style={styles.btSection}>
+                <View style={styles.btSectionHeader}>
+                  <View style={[styles.btSectionDot, { backgroundColor: '#6a1b9a' }]} />
+                  <Ionicons name="layers" size={15} color="#6a1b9a" />
+                  <Text style={styles.btSectionTitle}>تفاصيل التسجيل</Text>
+                </View>
+                <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                  <View style={[styles.btField, { flex: 1 }]}>
+                    <Text style={styles.btLabel}>المستوى</Text>
+                    <View style={styles.btPickerWrap}>
+                      <Picker selectedValue={bulkTrgLevel} onValueChange={setBulkTrgLevel} style={styles.btPicker as any}>
+                        {[1,2,3,4,5,6,7,8].map(n => <Picker.Item key={n} label={`المستوى ${n}`} value={String(n)} />)}
+                      </Picker>
+                      <Ionicons name="chevron-down" size={14} color="#90a4ae" style={styles.btPickerChevron} />
+                    </View>
+                  </View>
+                  <View style={[styles.btField, { flex: 1 }]}>
+                    <Text style={styles.btLabel}>الشعبة</Text>
+                    <TextInput
+                      value={bulkTrgSection}
+                      onChangeText={setBulkTrgSection}
+                      placeholder="مثال: أ"
+                      placeholderTextColor="#b0bec5"
+                      style={styles.btInput}
+                      testID="bulk-transfer-section-input"
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* القسم: السبب */}
+              <View style={styles.btSection}>
+                <View style={styles.btSectionHeader}>
+                  <View style={[styles.btSectionDot, { backgroundColor: '#37474f' }]} />
+                  <Ionicons name="chatbox-ellipses" size={15} color="#37474f" />
+                  <Text style={styles.btSectionTitle}>سبب النقل <Text style={styles.btOptional}>(اختياري)</Text></Text>
+                </View>
+                <TextInput
+                  value={bulkTrgReason}
+                  onChangeText={setBulkTrgReason}
+                  placeholder="إعادة توزيع الشعب، طلب الطلاب، ترقية مستوى..."
+                  placeholderTextColor="#b0bec5"
+                  multiline
+                  style={[styles.btInput, { minHeight: 72, textAlignVertical: 'top', paddingTop: 11 }]}
+                  testID="bulk-transfer-reason-input"
+                />
+              </View>
             </ScrollView>
 
-            <View style={styles.modalActionsFooter}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowBulkTransferModal(false)} disabled={bulkTransferring}>
-                <Text style={styles.modalCancelBtnText}>إلغاء</Text>
+            {/* Footer */}
+            <View style={styles.btFooter}>
+              <TouchableOpacity
+                style={styles.btCancelBtn}
+                onPress={() => setShowBulkTransferModal(false)}
+                disabled={bulkTransferring}
+              >
+                <Text style={styles.btCancelText}>إلغاء</Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.modalConfirmBtn, { backgroundColor: '#e65100' }, bulkTransferring && { opacity: 0.6 }]}
+                style={[styles.btConfirmBtn, bulkTransferring && { opacity: 0.6 }]}
                 onPress={handleBulkTransfer}
                 disabled={bulkTransferring}
                 testID="bulk-transfer-confirm"
               >
-                {bulkTransferring ? <ActivityIndicator size="small" color="#fff" /> : (
+                {bulkTransferring ? (
+                  <ActivityIndicator size="small" color="#fff" />
+                ) : (
                   <>
-                    <Ionicons name="swap-horizontal" size={16} color="#fff" />
-                    <Text style={styles.modalConfirmBtnText}>تأكيد نقل {selectedIds.size} طالب</Text>
+                    <Ionicons name="swap-horizontal" size={17} color="#fff" />
+                    <Text style={styles.btConfirmText}>تأكيد نقل {selectedIds.size} طالب</Text>
                   </>
                 )}
               </TouchableOpacity>
@@ -4033,4 +4092,167 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
   },
+
+  /* 🔄 ============ Bulk Transfer Modal — visual design ============ */
+  btModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.62)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+  },
+  btModalCard: {
+    width: '100%',
+    maxWidth: 560,
+    maxHeight: '90%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 18,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 12,
+  },
+  btHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    backgroundColor: '#e65100',
+  },
+  btHeaderIconBox: {
+    width: 42, height: 42, borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.20)',
+    justifyContent: 'center', alignItems: 'center',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.25)',
+  },
+  btHeaderTitle: { fontSize: 17, fontWeight: '800', color: '#fff', textAlign: 'right' },
+  btHeaderSub: { fontSize: 12, color: 'rgba(255,255,255,0.85)', textAlign: 'right', marginTop: 2 },
+  btHeaderClose: {
+    width: 32, height: 32, borderRadius: 10,
+    backgroundColor: 'rgba(255,255,255,0.18)',
+    justifyContent: 'center', alignItems: 'center',
+  },
+
+  /* Info card */
+  btInfoCard: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+    backgroundColor: '#fff8e1',
+    borderRadius: 12,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: '#ffe0b2',
+  },
+  btInfoIcon: {
+    width: 30, height: 30, borderRadius: 8,
+    backgroundColor: '#e65100',
+    justifyContent: 'center', alignItems: 'center',
+  },
+  btInfoTitle: { fontSize: 13, fontWeight: '800', color: '#5d4037', textAlign: 'right' },
+  btInfoLine: { fontSize: 11, color: '#795548', textAlign: 'right', lineHeight: 18 },
+
+  /* Section card */
+  btSection: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 14,
+    borderWidth: 1,
+    borderColor: '#eceff1',
+    shadowColor: '#94a3b8',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  btSectionHeader: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+    paddingBottom: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+  },
+  btSectionDot: { width: 4, height: 18, borderRadius: 2 },
+  btSectionTitle: { fontSize: 14, fontWeight: '800', color: '#0f172a', flex: 1, textAlign: 'right' },
+  btOptional: { fontSize: 11, color: '#94a3b8', fontWeight: '500' },
+  btField: { marginBottom: 10 },
+  btLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#475569',
+    textAlign: 'right',
+    marginBottom: 6,
+    marginRight: 2,
+  },
+
+  /* Pickers & inputs */
+  btPickerWrap: {
+    position: 'relative',
+    backgroundColor: '#f8fafc',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  btPickerDisabled: { backgroundColor: '#f1f5f9', opacity: 0.65 },
+  btPicker: {
+    height: 44,
+    paddingHorizontal: 36,
+    fontSize: 14,
+    color: '#0f172a',
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
+  btPickerChevron: { position: 'absolute', left: 12, top: 15 },
+  btInput: {
+    backgroundColor: '#f8fafc',
+    borderWidth: 1.5,
+    borderColor: '#e2e8f0',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 11,
+    fontSize: 14,
+    color: '#0f172a',
+    textAlign: 'right',
+  },
+
+  /* Footer */
+  btFooter: {
+    flexDirection: 'row-reverse',
+    gap: 10,
+    padding: 14,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderTopColor: '#eceff1',
+  },
+  btCancelBtn: {
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    borderRadius: 11,
+    backgroundColor: '#eceff1',
+    minWidth: 90,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  btCancelText: { fontSize: 14, color: '#455a64', fontWeight: '700' },
+  btConfirmBtn: {
+    flex: 1,
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 11,
+    backgroundColor: '#e65100',
+    shadowColor: '#e65100',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.30,
+    shadowRadius: 8,
+    elevation: 4,
+  },
+  btConfirmText: { fontSize: 14, color: '#fff', fontWeight: '800' },
 });
