@@ -201,6 +201,22 @@ export default function CurriculumScreen() {
     }
   };
 
+  // 🆕 تعديل مقرر في الخطة (Inline edit للساعات المعتمدة/الأسبوعية)
+  const updateCurriculumCourse = async (courseId: string, patch: any) => {
+    await api.put(`/curriculum/courses/${courseId}`, patch);
+    // تحديث متفائل في الـgrid لتفادي إعادة fetch كامل
+    setGrid((prev: any) => {
+      if (!prev?.grid) return prev;
+      const newGrid = (prev.grid || []).map((row: any) => ({
+        ...row,
+        term1: (row.term1 || []).map((c: any) => c.id === courseId ? { ...c, ...patch } : c),
+        term2: (row.term2 || []).map((c: any) => c.id === courseId ? { ...c, ...patch } : c),
+        term3: (row.term3 || []).map((c: any) => c.id === courseId ? { ...c, ...patch } : c),
+      }));
+      return { ...prev, grid: newGrid };
+    });
+  };
+
   // 🆕 دوال الحذف المتعدد
   const toggleSelect = (id: string) => {
     setSelectedIds(prev => {
@@ -728,13 +744,16 @@ export default function CurriculumScreen() {
                       <View style={styles.termsRow}>
                         <TermColumn label="الفصل الأول" courses={row.term1} onDelete={deleteCourse}
                           sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#1565c0"
-                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage} />
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage}
+                          onUpdateCourse={updateCurriculumCourse} />
                         <TermColumn label="الفصل الثاني" courses={row.term2} onDelete={deleteCourse}
                           sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#6a1b9a"
-                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage} />
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage}
+                          onUpdateCourse={updateCurriculumCourse} />
                         <TermColumn label="الفصل الصيفي" courses={row.term3 || []} onDelete={deleteCourse}
                           sectionsMap={sectionsMap} setSectionsMap={setSectionsMap} accentColor="#ef6c00"
-                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage} />
+                          selectedIds={selectedIds} onToggleSelect={toggleSelect} canManage={canManage}
+                          onUpdateCourse={updateCurriculumCourse} />
                       </View>
                     </View>
                   ))}
@@ -959,6 +978,24 @@ export default function CurriculumScreen() {
                       {uploadPreview.existing_in_db.slice(0, 5).map((r: any, i: number) => (
                         <Text key={i} style={styles.warnItem}>• {r.code} - {r.name}</Text>
                       ))}
+                    </>
+                  )}
+                  {/* 🆕 عرض المقررات المكررة في الملف نفسه بأسمائها */}
+                  {uploadPreview.duplicates_in_file?.length > 0 && (
+                    <>
+                      <Text style={[styles.previewSectionTitle, { color: '#6a1b9a' }]}>
+                        مكررة داخل الملف (سيتم تخطيها):
+                      </Text>
+                      {uploadPreview.duplicates_in_file.slice(0, 10).map((r: any, i: number) => (
+                        <Text key={i} style={[styles.warnItem, { color: '#6a1b9a' }]}>
+                          • {r.code} - {r.name} {r.level ? `(م${r.level})` : ''}
+                        </Text>
+                      ))}
+                      {uploadPreview.duplicates_in_file_count > 10 && (
+                        <Text style={[styles.warnItem, { color: '#6a1b9a', fontStyle: 'italic' }]}>
+                          ... و {uploadPreview.duplicates_in_file_count - 10} مقرر مكرر آخر
+                        </Text>
+                      )}
                     </>
                   )}
                 </ScrollView>
@@ -1251,12 +1288,22 @@ export default function CurriculumScreen() {
   );
 }
 
-const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor, selectedIds, onToggleSelect, canManage = true }: any) => (
+const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, accentColor, selectedIds, onToggleSelect, canManage = true, onUpdateCourse }: any) => {
+  // 🆕 حساب مجموع الساعات المعتمدة في هذا الفصل
+  const totalCredit = (courses || []).reduce((sum: number, c: any) => sum + (Number(c.credit_hours) || 0), 0);
+  return (
   <View style={styles.termCol}>
     <View style={[styles.termHeader, { borderBottomColor: accentColor }]}>
       <View style={[styles.termHeaderDot, { backgroundColor: accentColor }]} />
       <Text style={[styles.termHeaderText, { color: accentColor }]}>{label}</Text>
       <Text style={styles.termHeaderCount}>({courses?.length || 0})</Text>
+      {/* 🆕 مجموع الساعات المعتمدة في الفصل */}
+      {totalCredit > 0 && (
+        <View style={[styles.termCreditBadge, { backgroundColor: accentColor + '15', borderColor: accentColor }]}>
+          <Ionicons name="time" size={10} color={accentColor} />
+          <Text style={[styles.termCreditText, { color: accentColor }]}>{totalCredit} س.م</Text>
+        </View>
+      )}
     </View>
     {!courses || courses.length === 0 ? (
       <View style={styles.emptyTermBox}>
@@ -1267,72 +1314,154 @@ const TermColumn = ({ label, courses, onDelete, sectionsMap, setSectionsMap, acc
       courses.map((c: any, idx: number) => {
         const isSelected = selectedIds?.has(c.id) || false;
         return (
-        <View key={c.id} style={[styles.courseCard, isSelected && { backgroundColor: '#fff3e0', borderColor: '#ef6c00' }]} testID={`curr-${c.id}`}>
-          {/* 🆕 Checkbox للحذف المتعدد — يظهر فقط لمن يملك صلاحية الإدارة */}
-          {canManage && onToggleSelect && (
-            <TouchableOpacity
-              onPress={() => onToggleSelect(c.id)}
-              testID={`chk-${c.id}`}
-              style={{ marginRight: 4, padding: 2 }}
-              hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-            >
-              <Ionicons
-                name={isSelected ? 'checkbox' : 'square-outline'}
-                size={18}
-                color={isSelected ? '#ef6c00' : '#90a4ae'}
-              />
-            </TouchableOpacity>
-          )}
-          {/* 🆕 ترقيم المقرر داخل الفصل */}
-          <View style={[styles.rowNumBadge, { backgroundColor: accentColor + '15', borderColor: accentColor }]}>
-            <Text style={[styles.rowNumText, { color: accentColor }]}>{idx + 1}</Text>
-          </View>
-          <View style={{ flex: 1, minWidth: 0 }}>
-            <Text style={styles.courseName} numberOfLines={2}>{c.name}</Text>
-            <View style={styles.courseMetaRow}>
-              <View style={styles.codeChip}>
-                <Text style={styles.codeChipText}>{c.code}</Text>
-              </View>
-              <Text style={styles.creditText}>{c.credit_hours} س.م</Text>
-            </View>
-            {c.teachers?.length > 0 && (
-              <View style={styles.teacherRow}>
-                <Ionicons name="person" size={10} color="#1565c0" />
-                <Text style={styles.teacherText} numberOfLines={1}>
-                  {c.teachers.map((t: any) => t.full_name).join('، ')}
-                </Text>
-              </View>
-            )}
-          </View>
-          <View style={styles.sectionsBoxWrap} testID={`sections-wrap-${c.id}`}>
-            <TextInput
-              style={[styles.sectionsBox, !canManage && { backgroundColor: '#f1f5f9', color: '#64748b' }]}
-              placeholder="1"
-              placeholderTextColor="#cfd6e1"
-              keyboardType="numeric"
-              maxLength={2}
-              value={sectionsMap?.[c.id] ?? ''}
-              onChangeText={(v) => {
-                if (!canManage) return;
-                const cleaned = v.replace(/[^0-9]/g, '');
-                setSectionsMap?.((prev: any) => ({ ...prev, [c.id]: cleaned }));
-              }}
-              editable={canManage}
-              testID={`sections-input-${c.id}`}
-            />
-            <Text style={styles.sectionsBoxLabel}>شعب</Text>
-          </View>
-          {canManage && (
-            <TouchableOpacity onPress={() => onDelete(c.id, c.name)} testID={`del-${c.id}`} style={styles.delBtn}>
-              <Ionicons name="trash-outline" size={15} color="#c62828" />
-            </TouchableOpacity>
-          )}
-        </View>
+        <CurriculumCourseCard
+          key={c.id}
+          course={c}
+          index={idx}
+          isSelected={isSelected}
+          canManage={canManage}
+          accentColor={accentColor}
+          sectionsValue={sectionsMap?.[c.id] ?? ''}
+          onToggleSelect={onToggleSelect}
+          onSetSections={(v: string) => setSectionsMap?.((prev: any) => ({ ...prev, [c.id]: v }))}
+          onDelete={onDelete}
+          onUpdateCourse={onUpdateCourse}
+        />
         );
       })
     )}
   </View>
-);
+  );
+};
+
+/**
+ * 🆕 بطاقة مقرر منفصلة — تدعم تعديل الساعات المعتمدة inline
+ * عند الضغط على عدد الساعات يتحوّل لـ TextInput، وعند الخروج (blur) يحفظ التغيير عبر API
+ */
+const CurriculumCourseCard = ({ course: c, index: idx, isSelected, canManage, accentColor, sectionsValue, onToggleSelect, onSetSections, onDelete, onUpdateCourse }: any) => {
+  const [editingCredit, setEditingCredit] = React.useState(false);
+  const [creditDraft, setCreditDraft] = React.useState(String(c.credit_hours || ''));
+  const [savingCredit, setSavingCredit] = React.useState(false);
+
+  React.useEffect(() => { setCreditDraft(String(c.credit_hours || '')); }, [c.credit_hours]);
+
+  const commitCredit = async () => {
+    const clean = creditDraft.replace(/[^0-9]/g, '');
+    setEditingCredit(false);
+    const newVal = parseInt(clean);
+    if (isNaN(newVal) || newVal === c.credit_hours) {
+      setCreditDraft(String(c.credit_hours || ''));
+      return;
+    }
+    if (newVal < 1 || newVal > 20) {
+      setCreditDraft(String(c.credit_hours || ''));
+      const msg = 'الساعات المعتمدة يجب أن تكون بين 1 و 20';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('قيمة غير صالحة', msg);
+      return;
+    }
+    setSavingCredit(true);
+    try {
+      await onUpdateCourse?.(c.id, { credit_hours: newVal });
+    } catch (e: any) {
+      setCreditDraft(String(c.credit_hours || ''));
+      const msg = e?.response?.data?.detail || 'تعذر تعديل الساعات';
+      if (Platform.OS === 'web') window.alert(msg); else Alert.alert('فشل التحديث', msg);
+    } finally {
+      setSavingCredit(false);
+    }
+  };
+
+  return (
+    <View style={[styles.courseCard, isSelected && { backgroundColor: '#fff3e0', borderColor: '#ef6c00' }]} testID={`curr-${c.id}`}>
+      {canManage && onToggleSelect && (
+        <TouchableOpacity
+          onPress={() => onToggleSelect(c.id)}
+          testID={`chk-${c.id}`}
+          style={{ marginRight: 4, padding: 2 }}
+          hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        >
+          <Ionicons
+            name={isSelected ? 'checkbox' : 'square-outline'}
+            size={18}
+            color={isSelected ? '#ef6c00' : '#90a4ae'}
+          />
+        </TouchableOpacity>
+      )}
+      <View style={[styles.rowNumBadge, { backgroundColor: accentColor + '15', borderColor: accentColor }]}>
+        <Text style={[styles.rowNumText, { color: accentColor }]}>{idx + 1}</Text>
+      </View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text style={styles.courseName} numberOfLines={2}>{c.name}</Text>
+        <View style={styles.courseMetaRow}>
+          <View style={styles.codeChip}>
+            <Text style={styles.codeChipText}>{c.code}</Text>
+          </View>
+          {/* 🆕 ساعات معتمدة - قابلة للتعديل inline */}
+          {canManage && editingCredit ? (
+            <View style={styles.creditEditWrap}>
+              <TextInput
+                style={styles.creditEditInput}
+                value={creditDraft}
+                onChangeText={setCreditDraft}
+                keyboardType="numeric"
+                maxLength={2}
+                autoFocus
+                onBlur={commitCredit}
+                onSubmitEditing={commitCredit}
+                testID={`credit-input-${c.id}`}
+              />
+              <Text style={styles.creditEditUnit}>س.م</Text>
+            </View>
+          ) : (
+            <TouchableOpacity
+              onPress={() => canManage && setEditingCredit(true)}
+              disabled={!canManage || savingCredit}
+              testID={`credit-display-${c.id}`}
+              style={canManage ? styles.creditEditableTouch : undefined}
+            >
+              {savingCredit ? (
+                <ActivityIndicator size="small" color="#1565c0" />
+              ) : (
+                <Text style={[styles.creditText, canManage && styles.creditEditableText]}>{c.credit_hours} س.م {canManage && '✎'}</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+        {c.teachers?.length > 0 && (
+          <View style={styles.teacherRow}>
+            <Ionicons name="person" size={10} color="#1565c0" />
+            <Text style={styles.teacherText} numberOfLines={1}>
+              {c.teachers.map((t: any) => t.full_name).join('، ')}
+            </Text>
+          </View>
+        )}
+      </View>
+      <View style={styles.sectionsBoxWrap} testID={`sections-wrap-${c.id}`}>
+        <TextInput
+          style={[styles.sectionsBox, !canManage && { backgroundColor: '#f1f5f9', color: '#64748b' }]}
+          placeholder="1"
+          placeholderTextColor="#cfd6e1"
+          keyboardType="numeric"
+          maxLength={2}
+          value={sectionsValue}
+          onChangeText={(v) => {
+            if (!canManage) return;
+            const cleaned = v.replace(/[^0-9]/g, '');
+            onSetSections(cleaned);
+          }}
+          editable={canManage}
+          testID={`sections-input-${c.id}`}
+        />
+        <Text style={styles.sectionsBoxLabel}>شعب</Text>
+      </View>
+      {canManage && (
+        <TouchableOpacity onPress={() => onDelete(c.id, c.name)} testID={`del-${c.id}`} style={styles.delBtn}>
+          <Ionicons name="trash-outline" size={15} color="#c62828" />
+        </TouchableOpacity>
+      )}
+    </View>
+  );
+};
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f4f6fb' },
@@ -1420,6 +1549,49 @@ const styles = StyleSheet.create({
   sectionsBox: { width: 36, height: 30, borderWidth: 1, borderColor: '#cfd6e1', borderRadius: 6, backgroundColor: '#fff', textAlign: 'center', fontSize: 13, fontWeight: '700', color: '#1565c0', paddingVertical: 0, outlineStyle: 'none' as any },
   sectionsBoxLabel: { fontSize: 9, color: '#8a95a8', fontWeight: '600' },
   delBtn: { width: 30, height: 30, borderRadius: 6, alignItems: 'center', justifyContent: 'center', backgroundColor: '#ffebee', borderWidth: 1, borderColor: '#ffcdd2' },
+
+  // 🆕 Total credit per term badge
+  termCreditBadge: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  termCreditText: { fontSize: 10, fontWeight: '800' },
+
+  // 🆕 Inline edit للساعات المعتمدة
+  creditEditableTouch: {
+    paddingHorizontal: 4,
+    paddingVertical: 2,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: 'transparent',
+    borderStyle: 'dashed',
+  },
+  creditEditableText: { color: '#1565c0', fontWeight: '700' },
+  creditEditWrap: {
+    flexDirection: 'row-reverse',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 4,
+    borderRadius: 5,
+  },
+  creditEditInput: {
+    width: 36,
+    height: 22,
+    fontSize: 12,
+    fontWeight: '800',
+    color: '#0d47a1',
+    textAlign: 'center',
+    paddingVertical: 0,
+    paddingHorizontal: 2,
+    outlineStyle: 'none' as any,
+  },
+  creditEditUnit: { fontSize: 10, color: '#1565c0', fontWeight: '700' },
 
   // Summary box
   summaryBox: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#e8f5e9', padding: 12, borderRadius: 10, marginTop: 4 },

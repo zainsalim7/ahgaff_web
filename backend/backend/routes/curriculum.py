@@ -537,7 +537,8 @@ async def generate_offerings_from_curriculum(
         n_sections = max(1, min(int(n_sections or 1), len(SECTION_LABELS_AR)))
 
         for sec_idx in range(n_sections):
-            section_label = SECTION_LABELS_AR[sec_idx]
+            # 🆕 إذا كانت شعبة واحدة فقط، لا نُضيف حرفاً (سيكون section فارغاً)
+            section_label = "" if n_sections == 1 else SECTION_LABELS_AR[sec_idx]
 
             if skip_existing:
                 exists = await db.courses.find_one({
