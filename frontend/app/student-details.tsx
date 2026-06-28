@@ -1780,13 +1780,24 @@ export default function StudentDetailsScreen() {
               </TouchableOpacity>
             </View>
 
-            <ScrollView style={{ maxHeight: 460 }} contentContainerStyle={{ paddingBottom: 6 }}>
-              {/* العرض الحالي */}
+            <ScrollView style={{ maxHeight: 480 }} contentContainerStyle={{ paddingBottom: 6 }}>
+              {/* الوضع الحالي - بطاقة أنيقة */}
               <View style={styles.transferCurrentBox}>
-                <Text style={styles.transferSectionTitle}>الوضع الحالي</Text>
-                <Text style={styles.transferCurrentText} numberOfLines={2}>
-                  {student?.faculty_name || '—'} • {student?.department_name || '—'} • م{student?.level} • شعبة "{student?.section || '—'}"
-                </Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                  <Ionicons name="location" size={14} color="#e65100" />
+                  <Text style={styles.transferSectionTitle}>الوضع الحالي</Text>
+                </View>
+                <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6 }}>
+                  <View style={styles.chipCurrent}><Text style={styles.chipCurrentText}>{departmentName || 'القسم غير محدد'}</Text></View>
+                  <View style={styles.chipCurrent}><Text style={styles.chipCurrentText}>المستوى {student?.level ?? '—'}</Text></View>
+                  <View style={styles.chipCurrent}><Text style={styles.chipCurrentText}>شعبة {student?.section || '—'}</Text></View>
+                </View>
+              </View>
+
+              {/* الوجهة الجديدة - عنوان قسم */}
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 14, marginBottom: 6 }}>
+                <Ionicons name="navigate" size={14} color="#1565c0" />
+                <Text style={[styles.transferSectionTitle, { color: '#1565c0' }]}>الوجهة الجديدة</Text>
               </View>
 
               {/* الكلية */}
@@ -1855,10 +1866,21 @@ export default function StudentDetailsScreen() {
                 testID="transfer-reason-input"
               />
 
+              {/* تنبيه ذكي */}
+              <View style={styles.transferInfoBox}>
+                <Ionicons name="information-circle" size={16} color="#01579b" />
+                <Text style={styles.transferInfoText}>
+                  سيتم إلغاء تسجيل المقررات للفصل النشط تلقائياً، وحفظ سجل دائم بهذه العملية.
+                </Text>
+              </View>
+
               {/* سجل النقل السابق */}
               {transferHistory.length > 0 && (
                 <View style={{ marginTop: 14 }}>
-                  <Text style={styles.transferSectionTitle}>سجل النقل السابق ({transferHistory.length})</Text>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+                    <Ionicons name="time" size={14} color="#37474f" />
+                    <Text style={styles.transferSectionTitle}>سجل النقل السابق ({transferHistory.length})</Text>
+                  </View>
                   {transferHistory.slice(0, 5).map((h) => (
                     <View key={h.id} style={styles.historyItem}>
                       <Text style={styles.historyText} numberOfLines={2}>
@@ -2458,4 +2480,27 @@ const styles = StyleSheet.create({
   },
   historyText: { fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', lineHeight: 18 },
   historyMeta: { fontSize: 11, color: '#78909c', textAlign: 'right', marginTop: 3 },
+
+  // 🆕 Chips & info box للنقل
+  chipCurrent: {
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#ffcc80',
+    borderRadius: 14,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  chipCurrentText: { fontSize: 12, color: '#5d4037', fontWeight: '700' },
+  transferInfoBox: {
+    flexDirection: 'row-reverse',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: '#e1f5fe',
+    padding: 10,
+    borderRadius: 10,
+    marginTop: 12,
+    borderRightWidth: 3,
+    borderRightColor: '#0288d1',
+  },
+  transferInfoText: { flex: 1, fontSize: 12, color: '#01579b', textAlign: 'right', lineHeight: 18 },
 });

@@ -185,6 +185,16 @@ export default function StudentsScreen() {
   const [bulkGradHonors, setBulkGradHonors] = useState('');
   const [bulkGradNotes, setBulkGradNotes] = useState('');
   const [bulkGraduating, setBulkGraduating] = useState(false);
+
+  // 🔄 النقل الجماعي
+  const [showBulkTransferModal, setShowBulkTransferModal] = useState(false);
+  const [bulkTrgFacs, setBulkTrgFacs] = useState<any[]>([]);
+  const [bulkTrgFacId, setBulkTrgFacId] = useState('');
+  const [bulkTrgDeptId, setBulkTrgDeptId] = useState('');
+  const [bulkTrgLevel, setBulkTrgLevel] = useState('1');
+  const [bulkTrgSection, setBulkTrgSection] = useState('');
+  const [bulkTrgReason, setBulkTrgReason] = useState('');
+  const [bulkTransferring, setBulkTransferring] = useState(false);
   // سجل التاريخ لطالب
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
@@ -507,6 +517,58 @@ export default function StudentsScreen() {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل تغيير الحالة');
     } finally {
       setApplyingStatus(false);
+    }
+  };
+
+  // 🔄 نقل جماعي — فتح المودال
+  const openBulkTransferModal = async () => {
+    if (selectedIds.size === 0) {
+      showMessage('تنبيه', 'حدّد طلاباً أولاً');
+      return;
+    }
+    try {
+      const facs = await api.get('/faculties');
+      setBulkTrgFacs(facs.data || []);
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل تحميل الكليات');
+      return;
+    }
+    setBulkTrgFacId('');
+    setBulkTrgDeptId('');
+    setBulkTrgLevel('1');
+    setBulkTrgSection('');
+    setBulkTrgReason('');
+    setShowBulkTransferModal(true);
+  };
+
+  // 🔄 تنفيذ النقل الجماعي
+  const handleBulkTransfer = async () => {
+    if (selectedIds.size === 0) return;
+    if (!bulkTrgDeptId) { showMessage('خطأ', 'اختر القسم الهدف'); return; }
+    const lvl = parseInt(bulkTrgLevel);
+    if (isNaN(lvl) || lvl < 1 || lvl > 10) { showMessage('خطأ', 'المستوى غير صالح'); return; }
+    if (!bulkTrgSection.trim()) { showMessage('خطأ', 'الشعبة مطلوبة'); return; }
+    setBulkTransferring(true);
+    try {
+      const res = await api.post('/students/bulk-transfer', {
+        student_ids: Array.from(selectedIds),
+        target_faculty_id: bulkTrgFacId || undefined,
+        target_department_id: bulkTrgDeptId,
+        target_level: lvl,
+        target_section: bulkTrgSection.trim(),
+        reason: bulkTrgReason.trim() || undefined,
+      });
+      const data = res.data;
+      showMessage('تم النقل ✅', `نجح: ${data.succeeded} • فشل: ${data.failed_count}`);
+      setShowBulkTransferModal(false);
+      setSelectedIds(new Set());
+      setSelectionMode(false);
+      // إعادة تحميل القائمة
+      try { (await import('../src/services/api')).studentsAPI.getAll().then((r: any) => setStudents(r.data || [])); } catch {}
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'فشل النقل');
+    } finally {
+      setBulkTransferring(false);
     }
   };
 
@@ -1361,6 +1423,11 @@ export default function StudentsScreen() {
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#0d47a1' }]} onPress={() => setShowBulkGraduateModal(true)} testID="bulk-graduate-btn">
                   <Ionicons name="school" size={14} color="#fff" />
                   <Text style={styles.selActionText}>تخريج جماعي</Text>
+                </TouchableOpacity>
+                {/* 🔄 زر النقل الجماعي */}
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#e65100' }]} onPress={() => openBulkTransferModal()} testID="bulk-transfer-btn">
+                  <Ionicons name="swap-horizontal" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>نقل جماعي</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#f44336' }]} onPress={handleBulkDelete} disabled={deleting}>
                   {deleting ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash" size={14} color="#fff" />}
@@ -2680,6 +2747,109 @@ export default function StudentsScreen() {
                   <>
                     <Ionicons name="school" size={16} color="#fff" />
                     <Text style={styles.modalConfirmBtnText}>تخريج {selectedIds.size} طالب</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      {/* 🔄 ============ مودال النقل الجماعي ============ */}
+      <Modal
+        visible={showBulkTransferModal}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setShowBulkTransferModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalCard, { maxWidth: 480 }]}>
+            <View style={styles.modalHeader}>
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                <Ionicons name="swap-horizontal" size={20} color="#e65100" />
+                <Text style={styles.modalTitle}>نقل جماعي ({selectedIds.size} طالب)</Text>
+              </View>
+              <TouchableOpacity onPress={() => setShowBulkTransferModal(false)} testID="close-bulk-transfer">
+                <Ionicons name="close" size={22} color="#666" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={{ maxHeight: 420 }} contentContainerStyle={{ padding: 16, gap: 10 }}>
+              <View style={{ backgroundColor: '#fff3e0', borderRightWidth: 3, borderRightColor: '#e65100', padding: 12, borderRadius: 10 }}>
+                <Text style={{ fontSize: 13, fontWeight: '800', color: '#5d4037', textAlign: 'right' }}>
+                  سيتم نقل {selectedIds.size} طالب إلى الوجهة المحددة
+                </Text>
+                <Text style={{ fontSize: 11, color: '#8d6e63', textAlign: 'right', marginTop: 4, lineHeight: 16 }}>
+                  • تسجيل المقررات للفصل النشط سيُلغى تلقائياً{'\n'}
+                  • سيتم إنشاء سجل نقل لكل طالب{'\n'}
+                  • إن وُجد طالب بنفس البيانات سيُتخطّى
+                </Text>
+              </View>
+
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginTop: 6 }}>الكلية الهدف</Text>
+              <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10 }}>
+                <Picker selectedValue={bulkTrgFacId} onValueChange={(v) => { setBulkTrgFacId(v); setBulkTrgDeptId(''); }} style={{ height: 44, paddingHorizontal: 8 }}>
+                  <Picker.Item label="-- اختر كلية --" value="" />
+                  {bulkTrgFacs.map((f: any) => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                </Picker>
+              </View>
+
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginTop: 6 }}>القسم الهدف</Text>
+              <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10 }}>
+                <Picker selectedValue={bulkTrgDeptId} onValueChange={setBulkTrgDeptId} enabled={!!bulkTrgFacId} style={{ height: 44, paddingHorizontal: 8 }}>
+                  <Picker.Item label={bulkTrgFacId ? '-- اختر قسماً --' : '-- اختر كلية أولاً --'} value="" />
+                  {departments.filter((d: any) => !bulkTrgFacId || d.faculty_id === bulkTrgFacId).map((d: any) => (
+                    <Picker.Item key={d.id} label={d.name} value={d.id} />
+                  ))}
+                </Picker>
+              </View>
+
+              <View style={{ flexDirection: 'row-reverse', gap: 10 }}>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginBottom: 6 }}>المستوى</Text>
+                  <View style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10 }}>
+                    <Picker selectedValue={bulkTrgLevel} onValueChange={setBulkTrgLevel} style={{ height: 44, paddingHorizontal: 8 }}>
+                      {[1,2,3,4,5,6,7,8].map(n => <Picker.Item key={n} label={`المستوى ${n}`} value={String(n)} />)}
+                    </Picker>
+                  </View>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginBottom: 6 }}>الشعبة</Text>
+                  <TextInput
+                    value={bulkTrgSection}
+                    onChangeText={setBulkTrgSection}
+                    placeholder="مثل: أ"
+                    style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 14, textAlign: 'right' }}
+                    testID="bulk-transfer-section-input"
+                  />
+                </View>
+              </View>
+
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#37474f', textAlign: 'right', marginTop: 6 }}>سبب النقل (اختياري)</Text>
+              <TextInput
+                value={bulkTrgReason}
+                onChangeText={setBulkTrgReason}
+                placeholder="مثل: إعادة توزيع الشعب، ترقية مستوى..."
+                multiline
+                style={{ backgroundColor: '#fff', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, fontSize: 13, textAlign: 'right', minHeight: 60 }}
+                testID="bulk-transfer-reason-input"
+              />
+            </ScrollView>
+
+            <View style={styles.modalActionsFooter}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowBulkTransferModal(false)} disabled={bulkTransferring}>
+                <Text style={styles.modalCancelBtnText}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalConfirmBtn, { backgroundColor: '#e65100' }, bulkTransferring && { opacity: 0.6 }]}
+                onPress={handleBulkTransfer}
+                disabled={bulkTransferring}
+                testID="bulk-transfer-confirm"
+              >
+                {bulkTransferring ? <ActivityIndicator size="small" color="#fff" /> : (
+                  <>
+                    <Ionicons name="swap-horizontal" size={16} color="#fff" />
+                    <Text style={styles.modalConfirmBtnText}>تأكيد نقل {selectedIds.size} طالب</Text>
                   </>
                 )}
               </TouchableOpacity>
