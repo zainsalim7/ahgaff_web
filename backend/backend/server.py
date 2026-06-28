@@ -217,6 +217,20 @@ class SecurityHeadersMiddleware:
                     (b"referrer-policy", b"strict-origin-when-cross-origin"),
                     (b"permissions-policy", b"camera=(), microphone=(), geolocation=()"),
                 ]
+                # 🆕 منع أي CDN/Browser cache على استجابات /api/* (Cloudflare وغيره)
+                # يضمن أن أي تعديل (إسناد، نقل، ...) يظهر فوراً بدون تأخير 5-60 دقيقة
+                try:
+                    path = scope.get("path", "")
+                    if isinstance(path, str) and path.startswith("/api"):
+                        extra.extend([
+                            (b"cache-control", b"no-store, no-cache, must-revalidate, max-age=0"),
+                            (b"pragma", b"no-cache"),
+                            (b"expires", b"0"),
+                            (b"cdn-cache-control", b"no-store"),
+                            (b"cloudflare-cdn-cache-control", b"no-store"),
+                        ])
+                except Exception:
+                    pass
                 message["headers"] = list(message.get("headers", [])) + extra
             await send(message)
 
