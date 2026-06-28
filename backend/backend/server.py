@@ -15180,6 +15180,46 @@ async def startup_event():
     await cleanup_duplicate_roles_internal()
     # 🔧 Migration دائمة: إصلاح المستخدمين ذوي الأدوار الشاذة تلقائياً
     await migrate_broken_user_roles()
+    # 🔧 Migration دائمة: تعبئة semester_id لسجلات teaching_loads المعطّلة
+    # يحلّ مشكلة عدم ظهور الإسنادات في صفحة العبء التدريسي
+    await backfill_teaching_loads_semester_internal()
+
+
+async def backfill_teaching_loads_semester_internal():
+    """🔧 إصلاح تلقائي عند بدء التشغيل: يعبّئ `semester_id` للسجلات بدونها.
+    
+    آمن للتشغيل المتكرّر — يفلتر فقط السجلات بدون semester_id.
+    يحلّ المشكلة التي تجعل الإسنادات لا تظهر في صفحة العبء التدريسي.
+    """
+    try:
+        orphans = await db.teaching_loads.find({
+            "$or": [{"semester_id": None}, {"semester_id": ""}, {"semester_id": {"$exists": False}}]
+        }).to_list(10000)
+        
+        if not orphans:
+            return  # لا شيء للإصلاح
+        
+        active_sem = await db.semesters.find_one({"status": "active"})
+        active_sem_id = str(active_sem["_id"]) if active_sem else None
+        
+        fixed = 0
+        for load in orphans:
+            try:
+                course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
+                sem_id = (course.get("semester_id") if course else None) or active_sem_id
+                if sem_id:
+                    await db.teaching_loads.update_one(
+                        {"_id": load["_id"]},
+                        {"$set": {"semester_id": sem_id, "updated_at": datetime.now(timezone.utc)}}
+                    )
+                    fixed += 1
+            except Exception:
+                continue
+        
+        if fixed > 0:
+            logging.info(f"Teaching loads backfill: fixed {fixed} of {len(orphans)} orphan records on startup")
+    except Exception as e:
+        logging.warning(f"Teaching loads backfill failed (non-critical): {e}")
 
 
 async def restore_lecture_permissions_v1():
