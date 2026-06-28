@@ -15,6 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
+import { useFocusEffect } from 'expo-router';
 import api, { teachingLoadAPI, teachersAPI, departmentsAPI, API_URL } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -376,6 +377,44 @@ export default function TeachingLoadPage() {
 
   // Load existing teacher loads when teacher changes
   const [loadingExisting, setLoadingExisting] = useState(false);
+  // 🆕 جلب أحمال المعلم المختار (يُستدعى عند تغيير المعلم أو عند العودة للصفحة)
+  const refetchSelectedTeacherLoads = useCallback(async () => {
+    if (!selectedTeacher) {
+      setSelectedCourses([]);
+      setHoursMap({});
+      return;
+    }
+    setLoadingExisting(true);
+    try {
+      const res = await teachingLoadAPI.getAll({ teacher_id: selectedTeacher });
+      const items = res.data.items || [];
+      const existing: CourseLoad[] = items.map((i: any) => ({
+        course_id: i.course_id,
+        course_name: i.course_name,
+        course_code: i.course_code,
+        section: i.course_section || '',
+        level: i.course_level || 0,
+        credit_hours: i.course_credit_hours || 3,
+        department_id: i.course_department_id || '',
+        current_teacher_name: '',
+        existing_load_id: i.id,
+        existing_weekly_hours: i.weekly_hours,
+        existing_notes: i.notes || '',
+      }));
+      setSelectedCourses(existing);
+      const map: Record<string, string> = {};
+      for (const c of existing) {
+        const v = c.existing_weekly_hours ?? c.credit_hours ?? null;
+        map[c.course_id] = v != null ? String(v) : '';
+      }
+      setHoursMap(map);
+    } catch (e) {
+      console.error('Error loading teacher loads:', e);
+    } finally {
+      setLoadingExisting(false);
+    }
+  }, [selectedTeacher]);
+
   useEffect(() => {
     if (!selectedTeacher) {
       setSelectedCourses([]);
@@ -384,39 +423,24 @@ export default function TeachingLoadPage() {
       setSearchResults([]);
       return;
     }
-    (async () => {
-      setLoadingExisting(true);
-      try {
-        const res = await teachingLoadAPI.getAll({ teacher_id: selectedTeacher });
-        const items = res.data.items || [];
-        const existing: CourseLoad[] = items.map((i: any) => ({
-          course_id: i.course_id,
-          course_name: i.course_name,
-          course_code: i.course_code,
-          section: i.course_section || '',
-          level: i.course_level || 0,
-          credit_hours: i.course_credit_hours || 3,
-          department_id: i.course_department_id || '',
-          current_teacher_name: '',
-          existing_load_id: i.id,
-          existing_weekly_hours: i.weekly_hours,
-          existing_notes: i.notes || '',
-        }));
-        setSelectedCourses(existing);
-        const map: Record<string, string> = {};
-        for (const c of existing) {
-          // 🆕 الأولوية: weekly_hours المحفوظة → credit_hours من المقرر
-          const v = c.existing_weekly_hours ?? c.credit_hours ?? null;
-          map[c.course_id] = v != null ? String(v) : '';
-        }
-        setHoursMap(map);
-      } catch (e) {
-        console.error('Error loading teacher loads:', e);
-      } finally {
-        setLoadingExisting(false);
+    refetchSelectedTeacherLoads();
+  }, [selectedTeacher, refetchSelectedTeacherLoads]);
+
+  // 🆕 إعادة الجلب التلقائي عند العودة للصفحة (focus) لإظهار الإسنادات الجديدة فوراً
+  useFocusEffect(
+    useCallback(() => {
+      if (selectedTeacher) {
+        refetchSelectedTeacherLoads();
       }
-    })();
-  }, [selectedTeacher]);
+      // أيضاً نُعيد تشغيل ملخص الجدول إن كان مُنفّذاً بالفعل
+      if (summaryExecuted) {
+        loadSummary();
+      }
+      return () => {};
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedTeacher, summaryExecuted])
+  );
+
 
   // Search courses with debounce
   const handleSearch = (text: string) => {
@@ -954,7 +978,7 @@ export default function TeachingLoadPage() {
                     </div>
                     {/* Search Results Dropdown */}
                     {showResults && searchResults.length > 0 && (
-                      <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', zIndex: 1000, maxHeight: 280, overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', direction: 'rtl' }}>
+                      <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', zIndex: 1000, maxHeight: 'min(60vh, 520px)', overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', direction: 'rtl', scrollbarWidth: 'thin' as any }}>
                         {searchResults.map(c => {
                           const cDept = departments.find((d: any) => d.id === c.department_id);
                           // أولوية لاسم القسم/الكلية من الـ API (يعمل حتى لو كان القسم خارج نطاق المستخدم)
