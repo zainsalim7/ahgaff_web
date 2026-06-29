@@ -1,0 +1,39 @@
+{
+  "summary": "Backend-only regression verification of teaching_loads.semester_id backfill fix. The fix replaces the previous behaviour (which used active_semester_id as a fallback for orphan records, causing historical loads to surface in the active-semester view) with strict alignment to course.semester_id. All 7 tests PASS against the public REACT_APP_BACKEND_URL and direct MongoDB inspection. The original P0 regression is no longer reproducible.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "verifications_performed": [
+    "Startup migration backfill_teaching_loads_semester_internal ran successfully (log shows 'Teaching loads backfill: aligned 0 records, reset 1 orphans'). No 'failed' line present in backend.err.log. ✅",
+    "POST /api/teaching-load/backfill-semester returns 200 with full schema {success, fixed, reset_to_orphan, course_missing, total_checked, message}. Initial state: fixed=0, reset_to_orphan=0 over total_checked=9 (already aligned by startup hook). ✅",
+    "Idempotency: second consecutive POST returns {fixed: 0, reset_to_orphan: 0}. ✅",
+    "Mongo invariant: ALL 9 teaching_load records have semester_id exactly equal to the parent course.semester_id (0 mismatches, 0 missing-course cases). ✅",
+    "Original regression case (load tagged active-semester while course is from old semester): 4 loads in active semester (6a21bee0ddb8d04530cf65f4), 0 violations. ✅",
+    "Orphan handling: 4 courses have no semester_id; all of their teaching_loads have semester_id=null (NOT pinned to active). 0 violations. ✅",
+    "GET /api/teaching-load?semester_id=<ACTIVE> returns 4 items, all of whose courses truly belong to the active semester. ✅"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_teaching_load_semester_backfill.py",
+    "/app/test_reports/pytest/teaching_load_semester_backfill.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py L15190-15238 and routes/teaching_load.py L929-974 duplicate the same alignment logic (DRY violation). Suggest extracting into a shared helper (e.g. teaching_load_service.align_semesters(db)) called both from startup and from the manual endpoint, to avoid divergence on future edits.",
+    "server.py L15232 and routes/teaching_load.py L964 silently swallow per-record exceptions with bare `except Exception: continue`. This hides ObjectId parsing failures or DB errors. Consider logging the exception (logger.warning) so silent data-quality issues remain observable.",
+    "The startup migration runs on EVERY backend boot and scans up to 50000 records (db.teaching_loads.find({}).to_list(50000)). When the collection grows past this limit silently truncates results — recommend a cursor-based iteration or chunked pagination instead of an in-memory cap.",
+    "The manual endpoint POST /api/teaching-load/backfill-semester uses the same 50000 cap and performs N individual update_one calls. For larger datasets consider bulk_write with UpdateOne ops grouped by target semester_id for fewer round-trips.",
+    "There is no audit trail of which loads were re-aligned. Consider logging the (load_id, old_sem_id, new_sem_id) tuple to a migrations/audit collection — useful for forensic comparison if a future regression appears."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_teaching_load_semester_backfill.py (new, 7 tests, all passing)"
+  ],
+  "success_rate": {"backend": "100% (7/7 tests passed)", "frontend": "n/a (backend-only as requested)"},
+  "test_credentials": "admin / admin123 (login OK, returns access_token)",
+  "seed_data_creation": "No seed data created. Tests run purely against existing DB state; idempotency check ensures backfill is a no-op once aligned.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Regression suite at /app/backend/tests/test_teaching_load_semester_backfill.py is self-contained: it loads MONGO_URL/DB_NAME from /app/backend/.env and REACT_APP_BACKEND_URL from /app/frontend/.env, then validates the invariant load.semester_id == course.semester_id both via direct Mongo query and via the API. Re-run: `pytest /app/backend/tests/test_teaching_load_semester_backfill.py -v`. Current DB has 9 teaching_loads (4 active, 5 orphan-course-related) — adjust expectations if test data set changes drastically.",
+  "rca of the issue": "Original regression: backfill_teaching_loads_semester_internal previously used the active_semester_id as a fallback for any teaching_load lacking a semester_id, so historical loads (whose parent course belonged to an older, archived semester) ended up tagged with the active semester and surfaced wrongly in the active-semester view. The fix (verified here) drops the active-semester fallback entirely: alignment is driven only by course.semester_id. If course.semester_id is null, the load's semester_id is reset to null (orphan). If course.semester_id is set and differs from load.semester_id, the load is updated to match. Both the startup hook (server.py L15190-15238) and the manual admin endpoint (routes/teaching_load.py L929-974) implement this consistently. Verified by: (a) startup log shows no exception, (b) endpoint returns expected JSON, (c) idempotent second call yields zeros, (d) direct Mongo scan across all 9 loads finds 0 (load,course) semester_id mismatches, (e) no load in active semester points to an old-semester course, (f) all orphan-course loads carry null semester_id."
+}

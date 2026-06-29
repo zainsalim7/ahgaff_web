@@ -15188,38 +15188,52 @@ async def startup_event():
 
 
 async def backfill_teaching_loads_semester_internal():
-    """🔧 إصلاح تلقائي عند بدء التشغيل: يعبّئ `semester_id` للسجلات بدونها.
+    """🔧 إصلاح تلقائي عند بدء التشغيل: يضمن أن teaching_loads.semester_id يطابق course.semester_id.
     
-    آمن للتشغيل المتكرّر — يفلتر فقط السجلات بدون semester_id.
-    يحلّ المشكلة التي تجعل الإسنادات لا تظهر في صفحة العبء التدريسي.
+    يصلح حالتين:
+    1. السجلات بدون semester_id → يأخذ semester_id من المقرر (وليس الفصل النشط - لتجنّب إظهار سجلات قديمة في الفصل الحالي)
+    2. السجلات بـ semester_id خاطئ (لا يطابق course.semester_id) → يصححها
+    
+    آمن للتشغيل المتكرّر — يفلتر فقط السجلات التي تحتاج إصلاح.
     """
     try:
-        orphans = await db.teaching_loads.find({
-            "$or": [{"semester_id": None}, {"semester_id": ""}, {"semester_id": {"$exists": False}}]
-        }).to_list(10000)
-        
-        if not orphans:
-            return  # لا شيء للإصلاح
-        
-        active_sem = await db.semesters.find_one({"status": "active"})
-        active_sem_id = str(active_sem["_id"]) if active_sem else None
+        # كل السجلات (لأننا نريد التحقق من تطابق semester_id مع course.semester_id)
+        all_loads = await db.teaching_loads.find({}).to_list(50000)
+        if not all_loads:
+            return
         
         fixed = 0
-        for load in orphans:
+        reset_to_orphan = 0
+        for load in all_loads:
             try:
                 course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
-                sem_id = (course.get("semester_id") if course else None) or active_sem_id
-                if sem_id:
+                if not course:
+                    # المقرر محذوف - لا نلمس السجل (يبقى كما هو)
+                    continue
+                
+                correct_sem_id = course.get("semester_id")
+                current_sem_id = load.get("semester_id")
+                
+                # حالة 1: السجل بدون semester_id والمقرر له واحد → اضبطه
+                # حالة 2: السجل بـ semester_id يختلف عن course.semester_id → صحّحه
+                if correct_sem_id and current_sem_id != correct_sem_id:
                     await db.teaching_loads.update_one(
                         {"_id": load["_id"]},
-                        {"$set": {"semester_id": sem_id, "updated_at": datetime.now(timezone.utc)}}
+                        {"$set": {"semester_id": correct_sem_id, "updated_at": datetime.now(timezone.utc)}}
                     )
                     fixed += 1
+                elif not correct_sem_id and current_sem_id:
+                    # المقرر بلا فصل لكن السجل عليه فصل → امسحه (تنظيف منطقي)
+                    await db.teaching_loads.update_one(
+                        {"_id": load["_id"]},
+                        {"$set": {"semester_id": None, "updated_at": datetime.now(timezone.utc)}}
+                    )
+                    reset_to_orphan += 1
             except Exception:
                 continue
         
-        if fixed > 0:
-            logging.info(f"Teaching loads backfill: fixed {fixed} of {len(orphans)} orphan records on startup")
+        if fixed > 0 or reset_to_orphan > 0:
+            logging.info(f"Teaching loads backfill: aligned {fixed} records, reset {reset_to_orphan} orphans")
     except Exception as e:
         logging.warning(f"Teaching loads backfill failed (non-critical): {e}")
 

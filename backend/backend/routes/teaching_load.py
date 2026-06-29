@@ -928,44 +928,49 @@ async def _sync_teaching_loads_for_teachers(db, teacher_ids: list, semester_id: 
 
 @router.post("/teaching-load/backfill-semester")
 async def backfill_teaching_load_semester(current_user: dict = Depends(get_current_user)):
-    """🔧 إصلاح مرّة واحدة: تعبئة `semester_id` للسجلات التي تفتقده.
+    """🔧 إصلاح يدوي: محاذاة semester_id لـ teaching_loads مع course.semester_id.
     
-    يأخذ semester_id من المقرر، وإن لم يكن للمقرر، من الفصل النشط.
-    هذا يحلّ مشكلة الإسنادات التي لا تظهر في صفحة العبء التدريسي.
+    يصلح حالتين: السجلات بدون semester_id، أو بـ semester_id لا يطابق course.semester_id.
+    لا يأخذ الفصل النشط كاحتياطي (لتجنّب إظهار سجلات قديمة في الفصل الحالي).
     """
     if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     
-    orphans = await db.teaching_loads.find({
-        "$or": [{"semester_id": None}, {"semester_id": ""}, {"semester_id": {"$exists": False}}]
-    }).to_list(5000)
-    
-    if not orphans:
-        return {"success": True, "fixed": 0, "message": "لا توجد سجلات بحاجة للإصلاح"}
-    
-    active_sem = await db.semesters.find_one({"status": "active"})
-    active_sem_id = str(active_sem["_id"]) if active_sem else None
-    
+    all_loads = await db.teaching_loads.find({}).to_list(50000)
     fixed = 0
-    for load in orphans:
+    reset_to_orphan = 0
+    course_missing = 0
+    for load in all_loads:
         try:
             course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
-            sem_id = (course.get("semester_id") if course else None) or active_sem_id
-            if sem_id:
+            if not course:
+                course_missing += 1
+                continue
+            correct_sem_id = course.get("semester_id")
+            current_sem_id = load.get("semester_id")
+            if correct_sem_id and current_sem_id != correct_sem_id:
                 await db.teaching_loads.update_one(
                     {"_id": load["_id"]},
-                    {"$set": {"semester_id": sem_id, "updated_at": datetime.now(timezone.utc)}}
+                    {"$set": {"semester_id": correct_sem_id, "updated_at": datetime.now(timezone.utc)}}
                 )
                 fixed += 1
+            elif not correct_sem_id and current_sem_id:
+                await db.teaching_loads.update_one(
+                    {"_id": load["_id"]},
+                    {"$set": {"semester_id": None, "updated_at": datetime.now(timezone.utc)}}
+                )
+                reset_to_orphan += 1
         except Exception:
             continue
     
     return {
         "success": True,
         "fixed": fixed,
-        "total_orphans": len(orphans),
-        "message": f"تم إصلاح {fixed} سجل من {len(orphans)}"
+        "reset_to_orphan": reset_to_orphan,
+        "course_missing": course_missing,
+        "total_checked": len(all_loads),
+        "message": f"تم محاذاة {fixed} سجل مع فصول مقرراتها، تنظيف {reset_to_orphan} سجل، {course_missing} سجل بمقرر محذوف",
     }
 
 
