@@ -1,0 +1,45 @@
+{
+  "summary": "Verified P0 fix for POST /api/teaching-load/bulk — semester_id null no longer makes new assignments invisible in active-semester view. All 8 verification steps (Steps 1-8 from the request) pass via 7 new pytest cases. Existing 7-case regression suite in test_teaching_load_semester_backfill.py also still passes (14/14 total).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_teaching_load_bulk_semester_fix.py",
+    "/app/backend/tests/test_teaching_load_semester_backfill.py",
+    "/app/test_reports/pytest/iteration_49_results.xml"
+  ],
+  "test_results": {
+    "new_suite (test_teaching_load_bulk_semester_fix.py)": {
+      "Step2+3 active-sem course visible immediately + load.semester_id == active": "PASS",
+      "Step4 orphan course: load=active AND course doc auto-migrated to active": "PASS",
+      "Step5 OLD-sem course: load keeps OLD sem, NOT visible in default GET, IS visible with all_semesters=true, course NOT silently moved": "PASS",
+      "Step6 idempotency (same bulk twice → created=0/updated=1, no duplicates)": "PASS",
+      "Step7 backfill-safety: backfill doesn't reverse the fix for active OR migrated-orphan loads": "PASS",
+      "Step8 conflict detection: error contains 'مسند لـ', no duplicate inserted": "PASS",
+      "Cleanup": "PASS (0 leftovers)"
+    },
+    "existing regression (test_teaching_load_semester_backfill.py)": "7/7 PASS"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "teaching_load.py is 2129 lines — exceeds the 700-line guideline. Recommend splitting into bulk/, list/, backfill/, conflict/ submodules for maintainability.",
+    "GET /teaching-load and bulk endpoints cap reads at 500 docs (.to_list(500)); fine today but a pagination/limit param would be safer as data grows.",
+    "Bulk endpoint silently auto-migrates orphan courses to the active semester (a side-effect on the course collection from a teaching-load route). This is intentional per the fix but should be surfaced in the API response (e.g., migrated_courses[]) so the UI can warn the user."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_teaching_load_bulk_semester_fix.py (NEW)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "n/a (backend-only request)"},
+  "test_credentials": "admin / admin123 (used directly for JWT)",
+  "seed_data_creation": "Per-test ephemeral courses prefixed 'TLBLK_' + corresponding teaching_loads — fully cleaned up by test_zz_cleanup. Verified DB state post-run is identical to pre-run (15 courses, 9 loads, 0 leftovers).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "The bulk endpoint fix is verified end-to-end. If extending: also worth covering (a) a multi-item bulk payload mixing active+old+orphan courses to ensure per-item effective_sem_id resolution is independent, and (b) a non-admin user (dept_head) hitting bulk to verify _ensure_course_in_user_scope still rejects out-of-scope courses (admin bypasses scope). Tests are isolated and re-runnable safely.",
+  "rca of the issue": "Frontend (teaching-load.tsx handleSave) sends {teacher_id, course_id, weekly_hours} only — semester_id is omitted. Previous bulk handler inserted teaching_load with semester_id=null. GET /api/teaching-load defaults to {semester_id: active}, so null-semester loads were invisible until the next Cloud Run cold-start ran the backfill (~1h). Fix: bulk now resolves effective_sem_id = item.semester_id || course.semester_id || active_semester_id, and auto-promotes orphan courses to the active semester (so backfill won't revert). Strictness validated: courses already pinned to an OLD/closed semester are NOT pulled into active (Step 5)."
+}

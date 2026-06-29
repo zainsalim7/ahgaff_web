@@ -585,6 +585,12 @@ async def bulk_save_teaching_load(
     updated = 0
     errors = []
 
+    # 🔧 جلب الفصل النشط مرة واحدة لاستخدامه كاحتياطي عند غياب semester_id
+    # (الواجهة لا ترسل semester_id لكل عنصر، ولا يجب أن ينتهي السجل بـ null
+    # وإلا فإن GET /teaching-load الافتراضي يفلتر بالفصل النشط ولن يظهر السجل)
+    active_sem = await db.semesters.find_one({"status": "active"})
+    active_sem_id = str(active_sem["_id"]) if active_sem else None
+
     for item in items:
         # 🔒 منع إسناد مقرر خارج نطاق المستخدم (كلية/قسم)
         course = await db.courses.find_one({"_id": ObjectId(item.course_id)})
@@ -598,13 +604,27 @@ async def bulk_save_teaching_load(
             errors.append(f"{course_label}: {scope_err.detail}")
             continue
 
+        # 🔧 الإصلاح الحاسم: تحديد الـ semester_id الفعلي للسجل
+        # أولوية: (1) ما أرسله العميل صراحةً → (2) course.semester_id → (3) الفصل النشط
+        # السبب: إن بقي null، startup backfill سيُحاذي مع course.semester_id ولكن
+        # الواجهة لن تُظهر السجل حتى يحدث restart (بعد ~1 ساعة في Cloud Run)
+        effective_sem_id = item.semester_id or course.get("semester_id") or active_sem_id
+
+        # 🔧 إضافة: إن لم يكن للمقرر semester_id، اضبطه على الفصل النشط
+        # حتى يبقى متّسقاً مع teaching_load ولا يُعكسه startup backfill لاحقاً
+        if not course.get("semester_id") and active_sem_id:
+            await db.courses.update_one(
+                {"_id": ObjectId(item.course_id)},
+                {"$set": {"semester_id": active_sem_id}}
+            )
+
         # التحقق: هل المقرر مسند لمعلم آخر؟ (ضمن نفس الفصل فقط)
         check_query = {
             "course_id": item.course_id,
             "teacher_id": {"$ne": item.teacher_id},
         }
-        if item.semester_id:
-            check_query["semester_id"] = item.semester_id
+        if effective_sem_id:
+            check_query["semester_id"] = effective_sem_id
         assigned_to_other = await db.teaching_loads.find_one(check_query)
         if assigned_to_other:
             other_teacher = await db.teachers.find_one({"_id": ObjectId(assigned_to_other["teacher_id"])})
@@ -616,7 +636,7 @@ async def bulk_save_teaching_load(
         existing = await db.teaching_loads.find_one({
             "teacher_id": item.teacher_id,
             "course_id": item.course_id,
-            "semester_id": item.semester_id,
+            "semester_id": effective_sem_id,
         })
         if existing:
             await db.teaching_loads.update_one(
@@ -624,7 +644,7 @@ async def bulk_save_teaching_load(
                 {"$set": {
                     "weekly_hours": item.weekly_hours,
                     "notes": item.notes,
-                    "semester_id": item.semester_id,
+                    "semester_id": effective_sem_id,
                     "updated_at": datetime.now(timezone.utc),
                     "updated_by": current_user["id"],
                 }}
@@ -635,7 +655,7 @@ async def bulk_save_teaching_load(
                 "teacher_id": item.teacher_id,
                 "course_id": item.course_id,
                 "weekly_hours": item.weekly_hours,
-                "semester_id": item.semester_id,
+                "semester_id": effective_sem_id,
                 "notes": item.notes,
                 "created_by": current_user["id"],
                 "created_at": datetime.now(timezone.utc),
