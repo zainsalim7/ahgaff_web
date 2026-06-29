@@ -4584,7 +4584,13 @@ async def get_teacher_courses(
         # عدد المحاضرات (من الفلتر الموحّد)
         lectures_count = lecture_counts_map.get(course_id_str, 0)
 
-        weekly_hours = loads_by_course.get(course_id_str, course.get("credit_hours", 0)) or 0
+        # 🔧 نفس منطق /api/teachers list: weekly_hours من teaching_load، fallback لـ credit_hours
+        # (يشمل حالة load.weekly_hours == 0 → نأخذ credit_hours بدلاً من إظهار 0)
+        load_hours = loads_by_course.get(course_id_str)
+        if load_hours is None or load_hours == 0:
+            weekly_hours = course.get("credit_hours", 0) or 0
+        else:
+            weekly_hours = load_hours
         total_weekly_hours += weekly_hours
 
         result.append({

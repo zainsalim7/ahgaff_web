@@ -14,6 +14,21 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-06-29 **🔄 توحيد عدّاد المقررات/النصاب بين `/manage-teachers` و `/teacher-courses`**:
+  - **ما أبلغ عنه المستخدم**: قائمة المعلمين تُظهر "النصاب = 0 س" و "المقررات = 0" لمعلمين فعلياً يدرّسون (مثلاً زين سالم له 3 مقررات / 9 س في صفحته الفردية).
+  - **التشخيص**: `GET /api/teachers` كان يحسب من `teaching_loads` فقط في الفصل النشط. إن كان للمقرر `teacher_id` بدون سجل `teaching_load` مطابق، يخسر العداد. أما `GET /api/teachers/{id}/courses` فيستخدم UNION (`courses.teacher_id ∪ teaching_loads.course_id`) → نتائج متناقضة.
+  - **الإصلاح** في `server.py` (lines 4278-4316):
+    - استبدلنا الحلقة أحادية المصدر بـ UNION بين `loads_map` و `active_courses_map` على مفتاح `(teacher_id, course_id)`.
+    - أولوية للساعات: `weekly_hours` من teaching_load → fallback لـ `credit_hours` من المقرر (يشمل حالة `weekly_hours==0`).
+    - تم تنسيق نفس fallback في detail endpoint (line 4565) لضمان التطابق 100%.
+  - **التحقق**: `testing_agent_v3_fork` iteration 51 — **9/9 ناجح**:
+    - cross-page consistency على 60+ معلم ✓
+    - حالات الحدود: مقرر بـ `teacher_id` فقط (بلا load) → يُحتسب ✓
+    - حالة عكسية: load بلا `teacher_id` على المقرر → يُحتسب أيضاً ✓
+    - فصول قديمة لا تلوّث الفصل النشط ✓
+    - Idempotency + Multi-teacher integrity ✓
+  - **ملف اختبار جديد**: `/app/backend/tests/test_teachers_list_union_counts.py`.
+
 - 2026-06-29 **🧹 إصلاح ثلاثي لمشكلات صفحة "العبء التدريسي" (شبحية، فارغة، مكررات)**:
   - **المشاهدات التي أبلغ عنها المستخدم**:
     1. تقرير PDF يُظهر مقررات من فصول مؤرشفة في جدول الفصل النشط.
