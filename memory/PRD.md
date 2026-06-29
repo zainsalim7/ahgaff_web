@@ -14,6 +14,27 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-06-29 **🧹 إصلاح ثلاثي لمشكلات صفحة "العبء التدريسي" (شبحية، فارغة، مكررات)**:
+  - **المشاهدات التي أبلغ عنها المستخدم**:
+    1. تقرير PDF يُظهر مقررات من فصول مؤرشفة في جدول الفصل النشط.
+    2. صفوف فارغة بلا اسم مقرر في الجدول و PDF.
+    3. مكررات: نفس (المعلم، المقرر) يظهر مرتين في نفس الفصل.
+    4. صفحة `/teacher-courses` لنفس المعلم لا تُظهر هذه السجلات الشبحية (صحيح، تستخدم استعلاماً مختلفاً).
+  - **الإصلاحات الثلاث**:
+    1. **GET `/api/teaching-load`** (lines ~146-160 في `routes/teaching_load.py`): يتجاوز السجلات التي `course` فيها محذوف أو `is_active=False` → لا صفوف شبحية.
+    2. **`_get_export_data`** (lines ~813-826): نفس الفلتر يُطبَّق على تصديرات PDF/Excel → لا أسماء فارغة.
+    3. **Startup migrations جديدة في `server.py`**:
+       - `cleanup_orphan_teaching_loads_internal()`: يحذف نهائياً سجلات teaching_loads التي تشير لمقرر محذوف أو غير نشط.
+       - `dedup_teaching_loads_internal()`: aggregate على (teacher, course, semester) ويحذف المكررات مع الاحتفاظ بالأحدث (أكبر `_id`).
+  - **Endpoint يدوي جديد**: `POST /api/teaching-load/cleanup-orphans` (يحتاج `MANAGE_TEACHING_LOAD`) — يُرجع `{success, deleted_missing_course, deleted_inactive_course, total_deleted, total_checked, message}`.
+  - **التحقق**: `testing_agent_v3_fork` iteration 50 — **23/23 ناجح** (9 جديدة + 14 regression):
+    - السجلات اليتيمة (مقرر محذوف/غير نشط) تختفي من GET واللائحة والتصدير ✓
+    - Endpoint يحذفها فعلياً + Idempotency ✓
+    - Dedup يحتفظ بالأحدث ويحذف القديم ✓
+    - عدم تأثُّر السجلات السليمة + اختبار `all_semesters=true` يكشف فصول قديمة ✓
+  - **الأثر الفوري على بيئة preview**: حذف Dedup سجلين مكررين، اللائحة الآن تُظهر 2 بدلاً من 4 (نظيفة).
+  - **ملف اختبار جديد**: `/app/backend/tests/test_teaching_load_orphan_dedup.py`.
+
 - 2026-06-29 **🚨 إصلاح حرج (P0): العبء التدريسي لا يظهر إلا بعد ساعة** (تابع لـ iteration 48):
   - **السبب الجذري**: واجهة `teaching-load.tsx` (handleSave) ترسل `{teacher_id, course_id, weekly_hours}` فقط بدون `semester_id`. كان endpoint `POST /api/teaching-load/bulk` يُدخل السجل بـ `semester_id=null` → `GET /api/teaching-load` (افتراضياً يفلتر بالفصل النشط) لا يُظهره. عند إعادة تشغيل Cloud Run بعد ~1 ساعة من الخمول، يعمل startup backfill ويُحاذي `load.semester_id = course.semester_id` (الفصل النشط لمعظم المقررات) → فجأة يظهر. هذا فسّر تأخير الساعة بدقّة.
   - **الإصلاح** في `/app/backend/backend/routes/teaching_load.py` (دالة `bulk_save_teaching_load`):
