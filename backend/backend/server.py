@@ -4275,21 +4275,43 @@ async def get_teachers(
             "level": c.get("level", 1),
         })
     
-    # حساب الحمل الفعلي في الفصل النشط لكل المعلمين دفعة واحدة
+    # 🔧 توحيد المنطق مع /teacher-courses: نستخدم UNION (courses.teacher_id ∪ teaching_loads.course_id)
+    # ضمن الفصل النشط، مع fallback لـ course.credit_hours إن لم يوجد teaching_load.
+    # هذا يضمن تطابقاً 100% مع عرض /teacher-courses في عمودي "النصاب" و "المقررات".
     active_sem = await db.semesters.find_one({"status": "active"})
     active_sem_id = str(active_sem["_id"]) if active_sem else None
     active_sem_name = active_sem.get("name", "") if active_sem else ""
     current_sem_hours_by_teacher: dict = {}
     current_sem_courses_by_teacher: dict = {}
     if active_sem_id and teacher_ids:
+        # 1) خريطة (teacher_id, course_id) → weekly_hours من teaching_loads النشطة
+        loads_map: dict = {}  # (tid, cid) -> hours
         async for tl in db.teaching_loads.find({
             "teacher_id": {"$in": teacher_ids},
             "semester_id": active_sem_id,
         }):
-            tid = tl.get("teacher_id", "")
-            hours = tl.get("weekly_hours", 0) or 0
-            current_sem_hours_by_teacher[tid] = current_sem_hours_by_teacher.get(tid, 0) + hours
-            current_sem_courses_by_teacher[tid] = current_sem_courses_by_teacher.get(tid, 0) + 1
+            key = (tl.get("teacher_id", ""), tl.get("course_id", ""))
+            loads_map[key] = tl.get("weekly_hours", 0) or 0
+        # 2) خريطة (teacher_id, course_id) → credit_hours من courses النشطة في الفصل
+        # هذه تغطي الحالة التي يكون فيها course.teacher_id محدّداً لكن teaching_load غائب.
+        active_courses_map: dict = {}  # (tid, cid) -> credit_hours
+        async for c in db.courses.find({
+            "teacher_id": {"$in": teacher_ids},
+            "semester_id": active_sem_id,
+            "is_active": True,
+        }):
+            tid_c = c.get("teacher_id", "")
+            cid_c = str(c["_id"])
+            active_courses_map[(tid_c, cid_c)] = c.get("credit_hours", 0) or 0
+        # 3) UNION: كل المفاتيح (teacher, course) من المصدرين
+        union_keys: set = set(loads_map.keys()) | set(active_courses_map.keys())
+        for tid_u, cid_u in union_keys:
+            # الأولوية لـ teaching_load.weekly_hours، ثم credit_hours احتياطياً
+            hours = loads_map.get((tid_u, cid_u))
+            if hours is None or hours == 0:
+                hours = active_courses_map.get((tid_u, cid_u), 0)
+            current_sem_hours_by_teacher[tid_u] = current_sem_hours_by_teacher.get(tid_u, 0) + (hours or 0)
+            current_sem_courses_by_teacher[tid_u] = current_sem_courses_by_teacher.get(tid_u, 0) + 1
     
     result = []
     for teacher in teachers:

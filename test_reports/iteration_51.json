@@ -1,0 +1,31 @@
+{
+  "summary": "Iteration 51 — Verified that /api/teachers (list) now produces IDENTICAL counts/hours to /api/teachers/{id}/courses (detail) using the new UNION (courses.teacher_id ∪ teaching_loads) logic with credit_hours fallback. All 9 tests passed across cross-page consistency, positive seed scenarios, both edge cases (course-only and load-only), archived-semester negative check, idempotency, and multi-teacher non-contamination.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/teachers (list) vs GET /api/teachers/{id}/courses (detail)", "issue": "Subtle hours-fallback asymmetry when teaching_load.weekly_hours == 0: list endpoint falls back to course.credit_hours (line 4311 `if hours is None or hours == 0`), detail endpoint does NOT fall back (line 4587 uses dict.get with default only if key missing, so a literal 0 stays 0). Not observed in current data (no such row exists), but it's a latent inconsistency that could resurface if any teaching_load is saved with weekly_hours=0 and the linked course has credit_hours>0. Recommend aligning the detail logic to apply same fallback (or coerce 0 to None before .get)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_teachers_list_union_counts.py",
+    "/app/test_reports/pytest/iter51_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Align the 0-weekly_hours fallback behaviour between list and detail endpoints — either both fall back to credit_hours, or both keep 0 — to remove the latent asymmetry described in backend_issues.minor."
+  ],
+  "critical_code_review_comments": [
+    "server.py lines 4287-4314: UNION logic is correct and matches /teachers/{id}/courses semantics. loads_map keyed by (teacher_id, course_id) avoids duplicate counting when both sources reference the same course.",
+    "server.py line 4311: `if hours is None or hours == 0: hours = active_courses_map.get((tid_u, cid_u), 0)` — this implicitly differs from detail-endpoint behaviour at line 4587 which only falls back when the key is missing. Not a blocker today (zero such rows exist), but worth aligning explicitly.",
+    "Detail endpoint /teachers/{id}/courses still fetches courses WITHOUT is_active filter on the UNION (line 4557). List endpoint filters is_active=True in active_courses_map but accepts ALL teaching_loads. In practice, teaching_loads pointing to inactive courses would inflate detail but not always the list. Counts matched on all 60 sampled teachers, so no such data exists currently — flagging as latent only.",
+    "server.py file size > 15,650 lines — well past the recommended split threshold; defer to main agent."
+  ],
+  "updated_files": ["/app/backend/tests/test_teachers_list_union_counts.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "skipped per request"},
+  "test_credentials": "admin / admin123 (used).",
+  "seed_data_creation": "Synthetic courses/teaching_loads were created and removed during Steps 3-6 and 8. A final-sweep test scans for any leftover TEST_S* docs and removes them. Post-run DB verified clean.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_teachers_list_union_counts.py is the canonical regression for the LIST↔DETAIL parity. Re-run it whenever /api/teachers, /api/teachers/{id}/courses, or routes/_active_semester.get_teacher_active_course_ids() are touched. Mongo direct seeding uses MONGO_URL+DB_NAME from /app/backend/.env. Note the minor latent 0-weekly_hours asymmetry described above — write a future test only after main agent decides on the contract.",
+  "rca of the issue": "User saw /manage-teachers showing 0 courses / 0 hours while /teacher-courses showed correct values for the same teacher in the same active semester. Root cause: GET /api/teachers was counting ONLY teaching_loads (loads_map) in the active semester, missing teachers whose courses had teacher_id set but no corresponding teaching_load record. Fix (server.py 4278-4314): replaced single-source loop with a UNION of (a) teaching_loads(teacher_id, course_id) in active sem (b) courses(teacher_id, semester_id=active, is_active=True). Hours priority: weekly_hours from load → credit_hours from course fallback. Verification (this iteration): 60 teachers spot-checked + 4 synthetic-scenario tests + idempotency + multi-teacher integrity all PASS."
+}
