@@ -15185,6 +15185,94 @@ async def startup_event():
     # 🔧 Migration دائمة: تعبئة semester_id لسجلات teaching_loads المعطّلة
     # يحلّ مشكلة عدم ظهور الإسنادات في صفحة العبء التدريسي
     await backfill_teaching_loads_semester_internal()
+    # 🧹 تنظيف تلقائي: حذف teaching_loads اليتيمة (مقرر محذوف أو is_active=False)
+    # يحلّ مشكلة الصفوف الفارغة بلا اسم في PDF/Excel
+    await cleanup_orphan_teaching_loads_internal()
+    # 🧹 إزالة تلقائية للمكررات: نفس (teacher, course, semester) لها سجلات متعددة
+    # نتيجة لإصلاحات سابقة دمجت loads بـ semester_id=null مع loads بـ semester_id=active
+    await dedup_teaching_loads_internal()
+
+
+async def dedup_teaching_loads_internal():
+    """🧹 إزالة المكررات في teaching_loads: نفس (teacher_id, course_id, semester_id) له أكثر من سجل.
+    
+    يحتفظ بأحدث سجل (آخر updated_at أو آخر created_at) ويحذف الباقي.
+    آمن للتشغيل المتكرّر — لا يلمس السجلات الفريدة.
+    """
+    try:
+        pipeline = [
+            {"$group": {
+                "_id": {
+                    "teacher_id": "$teacher_id",
+                    "course_id": "$course_id",
+                    "semester_id": "$semester_id",
+                },
+                "ids": {"$push": "$_id"},
+                "count": {"$sum": 1},
+            }},
+            {"$match": {"count": {"$gt": 1}}},
+        ]
+        deleted = 0
+        async for group in db.teaching_loads.aggregate(pipeline):
+            ids = group["ids"]
+            # احتفظ بالأحدث (أكبر ObjectId timestamp) واحذف الباقي
+            ids_sorted = sorted(ids, reverse=True)
+            keep_id = ids_sorted[0]
+            for old_id in ids_sorted[1:]:
+                await db.teaching_loads.delete_one({"_id": old_id})
+                deleted += 1
+            # احتياط: تأكد أن الباقي له updated_at حديث
+            await db.teaching_loads.update_one(
+                {"_id": keep_id},
+                {"$set": {"updated_at": datetime.now(timezone.utc)}}
+            )
+        if deleted > 0:
+            logging.info(f"Teaching loads dedup: removed {deleted} duplicate records")
+    except Exception as e:
+        logging.warning(f"Teaching loads dedup failed (non-critical): {e}")
+
+
+async def cleanup_orphan_teaching_loads_internal():
+    """🧹 إصلاح تلقائي عند بدء التشغيل: حذف teaching_loads اليتيمة.
+    
+    يحذف السجلات التي:
+    1. تشير لـ course_id لم يعد موجوداً (مقرر محذوف)
+    2. تشير لمقرر بـ is_active=False
+    
+    هذه السجلات هي السبب في الصفوف الفارغة بلا اسم في تقارير PDF/Excel،
+    وفي ظهور مقررات شبحية في صفحة العبء التدريسي.
+    
+    آمن للتشغيل المتكرّر — لا يلمس السجلات السليمة.
+    """
+    try:
+        all_loads = await db.teaching_loads.find({}).to_list(50000)
+        if not all_loads:
+            return
+        deleted_missing = 0
+        deleted_inactive = 0
+        for load in all_loads:
+            try:
+                course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
+                if not course:
+                    await db.teaching_loads.delete_one({"_id": load["_id"]})
+                    deleted_missing += 1
+                elif course.get("is_active") is False:
+                    await db.teaching_loads.delete_one({"_id": load["_id"]})
+                    deleted_inactive += 1
+            except Exception:
+                # ObjectId غير صالح → احذفه
+                try:
+                    await db.teaching_loads.delete_one({"_id": load["_id"]})
+                    deleted_missing += 1
+                except Exception:
+                    pass
+        if deleted_missing > 0 or deleted_inactive > 0:
+            logging.info(
+                f"Teaching loads orphan cleanup: deleted {deleted_missing} missing-course, "
+                f"{deleted_inactive} inactive-course records"
+            )
+    except Exception as e:
+        logging.warning(f"Teaching loads orphan cleanup failed (non-critical): {e}")
 
 
 async def backfill_teaching_loads_semester_internal():

@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 50 regression suite for the teaching_load orphan-filter + cleanup-orphans endpoint + startup dedup migration. 9 new pytest cases in test_teaching_load_orphan_dedup.py all PASS (1 was initially soft-failing on an over-strict count assertion → relaxed to ≤ baseline; root cause documented below). Prior 14 regression tests (test_teaching_load_bulk_semester_fix.py + test_teaching_load_semester_backfill.py) still PASS — total 23/23.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_teaching_load_orphan_dedup.py",
+    "/app/test_reports/pytest/iteration_50_results.xml"
+  ],
+  "test_results": {
+    "Step 2 baseline (no empty course_name; all loads reference active courses)": "PASS",
+    "Step 3 seed orphan loads (missing course + inactive course) hidden from GET /api/teaching-load": "PASS",
+    "Step 4 POST /api/teaching-load/cleanup-orphans deletes both seeded orphans (success=True, deleted_missing_course≥1, deleted_inactive_course≥1)": "PASS",
+    "Step 5 idempotency: 2nd cleanup call returns total_deleted == 0, success=True": "PASS",
+    "Step 6 dedup_teaching_loads_internal() collapses duplicate (teacher,course,semester) → keeps larger _id, deletes older (imported from backend.server)": "PASS",
+    "Step 7 export filter — PDF endpoint returns 200 AND _get_export_data has no empty course_name rows after orphan seed": "PASS",
+    "Step 8 stability — two consecutive GET calls return same items/count": "PASS",
+    "Step 9 negative — old-sem load hidden by default, visible with all_semesters=true": "PASS",
+    "Final cleanup": "PASS (loads restored, courses removed, inactivated courses re-activated)"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "teaching_load.py is still ~2.1k lines — splitting into list/export/cleanup/dedup submodules would improve maintainability (carried over from iter 49).",
+    "cleanup_orphan_teaching_loads (and the startup variant) iterate per-load and call find_one per course (N+1 query). Fine at current size (~9 loads) but should batch via $lookup or a $in fetch + map for >10k loads.",
+    "Dedup keeps the largest _id (newest) but discards updated_at history of the older record. Acceptable, but worth logging the deleted ids in activity_log for audit trail (currently only the startup variant logs an aggregated count)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_teaching_load_orphan_dedup.py (NEW)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new + 14/14 prior regression)", "frontend": "n/a (backend-only)"},
+  "test_credentials": "admin / admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Per-test ephemeral teaching_loads + courses prefixed 'TLORPH_'. test_zz_cleanup removes everything (3 cleanup paths: tracked ids, inactivated-real-course restore to is_active=True, prefix sweep). Verified DB returns to original state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All three layers of the orphan/dedup fix are now covered. If extending: (a) add a startup-restart simulation by invoking cleanup_orphan_teaching_loads_internal() + dedup_teaching_loads_internal() back-to-back to verify ordering is safe; (b) extend Step 6 to also assert weekly_hours of the kept record matches the newer record (currently only asserts _id match); (c) add a multi-teacher dedup case to ensure groups isolate by teacher_id correctly. The test file is fully idempotent and re-runnable.",
+  "rca of the issue": "First run of test_orphan_loads_hidden_from_list failed because the assertion expected the active-listing count to stay AT baseline after seeding 2 orphans. The seed step flips an existing active course to is_active=False — and that course happened to already be referenced by a legit pre-existing teaching_load. So the same orphan-filter that hides our two seeds ALSO correctly hides that legit load, dropping the count by 1. The fix was conceptual (assertion was wrong, not the code): relaxed to len(items) ≤ baseline + explicit check that seeded ids are absent. Backend behavior is correct."
+}

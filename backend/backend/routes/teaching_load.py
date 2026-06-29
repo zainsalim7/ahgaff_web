@@ -149,6 +149,13 @@ async def get_teaching_loads(
         teacher = teachers_map.get(tid, {})
         course = courses_map.get(cid, {})
 
+        # 🔧 تجاهل السجلات اليتيمة: المقرر محذوف أو غير نشط
+        # (تسبّب في ظهور صفوف بلا اسم في الجدول/PDF — وكذلك بقايا فصول قديمة)
+        if not course:
+            continue
+        if course.get("is_active") is False:
+            continue
+
         wh = load.get("weekly_hours", 0)
         if tid not in teacher_summary:
             teacher_summary[tid] = {
@@ -816,6 +823,14 @@ async def _get_export_data(
         tid = load["teacher_id"]
         teacher = teachers_map.get(tid, {})
         course = courses_map.get(load["course_id"], {})
+
+        # 🔧 تجاهل السجلات اليتيمة في التصدير: المقرر محذوف أو غير نشط
+        # (هي السبب في ظهور صفوف فارغة بلا اسم في PDF/Excel)
+        if not course:
+            continue
+        if course.get("is_active") is False:
+            continue
+
         wh = load.get("weekly_hours", 0)
 
         # 🆕 حساب ملاحظات التكليف خارج القسم/الكلية (مع ذكر الاسم)
@@ -944,6 +959,60 @@ async def _sync_teaching_loads_for_teachers(db, teacher_ids: list, semester_id: 
     if to_insert:
         await db.teaching_loads.insert_many(to_insert)
     return len(to_insert)
+
+
+@router.post("/teaching-load/cleanup-orphans")
+async def cleanup_orphan_teaching_loads(current_user: dict = Depends(get_current_user)):
+    """🧹 حذف نهائي لسجلات teaching_loads اليتيمة:
+    
+    1. سجلات تشير إلى course_id لم يعد موجوداً في courses
+    2. سجلات لمقررات بـ is_active=False
+    
+    هذه السجلات هي السبب في ظهور صفوف فارغة بلا اسم في PDF/Excel،
+    وفي ظهور مقررات من فصول قديمة/مؤرشفة في الفصل النشط.
+    
+    آمن للتشغيل المتكرّر — يمسح فقط السجلات اليتيمة.
+    """
+    if not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    
+    all_loads = await db.teaching_loads.find({}).to_list(50000)
+    deleted_missing_course = 0
+    deleted_inactive_course = 0
+    
+    for load in all_loads:
+        try:
+            course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
+            if not course:
+                await db.teaching_loads.delete_one({"_id": load["_id"]})
+                deleted_missing_course += 1
+            elif course.get("is_active") is False:
+                await db.teaching_loads.delete_one({"_id": load["_id"]})
+                deleted_inactive_course += 1
+        except Exception:
+            # ObjectId غير صالح أو course_id فاسد → احذفه أيضاً
+            try:
+                await db.teaching_loads.delete_one({"_id": load["_id"]})
+                deleted_missing_course += 1
+            except Exception:
+                pass
+    
+    total_deleted = deleted_missing_course + deleted_inactive_course
+    await log_activity(
+        current_user, "cleanup_orphan_teaching_loads", "teaching_load",
+        None,
+        f"حذف {total_deleted} سجل عبء يتيم",
+        {"missing_course": deleted_missing_course, "inactive_course": deleted_inactive_course}
+    )
+    return {
+        "success": True,
+        "deleted_missing_course": deleted_missing_course,
+        "deleted_inactive_course": deleted_inactive_course,
+        "total_deleted": total_deleted,
+        "total_checked": len(all_loads),
+        "message": f"تم حذف {total_deleted} سجل يتيم ({deleted_missing_course} مقرر محذوف + {deleted_inactive_course} مقرر غير نشط)"
+    }
 
 
 @router.post("/teaching-load/backfill-semester")
