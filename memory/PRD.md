@@ -14,6 +14,19 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-06-29 **✅ تأكيد إصلاح regression عرض Teaching Load في الفصل النشط (P0)**:
+  - **المشكلة الأصلية**: سكربت backfill القديم كان يعيّن `active_semester_id` كقيمة افتراضية لجميع سجلات `teaching_loads` التي لا تملك `semester_id` → أدى لظهور إسنادات تدريسية تاريخية قديمة داخل عرض الفصل النشط.
+  - **الإصلاح**: في `server.py` (دالة `backfill_teaching_loads_semester_internal` سطور 15190-15238) و `routes/teaching_load.py` (مسار `POST /teaching-load/backfill-semester` سطور 929-974) — يُحاذي semester_id لكل سجل مع `course.semester_id` فقط. إن كان `course.semester_id = None` يُعاد سجل العبء إلى null (orphan) بدلاً من إلصاقه بالفصل النشط.
+  - **التحقق**: `testing_agent_v3_fork` iteration 48 — جميع الاختبارات السبعة نجحت (100%):
+    1. Startup migration يعمل بدون استثناءات ✓
+    2. Endpoint يعيد 200 مع JSON الكامل ✓
+    3. Idempotency (الاستدعاء الثاني = 0 تغييرات) ✓
+    4. كل 9 سجلات في DB: `load.semester_id == course.semester_id` (0 تباين) ✓
+    5. الفصل النشط: 4 سجلات، 0 منها ينتمي مقرره لفصل قديم ✓
+    6. السجلات اليتيمة (course بلا semester) → semester_id=null ✓
+    7. `GET /teaching-load?semester_id=<active>` يرجع فقط مقررات تنتمي فعلاً للفصل النشط ✓
+  - **ملف اختبار regression دائم**: `/app/backend/tests/test_teaching_load_semester_backfill.py` (7 tests, all passing).
+
 - 2026-06-26 **🛠️ صفحة "الإعدادات الأساسية" (إعادة بناء `(tabs)/admin.tsx`)**:
   - **السبب**: توحيد رابط البار السفلي مع الصفحة الرئيسية كان غير منطقي وفقد المستخدمون الوصول لكثير من الأدوات
   - أُعيد بناء `(tabs)/admin.tsx` كصفحة أدوات إدارية موحّدة باسم "الإعدادات الأساسية"
