@@ -14,6 +14,19 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-06-29 **🚨 إصلاح حرج (P0): العبء التدريسي لا يظهر إلا بعد ساعة** (تابع لـ iteration 48):
+  - **السبب الجذري**: واجهة `teaching-load.tsx` (handleSave) ترسل `{teacher_id, course_id, weekly_hours}` فقط بدون `semester_id`. كان endpoint `POST /api/teaching-load/bulk` يُدخل السجل بـ `semester_id=null` → `GET /api/teaching-load` (افتراضياً يفلتر بالفصل النشط) لا يُظهره. عند إعادة تشغيل Cloud Run بعد ~1 ساعة من الخمول، يعمل startup backfill ويُحاذي `load.semester_id = course.semester_id` (الفصل النشط لمعظم المقررات) → فجأة يظهر. هذا فسّر تأخير الساعة بدقّة.
+  - **الإصلاح** في `/app/backend/backend/routes/teaching_load.py` (دالة `bulk_save_teaching_load`):
+    1. يحلّ `effective_sem_id = item.semester_id || course.semester_id || active_semester_id` (3-tier fallback).
+    2. إن لم يكن للمقرر `semester_id` (orphan): يُرقّيه تلقائياً للفصل النشط قبل الإدراج، حتى لا يعكس startup backfill القرار لاحقاً.
+    3. المقررات المنتمية لفصل قديم/مغلق فعلاً تبقى كما هي (لا يتم ترحيلها بصمت).
+  - **التحقق**: `testing_agent_v3_fork` iteration 49 — 14/14 اختبار ناجح (7 جديدة + 7 regression):
+    - Step 2-3: السجل الجديد يظهر فوراً + `load.semester_id == active` ✓
+    - Step 4: مقرر يتيم → load و course كلاهما يُنقلان للفصل النشط ✓
+    - Step 5: مقرر بفصل قديم → load يبقى في الفصل القديم (لا ترحيل صامت) ✓
+    - Step 6: Idempotency ✓ — Step 7: Backfill-safety ✓ — Step 8: Conflict detection ✓
+  - **ملف الاختبار الجديد**: `/app/backend/tests/test_teaching_load_bulk_semester_fix.py`.
+
 - 2026-06-29 **✅ تأكيد إصلاح regression عرض Teaching Load في الفصل النشط (P0)**:
   - **المشكلة الأصلية**: سكربت backfill القديم كان يعيّن `active_semester_id` كقيمة افتراضية لجميع سجلات `teaching_loads` التي لا تملك `semester_id` → أدى لظهور إسنادات تدريسية تاريخية قديمة داخل عرض الفصل النشط.
   - **الإصلاح**: في `server.py` (دالة `backfill_teaching_loads_semester_internal` سطور 15190-15238) و `routes/teaching_load.py` (مسار `POST /teaching-load/backfill-semester` سطور 929-974) — يُحاذي semester_id لكل سجل مع `course.semester_id` فقط. إن كان `course.semester_id = None` يُعاد سجل العبء إلى null (orphan) بدلاً من إلصاقه بالفصل النشط.
