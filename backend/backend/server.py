@@ -149,6 +149,7 @@ try:
         maxIdleTimeMS=60000,
         socketTimeoutMS=30000,
         connectTimeoutMS=5000,
+        waitQueueTimeoutMS=10000,
         retryWrites=True,
         retryReads=True,
         compressors='zstd,snappy,zlib',
@@ -194,6 +195,24 @@ app = FastAPI(title="نظام حضور جامعة الأحقاف")
 
 # Gzip compression - ضغط الردود لتسريع النقل
 app.add_middleware(GZipMiddleware, minimum_size=500)
+
+# ==================== Request Timeout Middleware ====================
+from starlette.middleware.base import BaseHTTPMiddleware
+import asyncio
+
+class TimeoutMiddleware(BaseHTTPMiddleware):
+    """Abort requests that take longer than timeout_seconds to prevent worker starvation."""
+    def __init__(self, app, timeout_seconds: int = 30):
+        super().__init__(app)
+        self.timeout_seconds = timeout_seconds
+
+    async def dispatch(self, request, call_next):
+        try:
+            return await asyncio.wait_for(call_next(request), timeout=self.timeout_seconds)
+        except asyncio.TimeoutError:
+            return Response("Request timeout", status_code=504)
+
+app.add_middleware(TimeoutMiddleware, timeout_seconds=30)
 
 # ==================== Security Headers (Fast approach) ====================
 from starlette.types import ASGIApp, Receive, Scope, Send
