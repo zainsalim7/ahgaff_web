@@ -101,6 +101,25 @@ export default function TakeAttendanceScreen() {
   const [planTopicId, setPlanTopicId] = useState<string | null>(null);
   const [studyPlan, setStudyPlan] = useState<any>(null);
   const [savingLesson, setSavingLesson] = useState(false);
+
+  // 🆕 طلبات اعتماد معلّقة لهذه المحاضرة (شارة ⏳)
+  const [pendingByStudent, setPendingByStudent] = useState<Record<string, { id: string; new_status: string }>>({});
+  const isDean = user?.role === 'dean' || authUser?.role === 'dean';
+  const isAdmin = user?.role === 'admin' || authUser?.role === 'admin';
+  const needsApprovalMode = !isDean && !isAdmin && canEditAttendance && attendanceRecorded;
+
+  const fetchPendingRequests = useCallback(async () => {
+    if (!lectureId) return;
+    try {
+      const r = await api.get(`/api/attendance-changes/lecture/${lectureId}/pending`);
+      const map: Record<string, { id: string; new_status: string }> = {};
+      (r.data?.items || []).forEach((it: any) => {
+        map[it.student_id] = { id: it.id, new_status: it.new_status };
+      });
+      setPendingByStudent(map);
+    } catch (e) { /* silent */ }
+  }, [lectureId]);
+  useEffect(() => { fetchPendingRequests(); }, [fetchPendingRequests]);
   
   // بدء مراقبة الاتصال عند تحميل الصفحة
   useEffect(() => {
@@ -397,12 +416,20 @@ export default function TakeAttendanceScreen() {
       if (isOnline && !offlineMode) {
         // أونلاين - حفظ مباشر على الخادم
         if (lectureId) {
-          await attendanceAPI.recordSession({
+          const resp: any = await attendanceAPI.recordSession({
             lecture_id: lectureId as string,
             records,
             lesson_title: lessonTitle.trim() || undefined,
             plan_topic_id: planTopicId || undefined,
           } as any);
+          // 🆕 مسار اعتماد العميد
+          if (resp?.data?.status === 'pending_approval') {
+            const cnt = resp.data.created ?? records.length;
+            const msg = `تم إرسال ${cnt} تعديل لاعتماد العميد`;
+            if (Platform.OS === 'web') { window.alert(msg); goBack(); }
+            else { Alert.alert('بانتظار الاعتماد', msg, [{ text: 'حسناً', onPress: () => goBack() }]); }
+            return;
+          }
         }
         
         // تحديث الكاش بالحضور المحفوظ
@@ -508,17 +535,24 @@ export default function TakeAttendanceScreen() {
   const renderStudent = ({ item, index }: { item: EnrolledStudent; index: number }) => {
     const status = attendance[item.id] || 'present';
     const statusStyle = getStatusStyle(status);
+    const pending = pendingByStudent[item.id];  // 🆕 طلب اعتماد معلّق لهذا الطالب
 
     return (
       <TouchableOpacity
         style={styles.studentCard}
         onPress={() => toggleStatus(item.id)}
+        data-testid={`student-row-${item.student_id}`}
       >
         <Text style={styles.studentIndex}>{index + 1}</Text>
         <View style={styles.studentInfo}>
           <Text style={styles.studentName}>{item.full_name}</Text>
           <Text style={styles.studentId}>{item.student_id}</Text>
         </View>
+        {pending && (
+          <View style={styles.pendingBadge} data-testid={`pending-badge-${item.student_id}`}>
+            <Text style={styles.pendingText}>⏳ بانتظار اعتماد → {getStatusStyle(pending.new_status).label}</Text>
+          </View>
+        )}
         <View style={[styles.statusBadge, { backgroundColor: statusStyle.bg }]}>
           <Text style={[styles.statusText, { color: statusStyle.color }]}>
             {statusStyle.label}
@@ -606,6 +640,15 @@ export default function TakeAttendanceScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {/* 🆕 تنبيه وضع اعتماد العميد */}
+            {needsApprovalMode && (
+              <View style={styles.approvalBanner} data-testid="approval-mode-banner">
+                <Text style={styles.approvalBannerText}>
+                  ⏳ أنت تعدّل خارج مهلة التحضير — أي تغيير سيُرسَل لاعتماد العميد قبل التطبيق
+                </Text>
+              </View>
+            )}
 
             {/* Course Info Card */}
             <View style={styles.courseCard}>
@@ -1130,6 +1173,10 @@ const styles = StyleSheet.create({
   studentName: { fontSize: 14, fontWeight: '600', color: '#1a2540', textAlign: 'right' },
   studentId: { fontSize: 12, color: '#8a95a8', marginTop: 2, textAlign: 'right' },
   statusBadge: { paddingHorizontal: 14, paddingVertical: 7, borderRadius: 16, minWidth: 70, alignItems: 'center' },
+  pendingBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 10, backgroundColor: '#fff3cd', borderWidth: 1, borderColor: '#ffe58f', marginHorizontal: 6 },
+  pendingText: { fontSize: 10, color: '#8a6d3b', fontWeight: '600' },
+  approvalBanner: { backgroundColor: '#fff3cd', borderRightWidth: 4, borderRightColor: '#ffb300', padding: 10, marginHorizontal: 12, marginTop: 8, borderRadius: 6 },
+  approvalBannerText: { fontSize: 12, color: '#8a6d3b', textAlign: 'right', fontWeight: '600' },
   statusText: { fontSize: 13, fontWeight: '700' },
 
   // empty state

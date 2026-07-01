@@ -262,6 +262,16 @@ const SECTIONS: Section[] = [
         route: '/qr-scanner',
         permissions: [PERMISSIONS.MANAGE_ATTENDANCE, 'record_attendance', 'take_attendance'],
       },
+      {
+        id: 'attendance-approvals',
+        label: 'اعتماد تعديلات الحضور',
+        description: 'مراجعة واعتماد التعديلات خارج المهلة',
+        icon: 'shield-checkmark',
+        color: '#ff9800',
+        bg: '#fff3d6',
+        route: '/attendance-approvals',
+        permissions: [PERMISSIONS.APPROVE_ATTENDANCE_CHANGES],
+      },
     ],
   },
 

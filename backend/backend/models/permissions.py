@@ -84,6 +84,7 @@ class Permission:
     TAKE_ATTENDANCE = "take_attendance"
     VIEW_ATTENDANCE = "view_attendance"
     EDIT_ATTENDANCE = "edit_attendance"
+    APPROVE_ATTENDANCE_CHANGES = "approve_attendance_changes"  # اعتماد تعديلات الحضور خارج المهلة
     
     # صلاحيات الإشعارات
     SEND_NOTIFICATIONS = "send_notifications"
@@ -189,6 +190,7 @@ DEFAULT_PERMISSIONS = {
         Permission.MANAGE_ENROLLMENTS,
         Permission.MANAGE_LECTURES,
         Permission.VIEW_ATTENDANCE,
+        Permission.APPROVE_ATTENDANCE_CHANGES,  # اعتماد تعديلات الحضور خارج المهلة
         Permission.VIEW_REPORTS,
         Permission.EXPORT_REPORTS,
         Permission.IMPORT_DATA,
@@ -317,6 +319,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.TAKE_ATTENDANCE, "label": "أخذ الحضور", "category": "الحضور"},
     {"key": Permission.VIEW_ATTENDANCE, "label": "عرض الحضور", "category": "الحضور"},
     {"key": Permission.EDIT_ATTENDANCE, "label": "تعديل الحضور", "category": "الحضور"},
+    {"key": Permission.APPROVE_ATTENDANCE_CHANGES, "label": "اعتماد تعديلات الحضور (العميد)", "category": "الحضور"},
     {"key": Permission.SEND_NOTIFICATIONS, "label": "إرسال إشعارات وإنذارات للطلاب", "category": "الإشعارات"},
     {"key": Permission.VIEW_REPORTS, "label": "عرض جميع التقارير", "category": "التقارير"},
     {"key": Permission.VIEW_STATISTICS, "label": "عرض الإحصائيات", "category": "التقارير"},

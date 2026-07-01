@@ -175,6 +175,7 @@ from routes.teachers import router as teachers_router
 from routes.courses import router as courses_router
 from routes.notifications import router as notifications_router
 from routes.teaching_load import router as teaching_load_router
+from routes.attendance_approval import router as attendance_approval_router, create_change_requests_for_diff
 from routes.weekly_schedule import router as weekly_schedule_router
 from routes.study_plans import router as study_plans_router
 from routes.admin_tools import router as admin_tools_router
@@ -8827,11 +8828,29 @@ async def record_attendance_session(
         is_completed = lecture.get("status") == LectureStatus.COMPLETED
         edit_deadline = started + timedelta(minutes=attendance_edit_minutes)
         effective_deadline = edit_deadline if is_completed else attendance_deadline
+        is_bypass_edit = (
+            check_time > effective_deadline
+            and not is_offline_sync
+            and has_edit_perm
+            and is_completed
+        )
         if check_time > effective_deadline and not is_offline_sync and not has_edit_perm:
             raise HTTPException(
                 status_code=400,
                 detail=f"انتهت مدة التحضير ({attendance_duration} دقيقة)" if not is_completed else f"تم التحضير وانتهت مدة التعديل ({attendance_edit_minutes} دقيقة)"
             )
+        # 🆕 مسار اعتماد العميد: تعديل خارج المهلة من مستخدم غير ADMIN/DEAN
+        if is_bypass_edit and current_user["role"] not in [UserRole.ADMIN, UserRole.DEAN]:
+            diff_result = await create_change_requests_for_diff(
+                lecture, course, session.records, current_user, reason=session.notes
+            )
+            return {
+                "status": "pending_approval",
+                "message": f"تم إرسال {diff_result['created']} تعديل لاعتماد العميد",
+                "created": diff_result["created"],
+                "skipped_no_change": diff_result["skipped"],
+                "request_ids": diff_result["request_ids"],
+            }
     else:
         # التحضير لم يبدأ بعد - التحقق من الحد الأقصى للتأخير
         max_open_time = lecture_start + timedelta(minutes=max_delay)
@@ -9008,6 +9027,25 @@ async def update_attendance_status(
         raise HTTPException(status_code=404, detail="سجل الحضور غير موجود")
     
     old_status = record.get("status")
+    
+    # 🆕 مسار اعتماد العميد: أي مستخدم يعدّل عبر هذا الـ endpoint (bypass) وليس ADMIN/DEAN → طلب اعتماد
+    if current_user["role"] not in [UserRole.ADMIN, UserRole.DEAN] and old_status != new_status:
+        lecture = await db.lectures.find_one({"_id": ObjectId(record["lecture_id"])})
+        course = await db.courses.find_one({"_id": ObjectId(record["course_id"])}) if record.get("course_id") else None
+        if lecture and course:
+            # صياغة تنسيق يتوافق مع helper (يستخدم .student_id و .status)
+            class _R:
+                def __init__(self, sid, st):
+                    self.student_id = sid
+                    self.status = st
+            diff_result = await create_change_requests_for_diff(
+                lecture, course, [_R(record["student_id"], new_status)], current_user, reason=reason or None
+            )
+            return {
+                "status": "pending_approval",
+                "message": "تم إرسال طلب التعديل لاعتماد العميد",
+                "request_ids": diff_result["request_ids"],
+            }
     
     await db.attendance.update_one(
         {"_id": ObjectId(record_id)},
@@ -15173,6 +15211,7 @@ app.include_router(teachers_router, prefix="/api")
 app.include_router(courses_router, prefix="/api")
 app.include_router(notifications_router, prefix="/api")
 app.include_router(teaching_load_router, prefix="/api")
+app.include_router(attendance_approval_router, prefix="/api")
 app.include_router(weekly_schedule_router, prefix="/api")
 app.include_router(study_plans_router, prefix="/api")
 app.include_router(admin_tools_router, prefix="/api")
@@ -15628,8 +15667,17 @@ async def sync_default_roles():
             continue
         existing = await db.roles.find_one({"system_key": system_key})
         if existing:
-            # لا نُعدّل الصلاحيات الموجودة - المستخدم قد خصصها يدوياً
-            logging.info(f"الدور {system_key} موجود مسبقاً - لن يتم تعديله")
+            # لا نُعدّل الصلاحيات الموجودة عموماً - المستخدم قد خصصها يدوياً
+            # 🔧 استثناء: نضمن أن للعميد صلاحية approve_attendance_changes (ميزة جديدة)
+            existing_perms = existing.get("permissions", [])
+            if system_key == "dean" and Permission.APPROVE_ATTENDANCE_CHANGES not in existing_perms:
+                await db.roles.update_one(
+                    {"_id": existing["_id"]},
+                    {"$addToSet": {"permissions": Permission.APPROVE_ATTENDANCE_CHANGES}}
+                )
+                logging.info(f"تمت إضافة approve_attendance_changes إلى دور العميد")
+            else:
+                logging.info(f"الدور {system_key} موجود مسبقاً - لن يتم تعديله")
         else:
             role_names = {
                 "admin": "مدير النظام",

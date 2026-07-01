@@ -81,6 +81,7 @@ export const PERMISSIONS = {
   TAKE_ATTENDANCE: 'take_attendance',
   VIEW_ATTENDANCE: 'view_attendance',
   EDIT_ATTENDANCE: 'edit_attendance',
+  APPROVE_ATTENDANCE_CHANGES: 'approve_attendance_changes',
   // صلاحيات الجداول الدراسية (اليومي/الأسبوعي)
   VIEW_SCHEDULE: 'view_schedule',
   MANAGE_SCHEDULE: 'manage_schedule',
