@@ -312,6 +312,84 @@ async def pending_for_lecture(
 # Approve / Reject / Cancel
 # ─────────────────────────────────────────────────────────────
 
+@router.post("/attendance-changes/batch/approve")
+async def batch_approve(
+    payload: BatchActionPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """اعتماد جماعي لعدة طلبات."""
+    if not _can_approve(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بالاعتماد")
+    db = get_db()
+    approved = 0
+    errors: List[dict] = []
+    for req_id in payload.request_ids:
+        try:
+            doc = await db.attendance_change_requests.find_one({"_id": ObjectId(req_id)})
+            if not doc or doc.get("status") != "pending":
+                errors.append({"id": req_id, "reason": "غير موجود أو ليس معلّقاً"})
+                continue
+            if current_user["role"] != UserRole.ADMIN and current_user.get("faculty_id"):
+                if doc.get("faculty_id") and doc["faculty_id"] != current_user["faculty_id"]:
+                    errors.append({"id": req_id, "reason": "خارج نطاقك"})
+                    continue
+            await _apply_change_to_attendance(doc, current_user)
+            await db.attendance_change_requests.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {
+                    "status": "approved",
+                    "reviewed_by": current_user["id"],
+                    "reviewed_by_name": current_user.get("full_name", ""),
+                    "reviewed_at": datetime.now(timezone.utc),
+                }}
+            )
+            approved += 1
+        except Exception as e:
+            errors.append({"id": req_id, "reason": str(e)})
+    await log_activity(
+        current_user, "batch_approve_attendance_changes", "attendance_change_request",
+        None, f"اعتماد جماعي: {approved} من {len(payload.request_ids)}"
+    )
+    return {"success": True, "approved": approved, "errors": errors}
+
+
+@router.post("/attendance-changes/batch/reject")
+async def batch_reject(
+    payload: BatchActionPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """رفض جماعي لعدة طلبات."""
+    if not _can_approve(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بالرفض")
+    db = get_db()
+    rejected = 0
+    errors: List[dict] = []
+    for req_id in payload.request_ids:
+        try:
+            doc = await db.attendance_change_requests.find_one({"_id": ObjectId(req_id)})
+            if not doc or doc.get("status") != "pending":
+                errors.append({"id": req_id, "reason": "غير موجود أو ليس معلّقاً"})
+                continue
+            if current_user["role"] != UserRole.ADMIN and current_user.get("faculty_id"):
+                if doc.get("faculty_id") and doc["faculty_id"] != current_user["faculty_id"]:
+                    errors.append({"id": req_id, "reason": "خارج نطاقك"})
+                    continue
+            await db.attendance_change_requests.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {
+                    "status": "rejected",
+                    "reviewed_by": current_user["id"],
+                    "reviewed_by_name": current_user.get("full_name", ""),
+                    "reviewed_at": datetime.now(timezone.utc),
+                    "review_notes": payload.review_notes or "",
+                }}
+            )
+            rejected += 1
+        except Exception as e:
+            errors.append({"id": req_id, "reason": str(e)})
+    return {"success": True, "rejected": rejected, "errors": errors}
+
+
 @router.post("/attendance-changes/{req_id}/approve")
 async def approve_change(
     req_id: str,
@@ -390,84 +468,6 @@ async def reject_change(
         f"رفض تعديل حضور {doc.get('student_name', '')}: {payload.review_notes or ''}"
     )
     return {"success": True, "message": "تم رفض الطلب"}
-
-
-@router.post("/attendance-changes/batch/approve")
-async def batch_approve(
-    payload: BatchActionPayload,
-    current_user: dict = Depends(get_current_user),
-):
-    """اعتماد جماعي لعدة طلبات."""
-    if not _can_approve(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك بالاعتماد")
-    db = get_db()
-    approved = 0
-    errors: List[dict] = []
-    for req_id in payload.request_ids:
-        try:
-            doc = await db.attendance_change_requests.find_one({"_id": ObjectId(req_id)})
-            if not doc or doc.get("status") != "pending":
-                errors.append({"id": req_id, "reason": "غير موجود أو ليس معلّقاً"})
-                continue
-            if current_user["role"] != UserRole.ADMIN and current_user.get("faculty_id"):
-                if doc.get("faculty_id") and doc["faculty_id"] != current_user["faculty_id"]:
-                    errors.append({"id": req_id, "reason": "خارج نطاقك"})
-                    continue
-            await _apply_change_to_attendance(doc, current_user)
-            await db.attendance_change_requests.update_one(
-                {"_id": doc["_id"]},
-                {"$set": {
-                    "status": "approved",
-                    "reviewed_by": current_user["id"],
-                    "reviewed_by_name": current_user.get("full_name", ""),
-                    "reviewed_at": datetime.now(timezone.utc),
-                }}
-            )
-            approved += 1
-        except Exception as e:
-            errors.append({"id": req_id, "reason": str(e)})
-    await log_activity(
-        current_user, "batch_approve_attendance_changes", "attendance_change_request",
-        None, f"اعتماد جماعي: {approved} من {len(payload.request_ids)}"
-    )
-    return {"success": True, "approved": approved, "errors": errors}
-
-
-@router.post("/attendance-changes/batch/reject")
-async def batch_reject(
-    payload: BatchActionPayload,
-    current_user: dict = Depends(get_current_user),
-):
-    """رفض جماعي لعدة طلبات."""
-    if not _can_approve(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك بالرفض")
-    db = get_db()
-    rejected = 0
-    errors: List[dict] = []
-    for req_id in payload.request_ids:
-        try:
-            doc = await db.attendance_change_requests.find_one({"_id": ObjectId(req_id)})
-            if not doc or doc.get("status") != "pending":
-                errors.append({"id": req_id, "reason": "غير موجود أو ليس معلّقاً"})
-                continue
-            if current_user["role"] != UserRole.ADMIN and current_user.get("faculty_id"):
-                if doc.get("faculty_id") and doc["faculty_id"] != current_user["faculty_id"]:
-                    errors.append({"id": req_id, "reason": "خارج نطاقك"})
-                    continue
-            await db.attendance_change_requests.update_one(
-                {"_id": doc["_id"]},
-                {"$set": {
-                    "status": "rejected",
-                    "reviewed_by": current_user["id"],
-                    "reviewed_by_name": current_user.get("full_name", ""),
-                    "reviewed_at": datetime.now(timezone.utc),
-                    "review_notes": payload.review_notes or "",
-                }}
-            )
-            rejected += 1
-        except Exception as e:
-            errors.append({"id": req_id, "reason": str(e)})
-    return {"success": True, "rejected": rejected, "errors": errors}
 
 
 @router.delete("/attendance-changes/{req_id}")

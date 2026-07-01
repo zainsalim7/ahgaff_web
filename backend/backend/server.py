@@ -9010,7 +9010,12 @@ async def update_attendance_status(
 ):
     """تعديل حالة حضور طالب - يتطلب صلاحية edit_attendance"""
     user_permissions = current_user.get("permissions", [])
-    has_edit_perm = "edit_attendance" in user_permissions
+    # 🔧 admin يُسمح له مباشرة (feature spec: ADMIN bypass كامل)
+    # ملاحظة: edit_attendance مصنّف TEACHER_ONLY_PERMISSIONS فلا يمنحه has_permission لـ admin تلقائياً
+    if current_user["role"] == UserRole.ADMIN:
+        has_edit_perm = True
+    else:
+        has_edit_perm = has_permission(current_user, "edit_attendance")
     
     if not has_edit_perm:
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية تعديل الحضور")

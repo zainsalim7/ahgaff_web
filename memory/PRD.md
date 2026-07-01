@@ -14,6 +14,31 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-07-01 **🆕 نظام اعتماد العميد على تعديلات الحضور خارج المهلة**:
+  - **الحاجة**: بعد انتهاء نافذة `attendance_edit_minutes` من إعدادات الكلية، فقط من يملك صلاحية `edit_attendance` (bypass) يستطيع التعديل. المستخدم طلب أن تُحفَظ تعديلات هؤلاء (الجميع ما عدا ADMIN/DEAN) كطلبات معلّقة تنتظر اعتماد العميد.
+  - **الصلاحية الجديدة**: `APPROVE_ATTENDANCE_CHANGES` تُمنَح تلقائياً للعميد + المدير عبر migration في `sync_default_roles`.
+  - **Backend**:
+    - Collection جديد: `attendance_change_requests` (attendance_id, lecture_id, course_id, student_id, faculty_id, old_status, new_status, reason, requested_by, status ∈ {pending,approved,rejected,cancelled}).
+    - Route جديد `/app/backend/backend/routes/attendance_approval.py`:
+      - GET `/attendance-changes` (فلترة تلقائية حسب كلية العميد)
+      - GET `/attendance-changes/pending-count` (للبادج)
+      - GET `/attendance-changes/mine` (لمقدّم الطلب)
+      - GET `/attendance-changes/lecture/{id}/pending` (شارات ⏳ على الصفحة)
+      - POST `/attendance-changes/batch/approve` و `/batch/reject`
+      - POST `/attendance-changes/{req_id}/approve` و `/reject`
+      - DELETE `/attendance-changes/{req_id}` (إلغاء ذاتي)
+    - تعديل `POST /attendance/session` في server.py: إذا اكتشف `is_bypass_edit=True` وكان user ليس ADMIN/DEAN → يستدعي `create_change_requests_for_diff` بدلاً من التطبيق المباشر ويُرجع `{status: "pending_approval", request_ids}`.
+    - تعديل `PUT /attendance/{record_id}/status`: نفس المنطق للتغيير الفردي.
+  - **Frontend**:
+    - صفحة جديدة `/attendance-approvals` (تبويبات: قيد الانتظار / معتمد / مرفوض / الكل + اعتماد/رفض جماعي + مودال ملاحظات الرفض).
+    - في `/take-attendance`: تنبيه أصفر "أنت تعدّل خارج المهلة" + شارات ⏳ بجانب الطلاب الذين لديهم طلبات معلّقة + رسالة "تم إرسال N تعديل لاعتماد العميد" بعد الحفظ.
+    - أيقونة جديدة في `admin.tsx` تحت "الحضور وبطاقات الطلاب".
+  - **التحقق**: `testing_agent_v3_fork` iteration 52 كشف عن bugs (route ordering + admin bypass) — تم الإصلاح بعده:
+    - **Fix 1**: إعادة ترتيب مسارات `/batch/{approve,reject}` قبل `/{req_id}/{approve,reject}` لتفادي captured كـ path param.
+    - **Fix 2**: `PUT /attendance/{record_id}/status` — إضافة استثناء صريح للـ ADMIN لأن `edit_attendance` في `TEACHER_ONLY_PERMISSIONS` لا يُمنَح تلقائياً للمدير عبر `has_permission`.
+    - **النتيجة النهائية**: pytest — **18/18 اختبار ناجح** (E2E pending→approve/reject، Faculty scope، Self-cancel، داخل النافذة → مباشر، Idempotency، Batch، Badge، Dept-head → pending، Sibling dept-head لا يعتمد، ADMIN بلا اعتماد، DEAN بلا اعتماد).
+  - **ملف اختبار جديد**: `/app/backend/tests/test_attendance_approval.py` (18 اختبار).
+
 - 2026-06-29 **🔄 توحيد عدّاد المقررات/النصاب بين `/manage-teachers` و `/teacher-courses`**:
   - **ما أبلغ عنه المستخدم**: قائمة المعلمين تُظهر "النصاب = 0 س" و "المقررات = 0" لمعلمين فعلياً يدرّسون (مثلاً زين سالم له 3 مقررات / 9 س في صفحته الفردية).
   - **التشخيص**: `GET /api/teachers` كان يحسب من `teaching_loads` فقط في الفصل النشط. إن كان للمقرر `teacher_id` بدون سجل `teaching_load` مطابق، يخسر العداد. أما `GET /api/teachers/{id}/courses` فيستخدم UNION (`courses.teacher_id ∪ teaching_loads.course_id`) → نتائج متناقضة.
