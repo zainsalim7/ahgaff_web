@@ -111,7 +111,7 @@ export default function TakeAttendanceScreen() {
   const fetchPendingRequests = useCallback(async () => {
     if (!lectureId) return;
     try {
-      const r = await api.get(`/api/attendance-changes/lecture/${lectureId}/pending`);
+      const r = await api.get(`/attendance-changes/lecture/${lectureId}/pending`);
       const map: Record<string, { id: string; new_status: string }> = {};
       (r.data?.items || []).forEach((it: any) => {
         map[it.student_id] = { id: it.id, new_status: it.new_status };

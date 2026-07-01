@@ -14,6 +14,21 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-07-01 **➕ P2 مُنجَز: `/my-attendance-requests` + بادج طلبات الاعتماد للعميد**:
+  - **الصفحة الجديدة**: `/app/frontend/app/my-attendance-requests.tsx`
+    - 5 تبويبات: الكل / قيد الانتظار / معتمد / مرفوض / ملغى.
+    - بطاقة لكل طلب: اسم الطالب + المقرر + المحاضرة + التغيير المقترح (قديم → جديد) + الحالة الملوّنة + السبب + ملاحظات المراجع.
+    - زر "إلغاء الطلب" يظهر فقط للطلبات المعلّقة.
+    - Pull-to-refresh + عرض فارغ ذكي حسب الفلتر.
+    - تعمل عبر `GET /api/attendance-changes/mine` و `DELETE /api/attendance-changes/{id}` (endpoints موجودة سابقاً).
+  - **البادج الجديد**: أيقونة الإعدادات في الشريط السفلي:
+    - بادج أصفر (#ff9800) في الجهة اليسرى يعرض `approvalCount` للعميد + المدير فقط.
+    - Polling كل 60 ثانية عبر `GET /api/attendance-changes/pending-count`.
+    - يتعايش مع بادج الـ offline sync الأحمر في الجهة اليمنى (لا تعارض بصري).
+    - Cap: 99+ للأعداد الكبيرة.
+  - **رابط الوصول**: أيقونة جديدة في `admin.tsx` باسم "طلباتي لتعديل الحضور" (icon: time، لون سماوي) لكل من له `edit_attendance` أو `manage_attendance`.
+  - **التحقق**: لقطة UI تُظهر الصفحة تعمل بجميع التبويبات + الرسالة الفارغة الأنيقة.
+
 - 2026-07-01 **🆕 نظام اعتماد العميد على تعديلات الحضور خارج المهلة**:
   - **الحاجة**: بعد انتهاء نافذة `attendance_edit_minutes` من إعدادات الكلية، فقط من يملك صلاحية `edit_attendance` (bypass) يستطيع التعديل. المستخدم طلب أن تُحفَظ تعديلات هؤلاء (الجميع ما عدا ADMIN/DEAN) كطلبات معلّقة تنتظر اعتماد العميد.
   - **الصلاحية الجديدة**: `APPROVE_ATTENDANCE_CHANGES` تُمنَح تلقائياً للعميد + المدير عبر migration في `sync_default_roles`.

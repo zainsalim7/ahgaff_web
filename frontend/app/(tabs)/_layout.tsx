@@ -1,10 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { Tabs } from 'expo-router';
 import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
 import { useOfflineSyncStore } from '../../src/store/offlineSyncStore';
 import { institutionAPI } from '../../src/services/api';
+import api from '../../src/services/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function TabsLayout() {
@@ -14,6 +15,23 @@ export default function TabsLayout() {
   const permissions = user?.permissions || [];
   const pendingCount = useOfflineSyncStore((state) => state.getPendingRecordsCount());
   const [institutionName, setInstitutionName] = useState('نظام الحضور');
+
+  // 🆕 عدد طلبات اعتماد الحضور المعلّقة (للعميد + المدير)
+  const [approvalCount, setApprovalCount] = useState(0);
+  const canApproveAttendance = permissions.includes('approve_attendance_changes') || role === 'admin';
+  const fetchApprovalCount = useCallback(async () => {
+    if (!canApproveAttendance) return;
+    try {
+      const r = await api.get('/attendance-changes/pending-count');
+      setApprovalCount(r.data?.count || 0);
+    } catch (e) { /* silent */ }
+  }, [canApproveAttendance]);
+  useEffect(() => {
+    if (!canApproveAttendance) return;
+    fetchApprovalCount();
+    const iv = setInterval(fetchApprovalCount, 60000); // كل 60 ثانية
+    return () => clearInterval(iv);
+  }, [fetchApprovalCount, canApproveAttendance]);
 
   const isReady = !isLoading && !!user && !!role;
 
@@ -155,6 +173,11 @@ export default function TabsLayout() {
                   <Text style={styles.badgeText}>{pendingCount > 9 ? '9+' : pendingCount}</Text>
                 </View>
               )}
+              {approvalCount > 0 && (
+                <View style={styles.approvalBadge} data-testid="approval-badge">
+                  <Text style={styles.badgeText}>{approvalCount > 99 ? '99+' : approvalCount}</Text>
+                </View>
+              )}
             </View>
           ),
           headerTitle: 'الإعدادات الأساسية',
@@ -236,6 +259,20 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 4,
+  },
+  approvalBadge: {
+    position: 'absolute',
+    top: -4,
+    left: -8,
+    backgroundColor: '#ff9800',
+    borderRadius: 10,
+    minWidth: 18,
+    height: 18,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+    borderWidth: 1.5,
+    borderColor: '#fff',
   },
   badgeText: {
     color: '#fff',

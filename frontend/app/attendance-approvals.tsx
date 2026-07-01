@@ -61,7 +61,7 @@ export default function AttendanceApprovalsScreen() {
   const fetchList = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await api.get(`/api/attendance-changes?status=${filterStatus}`);
+      const res = await api.get(`/attendance-changes?status=${filterStatus}`);
       setItems(res.data?.items || []);
       setSelectedIds(new Set());
     } catch (e: any) {
@@ -91,9 +91,9 @@ export default function AttendanceApprovalsScreen() {
     setProcessing(true);
     try {
       if (ids.length === 1) {
-        await api.post(`/api/attendance-changes/${ids[0]}/approve`, {});
+        await api.post(`/attendance-changes/${ids[0]}/approve`, {});
       } else {
-        await api.post(`/api/attendance-changes/batch/approve`, { request_ids: ids });
+        await api.post(`/attendance-changes/batch/approve`, { request_ids: ids });
       }
       const msg = `تم اعتماد ${ids.length} طلب`;
       if (Platform.OS === 'web') window.alert(msg);
@@ -112,9 +112,9 @@ export default function AttendanceApprovalsScreen() {
     setProcessing(true);
     try {
       if (ids.length === 1) {
-        await api.post(`/api/attendance-changes/${ids[0]}/reject`, { review_notes: rejectNotes });
+        await api.post(`/attendance-changes/${ids[0]}/reject`, { review_notes: rejectNotes });
       } else {
-        await api.post(`/api/attendance-changes/batch/reject`, { request_ids: ids, review_notes: rejectNotes });
+        await api.post(`/attendance-changes/batch/reject`, { request_ids: ids, review_notes: rejectNotes });
       }
       const msg = `تم رفض ${ids.length} طلب`;
       if (Platform.OS === 'web') window.alert(msg);

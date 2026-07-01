@@ -272,6 +272,16 @@ const SECTIONS: Section[] = [
         route: '/attendance-approvals',
         permissions: [PERMISSIONS.APPROVE_ATTENDANCE_CHANGES],
       },
+      {
+        id: 'my-attendance-requests',
+        label: 'طلباتي لتعديل الحضور',
+        description: 'تاريخ طلبات الاعتماد التي قدّمتها',
+        icon: 'time',
+        color: '#0891b2',
+        bg: '#cffafe',
+        route: '/my-attendance-requests',
+        permissions: [PERMISSIONS.EDIT_ATTENDANCE, PERMISSIONS.MANAGE_ATTENDANCE],
+      },
     ],
   },
 
