@@ -132,7 +132,8 @@ async def _apply_status_change(
             "semester_id": str(active_sem["_id"]) if active_sem else None,
             "semester_name": (active_sem or {}).get("name") if active_sem else None,
             "academic_year_id": (active_sem or {}).get("academic_year_id") if active_sem else student.get("academic_year_id"),
-            "academic_year": student.get("academic_year") or (active_sem or {}).get("year"),
+            # 🔧 حقل الـ semesters هو 'academic_year' وليس 'year'
+            "academic_year": student.get("academic_year") or (active_sem or {}).get("academic_year"),
             "department_id": str(student.get("department_id") or "") or None,
             "faculty_id": str(student.get("faculty_id") or "") or None,
             "captured_at": effective_date,

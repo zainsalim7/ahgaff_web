@@ -14,6 +14,21 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-07-04 **🆕 صفحة "حالات الطالب (غير المستمرين)"**:
+  - **الحاجة**: جدول موحّد للطلاب في حالات: مجمَّد / إعادة / مفصول — مع الاحتفاظ ببيانات الطالب لحظة تغيير الحالة.
+  - **Backend** في `/app/backend/backend/routes/student_status.py`:
+    - **حفظ snapshot** في `_apply_status_change` عند أول انتقال لحالة غير نشطة: `{level, section, semester_id, semester_name, academic_year, academic_year_id, department_id, faculty_id, captured_at}`. يُلتقط مرة واحدة فقط ولا يُعدَّل لاحقاً.
+    - **`GET /api/student-statuses`**: قائمة موحّدة بفلاتر (status ∈ frozen/repeat/expelled/all + faculty_id + department_id + q).
+    - **`POST /api/student-status/{id}/restore`**: يستقبل `{new_level: 1-4, new_section, reason}` ويعيد الطالب لـ status=active + is_active=true + المستوى/الشعبة الجديدة + يحذف snapshot.
+    - **`GET /api/student-status/available-sections?department_id=X`**: يعيد `{levels: [1..4], sections: [...]}` للمودال.
+  - **Frontend** `/app/frontend/app/student-statuses.tsx`:
+    - 4 تبويبات + بحث + Pull-to-refresh.
+    - بطاقة كل طالب: الحالة الملوّنة، الاسم، الرقم، القسم، صندوق snapshot يعرض المستوى/الشعبة/الفصل/العام لحظة التغيير، السبب.
+    - زر "إعادة إلى النشط" يفتح مودال باختيار المستوى (1-4) والشعبة (من قائمة ديناميكية للقسم) + ملاحظة.
+    - رابط ثابت في `admin.tsx` باسم "حالات الطالب".
+  - **الميزة الجماعية**: في `/students`، زر "تغيير الحالة" موجود مسبقاً — يفتح مودال باختيار الحالة (مجمد/إعادة/مفصول) + السبب.
+  - **التحقق**: `testing_agent_v3_fork` iteration 54 كشف عن bug (`.get('year')` بدلاً من `.get('academic_year')`) — تم الإصلاح فوراً. اختبار Verification E2E عبر curl: snapshot يُحفَظ صحيحاً مع `academic_year: "2024-2025"` من الفصل النشط ✓.
+
 - 2026-07-04 **🎓 إصلاح جذري لمشكلات جدول الخريجين (Alumni)**:
   - **ما أبلغ عنه المستخدم**:
     1. تخريج طلاب من قسم "شريعة وقانون" → يظهرون في جدول الخريجين تحت قسم مختلف. عند استرجاعهم يعودون لقسم خاطئ.
