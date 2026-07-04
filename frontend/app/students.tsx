@@ -198,6 +198,14 @@ export default function StudentsScreen() {
   // سجل التاريخ لطالب
   const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [historyData, setHistoryData] = useState<any[]>([]);
+
+  // 🆕 إجراءات المقررات: نسخ / نقل / إلغاء تسجيل
+  const [enrollActionMode, setEnrollActionMode] = useState<null | 'copy' | 'move' | 'unenroll'>(null);
+  const [enrollActionCourses, setEnrollActionCourses] = useState<any[]>([]);
+  const [enrollActionSourceId, setEnrollActionSourceId] = useState<string>('');
+  const [enrollActionTargetIds, setEnrollActionTargetIds] = useState<string[]>([]);
+  const [enrollActionSearch, setEnrollActionSearch] = useState('');
+  const [enrollActionLoading, setEnrollActionLoading] = useState(false);
   const [historyFor, setHistoryFor] = useState<any>(null);
 
   // استيراد الطلاب من Excel
@@ -573,6 +581,73 @@ export default function StudentsScreen() {
   };
 
   // 🆕 تخريج جماعي
+
+  // 🆕 فتح مودال إجراءات المقررات
+  const openEnrollActionModal = async (mode: 'copy' | 'move' | 'unenroll') => {
+    if (selectedIds.size === 0) return;
+    try {
+      const res = await api.get('/courses');
+      const list = (res.data || []).filter((c: any) => c.is_active !== false);
+      setEnrollActionCourses(list);
+    } catch { setEnrollActionCourses([]); }
+    setEnrollActionSourceId('');
+    setEnrollActionTargetIds([]);
+    setEnrollActionSearch('');
+    setEnrollActionMode(mode);
+  };
+
+  const toggleEnrollActionTarget = (id: string) => {
+    setEnrollActionTargetIds(prev =>
+      prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+    );
+  };
+
+  const submitEnrollAction = async () => {
+    if (!enrollActionMode || selectedIds.size === 0) return;
+    const student_ids = Array.from(selectedIds);
+    setEnrollActionLoading(true);
+    try {
+      if (enrollActionMode === 'copy') {
+        if (enrollActionTargetIds.length === 0) {
+          showMessage('تنبيه', 'اختر مقرراً واحداً على الأقل'); setEnrollActionLoading(false); return;
+        }
+        const r = await api.post('/enrollments/bulk-copy', { student_ids, target_course_ids: enrollActionTargetIds });
+        showMessage('تم', r.data?.message || `تم نسخ ${student_ids.length} طالب`);
+      } else if (enrollActionMode === 'move') {
+        if (!enrollActionSourceId || enrollActionTargetIds.length === 0) {
+          showMessage('تنبيه', 'اختر المقرر المصدر والمقرر الهدف'); setEnrollActionLoading(false); return;
+        }
+        const r = await api.post('/enrollments/bulk-move', {
+          student_ids,
+          source_course_id: enrollActionSourceId,
+          target_course_id: enrollActionTargetIds[0],
+        });
+        showMessage('تم', r.data?.message || `تم نقل ${student_ids.length} طالب`);
+      } else if (enrollActionMode === 'unenroll') {
+        if (enrollActionTargetIds.length === 0) {
+          showMessage('تنبيه', 'اختر المقرر لإلغاء التسجيل منه'); setEnrollActionLoading(false); return;
+        }
+        // إلغاء تسجيل تكراري لكل (طالب × مقرر)
+        let removed = 0;
+        for (const cid of enrollActionTargetIds) {
+          for (const sid of student_ids) {
+            try {
+              await api.delete(`/enrollments/${cid}/${sid}`);
+              removed++;
+            } catch { /* silent */ }
+          }
+        }
+        showMessage('تم', `تم إلغاء ${removed} تسجيل`);
+      }
+      setEnrollActionMode(null);
+      setSelectedIds(new Set());
+      await fetchStudents();
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'فشلت العملية';
+      showMessage('خطأ', msg);
+    } finally { setEnrollActionLoading(false); }
+  };
+
   const handleBulkGraduate = async () => {
     if (selectedIds.size === 0) return;
     const year = parseInt(bulkGradYear);
@@ -1438,6 +1513,19 @@ export default function StudentsScreen() {
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#e65100' }]} onPress={() => openBulkTransferModal()} testID="bulk-transfer-btn">
                   <Ionicons name="swap-horizontal" size={14} color="#fff" />
                   <Text style={styles.selActionText}>نقل جماعي</Text>
+                </TouchableOpacity>
+                {/* 🆕 إجراءات المقررات: نسخ / نقل / إلغاء تسجيل */}
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#1565c0' }]} onPress={() => openEnrollActionModal('copy')} testID="bulk-copy-course-btn">
+                  <Ionicons name="copy" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>نسخ إلى مقرر</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#f57c00' }]} onPress={() => openEnrollActionModal('move')} testID="bulk-move-course-btn">
+                  <Ionicons name="arrow-forward-circle" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>نقل إلى مقرر</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#c62828' }]} onPress={() => openEnrollActionModal('unenroll')} testID="bulk-unenroll-btn">
+                  <Ionicons name="remove-circle" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>إلغاء تسجيل</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#f44336' }]} onPress={handleBulkDelete} disabled={deleting}>
                   {deleting ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="trash" size={14} color="#fff" />}
@@ -2497,6 +2585,96 @@ export default function StudentsScreen() {
       )}
 
       {/* نافذة سجل تاريخ الحالة */}
+
+      {/* 🆕 مودال إجراءات المقررات (نسخ/نقل/إلغاء تسجيل) */}
+      {enrollActionMode && (
+        <Modal visible={!!enrollActionMode} transparent animationType="fade" onRequestClose={() => setEnrollActionMode(null)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 16, width: '100%', maxWidth: 520, maxHeight: '85%' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 10 }}>
+                {enrollActionMode === 'copy' ? '📋 نسخ إلى مقرر' : enrollActionMode === 'move' ? '🔀 نقل إلى مقرر' : '❌ إلغاء تسجيل من مقرر'}
+              </Text>
+              <Text style={{ fontSize: 12, color: '#556', textAlign: 'right', marginBottom: 8 }}>
+                {selectedIds.size} طالب محدد
+              </Text>
+
+              {enrollActionMode === 'move' && (
+                <>
+                  <Text style={{ fontSize: 12, color: '#556', fontWeight: '600', textAlign: 'right', marginTop: 8 }}>المقرر المصدر (سيُحذف الطلاب منه):</Text>
+                  <ScrollView style={{ maxHeight: 130, borderWidth: 1, borderColor: '#c0c8d4', borderRadius: 6, marginTop: 4 }}>
+                    {enrollActionCourses.map(c => (
+                      <TouchableOpacity
+                        key={'src-' + c.id}
+                        style={{ padding: 8, backgroundColor: enrollActionSourceId === c.id ? '#fff3d6' : '#fff', borderBottomWidth: 1, borderBottomColor: '#eef1f6' }}
+                        onPress={() => setEnrollActionSourceId(c.id)}
+                        data-testid={`src-course-${c.id}`}
+                      >
+                        <Text style={{ fontSize: 12, textAlign: 'right', color: enrollActionSourceId === c.id ? '#8a6d3b' : '#333' }}>
+                          {enrollActionSourceId === c.id ? '● ' : '○ '}{c.name} ({c.code}) {c.section ? `- شعبة ${c.section}` : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
+                </>
+              )}
+
+              <Text style={{ fontSize: 12, color: '#556', fontWeight: '600', textAlign: 'right', marginTop: 10 }}>
+                {enrollActionMode === 'unenroll' ? 'المقررات المراد إلغاء التسجيل منها:' : enrollActionMode === 'move' ? 'المقرر الهدف:' : 'المقررات الهدف (يمكن اختيار عدة):'}
+              </Text>
+              <TextInput
+                style={{ borderWidth: 1, borderColor: '#c0c8d4', borderRadius: 6, padding: 6, marginTop: 4, fontSize: 12 }}
+                placeholder="بحث بالاسم أو الكود..."
+                value={enrollActionSearch}
+                onChangeText={setEnrollActionSearch}
+                textAlign="right"
+                data-testid="enroll-action-search"
+              />
+              <ScrollView style={{ maxHeight: 200, borderWidth: 1, borderColor: '#c0c8d4', borderRadius: 6, marginTop: 4 }}>
+                {enrollActionCourses
+                  .filter(c => !enrollActionSearch || (c.name || '').includes(enrollActionSearch) || (c.code || '').toLowerCase().includes(enrollActionSearch.toLowerCase()))
+                  .map(c => {
+                    const isSelected = enrollActionTargetIds.includes(c.id);
+                    const isSingle = enrollActionMode === 'move';
+                    return (
+                      <TouchableOpacity
+                        key={c.id}
+                        style={{ padding: 8, backgroundColor: isSelected ? '#e3f2fd' : '#fff', borderBottomWidth: 1, borderBottomColor: '#eef1f6' }}
+                        onPress={() => {
+                          if (isSingle) setEnrollActionTargetIds([c.id]);
+                          else toggleEnrollActionTarget(c.id);
+                        }}
+                        data-testid={`target-course-${c.id}`}
+                      >
+                        <Text style={{ fontSize: 12, textAlign: 'right', color: isSelected ? '#1565c0' : '#333' }}>
+                          {isSelected ? '✓ ' : '○ '}{c.name} ({c.code}) {c.section ? `- شعبة ${c.section}` : ''}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+              </ScrollView>
+
+              <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 14 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: enrollActionMode === 'unenroll' ? '#c62828' : enrollActionMode === 'move' ? '#f57c00' : '#1565c0', padding: 10, borderRadius: 6, alignItems: 'center' }}
+                  onPress={submitEnrollAction}
+                  disabled={enrollActionLoading}
+                  data-testid="confirm-enroll-action"
+                >
+                  {enrollActionLoading ? <ActivityIndicator size="small" color="#fff" /> : <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>تنفيذ</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#8a95a8', padding: 10, borderRadius: 6, alignItems: 'center' }}
+                  onPress={() => setEnrollActionMode(null)}
+                >
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>إلغاء</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+
       {showHistoryModal && (
       <Modal visible={showHistoryModal} transparent animationType="fade">
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
