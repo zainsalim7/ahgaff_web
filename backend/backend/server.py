@@ -5293,6 +5293,35 @@ async def get_courses(
         lecture_counts = await _get_lec_counts(db, course_ids, _target_sem)
     
     # جلب أسماء المعلمين من collection المعلمين أو المستخدمين
+    # 🆕 batch lookup لأسماء الأقسام والكليات
+    dept_ids_set = {c.get("department_id") for c in courses if c.get("department_id")}
+    dept_map: dict = {}
+    fac_ids_set: set = set()
+    if dept_ids_set:
+        try:
+            dept_obj_ids = [ObjectId(x) for x in dept_ids_set if x]
+            async for d in db.departments.find(
+                {"_id": {"$in": dept_obj_ids}}, {"name": 1, "faculty_id": 1}
+            ):
+                dept_map[str(d["_id"])] = {
+                    "name": (d.get("name") or "").strip(),
+                    "faculty_id": str(d.get("faculty_id") or "") or None,
+                }
+                if d.get("faculty_id"):
+                    fac_ids_set.add(str(d["faculty_id"]))
+        except Exception:
+            pass
+    fac_map: dict = {}
+    if fac_ids_set:
+        try:
+            fac_obj_ids = [ObjectId(x) for x in fac_ids_set if x]
+            async for f in db.faculties.find(
+                {"_id": {"$in": fac_obj_ids}}, {"name": 1}
+            ):
+                fac_map[str(f["_id"])] = (f.get("name") or "").strip()
+        except Exception:
+            pass
+
     result = []
     for c in courses:
         teacher_name = None
@@ -5320,11 +5349,21 @@ async def get_courses(
             except:
                 pass
         
+        # 🆕 اسم القسم واسم الكلية
+        c_dept_id = str(c.get("department_id", "") or "")
+        c_dept_info = dept_map.get(c_dept_id, {})
+        c_dept_name = c_dept_info.get("name") or None
+        c_fac_id = c_dept_info.get("faculty_id")
+        c_fac_name = fac_map.get(c_fac_id, "") if c_fac_id else None
+
         result.append({
             "id": str(c["_id"]),
             "name": c.get("name", ""),
             "code": c.get("code", ""),
             "department_id": c.get("department_id", ""),
+            "department_name": c_dept_name,
+            "faculty_id": c_fac_id,
+            "faculty_name": c_fac_name,
             "teacher_id": c.get("teacher_id"),
             "teacher_name": teacher_name,
             "level": c.get("level", 1),
@@ -5339,7 +5378,6 @@ async def get_courses(
             "lectures_count": lecture_counts.get(str(c["_id"]), 0),
             "created_at": c.get("created_at"),
             "is_active": c.get("is_active", True),
-            "department_name": None
         })
     
     return apply_fields(result, allowed)
@@ -7005,6 +7043,28 @@ async def get_today_lectures(
     result = []
     allowed = parse_fields(fields)
     need_attendance = (allowed is None) or ("attendance_count" in allowed) or ("total_enrolled" in allowed)
+
+    # 🆕 batch lookup لأسماء الأقسام والكليات
+    _dept_ids = {course_map[cid].get("department_id") for cid in course_map if course_map[cid].get("department_id")}
+    _dept_map: dict = {}
+    _fac_ids: set = set()
+    if _dept_ids:
+        try:
+            _oids = [ObjectId(x) for x in _dept_ids if x]
+            async for d in db.departments.find({"_id": {"$in": _oids}}, {"name": 1, "faculty_id": 1}):
+                _dept_map[str(d["_id"])] = {"name": (d.get("name") or "").strip(), "faculty_id": str(d.get("faculty_id") or "") or None}
+                if d.get("faculty_id"): _fac_ids.add(str(d["faculty_id"]))
+        except Exception:
+            pass
+    _fac_map: dict = {}
+    if _fac_ids:
+        try:
+            _foids = [ObjectId(x) for x in _fac_ids if x]
+            async for f in db.faculties.find({"_id": {"$in": _foids}}, {"name": 1}):
+                _fac_map[str(f["_id"])] = (f.get("name") or "").strip()
+        except Exception:
+            pass
+
     for lecture in lectures:
         course = course_map.get(lecture["course_id"], {})
         # حساب عدد الطلاب الحاضرين (فقط إذا مطلوب)
@@ -7017,12 +7077,23 @@ async def get_today_lectures(
             })
             total_enrolled = await db.enrollments.count_documents({"course_id": lecture["course_id"]})
 
+        # 🆕 اسم القسم والكلية
+        _cdept_id = str(course.get("department_id", "") or "")
+        _cdept_info = _dept_map.get(_cdept_id, {})
+        _cdept_name = _cdept_info.get("name") or None
+        _cfac_id = _cdept_info.get("faculty_id")
+        _cfac_name = _fac_map.get(_cfac_id, "") if _cfac_id else None
+
         result.append({
             "id": str(lecture["_id"]),
             "course_id": lecture["course_id"],
             "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
             "section": course.get("section", ""),
+            "department_id": _cdept_id or None,
+            "department_name": _cdept_name,
+            "faculty_id": _cfac_id,
+            "faculty_name": _cfac_name,
             "date": lecture["date"],
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
@@ -7175,27 +7246,57 @@ async def get_month_lectures(
     # تجميع التواريخ والمحاضرات
     dates_with_lectures = {}
     lectures_list = []
-    
+
+    # 🆕 batch lookup لأسماء الأقسام والكليات
+    _dept_ids = {c.get("department_id") for c in course_map.values() if c.get("department_id")}
+    _dept_map: dict = {}
+    _fac_ids: set = set()
+    if _dept_ids:
+        try:
+            _oids = [ObjectId(x) for x in _dept_ids if x]
+            async for d in db.departments.find({"_id": {"$in": _oids}}, {"name": 1, "faculty_id": 1}):
+                _dept_map[str(d["_id"])] = {"name": (d.get("name") or "").strip(), "faculty_id": str(d.get("faculty_id") or "") or None}
+                if d.get("faculty_id"): _fac_ids.add(str(d["faculty_id"]))
+        except Exception:
+            pass
+    _fac_map: dict = {}
+    if _fac_ids:
+        try:
+            _foids = [ObjectId(x) for x in _fac_ids if x]
+            async for f in db.faculties.find({"_id": {"$in": _foids}}, {"name": 1}):
+                _fac_map[str(f["_id"])] = (f.get("name") or "").strip()
+        except Exception:
+            pass
+
     for lecture in lectures:
         date = lecture["date"]
         course = course_map.get(lecture["course_id"], {})
-        
+        _cdept_id = str(course.get("department_id", "") or "")
+        _cdept_info = _dept_map.get(_cdept_id, {})
+        _cdept_name = _cdept_info.get("name") or None
+        _cfac_id = _cdept_info.get("faculty_id")
+        _cfac_name = _fac_map.get(_cfac_id, "") if _cfac_id else None
+
         if date not in dates_with_lectures:
             dates_with_lectures[date] = []
-        
+
         lecture_info = {
             "id": str(lecture["_id"]),
             "course_id": lecture["course_id"],
             "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
             "section": course.get("section", ""),
+            "department_id": _cdept_id or None,
+            "department_name": _cdept_name,
+            "faculty_id": _cfac_id,
+            "faculty_name": _cfac_name,
             "date": date,
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
             "room": lecture.get("room", ""),
             "status": lecture.get("status", LectureStatus.SCHEDULED),
         }
-        
+
         dates_with_lectures[date].append(lecture_info)
         lectures_list.append(lecture_info)
     
