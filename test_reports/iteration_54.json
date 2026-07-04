@@ -1,0 +1,42 @@
+{
+  "summary": "Backend testing for 'حالات الطالب (غير المستمرين)' snapshot feature. Wrote /app/backend/tests/test_student_status_snapshot.py covering 16 test cases (seed, bulk-change to frozen/repeat/expelled, list, filters, search, snapshot immutability, restore, restore validations, history, available-sections, permission scope, cleanup). 14/16 passed. 2 real backend issues found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "POST /api/student-status/bulk-change (frozen/repeat/expelled)",
+        "issue": "status_snapshot.academic_year is saved as NULL even though active semester document has field 'academic_year'. Root cause in /app/backend/backend/routes/student_status.py line ~135: code reads active_sem.get('year') but the actual field is 'academic_year'. Also academic_year_id is NULL because active_sem doc has no 'academic_year_id' field. Spec required: academic_year NOT_NULL. Fix: change `.get('year')` to `.get('academic_year')`.",
+        "priority": "HIGH"
+      },
+      {
+        "endpoint": "GET /api/student-statuses",
+        "issue": "Permission requirement is OR of MANAGE_STUDENTS/VIEW_STUDENTS. Spec (Step 16) expects users without manage_students → 403, but any employee with default role perms (which include view_students) still gets 200. Either tighten to require MANAGE_STUDENTS only, or update spec. Current behavior returned 200 with items list for a permission-less employee (fallback loads role defaults that include view_students).",
+        "priority": "MEDIUM"
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_student_status_snapshot.py",
+    "/app/test_reports/pytest/snapshot_results.xml"
+  ],
+  "action_items": [
+    "Fix _apply_status_change snapshot builder in /app/backend/backend/routes/student_status.py: use active_sem.get('academic_year') instead of .get('year') so snapshot.academic_year is populated (currently NULL).",
+    "Decide on permission scope for GET /api/student-statuses: if the intent is admin/manage_students only (per spec Step 16), remove VIEW_STUDENTS from the allowed set."
+  ],
+  "critical_code_review_comments": [
+    "Bug: /app/backend/backend/routes/student_status.py:135 uses active_sem.get('year') which never exists — semesters store the year under 'academic_year'. Snapshot's academic_year ends up None.",
+    "Design: /student-statuses currently permits VIEW_STUDENTS holders too; spec calls for manage_students only. Consider tightening.",
+    "Minor: in _apply_status_change, the block `if new_status == 'active': pass  # سنمرّرها في الاستدعاء` is dead code; the actual $unset is performed as a second update_one call after the $set. Two round-trips could be combined into one update_one({'$set':..,'$unset':..}).",
+    "The list endpoint does two separate update_one calls for active status; using a single call with $set+$unset would be atomic and cheaper.",
+    "restore endpoint doesn't record old_level explicitly in student doc history — it does record it in history log, good. But new_section stored in history has no old_section — minor."
+  ],
+  "updated_files": ["/app/backend/tests/test_student_status_snapshot.py"],
+  "success_rate": {"backend": "87.5% (14/16)", "frontend": "N/A (skipped as requested)"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "Test creates 3 TEST_SNAP students + 1 test employee user per run and cleans them up in test_99_cleanup (also removes student_status_history entries).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Test file at /app/backend/tests/test_student_status_snapshot.py runs against REACT_APP_BACKEND_URL. Requires env vars MONGO_URL, DB_NAME, REACT_APP_BACKEND_URL. Two failing tests point to real bugs: (1) academic_year field-name typo in snapshot builder, (2) permission requirement mismatch with spec. Steps 1-14 (seed, status changes, listing, filters, immutability, restore + validations, history, available-sections) all pass. Cleanup verified.",
+  "rca of the issue": "Bug 1: Snapshot builder in _apply_status_change references (active_sem or {}).get('year') — the semesters collection stores the year under key 'academic_year' (verified via pymongo: {'name':'الفصل الصيفي 2024-2025','academic_year':'2024-2025','status':'active'}). Result: snapshot['academic_year'] is None on all frozen/repeat/expelled documents. Fix: replace .get('year') → .get('academic_year'). Bug 2: Endpoint GET /student-statuses accepts either MANAGE_STUDENTS or VIEW_STUDENTS. Default employee role includes view_students via DEFAULT_PERMISSIONS, so a user created with empty permissions still resolves to view_students at token time (deps.py:180 fallback). Consequently permission-less employees can list statuses (200 instead of expected 403). Fix: require MANAGE_STUDENTS only, or override spec."
+}

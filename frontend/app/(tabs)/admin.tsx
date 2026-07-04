@@ -82,6 +82,16 @@ const SECTIONS: Section[] = [
         route: '/student-references',
         permissions: [PERMISSIONS.MANAGE_STUDENTS, 'view_students'],
       },
+      {
+        id: 'student-statuses',
+        label: 'حالات الطالب',
+        description: 'الطلاب المجمَّدون والمُعادون والمفصولون',
+        icon: 'people-circle',
+        color: '#0369a1',
+        bg: '#e0f2fe',
+        route: '/student-statuses',
+        permissions: [PERMISSIONS.MANAGE_STUDENTS, 'view_students'],
+      },
     ],
   },
 
