@@ -53,6 +53,9 @@ interface AvailableCourse {
   credit_hours: number;
   weekly_hours?: number | null;
   department_id?: string;
+  department_name?: string;
+  faculty_id?: string;
+  faculty_name?: string;
   semester_id?: string;
   current_teacher_name?: string;
 }
@@ -650,6 +653,18 @@ export default function TeacherCoursesScreen() {
                           <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 3, flexWrap: 'wrap' }}>
                             <Text style={styles.resultMeta}>المستوى {course.level}</Text>
                             {!!course.section && <Text style={styles.resultMeta}>شعبة {course.section}</Text>}
+                            {!!course.faculty_name && (
+                              <View style={styles.deptBadge} data-testid={`course-faculty-${course.course_id}`}>
+                                <Ionicons name="business" size={10} color="#1565c0" />
+                                <Text style={styles.deptBadgeText}>{course.faculty_name}</Text>
+                              </View>
+                            )}
+                            {!!course.department_name && (
+                              <View style={[styles.deptBadge, { backgroundColor: '#f3e8ff', borderColor: '#c084fc' }]} data-testid={`course-dept-${course.course_id}`}>
+                                <Ionicons name="school" size={10} color="#7c3aed" />
+                                <Text style={[styles.deptBadgeText, { color: '#7c3aed' }]}>{course.department_name}</Text>
+                              </View>
+                            )}
                             {isAssignedToOther && (
                               <Text style={[styles.resultMeta, { color: '#f44336' }]}>
                                 مسند حالياً لـ {course.current_teacher_name}
@@ -900,6 +915,8 @@ const styles = StyleSheet.create({
   resultName: { fontSize: 13, fontWeight: '700', color: '#1a2540' },
   resultCode: { fontSize: 11, color: '#8a95a8' },
   resultMeta: { fontSize: 11, color: '#5b6678' },
+  deptBadge: { flexDirection: 'row-reverse', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 8, backgroundColor: '#e3f2fd', borderWidth: 1, borderColor: '#90caf9' },
+  deptBadgeText: { fontSize: 10, color: '#1565c0', fontWeight: '700' },
 
   hoursWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 },
   hoursInput: {
