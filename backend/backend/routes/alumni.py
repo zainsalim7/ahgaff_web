@@ -90,6 +90,39 @@ async def _ensure_student_in_user_scope(db, current_user: dict, student: dict):
         raise HTTPException(status_code=403, detail="هذا الطالب ليس من كليتك")
 
 
+async def _resolve_dept_faculty_snapshot(db, student: dict) -> dict:
+    """يبني snapshot باسم القسم والكلية للطالب في لحظة التخرّج.
+    
+    يحمي البيانات التاريخية للخريج من:
+    - تغيير department_id للطالب لاحقاً بسبب خطأ إدخال.
+    - إعادة تسمية أو دمج القسم/الكلية بعد التخرّج.
+    - أي فقدان مرجع لاحق (department محذوف).
+    """
+    snapshot = {
+        "department_id": str(student.get("department_id") or "") or None,
+        "department_name": None,
+        "faculty_id": str(student.get("faculty_id") or "") or None,
+        "faculty_name": None,
+    }
+    if snapshot["department_id"]:
+        try:
+            d = await db.departments.find_one({"_id": ObjectId(snapshot["department_id"])})
+            if d:
+                snapshot["department_name"] = (d.get("name") or "").strip() or None
+                if not snapshot["faculty_id"] and d.get("faculty_id"):
+                    snapshot["faculty_id"] = str(d["faculty_id"])
+        except Exception:
+            pass
+    if snapshot["faculty_id"]:
+        try:
+            f = await db.faculties.find_one({"_id": ObjectId(snapshot["faculty_id"])})
+            if f:
+                snapshot["faculty_name"] = (f.get("name") or "").strip() or None
+        except Exception:
+            pass
+    return snapshot
+
+
 # ============================
 # 1) Graduate Student
 # ============================
@@ -114,6 +147,9 @@ async def graduate_student(
 
     await _ensure_student_in_user_scope(db, current_user, student)
 
+    # 📸 حفظ snapshot للقسم/الكلية عند التخرج
+    snapshot = await _resolve_dept_faculty_snapshot(db, student)
+
     graduation_data = {
         "year": body.graduation_year,
         "date": body.graduation_date,
@@ -126,6 +162,7 @@ async def graduate_student(
         "graduated_at": _now(),
         "graduated_by_user_id": current_user.get("id"),
         "graduated_by_username": current_user.get("username"),
+        "department_snapshot": snapshot,  # 🔒 قسم/كلية لحظة التخرج
     }
 
     await db.students.update_one(
@@ -201,6 +238,8 @@ async def bulk_graduate_students(
             failed.append({"id": sid, "name": student.get("full_name"), "error": e.detail})
             continue
 
+        # 📸 حفظ snapshot للقسم/الكلية عند التخرج الجماعي
+        snapshot = await _resolve_dept_faculty_snapshot(db, student)
         graduation_data = {
             "year": body.graduation_year,
             "date": body.graduation_date,
@@ -214,6 +253,7 @@ async def bulk_graduate_students(
             "graduated_by_user_id": current_user.get("id"),
             "graduated_by_username": current_user.get("username"),
             "bulk_graduation": True,
+            "department_snapshot": snapshot,
         }
         await db.students.update_one(
             {"_id": ObjectId(sid)},
@@ -311,11 +351,18 @@ async def list_alumni(
     result = []
     for s in alumni:
         gd = s.get("graduation_data") or {}
+        snap = gd.get("department_snapshot") or {}
         dept_id = str(s.get("department_id", "") or "")
         dept_doc = dept_map.get(dept_id) if dept_id else None
-        fac_name = ""
+        current_fac_name = ""
         if dept_doc and dept_doc.get("faculty_id"):
-            fac_name = fac_map.get(str(dept_doc["faculty_id"]), "")
+            current_fac_name = fac_map.get(str(dept_doc["faculty_id"]), "")
+        # 🔒 نُعطي الأولوية لـ snapshot المحفوظ لحظة التخرج (المصدر التاريخي الصحيح)
+        # ثم نرجع للقسم/الكلية الحالية كاحتياط لسجلات قديمة قبل إضافة الـ snapshot
+        display_dept_id = snap.get("department_id") or dept_id
+        display_dept_name = snap.get("department_name") or ((dept_doc or {}).get("name", "") if dept_doc else "")
+        display_fac_id = snap.get("faculty_id") or ((dept_doc or {}).get("faculty_id", "") if dept_doc else s.get("faculty_id", ""))
+        display_fac_name = snap.get("faculty_name") or current_fac_name
         result.append({
             "id": str(s["_id"]),
             "student_id": s.get("student_id"),
@@ -323,10 +370,10 @@ async def list_alumni(
             "full_name": s.get("full_name"),
             "phone": s.get("phone"),
             "email": s.get("email"),
-            "department_id": dept_id,
-            "department_name": (dept_doc or {}).get("name", "") if dept_doc else "",
-            "faculty_id": (dept_doc or {}).get("faculty_id", "") if dept_doc else s.get("faculty_id", ""),
-            "faculty_name": fac_name,
+            "department_id": display_dept_id,
+            "department_name": display_dept_name,
+            "faculty_id": display_fac_id,
+            "faculty_name": display_fac_name,
             "level_graduated": s.get("graduated_from_level") or s.get("level"),
             "graduation_year": gd.get("year"),
             "graduation_date": gd.get("date") or s.get("graduation_date"),
@@ -415,15 +462,24 @@ async def restore_alumni_to_student(
 
     await _ensure_student_in_user_scope(db, current_user, s)
 
+    # 🔒 استرجاع القسم/الكلية من snapshot إن وُجد (يعيد الطالب لقسمه الأصلي)
+    gd = s.get("graduation_data") or {}
+    snap = gd.get("department_snapshot") or {}
+    set_fields: dict = {
+        "is_alumni": False,
+        "status": "active",
+        "status_changed_at": _now(),
+        "status_reason": "استرجاع من قائمة الخريجين",
+    }
+    if snap.get("department_id") and snap["department_id"] != str(s.get("department_id") or ""):
+        set_fields["department_id"] = snap["department_id"]
+    if snap.get("faculty_id") and snap["faculty_id"] != str(s.get("faculty_id") or ""):
+        set_fields["faculty_id"] = snap["faculty_id"]
+
     await db.students.update_one(
         {"_id": ObjectId(alumni_id)},
         {
-            "$set": {
-                "is_alumni": False,
-                "status": "active",
-                "status_changed_at": _now(),
-                "status_reason": "استرجاع من قائمة الخريجين",
-            },
+            "$set": set_fields,
             "$unset": {"graduation_data": "", "graduation_date": "", "graduated_from_level": ""},
         },
     )

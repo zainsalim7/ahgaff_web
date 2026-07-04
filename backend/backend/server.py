@@ -15263,6 +15263,59 @@ async def startup_event():
     # 🧹 إزالة تلقائية للمكررات: نفس (teacher, course, semester) لها سجلات متعددة
     # نتيجة لإصلاحات سابقة دمجت loads بـ semester_id=null مع loads بـ semester_id=active
     await dedup_teaching_loads_internal()
+    # 🎓 تعبئة snapshot القسم/الكلية للخريجين الحاليين (يعمل مرة واحدة عملياً)
+    await backfill_alumni_department_snapshot_internal()
+
+
+async def backfill_alumni_department_snapshot_internal():
+    """يحفظ snapshot اسم القسم/الكلية داخل graduation_data.department_snapshot
+    لكل خريج لا يملك هذا الحقل بعد. يمنع تحوّل عرض القسم لاحقاً بسبب
+    تغيير department_id للطالب أو إعادة تسمية القسم.
+    """
+    try:
+        # جلب مرة واحدة كل الأقسام والكليات لأداء أسرع
+        depts_map: dict = {}
+        async for d in db.departments.find({}):
+            depts_map[str(d["_id"])] = {
+                "name": (d.get("name") or "").strip(),
+                "faculty_id": str(d.get("faculty_id") or "") or None,
+            }
+        facs_map: dict = {}
+        async for f in db.faculties.find({}):
+            facs_map[str(f["_id"])] = (f.get("name") or "").strip()
+
+        cursor = db.students.find({
+            "is_alumni": True,
+            "graduation_data.department_snapshot": {"$exists": False},
+        })
+        fixed = 0
+        async for s in cursor:
+            dept_id = str(s.get("department_id") or "") or None
+            fac_id = str(s.get("faculty_id") or "") or None
+            dept_name = None
+            fac_name = None
+            if dept_id and dept_id in depts_map:
+                dept_name = depts_map[dept_id]["name"]
+                if not fac_id:
+                    fac_id = depts_map[dept_id]["faculty_id"]
+            if fac_id and fac_id in facs_map:
+                fac_name = facs_map[fac_id]
+            snapshot = {
+                "department_id": dept_id,
+                "department_name": dept_name,
+                "faculty_id": fac_id,
+                "faculty_name": fac_name,
+                "backfilled": True,
+            }
+            await db.students.update_one(
+                {"_id": s["_id"]},
+                {"$set": {"graduation_data.department_snapshot": snapshot}}
+            )
+            fixed += 1
+        if fixed > 0:
+            logging.info(f"Alumni department snapshot backfill: added to {fixed} records")
+    except Exception as e:
+        logging.warning(f"Alumni department snapshot backfill failed (non-critical): {e}")
 
 
 async def dedup_teaching_loads_internal():

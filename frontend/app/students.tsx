@@ -597,7 +597,17 @@ export default function StudentsScreen() {
       const d = res.data;
       const failedTxt = d.failed?.length ? `\nفشل: ${d.failed.length}` : '';
       const skippedTxt = d.skipped?.length ? `\nتُجاوز: ${d.skipped.length}` : '';
-      showMessage('تم', `${d.message}${failedTxt}${skippedTxt}`);
+      // 🆕 عرض تفصيلي لأسماء الطلاب الذين فشلوا مع السبب
+      let detailsTxt = '';
+      if (d.failed?.length) {
+        const items = d.failed.slice(0, 5).map((f: any) => `• ${f.name || f.id}: ${f.error || 'خطأ'}`).join('\n');
+        detailsTxt += `\n\n❌ فشل:\n${items}${d.failed.length > 5 ? `\n... و${d.failed.length - 5} آخر` : ''}`;
+      }
+      if (d.skipped?.length) {
+        const items = d.skipped.slice(0, 5).map((f: any) => `• ${f.name || f.id}: ${f.reason || ''}`).join('\n');
+        detailsTxt += `\n\n⚠️ تجاوز:\n${items}${d.skipped.length > 5 ? `\n... و${d.skipped.length - 5} آخر` : ''}`;
+      }
+      showMessage('تم', `${d.message}${failedTxt}${skippedTxt}${detailsTxt}`);
       setShowBulkGraduateModal(false);
       setSelectedIds(new Set());
       setSelectionMode(false);

@@ -1,0 +1,27 @@
+{
+  "summary": "Backend testing for Alumni department snapshot fix. All 9 review steps covered by 8 pytest cases; all PASSED. Cleanup of seed data verified (0 TEST_ docs left).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_alumni_department_snapshot.py",
+    "/app/test_reports/pytest/alumni_snapshot.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "alumni.list_alumni prefers graduation_data.department_snapshot over current lookup — verified working, protecting historical view even when student.department_id is tampered.",
+    "restore_alumni_to_student correctly restores department_id/faculty_id from snapshot.",
+    "backfill_alumni_department_snapshot_internal is idempotent (uses $exists filter) and marks records with backfilled=true.",
+    "bulk_graduate_students returns structured failed[] with {id, error} and skipped[] with reason='متخرج بالفعل' for already-graduated — matches UI expectation.",
+    "Minor: filters faculty_id/department_id in list_alumni still query the raw student fields (not the snapshot). If a student's dept_id was corrupted, the snapshot-based display could show 'الشريعة والقانون' but the record wouldn't match a filter by that department_id. Consider filtering against snapshot too for consistency."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_alumni_department_snapshot.py"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "N/A"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "Created 1 faculty (TEST_شريعة_وقانون) + 1 other faculty + 1 department 'الشريعة والقانون' + 1 other dept + 3 active students + 2 extra students during tests. All cleaned up post-run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Existing production alumnus 'خالد' already backfilled with snapshot (verified in DB before tests). Test file at /app/backend/tests/test_alumni_department_snapshot.py is idempotent and cleans up after itself.",
+  "rca of the issue": "Original bug: graduated students showed wrong department because list_alumni was reading current department_id/faculty_id via live lookup; if department was renamed or student's department_id was later mutated, alumni card would display wrong values. Fix: capture department_snapshot at graduation time and prefer it in list/restore/detail paths. Backfill on startup covers legacy records. Verified end-to-end."
+}
