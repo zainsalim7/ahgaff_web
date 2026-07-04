@@ -641,7 +641,7 @@ export default function StudentsScreen() {
       }
       setEnrollActionMode(null);
       setSelectedIds(new Set());
-      await fetchStudents();
+      try { fetchData(); } catch {}
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشلت العملية';
       showMessage('خطأ', msg);
