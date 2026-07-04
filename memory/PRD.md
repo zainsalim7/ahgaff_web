@@ -14,6 +14,30 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-07-04 **🎓 إصلاح جذري لمشكلات جدول الخريجين (Alumni)**:
+  - **ما أبلغ عنه المستخدم**:
+    1. تخريج طلاب من قسم "شريعة وقانون" → يظهرون في جدول الخريجين تحت قسم مختلف. عند استرجاعهم يعودون لقسم خاطئ.
+    2. النقل الجماعي (bulk-graduate) يفشل لبعض الطلاب بدون تفصيل السبب.
+  - **السبب الجذري**:
+    - `list_alumni` كان يعتمد lookup مباشر على `department_id` الحالي — أي تغيير لاحق في هذا الحقل (سواء بخطأ إدخال أو دمج/إعادة تسمية القسم) يُبدّل اسم القسم المعروض للخريج.
+    - الاسترجاع لم يكن يعيد `department_id` الأصلي فيبقى الطالب في القسم الخاطئ.
+    - الواجهة كانت تعرض فقط عدد "فشل" بدون تفاصيل عن الطلاب المتأثرين والأسباب.
+  - **الإصلاحات في `/app/backend/backend/routes/alumni.py`**:
+    - دالة جديدة `_resolve_dept_faculty_snapshot()` تحفظ اسم القسم/الكلية + IDs في `graduation_data.department_snapshot`.
+    - `graduate_student` و `bulk_graduate_students` يستدعيان الـ helper ويحفظان snapshot لحظة التخرج.
+    - `list_alumni` يعطي **أولوية الـ snapshot** على الـ lookup الحالي — لا يتأثّر بأي تعديل لاحق على `department_id`.
+    - `list_alumni` الفلاتر (faculty_id/department_id/q) تُطابق الآن كلاً من الحقل الحالي والـ snapshot (عبر `$or/$and` مركّبة).
+    - `restore_alumni_to_student` يعيد `department_id/faculty_id` إلى قيم الـ snapshot عند الاسترجاع.
+  - **Migration جديدة**: `backfill_alumni_department_snapshot_internal` في `server.py` تعمل عند startup — تعبّئ snapshot للخريجين القدامى الذين خرّجوا قبل هذا الإصلاح (idempotent، تعمل مرة واحدة عملياً + تعلّم كل سجل بـ `backfilled=true`).
+  - **Frontend**: `students.tsx` يعرض الآن قائمة تفصيلية بأسماء أول 5 طلاب فشل تخريجهم مع سبب فشل كل واحد + طلاب تُجاوزوا (متخرج بالفعل).
+  - **التحقق**: `testing_agent_v3_fork` iteration 53 — **8/8 اختبار ناجح**:
+    - Bulk graduate يحفظ snapshot صحيح ✓
+    - Tampering على `department_id` لا يؤثر على العرض ✓
+    - Restore يُعيد الطالب لقسمه الأصلي حتى لو تعرّض للتلاعب ✓
+    - Backfill migration idempotent ✓
+    - Failed[] يحوي `{id, error}` واضحة + Skipped[] للمتخرج مسبقاً ✓
+  - **ملف اختبار جديد**: `/app/backend/tests/test_alumni_department_snapshot.py` (8 اختبارات).
+
 - 2026-07-01 **➕ P2 مُنجَز: `/my-attendance-requests` + بادج طلبات الاعتماد للعميد**:
   - **الصفحة الجديدة**: `/app/frontend/app/my-attendance-requests.tsx`
     - 5 تبويبات: الكل / قيد الانتظار / معتمد / مرفوض / ملغى.

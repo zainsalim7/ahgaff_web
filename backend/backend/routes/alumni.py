@@ -315,13 +315,32 @@ async def list_alumni(
     if year is not None:
         query["graduation_data.year"] = year
     if faculty_id:
-        query["faculty_id"] = faculty_id
+        # يطابق كلاً من الحقل الحالي و snapshot المحفوظ (للسجلات التي تعرّض قسمها للتعديل)
+        query["$or"] = query.get("$or", []) + [
+            {"faculty_id": faculty_id},
+            {"graduation_data.department_snapshot.faculty_id": faculty_id},
+        ]
     if department_id:
-        query["department_id"] = department_id
+        or_clauses = [
+            {"department_id": department_id},
+            {"graduation_data.department_snapshot.department_id": department_id},
+        ]
+        if "$or" in query:
+            existing_or = query.pop("$or")
+            query["$and"] = [{"$or": existing_or}, {"$or": or_clauses}]
+        else:
+            query["$or"] = or_clauses
     if q:
         import re as _re
         rx = {"$regex": _re.escape(q), "$options": "i"}
-        query["$or"] = [{"full_name": rx}, {"student_id": rx}, {"reference_number": rx}]
+        q_clauses = [{"full_name": rx}, {"student_id": rx}, {"reference_number": rx}]
+        if "$and" in query:
+            query["$and"].append({"$or": q_clauses})
+        elif "$or" in query:
+            existing_or = query.pop("$or")
+            query["$and"] = [{"$or": existing_or}, {"$or": q_clauses}]
+        else:
+            query["$or"] = q_clauses
 
     cursor = db.students.find(query).sort([("graduation_data.year", -1), ("full_name", 1)])
     alumni = await cursor.to_list(5000)
