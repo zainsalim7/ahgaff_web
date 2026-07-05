@@ -14,6 +14,20 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-07-05 **🔐 إصلاح UI Blocker: تعديل مقررات عبر الأقسام (multi-department admin) في `/teacher-courses`**:
+  - **ما أبلغ عنه المستخدم**: مستخدم يملك صلاحيات على عدة أقسام (`department_ids`) لا يستطيع تعديل/إلغاء إسناد مقرر إن كان مسنداً لمدرس من قسم آخر، وتظهر الشارة "للعرض فقط".
+  - **السبب الجذري** (ثلاث طبقات):
+    1. `/app/frontend/app/teacher-courses.tsx` كانت تقارن `user.department_id` (مفرد) بقسم المقرر.
+    2. `/app/backend/backend/routes/teaching_load.py` `_ensure_course_in_user_scope` تقارن مفرداً كذلك، و `delete_teaching_load` يكرّر نفس المنطق.
+    3. `/app/backend/backend/routes/deps.py` `get_current_user` و `/api/auth/me` و `/api/auth/login` **لم تكن تُرجع `department_ids/faculty_ids` كمصفوفات أصلاً** — لذا حتى بعد إصلاح المقارنة كانت المصفوفة تبقى فارغة.
+  - **الإصلاح**:
+    - Frontend (`teacher-courses.tsx` ~L67-91): `canManageCourse` يستخدم الآن `user.department_ids` (مع fallback لـ `department_id` المفرد) ويشمل دور `university_president`.
+    - Backend (`teaching_load.py` L30-82): `_ensure_course_in_user_scope` يعمل بـ `$in` على `department_ids` و `faculty_ids`؛ و `delete_teaching_load` أصبح يستدعي نفس الدالة (توحيد المنطق).
+    - Backend (`deps.py` L194-215): `get_current_user` يُرجع الآن `department_ids` و `faculty_ids` مع fallback backward-compat للمفرد.
+    - Backend (`auth.py`): استجابتا `POST /auth/login` و `GET /auth/me` تُرجعان `department_ids`, `faculty_ids`, و `department_names`.
+  - **التحقق**: `testing_agent_v3_fork` (iteration_57) — 9/9 backend tests + regression clean. ملف اختبار: `/app/backend/tests/test_teaching_load_multi_dept_scope.py`.
+
+
 - 2026-07-05 **🔐 إصلاح صلاحيات الأقسام المتعددة لـ registration_manager/registrar**:
   - **ما أبلغ عنه المستخدم**: عند منح مستخدم (خاصة registration_manager) صلاحيات على **عدة أقسام** في كلية واحدة عبر `department_ids`، يرى قسماً واحداً فقط. أو عند منح كلية كاملة قد لا يرى كل أقسامها.
   - **السبب الجذري** في `server.py` دالة `get_user_scope_filter`: فرع `registration_manager` و `registrar` كان يعتمد على `faculty_id` فقط ويتجاهل `department_ids` تماماً (بعكس `custom` و `department_head` و `employee` الذين يدعمانه).
