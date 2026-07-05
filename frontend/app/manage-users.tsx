@@ -433,7 +433,15 @@ export default function ManageUsersScreen() {
     // تحديد مستوى الصلاحية بناءً على البيانات الموجودة
     let permissionLevel = '';
     // دعم الأقسام المتعددة
-    const userDeptIds = user.department_ids || (user.department_id ? [user.department_id] : []);
+    const rawDeptIds = user.department_ids || (user.department_id ? [user.department_id] : []);
+    // 🧹 تنظيف IDs قديمة: احتفظ فقط بالأقسام التابعة لكلية المستخدم الحالية
+    // (يعالج حالة تغيير الكلية سابقاً دون مسح المصفوفة)
+    const userDeptIds = user.faculty_id
+      ? rawDeptIds.filter((deptId) => {
+          const dept = departments.find(d => d.id === deptId);
+          return dept && dept.faculty_id === user.faculty_id;
+        })
+      : rawDeptIds;
     
     if (userDeptIds.length > 0) {
       permissionLevel = 'department';
@@ -852,11 +860,18 @@ export default function ManageUsersScreen() {
                                 styles.scopeItem,
                                 formData.faculty_id === faculty.id && styles.scopeItemActive
                               ]}
-                              onPress={() => setFormData(prev => ({ 
-                                ...prev, 
-                                faculty_id: faculty.id,
-                                department_id: ''
-                              }))}
+                              onPress={() => setFormData(prev => {
+                                // إذا نفس الكلية: لا تفعل شيئاً (تجنّب مسح الاختيارات)
+                                if (prev.faculty_id === faculty.id) return prev;
+                                // عند تغيير الكلية: امسح كل الأقسام (المفرد والمصفوفة)
+                                // لأن الأقسام تنتمي لكلية معيّنة، وإبقاء IDs قديمة يسبب عدّاً خاطئاً وحفظاً خاطئاً
+                                return {
+                                  ...prev,
+                                  faculty_id: faculty.id,
+                                  department_id: '',
+                                  department_ids: [],
+                                };
+                              })}
                             >
                               <Text style={[
                                 styles.scopeItemText,
@@ -1096,11 +1111,18 @@ export default function ManageUsersScreen() {
                                 styles.scopeItem,
                                 formData.faculty_id === faculty.id && styles.scopeItemActive
                               ]}
-                              onPress={() => setFormData(prev => ({ 
-                                ...prev, 
-                                faculty_id: faculty.id,
-                                department_id: ''
-                              }))}
+                              onPress={() => setFormData(prev => {
+                                // إذا نفس الكلية: لا تفعل شيئاً (تجنّب مسح الاختيارات)
+                                if (prev.faculty_id === faculty.id) return prev;
+                                // عند تغيير الكلية: امسح كل الأقسام (المفرد والمصفوفة)
+                                // لأن الأقسام تنتمي لكلية معيّنة، وإبقاء IDs قديمة يسبب عدّاً خاطئاً وحفظاً خاطئاً
+                                return {
+                                  ...prev,
+                                  faculty_id: faculty.id,
+                                  department_id: '',
+                                  department_ids: [],
+                                };
+                              })}
                             >
                               <Text style={[
                                 styles.scopeItemText,
