@@ -892,23 +892,39 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
             else:
                 query["_id"] = {"$in": [ObjectId(did) for did in user_dept_ids]}
     
-    # Registration Manager / Registrar - يرى بيانات الكلية
-    elif role in ["registration_manager", "registrar"] and faculty_id:
-        if scope_type == "students":
-            dept_ids = await get_faculty_department_ids(faculty_id)
-            if dept_ids:
-                query["department_id"] = {"$in": dept_ids}
-        elif scope_type == "courses":
-            dept_ids = await get_faculty_department_ids(faculty_id)
-            if dept_ids:
-                query["department_id"] = {"$in": dept_ids}
-        elif scope_type == "departments":
-            query["faculty_id"] = faculty_id
-        elif scope_type == "teachers":
-            # 🔧 كان مفقوداً: المسجِّل يرى معلمي كليته فقط (+ المعلمين العابرين عبر teaching_loads)
-            dept_ids = await get_faculty_department_ids(faculty_id)
-            if dept_ids:
-                query["department_id"] = {"$in": dept_ids}
+    # Registration Manager / Registrar - نطاق مرن:
+    # (1) إن كانت له أقسام محددة (department_ids) → يرى تلك الأقسام فقط
+    # (2) إن كانت له كلية فقط (faculty_id) → يرى كل أقسام الكلية
+    # (3) إن كان له كل من faculty_id و department_ids → أولوية للأقسام (أكثر تحديداً)
+    elif role in ["registration_manager", "registrar"]:
+        # 🔧 الحالة (1): أقسام محددة → استخدمها مباشرة
+        if department_ids and len(department_ids) > 0:
+            if scope_type in ["students", "courses", "teachers"]:
+                if len(department_ids) == 1:
+                    query["department_id"] = department_ids[0]
+                else:
+                    query["department_id"] = {"$in": department_ids}
+            elif scope_type == "departments":
+                if len(department_ids) == 1:
+                    query["_id"] = ObjectId(department_ids[0])
+                else:
+                    query["_id"] = {"$in": [ObjectId(did) for did in department_ids]}
+        # الحالة (2): كلية كاملة بدون تحديد أقسام
+        elif faculty_id:
+            if scope_type == "students":
+                dept_ids = await get_faculty_department_ids(faculty_id)
+                if dept_ids:
+                    query["department_id"] = {"$in": dept_ids}
+            elif scope_type == "courses":
+                dept_ids = await get_faculty_department_ids(faculty_id)
+                if dept_ids:
+                    query["department_id"] = {"$in": dept_ids}
+            elif scope_type == "departments":
+                query["faculty_id"] = faculty_id
+            elif scope_type == "teachers":
+                dept_ids = await get_faculty_department_ids(faculty_id)
+                if dept_ids:
+                    query["department_id"] = {"$in": dept_ids}
     
     # Teacher - يرى فقط مقرراته
     elif role == UserRole.TEACHER:

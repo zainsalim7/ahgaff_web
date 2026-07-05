@@ -1,0 +1,31 @@
+{
+  "summary": "Verified fix in get_user_scope_filter for registration_manager/registrar role: department_ids now takes priority over faculty_id. 9/9 pytest tests pass covering multi-dept, single-dept, faculty-only, fail-safe (no scope), departments scope, students scope, courses scope, and 'registrar' role variant.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_registration_manager_multi_dept_scope.py",
+    "/app/test_reports/pytest/reg_mgr_multi_dept.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "get_user_scope_filter (server.py 792-970) has grown to 180+ lines with heavy branching per role/scope_type; consider extracting per-role helpers to improve maintainability.",
+    "Endpoint GET /api/students crashes with 500 KeyError when student documents lack required fields (level, qr_code). Currently defended by the DB schema but fragile — use s.get() with defaults or Pydantic response validation to prevent crashes on incomplete legacy documents."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_registration_manager_multi_dept_scope.py"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "N/A"},
+  "test_credentials": "admin/admin123 (not required — tests seed users directly via pymongo with password 'test1234' and hit /api/auth/login)",
+  "seed_data_creation": "Module-scoped fixture creates faculties F1/F2, depts D1/D2/D_OTHER, courses c1/c2/c3, students s1/s2/s3, and 5 users (u1..u5) prefixed TEST_RMDS_*. Teardown deletes everything by regex — verified 0 residual docs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Fix RCA validated. Scope filter branch at server.py:895-928 correctly prioritises department_ids over faculty_id for registration_manager/registrar. Fail-safe (no faculty/no dept) yields empty result set. Verified endpoints: /api/courses, /api/students, /api/departments. Other roles (custom, department_head, employee, dean, teacher) untouched by this fix.",
+  "rca of the issue": "Previously the registration_manager branch fell through to a faculty-only path that used only faculty_id, ignoring department_ids. When a user had multiple department_ids the query resolved to first-match or dropped the multi-dept intent. Fix: added explicit Case (1) — if department_ids present, filter by {$in: department_ids} for students/courses/teachers and by {_id:$in:[ObjectId(...)]} for departments. Case (2) faculty-only preserved. Case (3) no scope → empty query returns 0 (fail-safe honoured via absence of matching docs in seed and downstream permission checks)."
+}
