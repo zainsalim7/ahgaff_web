@@ -67,19 +67,26 @@ export default function TeacherCoursesScreen() {
   // 🔒 صلاحيات إسناد المقررات للمعلمين
   const { hasPermission, user } = useAuth();
   const canAssign = hasPermission(PERMISSIONS.MANAGE_TEACHING_LOAD);
-  const isAdmin = user?.role === 'admin';
-  // 🔒 ملكية القسم/الكلية: المستخدم يستطيع التحكم فقط بمقررات قسمه/كليته
-  const userDeptId = (user as any)?.department_id ? String((user as any).department_id) : '';
-  const userFacultyId = (user as any)?.faculty_id ? String((user as any).faculty_id) : '';
+  const userRole = (user as any)?.role;
+  const isAdmin = userRole === 'admin' || userRole === 'university_president';
+  // 🔒 ملكية القسم/الكلية: ندعم multi-department (department_ids) و multi-faculty (faculty_ids)
+  const userDeptIds: string[] = Array.isArray((user as any)?.department_ids) && (user as any).department_ids.length > 0
+    ? (user as any).department_ids.map((d: any) => String(d))
+    : ((user as any)?.department_id ? [String((user as any).department_id)] : []);
+  const userFacultyIds: string[] = Array.isArray((user as any)?.faculty_ids) && (user as any).faculty_ids.length > 0
+    ? (user as any).faculty_ids.map((f: any) => String(f))
+    : ((user as any)?.faculty_id ? [String((user as any).faculty_id)] : []);
   const canManageCourse = (course: any): boolean => {
     if (isAdmin) return true;
     if (!canAssign) return false;
     // إن لم يكن للمستخدم نطاق (لا قسم ولا كلية) فهو global
-    if (!userDeptId && !userFacultyId) return true;
+    if (userDeptIds.length === 0 && userFacultyIds.length === 0) return true;
     const courseDeptId = course?.department_id ? String(course.department_id) : '';
     const courseFacultyId = course?.faculty_id ? String(course.faculty_id) : '';
-    if (userDeptId && courseDeptId) return courseDeptId === userDeptId;
-    if (userFacultyId && courseFacultyId) return courseFacultyId === userFacultyId;
+    // إذا كان لدى المستخدم أقسام: يكفي أن يكون المقرر تابعاً لأحد أقسامه
+    if (userDeptIds.length > 0 && courseDeptId && userDeptIds.includes(courseDeptId)) return true;
+    // وإذا كان لدى المستخدم كليات: يكفي أن يكون المقرر تابعاً لأحد كلياته
+    if (userFacultyIds.length > 0 && courseFacultyId && userFacultyIds.includes(courseFacultyId)) return true;
     return false;
   };
 
@@ -125,8 +132,9 @@ export default function TeacherCoursesScreen() {
         console.warn('Failed to fetch teacher courses:', coursesRes.reason);
         setData(null);
       }
-      if (teacherRes.status === 'fulfilled' && teacherRes.value?.data?.department_id) {
-        setTeacherDept(teacherRes.value.data.department_id);
+      // teacherRes ما زالت مستخدمة للتحقق من صحة teacherId فقط
+      if (teacherRes.status === 'rejected') {
+        console.warn('Failed to fetch teacher details:', teacherRes.reason);
       }
     } catch (error) {
       console.error('Error fetching teacher courses:', error);

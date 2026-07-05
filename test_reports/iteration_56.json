@@ -1,0 +1,62 @@
+{
+  "summary": "Tested backend multi-department scope for POST/DELETE /api/teaching-load and /bulk. Admin baseline and Saeed single-dept regression pass. However, the intended feature (user whose department_ids contains multiple departments should manage courses across ALL of them) FAILS: user works in dept_a (first) but is rejected in dept_b with 403 'لا يمكنك إسناد مقرر لا ينتمي لأحد أقسامك'. Root cause: get_current_user() in routes/deps.py never returns department_ids/faculty_ids arrays, so _ensure_course_in_user_scope always falls back to the single department_id.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "routes/deps.py::get_current_user & POST/DELETE /api/teaching-load",
+        "issue": "get_current_user builds current_user dict WITHOUT 'department_ids'/'faculty_ids' arrays (only single 'department_id'/'faculty_id'). Therefore _ensure_course_in_user_scope's new multi-dept branch (line 41: user_dept_ids = current_user.get('department_ids') or []) always resolves to [] and falls back to [department_id]. A user with department_ids=[deptA, deptB] can assign in deptA (first) but is REJECTED in deptB. This defeats the entire feature.",
+        "priority": "CRITICAL"
+      },
+      {
+        "endpoint": "GET /api/auth/me",
+        "issue": "Response returns department_ids: null even when the user document has department_ids=[deptA, deptB] in MongoDB. Frontend AuthContext cannot populate user.department_ids, so the new frontend canManageCourse() multi-dept branch also fails in production — 'للعرض فقط' badge will appear incorrectly for depts beyond the primary one.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "POST /api/users",
+        "issue": "Create response echoes department_ids but subsequent /auth/me shows null (persistence-vs-projection). Also, 'permissions' at create is ignored at request-time (get_current_user recomputes from role_doc); only custom_permissions or user_permissions collection actually grants effective perms."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {
+        "flow": "/teacher-courses for multi-dept manager",
+        "issue": "Even though canManageCourse() logic in teacher-courses.tsx (lines 79-91) is correct, user.department_ids is never populated by /api/auth/me (backend critical #2). So the multi-dept branch never activates; the badge 'للعرض فقط' incorrectly appears for courses in the user's secondary departments.",
+        "affected_selectors": []
+      }
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_teaching_load_multi_dept_scope.py",
+    "/app/test_reports/pytest/multi_dept_scope.xml"
+  ],
+  "action_items": [
+    "Fix /app/backend/backend/routes/deps.py get_current_user to include 'department_ids' and 'faculty_ids' arrays in the returned dict (from user doc, backward-compatible with singular fields).",
+    "Fix /api/auth/me to include department_ids and faculty_ids in its response payload.",
+    "Retest with pytest /app/backend/tests/test_teaching_load_multi_dept_scope.py -v; the two currently failing tests must turn green."
+  ],
+  "critical_code_review_comments": [
+    "routes/deps.py:194-209 get_current_user returns only singular department_id/faculty_id — arrays never propagate. Any endpoint relying on department_ids/faculty_ids is silently broken (this feature, and likely others).",
+    "routes/users.py:57-58 create_user derives department_id from department_ids[0] but /auth/me later hides department_ids — write-only field from the client's perspective.",
+    "routes/teaching_load.py::_ensure_course_in_user_scope logic itself is correct — problem is that its inputs are stripped upstream.",
+    "get_current_user rebuilds 'permissions' from role_doc, ignoring user.permissions from POST /users. Suggest documenting that only custom_permissions grants extra perms at request time."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_teaching_load_multi_dept_scope.py"
+  ],
+  "success_rate": {
+    "backend": "80% (8/10, 1 skipped) — Admin: PASS, Deny in dept_c: PASS, Delete deny out-of-scope: PASS, Bulk scope: PASS, Saeed regression deny: PASS, Multi-dept ALLOW in dept_b: FAIL, /auth/me department_ids: FAIL",
+    "frontend": "Not executed — inferred broken via backend /auth/me contract"
+  },
+  "test_credentials": "admin/admin123, Saeed/test1234 (both used)",
+  "seed_data_creation": "Temp user TEST_multidept_<hex> created via POST /api/users; department_ids + custom_permissions applied via direct MongoDB update; deleted in fixture teardown.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/test_teaching_load_multi_dept_scope.py -v (needs REACT_APP_BACKEND_URL, MONGO_URL, DB_NAME). The failing tests test_user_has_department_ids_populated and test_can_assign_and_delete_in_dept_b are the acceptance criteria — they should pass after get_current_user + /auth/me expose department_ids.",
+  "rca of the issue": "get_current_user in /app/backend/backend/routes/deps.py returns a request-scoped current_user dict WITHOUT department_ids/faculty_ids arrays. The new multi-dept branch in _ensure_course_in_user_scope reads current_user.get('department_ids') → None → falls back to [department_id] (single). Symptom: user with department_ids=[A,B] can only manage courses in A. Additionally /api/auth/me does not include department_ids in the payload, blocking the frontend canManageCourse() from working too. Fix: (1) deps.py get_current_user return include 'department_ids': user.get('department_ids') or ([user.get('department_id')] if user.get('department_id') else []); same for faculty_ids. (2) /api/auth/me must expose those fields. Repro: create user with department_ids=[A,B] + manage_teaching_load; POST /teaching-load in dept A → 200; POST in dept B → 403; GET /auth/me → department_ids: null."
+}

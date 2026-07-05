@@ -29,15 +29,26 @@ class TeachingLoadUpdate(BaseModel):
 
 async def _ensure_course_in_user_scope(db, current_user: dict, course: dict):
     """🔒 يتأكد أن المقرر ضمن نطاق المستخدم (قسمه/كليته).
-    - admin: سماح كامل
-    - مستخدم بـ department_id: المقرر يجب أن يكون من نفس القسم
-    - مستخدم بـ faculty_id فقط: المقرر يجب أن يكون من كلية المستخدم
-    - مستخدم بدون نطاق: يُسمح فقط لـ admin (آمن افتراضياً - يرفض)
+    - admin / university_president: سماح كامل
+    - مستخدم بـ department_ids (أو department_id قديم): المقرر يجب أن يكون من أحد أقسامه
+    - مستخدم بـ faculty_ids/faculty_id فقط: المقرر يجب أن يكون من إحدى كلياته
+    - مستخدم بدون نطاق: يُسمح (global مثل رئيس الجامعة إذا لم يكن admin)
     """
-    if current_user.get("role") == "admin":
+    role = current_user.get("role")
+    if role in ("admin", "university_president"):
         return
-    user_dept_id = current_user.get("department_id")
-    user_faculty_id = current_user.get("faculty_id")
+    # دعم multi-department + backward compat مع department_id المفرد
+    user_dept_ids = current_user.get("department_ids") or []
+    if not user_dept_ids and current_user.get("department_id"):
+        user_dept_ids = [current_user.get("department_id")]
+    user_dept_ids = [str(x) for x in user_dept_ids if x]
+
+    # دعم multi-faculty + backward compat مع faculty_id المفرد
+    user_faculty_ids = current_user.get("faculty_ids") or []
+    if not user_faculty_ids and current_user.get("faculty_id"):
+        user_faculty_ids = [current_user.get("faculty_id")]
+    user_faculty_ids = [str(x) for x in user_faculty_ids if x]
+
     course_dept_id = str(course.get("department_id") or "")
     course_faculty_id = str(course.get("faculty_id") or "")
 
@@ -50,21 +61,21 @@ async def _ensure_course_in_user_scope(db, current_user: dict, course: dict):
         except Exception:
             pass
 
-    if user_dept_id:
-        # رئيس قسم: يجب أن يكون المقرر من قسمه
-        if course_dept_id and course_dept_id != str(user_dept_id):
+    if user_dept_ids:
+        # يكفي أن يكون المقرر تابعاً لأحد أقسام المستخدم
+        if course_dept_id and course_dept_id not in user_dept_ids:
             raise HTTPException(
                 status_code=403,
-                detail="لا يمكنك إسناد مقرر لا ينتمي لقسمك"
+                detail="لا يمكنك إسناد مقرر لا ينتمي لأحد أقسامك"
             )
-    elif user_faculty_id:
-        # عميد/مسجل/إلخ: يجب أن يكون المقرر من كليته
-        if course_faculty_id and course_faculty_id != str(user_faculty_id):
+    elif user_faculty_ids:
+        # يكفي أن يكون المقرر تابعاً لإحدى كليات المستخدم
+        if course_faculty_id and course_faculty_id not in user_faculty_ids:
             raise HTTPException(
                 status_code=403,
-                detail="لا يمكنك إسناد مقرر لا ينتمي لكليتك"
+                detail="لا يمكنك إسناد مقرر لا ينتمي لإحدى كلياتك"
             )
-    # مستخدم بدون نطاق ولكنه يملك الصلاحية = مستخدم عام (مثل رئيس الجامعة) → يُسمح
+    # مستخدم بدون نطاق ولكنه يملك الصلاحية = مستخدم عام → يُسمح
 
 
 @router.get("/teaching-load")
@@ -341,27 +352,11 @@ async def delete_teaching_load(
         raise HTTPException(status_code=404, detail="السجل غير موجود")
 
     # 🔒 منع حذف إسناد مقرر لا ينتمي لقسم/كلية المستخدم (حماية ضد إساءة استخدام cross_university)
-    if current_user.get("role") != "admin":
+    if current_user.get("role") not in ("admin", "university_president"):
         course = await db.courses.find_one({"_id": ObjectId(existing["course_id"])})
         if course:
-            user_dept_id = current_user.get("department_id")
-            user_faculty_id = current_user.get("faculty_id")
-            course_dept_id = str(course.get("department_id") or "")
-            course_faculty_id = str(course.get("faculty_id") or "")
-
-            # السماح إذا المستخدم بدون نطاق (يعني global)، أو المقرر ضمن نطاقه
-            if user_dept_id:
-                if course_dept_id and course_dept_id != str(user_dept_id):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="لا يمكنك إلغاء إسناد مقرر لا ينتمي لقسمك"
-                    )
-            elif user_faculty_id:
-                if course_faculty_id and course_faculty_id != str(user_faculty_id):
-                    raise HTTPException(
-                        status_code=403,
-                        detail="لا يمكنك إلغاء إسناد مقرر لا ينتمي لكليتك"
-                    )
+            # استخدام نفس منطق التحقق (يدعم multi-department/multi-faculty)
+            await _ensure_course_in_user_scope(db, current_user, course)
 
     await db.teaching_loads.delete_one({"_id": ObjectId(load_id)})
 
