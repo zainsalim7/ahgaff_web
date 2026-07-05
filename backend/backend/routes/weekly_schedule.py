@@ -54,11 +54,55 @@ class TimeSlotCreate(BaseModel):
     end_time: str  # "09:30"
 
 
+class UnavailablePeriod(BaseModel):
+    day: str
+    slot_number: int
+
+
 class TeacherPreferenceUpdate(BaseModel):
-    unavailable_days: List[str] = []  # ["الثلاثاء", "الأربعاء"]
-    unavailable_slots: List[int] = []  # [1, 5] = الأولى والأخيرة
+    unavailable_days: List[str] = []  # ["الثلاثاء", "الأربعاء"] — يوم كامل
+    unavailable_slots: List[int] = []  # [1, 5] = فترات تُطبَّق على كل الأيام (قديم/توافق رجعي)
+    unavailable_periods: List[UnavailablePeriod] = []  # 🆕 شبكة يوم×فترة بدقة عالية
     max_daily_lectures: int = 2
     allow_consecutive_lectures: bool = False  # افتراضياً لا نسمح بمحاضرتين متتاليتين لنفس الأستاذ
+
+
+def _derive_unavailable_periods(pref: dict, working_days: List[str], slot_numbers: List[int]) -> List[dict]:
+    """🔄 يستخرج قائمة الخلايا (يوم/فترة) غير المتاحة من كل من:
+    - unavailable_periods الجديدة (dosahalt)
+    - unavailable_days القديمة (يوم كامل → كل الفترات)
+    - unavailable_slots القديمة (فترة عبر كل الأيام)
+    ويعيد مجموعة موحدة بدون تكرار.
+    """
+    result = set()
+    # 1) الشبكة الجديدة (إن وُجدت)
+    for p in pref.get("unavailable_periods", []) or []:
+        if isinstance(p, dict) and p.get("day") and p.get("slot_number") is not None:
+            result.add((str(p["day"]), int(p["slot_number"])))
+    # 2) توافق رجعي: أيام كاملة قديمة
+    for d in pref.get("unavailable_days", []) or []:
+        for sn in slot_numbers:
+            result.add((str(d), int(sn)))
+    # 3) توافق رجعي: فترات قديمة على كل الأيام
+    for sn in pref.get("unavailable_slots", []) or []:
+        for d in working_days:
+            result.add((str(d), int(sn)))
+    return [{"day": d, "slot_number": sn} for (d, sn) in result]
+
+
+def _is_period_unavailable(pref: dict, day: str, slot_number: int) -> bool:
+    """يتحقق ما إذا كانت الخلية (يوم/فترة) محظورة، بدمج الشبكة الجديدة + الحقول القديمة."""
+    # الشبكة الجديدة
+    for p in pref.get("unavailable_periods", []) or []:
+        if isinstance(p, dict) and p.get("day") == day and int(p.get("slot_number", -1)) == int(slot_number):
+            return True
+    # يوم كامل قديم
+    if day in (pref.get("unavailable_days", []) or []):
+        return True
+    # فترة عبر كل الأيام قديمة
+    if int(slot_number) in (pref.get("unavailable_slots", []) or []):
+        return True
+    return False
 
 
 class ScheduleSlotCreate(BaseModel):
@@ -359,11 +403,31 @@ async def get_teacher_preferences(teacher_id: str, current_user: dict = Depends(
     db = get_db()
     pref = await db.teacher_preferences.find_one({"teacher_id": teacher_id})
     if not pref:
-        return {"teacher_id": teacher_id, "unavailable_days": [], "unavailable_slots": [], "max_daily_lectures": 2, "allow_consecutive_lectures": False}
+        return {
+            "teacher_id": teacher_id,
+            "unavailable_days": [],
+            "unavailable_slots": [],
+            "unavailable_periods": [],
+            "max_daily_lectures": 2,
+            "allow_consecutive_lectures": False,
+        }
+    # 🔄 لعرض نظيف: نُرجع الشبكة كما هي إن وُجدت،
+    # وإلا نشتقّها من الحقول القديمة (backward compat) لسهولة عمل UI الجديدة
+    unavailable_periods = pref.get("unavailable_periods") or []
+    if not unavailable_periods and (pref.get("unavailable_days") or pref.get("unavailable_slots")):
+        # اشتق الشبكة من الحقول القديمة باستخدام أيام العمل والفترات الحالية
+        settings = await db.schedule_settings.find_one({})
+        working_days = (settings or {}).get("working_days", ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"])
+        ts_docs = await db.time_slots.find({}).to_list(20)
+        slot_numbers = sorted([ts.get("slot_number") for ts in ts_docs if ts.get("slot_number")])
+        if not slot_numbers:
+            slot_numbers = [1, 2, 3, 4, 5]
+        unavailable_periods = _derive_unavailable_periods(pref, working_days, slot_numbers)
     return {
         "teacher_id": teacher_id,
         "unavailable_days": pref.get("unavailable_days", []),
         "unavailable_slots": pref.get("unavailable_slots", []),
+        "unavailable_periods": unavailable_periods,
         "max_daily_lectures": pref.get("max_daily_lectures", 2),
         "allow_consecutive_lectures": pref.get("allow_consecutive_lectures", False),
     }
@@ -378,12 +442,47 @@ async def update_teacher_preferences(
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
+
+    # 🔄 نطبّع الشبكة (unavailable_periods) ونشتقّ الحقول القديمة للتوافق الرجعي
+    # (بحيث كود الجدولة القديم أو النشر السابق على Cloud Run لا ينكسر)
+    periods_set = set()
+    for p in data.unavailable_periods or []:
+        periods_set.add((p.day, int(p.slot_number)))
+    # أضف أيضاً كل ما ورد في الحقول القديمة (إن أرسلها الفرونت للتوافق)
+    settings = await db.schedule_settings.find_one({})
+    working_days = (settings or {}).get("working_days", ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"])
+    ts_docs = await db.time_slots.find({}).to_list(20)
+    slot_numbers = sorted([ts.get("slot_number") for ts in ts_docs if ts.get("slot_number")])
+    if not slot_numbers:
+        slot_numbers = [1, 2, 3, 4, 5]
+    for d in data.unavailable_days or []:
+        for sn in slot_numbers:
+            periods_set.add((d, sn))
+    for sn in data.unavailable_slots or []:
+        for d in working_days:
+            periods_set.add((d, sn))
+
+    normalized_periods = [{"day": d, "slot_number": sn} for (d, sn) in sorted(periods_set)]
+
+    # اشتقّ الحقول القديمة المكافئة من الشبكة النهائية:
+    # - يوم كامل = يوم كل خلاياه محددة
+    # - فترة على كل الأيام = فترة موجودة في كل يوم عمل
+    derived_days = []
+    for d in working_days:
+        if all((d, sn) in periods_set for sn in slot_numbers):
+            derived_days.append(d)
+    derived_slots = []
+    for sn in slot_numbers:
+        if all((d, sn) in periods_set for d in working_days):
+            derived_slots.append(sn)
+
     await db.teacher_preferences.update_one(
         {"teacher_id": teacher_id},
         {"$set": {
             "teacher_id": teacher_id,
-            "unavailable_days": data.unavailable_days,
-            "unavailable_slots": data.unavailable_slots,
+            "unavailable_days": derived_days,
+            "unavailable_slots": derived_slots,
+            "unavailable_periods": normalized_periods,
             "max_daily_lectures": data.max_daily_lectures,
             "allow_consecutive_lectures": data.allow_consecutive_lectures,
             "updated_at": datetime.now(timezone.utc),
@@ -681,12 +780,10 @@ async def create_schedule_slot(
     # 4. تعارض تفضيلات المعلم
     pref = await db.teacher_preferences.find_one({"teacher_id": data.teacher_id})
     if pref:
-        if data.day in pref.get("unavailable_days", []):
+        # 🆕 نستخدم _is_period_unavailable الذي يدمج الشبكة الجديدة + الحقول القديمة
+        if _is_period_unavailable(pref, data.day, data.slot_number):
             t = await db.teachers.find_one({"_id": ObjectId(data.teacher_id)})
-            conflicts.append(f"تعارض تفضيلات: '{t.get('full_name', '')}' لا يعمل يوم {data.day}")
-        if data.slot_number in pref.get("unavailable_slots", []):
-            t = await db.teachers.find_one({"_id": ObjectId(data.teacher_id)})
-            conflicts.append(f"تعارض تفضيلات: '{t.get('full_name', '')}' لا يعمل في الفترة {data.slot_number}")
+            conflicts.append(f"تعارض تفضيلات: '{t.get('full_name', '')}' غير متاح يوم {data.day} في الفترة {data.slot_number}")
         # Check max daily
         daily_count = await db.weekly_schedule.count_documents({
             "teacher_id": data.teacher_id, "day": data.day
@@ -885,8 +982,6 @@ async def auto_generate_schedule(
                     continue
 
                 pref = prefs_map.get(tid, {})
-                unavail_days = pref.get("unavailable_days", [])
-                unavail_slots = pref.get("unavailable_slots", [])
                 max_daily = pref.get("max_daily_lectures", 2)
                 allow_consecutive = pref.get("allow_consecutive_lectures", False)
 
@@ -894,13 +989,15 @@ async def auto_generate_schedule(
                 for day in working_days:
                     if placed >= needed:
                         break
-                    if day in unavail_days:
+                    # 🆕 تجاوز اليوم إن كانت كل خلاياه محظورة (يوم كامل بلغة الشبكة)
+                    if all(_is_period_unavailable(pref, day, sn) for sn in slot_numbers):
                         continue
 
                     for sn in slot_numbers:
                         if placed >= needed:
                             break
-                        if sn in unavail_slots:
+                        # 🆕 فحص الخلية (يوم × فترة) عبر الشبكة الجديدة + توافق رجعي
+                        if _is_period_unavailable(pref, day, sn):
                             continue
 
                         key_ts = (day, sn)

@@ -14,7 +14,23 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
-- 2026-07-05 **🔐 إصلاح UI Blocker: تعديل مقررات عبر الأقسام (multi-department admin) في `/teacher-courses`**:
+- 2026-07-05 **🗓️ شبكة تفضيلات المعلمين (يوم × فترة) — دقة أعلى**:
+  - **الحاجة**: النموذج السابق كان يفصل بين "أيام لا يعمل فيها" (يوم كامل) و"فترات لا يعمل فيها" (تُطبَّق على كل الأيام). لم يكن يمكن قول: "الأحد فترتان محددتان + الاثنين يوم كامل + الثلاثاء فترة واحدة".
+  - **الإصلاح**:
+    - **Backend** (`routes/weekly_schedule.py`):
+      - حقل جديد `unavailable_periods: List[{day, slot_number}]` — مصدر الحقيقة.
+      - دالتان مساعدتان `_derive_unavailable_periods` و `_is_period_unavailable` لدمج الشبكة الجديدة + الحقول القديمة.
+      - `GET /teacher-preferences/{id}` يُرجع الشبكة (مشتقّة تلقائياً من القديم إن لزم).
+      - `PUT /teacher-preferences/{id}` يحفظ الشبكة، ويشتقّ منها `unavailable_days` و `unavailable_slots` القديمة تلقائياً (للتوافق الرجعي مع أي كود قديم أو نشر سابق على Cloud Run).
+      - **المولّد التلقائي** وفحص التعارض في `create_slot` يعتمدان الآن على `_is_period_unavailable` (دقة أعلى + رسالة تعارض أوضح).
+    - **Frontend** (`app/weekly-schedule.tsx`):
+      - استُبدلت كتلتا "أيام" و"فترات" المنفصلتان بجدول شبكي تفاعلي (أيام × فترات) مع:
+        - نقر خلية → تلوينها.
+        - عمود "يوم كامل" → قلب كل خلايا الصف دفعة واحدة.
+        - عدّاد سفلي للخلايا المحظورة.
+  - **التحقق**: curl PUT + GET أثبت الحفظ + استخراج توافقي تلقائي (7 خلايا مختلطة → `unavailable_days=['الأحد']`, `unavailable_slots=[]`).
+
+
   - **ما أبلغ عنه المستخدم**: مستخدم يملك صلاحيات على عدة أقسام (`department_ids`) لا يستطيع تعديل/إلغاء إسناد مقرر إن كان مسنداً لمدرس من قسم آخر، وتظهر الشارة "للعرض فقط".
   - **السبب الجذري** (ثلاث طبقات):
     1. `/app/frontend/app/teacher-courses.tsx` كانت تقارن `user.department_id` (مفرد) بقسم المقرر.

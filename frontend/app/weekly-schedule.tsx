@@ -89,7 +89,7 @@ export default function WeeklySchedulePage() {
   // Prefs state
   const [teachers, setTeachers] = useState<any[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
-  const [prefs, setPrefs] = useState<any>({ unavailable_days: [], unavailable_slots: [], max_daily_lectures: 2, allow_consecutive_lectures: false });
+  const [prefs, setPrefs] = useState<any>({ unavailable_days: [], unavailable_slots: [], unavailable_periods: [], max_daily_lectures: 2, allow_consecutive_lectures: false });
   const [savingPrefs, setSavingPrefs] = useState(false);
   // Add slot modal
   const [showAddSlot, setShowAddSlot] = useState(false);
@@ -1013,31 +1013,111 @@ export default function WeeklySchedulePage() {
               <View style={st.card}>
                 <Text style={[st.label, { fontSize: 15, marginBottom: 12 }]}>تفضيلات المعلم</Text>
 
-                <Text style={st.miniLabel}>أيام لا يعمل فيها</Text>
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                  {DAYS.map(day => {
-                    const sel = prefs.unavailable_days?.includes(day);
-                    return (
-                      <TouchableOpacity key={day} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: sel ? '#e53935' : '#f0f0f0' }}
-                        onPress={() => setPrefs((p: any) => ({ ...p, unavailable_days: sel ? p.unavailable_days.filter((d: string) => d !== day) : [...(p.unavailable_days || []), day] }))}>
-                        <Text style={{ color: sel ? '#fff' : '#333', fontSize: 13 }}>{day}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
-
-                <Text style={st.miniLabel}>فترات لا يعمل فيها</Text>
-                <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-                  {timeSlots.map(ts => {
-                    const sel = prefs.unavailable_slots?.includes(ts.slot_number);
-                    return (
-                      <TouchableOpacity key={ts.slot_number} style={{ paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: sel ? '#e53935' : '#f0f0f0' }}
-                        onPress={() => setPrefs((p: any) => ({ ...p, unavailable_slots: sel ? p.unavailable_slots.filter((s: number) => s !== ts.slot_number) : [...(p.unavailable_slots || []), ts.slot_number] }))}>
-                        <Text style={{ color: sel ? '#fff' : '#333', fontSize: 12 }}>{ts.name}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
-                </View>
+                <Text style={st.miniLabel}>غير متاح (شبكة يوم × فترة)</Text>
+                <Text style={{ fontSize: 11, color: '#888', marginBottom: 8, textAlign: 'right' }}>
+                  اضغط الخلية لتحديد/إلغاء. اضغط «يوم كامل» في نهاية الصف لقلب اليوم كله.
+                </Text>
+                {(() => {
+                  // 🆕 شبكة تفاعلية: أيام × فترات
+                  // نستخدم دائماً unavailable_periods كمصدر الحقيقة الوحيد في الفرونت،
+                  // ونشتقّ الحقول القديمة عند الحفظ للتوافق الرجعي.
+                  const periods: Array<{day: string; slot_number: number}> = Array.isArray(prefs.unavailable_periods) ? prefs.unavailable_periods : [];
+                  const isCellUnavailable = (day: string, sn: number) => {
+                    if (periods.some(p => p.day === day && Number(p.slot_number) === sn)) return true;
+                    // fallback backward-compat للحالة النادرة قبل أول حفظ
+                    if ((prefs.unavailable_days || []).includes(day)) return true;
+                    if ((prefs.unavailable_slots || []).includes(sn)) return true;
+                    return false;
+                  };
+                  const toggleCell = (day: string, sn: number) => {
+                    setPrefs((p: any) => {
+                      const cur: Array<{day: string; slot_number: number}> = Array.isArray(p.unavailable_periods) ? [...p.unavailable_periods] : [];
+                      const idx = cur.findIndex(x => x.day === day && Number(x.slot_number) === sn);
+                      if (idx >= 0) cur.splice(idx, 1);
+                      else cur.push({ day, slot_number: sn });
+                      return { ...p, unavailable_periods: cur };
+                    });
+                  };
+                  const toggleWholeDay = (day: string) => {
+                    setPrefs((p: any) => {
+                      const cur: Array<{day: string; slot_number: number}> = Array.isArray(p.unavailable_periods) ? [...p.unavailable_periods] : [];
+                      const allSelected = timeSlots.every(ts => cur.some(x => x.day === day && Number(x.slot_number) === ts.slot_number));
+                      const filtered = cur.filter(x => x.day !== day);
+                      if (!allSelected) {
+                        timeSlots.forEach(ts => filtered.push({ day, slot_number: ts.slot_number }));
+                      }
+                      return { ...p, unavailable_periods: filtered };
+                    });
+                  };
+                  const totalCells = periods.length;
+                  return (
+                    <View style={{ marginBottom: 12 }}>
+                      {/* رأس الجدول: الفترات */}
+                      <View style={{ flexDirection: 'row-reverse', gap: 4, marginBottom: 4 }}>
+                        <View style={{ width: 82 }} />
+                        {timeSlots.map(ts => (
+                          <View key={ts.slot_number} style={{ flex: 1, alignItems: 'center', paddingVertical: 4, backgroundColor: '#f5f5f5', borderRadius: 6 }}>
+                            <Text style={{ fontSize: 11, color: '#555', fontWeight: '600' }}>{ts.name}</Text>
+                          </View>
+                        ))}
+                        <View style={{ width: 82, alignItems: 'center', paddingVertical: 4 }}>
+                          <Text style={{ fontSize: 11, color: '#c62828', fontWeight: '700' }}>يوم كامل</Text>
+                        </View>
+                      </View>
+                      {/* الصفوف: كل يوم */}
+                      {DAYS.map(day => {
+                        const dayCellCount = periods.filter(p => p.day === day).length;
+                        const allSelected = timeSlots.length > 0 && dayCellCount === timeSlots.length;
+                        return (
+                          <View key={day} style={{ flexDirection: 'row-reverse', gap: 4, marginBottom: 4, alignItems: 'center' }}>
+                            <View style={{ width: 82, alignItems: 'center', paddingVertical: 8, backgroundColor: '#eef2f7', borderRadius: 6 }}>
+                              <Text style={{ fontSize: 12, color: '#333', fontWeight: '700' }}>{day}</Text>
+                            </View>
+                            {timeSlots.map(ts => {
+                              const off = isCellUnavailable(day, ts.slot_number);
+                              return (
+                                <TouchableOpacity
+                                  key={ts.slot_number}
+                                  onPress={() => toggleCell(day, ts.slot_number)}
+                                  style={{
+                                    flex: 1,
+                                    minHeight: 36,
+                                    borderRadius: 6,
+                                    backgroundColor: off ? '#e53935' : '#f0f0f0',
+                                    borderWidth: off ? 0 : 1,
+                                    borderColor: '#ddd',
+                                    justifyContent: 'center',
+                                    alignItems: 'center',
+                                  }}
+                                  testID={`pref-cell-${day}-${ts.slot_number}`}
+                                >
+                                  <Ionicons name={off ? 'close' : 'checkmark'} size={14} color={off ? '#fff' : '#9aa4b0'} />
+                                </TouchableOpacity>
+                              );
+                            })}
+                            <TouchableOpacity
+                              onPress={() => toggleWholeDay(day)}
+                              style={{
+                                width: 82, paddingVertical: 8, borderRadius: 6,
+                                backgroundColor: allSelected ? '#b71c1c' : '#fff5f5',
+                                borderWidth: 1, borderColor: allSelected ? '#b71c1c' : '#ffcdd2',
+                                alignItems: 'center',
+                              }}
+                              testID={`pref-day-toggle-${day}`}
+                            >
+                              <Text style={{ fontSize: 11, fontWeight: '700', color: allSelected ? '#fff' : '#c62828' }}>
+                                {allSelected ? '✓ كامل' : 'اليوم كله'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        );
+                      })}
+                      <Text style={{ fontSize: 12, color: '#666', textAlign: 'right', marginTop: 6 }}>
+                        عدد الخلايا المحظورة: <Text style={{ fontWeight: '700', color: '#c62828' }}>{totalCells}</Text>
+                      </Text>
+                    </View>
+                  );
+                })()}
 
                 <Text style={st.miniLabel}>أقصى محاضرات يومياً (افتراضي: 2)</Text>
                 {Platform.OS === 'web' ? (
