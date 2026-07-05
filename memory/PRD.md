@@ -14,6 +14,18 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 
 ## Implemented (selected, recent)
+- 2026-07-05 **🔐 إصلاح صلاحيات الأقسام المتعددة لـ registration_manager/registrar**:
+  - **ما أبلغ عنه المستخدم**: عند منح مستخدم (خاصة registration_manager) صلاحيات على **عدة أقسام** في كلية واحدة عبر `department_ids`، يرى قسماً واحداً فقط. أو عند منح كلية كاملة قد لا يرى كل أقسامها.
+  - **السبب الجذري** في `server.py` دالة `get_user_scope_filter`: فرع `registration_manager` و `registrar` كان يعتمد على `faculty_id` فقط ويتجاهل `department_ids` تماماً (بعكس `custom` و `department_head` و `employee` الذين يدعمانه).
+  - **الإصلاح** (السطور ~895-928): توسيع الفرع بأولوية:
+    1. `department_ids` (list) → فلترة بأقسام محددة (`$in`).
+    2. `department_id` (single legacy) → قسم واحد.
+    3. `faculty_id` → كل أقسام الكلية.
+    4. لا شيء → منع كل الوصول (fail-safe).
+  - **الواجهة**: `manage-users.tsx` تدعم اختيار أقسام متعددة أصلاً — لا تعديل مطلوب.
+  - **التحقق**: `testing_agent_v3_fork` — **9/9 اختبار ناجح** (Multi-dept, Single, Faculty-only, Fail-safe, registrar).
+  - **ملف اختبار جديد**: `/app/backend/tests/test_registration_manager_multi_dept_scope.py`.
+
 - 2026-07-04 **➕ إجراءات المقررات في `/students` (نسخ / نقل / إلغاء تسجيل)**:
   - **الحاجة**: نقل الإجراءات الثلاثة الموجودة في `/course-students` (زر "نسخ إلى مقرر" الأزرق، "نقل إلى مقرر" البرتقالي، "إلغاء تسجيل" الأحمر) إلى الصفحة الرئيسية `/students` ليعمل عليها الأدمن على مستوى الطلاب مباشرة.
   - **Frontend** (`/app/frontend/app/students.tsx`):
