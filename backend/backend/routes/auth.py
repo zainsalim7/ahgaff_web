@@ -213,6 +213,8 @@ async def login(user_data: UserLogin, request: Request):
             "student_id": user.get("student_id"),
             "faculty_id": user.get("faculty_id"),
             "department_id": user.get("department_id"),
+            "faculty_ids": user.get("faculty_ids") or ([user.get("faculty_id")] if user.get("faculty_id") else []),
+            "department_ids": user.get("department_ids") or ([user.get("department_id")] if user.get("department_id") else []),
             "faculty_name": faculty_name,
             "department_name": department_name
         }
@@ -274,6 +276,24 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         except:
             pass
 
+    # دعم multi-department / multi-faculty (backward-compat مع المفرد)
+    department_ids = user.get("department_ids") or (
+        [user.get("department_id")] if user.get("department_id") else []
+    )
+    faculty_ids = user.get("faculty_ids") or (
+        [user.get("faculty_id")] if user.get("faculty_id") else []
+    )
+    # أسماء الأقسام (لعرضها في الـ UI عند وجود multi-dept)
+    department_names = []
+    if department_ids:
+        try:
+            dept_object_ids = [ObjectId(d) for d in department_ids if d]
+            dept_docs = await db.departments.find({"_id": {"$in": dept_object_ids}}).to_list(50)
+            name_map = {str(d["_id"]): d.get("name") for d in dept_docs}
+            department_names = [name_map.get(str(d)) for d in department_ids if name_map.get(str(d))]
+        except Exception:
+            pass
+
     return {
         "id": str(user["_id"]),
         "username": user["username"],
@@ -288,6 +308,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "student_id": user.get("student_id"),
         "faculty_id": user.get("faculty_id"),
         "department_id": user.get("department_id"),
+        "faculty_ids": faculty_ids,
+        "department_ids": department_ids,
         "faculty_name": faculty_name,
-        "department_name": department_name
+        "department_name": department_name,
+        "department_names": department_names
     }

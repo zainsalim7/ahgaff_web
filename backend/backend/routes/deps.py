@@ -202,7 +202,13 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         "is_active": user.get("is_active", True),
         "permissions": user_permissions,
         "faculty_id": user.get("faculty_id"),
+        "faculty_ids": user.get("faculty_ids") or (
+            [user.get("faculty_id")] if user.get("faculty_id") else []
+        ),
         "department_id": user.get("department_id"),
+        "department_ids": user.get("department_ids") or (
+            [user.get("department_id")] if user.get("department_id") else []
+        ),
         "student_id": user.get("student_id"),
         "role_id": user.get("role_id"),
         "custom_permissions": user.get("custom_permissions", [])
