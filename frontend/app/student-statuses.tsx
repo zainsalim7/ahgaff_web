@@ -82,7 +82,9 @@ export default function StudentStatusesScreen() {
   const openRestoreModal = async (s: StatusStudent) => {
     setRestoreModal(s);
     setRestoreLevel(s.snapshot_level || 1);
-    setRestoreSection(s.snapshot_section || 'أ');
+    // 🔧 نحترم الشعبة الأصلية كما هي (قد تكون فارغة "" = بدون شعبة)
+    // بدلاً من إجبار المستخدم على اختيار أ أو ب
+    setRestoreSection(s.snapshot_section ?? '');
     setRestoreReason('');
     try {
       const r = await api.get(`/student-status/available-sections${s.department_id ? '?department_id=' + s.department_id : ''}`);
@@ -106,7 +108,8 @@ export default function StudentStatusesScreen() {
         new_section: restoreSection,
         reason: restoreReason.trim() || 'استرجاع للحالة النشطة',
       });
-      const msg = `تم استرجاع ${restoreModal.full_name} إلى المستوى ${restoreLevel} ${restoreSection}`;
+      const secLabel = restoreSection ? restoreSection : 'بدون شعبة';
+      const msg = `تم استرجاع ${restoreModal.full_name} إلى المستوى ${restoreLevel} ${secLabel}`;
       if (Platform.OS === 'web') window.alert(msg);
       else Alert.alert('نجاح', msg);
       setRestoreModal(null);
@@ -237,6 +240,15 @@ export default function StudentStatusesScreen() {
 
             <Text style={styles.fieldLabel}>الشعبة:</Text>
             <View style={styles.optionsRow}>
+              {/* 🆕 خيار "بدون شعبة" لدعم الطلاب الذين لم يكونوا مسجّلين في شعبة أصلاً */}
+              <TouchableOpacity
+                key="__none__"
+                style={[styles.optionBtn, restoreSection === '' && styles.optionBtnActive]}
+                onPress={() => setRestoreSection('')}
+                data-testid="restore-section-none"
+              >
+                <Text style={[styles.optionText, restoreSection === '' && styles.optionTextActive]}>بدون شعبة</Text>
+              </TouchableOpacity>
               {availableSections.map(sec => (
                 <TouchableOpacity
                   key={sec}

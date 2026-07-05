@@ -480,7 +480,8 @@ async def restore_student_to_active(
         "status_changed_by": current_user.get("id"),
         "status_reason": payload.reason or "استرجاع للحالة النشطة",
     }
-    if payload.new_section:
+    if payload.new_section is not None:
+        # نكتب حتى لو كانت "" (سلسلة فارغة) لدعم "بدون شعبة" كما كان الطالب أصلاً
         update_data["section"] = payload.new_section
 
     await db.students.update_one(
