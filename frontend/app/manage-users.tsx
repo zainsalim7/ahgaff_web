@@ -309,14 +309,27 @@ export default function ManageUsersScreen() {
     
     setSaving(true);
     try {
+      // 🧹 تنظيف الحمولة حسب مستوى الصلاحية لمنع إرسال قيم قديمة تُعيد كتابة الحقول في الـ Backend
+      // (مثلاً: عند اختيار "كلية محددة" لا نرسل department_ids قديمة حتى لا يُشتق منها department_id)
+      // ملاحظة: Backend يعامل "" و null على أنهما مسح — لكن يتجاهل الحقل كلياً إن كان undefined
+      // لذا نمرر "" صراحةً للمسح.
+      const level = formData.permission_level;
+      const cleanDeptIds = level === 'department' && formData.department_ids.length > 0
+        ? formData.department_ids
+        : [];
+      const cleanDeptId = level === 'department'
+        ? (cleanDeptIds[0] || formData.department_id || '')
+        : '';
+      const cleanFacultyId = level === 'university' ? '' : (formData.faculty_id || '');
+
       await usersAPI.update(selectedUser.id, {
         full_name: formData.full_name,
         role_id: formData.role_id || undefined,
         email: formData.email || undefined,
         phone: formData.phone || undefined,
-        faculty_id: formData.faculty_id || undefined,
-        department_id: formData.department_ids.length > 0 ? formData.department_ids[0] : (formData.department_id || undefined),
-        department_ids: formData.department_ids.length > 0 ? formData.department_ids : undefined,
+        faculty_id: cleanFacultyId,
+        department_id: cleanDeptId,
+        department_ids: cleanDeptIds,
       });
       
       if (Platform.OS === 'web') {
@@ -1053,7 +1066,9 @@ export default function ManageUsersScreen() {
                             ...prev, 
                             permission_level: 'university',
                             faculty_id: '',
-                            department_id: ''
+                            faculty_ids: [],
+                            department_id: '',
+                            department_ids: []
                           }))}
                         >
                           <Ionicons name="globe" size={20} color={formData.permission_level === 'university' ? '#fff' : '#666'} />
@@ -1070,7 +1085,8 @@ export default function ManageUsersScreen() {
                           onPress={() => setFormData(prev => ({ 
                             ...prev, 
                             permission_level: 'faculty',
-                            department_id: ''
+                            department_id: '',
+                            department_ids: []
                           }))}
                         >
                           <Ionicons name="school" size={20} color={formData.permission_level === 'faculty' ? '#fff' : '#666'} />
