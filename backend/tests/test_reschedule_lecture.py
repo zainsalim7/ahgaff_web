@@ -150,7 +150,9 @@ class TestRescheduleLectureBackend:
         print(f"Get lectures status: {response.status_code}")
         
         assert response.status_code == 200
-        lectures = response.json()
+        data = response.json()
+        # الـ API يعيد صيغة مقسمة صفحات: {"lectures": [...], "total": ...}
+        lectures = data["lectures"] if isinstance(data, dict) else data
         print(f"Found {len(lectures)} lectures for course")
         
         # Find lectures with rescheduled flag

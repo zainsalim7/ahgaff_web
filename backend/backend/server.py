@@ -16,6 +16,7 @@ from datetime import datetime, timedelta, timezone
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 import json
 import pandas as pd
 from io import BytesIO
@@ -7535,14 +7536,36 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
     allow_same_course: إذا True يرجع تحذير بدل خطأ للمقررات التي لها نفس الاسم الأساسي (شعب مختلفة)
     """
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
-    if not course or not course.get("teacher_id"):
-        return None  # لا يوجد أستاذ مرتبط
-    
-    teacher_id = course["teacher_id"]
+    if not course:
+        return None
     course_name = course.get("name", "")
     # استخراج الاسم الأساسي بدون حرف الشعبة
     import re
     base_name = re.sub(r'\s*\([أ-ي]\)\s*$', '', course_name).strip()
+
+    # 🔒 (1) فحص تعارض المقرر نفسه — خطأ صارم دائماً (لا يمكن تجاوزه بـ force)
+    # يعمل حتى لو لم يكن للمقرر أستاذ مرتبط
+    same_course_query = {
+        "course_id": course_id,
+        "date": date,
+        "status": {"$ne": LectureStatus.CANCELLED},
+    }
+    if exclude_lecture_id:
+        same_course_query["_id"] = {"$ne": ObjectId(exclude_lecture_id)}
+    for lec in await db.lectures.find(same_course_query).to_list(1000):
+        ex_start = lec.get("start_time", "")
+        ex_end = lec.get("end_time", "")
+        if ex_start and ex_end and start_time and end_time:
+            if start_time < ex_end and end_time > ex_start:
+                return {
+                    "type": "error",
+                    "message": f"يوجد تعارض: المقرر \"{course_name}\" لديه محاضرة أخرى بنفس التوقيت يوم {date} من {ex_start} إلى {ex_end} — لا يمكن إنشاء محاضرتين متداخلتين لنفس المقرر"
+                }
+
+    if not course.get("teacher_id"):
+        return None  # لا يوجد أستاذ مرتبط — اكتفينا بفحص المقرر نفسه
+
+    teacher_id = course["teacher_id"]
     
     # جلب جميع مقررات هذا الأستاذ
     teacher_courses = await db.courses.find({"teacher_id": teacher_id}).to_list(1000)
@@ -7636,7 +7659,10 @@ async def create_lecture(
         lecture["semester_id"] = active_sem_for_lec["id"]
         lecture["semester_name"] = active_sem_for_lec["name"]
 
-    result = await db.lectures.insert_one(lecture)
+    try:
+        result = await db.lectures.insert_one(lecture)
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="يوجد محاضرة مطابقة لنفس المقرر في نفس التاريخ ووقت البداية — تم رفض الإنشاء (حماية قاعدة البيانات)")
     
     # إرسال تنبيه تلقائي للمعلم وطلاب المقرر
     await notify_lecture_created(course, data.date, data.start_time, data.end_time)
@@ -7724,11 +7750,19 @@ async def generate_semester_lectures(
         current += timedelta(days=1)
     
     lectures_created = 0
+    conflicts_skipped = 0
     
     while current <= end:
+        date_str = current.strftime("%Y-%m-%d")
+        # فحص التعارض (نفس المقرر أو نفس الأستاذ)
+        conflict = await check_teacher_lecture_conflict(data.course_id, date_str, data.start_time, data.end_time, allow_same_course=True)
+        if conflict and conflict["type"] == "error":
+            conflicts_skipped += 1
+            current += timedelta(days=7)
+            continue
         lecture = {
             "course_id": data.course_id,
-            "date": current.strftime("%Y-%m-%d"),
+            "date": date_str,
             "start_time": data.start_time,
             "end_time": data.end_time,
             "room": data.room or "",
@@ -7737,13 +7771,17 @@ async def generate_semester_lectures(
             "created_at": get_yemen_time(),
             "created_by": current_user["id"]
         }
-        await db.lectures.insert_one(lecture)
-        lectures_created += 1
+        try:
+            await db.lectures.insert_one(lecture)
+            lectures_created += 1
+        except DuplicateKeyError:
+            conflicts_skipped += 1
         current += timedelta(days=7)
     
     return {
-        "message": f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي",
-        "count": lectures_created
+        "message": f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي" + (f" (تم تخطي {conflicts_skipped} بسبب تعارض)" if conflicts_skipped > 0 else ""),
+        "count": lectures_created,
+        "conflicts_skipped": conflicts_skipped
     }
 
 class DaySlot(BaseModel):
@@ -7833,8 +7871,11 @@ async def generate_semester_lectures_advanced(
                     "created_at": get_yemen_time(),
                     "created_by": current_user["id"]
                 }
-                await db.lectures.insert_one(lecture)
-                lectures_created += 1
+                try:
+                    await db.lectures.insert_one(lecture)
+                    lectures_created += 1
+                except DuplicateKeyError:
+                    conflicts_skipped += 1
             
             current += timedelta(days=7)
     
@@ -7869,6 +7910,16 @@ async def update_lecture(
     new_end = update_data.get("end_time", lecture.get("end_time", ""))
     if new_start and new_end and new_end <= new_start:
         raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
+
+    # 🔒 فحص التعارض عند تغيير التاريخ أو الوقت (نفس المقرر أو نفس الأستاذ)
+    if any(k in update_data for k in ("date", "start_time", "end_time")):
+        eff_date = update_data.get("date") or lecture.get("date", "")
+        conflict = await check_teacher_lecture_conflict(
+            lecture.get("course_id", ""), eff_date, new_start, new_end,
+            exclude_lecture_id=lecture_id, allow_same_course=True
+        )
+        if conflict and conflict["type"] == "error":
+            raise HTTPException(status_code=400, detail=conflict["message"])
 
     # عند إعادة الجدولة (تغيير التاريخ): احفظ التاريخ الأصلي
     new_date = update_data.get("date")
@@ -7910,10 +7961,13 @@ async def update_lecture(
             )
 
     if update_data:
-        await db.lectures.update_one(
-            {"_id": ObjectId(lecture_id)},
-            {"$set": update_data}
-        )
+        try:
+            await db.lectures.update_one(
+                {"_id": ObjectId(lecture_id)},
+                {"$set": update_data}
+            )
+        except DuplicateKeyError:
+            raise HTTPException(status_code=409, detail="يوجد محاضرة مطابقة لنفس المقرر في نفس التاريخ ووقت البداية — تم رفض التعديل (حماية قاعدة البيانات)")
     
     return {"message": "تم تحديث المحاضرة بنجاح"}
 
@@ -8303,7 +8357,10 @@ async def reschedule_lecture(
     if new_end_time:
         update_data["end_time"] = new_end_time
     
-    await db.lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": update_data})
+    try:
+        await db.lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": update_data})
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail="يوجد محاضرة مطابقة لنفس المقرر في نفس التاريخ ووقت البداية — تم رفض إعادة الجدولة (حماية قاعدة البيانات)")
     
     # إرسال إشعار للمعلم والطلاب
     try:
@@ -15890,6 +15947,70 @@ async def _ensure_weekly_schedule_unique_indexes(db):
 
 
 
+async def _ensure_lectures_unique_index(db):
+    """
+    🔒 حماية جذرية ضد المحاضرات المكررة في lectures:
+    1. نبحث عن أي تكرارات قائمة (نفس course_id/date/start_time بحالة نشطة).
+    2. نُبقي على المحاضرة الأهم (المنعقدة أولاً ثم الأقدم) ونُلغي الفائض (لا نحذف حفاظاً على سجلات الحضور).
+    3. ننشئ فهرس فريد جزئي بحيث ترفض MongoDB أي إدخال مكرر حتى لو أخطأ الكود.
+    """
+    try:
+        active_statuses = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT]
+        cancelled_total = 0
+        pipe = [
+            {"$match": {"status": {"$in": active_statuses}}},
+            {"$group": {
+                "_id": {"c": "$course_id", "d": "$date", "s": "$start_time"},
+                "docs": {"$push": {"id": "$_id", "created_at": "$created_at", "status": "$status"}},
+                "count": {"$sum": 1},
+            }},
+            {"$match": {"count": {"$gt": 1}}},
+        ]
+        async for group in db.lectures.aggregate(pipe):
+            # نُفضّل الإبقاء على المنعقدة (completed)، ثم الأقدم إنشاءً
+            docs = sorted(
+                group["docs"],
+                key=lambda x: (0 if x.get("status") == LectureStatus.COMPLETED else 1, str(x.get("created_at") or "")),
+            )
+            for extra in docs[1:]:
+                await db.lectures.update_one(
+                    {"_id": extra["id"]},
+                    {"$set": {
+                        "status": LectureStatus.CANCELLED,
+                        "cancellation_reason": "أُلغيت تلقائياً: محاضرة مكررة (نفس المقرر والتاريخ والوقت)",
+                        "cancelled_at": get_yemen_time(),
+                        "cancelled_by_name": "النظام (تنظيف تلقائي)",
+                    }},
+                )
+                cancelled_total += 1
+                logging.warning(
+                    f"[lectures dedupe] أُلغيت محاضرة مكررة: course={group['_id']['c']} "
+                    f"date={group['_id']['d']} start={group['_id']['s']} id={extra['id']}"
+                )
+        if cancelled_total > 0:
+            logging.warning(f"[lectures dedupe] TOTAL cancelled duplicates: {cancelled_total}")
+
+        # فهرس فريد جزئي: يشمل الحالات النشطة فقط (الملغاة مستثناة ليمكن إعادة الإنشاء بعد الإلغاء)
+        try:
+            await db.lectures.create_index(
+                [("course_id", 1), ("date", 1), ("start_time", 1)],
+                unique=True,
+                partialFilterExpression={"status": {"$in": active_statuses}},
+                name="uniq_course_date_start",
+            )
+        except Exception as idx_err:
+            # نسخ MongoDB الأقدم من 6.0 لا تدعم $in في partialFilterExpression — نستخدم scheduled فقط
+            logging.warning(f"[lectures unique index] $in filter failed ({idx_err}) — fallback to scheduled-only")
+            await db.lectures.create_index(
+                [("course_id", 1), ("date", 1), ("start_time", 1)],
+                unique=True,
+                partialFilterExpression={"status": LectureStatus.SCHEDULED},
+                name="uniq_course_date_start",
+            )
+    except Exception as e:
+        logging.warning(f"[lectures unique index] failed: {e}")
+
+
 async def create_indexes():
     """إنشاء فهارس لتسريع الاستعلامات"""
     try:
@@ -15928,6 +16049,9 @@ async def create_indexes():
         # 🔒 حماية على مستوى قاعدة البيانات ضد التعارض المزدوج في الجدول الأسبوعي
         # نطبّق فهارس فريدة جزئية بعد إزالة أي تكرار قائم (نحتفظ بأقدم نسخة)
         await _ensure_weekly_schedule_unique_indexes(db)
+
+        # 🔒 حماية على مستوى قاعدة البيانات ضد المحاضرات المكررة (نفس المقرر/التاريخ/الوقت)
+        await _ensure_lectures_unique_index(db)
 
         logging.info("MongoDB indexes created successfully")
     except Exception as e:
