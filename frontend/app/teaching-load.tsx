@@ -976,9 +976,20 @@ export default function TeachingLoadPage() {
                       />
                       {searching ? <ActivityIndicator size="small" color="#1565c0" /> : <Ionicons name="search" size={20} color="#999" />}
                     </div>
-                    {/* Search Results Dropdown */}
+                    {/* Search Results Panel (in-flow: لا يغطي المحتوى ويسمح بالتمرير الطبيعي) */}
                     {showResults && searchResults.length > 0 && (
-                      <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', zIndex: 1000, maxHeight: 'min(60vh, 520px)', overflowY: 'auto', boxShadow: '0 4px 16px rgba(0,0,0,0.12)', direction: 'rtl', scrollbarWidth: 'thin' as any }}>
+                      <div style={{ marginTop: 8, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #cfd8dc', direction: 'rtl', overflow: 'hidden' }} data-testid="course-search-results-panel">
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', borderBottom: '1px solid #e8ecef', backgroundColor: '#f7f9fb' }}>
+                          <span style={{ fontSize: 12, color: '#455a64', fontWeight: 700 }}>نتائج البحث ({searchResults.length})</span>
+                          <button
+                            onClick={() => setShowResults(false)}
+                            data-testid="close-search-results-btn"
+                            style={{ display: 'flex', alignItems: 'center', gap: 4, border: '1px solid #ddd', backgroundColor: '#fff', borderRadius: 6, padding: '3px 10px', fontSize: 12, color: '#c62828', cursor: 'pointer', fontWeight: 600 }}
+                          >
+                            ✕ إغلاق النتائج
+                          </button>
+                        </div>
+                        <div style={{ maxHeight: 340, overflowY: 'auto', scrollbarWidth: 'thin' as any }}>
                         {searchResults.map(c => {
                           const cDept = departments.find((d: any) => d.id === c.department_id);
                           // أولوية لاسم القسم/الكلية من الـ API (يعمل حتى لو كان القسم خارج نطاق المستخدم)
@@ -1033,10 +1044,11 @@ export default function TeachingLoadPage() {
                           </TouchableOpacity>
                           );
                         })}
+                        </div>
                       </div>
                     )}
                     {showResults && searchQuery.length > 0 && searchResults.length === 0 && !searching && (
-                      <div style={{ position: 'absolute', top: 52, left: 0, right: 0, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', padding: 16, textAlign: 'center', boxShadow: '0 4px 16px rgba(0,0,0,0.12)' }}>
+                      <div style={{ marginTop: 8, backgroundColor: '#fff', borderRadius: 10, border: '1px solid #ddd', padding: 16, textAlign: 'center' }}>
                         <Text style={{ color: '#999' }}>لا توجد نتائج</Text>
                       </div>
                     )}
@@ -1147,8 +1159,8 @@ export default function TeachingLoadPage() {
               </View>
             )}
 
-            {/* Empty state */}
-            {!selectedDept && (
+            {/* Empty state - يظهر فقط إذا لم يُختر قسم ولم يُفعَّل وضع جميع الأقسام */}
+            {!selectedDept && !crossDept && (
               <View style={styles.emptyCard} data-testid="teaching-load-empty">
                 <Ionicons name="grid-outline" size={24} color="#bbb" />
                 <Text style={styles.emptyText}>اختر القسم ثم المعلم لتعيين العبء التدريسي</Text>
