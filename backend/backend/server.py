@@ -15786,6 +15786,110 @@ async def migrate_broken_user_roles():
     except Exception as e:
         logging.error(f"User role migration failed (non-critical): {e}")
 
+async def _ensure_weekly_schedule_unique_indexes(db):
+    """
+    🔒 حماية جذرية ضد الحجز المزدوج في weekly_schedule:
+    1. نبحث عن أي تكرارات قائمة (نفس teacher/day/slot أو room/day/slot أو dept/level/section/day/slot).
+    2. نحتفظ بأقدم نسخة ونحذف الفائض (يتم تسجيله في السجل).
+    3. ننشئ فهارس فريدة جزئية (partial unique indexes) بحيث ترفض MongoDB أي إدخال متعارض حتى لو أخطأ الكود.
+    """
+    try:
+        # --- 1) إزالة أي تكرارات قائمة ---
+        removed_total = 0
+        # (a) نفس المعلم في نفس اليوم/الفترة
+        pipe = [
+            {"$match": {"teacher_id": {"$exists": True, "$nin": [None, ""]}}},
+            {"$group": {
+                "_id": {"t": "$teacher_id", "d": "$day", "s": "$slot_number"},
+                "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
+                "count": {"$sum": 1},
+            }},
+            {"$match": {"count": {"$gt": 1}}},
+        ]
+        async for group in db.weekly_schedule.aggregate(pipe):
+            docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+            # نحتفظ بالأقدم، نحذف الباقي
+            for extra in docs[1:]:
+                await db.weekly_schedule.delete_one({"_id": extra["id"]})
+                removed_total += 1
+                logging.warning(
+                    f"[schedule dedupe] حُذف تكرار المعلم: teacher={group['_id']['t']} "
+                    f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
+                )
+
+        # (b) نفس القاعة في نفس اليوم/الفترة
+        pipe = [
+            {"$match": {"room_id": {"$exists": True, "$nin": [None, ""]}}},
+            {"$group": {
+                "_id": {"r": "$room_id", "d": "$day", "s": "$slot_number"},
+                "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
+                "count": {"$sum": 1},
+            }},
+            {"$match": {"count": {"$gt": 1}}},
+        ]
+        async for group in db.weekly_schedule.aggregate(pipe):
+            docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+            for extra in docs[1:]:
+                await db.weekly_schedule.delete_one({"_id": extra["id"]})
+                removed_total += 1
+                logging.warning(
+                    f"[schedule dedupe] حُذف تكرار القاعة: room={group['_id']['r']} "
+                    f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
+                )
+
+        # (c) نفس الشعبة في نفس اليوم/الفترة
+        pipe = [
+            {"$group": {
+                "_id": {
+                    "dept": "$department_id", "lvl": "$level",
+                    "sec": {"$ifNull": ["$section", ""]},
+                    "d": "$day", "s": "$slot_number",
+                },
+                "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
+                "count": {"$sum": 1},
+            }},
+            {"$match": {"count": {"$gt": 1}}},
+        ]
+        async for group in db.weekly_schedule.aggregate(pipe):
+            docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+            for extra in docs[1:]:
+                await db.weekly_schedule.delete_one({"_id": extra["id"]})
+                removed_total += 1
+                logging.warning(
+                    f"[schedule dedupe] حُذف تكرار الشعبة: dept={group['_id']['dept']} "
+                    f"level={group['_id']['lvl']} sec={group['_id']['sec']} "
+                    f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
+                )
+
+        if removed_total > 0:
+            logging.warning(f"[schedule dedupe] TOTAL removed: {removed_total} slot(s). See warnings above.")
+
+        # --- 2) إنشاء فهارس فريدة جزئية (Partial Unique Indexes) ---
+        # MongoDB لا يدعم $ne في partial index. نستخدم $exists+$type فقط.
+        # ملاحظة: السجلات ذات teacher_id="" ستُشملها الفهرس، لكن هذا مقبول لأن الحقل نصّي.
+        await db.weekly_schedule.create_index(
+            [("teacher_id", 1), ("day", 1), ("slot_number", 1)],
+            unique=True,
+            partialFilterExpression={"teacher_id": {"$exists": True, "$type": "string"}},
+            name="uniq_teacher_day_slot",
+        )
+        await db.weekly_schedule.create_index(
+            [("room_id", 1), ("day", 1), ("slot_number", 1)],
+            unique=True,
+            partialFilterExpression={"room_id": {"$exists": True, "$type": "string"}},
+            name="uniq_room_day_slot",
+        )
+        await db.weekly_schedule.create_index(
+            [("department_id", 1), ("level", 1), ("section", 1), ("day", 1), ("slot_number", 1)],
+            unique=True,
+            partialFilterExpression={"department_id": {"$exists": True, "$type": "string"}},
+            name="uniq_section_day_slot",
+        )
+    except Exception as e:
+        logging.warning(f"[weekly_schedule unique indexes] failed: {e}")
+
+
+
 async def create_indexes():
     """إنشاء فهارس لتسريع الاستعلامات"""
     try:
@@ -15820,6 +15924,11 @@ async def create_indexes():
         await db.students.create_index("user_id")
         await db.teachers.create_index("user_id")
         await db.courses.create_index([("department_id", 1), ("level", 1)])
+
+        # 🔒 حماية على مستوى قاعدة البيانات ضد التعارض المزدوج في الجدول الأسبوعي
+        # نطبّق فهارس فريدة جزئية بعد إزالة أي تكرار قائم (نحتفظ بأقدم نسخة)
+        await _ensure_weekly_schedule_unique_indexes(db)
+
         logging.info("MongoDB indexes created successfully")
     except Exception as e:
         logging.warning(f"Index creation warning: {e}")

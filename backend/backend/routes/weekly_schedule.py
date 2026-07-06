@@ -7,6 +7,7 @@ from bson import ObjectId
 from datetime import datetime, timezone
 from typing import Optional, List
 from pydantic import BaseModel
+from pymongo.errors import DuplicateKeyError
 
 from .deps import get_db, get_current_user, has_permission, log_activity
 from models.permissions import Permission
@@ -798,7 +799,21 @@ async def create_schedule_slot(
     doc = data.dict()
     doc["created_at"] = datetime.now(timezone.utc)
     doc["created_by"] = current_user["id"]
-    result = await db.weekly_schedule.insert_one(doc)
+    try:
+        result = await db.weekly_schedule.insert_one(doc)
+    except DuplicateKeyError as e:
+        # 🔒 خط الدفاع الأخير: MongoDB رفض الحفظ لتعارض فريد.
+        # هذا يحدث فقط إن أفلت التعارض من الفحوصات السابقة (race condition نادر أو بيانات قديمة).
+        idx_name = str(getattr(e, "details", {}).get("keyPattern", ""))
+        if "teacher" in idx_name:
+            msg = "تعارض معلم: هذا المعلم لديه محاضرة أخرى في نفس اليوم والفترة"
+        elif "room" in idx_name:
+            msg = "تعارض قاعة: هذه القاعة محجوزة في نفس اليوم والفترة"
+        elif "section" in idx_name or "department" in idx_name:
+            msg = "تعارض شعبة: هذه الشعبة لديها محاضرة أخرى في نفس اليوم والفترة"
+        else:
+            msg = "تعارض في الجدول (تكرار مرفوض من قاعدة البيانات)"
+        raise HTTPException(status_code=409, detail={"message": msg, "conflicts": [msg]})
     return {"id": str(result.inserted_id), "message": "تم إضافة المحاضرة في الجدول"}
 
 
@@ -862,7 +877,19 @@ async def update_schedule_slot(
         if room_busy:
             raise HTTPException(status_code=409, detail="تعارض: القاعة مشغولة في نفس الفترة")
 
-    await db.weekly_schedule.update_one({"_id": ObjectId(slot_id)}, {"$set": update})
+    try:
+        await db.weekly_schedule.update_one({"_id": ObjectId(slot_id)}, {"$set": update})
+    except DuplicateKeyError as e:
+        idx_name = str(getattr(e, "details", {}).get("keyPattern", ""))
+        if "teacher" in idx_name:
+            msg = "تعارض معلم: هذا المعلم لديه محاضرة أخرى في نفس اليوم والفترة"
+        elif "room" in idx_name:
+            msg = "تعارض قاعة: هذه القاعة محجوزة في نفس اليوم والفترة"
+        elif "section" in idx_name or "department" in idx_name:
+            msg = "تعارض شعبة: هذه الشعبة لديها محاضرة أخرى في نفس اليوم والفترة"
+        else:
+            msg = "تعارض في الجدول (تكرار مرفوض من قاعدة البيانات)"
+        raise HTTPException(status_code=409, detail=msg)
     return {"message": "تم التحديث"}
 
 
@@ -1072,7 +1099,12 @@ async def auto_generate_schedule(
                             "created_by": current_user["id"],
                             "auto_generated": True,
                         }
-                        await db.weekly_schedule.insert_one(doc)
+                        try:
+                            await db.weekly_schedule.insert_one(doc)
+                        except DuplicateKeyError:
+                            # فهرس DB منع التكرار (حماية إضافية) — تجاوز هذه الخلية
+                            skipped += 1
+                            continue
 
                         # Update tracking
                         teacher_occupied.setdefault(key_ts, set()).add(tid)
