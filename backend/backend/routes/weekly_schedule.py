@@ -820,23 +820,42 @@ async def update_schedule_slot(
         raise HTTPException(status_code=400, detail="لا توجد بيانات")
 
     # Check conflicts for new values
-    check_day = existing["day"]
-    check_slot = existing["slot_number"]
+    # 🔒 نستخدم القيم الجديدة إن أُرسلت، وإلا القيم القديمة
+    check_day = update.get("day", existing["day"])
+    check_slot = update.get("slot_number", existing["slot_number"])
+    check_teacher = update.get("teacher_id", existing.get("teacher_id"))
+    check_room = update.get("room_id", existing.get("room_id"))
+    check_dept = update.get("department_id", existing.get("department_id"))
+    check_level = update.get("level", existing.get("level"))
+    check_section = update.get("section", existing.get("section", ""))
 
-    if "teacher_id" in update:
+    # تعارض الشعبة إن تغيّر أي حقل مؤثر
+    if any(k in update for k in ("day", "slot_number", "department_id", "level", "section")):
+        section_busy = await db.weekly_schedule.find_one({
+            "_id": {"$ne": ObjectId(slot_id)},
+            "department_id": check_dept,
+            "level": check_level,
+            "section": check_section,
+            "day": check_day,
+            "slot_number": check_slot,
+        })
+        if section_busy:
+            raise HTTPException(status_code=409, detail="تعارض: يوجد محاضرة أخرى لنفس الشعبة في هذه الفترة")
+
+    if check_teacher and any(k in update for k in ("teacher_id", "day", "slot_number")):
         teacher_busy = await db.weekly_schedule.find_one({
             "_id": {"$ne": ObjectId(slot_id)},
-            "teacher_id": update["teacher_id"],
+            "teacher_id": check_teacher,
             "day": check_day,
             "slot_number": check_slot,
         })
         if teacher_busy:
             raise HTTPException(status_code=409, detail="تعارض: المعلم لديه محاضرة أخرى في نفس الفترة")
 
-    if "room_id" in update:
+    if check_room and any(k in update for k in ("room_id", "day", "slot_number")):
         room_busy = await db.weekly_schedule.find_one({
             "_id": {"$ne": ObjectId(slot_id)},
-            "room_id": update["room_id"],
+            "room_id": check_room,
             "day": check_day,
             "slot_number": check_slot,
         })
@@ -928,17 +947,24 @@ async def auto_generate_schedule(
     teacher_daily_count = {}  # (teacher_id, day) -> count
     teacher_day_slots = {}  # (teacher_id, day) -> set of slot_numbers (to detect consecutive)
 
-    # Load existing schedule to avoid conflicts
-    existing = await db.weekly_schedule.find({"faculty_id": faculty_id}).to_list(5000)
-    for e in existing:
+    # Load existing schedule to avoid conflicts.
+    # 🔒 المعلم قد يُدرِّس في كليات متعددة → نحمّل الجدول عالمياً لتعارض المعلم.
+    # القاعات والشعب محلية بالكلية فقط.
+    existing_global = await db.weekly_schedule.find({}).to_list(20000)
+    for e in existing_global:
         key = (e["day"], e["slot_number"])
-        teacher_occupied.setdefault(key, set()).add(e["teacher_id"])
-        room_occupied.setdefault(key, set()).add(e["room_id"])
-        sk = (e["department_id"], e["level"], e.get("section", ""), e["day"], e["slot_number"])
-        section_occupied[sk] = True
-        dk = (e["teacher_id"], e["day"])
-        teacher_daily_count[dk] = teacher_daily_count.get(dk, 0) + 1
-        teacher_day_slots.setdefault(dk, set()).add(e["slot_number"])
+        # tracking عالمي للمعلم (يشمل كل الكليات)
+        if e.get("teacher_id"):
+            teacher_occupied.setdefault(key, set()).add(e["teacher_id"])
+            dk = (e["teacher_id"], e["day"])
+            teacher_daily_count[dk] = teacher_daily_count.get(dk, 0) + 1
+            teacher_day_slots.setdefault(dk, set()).add(e["slot_number"])
+        # tracking محلي للقاعة والشعبة (مقيّد بالكلية الحالية)
+        if e.get("faculty_id") == faculty_id:
+            if e.get("room_id"):
+                room_occupied.setdefault(key, set()).add(e["room_id"])
+            sk = (e["department_id"], e["level"], e.get("section", ""), e["day"], e["slot_number"])
+            section_occupied[sk] = True
 
     created = 0
     skipped = 0
