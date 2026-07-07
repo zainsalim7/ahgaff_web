@@ -140,3 +140,65 @@ class TestRoomConflictPrevention:
     def test_04_cleanup(self, admin_token):
         for lid in self.created_ids:
             requests.delete(f"{BASE_URL}/api/lectures/{lid}", headers=self._headers(admin_token))
+
+
+class TestChangeLectureRoom:
+    """🏛️ PUT /api/lectures/{id}/room — تغيير القاعة فقط مع فحص التعارض"""
+    created_ids = []
+    DATE = (datetime.now() + timedelta(days=40)).strftime("%Y-%m-%d")
+
+    def _headers(self, token):
+        return {"Authorization": f"Bearer {token}"}
+
+    @pytest.fixture(scope="class")
+    def two_courses(self, admin_token):
+        r = requests.get(f"{BASE_URL}/api/courses", headers=self._headers(admin_token))
+        data = r.json()
+        courses = data if isinstance(data, list) else data.get("courses", [])
+        seen = {}
+        for c in courses:
+            t = c.get("teacher_id")
+            if t and t not in seen:
+                seen[t] = c["id"]
+            if len(seen) >= 2:
+                break
+        if len(seen) < 2:
+            pytest.skip("يلزم مقرران بمعلمين مختلفين")
+        return list(seen.values())[:2]
+
+    def test_01_setup_lectures(self, admin_token, two_courses):
+        for cid, room in [(two_courses[0], "غرفة أ"), (two_courses[1], "غرفة ب")]:
+            r = requests.post(f"{BASE_URL}/api/lectures", headers=self._headers(admin_token), json={
+                "course_id": cid, "date": self.DATE,
+                "start_time": "10:00", "end_time": "11:30", "room": room,
+            })
+            assert r.status_code == 200, r.text
+            TestChangeLectureRoom.created_ids.append(r.json()["id"])
+
+    def test_02_change_to_occupied_room_rejected(self, admin_token):
+        r = requests.put(
+            f"{BASE_URL}/api/lectures/{self.created_ids[1]}/room",
+            headers=self._headers(admin_token), json={"room": "غرفة أ"},
+        )
+        assert r.status_code == 400, f"Expected 400, got {r.status_code}: {r.text}"
+        assert "تعارض قاعة" in r.json()["detail"]
+
+    def test_03_change_to_free_room_succeeds_with_audit(self, admin_token):
+        r = requests.put(
+            f"{BASE_URL}/api/lectures/{self.created_ids[1]}/room",
+            headers=self._headers(admin_token), json={"room": "غرفة ج"},
+        )
+        assert r.status_code == 200, r.text
+        assert "تم تغيير القاعة" in r.json()["message"]
+
+    def test_04_same_room_rejected(self, admin_token):
+        r = requests.put(
+            f"{BASE_URL}/api/lectures/{self.created_ids[1]}/room",
+            headers=self._headers(admin_token), json={"room": "غرفة ج"},
+        )
+        assert r.status_code == 400
+        assert "نفس القاعة" in r.json()["detail"]
+
+    def test_05_cleanup(self, admin_token):
+        for lid in self.created_ids:
+            requests.delete(f"{BASE_URL}/api/lectures/{lid}", headers=self._headers(admin_token))

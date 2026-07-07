@@ -138,6 +138,10 @@ export default function CourseLecturesScreen() {
   const [rescheduleModal, setRescheduleModal] = useState<{lectureId: string; courseName: string; oldDate: string} | null>(null);
   const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '08:00', end_time: '09:00' });
   const [rescheduling, setRescheduling] = useState(false);
+  // 🏛️ تغيير القاعة فقط
+  const [roomChangeModal, setRoomChangeModal] = useState<{lectureId: string; currentRoom: string; date: string; time: string} | null>(null);
+  const [newRoom, setNewRoom] = useState('');
+  const [changingRoom, setChangingRoom] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
   const [deleting, setDeleting] = useState(false);
   
@@ -667,6 +671,38 @@ export default function CourseLecturesScreen() {
     }
   };
 
+  // 🏛️ تغيير قاعة المحاضرة فقط (مع فحص التعارض والإشعارات)
+  const handleChangeRoom = async (force: boolean = false) => {
+    if (!roomChangeModal || !newRoom) return;
+    setChangingRoom(true);
+    try {
+      const res = await api.put(`/lectures/${roomChangeModal.lectureId}/room`, { room: newRoom, force });
+      showNotification('success', res.data.message || 'تم تغيير القاعة بنجاح');
+      setRoomChangeModal(null);
+      fetchData(1);
+    } catch (error: any) {
+      const status = error.response?.status;
+      const message = error.response?.data?.detail || 'حدث خطأ في تغيير القاعة';
+      // تحذير قابل للتجاوز (دمج شعبتين لنفس المعلم)
+      if (status === 409 && !force) {
+        if (Platform.OS === 'web') {
+          if (window.confirm(message + '\n\nهل تريد المتابعة؟')) {
+            await handleChangeRoom(true);
+          }
+        } else {
+          Alert.alert('تنبيه', message, [
+            { text: 'إلغاء', style: 'cancel' },
+            { text: 'متابعة', onPress: () => handleChangeRoom(true) },
+          ]);
+        }
+      } else {
+        showNotification('error', message);
+      }
+    } finally {
+      setChangingRoom(false);
+    }
+  };
+
   const handleReschedule = async () => {
     if (!rescheduleModal) return;
     if (!rescheduleData.date) {
@@ -1112,6 +1148,16 @@ export default function CourseLecturesScreen() {
                     </TouchableOpacity>
                   )}
                   {canManageLectures && lec.status === 'scheduled' && (
+                    <TouchableOpacity style={styles.menuItem} testID="change-room-menu-item" onPress={() => {
+                      setOpenMenuId(null);
+                      setNewRoom('');
+                      setRoomChangeModal({ lectureId: lec.id, currentRoom: lec.room || '', date: lec.date, time: `${lec.start_time || ''} - ${lec.end_time || ''}` });
+                    }}>
+                      <Ionicons name="location-outline" size={18} color="#9c27b0" />
+                      <Text style={styles.menuText}>تغيير القاعة</Text>
+                    </TouchableOpacity>
+                  )}
+                  {canManageLectures && lec.status === 'scheduled' && (
                     <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleCancelLecture(lec.id); }}>
                       <Ionicons name="close-circle-outline" size={18} color="#f57c00" />
                       <Text style={styles.menuText}>إلغاء المحاضرة</Text>
@@ -1523,6 +1569,50 @@ export default function CourseLecturesScreen() {
                 >
                   <Text style={{ fontWeight: '600', color: '#fff' }}>
                     {rescheduling ? 'جاري...' : 'إعادة الجدولة'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
+
+      {/* 🏛️ نافذة تغيير القاعة فقط */}
+      {roomChangeModal && (
+        <Modal visible={true} transparent animationType="fade">
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 24, width: '90%', maxWidth: 400 }} testID="change-room-modal">
+              <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8, color: '#4a148c' }}>
+                تغيير قاعة المحاضرة
+              </Text>
+              <Text style={{ textAlign: 'center', color: '#666', marginBottom: 16 }}>
+                {roomChangeModal.date} · {roomChangeModal.time}
+              </Text>
+              <View style={{ backgroundColor: '#f3e5f5', borderRadius: 8, padding: 10, marginBottom: 16 }}>
+                <Text style={{ textAlign: 'center', color: '#6a1b9a', fontWeight: '600' }}>
+                  القاعة الحالية: {roomChangeModal.currentRoom || 'غير محددة'}
+                </Text>
+              </View>
+              <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333', textAlign: 'right' }}>القاعة الجديدة:</Text>
+              <RoomPicker value={newRoom} onChange={setNewRoom} testID="change-room-picker" />
+              <Text style={{ fontSize: 12, color: '#888', textAlign: 'center', marginTop: 10, marginBottom: 16 }}>
+                سيتم فحص توفر القاعة وإشعار المعلم والطلاب تلقائياً
+              </Text>
+              <View style={{ flexDirection: 'row', gap: 12 }}>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#e0e0e0', padding: 14, borderRadius: 10, alignItems: 'center' }}
+                  onPress={() => setRoomChangeModal(null)}
+                >
+                  <Text style={{ fontWeight: '600', color: '#333' }}>إلغاء</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={{ flex: 1, backgroundColor: '#9c27b0', padding: 14, borderRadius: 10, alignItems: 'center', opacity: (changingRoom || !newRoom || newRoom === roomChangeModal.currentRoom) ? 0.5 : 1 }}
+                  onPress={() => handleChangeRoom()}
+                  disabled={changingRoom || !newRoom || newRoom === roomChangeModal.currentRoom}
+                  testID="confirm-change-room-btn"
+                >
+                  <Text style={{ fontWeight: '600', color: '#fff' }}>
+                    {changingRoom ? 'جاري...' : 'حفظ القاعة'}
                   </Text>
                 </TouchableOpacity>
               </View>

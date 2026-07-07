@@ -8349,6 +8349,113 @@ async def cleanup_ghost_completions(current_user: dict = Depends(get_current_use
     }
 
 
+@api_router.put("/lectures/{lecture_id}/room")
+async def change_lecture_room(
+    lecture_id: str,
+    request: Request,
+    current_user: dict = Depends(get_current_user)
+):
+    """🏛️ تغيير قاعة محاضرة مجدولة فقط (دون تغيير التاريخ/الوقت) مع فحص التعارض وإشعار المعلم والطلاب"""
+    is_admin = current_user["role"] == UserRole.ADMIN
+    if not is_admin and current_user["role"] != UserRole.TEACHER and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "edit_lecture"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتغيير قاعة المحاضرة")
+
+    lecture = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
+    if not lecture:
+        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
+    if lecture.get("status") != LectureStatus.SCHEDULED:
+        raise HTTPException(status_code=400, detail="يمكن تغيير القاعة للمحاضرات المجدولة فقط")
+
+    body = await request.json()
+    new_room = (body.get("room") or "").strip()
+    force = bool(body.get("force"))
+    if not new_room:
+        raise HTTPException(status_code=400, detail="يرجى اختيار القاعة الجديدة")
+
+    old_room = (lecture.get("room") or "").strip()
+    if new_room == old_room:
+        raise HTTPException(status_code=400, detail="القاعة المختارة هي نفس القاعة الحالية")
+
+    # فحص تعارض القاعة الجديدة في نفس التاريخ والوقت
+    room_conflict = await check_room_lecture_conflict(
+        lecture.get("course_id", ""), new_room,
+        lecture.get("date", ""), lecture.get("start_time", ""), lecture.get("end_time", ""),
+        exclude_lecture_id=lecture_id
+    )
+    if room_conflict:
+        if room_conflict["type"] == "error":
+            raise HTTPException(status_code=400, detail=room_conflict["message"])
+        elif room_conflict["type"] == "warning" and not force:
+            raise HTTPException(status_code=409, detail=room_conflict["message"])
+
+    await db.lectures.update_one(
+        {"_id": ObjectId(lecture_id)},
+        {"$set": {
+            "room": new_room,
+            "previous_room": old_room,
+            "room_changed_at": get_yemen_time(),
+            "room_changed_by_name": current_user.get("full_name", ""),
+        }}
+    )
+
+    # إشعار المعلم وطلاب المقرر
+    try:
+        course = await db.courses.find_one({"_id": ObjectId(lecture.get("course_id", ""))})
+        if course:
+            course_name = course.get("name", "")
+            lec_date = lecture.get("date", "")
+            lec_time = f"{lecture.get('start_time', '')} - {lecture.get('end_time', '')}"
+            title = f"تغيير قاعة محاضرة - {course_name}"
+            message = f"تنبيه: تم تغيير قاعة محاضرة {course_name} يوم {lec_date} ({lec_time}) من \"{old_room or 'غير محددة'}\" إلى \"{new_room}\""
+
+            target_user_ids = []
+            teacher_id = course.get("teacher_id")
+            if teacher_id:
+                teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+                if teacher and teacher.get("user_id"):
+                    target_user_ids.append(teacher["user_id"])
+            enrollments = await db.enrollments.find({"course_id": str(course["_id"])}).to_list(5000)
+            student_ids = [e.get("student_id") for e in enrollments if e.get("student_id")]
+            if student_ids:
+                students = await db.students.find(
+                    {"_id": {"$in": [ObjectId(sid) for sid in student_ids]}}
+                ).to_list(5000)
+                for s in students:
+                    if s.get("user_id"):
+                        target_user_ids.append(s["user_id"])
+
+            if target_user_ids:
+                in_app = [{
+                    "user_id": uid,
+                    "title": title,
+                    "message": message,
+                    "type": "room_change",
+                    "course_id": str(course["_id"]),
+                    "course_name": course_name,
+                    "is_read": False,
+                    "created_at": get_yemen_time().isoformat(),
+                } for uid in set(target_user_ids)]
+                await db.notifications.insert_many(in_app)
+
+                from services.firebase_service import send_notification_to_many
+                tokens_docs = await db.fcm_tokens.find(
+                    {"user_id": {"$in": list(set(target_user_ids))}}
+                ).to_list(5000)
+                tokens = [doc["token"] for doc in tokens_docs if doc.get("token")]
+                if tokens:
+                    await send_notification_to_many(tokens, title, message)
+
+            logger.info(f"تم إرسال إشعار تغيير قاعة: {course_name} إلى {len(set(target_user_ids))} مستخدم")
+    except Exception as e:
+        logger.error(f"خطأ في إرسال إشعار تغيير القاعة: {e}")
+
+    await log_activity(
+        current_user, "change_lecture_room", "lecture", lecture_id, None,
+        {"old_room": old_room, "new_room": new_room, "date": lecture.get("date", "")},
+    )
+    return {"message": f"تم تغيير القاعة من \"{old_room or 'غير محددة'}\" إلى \"{new_room}\" وإشعار المعلم والطلاب"}
+
+
 @api_router.put("/lectures/{lecture_id}/reschedule")
 async def reschedule_lecture(
     lecture_id: str,
