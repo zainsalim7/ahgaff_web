@@ -202,3 +202,78 @@ class TestChangeLectureRoom:
     def test_05_cleanup(self, admin_token):
         for lid in self.created_ids:
             requests.delete(f"{BASE_URL}/api/lectures/{lid}", headers=self._headers(admin_token))
+
+
+class TestRoomsAvailability:
+    """🟢🔴 POST /api/rooms/availability — فحص إشغال القاعات للمؤشر البصري"""
+    created_ids = []
+    DATE = (datetime.now() + timedelta(days=45)).strftime("%Y-%m-%d")
+
+    def _headers(self, token):
+        return {"Authorization": f"Bearer {token}"}
+
+    @pytest.fixture(scope="class")
+    def course_with_teacher(self, admin_token):
+        r = requests.get(f"{BASE_URL}/api/courses", headers=self._headers(admin_token))
+        data = r.json()
+        courses = data if isinstance(data, list) else data.get("courses", [])
+        for c in courses:
+            if c.get("teacher_id"):
+                return c["id"]
+        pytest.skip("لا يوجد مقرر له أستاذ")
+
+    @pytest.fixture(scope="class")
+    def registered_room(self, admin_token):
+        r = requests.get(f"{BASE_URL}/api/rooms", headers=self._headers(admin_token))
+        rooms = r.json()
+        if not rooms:
+            pytest.skip("لا توجد قاعات مسجلة")
+        return rooms[0]["name"]
+
+    def test_01_setup_busy_lecture(self, admin_token, course_with_teacher, registered_room):
+        r = requests.post(f"{BASE_URL}/api/lectures", headers=self._headers(admin_token), json={
+            "course_id": course_with_teacher, "date": self.DATE,
+            "start_time": "08:00", "end_time": "09:30", "room": registered_room,
+        })
+        assert r.status_code == 200, r.text
+        TestRoomsAvailability.created_ids.append(r.json()["id"])
+
+    def test_02_overlapping_occurrence_marks_busy(self, admin_token, registered_room):
+        r = requests.post(f"{BASE_URL}/api/rooms/availability", headers=self._headers(admin_token), json={
+            "occurrences": [{"date": self.DATE, "start_time": "08:30", "end_time": "10:00"}],
+        })
+        assert r.status_code == 200, r.text
+        results = {x["name"]: x for x in r.json()["results"]}
+        assert results[registered_room]["busy_count"] == 1
+        assert results[registered_room]["conflicts"][0]["start_time"] == "08:00"
+
+    def test_03_non_overlapping_occurrence_free(self, admin_token, registered_room):
+        r = requests.post(f"{BASE_URL}/api/rooms/availability", headers=self._headers(admin_token), json={
+            "occurrences": [{"date": self.DATE, "start_time": "12:00", "end_time": "13:00"}],
+        })
+        results = {x["name"]: x for x in r.json()["results"]}
+        assert results[registered_room]["busy_count"] == 0
+
+    def test_04_exclude_lecture_id_ignores_own_booking(self, admin_token, registered_room):
+        r = requests.post(f"{BASE_URL}/api/rooms/availability", headers=self._headers(admin_token), json={
+            "occurrences": [{"date": self.DATE, "start_time": "08:00", "end_time": "09:30"}],
+            "exclude_lecture_id": self.created_ids[0],
+        })
+        results = {x["name"]: x for x in r.json()["results"]}
+        assert results[registered_room]["busy_count"] == 0
+
+    def test_05_multi_occurrence_counts(self, admin_token, registered_room):
+        d2 = (datetime.now() + timedelta(days=52)).strftime("%Y-%m-%d")
+        r = requests.post(f"{BASE_URL}/api/rooms/availability", headers=self._headers(admin_token), json={
+            "occurrences": [
+                {"date": self.DATE, "start_time": "08:00", "end_time": "09:30"},
+                {"date": d2, "start_time": "08:00", "end_time": "09:30"},
+            ],
+        })
+        results = {x["name"]: x for x in r.json()["results"]}
+        assert results[registered_room]["busy_count"] == 1
+        assert results[registered_room]["total"] == 2
+
+    def test_06_cleanup(self, admin_token):
+        for lid in self.created_ids:
+            requests.delete(f"{BASE_URL}/api/lectures/{lid}", headers=self._headers(admin_token))

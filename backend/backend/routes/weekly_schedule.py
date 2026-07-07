@@ -154,6 +154,96 @@ async def get_rooms(
     } for r in rooms]
 
 
+class RoomOccurrence(BaseModel):
+    date: str  # YYYY-MM-DD
+    start_time: str  # HH:MM
+    end_time: str  # HH:MM
+
+
+class RoomAvailabilityRequest(BaseModel):
+    occurrences: List[RoomOccurrence]
+    exclude_lecture_id: Optional[str] = None
+
+
+@router.post("/rooms/availability")
+async def check_rooms_availability(data: RoomAvailabilityRequest, current_user: dict = Depends(get_current_user)):
+    """🟢🔴 فحص إشغال جميع القاعات المسجلة مقابل مواعيد محددة (محاضرة واحدة أو سلسلة توليد)"""
+    db = get_db()
+    occurrences = data.occurrences[:200]
+    if not occurrences:
+        raise HTTPException(status_code=400, detail="لا توجد مواعيد للفحص")
+
+    rooms = await db.rooms.find({"is_active": True}).sort("name", 1).to_list(500)
+    dates = list({o.date for o in occurrences})
+
+    lec_query = {
+        "date": {"$in": dates},
+        "status": {"$ne": "cancelled"},
+        "room": {"$nin": ["", None]},
+    }
+    if data.exclude_lecture_id:
+        try:
+            lec_query["_id"] = {"$ne": ObjectId(data.exclude_lecture_id)}
+        except Exception:
+            pass
+    lectures = await db.lectures.find(
+        lec_query, {"room": 1, "date": 1, "start_time": 1, "end_time": 1, "course_id": 1}
+    ).to_list(10000)
+
+    # أسماء المقررات الحاجزة (جلب جماعي)
+    course_ids = list({l.get("course_id") for l in lectures if l.get("course_id")})
+    course_names = {}
+    if course_ids:
+        try:
+            oids = [ObjectId(cid) for cid in course_ids]
+            async for c in db.courses.find({"_id": {"$in": oids}}, {"name": 1}):
+                course_names[str(c["_id"])] = c.get("name", "")
+        except Exception:
+            pass
+
+    # تجميع المحاضرات حسب اسم القاعة (بعد إزالة الفراغات)
+    by_room = {}
+    for l in lectures:
+        rn = (l.get("room") or "").strip()
+        if rn:
+            by_room.setdefault(rn, []).append(l)
+
+    results = []
+    total = len(occurrences)
+    for r in rooms:
+        rname = (r.get("name") or "").strip()
+        conflicts = []
+        busy_count = 0
+        room_lectures = by_room.get(rname, [])
+        for occ in occurrences:
+            hit = None
+            for l in room_lectures:
+                if l.get("date") != occ.date:
+                    continue
+                ls, le = l.get("start_time", ""), l.get("end_time", "")
+                if ls and le and occ.start_time < le and occ.end_time > ls:
+                    hit = l
+                    break
+            if hit:
+                busy_count += 1
+                if len(conflicts) < 3:
+                    conflicts.append({
+                        "date": hit.get("date", ""),
+                        "start_time": hit.get("start_time", ""),
+                        "end_time": hit.get("end_time", ""),
+                        "course_name": course_names.get(hit.get("course_id", ""), "مقرر آخر"),
+                    })
+        results.append({
+            "id": str(r["_id"]),
+            "name": rname,
+            "building": r.get("building", ""),
+            "total": total,
+            "busy_count": busy_count,
+            "conflicts": conflicts,
+        })
+    return {"results": results, "total_occurrences": total}
+
+
 @router.post("/rooms")
 async def create_room(data: RoomCreate, current_user: dict = Depends(get_current_user)):
     if not can_manage_schedule(current_user):

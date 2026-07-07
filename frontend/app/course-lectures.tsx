@@ -139,7 +139,7 @@ export default function CourseLecturesScreen() {
   const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '08:00', end_time: '09:00' });
   const [rescheduling, setRescheduling] = useState(false);
   // 🏛️ تغيير القاعة فقط
-  const [roomChangeModal, setRoomChangeModal] = useState<{lectureId: string; currentRoom: string; date: string; time: string} | null>(null);
+  const [roomChangeModal, setRoomChangeModal] = useState<{lectureId: string; currentRoom: string; date: string; time: string; startTime: string; endTime: string} | null>(null);
   const [newRoom, setNewRoom] = useState('');
   const [changingRoom, setChangingRoom] = useState(false);
   const [selectionMode, setSelectionMode] = useState(false);
@@ -264,6 +264,28 @@ export default function CourseLecturesScreen() {
       slots: [{ start_time: '08:00', end_time: '09:30' }],
     }))
   );
+
+  // 🟢🔴 مواعيد التوليد لفحص إشغال القاعات (كل تكرارات الأيام المفعلة ضمن الفترة)
+  const generateOccurrences = React.useMemo(() => {
+    if (!tempStartDate || !tempEndDate || tempStartDate >= tempEndDate) return undefined;
+    const enabled = dayConfigs.filter(d => d.enabled);
+    if (enabled.length === 0) return undefined;
+    const dayNumById: Record<string, number> = {};
+    DAYS.forEach(d => { dayNumById[d.id] = d.num; });
+    const occ: { date: string; start_time: string; end_time: string }[] = [];
+    const start = new Date(tempStartDate + 'T00:00:00');
+    const end = new Date(tempEndDate + 'T00:00:00');
+    if (isNaN(start.getTime()) || isNaN(end.getTime())) return undefined;
+    for (let d = new Date(start); d <= end && occ.length < 200; d.setDate(d.getDate() + 1)) {
+      const cfg = enabled.find(c => dayNumById[c.day] === d.getDay());
+      if (!cfg) continue;
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      for (const s of cfg.slots) {
+        if (s.start_time && s.end_time) occ.push({ date: dateStr, start_time: s.start_time, end_time: s.end_time });
+      }
+    }
+    return occ.length > 0 ? occ : undefined;
+  }, [tempStartDate, tempEndDate, dayConfigs]);
 
   const fetchData = useCallback(async (page: number = 1, append: boolean = false) => {
     if (!courseId) return;
@@ -1151,7 +1173,7 @@ export default function CourseLecturesScreen() {
                     <TouchableOpacity style={styles.menuItem} testID="change-room-menu-item" onPress={() => {
                       setOpenMenuId(null);
                       setNewRoom('');
-                      setRoomChangeModal({ lectureId: lec.id, currentRoom: lec.room || '', date: lec.date, time: `${lec.start_time || ''} - ${lec.end_time || ''}` });
+                      setRoomChangeModal({ lectureId: lec.id, currentRoom: lec.room || '', date: lec.date, time: `${lec.start_time || ''} - ${lec.end_time || ''}`, startTime: lec.start_time || '', endTime: lec.end_time || '' });
                     }}>
                       <Ionicons name="location-outline" size={18} color="#9c27b0" />
                       <Text style={styles.menuText}>تغيير القاعة</Text>
@@ -1290,6 +1312,7 @@ export default function CourseLecturesScreen() {
                   value={generateRoom}
                   onChange={setGenerateRoom}
                   testID="generate-room-picker"
+                  occurrences={generateOccurrences}
                 />
               </View>
 
@@ -1594,7 +1617,17 @@ export default function CourseLecturesScreen() {
                 </Text>
               </View>
               <Text style={{ fontWeight: '600', marginBottom: 8, color: '#333', textAlign: 'right' }}>القاعة الجديدة:</Text>
-              <RoomPicker value={newRoom} onChange={setNewRoom} testID="change-room-picker" />
+              <RoomPicker
+                value={newRoom}
+                onChange={setNewRoom}
+                testID="change-room-picker"
+                occurrences={
+                  roomChangeModal.date && roomChangeModal.startTime && roomChangeModal.endTime
+                    ? [{ date: roomChangeModal.date, start_time: roomChangeModal.startTime, end_time: roomChangeModal.endTime }]
+                    : undefined
+                }
+                excludeLectureId={roomChangeModal.lectureId}
+              />
               <Text style={{ fontSize: 12, color: '#888', textAlign: 'center', marginTop: 10, marginBottom: 16 }}>
                 سيتم فحص توفر القاعة وإشعار المعلم والطلاب تلقائياً
               </Text>

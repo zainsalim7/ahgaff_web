@@ -379,6 +379,11 @@ export default function AddLectureModal({
               value={formData.room}
               onChange={(room) => setFormData({ ...formData, room })}
               testID="lecture-room-picker"
+              occurrences={
+                formData.date && formData.start_time && formData.end_time
+                  ? [{ date: formData.date, start_time: formData.start_time, end_time: formData.end_time }]
+                  : undefined
+              }
             />
           </View>
 
