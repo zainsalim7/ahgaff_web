@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { settingsAPI } from '../services/api';
 import { WEEKDAYS_AR } from '../utils/dateUtils';
+import RoomPicker from './RoomPicker';
 
 interface Course {
   id: string;
@@ -122,7 +123,7 @@ export default function AddLectureModal({
       return;
     }
     if (!formData.room.trim()) {
-      showAlert('تنبيه', 'يرجى إدخال القاعة');
+      showAlert('تنبيه', 'يرجى اختيار القاعة');
       return;
     }
     if (formData.start_time && formData.end_time && formData.end_time <= formData.start_time) {
@@ -369,17 +370,15 @@ export default function AddLectureModal({
             )}
           </View>
 
-          {/* Room */}
+          {/* Room - قائمة منسدلة من القاعات المسجلة */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
               <Ionicons name="location" size={18} color="#f44336" /> القاعة *
             </Text>
-            <TextInput
-              style={styles.input}
+            <RoomPicker
               value={formData.room}
-              onChangeText={(text) => setFormData({ ...formData, room: text })}
-              placeholder="رقم أو اسم القاعة"
-              placeholderTextColor="#999"
+              onChange={(room) => setFormData({ ...formData, room })}
+              testID="lecture-room-picker"
             />
           </View>
 

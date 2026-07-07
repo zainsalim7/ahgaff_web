@@ -21,6 +21,7 @@ import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import api, { coursesAPI, lecturesAPI, settingsAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import AddLectureModal, { LectureFormData } from '../src/components/AddLectureModal';
+import RoomPicker from '../src/components/RoomPicker';
 import { useAuthStore } from '../src/store/authStore';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { PERMISSIONS } from '../src/contexts/AuthContext';
@@ -1233,18 +1234,16 @@ export default function CourseLecturesScreen() {
                 </View>
               </View>
 
-              {/* Room */}
+              {/* Room - قائمة منسدلة من القاعات المسجلة */}
               <View style={styles.generateSection}>
                 <View style={styles.generateSectionHeader}>
                   <Ionicons name="location" size={20} color="#9c27b0" />
                   <Text style={styles.generateSectionTitle}>القاعة</Text>
                 </View>
-                <TextInput
-                  style={styles.roomInput}
+                <RoomPicker
                   value={generateRoom}
-                  onChangeText={setGenerateRoom}
-                  placeholder="أدخل رقم القاعة"
-                  placeholderTextColor="#999"
+                  onChange={setGenerateRoom}
+                  testID="generate-room-picker"
                 />
               </View>
 

@@ -86,3 +86,57 @@ class TestLectureDuplicatePrevention:
     def test_06_cleanup(self, admin_token):
         for lid in self.created_ids:
             requests.delete(f"{BASE_URL}/api/lectures/{lid}", headers=self._headers(admin_token))
+
+
+class TestRoomConflictPrevention:
+    """🏛️ منع تعارض القاعات: قاعة واحدة لا تستقبل محاضرتين متداخلتين لمعلمين/مقررين مختلفين"""
+    created_ids = []
+    ROOM = "قاعة اختبار تعارض"
+    DATE = (datetime.now() + timedelta(days=35)).strftime("%Y-%m-%d")
+
+    def _headers(self, token):
+        return {"Authorization": f"Bearer {token}"}
+
+    @pytest.fixture(scope="class")
+    def two_courses(self, admin_token):
+        r = requests.get(f"{BASE_URL}/api/courses", headers=self._headers(admin_token))
+        data = r.json()
+        courses = data if isinstance(data, list) else data.get("courses", [])
+        seen = {}
+        for c in courses:
+            t = c.get("teacher_id")
+            if t and t not in seen:
+                seen[t] = c["id"]
+            if len(seen) >= 2:
+                break
+        if len(seen) < 2:
+            pytest.skip("يلزم مقرران بمعلمين مختلفين")
+        return list(seen.values())[:2]
+
+    def test_01_first_lecture_in_room(self, admin_token, two_courses):
+        r = requests.post(f"{BASE_URL}/api/lectures", headers=self._headers(admin_token), json={
+            "course_id": two_courses[0], "date": self.DATE,
+            "start_time": "10:00", "end_time": "11:30", "room": self.ROOM,
+        })
+        assert r.status_code == 200, r.text
+        TestRoomConflictPrevention.created_ids.append(r.json()["id"])
+
+    def test_02_other_course_same_room_overlap_rejected(self, admin_token, two_courses):
+        r = requests.post(f"{BASE_URL}/api/lectures", headers=self._headers(admin_token), json={
+            "course_id": two_courses[1], "date": self.DATE,
+            "start_time": "10:30", "end_time": "12:00", "room": self.ROOM, "force": True,
+        })
+        assert r.status_code == 400, f"Expected 400, got {r.status_code}: {r.text}"
+        assert "تعارض قاعة" in r.json()["detail"]
+
+    def test_03_other_course_same_room_non_overlap_allowed(self, admin_token, two_courses):
+        r = requests.post(f"{BASE_URL}/api/lectures", headers=self._headers(admin_token), json={
+            "course_id": two_courses[1], "date": self.DATE,
+            "start_time": "12:00", "end_time": "13:00", "room": self.ROOM,
+        })
+        assert r.status_code == 200, r.text
+        TestRoomConflictPrevention.created_ids.append(r.json()["id"])
+
+    def test_04_cleanup(self, admin_token):
+        for lid in self.created_ids:
+            requests.delete(f"{BASE_URL}/api/lectures/{lid}", headers=self._headers(admin_token))

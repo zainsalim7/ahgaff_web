@@ -7601,6 +7601,52 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
     return None
 
 
+async def check_room_lecture_conflict(course_id: str, room: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None):
+    """🏛️ فحص تعارض القاعة - هل القاعة محجوزة لمحاضرة أخرى في نفس الوقت؟
+    - معلم مختلف أو مقرر مختلف → خطأ صارم (لا يمكن تجاوزه)
+    - نفس المعلم وشعبة أخرى من نفس المقرر الأساسي → تحذير قابل للتجاوز (دمج شعبتين في قاعة واحدة)
+    """
+    room = (room or "").strip()
+    if not room:
+        return None
+    import re
+    my_course = await db.courses.find_one({"_id": ObjectId(course_id)}) if course_id else None
+    my_teacher = my_course.get("teacher_id") if my_course else None
+    my_base = re.sub(r'\s*\([أ-ي]\)\s*$', '', (my_course or {}).get("name", "")).strip()
+
+    query = {
+        "room": room,
+        "date": date,
+        "status": {"$ne": LectureStatus.CANCELLED},
+    }
+    if exclude_lecture_id:
+        query["_id"] = {"$ne": ObjectId(exclude_lecture_id)}
+    for lec in await db.lectures.find(query).to_list(1000):
+        # نفس المقرر: يُغطى بفحص تعارض المقرر نفسه (رسالة أوضح هناك)
+        if lec.get("course_id") == course_id:
+            continue
+        ex_start = lec.get("start_time", "")
+        ex_end = lec.get("end_time", "")
+        if not (ex_start and ex_end and start_time and end_time):
+            continue
+        if not (start_time < ex_end and end_time > ex_start):
+            continue
+        other = None
+        if lec.get("course_id"):
+            try:
+                other = await db.courses.find_one({"_id": ObjectId(lec["course_id"])})
+            except Exception:
+                other = None
+        oname = (other or {}).get("name", "مقرر آخر")
+        obase = re.sub(r'\s*\([أ-ي]\)\s*$', '', oname).strip()
+        msg = f"تعارض قاعة: القاعة \"{room}\" محجوزة يوم {date} من {ex_start} إلى {ex_end} لمقرر \"{oname}\""
+        # دمج شعبتين لنفس المعلم ونفس المقرر الأساسي في نفس القاعة → تحذير قابل للتجاوز
+        if my_teacher and other and other.get("teacher_id") == my_teacher and my_base and my_base == obase:
+            return {"type": "warning", "message": msg + " — شعبة أخرى لنفس المعلم، يمكنك المتابعة لدمج الشعبتين"}
+        return {"type": "error", "message": msg}
+    return None
+
+
 
 @api_router.post("/lectures")
 async def create_lecture(
@@ -7640,6 +7686,14 @@ async def create_lecture(
             raise HTTPException(status_code=400, detail=conflict["message"])
         elif conflict["type"] == "warning" and not data.force:
             raise HTTPException(status_code=409, detail=conflict["message"])
+    
+    # 🏛️ فحص تعارض القاعة
+    room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", data.date, data.start_time, data.end_time)
+    if room_conflict:
+        if room_conflict["type"] == "error":
+            raise HTTPException(status_code=400, detail=room_conflict["message"])
+        elif room_conflict["type"] == "warning" and not data.force:
+            raise HTTPException(status_code=409, detail=room_conflict["message"])
     
     lecture = {
         "course_id": data.course_id,
@@ -7754,9 +7808,14 @@ async def generate_semester_lectures(
     
     while current <= end:
         date_str = current.strftime("%Y-%m-%d")
-        # فحص التعارض (نفس المقرر أو نفس الأستاذ)
+        # فحص التعارض (نفس المقرر أو نفس الأستاذ أو القاعة)
         conflict = await check_teacher_lecture_conflict(data.course_id, date_str, data.start_time, data.end_time, allow_same_course=True)
         if conflict and conflict["type"] == "error":
+            conflicts_skipped += 1
+            current += timedelta(days=7)
+            continue
+        room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", date_str, data.start_time, data.end_time)
+        if room_conflict and room_conflict["type"] == "error":
             conflicts_skipped += 1
             current += timedelta(days=7)
             continue
@@ -7859,6 +7918,10 @@ async def generate_semester_lectures_advanced(
                 if conflict and conflict["type"] == "error":
                     conflicts_skipped += 1
                     continue
+                room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", date_str, slot.start_time, slot.end_time)
+                if room_conflict and room_conflict["type"] == "error":
+                    conflicts_skipped += 1
+                    continue
                 
                 lecture = {
                     "course_id": data.course_id,
@@ -7911,8 +7974,8 @@ async def update_lecture(
     if new_start and new_end and new_end <= new_start:
         raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
 
-    # 🔒 فحص التعارض عند تغيير التاريخ أو الوقت (نفس المقرر أو نفس الأستاذ)
-    if any(k in update_data for k in ("date", "start_time", "end_time")):
+    # 🔒 فحص التعارض عند تغيير التاريخ أو الوقت أو القاعة (نفس المقرر أو نفس الأستاذ أو القاعة)
+    if any(k in update_data for k in ("date", "start_time", "end_time", "room")):
         eff_date = update_data.get("date") or lecture.get("date", "")
         conflict = await check_teacher_lecture_conflict(
             lecture.get("course_id", ""), eff_date, new_start, new_end,
@@ -7920,6 +7983,13 @@ async def update_lecture(
         )
         if conflict and conflict["type"] == "error":
             raise HTTPException(status_code=400, detail=conflict["message"])
+        eff_room = update_data.get("room") if "room" in update_data else lecture.get("room", "")
+        room_conflict = await check_room_lecture_conflict(
+            lecture.get("course_id", ""), eff_room or "", eff_date, new_start, new_end,
+            exclude_lecture_id=lecture_id
+        )
+        if room_conflict and room_conflict["type"] == "error":
+            raise HTTPException(status_code=400, detail=room_conflict["message"])
 
     # عند إعادة الجدولة (تغيير التاريخ): احفظ التاريخ الأصلي
     new_date = update_data.get("date")
@@ -8330,6 +8400,14 @@ async def reschedule_lecture(
     )
     if conflict and conflict["type"] == "error":
         raise HTTPException(status_code=400, detail=conflict["message"])
+    
+    # 🏛️ فحص تعارض القاعة في الموعد الجديد
+    room_conflict = await check_room_lecture_conflict(
+        lecture.get("course_id", ""), lecture.get("room", "") or "", new_date, start_time, end_time,
+        exclude_lecture_id=lecture_id
+    )
+    if room_conflict and room_conflict["type"] == "error":
+        raise HTTPException(status_code=400, detail=room_conflict["message"])
     
     # حفظ التاريخ القديم للإشعار
     old_date = lecture.get("date", "")
@@ -12202,6 +12280,12 @@ async def import_lectures_from_excel(
                     # فحص التعارض
                     conflict = await check_teacher_lecture_conflict(course_id, date_str, start_time, end_time, allow_same_course=True)
                     if conflict and conflict["type"] == "error":
+                        row_conflicts += 1
+                        total_conflicts += 1
+                        current += timedelta(days=7)
+                        continue
+                    room_conflict = await check_room_lecture_conflict(course_id, room or "", date_str, start_time, end_time)
+                    if room_conflict and room_conflict["type"] == "error":
                         row_conflicts += 1
                         total_conflicts += 1
                         current += timedelta(days=7)
