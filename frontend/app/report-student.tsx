@@ -10,6 +10,7 @@ import {
   RefreshControl,
   Alert,
   Platform,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -42,6 +43,7 @@ export default function StudentReport() {
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
+  const [studentSearch, setStudentSearch] = useState('');
   
   // بيانات التقرير
   const [studentData, setStudentData] = useState<any>(null);
@@ -169,6 +171,14 @@ export default function StudentReport() {
     ? courses.filter(c => c.department_id === selectedDept)
     : courses;
 
+  // 🔍 بحث بالاسم أو رقم القيد فوق قائمة الطلاب
+  const searchedStudents = studentSearch.trim()
+    ? filteredStudents.filter(s => {
+        const q = studentSearch.trim();
+        return (s.full_name || '').includes(q) || String(s.student_id || '').includes(q);
+      })
+    : filteredStudents;
+
   // جلب تقرير الطالب
   const fetchStudentReport = async (studentId: string) => {
     if (!studentId) {
@@ -258,6 +268,7 @@ export default function StudentReport() {
     setSelectedDept('');
     setSelectedCourse('');
     setSelectedStudent('');
+    setStudentSearch('');
     setStudentData(null);
   };
 
@@ -383,14 +394,45 @@ export default function StudentReport() {
               {/* قائمة الطلاب */}
               <View style={styles.filterRow}>
                 <Text style={styles.filterLabel}>الطالب</Text>
+                {/* 🔍 بحث بالاسم أو رقم القيد */}
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', paddingHorizontal: 10, marginBottom: 8 }}>
+                  <Ionicons name="search" size={16} color="#9c27b0" />
+                  <TextInput
+                    style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, fontSize: 14, color: '#333', textAlign: 'right' }}
+                    value={studentSearch}
+                    onChangeText={(text) => {
+                      setStudentSearch(text);
+                      // إن لم يعد الطالب المحدد ضمن نتائج البحث نعيد التعيين
+                      if (selectedStudent) {
+                        const q = text.trim();
+                        const stillVisible = !q || filteredStudents.some(s =>
+                          s.id === selectedStudent && ((s.full_name || '').includes(q) || String(s.student_id || '').includes(q))
+                        );
+                        if (!stillVisible) {
+                          setSelectedStudent('');
+                          setStudentData(null);
+                        }
+                      }
+                    }}
+                    placeholder="ابحث باسم الطالب أو رقم القيد..."
+                    placeholderTextColor="#999"
+                    testID="student-search-input"
+                  />
+                  {studentSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setStudentSearch('')} testID="clear-student-search">
+                      <Ionicons name="close-circle" size={18} color="#999" />
+                    </TouchableOpacity>
+                  )}
+                </View>
                 <View style={styles.pickerWrapper}>
                   <Picker
                     selectedValue={selectedStudent}
                     onValueChange={handleStudentChange}
                     style={styles.picker}
+                    testID="student-picker"
                   >
-                    <Picker.Item label={`اختر طالب (${filteredStudents.length} طالب)`} value="" />
-                    {filteredStudents.map((student) => (
+                    <Picker.Item label={`اختر طالب (${searchedStudents.length} طالب)`} value="" />
+                    {searchedStudents.map((student) => (
                       <Picker.Item 
                         key={student.id} 
                         label={`${student.full_name} - ${student.student_id}`} 
@@ -399,6 +441,11 @@ export default function StudentReport() {
                     ))}
                   </Picker>
                 </View>
+                {studentSearch.trim().length > 0 && searchedStudents.length === 0 && (
+                  <Text style={{ fontSize: 12, color: '#e65100', textAlign: 'center', marginTop: 6 }}>
+                    لا توجد نتائج مطابقة للبحث "{studentSearch.trim()}"
+                  </Text>
+                )}
               </View>
             </>
           )}
