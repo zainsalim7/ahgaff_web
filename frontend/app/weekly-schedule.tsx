@@ -240,13 +240,18 @@ export default function WeeklySchedulePage() {
 
   const handleGenerate = async () => {
     if (!selectedFaculty) return;
-    const msg = 'هل تريد توليد الجدول تلقائياً؟\nسيتم توزيع المقررات مع مراعاة التعارضات والتفضيلات';
+    const deptName = departments.find(d => d.id === selectedDept)?.name;
+    const facName = faculties.find(f => f.id === selectedFaculty)?.name || '';
+    const scopeMsg = selectedDept
+      ? `📍 النطاق: قسم "${deptName}" فقط\n(لن يتأثر جدول بقية الأقسام، ومع مراعاة تعارضات المعلمين والقاعات مع كل الأقسام والكليات)`
+      : `📍 النطاق: كامل كلية "${facName}" (${departments.length} قسم)`;
+    const msg = `هل تريد توليد الجدول تلقائياً؟\n\n${scopeMsg}\n\nسيتم توزيع المقررات مع مراعاة التعارضات والتفضيلات`;
     if (Platform.OS === 'web' && !window.confirm(msg)) return;
     setGenerating(true);
     try {
       const res = await scheduleAPI.autoGenerate(selectedFaculty, selectedDept || undefined);
       const d = res.data;
-      let resultMsg = d.message;
+      let resultMsg = (selectedDept ? `[قسم ${deptName}] ` : '') + d.message;
       if (d.errors?.length) resultMsg += '\n\nملاحظات:\n' + d.errors.join('\n');
       if (Platform.OS === 'web') window.alert(resultMsg);
       else Alert.alert('نتيجة', resultMsg);
@@ -266,7 +271,14 @@ export default function WeeklySchedulePage() {
   };
 
   const handleClearSchedule = async () => {
-    if (Platform.OS === 'web' && !window.confirm('مسح الجدول بالكامل؟ لا يمكن التراجع')) return;
+    const deptName = departments.find(d => d.id === selectedDept)?.name;
+    const facName = faculties.find(f => f.id === selectedFaculty)?.name || '';
+    const scopeMsg = selectedDept
+      ? `مسح جدول قسم "${deptName}" فقط؟`
+      : selectedFaculty
+        ? `⚠️ مسح جدول كامل كلية "${facName}" (كل الأقسام)؟`
+        : '⚠️ مسح الجدول بالكامل لكل الكليات؟';
+    if (Platform.OS === 'web' && !window.confirm(scopeMsg + '\nلا يمكن التراجع')) return;
     try {
       const params: any = {};
       if (selectedFaculty) params.faculty_id = selectedFaculty;
@@ -670,6 +682,21 @@ export default function WeeklySchedulePage() {
               {/* Actions */}
               {selectedFaculty && (
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
+                  {viewMode === 'section' && (
+                    <View style={{
+                      flexDirection: 'row-reverse', alignItems: 'center', gap: 4,
+                      backgroundColor: selectedDept ? '#e8f5e9' : '#fff8e1',
+                      borderWidth: 1, borderColor: selectedDept ? '#a5d6a7' : '#ffe082',
+                      borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6,
+                    }} testID="generation-scope-badge">
+                      <Ionicons name="locate" size={13} color={selectedDept ? '#2e7d32' : '#e65100'} />
+                      <Text style={{ fontSize: 11, fontWeight: '700', color: selectedDept ? '#2e7d32' : '#e65100' }}>
+                        {selectedDept
+                          ? `نطاق التوليد/المسح: قسم ${departments.find(d => d.id === selectedDept)?.name || ''} فقط`
+                          : `نطاق التوليد/المسح: كامل الكلية (${departments.length} قسم)`}
+                      </Text>
+                    </View>
+                  )}
                   {viewMode === 'section' && (
                     <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32' }]} onPress={handleGenerate} disabled={generating} testID="auto-generate-btn">
                       {generating ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="flash" size={16} color="#fff" />}
