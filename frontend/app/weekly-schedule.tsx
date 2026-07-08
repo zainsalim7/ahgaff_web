@@ -85,6 +85,7 @@ export default function WeeklySchedulePage() {
   const [importingRooms, setImportingRooms] = useState(false);
   // Settings state
   const [editSlots, setEditSlots] = useState<any[]>([]);
+  const [editWorkingDays, setEditWorkingDays] = useState<string[]>([]);
   const [savingSlots, setSavingSlots] = useState(false);
   // Prefs state
   const [teachers, setTeachers] = useState<any[]>([]);
@@ -112,6 +113,7 @@ export default function WeeklySchedulePage() {
         setFaculties(facRes.data);
         setTimeSlots(settRes.data.time_slots || []);
         setEditSlots(settRes.data.time_slots || []);
+        setEditWorkingDays(settRes.data.working_days || []);
       } catch (e) { console.error(e); }
     })();
   }, []);
@@ -130,6 +132,7 @@ export default function WeeklySchedulePage() {
         setRooms(roomRes.data);
         setTimeSlots(settRes.data.time_slots || []);
         setEditSlots(settRes.data.time_slots || []);
+        setEditWorkingDays(settRes.data.working_days || []);
       } catch (e) { console.error(e); }
     })();
   }, [selectedFaculty]);
@@ -511,12 +514,19 @@ export default function WeeklySchedulePage() {
   };
 
   const handleSaveSlots = async () => {
+    if (editWorkingDays.length === 0) {
+      if (Platform.OS === 'web') window.alert('اختر يوم عمل واحداً على الأقل');
+      return;
+    }
     setSavingSlots(true);
     try {
       await scheduleAPI.saveTimeSlots(editSlots, selectedFaculty || undefined);
+      await scheduleAPI.saveWorkingDays(editWorkingDays, selectedFaculty || undefined);
       setTimeSlots(editSlots);
-      if (Platform.OS === 'web') window.alert('تم حفظ الفترات الزمنية');
-    } catch {}
+      if (Platform.OS === 'web') window.alert('تم حفظ الفترات الزمنية وأيام العمل');
+    } catch (e: any) {
+      if (Platform.OS === 'web') window.alert(e?.response?.data?.detail || 'حدث خطأ في الحفظ');
+    }
     finally { setSavingSlots(false); }
   };
 
@@ -1074,6 +1084,36 @@ export default function WeeklySchedulePage() {
                 {selectedFaculty ? 'فترات خاصة بالكلية المختارة' : 'فترات عامة لكل الكليات (افتراضي)'}
               </Text>
             </View>
+          <View style={st.card}>
+            <Text style={[st.label, { fontSize: 15, marginBottom: 8 }]}>أيام العمل</Text>
+            <Text style={{ fontSize: 11, color: '#888', marginBottom: 10, textAlign: 'right' }}>
+              الأيام المفعلة تُستخدم في توليد الجدول — يجب اختيار يوم واحد على الأقل
+            </Text>
+            <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+              {['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة'].map(day => {
+                const on = editWorkingDays.includes(day);
+                return (
+                  <TouchableOpacity
+                    key={day}
+                    onPress={() => setEditWorkingDays(prev => on ? prev.filter(d => d !== day) : [...prev, day])}
+                    testID={`working-day-${day}`}
+                    style={{
+                      paddingVertical: 8, paddingHorizontal: 16, borderRadius: 20,
+                      backgroundColor: on ? '#1565c0' : '#f0f2f5',
+                      borderWidth: 1, borderColor: on ? '#1565c0' : '#dde3ea',
+                    }}
+                  >
+                    <Text style={{ fontSize: 13, fontWeight: '700', color: on ? '#fff' : '#667' }}>{day}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {editWorkingDays.length === 0 && (
+              <Text style={{ fontSize: 12, color: '#c62828', fontWeight: '700', marginTop: 8, textAlign: 'right' }}>
+                ⚠️ لا توجد أيام عمل محددة — التوليد التلقائي لن يعمل حتى تختار وتحفظ
+              </Text>
+            )}
+          </View>
           <View style={st.card}>
             <Text style={[st.label, { fontSize: 15, marginBottom: 12 }]}>الفترات الزمنية</Text>
             {editSlots.map((s, i) => (

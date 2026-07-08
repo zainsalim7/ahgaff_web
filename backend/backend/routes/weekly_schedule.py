@@ -468,6 +468,9 @@ async def update_schedule_settings(
     return {"message": "تم تحديث الإعدادات"}
 
 
+DEFAULT_WORKING_DAYS = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
+
+
 @router.post("/schedule-settings/time-slots")
 async def save_time_slots(
     slots: List[TimeSlotCreate],
@@ -484,7 +487,39 @@ async def save_time_slots(
         {"$set": {"time_slots": slots_data}},
         upsert=True
     )
+    # 🛡️ ضمان وجود أيام العمل — يعالج السجلات الناقصة التي كانت تمنع التوليد
+    doc = await db.schedule_settings.find_one({"_id": settings_id})
+    if not doc.get("working_days"):
+        await db.schedule_settings.update_one(
+            {"_id": settings_id},
+            {"$set": {"working_days": DEFAULT_WORKING_DAYS}}
+        )
     return {"message": "تم حفظ الفترات الزمنية"}
+
+
+class WorkingDaysUpdate(BaseModel):
+    days: List[str]
+
+
+@router.post("/schedule-settings/working-days")
+async def save_working_days(
+    data: WorkingDaysUpdate,
+    faculty_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """💼 حفظ أيام العمل (لكل كلية أو عام)"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if not data.days:
+        raise HTTPException(status_code=400, detail="اختر يوم عمل واحداً على الأقل")
+    db = get_db()
+    settings_id = f"faculty_{faculty_id}" if faculty_id else "global"
+    await db.schedule_settings.update_one(
+        {"_id": settings_id},
+        {"$set": {"working_days": data.days}},
+        upsert=True
+    )
+    return {"message": "تم حفظ أيام العمل"}
 
 
 # ===== تفضيلات المعلمين =====
@@ -1075,8 +1110,10 @@ async def auto_generate_schedule(
 
     time_slots = settings.get("time_slots", [])
     working_days = settings.get("working_days", [])
-    if not time_slots or not working_days:
-        raise HTTPException(status_code=400, detail="يرجى إعداد الفترات الزمنية وأيام العمل")
+    if not time_slots:
+        raise HTTPException(status_code=400, detail="يرجى إعداد الفترات الزمنية أولاً — تبويب «الفترات» ثم حفظ")
+    if not working_days:
+        raise HTTPException(status_code=400, detail="أيام العمل غير محددة — افتح تبويب «الفترات»، حدد أيام العمل ثم احفظ")
 
     slot_numbers = sorted([s["slot_number"] for s in time_slots])
 

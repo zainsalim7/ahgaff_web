@@ -792,6 +792,7 @@ export const scheduleAPI = {
   // الإعدادات
   getSettings: (facultyId?: string) => api.get('/schedule-settings', { params: { faculty_id: facultyId } }),
   saveTimeSlots: (slots: any[], facultyId?: string) => api.post(`/schedule-settings/time-slots${facultyId ? `?faculty_id=${facultyId}` : ''}`, slots),
+  saveWorkingDays: (days: string[], facultyId?: string) => api.post(`/schedule-settings/working-days${facultyId ? `?faculty_id=${facultyId}` : ''}`, { days }),
   // تفضيلات المعلمين
   getTeacherPrefs: (id: string) => api.get(`/teacher-preferences/${id}`),
   getTeacherPrefsSummary: (departmentId: string) => api.get('/teacher-preferences', { params: { department_id: departmentId } }),
