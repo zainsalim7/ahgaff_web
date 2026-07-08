@@ -95,6 +95,7 @@ export default function WeeklySchedulePage() {
   const [prefsSummary, setPrefsSummary] = useState<any[]>([]);
   const [prefsSummaryLoading, setPrefsSummaryLoading] = useState(false);
   const [prefsTeacherSearch, setPrefsTeacherSearch] = useState('');
+  const [prefsListOpen, setPrefsListOpen] = useState(false);
   // Add slot modal
   const [showAddSlot, setShowAddSlot] = useState(false);
   const [addSlotData, setAddSlotData] = useState({ day: '', slot_number: '', course_id: '', teacher_id: '', room_id: '' });
@@ -1115,7 +1116,7 @@ export default function WeeklySchedulePage() {
                 </View>
                 <View style={{ flex: 1 }}>
                   <View style={st.pickerWrap}>
-                    <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); setSelectedTeacher(''); setPrefsTeacherSearch(''); }} style={{ height: 40 }} testID="prefs-dept-picker">
+                    <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); setSelectedTeacher(''); setPrefsTeacherSearch(''); setPrefsListOpen(false); }} style={{ height: 40 }} testID="prefs-dept-picker">
                       <Picker.Item label="-- القسم --" value="" />{departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                     </Picker>
                   </View>
@@ -1123,74 +1124,118 @@ export default function WeeklySchedulePage() {
               </View>
             </View>
 
-            {/* 📋 قائمة معلمي القسم مع ملخص التفضيلات — تبقى ظاهرة دائماً للتنقل بين المعلمين */}
+            {/* 📋 قائمة منسدلة لمعلمي القسم مع ملخص التفضيلات */}
             {selectedDept && (
               <View style={st.card} testID="prefs-teachers-panel">
-                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <Text style={[st.label, { fontSize: 13, marginBottom: 0 }]}>معلمو القسم ({prefsSummary.length})</Text>
-                  {prefsSummaryLoading && <ActivityIndicator size="small" color="#1565c0" />}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', paddingHorizontal: 10, marginBottom: 8 }}>
-                  <Ionicons name="search" size={15} color="#1565c0" />
-                  <TextInput
-                    style={{ flex: 1, paddingVertical: 7, paddingHorizontal: 8, fontSize: 13, color: '#333', textAlign: 'right' }}
-                    value={prefsTeacherSearch}
-                    onChangeText={setPrefsTeacherSearch}
-                    placeholder="ابحث عن معلم بالاسم..."
-                    placeholderTextColor="#999"
-                    testID="prefs-teacher-search"
-                  />
-                  {prefsTeacherSearch.length > 0 && (
-                    <TouchableOpacity onPress={() => setPrefsTeacherSearch('')}>
-                      <Ionicons name="close-circle" size={16} color="#999" />
-                    </TouchableOpacity>
-                  )}
-                </View>
-                <ScrollView style={{ maxHeight: 280 }} nestedScrollEnabled>
-                  {prefsSummary
-                    .filter(s => !prefsTeacherSearch.trim() || (s.full_name || '').includes(prefsTeacherSearch.trim()))
-                    .map(s => {
-                      const isSel = s.teacher_id === selectedTeacher;
+                {/* رأس القائمة المنسدلة (مغلقة افتراضياً) */}
+                <TouchableOpacity
+                  onPress={() => { setPrefsListOpen(!prefsListOpen); setPrefsTeacherSearch(''); }}
+                  testID="prefs-teachers-dropdown-toggle"
+                  style={{
+                    flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+                    backgroundColor: '#f8f9fb', borderWidth: 1, borderColor: prefsListOpen ? '#1565c0' : '#dde3ea',
+                    borderRadius: 8, paddingVertical: 10, paddingHorizontal: 12,
+                  }}
+                >
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, flex: 1 }}>
+                    <Ionicons name="person" size={16} color="#1565c0" />
+                    {(() => {
+                      const sel = prefsSummary.find(s => s.teacher_id === selectedTeacher);
                       return (
-                        <TouchableOpacity
-                          key={s.teacher_id}
-                          onPress={() => setSelectedTeacher(s.teacher_id)}
-                          testID={`prefs-teacher-row-${s.teacher_id}`}
-                          style={{
-                            flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
-                            paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, marginBottom: 4,
-                            backgroundColor: isSel ? '#e3f2fd' : '#fafbfc',
-                            borderWidth: 1, borderColor: isSel ? '#1565c0' : '#eef1f5',
-                          }}
-                        >
-                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flex: 1 }}>
-                            <Ionicons name={isSel ? 'person' : 'person-outline'} size={15} color={isSel ? '#1565c0' : '#8895a7'} />
-                            <Text style={{ fontSize: 13, fontWeight: isSel ? '700' : '600', color: isSel ? '#0d47a1' : '#333', textAlign: 'right' }} numberOfLines={1}>
-                              {s.full_name}
-                            </Text>
-                          </View>
-                          {s.unavailable_count > 0 ? (
-                            <View style={{ backgroundColor: '#ffebee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
-                              <Text style={{ fontSize: 11, color: '#c62828', fontWeight: '700' }}>{s.unavailable_count} فترة محظورة</Text>
-                            </View>
-                          ) : s.has_prefs ? (
-                            <View style={{ backgroundColor: '#e8f5e9', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
-                              <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '600' }}>متاح دائماً</Text>
-                            </View>
-                          ) : (
-                            <Text style={{ fontSize: 11, color: '#aab3c0' }}>بدون تفضيلات</Text>
-                          )}
-                        </TouchableOpacity>
+                        <Text style={{ fontSize: 13, fontWeight: '700', color: sel ? '#0d47a1' : '#8895a7', textAlign: 'right' }} numberOfLines={1}>
+                          {sel ? sel.full_name : `-- اختر المعلم (${prefsSummary.length}) --`}
+                        </Text>
                       );
-                    })}
-                  {!prefsSummaryLoading && prefsSummary.length === 0 && (
-                    <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', padding: 12 }}>لا يوجد معلمون في هذا القسم</Text>
-                  )}
-                  {!prefsSummaryLoading && prefsSummary.length > 0 && prefsTeacherSearch.trim().length > 0 &&
-                    prefsSummary.filter(s => (s.full_name || '').includes(prefsTeacherSearch.trim())).length === 0 && (
-                    <Text style={{ fontSize: 12, color: '#e65100', textAlign: 'center', padding: 12 }}>لا توجد نتائج للبحث "{prefsTeacherSearch.trim()}"</Text>
-                  )}
-                </ScrollView>
+                    })()}
+                    {(() => {
+                      const sel = prefsSummary.find(s => s.teacher_id === selectedTeacher);
+                      if (!sel) return null;
+                      return sel.unavailable_count > 0 ? (
+                        <View style={{ backgroundColor: '#ffebee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 11, color: '#c62828', fontWeight: '700' }}>{sel.unavailable_count} فترة محظورة</Text>
+                        </View>
+                      ) : sel.has_prefs ? (
+                        <View style={{ backgroundColor: '#e8f5e9', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                          <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '600' }}>متاح دائماً</Text>
+                        </View>
+                      ) : (
+                        <Text style={{ fontSize: 11, color: '#aab3c0' }}>بدون تفضيلات</Text>
+                      );
+                    })()}
+                  </View>
+                  <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6 }}>
+                    {prefsSummaryLoading && <ActivityIndicator size="small" color="#1565c0" />}
+                    <Ionicons name={prefsListOpen ? 'chevron-up' : 'chevron-down'} size={18} color="#1565c0" />
+                  </View>
+                </TouchableOpacity>
+
+                {/* المحتوى المنسدل: بحث + قائمة — يظهر عند الفتح فقط */}
+                {prefsListOpen && (
+                  <View style={{ marginTop: 8, borderWidth: 1, borderColor: '#e3e9f0', borderRadius: 8, padding: 8, backgroundColor: '#fff' }}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', paddingHorizontal: 10, marginBottom: 8 }}>
+                      <Ionicons name="search" size={15} color="#1565c0" />
+                      <TextInput
+                        style={{ flex: 1, paddingVertical: 7, paddingHorizontal: 8, fontSize: 13, color: '#333', textAlign: 'right' }}
+                        value={prefsTeacherSearch}
+                        onChangeText={setPrefsTeacherSearch}
+                        placeholder="ابحث عن معلم بالاسم..."
+                        placeholderTextColor="#999"
+                        autoFocus={Platform.OS === 'web'}
+                        testID="prefs-teacher-search"
+                      />
+                      {prefsTeacherSearch.length > 0 && (
+                        <TouchableOpacity onPress={() => setPrefsTeacherSearch('')}>
+                          <Ionicons name="close-circle" size={16} color="#999" />
+                        </TouchableOpacity>
+                      )}
+                    </View>
+                    <ScrollView style={{ maxHeight: 260 }} nestedScrollEnabled>
+                      {prefsSummary
+                        .filter(s => !prefsTeacherSearch.trim() || (s.full_name || '').includes(prefsTeacherSearch.trim()))
+                        .map(s => {
+                          const isSel = s.teacher_id === selectedTeacher;
+                          return (
+                            <TouchableOpacity
+                              key={s.teacher_id}
+                              onPress={() => { setSelectedTeacher(s.teacher_id); setPrefsListOpen(false); setPrefsTeacherSearch(''); }}
+                              testID={`prefs-teacher-row-${s.teacher_id}`}
+                              style={{
+                                flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+                                paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, marginBottom: 4,
+                                backgroundColor: isSel ? '#e3f2fd' : '#fafbfc',
+                                borderWidth: 1, borderColor: isSel ? '#1565c0' : '#eef1f5',
+                              }}
+                            >
+                              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flex: 1 }}>
+                                <Ionicons name={isSel ? 'person' : 'person-outline'} size={15} color={isSel ? '#1565c0' : '#8895a7'} />
+                                <Text style={{ fontSize: 13, fontWeight: isSel ? '700' : '600', color: isSel ? '#0d47a1' : '#333', textAlign: 'right' }} numberOfLines={1}>
+                                  {s.full_name}
+                                </Text>
+                              </View>
+                              {s.unavailable_count > 0 ? (
+                                <View style={{ backgroundColor: '#ffebee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 11, color: '#c62828', fontWeight: '700' }}>{s.unavailable_count} فترة محظورة</Text>
+                                </View>
+                              ) : s.has_prefs ? (
+                                <View style={{ backgroundColor: '#e8f5e9', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                                  <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '600' }}>متاح دائماً</Text>
+                                </View>
+                              ) : (
+                                <Text style={{ fontSize: 11, color: '#aab3c0' }}>بدون تفضيلات</Text>
+                              )}
+                            </TouchableOpacity>
+                          );
+                        })}
+                      {!prefsSummaryLoading && prefsSummary.length === 0 && (
+                        <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', padding: 12 }}>لا يوجد معلمون في هذا القسم</Text>
+                      )}
+                      {!prefsSummaryLoading && prefsSummary.length > 0 && prefsTeacherSearch.trim().length > 0 &&
+                        prefsSummary.filter(s => (s.full_name || '').includes(prefsTeacherSearch.trim())).length === 0 && (
+                        <Text style={{ fontSize: 12, color: '#e65100', textAlign: 'center', padding: 12 }}>لا توجد نتائج للبحث "{prefsTeacherSearch.trim()}"</Text>
+                      )}
+                    </ScrollView>
+                  </View>
+                )}
               </View>
             )}
 
