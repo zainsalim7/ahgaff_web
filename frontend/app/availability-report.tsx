@@ -37,9 +37,13 @@ export default function AvailabilityReport() {
           api.get('/departments'),
           api.get('/schedule-settings'),
         ]);
-        setFaculties(facRes.data || []);
-        setDepartments(deptRes.data || []);
-        setTimeSlots((setRes.data?.time_slots || []).sort((a: any, b: any) => a.slot_number - b.slot_number));
+        // 🛡️ تطبيع دفاعي: نضمن مصفوفات دائماً حتى لو تغيّر شكل الاستجابة (يمنع الصفحة البيضاء)
+        const facData = facRes.data;
+        const deptData = deptRes.data;
+        setFaculties(Array.isArray(facData) ? facData : (facData?.faculties || []));
+        setDepartments(Array.isArray(deptData) ? deptData : (deptData?.departments || []));
+        const slots = setRes.data?.time_slots;
+        setTimeSlots((Array.isArray(slots) ? slots : []).sort((a: any, b: any) => a.slot_number - b.slot_number));
       } catch (e) {
         console.error(e);
       }
@@ -66,7 +70,13 @@ export default function AvailabilityReport() {
         ? '/weekly-schedule/availability/rooms'
         : '/weekly-schedule/availability/teachers';
       const res = await api.get(path, { params });
-      setData(res.data);
+      const d = res.data;
+      // 🛡️ نتحقق أن الاستجابة بالشكل المتوقع قبل العرض (يمنع انهيار الصفحة)
+      if (!d || typeof d !== 'object' || (!Array.isArray(d.rooms) && !Array.isArray(d.teachers))) {
+        Platform.OS === 'web' && window.alert('استجابة غير متوقعة من الخادم — تأكد من تحديث نسخة الخادم (النشر)');
+        return;
+      }
+      setData(d);
       setExecuted(true);
     } catch (e: any) {
       const err = e?.response?.data?.detail || 'فشل التحميل';
@@ -291,7 +301,7 @@ export default function AvailabilityReport() {
             {/* قائمة القاعات/الأساتذة */}
             <View style={{ backgroundColor: '#fff', borderRadius: 10, overflow: 'hidden' }}>
               {reportType === 'rooms' ? (
-                data.rooms.map((r: any, idx: number) => (
+                (Array.isArray(data.rooms) ? data.rooms : []).map((r: any, idx: number) => (
                   <View
                     key={r.id}
                     style={{
@@ -393,3 +403,4 @@ export default function AvailabilityReport() {
     </SafeAreaView>
   );
 }
+
