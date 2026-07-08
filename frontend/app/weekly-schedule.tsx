@@ -262,6 +262,57 @@ export default function WeeklySchedulePage() {
     } finally { setGenerating(false); }
   };
 
+  // ============= 🗓️ توليد المحاضرات من الجدول الأسبوعي =============
+  const [showGenLecturesModal, setShowGenLecturesModal] = useState(false);
+  const [genLecStart, setGenLecStart] = useState('');
+  const [genLecEnd, setGenLecEnd] = useState('');
+  const [genLecHolidays, setGenLecHolidays] = useState<string[]>([]);
+  const [genLecHolidayInput, setGenLecHolidayInput] = useState('');
+  const [genLecPreview, setGenLecPreview] = useState<any>(null);
+  const [genLecLoading, setGenLecLoading] = useState(false);
+
+  const openGenLecturesModal = async () => {
+    setGenLecPreview(null);
+    setGenLecHolidays([]);
+    setGenLecHolidayInput('');
+    // افتراضياً: فترة الفصل النشط إن وُجدت
+    try {
+      const res = await api.get('/settings');
+      if (res.data?.semester_start_date && res.data?.semester_end_date) {
+        setGenLecStart(res.data.semester_start_date);
+        setGenLecEnd(res.data.semester_end_date);
+      }
+    } catch {}
+    setShowGenLecturesModal(true);
+  };
+
+  const runGenLectures = async (dryRun: boolean) => {
+    if (!genLecStart || !genLecEnd) {
+      if (Platform.OS === 'web') window.alert('حدد فترة التوليد (من - إلى)');
+      return;
+    }
+    setGenLecLoading(true);
+    try {
+      const res = await scheduleAPI.generateLecturesFromSchedule({
+        faculty_id: selectedFaculty,
+        department_id: selectedDept || null,
+        start_date: genLecStart,
+        end_date: genLecEnd,
+        holidays: genLecHolidays,
+        dry_run: dryRun,
+      });
+      if (dryRun) {
+        setGenLecPreview(res.data);
+      } else {
+        if (Platform.OS === 'web') window.alert(res.data.message);
+        setShowGenLecturesModal(false);
+        setGenLecPreview(null);
+      }
+    } catch (e: any) {
+      if (Platform.OS === 'web') window.alert(e?.response?.data?.detail || 'حدث خطأ');
+    } finally { setGenLecLoading(false); }
+  };
+
   const handleDeleteSlot = async (id: string) => {
     if (Platform.OS === 'web' && !window.confirm('حذف هذه المحاضرة من الجدول؟')) return;
     try {
@@ -716,6 +767,16 @@ export default function WeeklySchedulePage() {
                     </TouchableOpacity>
                   )}
                   {/* 💾 حفظ نسخة احتياطية */}
+                  {viewMode === 'section' && schedule.length > 0 && (
+                    <TouchableOpacity
+                      style={[st.btn, { backgroundColor: '#00838f' }]}
+                      onPress={openGenLecturesModal}
+                      testID="generate-lectures-btn"
+                    >
+                      <Ionicons name="calendar" size={16} color="#fff" />
+                      <Text style={st.btnText}>توليد المحاضرات</Text>
+                    </TouchableOpacity>
+                  )}
                   {viewMode === 'section' && schedule.length > 0 && (
                     <TouchableOpacity
                       style={[st.btn, { backgroundColor: '#6a1b9a' }]}
@@ -1314,6 +1375,89 @@ export default function WeeklySchedulePage() {
                 style={{ flex: 2, padding: '10px', borderRadius: 8, border: 'none', backgroundColor: '#6a1b9a', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>
                 {savingDraft ? 'جاري الحفظ...' : 'حفظ النسخة'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============= 🗓️ Generate Lectures from Schedule Modal ============= */}
+      {showGenLecturesModal && Platform.OS === 'web' && (
+        <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}>
+          <div style={{ backgroundColor: '#fff', borderRadius: 14, padding: 20, width: 520, maxWidth: '95%', direction: 'rtl', maxHeight: '90vh', overflowY: 'auto' }} data-testid="generate-lectures-modal">
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <Ionicons name="calendar" size={22} color="#00838f" />
+              <span style={{ fontSize: 17, fontWeight: 800, color: '#222' }}>توليد المحاضرات من الجدول الأسبوعي</span>
+            </div>
+            <div style={{ fontSize: 12, color: '#666', marginBottom: 6, lineHeight: 1.7 }}>
+              سيتم تحويل خانات الجدول إلى محاضرات فعلية بتواريخ محددة (بقاعة ووقت كل خانة).
+              <br />✅ <strong>توليد الناقص فقط</strong>: المحاضرات المولدة سابقاً من صفحة المقررات تُتخطى ولا تُمس.
+            </div>
+            <div style={{ backgroundColor: selectedDept ? '#e8f5e9' : '#fff8e1', border: '1px solid ' + (selectedDept ? '#a5d6a7' : '#ffe082'), borderRadius: 8, padding: '6px 10px', fontSize: 12, fontWeight: 700, color: selectedDept ? '#2e7d32' : '#e65100', marginBottom: 12 }}>
+              📍 النطاق: {selectedDept ? `قسم ${departments.find(d => d.id === selectedDept)?.name || ''} فقط` : `كامل الكلية (${departments.length} قسم)`}
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>من تاريخ *</label>
+                <input type="date" value={genLecStart} onChange={(e: any) => { setGenLecStart(e.target.value); setGenLecPreview(null); }}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, marginTop: 4, boxSizing: 'border-box' }} data-testid="gen-lec-start" />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>إلى تاريخ *</label>
+                <input type="date" value={genLecEnd} onChange={(e: any) => { setGenLecEnd(e.target.value); setGenLecPreview(null); }}
+                  style={{ width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, marginTop: 4, boxSizing: 'border-box' }} data-testid="gen-lec-end" />
+              </div>
+            </div>
+            <label style={{ fontSize: 12, fontWeight: 700, color: '#444' }}>الأيام المعطلة / العطلات (تُتخطى)</label>
+            <div style={{ display: 'flex', gap: 6, marginTop: 4, marginBottom: 6 }}>
+              <input type="date" value={genLecHolidayInput} onChange={(e: any) => setGenLecHolidayInput(e.target.value)}
+                style={{ flex: 1, padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, boxSizing: 'border-box' }} data-testid="gen-lec-holiday-input" />
+              <button
+                onClick={() => {
+                  if (genLecHolidayInput && !genLecHolidays.includes(genLecHolidayInput)) {
+                    setGenLecHolidays([...genLecHolidays, genLecHolidayInput].sort());
+                    setGenLecHolidayInput('');
+                    setGenLecPreview(null);
+                  }
+                }}
+                style={{ padding: '8px 14px', borderRadius: 8, border: 'none', backgroundColor: '#e65100', color: '#fff', cursor: 'pointer', fontWeight: 700, fontSize: 12 }}
+                data-testid="gen-lec-add-holiday"
+              >+ إضافة</button>
+            </div>
+            {genLecHolidays.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 10 }}>
+                {genLecHolidays.map(h => (
+                  <span key={h} style={{ backgroundColor: '#fff3e0', border: '1px solid #ffcc80', borderRadius: 12, padding: '3px 10px', fontSize: 11, fontWeight: 700, color: '#e65100' }}>
+                    {h} <span style={{ cursor: 'pointer', color: '#c62828' }} onClick={() => { setGenLecHolidays(genLecHolidays.filter(x => x !== h)); setGenLecPreview(null); }}>✕</span>
+                  </span>
+                ))}
+              </div>
+            )}
+            {/* نتيجة المعاينة */}
+            {genLecPreview && (
+              <div style={{ backgroundColor: '#e0f2f1', border: '1px solid #80cbc4', borderRadius: 10, padding: 12, marginTop: 8, marginBottom: 4 }} data-testid="gen-lec-preview">
+                <div style={{ fontSize: 13, fontWeight: 800, color: '#00695c', marginBottom: 6 }}>📊 المعاينة</div>
+                <div style={{ fontSize: 12, color: '#004d40', lineHeight: 1.9 }}>
+                  ✅ سيتم إنشاء: <strong>{genLecPreview.to_create}</strong> محاضرة
+                  <br />📚 عدد المقررات: <strong>{genLecPreview.courses_count}</strong> | خانات الجدول: <strong>{genLecPreview.schedule_slots}</strong>
+                  <br />⏭️ موجودة مسبقاً (تُتخطى): <strong>{genLecPreview.already_exist}</strong>
+                  {genLecPreview.holidays_count > 0 ? <><br />🏖️ عطلات مستثناة: <strong>{genLecPreview.holidays_count}</strong> يوم</> : null}
+                </div>
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button onClick={() => { setShowGenLecturesModal(false); setGenLecPreview(null); }} disabled={genLecLoading}
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: 'none', backgroundColor: '#f5f5f5', cursor: 'pointer', fontWeight: 700 }}>إلغاء</button>
+              <button onClick={() => runGenLectures(true)} disabled={genLecLoading} data-testid="gen-lec-preview-btn"
+                style={{ flex: 1, padding: '10px', borderRadius: 8, border: '1px solid #00838f', backgroundColor: '#fff', color: '#00838f', cursor: 'pointer', fontWeight: 800 }}>
+                {genLecLoading ? 'جاري...' : '👁️ معاينة'}
+              </button>
+              <button onClick={() => runGenLectures(false)} disabled={genLecLoading || !genLecPreview || genLecPreview.to_create === 0} data-testid="gen-lec-confirm-btn"
+                style={{ flex: 1.4, padding: '10px', borderRadius: 8, border: 'none', backgroundColor: (!genLecPreview || genLecPreview.to_create === 0) ? '#b0bec5' : '#00838f', color: '#fff', cursor: 'pointer', fontWeight: 800 }}>
+                {genLecLoading ? 'جاري...' : `✓ تأكيد التوليد${genLecPreview ? ` (${genLecPreview.to_create})` : ''}`}
+              </button>
+            </div>
+            <div style={{ fontSize: 10, color: '#999', marginTop: 8, textAlign: 'center' }}>
+              التأكيد متاح بعد المعاينة فقط — لضمان مراجعتك للأرقام قبل الإنشاء
             </div>
           </div>
         </div>

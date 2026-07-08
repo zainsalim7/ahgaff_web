@@ -795,6 +795,7 @@ export const scheduleAPI = {
   // تفضيلات المعلمين
   getTeacherPrefs: (id: string) => api.get(`/teacher-preferences/${id}`),
   getTeacherPrefsSummary: (departmentId: string) => api.get('/teacher-preferences', { params: { department_id: departmentId } }),
+  generateLecturesFromSchedule: (data: any) => api.post('/weekly-schedule/generate-lectures', data),
   saveTeacherPrefs: (id: string, data: any) => api.put(`/teacher-preferences/${id}`, data),
   // الجدول
   getSchedule: (params?: any) => api.get('/weekly-schedule', { params }),

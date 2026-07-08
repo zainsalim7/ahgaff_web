@@ -2206,3 +2206,161 @@ async def teachers_availability(
         "busy_count": sum(1 for t in result if t.get("status") == "busy"),
         "teachers": result,
     }
+
+
+# ===== 🗓️ توليد المحاضرات الفعلية من الجدول الأسبوعي =====
+
+_ARABIC_DAY_TO_WEEKDAY = {
+    "السبت": 5, "الأحد": 6, "الاثنين": 0, "الإثنين": 0,
+    "الثلاثاء": 1, "الأربعاء": 2, "الخميس": 3, "الجمعة": 4,
+}
+
+
+class GenerateLecturesFromScheduleRequest(BaseModel):
+    faculty_id: str
+    department_id: Optional[str] = None
+    start_date: str  # YYYY-MM-DD
+    end_date: str    # YYYY-MM-DD
+    holidays: List[str] = []  # تواريخ معطلة تُتخطى
+    dry_run: bool = True  # معاينة فقط دون إنشاء
+
+
+@router.post("/weekly-schedule/generate-lectures")
+async def generate_lectures_from_schedule(
+    data: GenerateLecturesFromScheduleRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """
+    🗓️ تحويل الجدول الأسبوعي المعتمد إلى محاضرات فعلية بتواريخ محددة.
+    - توليد الناقص فقط: المحاضرات الموجودة مسبقاً (من صفحة المقررات أو توليد سابق) تُتخطى ولا تُمس.
+    - يتخطى العطلات المحددة.
+    - dry_run=True: معاينة (عدد ما سيُنشأ/يُتخطى) دون أي إنشاء.
+    """
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+
+    # التحقق من التواريخ
+    try:
+        start_d = datetime.strptime(data.start_date, "%Y-%m-%d").date()
+        end_d = datetime.strptime(data.end_date, "%Y-%m-%d").date()
+    except ValueError:
+        raise HTTPException(status_code=400, detail="صيغة التاريخ غير صحيحة (YYYY-MM-DD)")
+    if end_d < start_d:
+        raise HTTPException(status_code=400, detail="تاريخ النهاية قبل تاريخ البداية")
+    if (end_d - start_d).days > 370:
+        raise HTTPException(status_code=400, detail="الفترة أطول من سنة — قلّص النطاق")
+    holidays_set = set(data.holidays or [])
+
+    # خانات الجدول ضمن النطاق
+    sched_query = {"faculty_id": data.faculty_id}
+    if data.department_id:
+        sched_query["department_id"] = data.department_id
+    slots = await db.weekly_schedule.find(sched_query).to_list(5000)
+    if not slots:
+        raise HTTPException(status_code=400, detail="لا يوجد جدول أسبوعي في هذا النطاق — ولّد الجدول أولاً")
+
+    # أوقات الفترات (خاصة بالكلية أو العامة)
+    settings = await db.schedule_settings.find_one({"_id": f"faculty_{data.faculty_id}"})
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"})
+    time_slots = (settings or {}).get("time_slots", [])
+    slot_times = {s["slot_number"]: (s.get("start_time", ""), s.get("end_time", "")) for s in time_slots}
+
+    # أسماء القاعات (الجدول يخزن room_id والمحاضرات تخزن الاسم نصاً)
+    room_ids = list({s.get("room_id") for s in slots if s.get("room_id")})
+    room_names = {}
+    if room_ids:
+        try:
+            async for r in db.rooms.find({"_id": {"$in": [ObjectId(rid) for rid in room_ids]}}):
+                room_names[str(r["_id"])] = r.get("name", "")
+        except Exception:
+            pass
+
+    # بناء المرشحين: لكل خانة × كل تاريخ مطابق لليوم ضمن الفترة
+    from datetime import timedelta as _td
+    candidates = []
+    skipped_no_time = 0
+    d = start_d
+    while d <= end_d:
+        date_str = d.strftime("%Y-%m-%d")
+        if date_str not in holidays_set:
+            wd = d.weekday()
+            for s in slots:
+                if _ARABIC_DAY_TO_WEEKDAY.get(s.get("day", "")) != wd:
+                    continue
+                st_time, en_time = slot_times.get(s.get("slot_number"), ("", ""))
+                if not st_time or not en_time:
+                    skipped_no_time += 1
+                    continue
+                candidates.append({
+                    "course_id": s.get("course_id", ""),
+                    "date": date_str,
+                    "start_time": st_time,
+                    "end_time": en_time,
+                    "room": room_names.get(s.get("room_id", ""), ""),
+                })
+        d += _td(days=1)
+
+    if not candidates:
+        return {"dry_run": data.dry_run, "to_create": 0, "already_exist": 0, "holidays_skipped": len(holidays_set), "courses_count": 0, "message": "لا توجد مواعيد ضمن الفترة المحددة"}
+
+    # المحاضرات الموجودة مسبقاً (نحترمها ونتخطاها) — بأي حالة غير ملغاة
+    course_ids = list({c["course_id"] for c in candidates if c["course_id"]})
+    existing = set()
+    async for lec in db.lectures.find({
+        "course_id": {"$in": course_ids},
+        "date": {"$gte": data.start_date, "$lte": data.end_date},
+        "status": {"$ne": "cancelled"},
+    }, {"course_id": 1, "date": 1, "start_time": 1}):
+        existing.add((lec.get("course_id"), lec.get("date"), lec.get("start_time")))
+
+    to_create = [c for c in candidates if (c["course_id"], c["date"], c["start_time"]) not in existing]
+    already = len(candidates) - len(to_create)
+
+    if data.dry_run:
+        return {
+            "dry_run": True,
+            "to_create": len(to_create),
+            "already_exist": already,
+            "skipped_no_time": skipped_no_time,
+            "courses_count": len(course_ids),
+            "schedule_slots": len(slots),
+            "date_range": f"{data.start_date} → {data.end_date}",
+            "holidays_count": len(holidays_set),
+            "message": f"سيتم إنشاء {len(to_create)} محاضرة لـ{len(course_ids)} مقرراً (تخطي {already} موجودة مسبقاً)",
+        }
+
+    # التنفيذ الفعلي — الفهرس الفريد uniq_course_date_start شبكة أمان إضافية
+    created = 0
+    dup_skipped = 0
+    now = datetime.now(timezone.utc)
+    for c in to_create:
+        try:
+            await db.lectures.insert_one({
+                "course_id": c["course_id"],
+                "date": c["date"],
+                "start_time": c["start_time"],
+                "end_time": c["end_time"],
+                "room": c["room"],
+                "status": "scheduled",
+                "notes": "",
+                "created_at": now,
+                "created_by": current_user.get("id", ""),
+                "generated_from_schedule": True,
+            })
+            created += 1
+        except DuplicateKeyError:
+            dup_skipped += 1
+
+    await log_activity(
+        current_user, "generate_lectures_from_schedule", "weekly_schedule", data.faculty_id, None,
+        {"department_id": data.department_id, "range": f"{data.start_date}→{data.end_date}", "created": created, "skipped": already + dup_skipped},
+    )
+    return {
+        "dry_run": False,
+        "created": created,
+        "already_exist": already + dup_skipped,
+        "courses_count": len(course_ids),
+        "message": f"تم إنشاء {created} محاضرة لـ{len(course_ids)} مقرراً (تخطي {already + dup_skipped} موجودة مسبقاً)",
+    }
