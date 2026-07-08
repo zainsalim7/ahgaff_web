@@ -489,6 +489,44 @@ async def save_time_slots(
 
 # ===== تفضيلات المعلمين =====
 
+@router.get("/teacher-preferences")
+async def list_teacher_preferences_summary(department_id: str, current_user: dict = Depends(get_current_user)):
+    """📋 ملخص التفضيلات المحفوظة لجميع معلمي قسم معين — لقائمة تبويب تفضيلات المعلمين"""
+    db = get_db()
+    teachers = await db.teachers.find({"department_id": department_id}).sort("full_name", 1).to_list(1000)
+    tids = [str(t["_id"]) for t in teachers]
+    prefs_docs = await db.teacher_preferences.find({"teacher_id": {"$in": tids}}).to_list(1000)
+    by_tid = {p.get("teacher_id"): p for p in prefs_docs}
+
+    # لعدّ الحقول القديمة (قبل شبكة الفترات) نحتاج عدد الفترات وأيام العمل
+    ts_count = await db.time_slots.count_documents({}) or 6
+    settings = await db.schedule_settings.find_one({})
+    working_days_count = len((settings or {}).get("working_days", []) or []) or 6
+
+    results = []
+    for t in teachers:
+        tid = str(t["_id"])
+        p = by_tid.get(tid)
+        unavailable_count = 0
+        if p:
+            periods = p.get("unavailable_periods") or []
+            if periods:
+                unavailable_count = len(periods)
+            else:
+                days_n = len(p.get("unavailable_days") or [])
+                slots_n = len(p.get("unavailable_slots") or [])
+                unavailable_count = days_n * ts_count + slots_n * max(0, working_days_count - days_n)
+        results.append({
+            "teacher_id": tid,
+            "full_name": t.get("full_name", ""),
+            "has_prefs": bool(p),
+            "unavailable_count": unavailable_count,
+            "max_daily_lectures": (p or {}).get("max_daily_lectures", 2),
+            "allow_consecutive_lectures": (p or {}).get("allow_consecutive_lectures", False),
+        })
+    return results
+
+
 @router.get("/teacher-preferences/{teacher_id}")
 async def get_teacher_preferences(teacher_id: str, current_user: dict = Depends(get_current_user)):
     db = get_db()

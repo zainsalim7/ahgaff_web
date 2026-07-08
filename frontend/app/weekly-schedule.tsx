@@ -91,6 +91,10 @@ export default function WeeklySchedulePage() {
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [prefs, setPrefs] = useState<any>({ unavailable_days: [], unavailable_slots: [], unavailable_periods: [], max_daily_lectures: 2, allow_consecutive_lectures: false });
   const [savingPrefs, setSavingPrefs] = useState(false);
+  // 📋 ملخص تفضيلات معلمي القسم (لقائمة تبويب التفضيلات)
+  const [prefsSummary, setPrefsSummary] = useState<any[]>([]);
+  const [prefsSummaryLoading, setPrefsSummaryLoading] = useState(false);
+  const [prefsTeacherSearch, setPrefsTeacherSearch] = useState('');
   // Add slot modal
   const [showAddSlot, setShowAddSlot] = useState(false);
   const [addSlotData, setAddSlotData] = useState({ day: '', slot_number: '', course_id: '', teacher_id: '', room_id: '' });
@@ -186,6 +190,21 @@ export default function WeeklySchedulePage() {
       })();
     }
   }, [selectedDept]);
+
+  // 📋 تحميل ملخص التفضيلات المحفوظة لكل معلمي القسم (تبويب التفضيلات)
+  const loadPrefsSummary = useCallback(async () => {
+    if (!selectedDept) { setPrefsSummary([]); return; }
+    setPrefsSummaryLoading(true);
+    try {
+      const res = await scheduleAPI.getTeacherPrefsSummary(selectedDept);
+      setPrefsSummary(res.data || []);
+    } catch { setPrefsSummary([]); }
+    finally { setPrefsSummaryLoading(false); }
+  }, [selectedDept]);
+
+  useEffect(() => {
+    if (activeTab === 'prefs') loadPrefsSummary();
+  }, [activeTab, loadPrefsSummary]);
 
   // Load all teachers + courses in the faculty (for schedule view modes: teacher/course)
   useEffect(() => {
@@ -443,6 +462,7 @@ export default function WeeklySchedulePage() {
     try {
       await scheduleAPI.saveTeacherPrefs(selectedTeacher, prefs);
       if (Platform.OS === 'web') window.alert('تم حفظ التفضيلات');
+      loadPrefsSummary(); // تحديث شارات القائمة
     } catch {}
     finally { setSavingPrefs(false); }
   };
@@ -996,22 +1016,101 @@ export default function WeeklySchedulePage() {
         {activeTab === 'prefs' && (
           <>
             <View style={st.card}>
-              <Text style={st.label}>اختر القسم ثم المعلم</Text>
+              <Text style={st.label}>اختر القسم لعرض معلميه وتفضيلاتهم المحفوظة</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <View style={{ flex: 1 }}>
-                  <View style={st.pickerWrap}><Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 40 }}>
-                    <Picker.Item label="-- القسم --" value="" />{departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
-                  </Picker></View>
+                  <View style={st.pickerWrap}>
+                    <Picker selectedValue={selectedFaculty} onValueChange={v => { setSelectedFaculty(v); setSelectedDept(''); setSelectedTeacher(''); setPrefsTeacherSearch(''); }} style={{ height: 40 }} testID="prefs-faculty-picker">
+                      <Picker.Item label="-- الكلية --" value="" />{faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                    </Picker>
+                  </View>
                 </View>
                 <View style={{ flex: 1 }}>
-                  <TeacherSearchBox teachers={teachers} selectedId={selectedTeacher} onSelect={setSelectedTeacher} placeholder="ابحث عن المعلم..." />
+                  <View style={st.pickerWrap}>
+                    <Picker selectedValue={selectedDept} onValueChange={v => { setSelectedDept(v); setSelectedTeacher(''); setPrefsTeacherSearch(''); }} style={{ height: 40 }} testID="prefs-dept-picker">
+                      <Picker.Item label="-- القسم --" value="" />{departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                    </Picker>
+                  </View>
                 </View>
               </View>
             </View>
 
+            {/* 📋 قائمة معلمي القسم مع ملخص التفضيلات — تبقى ظاهرة دائماً للتنقل بين المعلمين */}
+            {selectedDept && (
+              <View style={st.card} testID="prefs-teachers-panel">
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                  <Text style={[st.label, { fontSize: 13, marginBottom: 0 }]}>معلمو القسم ({prefsSummary.length})</Text>
+                  {prefsSummaryLoading && <ActivityIndicator size="small" color="#1565c0" />}
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', paddingHorizontal: 10, marginBottom: 8 }}>
+                  <Ionicons name="search" size={15} color="#1565c0" />
+                  <TextInput
+                    style={{ flex: 1, paddingVertical: 7, paddingHorizontal: 8, fontSize: 13, color: '#333', textAlign: 'right' }}
+                    value={prefsTeacherSearch}
+                    onChangeText={setPrefsTeacherSearch}
+                    placeholder="ابحث عن معلم بالاسم..."
+                    placeholderTextColor="#999"
+                    testID="prefs-teacher-search"
+                  />
+                  {prefsTeacherSearch.length > 0 && (
+                    <TouchableOpacity onPress={() => setPrefsTeacherSearch('')}>
+                      <Ionicons name="close-circle" size={16} color="#999" />
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <ScrollView style={{ maxHeight: 280 }} nestedScrollEnabled>
+                  {prefsSummary
+                    .filter(s => !prefsTeacherSearch.trim() || (s.full_name || '').includes(prefsTeacherSearch.trim()))
+                    .map(s => {
+                      const isSel = s.teacher_id === selectedTeacher;
+                      return (
+                        <TouchableOpacity
+                          key={s.teacher_id}
+                          onPress={() => setSelectedTeacher(s.teacher_id)}
+                          testID={`prefs-teacher-row-${s.teacher_id}`}
+                          style={{
+                            flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between',
+                            paddingVertical: 8, paddingHorizontal: 10, borderRadius: 8, marginBottom: 4,
+                            backgroundColor: isSel ? '#e3f2fd' : '#fafbfc',
+                            borderWidth: 1, borderColor: isSel ? '#1565c0' : '#eef1f5',
+                          }}
+                        >
+                          <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 6, flex: 1 }}>
+                            <Ionicons name={isSel ? 'person' : 'person-outline'} size={15} color={isSel ? '#1565c0' : '#8895a7'} />
+                            <Text style={{ fontSize: 13, fontWeight: isSel ? '700' : '600', color: isSel ? '#0d47a1' : '#333', textAlign: 'right' }} numberOfLines={1}>
+                              {s.full_name}
+                            </Text>
+                          </View>
+                          {s.unavailable_count > 0 ? (
+                            <View style={{ backgroundColor: '#ffebee', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                              <Text style={{ fontSize: 11, color: '#c62828', fontWeight: '700' }}>{s.unavailable_count} فترة محظورة</Text>
+                            </View>
+                          ) : s.has_prefs ? (
+                            <View style={{ backgroundColor: '#e8f5e9', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 2 }}>
+                              <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '600' }}>متاح دائماً</Text>
+                            </View>
+                          ) : (
+                            <Text style={{ fontSize: 11, color: '#aab3c0' }}>بدون تفضيلات</Text>
+                          )}
+                        </TouchableOpacity>
+                      );
+                    })}
+                  {!prefsSummaryLoading && prefsSummary.length === 0 && (
+                    <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', padding: 12 }}>لا يوجد معلمون في هذا القسم</Text>
+                  )}
+                  {!prefsSummaryLoading && prefsSummary.length > 0 && prefsTeacherSearch.trim().length > 0 &&
+                    prefsSummary.filter(s => (s.full_name || '').includes(prefsTeacherSearch.trim())).length === 0 && (
+                    <Text style={{ fontSize: 12, color: '#e65100', textAlign: 'center', padding: 12 }}>لا توجد نتائج للبحث "{prefsTeacherSearch.trim()}"</Text>
+                  )}
+                </ScrollView>
+              </View>
+            )}
+
             {selectedTeacher && (
               <View style={st.card}>
-                <Text style={[st.label, { fontSize: 15, marginBottom: 12 }]}>تفضيلات المعلم</Text>
+                <Text style={[st.label, { fontSize: 15, marginBottom: 12 }]}>
+                  تفضيلات المعلم: {prefsSummary.find(s => s.teacher_id === selectedTeacher)?.full_name || teachers.find((t: any) => t.id === selectedTeacher)?.full_name || ''}
+                </Text>
 
                 <Text style={st.miniLabel}>غير متاح (شبكة يوم × فترة)</Text>
                 <Text style={{ fontSize: 11, color: '#888', marginBottom: 8, textAlign: 'right' }}>

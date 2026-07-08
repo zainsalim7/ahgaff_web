@@ -794,6 +794,7 @@ export const scheduleAPI = {
   saveTimeSlots: (slots: any[], facultyId?: string) => api.post(`/schedule-settings/time-slots${facultyId ? `?faculty_id=${facultyId}` : ''}`, slots),
   // تفضيلات المعلمين
   getTeacherPrefs: (id: string) => api.get(`/teacher-preferences/${id}`),
+  getTeacherPrefsSummary: (departmentId: string) => api.get('/teacher-preferences', { params: { department_id: departmentId } }),
   saveTeacherPrefs: (id: string, data: any) => api.put(`/teacher-preferences/${id}`, data),
   // الجدول
   getSchedule: (params?: any) => api.get('/weekly-schedule', { params }),
