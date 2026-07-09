@@ -432,10 +432,11 @@ export default function CourseLecturesScreen() {
 
   // تحديد الكل / إلغاء تحديد الكل
   const toggleSelectAll = () => {
-    if (selectedLectures.size === lectures.length) {
+    const filtered = getFilteredLectures();
+    if (selectedLectures.size === filtered.length) {
       setSelectedLectures(new Set());
     } else {
-      setSelectedLectures(new Set(lectures.map(l => l.id)));
+      setSelectedLectures(new Set(filtered.map(l => l.id)));
     }
   };
 
@@ -763,14 +764,29 @@ export default function CourseLecturesScreen() {
     const presentCount = stCounts.present ?? 0;
     const absentCount = stCounts.absent ?? studentsTotal;
 
+    const CardWrapper: any = selectionMode ? TouchableOpacity : View;
     return (
-      <View dataSet={{ responsive: "lecture-card" }} style={[styles.lectureCardNew, isSelected && styles.lectureCardNewSelected]}>
-        {/* الرقم التسلسلي */}
-        <View style={styles.lectureNumWrap}>
-          <View style={styles.lectureNumBadge}>
-            <Text style={styles.lectureNumText}>{index + 1}</Text>
+      <CardWrapper
+        dataSet={{ responsive: "lecture-card" }}
+        style={[styles.lectureCardNew, isSelected && styles.lectureCardNewSelected]}
+        {...(selectionMode ? { onPress: () => toggleLectureSelection(item.id), activeOpacity: 0.7 } : {})}
+      >
+        {/* الرقم التسلسلي / مربع التحديد */}
+        {selectionMode ? (
+          <TouchableOpacity
+            style={styles.lectureNumWrap}
+            onPress={() => toggleLectureSelection(item.id)}
+            testID={`lecture-checkbox-${item.id}`}
+          >
+            <Ionicons name={isSelected ? 'checkbox' : 'square-outline'} size={22} color={isSelected ? '#2962ff' : '#8a94a8'} />
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.lectureNumWrap}>
+            <View style={styles.lectureNumBadge}>
+              <Text style={styles.lectureNumText}>{index + 1}</Text>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* العمود الأول: اليوم + التاريخ */}
         <View style={styles.lectureDayCol}>
@@ -847,7 +863,7 @@ export default function CourseLecturesScreen() {
         <View dataSet={{ responsive: "lecture-status-abs" }} style={[styles.statusBadgeAbs, { backgroundColor: statusInfo.color }]}>
           <Text style={styles.statusBadgeAbsText}>{statusInfo.label}</Text>
         </View>
-      </View>
+      </CardWrapper>
     );
   };
 
