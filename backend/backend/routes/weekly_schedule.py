@@ -1672,7 +1672,9 @@ async def export_visual_pdf(
     db = get_db()
 
     try:
-        pdfmetrics.registerFont(TTFont("Amiri", "/app/backend/backend/fonts/Amiri-Regular.ttf"))
+        import os as _os
+        _font_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "fonts", "Amiri-Regular.ttf")
+        pdfmetrics.registerFont(TTFont("Amiri", _font_path))
         font_name = "Amiri"
     except Exception:
         font_name = "Helvetica"
@@ -1706,7 +1708,7 @@ async def export_visual_pdf(
 
     slots_by_cell = {}
     for s in slots:
-        key = (s.get("day_of_week"), s.get("slot_number"))
+        key = (s.get("day") or s.get("day_of_week"), s.get("slot_number"))
         slots_by_cell.setdefault(key, []).append(s)
 
     course_ids = {s.get("course_id") for s in slots if s.get("course_id")}
@@ -1928,7 +1930,7 @@ async def export_visual_excel(
 
     slots_by_cell = {}
     for s in slots:
-        key = (s.get("day_of_week"), s.get("slot_number"))
+        key = (s.get("day") or s.get("day_of_week"), s.get("slot_number"))
         slots_by_cell.setdefault(key, []).append(s)
 
     cell_fill = PatternFill(start_color="fafafa", end_color="fafafa", fill_type="solid")
@@ -2019,7 +2021,7 @@ async def rooms_availability(
     if semester_id:
         sched_query["semester_id"] = semester_id
     if day_of_week:
-        sched_query["day_of_week"] = day_of_week
+        sched_query["$or"] = [{"day": day_of_week}, {"day_of_week": day_of_week}]
     if slot_number is not None:
         sched_query["slot_number"] = slot_number
     slots = await db.weekly_schedule.find(sched_query).to_list(5000)
@@ -2042,7 +2044,7 @@ async def rooms_availability(
         rid = s.get("room_id")
         if not rid:
             continue
-        key = (rid, s.get("day_of_week"), s.get("slot_number"))
+        key = (rid, s.get("day") or s.get("day_of_week"), s.get("slot_number"))
         course = courses_map.get(s.get("course_id", ""), {})
         teacher = teachers_map.get(s.get("teacher_id", ""), {})
         busy_map[key] = {
@@ -2130,7 +2132,7 @@ async def teachers_availability(
     if semester_id:
         sched_query["semester_id"] = semester_id
     if day_of_week:
-        sched_query["day_of_week"] = day_of_week
+        sched_query["$or"] = [{"day": day_of_week}, {"day_of_week": day_of_week}]
     if slot_number is not None:
         sched_query["slot_number"] = slot_number
     slots = await db.weekly_schedule.find(sched_query).to_list(5000)
@@ -2158,7 +2160,7 @@ async def teachers_availability(
         tid = s.get("teacher_id")
         if not tid:
             continue
-        key = (tid, s.get("day_of_week"), s.get("slot_number"))
+        key = (tid, s.get("day") or s.get("day_of_week"), s.get("slot_number"))
         course = courses_map.get(s.get("course_id", ""), {})
         room = rooms_map.get(s.get("room_id", ""), {})
         busy_map[key] = {
