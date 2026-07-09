@@ -1706,11 +1706,6 @@ async def export_visual_pdf(
     time_slots_cfg = sorted((settings or {}).get("time_slots", []), key=lambda x: x.get("slot_number", 0))
     working_days = (settings or {}).get("working_days", ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء"])
 
-    slots_by_cell = {}
-    for s in slots:
-        key = (s.get("day") or s.get("day_of_week"), s.get("slot_number"))
-        slots_by_cell.setdefault(key, []).append(s)
-
     course_ids = {s.get("course_id") for s in slots if s.get("course_id")}
     teacher_ids = {s.get("teacher_id") for s in slots if s.get("teacher_id")}
     room_ids_set = {s.get("room_id") for s in slots if s.get("room_id")}
@@ -1753,76 +1748,123 @@ async def export_visual_pdf(
     styles = getSampleStyleSheet()
     title_style = ParagraphStyle("Title", parent=styles["Title"], fontName=font_name, fontSize=16, alignment=1, textColor=colors.HexColor("#1565c0"))
     sub_style = ParagraphStyle("Sub", parent=styles["Normal"], fontName=font_name, fontSize=9, alignment=1, textColor=colors.grey)
+    group_style = ParagraphStyle("Group", parent=styles["Normal"], fontName=font_name, fontSize=13, alignment=1, textColor=colors.HexColor("#00695c"))
+    legend_style = ParagraphStyle("Legend", fontName=font_name, fontSize=8, alignment=1, textColor=colors.grey)
+
+    from reportlab.platypus import PageBreak
 
     story = []
     story.append(Paragraph(ar(title), title_style))
     story.append(Paragraph(ar(f"تاريخ التصدير: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  جامعة الأحقاف"), sub_style))
     story.append(Spacer(1, 0.3*cm))
 
-    header_row = [ar("الفترة")] + [ar(d) for d in working_days]
-    table_data = [header_row]
+    def build_cell_map(slot_list):
+        m = {}
+        for s in slot_list:
+            m.setdefault((s.get("day") or s.get("day_of_week"), s.get("slot_number")), []).append(s)
+        return m
 
-    for ts in time_slots_cfg:
-        slot_num = ts.get("slot_number")
-        time_str = f"{ts.get('start_time','')}\n{ts.get('end_time','')}"
-        row = [ar(f"الفترة {slot_num}\n{time_str}")]
-        for day in working_days:
-            cell_slots = slots_by_cell.get((day, slot_num), [])
-            if not cell_slots:
-                row.append("")
-            else:
-                parts = []
-                for s in cell_slots:
-                    course = courses_map.get(s.get("course_id", ""), {})
-                    teacher = teachers_map.get(s.get("teacher_id", ""), {})
-                    room = rooms_map.get(s.get("room_id", ""), {})
-                    line = course.get("name", "") or course.get("code", "")
-                    if teacher.get("full_name") and not teacher_id:
-                        line += f"\n{teacher.get('full_name','')}"
-                    if room.get("name") and not room_id:
-                        line += f"\n[{room.get('name','')}]"
-                    sec = s.get("section")
-                    if sec and not section:
-                        line += f" - شعبة {sec}"
-                    parts.append(ar(line))
-                row.append("\n\n".join(parts))
-        table_data.append(row)
+    def make_table(cell_map, hide_section=False):
+        header_row = [ar("الفترة")] + [ar(d) for d in working_days]
+        table_data = [header_row]
+        for ts in time_slots_cfg:
+            slot_num = ts.get("slot_number")
+            time_str = f"{ts.get('start_time','')}\n{ts.get('end_time','')}"
+            row = [ar(f"الفترة {slot_num}\n{time_str}")]
+            for day in working_days:
+                cell_slots = cell_map.get((day, slot_num), [])
+                if not cell_slots:
+                    row.append("")
+                else:
+                    parts = []
+                    for s in cell_slots:
+                        course = courses_map.get(s.get("course_id", ""), {})
+                        teacher = teachers_map.get(s.get("teacher_id", ""), {})
+                        room = rooms_map.get(s.get("room_id", ""), {})
+                        line = course.get("name", "") or course.get("code", "")
+                        if teacher.get("full_name") and not teacher_id:
+                            line += f"\n{teacher.get('full_name','')}"
+                        if room.get("name") and not room_id:
+                            line += f"\n[{room.get('name','')}]"
+                        sec = s.get("section")
+                        if sec and not section and not hide_section:
+                            line += f" - شعبة {sec}"
+                        parts.append(ar(line))
+                    row.append("\n\n".join(parts))
+            table_data.append(row)
 
-    num_cols = len(header_row)
-    col_widths = [3*cm] + [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1)
+        num_cols = len(header_row)
+        col_widths = [3*cm] + [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1)
+        tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+        base_style = [
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+            ("FONTNAME", (0, 0), (-1, -1), font_name),
+            ("FONTSIZE", (0, 0), (-1, 0), 11),
+            ("FONTSIZE", (0, 1), (-1, -1), 9),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#e3f2fd")),
+            ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#0d47a1")),
+            ("FONTSIZE", (0, 1), (0, -1), 9),
+            ("BACKGROUND", (1, 1), (-1, -1), colors.HexColor("#fafafa")),
+            ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#bdbdbd")),
+            ("LINEBELOW", (0, 0), (-1, 0), 1.5, colors.HexColor("#1565c0")),
+            ("TOPPADDING", (0, 0), (-1, -1), 6),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
+            ("LEFTPADDING", (0, 0), (-1, -1), 4),
+            ("RIGHTPADDING", (0, 0), (-1, -1), 4),
+        ]
+        for row_idx in range(1, len(table_data)):
+            for col_idx in range(1, num_cols):
+                if not table_data[row_idx][col_idx]:
+                    base_style.append(("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx), colors.HexColor("#f5f5f5")))
+        tbl.setStyle(TableStyle(base_style))
+        return tbl
 
-    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
-    base_style = [
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
-        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
-        ("FONTNAME", (0, 0), (-1, -1), font_name),
-        ("FONTSIZE", (0, 0), (-1, 0), 11),
-        ("FONTSIZE", (0, 1), (-1, -1), 9),
-        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
-        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-        ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#e3f2fd")),
-        ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#0d47a1")),
-        ("FONTSIZE", (0, 1), (0, -1), 9),
-        ("BACKGROUND", (1, 1), (-1, -1), colors.HexColor("#fafafa")),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#bdbdbd")),
-        ("LINEBELOW", (0, 0), (-1, 0), 1.5, colors.HexColor("#1565c0")),
-        ("TOPPADDING", (0, 0), (-1, -1), 6),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 6),
-        ("LEFTPADDING", (0, 0), (-1, -1), 4),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 4),
-    ]
-    for row_idx in range(1, len(table_data)):
-        for col_idx in range(1, num_cols):
-            if not table_data[row_idx][col_idx]:
-                base_style.append(("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx), colors.HexColor("#f5f5f5")))
-    tbl.setStyle(TableStyle(base_style))
+    # 📄 تصدير واسع (كلية/قسم كامل) → صفحة مستقلة لكل شعبة حتى لا تتكدس الخلايا وينهار البناء
+    wide = not teacher_id and not room_id and not (level is not None and section)
 
-    story.append(tbl)
-    story.append(Spacer(1, 0.4*cm))
-    legend_style = ParagraphStyle("Legend", fontName=font_name, fontSize=8, alignment=1, textColor=colors.grey)
-    story.append(Paragraph(ar(f"إجمالي المحاضرات: {len(slots)}"), legend_style))
+    if wide and slots:
+        dept_names = {}
+        dept_ids = {s.get("department_id") for s in slots if s.get("department_id")}
+        if dept_ids:
+            try:
+                async for dpt in db.departments.find({"_id": {"$in": [ObjectId(x) for x in dept_ids if x]}}):
+                    dept_names[str(dpt["_id"])] = dpt.get("name", "")
+            except Exception:
+                pass
+        groups = {}
+        for s in slots:
+            gkey = (s.get("department_id") or "", s.get("level"), s.get("section") or "")
+            groups.setdefault(gkey, []).append(s)
+        sorted_keys = sorted(groups.keys(), key=lambda k: (dept_names.get(k[0], ""), k[1] if k[1] is not None else 0, k[2]))
+        for i, gk in enumerate(sorted_keys):
+            dname = dept_names.get(gk[0], "")
+            gparts = []
+            if dname:
+                gparts.append(f"قسم: {dname}")
+            if gk[1] is not None:
+                gparts.append(f"المستوى {gk[1]}")
+            if gk[2]:
+                gparts.append(f"شعبة {gk[2]}")
+            if gparts:
+                story.append(Paragraph(ar(" — ".join(gparts)), group_style))
+                story.append(Spacer(1, 0.2*cm))
+            story.append(make_table(build_cell_map(groups[gk]), hide_section=True))
+            story.append(Spacer(1, 0.25*cm))
+            story.append(Paragraph(ar(f"عدد المحاضرات: {len(groups[gk])}"), legend_style))
+            if i < len(sorted_keys) - 1:
+                story.append(PageBreak())
+    else:
+        story.append(make_table(build_cell_map(slots)))
+        story.append(Spacer(1, 0.4*cm))
+        story.append(Paragraph(ar(f"إجمالي المحاضرات: {len(slots)}"), legend_style))
 
-    doc.build(story)
+    try:
+        doc.build(story)
+    except Exception as build_err:
+        raise HTTPException(status_code=400, detail=f"تعذر بناء ملف PDF: {str(build_err)[:150]}")
     buf.seek(0)
     filename = f"weekly_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
     return StreamingResponse(
@@ -1888,26 +1930,6 @@ async def export_visual_excel(
     working_days = (settings or {}).get("working_days", ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء"])
 
     wb = Workbook()
-    ws = wb.active
-    ws.title = "الجدول الأسبوعي"
-    ws.sheet_view.rightToLeft = True
-
-    title_parts = ["الجدول الأسبوعي"]
-    if teacher_id and teacher_id in teachers_map:
-        title_parts.append(f"للأستاذ: {teachers_map[teacher_id].get('full_name','')}")
-    if room_id and room_id in rooms_map:
-        title_parts.append(f"للقاعة: {rooms_map[room_id].get('name','')}")
-    if level is not None:
-        title_parts.append(f"م{level}")
-    if section:
-        title_parts.append(f"شعبة {section}")
-
-    num_cols = len(working_days) + 1
-    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
-    cell = ws.cell(row=1, column=1, value=" - ".join(title_parts))
-    cell.font = Font(bold=True, size=16, color="1565c0")
-    cell.alignment = Alignment(horizontal="center", vertical="center")
-    ws.row_dimensions[1].height = 30
 
     header_fill = PatternFill(start_color="1565c0", end_color="1565c0", fill_type="solid")
     header_font = Font(bold=True, color="FFFFFF", size=12)
@@ -1918,63 +1940,132 @@ async def export_visual_excel(
         top=Side(style="thin", color="bdbdbd"),
         bottom=Side(style="thin", color="bdbdbd"),
     )
-
-    headers = ["الفترة"] + working_days
-    for col_idx, h in enumerate(headers, start=1):
-        c = ws.cell(row=3, column=col_idx, value=h)
-        c.fill = header_fill
-        c.font = header_font
-        c.alignment = center
-        c.border = border
-    ws.row_dimensions[3].height = 24
-
-    slots_by_cell = {}
-    for s in slots:
-        key = (s.get("day") or s.get("day_of_week"), s.get("slot_number"))
-        slots_by_cell.setdefault(key, []).append(s)
-
     cell_fill = PatternFill(start_color="fafafa", end_color="fafafa", fill_type="solid")
     empty_fill = PatternFill(start_color="f5f5f5", end_color="f5f5f5", fill_type="solid")
     time_fill = PatternFill(start_color="e3f2fd", end_color="e3f2fd", fill_type="solid")
     time_font = Font(bold=True, color="0d47a1", size=10)
+    num_cols = len(working_days) + 1
 
-    for r_idx, ts in enumerate(time_slots_cfg, start=4):
-        slot_num = ts.get("slot_number")
-        time_str = f"الفترة {slot_num}\n{ts.get('start_time','')}\n{ts.get('end_time','')}"
-        c = ws.cell(row=r_idx, column=1, value=time_str)
-        c.fill = time_fill
-        c.font = time_font
-        c.alignment = center
-        c.border = border
-        for d_idx, day in enumerate(working_days, start=2):
-            cell_slots = slots_by_cell.get((day, slot_num), [])
-            cell_val = ""
-            if cell_slots:
-                parts = []
-                for s in cell_slots:
-                    course = courses_map.get(s.get("course_id", ""), {})
-                    teacher = teachers_map.get(s.get("teacher_id", ""), {})
-                    room = rooms_map.get(s.get("room_id", ""), {})
-                    line = course.get("name", "") or course.get("code", "")
-                    if teacher.get("full_name") and not teacher_id:
-                        line += f"\n{teacher.get('full_name','')}"
-                    if room.get("name") and not room_id:
-                        line += f"\n[{room.get('name','')}]"
-                    sec = s.get("section")
-                    if sec and not section:
-                        line += f" - ش/{sec}"
-                    parts.append(line)
-                cell_val = "\n\n".join(parts)
-            c = ws.cell(row=r_idx, column=d_idx, value=cell_val)
-            c.fill = empty_fill if not cell_val else cell_fill
+    def build_cell_map(slot_list):
+        m = {}
+        for s in slot_list:
+            m.setdefault((s.get("day") or s.get("day_of_week"), s.get("slot_number")), []).append(s)
+        return m
+
+    def write_grid(ws, cell_map, sheet_title, hide_section=False):
+        ws.sheet_view.rightToLeft = True
+        ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=num_cols)
+        cell = ws.cell(row=1, column=1, value=sheet_title)
+        cell.font = Font(bold=True, size=16, color="1565c0")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        ws.row_dimensions[1].height = 30
+
+        headers = ["الفترة"] + working_days
+        for col_idx, h in enumerate(headers, start=1):
+            c = ws.cell(row=3, column=col_idx, value=h)
+            c.fill = header_fill
+            c.font = header_font
             c.alignment = center
             c.border = border
-            c.font = Font(size=10)
-        ws.row_dimensions[r_idx].height = 60
+        ws.row_dimensions[3].height = 24
 
-    ws.column_dimensions["A"].width = 15
-    for i in range(2, num_cols + 1):
-        ws.column_dimensions[chr(64 + i)].width = 28
+        for r_idx, ts in enumerate(time_slots_cfg, start=4):
+            slot_num = ts.get("slot_number")
+            time_str = f"الفترة {slot_num}\n{ts.get('start_time','')}\n{ts.get('end_time','')}"
+            c = ws.cell(row=r_idx, column=1, value=time_str)
+            c.fill = time_fill
+            c.font = time_font
+            c.alignment = center
+            c.border = border
+            max_lines = 1
+            for d_idx, day in enumerate(working_days, start=2):
+                cell_slots = cell_map.get((day, slot_num), [])
+                cell_val = ""
+                if cell_slots:
+                    parts = []
+                    for s in cell_slots:
+                        course = courses_map.get(s.get("course_id", ""), {})
+                        teacher = teachers_map.get(s.get("teacher_id", ""), {})
+                        room = rooms_map.get(s.get("room_id", ""), {})
+                        line = course.get("name", "") or course.get("code", "")
+                        if teacher.get("full_name") and not teacher_id:
+                            line += f"\n{teacher.get('full_name','')}"
+                        if room.get("name") and not room_id:
+                            line += f"\n[{room.get('name','')}]"
+                        sec = s.get("section")
+                        if sec and not section and not hide_section:
+                            line += f" - ش/{sec}"
+                        parts.append(line)
+                    cell_val = "\n\n".join(parts)
+                    max_lines = max(max_lines, cell_val.count("\n") + 1)
+                c = ws.cell(row=r_idx, column=d_idx, value=cell_val)
+                c.fill = empty_fill if not cell_val else cell_fill
+                c.alignment = center
+                c.border = border
+                c.font = Font(size=10)
+            ws.row_dimensions[r_idx].height = max(60, min(400, max_lines * 15))
+
+        ws.column_dimensions["A"].width = 15
+        for i in range(2, num_cols + 1):
+            ws.column_dimensions[chr(64 + i)].width = 28
+
+    def safe_sheet_name(name, used):
+        # أسماء أوراق Excel: ≤31 حرفاً وبدون رموز محظورة وفريدة
+        for ch in '[]:*?/\\':
+            name = name.replace(ch, "-")
+        name = (name or "جدول").strip()[:28] or "جدول"
+        base, i = name, 2
+        while name in used:
+            name = f"{base[:25]}-{i}"
+            i += 1
+        used.add(name)
+        return name
+
+    # 📄 تصدير واسع (كلية/قسم) → ورقة مستقلة لكل شعبة
+    wide = not teacher_id and not room_id and not (level is not None and section)
+
+    if wide and slots:
+        dept_names = {}
+        dept_ids = {s.get("department_id") for s in slots if s.get("department_id")}
+        if dept_ids:
+            try:
+                async for dpt in db.departments.find({"_id": {"$in": [ObjectId(x) for x in dept_ids if x]}}):
+                    dept_names[str(dpt["_id"])] = dpt.get("name", "")
+            except Exception:
+                pass
+        groups = {}
+        for s in slots:
+            gkey = (s.get("department_id") or "", s.get("level"), s.get("section") or "")
+            groups.setdefault(gkey, []).append(s)
+        sorted_keys = sorted(groups.keys(), key=lambda k: (dept_names.get(k[0], ""), k[1] if k[1] is not None else 0, k[2]))
+        used_names = set()
+        wb.remove(wb.active)
+        for gk in sorted_keys:
+            dname = dept_names.get(gk[0], "")
+            gparts = []
+            if dname:
+                gparts.append(dname)
+            if gk[1] is not None:
+                gparts.append(f"م{gk[1]}")
+            if gk[2]:
+                gparts.append(f"ش{gk[2]}")
+            sheet_name = safe_sheet_name("-".join(gparts) or "جدول", used_names)
+            ws = wb.create_sheet(title=sheet_name)
+            full_title = " - ".join(["الجدول الأسبوعي"] + ([f"قسم {dname}"] if dname else []) + ([f"المستوى {gk[1]}"] if gk[1] is not None else []) + ([f"شعبة {gk[2]}"] if gk[2] else []))
+            write_grid(ws, build_cell_map(groups[gk]), full_title, hide_section=True)
+    else:
+        ws = wb.active
+        ws.title = "الجدول الأسبوعي"
+        title_parts2 = ["الجدول الأسبوعي"]
+        if teacher_id and teacher_id in teachers_map:
+            title_parts2.append(f"للأستاذ: {teachers_map[teacher_id].get('full_name','')}")
+        if room_id and room_id in rooms_map:
+            title_parts2.append(f"للقاعة: {rooms_map[room_id].get('name','')}")
+        if level is not None:
+            title_parts2.append(f"م{level}")
+        if section:
+            title_parts2.append(f"شعبة {section}")
+        write_grid(ws, build_cell_map(slots), " - ".join(title_parts2))
 
     import io
     buf = io.BytesIO()
