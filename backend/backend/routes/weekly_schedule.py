@@ -1765,16 +1765,21 @@ async def export_visual_pdf(
         return m
 
     def make_table(cell_map, hide_section=False):
-        header_row = [ar("الفترة")] + [ar(d) for d in working_days]
+        # 🔄 الأيام صفوف (عمود "اليوم" في أقصى اليمين) والفترات أعمدة في الأعلى — اتجاه يمين→يسار
+        period_headers = [
+            ar(f"الفترة {ts.get('slot_number')}\n{ts.get('start_time','')}\n{ts.get('end_time','')}")
+            for ts in time_slots_cfg
+        ]
+        # PDF يرسم الأعمدة من اليسار → نعكس ترتيب الفترات ونضع عمود اليوم آخراً (أقصى اليمين)
+        header_row = period_headers[::-1] + [ar("اليوم")]
         table_data = [header_row]
-        for ts in time_slots_cfg:
-            slot_num = ts.get("slot_number")
-            time_str = f"{ts.get('start_time','')}\n{ts.get('end_time','')}"
-            row = [ar(f"الفترة {slot_num}\n{time_str}")]
-            for day in working_days:
+        for day in working_days:
+            cells = []
+            for ts in time_slots_cfg:
+                slot_num = ts.get("slot_number")
                 cell_slots = cell_map.get((day, slot_num), [])
                 if not cell_slots:
-                    row.append("")
+                    cells.append("")
                 else:
                     parts = []
                     for s in cell_slots:
@@ -1790,24 +1795,25 @@ async def export_visual_pdf(
                         if sec and not section and not hide_section:
                             line += f" - شعبة {sec}"
                         parts.append(ar(line))
-                    row.append("\n\n".join(parts))
-            table_data.append(row)
+                    cells.append("\n\n".join(parts))
+            table_data.append(cells[::-1] + [ar(day)])
 
         num_cols = len(header_row)
-        col_widths = [3*cm] + [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1)
+        col_widths = [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1) + [3*cm]
         tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
         base_style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
             ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
             ("FONTNAME", (0, 0), (-1, -1), font_name),
-            ("FONTSIZE", (0, 0), (-1, 0), 11),
+            ("FONTSIZE", (0, 0), (-1, 0), 10),
             ("FONTSIZE", (0, 1), (-1, -1), 9),
             ("ALIGN", (0, 0), (-1, -1), "CENTER"),
             ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
-            ("BACKGROUND", (0, 1), (0, -1), colors.HexColor("#e3f2fd")),
-            ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#0d47a1")),
-            ("FONTSIZE", (0, 1), (0, -1), 9),
-            ("BACKGROUND", (1, 1), (-1, -1), colors.HexColor("#fafafa")),
+            # عمود اليوم (أقصى اليمين = آخر عمود)
+            ("BACKGROUND", (-1, 1), (-1, -1), colors.HexColor("#e3f2fd")),
+            ("TEXTCOLOR", (-1, 1), (-1, -1), colors.HexColor("#0d47a1")),
+            ("FONTSIZE", (-1, 1), (-1, -1), 11),
+            ("BACKGROUND", (0, 1), (-2, -1), colors.HexColor("#fafafa")),
             ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#bdbdbd")),
             ("LINEBELOW", (0, 0), (-1, 0), 1.5, colors.HexColor("#1565c0")),
             ("TOPPADDING", (0, 0), (-1, -1), 6),
@@ -1816,7 +1822,7 @@ async def export_visual_pdf(
             ("RIGHTPADDING", (0, 0), (-1, -1), 4),
         ]
         for row_idx in range(1, len(table_data)):
-            for col_idx in range(1, num_cols):
+            for col_idx in range(0, num_cols - 1):
                 if not table_data[row_idx][col_idx]:
                     base_style.append(("BACKGROUND", (col_idx, row_idx), (col_idx, row_idx), colors.HexColor("#f5f5f5")))
         tbl.setStyle(TableStyle(base_style))
@@ -1944,7 +1950,8 @@ async def export_visual_excel(
     empty_fill = PatternFill(start_color="f5f5f5", end_color="f5f5f5", fill_type="solid")
     time_fill = PatternFill(start_color="e3f2fd", end_color="e3f2fd", fill_type="solid")
     time_font = Font(bold=True, color="0d47a1", size=10)
-    num_cols = len(working_days) + 1
+    # 🔄 الأيام صفوف والفترات أعمدة (rightToLeft يجعل عمود اليوم في أقصى اليمين)
+    num_cols = len(time_slots_cfg) + 1
 
     def build_cell_map(slot_list):
         m = {}
@@ -1960,25 +1967,24 @@ async def export_visual_excel(
         cell.alignment = Alignment(horizontal="center", vertical="center")
         ws.row_dimensions[1].height = 30
 
-        headers = ["الفترة"] + working_days
+        headers = ["اليوم"] + [f"الفترة {ts.get('slot_number')}\n{ts.get('start_time','')} - {ts.get('end_time','')}" for ts in time_slots_cfg]
         for col_idx, h in enumerate(headers, start=1):
             c = ws.cell(row=3, column=col_idx, value=h)
             c.fill = header_fill
             c.font = header_font
             c.alignment = center
             c.border = border
-        ws.row_dimensions[3].height = 24
+        ws.row_dimensions[3].height = 34
 
-        for r_idx, ts in enumerate(time_slots_cfg, start=4):
-            slot_num = ts.get("slot_number")
-            time_str = f"الفترة {slot_num}\n{ts.get('start_time','')}\n{ts.get('end_time','')}"
-            c = ws.cell(row=r_idx, column=1, value=time_str)
+        for r_idx, day in enumerate(working_days, start=4):
+            c = ws.cell(row=r_idx, column=1, value=day)
             c.fill = time_fill
             c.font = time_font
             c.alignment = center
             c.border = border
             max_lines = 1
-            for d_idx, day in enumerate(working_days, start=2):
+            for d_idx, ts in enumerate(time_slots_cfg, start=2):
+                slot_num = ts.get("slot_number")
                 cell_slots = cell_map.get((day, slot_num), [])
                 cell_val = ""
                 if cell_slots:
@@ -2005,7 +2011,7 @@ async def export_visual_excel(
                 c.font = Font(size=10)
             ws.row_dimensions[r_idx].height = max(60, min(400, max_lines * 15))
 
-        ws.column_dimensions["A"].width = 15
+        ws.column_dimensions["A"].width = 12
         for i in range(2, num_cols + 1):
             ws.column_dimensions[chr(64 + i)].width = 28
 
