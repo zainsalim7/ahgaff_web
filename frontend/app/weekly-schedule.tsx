@@ -426,47 +426,44 @@ export default function WeeklySchedulePage() {
   const [exportRoomId, setExportRoomId] = useState('');
 
   const handleExport = async () => {
-    const params = new URLSearchParams();
-    if (selectedFaculty) params.set('faculty_id', selectedFaculty);
-    if (selectedDept) params.set('department_id', selectedDept);
-    
+    const params: any = {};
+    if (selectedFaculty) params.faculty_id = selectedFaculty;
+    if (selectedDept) params.department_id = selectedDept;
+
     if (exportScope === 'teacher' && exportTeacherId) {
-      params.set('teacher_id', exportTeacherId);
+      params.teacher_id = exportTeacherId;
     } else if (exportScope === 'room' && exportRoomId) {
-      params.set('room_id', exportRoomId);
+      params.room_id = exportRoomId;
     } else if (exportScope === 'section') {
-      if (selectedLevel) params.set('level', selectedLevel);
-      if (selectedSection) params.set('section', selectedSection);
+      if (selectedLevel) params.level = selectedLevel;
+      if (selectedSection) params.section = selectedSection;
     }
-    
-    const token = await (async () => {
-      try {
-        const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-        return await AsyncStorage.getItem('token');
-      } catch { return null; }
-    })();
-    
-    const url = `${process.env.EXPO_PUBLIC_BACKEND_URL || ''}/api/weekly-schedule/export-visual/${exportFormat}?${params.toString()}`;
-    
+
     try {
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${token}` },
+      // نستخدم قناة axios الموحدة (API_URL الصحيح لكل بيئة + التوكن تلقائياً)
+      const res = await api.get(`/weekly-schedule/export-visual/${exportFormat}`, {
+        params,
+        responseType: 'blob',
       });
-      if (!res.ok) {
-        const err = await res.json();
-        if (Platform.OS === 'web') window.alert(err.detail || 'فشل التصدير');
-        return;
-      }
-      const blob = await res.blob();
-      const objUrl = URL.createObjectURL(blob);
+      const objUrl = URL.createObjectURL(res.data);
       const link = document.createElement('a');
       link.href = objUrl;
       link.download = `weekly_schedule.${exportFormat === 'pdf' ? 'pdf' : 'xlsx'}`;
       link.click();
       URL.revokeObjectURL(objUrl);
       setShowExportModal(false);
-    } catch (e) {
-      if (Platform.OS === 'web') window.alert('فشل التصدير');
+    } catch (e: any) {
+      let msg = 'فشل التصدير';
+      try {
+        const blobData = e?.response?.data;
+        if (blobData && typeof blobData.text === 'function') {
+          const j = JSON.parse(await blobData.text());
+          if (j.detail) msg = j.detail;
+        }
+      } catch {}
+      if (e?.response?.status) msg += ` (رمز ${e.response.status})`;
+      else if (e?.message) msg += ` — ${e.message}`;
+      if (Platform.OS === 'web') window.alert(msg);
     }
   };
 
