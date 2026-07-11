@@ -3150,3 +3150,29 @@ async def export_master_excel(
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@router.get("/weekly-schedule/free-rooms")
+async def get_free_rooms_for_slot(
+    faculty_id: str,
+    day: str,
+    slot_number: int,
+    current_user: dict = Depends(get_current_user),
+):
+    """قاعات الكلية مع حالة انشغالها في (يوم، فترة) محددة — الانشغال يُفحص عالمياً عبر كل الجداول"""
+    db = get_db()
+    rooms = await db.rooms.find({"faculty_id": faculty_id, "is_active": True}).to_list(300)
+    busy_ids = await db.weekly_schedule.distinct("room_id", {
+        "day": day, "slot_number": slot_number, "room_id": {"$nin": ["", None]}
+    })
+    busy_set = set(busy_ids)
+    return [
+        {
+            "id": str(r["_id"]),
+            "name": r.get("name", ""),
+            "building": r.get("building", ""),
+            "capacity": r.get("capacity", 0),
+            "busy": str(r["_id"]) in busy_set,
+        }
+        for r in rooms
+    ]

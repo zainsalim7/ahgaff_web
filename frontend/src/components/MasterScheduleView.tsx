@@ -41,10 +41,10 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   const [selected, setSelected] = useState<any>(null); // الخلية المحددة (entry)
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [rooms, setRooms] = useState<any[]>([]);
   const [addModal, setAddModal] = useState<{ group: any; day: string; slotNumber: number } | null>(null);
   const [addCourseId, setAddCourseId] = useState('');
   const [addRoomId, setAddRoomId] = useState('');
+  const [slotRooms, setSlotRooms] = useState<any[] | null>(null); // قاعات (يوم/فترة) مع حالة الانشغال
 
   const load = useCallback(async () => {
     if (!facultyId) return;
@@ -59,13 +59,6 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   }, [facultyId, departmentId]);
 
   useEffect(() => { setSelected(null); load(); }, [load]);
-
-  useEffect(() => {
-    if (!facultyId) return;
-    api.get('/rooms', { params: { faculty_id: facultyId } })
-      .then(res => setRooms(res.data || []))
-      .catch(() => setRooms([]));
-  }, [facultyId]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text });
@@ -109,7 +102,11 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
       }
       setAddCourseId(candidates.length === 1 ? candidates[0].course_id : '');
       setAddRoomId('');
+      setSlotRooms(null);
       setAddModal({ group, day, slotNumber });
+      api.get('/weekly-schedule/free-rooms', { params: { faculty_id: facultyId, day, slot_number: slotNumber } })
+        .then(res => setSlotRooms(res.data || []))
+        .catch(() => setSlotRooms([]));
       return;
     }
     if (selected.department_id !== group.department_id || selected.level !== group.level || selected.section !== group.section) {
@@ -391,13 +388,33 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                   {addCourseId === u.course_id && <Ionicons name="checkmark-circle" size={18} color="#1565c0" />}
                 </div>
               ))}
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#333', margin: '10px 0 6px', textAlign: 'right' }}>القاعة:</div>
-            <select value={addRoomId} onChange={(ev: any) => setAddRoomId(ev.target.value)} style={{
-              width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc',
-            }} data-testid="add-room-select">
-              <option value="">-- بدون قاعة --</option>
-              {rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}{r.building ? ` (${r.building})` : ''}</option>)}
-            </select>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#333', margin: '10px 0 6px', textAlign: 'right' }}>
+              القاعة (الفارغة في هذا الوقت فقط):
+            </div>
+            {slotRooms === null ? (
+              <div style={{ fontSize: 11.5, color: '#888', textAlign: 'right', padding: '6px 0' }}>جاري فحص توفر القاعات...</div>
+            ) : (
+              <>
+                <select value={addRoomId} onChange={(ev: any) => setAddRoomId(ev.target.value)} style={{
+                  width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc',
+                }} data-testid="add-room-select">
+                  <option value="">-- بدون قاعة --</option>
+                  {slotRooms.filter((r: any) => !r.busy).map((r: any) => (
+                    <option key={r.id} value={r.id}>{r.name}{r.building ? ` (${r.building})` : ''}{r.capacity ? ` — سعة ${r.capacity}` : ''}</option>
+                  ))}
+                </select>
+                {slotRooms.filter((r: any) => r.busy).length > 0 && (
+                  <div style={{ fontSize: 10.5, color: '#e65100', textAlign: 'right', marginTop: 5 }} data-testid="busy-rooms-note">
+                    🔒 استُثنيت {slotRooms.filter((r: any) => r.busy).length} قاعة مشغولة في هذا الوقت: {slotRooms.filter((r: any) => r.busy).map((r: any) => r.name).join('، ')}
+                  </div>
+                )}
+                {slotRooms.filter((r: any) => !r.busy).length === 0 && (
+                  <div style={{ fontSize: 11, color: '#c62828', textAlign: 'right', marginTop: 5, fontWeight: 700 }}>
+                    ⚠️ جميع القاعات مشغولة في هذا الوقت — يمكن الإضافة بدون قاعة
+                  </div>
+                )}
+              </>
+            )}
             <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
               <button onClick={confirmAdd} disabled={!addCourseId || busy} style={{
                 flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: addCourseId ? 'pointer' : 'not-allowed',
