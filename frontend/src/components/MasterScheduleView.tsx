@@ -151,6 +151,32 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
     finally { setBusy(false); }
   };
 
+  const downloadExport = async (fmt: 'pdf' | 'excel') => {
+    setBusy(true);
+    try {
+      const params: any = { faculty_id: facultyId };
+      if (departmentId) params.department_id = departmentId;
+      const res = await api.get(`/weekly-schedule/master-view/export/${fmt}`, { params, responseType: 'blob' });
+      const objUrl = URL.createObjectURL(res.data);
+      const link = document.createElement('a');
+      link.href = objUrl;
+      link.download = `master_schedule.${fmt === 'pdf' ? 'pdf' : 'xlsx'}`;
+      link.click();
+      URL.revokeObjectURL(objUrl);
+      showMsg('success', `✅ تم تصدير ${fmt === 'pdf' ? 'PDF' : 'Excel'} بنجاح`);
+    } catch (e: any) {
+      let m = 'فشل التصدير';
+      try {
+        const blob = e?.response?.data;
+        if (blob && typeof blob.text === 'function') {
+          const parsed = JSON.parse(await blob.text());
+          if (parsed?.detail) m = typeof parsed.detail === 'string' ? parsed.detail : m;
+        }
+      } catch {}
+      showMsg('error', `❌ ${m}`);
+    } finally { setBusy(false); }
+  };
+
   if (Platform.OS !== 'web') {
     return <View style={{ padding: 20 }}><Text style={{ textAlign: 'center', color: '#888' }}>العرض الشامل متاح على الويب فقط</Text></View>;
   }
@@ -198,6 +224,24 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
           </View>
         )}
         {busy && <ActivityIndicator size="small" color="#1565c0" />}
+        <TouchableOpacity
+          onPress={() => downloadExport('pdf')}
+          disabled={busy}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#c62828' }}
+          testID="master-export-pdf-btn"
+        >
+          <Ionicons name="document-text" size={14} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>PDF ملوّن</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => downloadExport('excel')}
+          disabled={busy}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#2e7d32' }}
+          testID="master-export-excel-btn"
+        >
+          <Ionicons name="grid" size={14} color="#fff" />
+          <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Excel ملوّن</Text>
+        </TouchableOpacity>
         <View style={{ marginLeft: 'auto', backgroundColor: '#e3f2fd', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
           <Text style={{ fontSize: 12, color: '#1565c0', fontWeight: '600' }}>{groups.length} شعبة • {entries.length} محاضرة</Text>
         </View>

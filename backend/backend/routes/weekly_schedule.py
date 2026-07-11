@@ -2535,6 +2535,12 @@ async def get_master_view(
 ):
     """العرض الشامل: كل المستويات والشعب × الأيام والفترات + المقررات غير المدرجة"""
     db = get_db()
+    result = await _build_master_data(db, faculty_id, department_id)
+    result["can_manage"] = can_manage_schedule(current_user)
+    return result
+
+
+async def _build_master_data(db, faculty_id: str, department_id: Optional[str] = None) -> dict:
 
     settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
     if not settings:
@@ -2637,7 +2643,6 @@ async def get_master_view(
         "groups": groups,
         "entries": entries,
         "unscheduled": unscheduled,
-        "can_manage": can_manage_schedule(current_user),
     }
 
 
@@ -2770,3 +2775,378 @@ async def swap_schedule_slots(
     await log_activity(current_user, "swap_schedule_slots", "weekly_schedule", data.slot_a_id, None,
                        {"a": f"{pos_a['day']}-{pos_a['slot_number']}", "b": f"{pos_b['day']}-{pos_b['slot_number']}"})
     return {"message": "تم تبديل المحاضرتين بنجاح"}
+
+
+# ===== تصدير العرض الشامل الملوّن (بأسلوب aSc Timetables) =====
+
+_MASTER_PALETTE = [
+    '#e53935', '#1e88e5', '#43a047', '#fb8c00', '#8e24aa', '#00acc1',
+    '#fdd835', '#d81b60', '#5e35b1', '#00897b', '#f4511e', '#3949ab',
+    '#7cb342', '#ffb300', '#c0ca33', '#6d4c41', '#039be5', '#e91e63',
+    '#4caf50', '#ff7043', '#9c27b0', '#26a69a', '#ec407a', '#66bb6a',
+]
+
+
+def _master_course_color(course_id: str) -> str:
+    h = 0
+    for ch in course_id:
+        h = (h * 31 + ord(ch)) & 0xFFFFFFFF
+    return _MASTER_PALETTE[h % len(_MASTER_PALETTE)]
+
+
+def _master_text_color(bg: str) -> str:
+    r, g, b = int(bg[1:3], 16), int(bg[3:5], 16), int(bg[5:7], 16)
+    return '#1a1a1a' if (r * 299 + g * 587 + b * 114) / 1000 > 150 else '#ffffff'
+
+
+def _short_teacher(full: str) -> str:
+    if not full:
+        return ""
+    parts = full.strip().split()
+    if len(parts) <= 2:
+        return full
+    return f"{parts[0]} {parts[-1]}"
+
+
+@router.get("/weekly-schedule/master-view/export/pdf")
+async def export_master_pdf(
+    faculty_id: str,
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تصدير PDF ملوّن للعرض الشامل: الشعب صفوفاً × (الأيام × الفترات) أعمدة"""
+    try:
+        from reportlab.lib.pagesizes import landscape, A3
+        from reportlab.lib import colors
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.units import cm
+        from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"مكتبة PDF غير مثبتة: {e}")
+
+    db = get_db()
+    data = await _build_master_data(db, faculty_id, department_id)
+    working_days = data["working_days"]
+    time_slots = sorted(data["time_slots"], key=lambda x: x.get("slot_number", 0))
+    groups = data["groups"]
+    entries = data["entries"]
+    unscheduled = data["unscheduled"]
+
+    if not groups:
+        raise HTTPException(status_code=400, detail="لا توجد بيانات جدول لهذه الكلية")
+
+    try:
+        import os as _os
+        _font_path = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "..", "fonts", "Amiri-Regular.ttf")
+        pdfmetrics.registerFont(TTFont("Amiri", _font_path))
+        font_name = "Amiri"
+    except Exception:
+        font_name = "Helvetica"
+
+    def ar(text):
+        if not text:
+            return ""
+        try:
+            return get_display(arabic_reshaper.reshape(str(text)))
+        except Exception:
+            return str(text)
+
+    faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
+    title = f"الجدول الأسبوعي الشامل — {(faculty or {}).get('name', '')}"
+    if department_id:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+        if dept:
+            title += f" — قسم {dept.get('name', '')}"
+
+    # فهرسة الخلايا
+    cell_map = {}
+    for e in entries:
+        k = (e["department_id"], e["level"], e["section"], e["day"], e["slot_number"])
+        cell_map.setdefault(k, []).append(e)
+
+    nd, ns = len(working_days), len(time_slots)
+    ncols = nd * ns  # أعمدة البيانات
+
+    # الصف 0: أسماء الأيام (مدموجة) — RTL: نعكس ترتيب الأعمدة، عمود الشعبة آخراً (أقصى اليمين)
+    def rev(idx):
+        return ncols - 1 - idx
+
+    header0 = [""] * ncols + [ar("المستوى / الشعبة")]
+    header1 = [""] * ncols + [""]
+    for di, day in enumerate(working_days):
+        for si, ts in enumerate(time_slots):
+            orig = di * ns + si
+            header1[rev(orig)] = ar(f"{ts.get('slot_number')}\n{ts.get('start_time','')}")
+        # اسم اليوم يوضع في أول عمود من نطاقه بعد العكس (الأصغر index)
+        span_start = rev(di * ns + ns - 1)
+        header0[span_start] = ar(day)
+
+    table_data = [header0, header1]
+    cell_styles = []
+
+    for gi, g in enumerate(groups):
+        row_idx = gi + 2
+        row = [""] * ncols + [ar(f"{g['department_name']} · م{g['level']}" + (f" · {g['section']}" if g['section'] else ""))]
+        for di, day in enumerate(working_days):
+            for si, ts in enumerate(time_slots):
+                orig = di * ns + si
+                col = rev(orig)
+                items = cell_map.get((g["department_id"], g["level"], g["section"], day, ts.get("slot_number")), [])
+                if items:
+                    it = items[0]
+                    txt = it["course_name"]
+                    extra = _short_teacher(it["teacher_name"])
+                    if it.get("room_name"):
+                        extra += f" · {it['room_name']}"
+                    row[col] = ar(f"{txt}\n{extra}")
+                    bg = _master_course_color(it["course_id"])
+                    fg = _master_text_color(bg)
+                    cell_styles.append(("BACKGROUND", (col, row_idx), (col, row_idx), colors.HexColor(bg)))
+                    cell_styles.append(("TEXTCOLOR", (col, row_idx), (col, row_idx), colors.HexColor(fg)))
+        table_data.append(row)
+
+    import io
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=landscape(A3), rightMargin=0.5*cm, leftMargin=0.5*cm, topMargin=0.5*cm, bottomMargin=0.5*cm)
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("T", parent=styles["Title"], fontName=font_name, fontSize=15, alignment=1, textColor=colors.HexColor("#0d2a52"))
+    sub_style = ParagraphStyle("S", parent=styles["Normal"], fontName=font_name, fontSize=8, alignment=1, textColor=colors.grey)
+    sec_style = ParagraphStyle("Sec", parent=styles["Normal"], fontName=font_name, fontSize=12, alignment=2, textColor=colors.HexColor("#e65100"))
+
+    story = [
+        Paragraph(ar(title), title_style),
+        Paragraph(ar(f"تاريخ التصدير: {datetime.now().strftime('%Y-%m-%d %H:%M')}  |  جامعة الأحقاف"), sub_style),
+        Spacer(1, 0.25*cm),
+    ]
+
+    # عرض A3 landscape ≈ 42cm — عمود الشعبة 4.2cm والباقي موزع
+    avail = 42 - 1.0 - 4.2
+    col_w = [avail / ncols * cm] * ncols + [4.2 * cm]
+    tbl = Table(table_data, colWidths=col_w, repeatRows=2)
+
+    style = [
+        ("FONTNAME", (0, 0), (-1, -1), font_name),
+        ("FONTSIZE", (0, 0), (-1, 1), 7),
+        ("FONTSIZE", (0, 2), (-1, -1), 5.5),
+        ("FONTSIZE", (-1, 2), (-1, -1), 7),
+        ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("BACKGROUND", (0, 1), (-1, 1), colors.HexColor("#3d7ede")),
+        ("TEXTCOLOR", (0, 1), (-1, 1), colors.white),
+        ("BACKGROUND", (-1, 0), (-1, 1), colors.HexColor("#0d2a52")),
+        ("BACKGROUND", (-1, 2), (-1, -1), colors.HexColor("#eef3fa")),
+        ("TEXTCOLOR", (-1, 2), (-1, -1), colors.HexColor("#1a2540")),
+        ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#b8c4d6")),
+        ("TOPPADDING", (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING", (0, 0), (-1, -1), 1),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 1),
+    ]
+    # دمج خلايا أسماء الأيام في الصف 0
+    for di in range(nd):
+        c1 = rev(di * ns + ns - 1)
+        c2 = rev(di * ns)
+        style.append(("SPAN", (c1, 0), (c2, 0)))
+        # خط فاصل أثقل بين الأيام
+        style.append(("LINEBEFORE", (c1, 0), (c1, -1), 1.2, colors.HexColor("#5a6b85")))
+    style += cell_styles
+    tbl.setStyle(TableStyle(style))
+    story.append(tbl)
+
+    # قسم المقررات غير المدرجة
+    if unscheduled:
+        story.append(Spacer(1, 0.5*cm))
+        story.append(Paragraph(ar(f"⚠ مقررات لم تُدرج في الجدول أو مدرجة جزئياً ({len(unscheduled)})"), sec_style))
+        story.append(Spacer(1, 0.15*cm))
+        uhead = [ar(h) for h in ["الناقص", "المدرج", "المطلوب أسبوعياً", "المستوى/الشعبة", "القسم", "المعلم", "المقرر"]]
+        udata = [uhead]
+        for u in unscheduled:
+            udata.append([
+                str(u["missing"]), str(u["scheduled"]), str(u["needed"]),
+                ar(f"م{u['level']}" + (f" · {u['section']}" if u['section'] else "")),
+                ar(u["department_name"]), ar(u["teacher_name"]), ar(u["course_name"]),
+            ])
+        utbl = Table(udata, colWidths=[2*cm, 2*cm, 3*cm, 3*cm, 6*cm, 7*cm, 8*cm])
+        utbl.setStyle(TableStyle([
+            ("FONTNAME", (0, 0), (-1, -1), font_name),
+            ("FONTSIZE", (0, 0), (-1, -1), 8),
+            ("ALIGN", (0, 0), (-1, -1), "CENTER"),
+            ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#ffe0b2")),
+            ("TEXTCOLOR", (0, 0), (-1, 0), colors.HexColor("#6d4c00")),
+            ("TEXTCOLOR", (0, 1), (0, -1), colors.HexColor("#c62828")),
+            ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#e0c9a0")),
+            ("TOPPADDING", (0, 0), (-1, -1), 3),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ]))
+        story.append(utbl)
+
+    try:
+        doc.build(story)
+    except Exception as build_err:
+        raise HTTPException(status_code=400, detail=f"تعذر بناء ملف PDF: {str(build_err)[:150]}")
+    buf.seek(0)
+    filename = f"master_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/weekly-schedule/master-view/export/excel")
+async def export_master_excel(
+    faculty_id: str,
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """تصدير Excel ملوّن للعرض الشامل"""
+    try:
+        from openpyxl import Workbook
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+    except ImportError as e:
+        raise HTTPException(status_code=500, detail=f"مكتبة Excel غير مثبتة: {e}")
+
+    db = get_db()
+    data = await _build_master_data(db, faculty_id, department_id)
+    working_days = data["working_days"]
+    time_slots = sorted(data["time_slots"], key=lambda x: x.get("slot_number", 0))
+    groups = data["groups"]
+    entries = data["entries"]
+    unscheduled = data["unscheduled"]
+
+    if not groups:
+        raise HTTPException(status_code=400, detail="لا توجد بيانات جدول لهذه الكلية")
+
+    faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
+    title = f"الجدول الأسبوعي الشامل — {(faculty or {}).get('name', '')}"
+    if department_id:
+        dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+        if dept:
+            title += f" — قسم {dept.get('name', '')}"
+
+    cell_map = {}
+    for e in entries:
+        k = (e["department_id"], e["level"], e["section"], e["day"], e["slot_number"])
+        cell_map.setdefault(k, []).append(e)
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "الجدول الشامل"
+    ws.sheet_view.rightToLeft = True
+
+    ns = len(time_slots)
+    ncols_total = 1 + len(working_days) * ns  # عمود الشعبة + الأيام×الفترات
+
+    thin = Side(style="thin", color="B8C4D6")
+    thick = Side(style="medium", color="5A6B85")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+    # العنوان
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=ncols_total)
+    tc = ws.cell(row=1, column=1, value=title)
+    tc.font = Font(bold=True, size=14, color="0D2A52")
+    tc.alignment = center
+
+    # الصف 2: الأيام (مدموجة) — العمود 1 للشعبة
+    hc = ws.cell(row=2, column=1, value="المستوى / الشعبة")
+    ws.merge_cells(start_row=2, start_column=1, end_row=3, end_column=1)
+    hc.fill = PatternFill("solid", fgColor="0D2A52")
+    hc.font = Font(bold=True, color="FFFFFF", size=10)
+    hc.alignment = center
+
+    for di, day in enumerate(working_days):
+        c1 = 2 + di * ns
+        ws.merge_cells(start_row=2, start_column=c1, end_row=2, end_column=c1 + ns - 1)
+        dc = ws.cell(row=2, column=c1, value=day)
+        dc.fill = PatternFill("solid", fgColor="1565C0")
+        dc.font = Font(bold=True, color="FFFFFF", size=11)
+        dc.alignment = center
+        for si, ts in enumerate(time_slots):
+            sc = ws.cell(row=3, column=c1 + si, value=f"{ts.get('slot_number')} ({ts.get('start_time','')})")
+            sc.fill = PatternFill("solid", fgColor="3D7EDE")
+            sc.font = Font(bold=True, color="FFFFFF", size=8)
+            sc.alignment = center
+            sc.border = border
+
+    # صفوف الشعب
+    for gi, g in enumerate(groups):
+        r = 4 + gi
+        label = f"{g['department_name']} · م{g['level']}" + (f" · {g['section']}" if g['section'] else "")
+        gc = ws.cell(row=r, column=1, value=label)
+        gc.fill = PatternFill("solid", fgColor="EEF3FA")
+        gc.font = Font(bold=True, size=9, color="1A2540")
+        gc.alignment = center
+        gc.border = border
+        for di, day in enumerate(working_days):
+            for si, ts in enumerate(time_slots):
+                col = 2 + di * ns + si
+                cell = ws.cell(row=r, column=col)
+                cell.border = Border(
+                    left=thick if si == ns - 1 else thin,
+                    right=thick if si == 0 else thin,
+                    top=thin, bottom=thin,
+                )
+                items = cell_map.get((g["department_id"], g["level"], g["section"], day, ts.get("slot_number")), [])
+                if items:
+                    it = items[0]
+                    extra = _short_teacher(it["teacher_name"])
+                    if it.get("room_name"):
+                        extra += f" · {it['room_name']}"
+                    cell.value = f"{it['course_name']}\n{extra}"
+                    bg = _master_course_color(it["course_id"])[1:].upper()
+                    fg = _master_text_color("#" + bg)[1:].upper()
+                    cell.fill = PatternFill("solid", fgColor=bg)
+                    cell.font = Font(bold=True, size=7.5, color=fg)
+                    cell.alignment = center
+
+    # عرض الأعمدة والصفوف
+    ws.column_dimensions["A"].width = 26
+    for c in range(2, ncols_total + 1):
+        ws.column_dimensions[get_column_letter(c)].width = 14
+    for r in range(4, 4 + len(groups)):
+        ws.row_dimensions[r].height = 34
+
+    # ورقة المقررات غير المدرجة
+    if unscheduled:
+        ws2 = wb.create_sheet("غير المدرجة")
+        ws2.sheet_view.rightToLeft = True
+        heads = ["المقرر", "المعلم", "القسم", "المستوى/الشعبة", "المطلوب أسبوعياً", "المدرج", "الناقص"]
+        for ci, h in enumerate(heads, 1):
+            c = ws2.cell(row=1, column=ci, value=h)
+            c.fill = PatternFill("solid", fgColor="FFE0B2")
+            c.font = Font(bold=True, color="6D4C00", size=10)
+            c.alignment = center
+            c.border = border
+        for ri, u in enumerate(unscheduled, 2):
+            vals = [
+                u["course_name"], u["teacher_name"], u["department_name"],
+                f"م{u['level']}" + (f" · {u['section']}" if u['section'] else ""),
+                u["needed"], u["scheduled"], u["missing"],
+            ]
+            for ci, v in enumerate(vals, 1):
+                c = ws2.cell(row=ri, column=ci, value=v)
+                c.alignment = center
+                c.border = border
+                if ci == 7:
+                    c.font = Font(bold=True, color="C62828")
+        for ci, w in enumerate([30, 25, 22, 15, 15, 10, 10], 1):
+            ws2.column_dimensions[get_column_letter(ci)].width = w
+
+    import io
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f"master_schedule_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
