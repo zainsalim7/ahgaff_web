@@ -41,6 +41,10 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   const [selected, setSelected] = useState<any>(null); // الخلية المحددة (entry)
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [addModal, setAddModal] = useState<{ group: any; day: string; slotNumber: number } | null>(null);
+  const [addCourseId, setAddCourseId] = useState('');
+  const [addRoomId, setAddRoomId] = useState('');
 
   const load = useCallback(async () => {
     if (!facultyId) return;
@@ -55,6 +59,13 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   }, [facultyId, departmentId]);
 
   useEffect(() => { setSelected(null); load(); }, [load]);
+
+  useEffect(() => {
+    if (!facultyId) return;
+    api.get('/rooms', { params: { faculty_id: facultyId } })
+      .then(res => setRooms(res.data || []))
+      .catch(() => setRooms([]));
+  }, [facultyId]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text });
@@ -86,9 +97,21 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
     finally { setBusy(false); }
   };
 
-  // نقرة على خلية فارغة (نفس مجموعة المحاضرة المحددة فقط)
+  // نقرة على خلية فارغة: نقل المحاضرة المحددة، أو إضافة من قائمة غير المدرجة
   const onEmptyCellClick = async (group: any, day: string, slotNumber: number) => {
-    if (!editMode || !selected) return;
+    if (!editMode) return;
+    if (!selected) {
+      const candidates = (data?.unscheduled || []).filter((u: any) =>
+        u.department_id === group.department_id && u.level === group.level && u.section === group.section);
+      if (candidates.length === 0) {
+        showMsg('error', '⚠️ لا توجد مقررات غير مدرجة لهذه الشعبة — كل مقرراتها مكتملة في الجدول');
+        return;
+      }
+      setAddCourseId(candidates.length === 1 ? candidates[0].course_id : '');
+      setAddRoomId('');
+      setAddModal({ group, day, slotNumber });
+      return;
+    }
     if (selected.department_id !== group.department_id || selected.level !== group.level || selected.section !== group.section) {
       showMsg('error', '⚠️ يمكن نقل المحاضرة فقط داخل صف نفس الشعبة (نفس القسم والمستوى والشعبة)');
       return;
@@ -98,6 +121,31 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
       const res = await api.post('/weekly-schedule/move-slot', { slot_id: selected.id, target_day: day, target_slot_number: slotNumber });
       showMsg('success', `✅ ${res.data.message}`);
       setSelected(null);
+      await load();
+    } catch (e: any) { handleConflictError(e); }
+    finally { setBusy(false); }
+  };
+
+  // تأكيد إضافة محاضرة غير مدرجة في الخلية الفارغة
+  const confirmAdd = async () => {
+    if (!addModal || !addCourseId) return;
+    const course = (data?.unscheduled || []).find((u: any) => u.course_id === addCourseId);
+    if (!course) return;
+    setBusy(true);
+    try {
+      const res = await api.post('/weekly-schedule', {
+        faculty_id: facultyId,
+        department_id: addModal.group.department_id,
+        level: addModal.group.level,
+        section: addModal.group.section,
+        day: addModal.day,
+        slot_number: addModal.slotNumber,
+        course_id: course.course_id,
+        teacher_id: course.teacher_id,
+        room_id: addRoomId,
+      });
+      showMsg('success', `✅ ${res.data.message}`);
+      setAddModal(null);
       await load();
     } catch (e: any) { handleConflictError(e); }
     finally { setBusy(false); }
@@ -145,7 +193,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
             <Text style={{ fontSize: 11, color: '#e65100', fontWeight: '600' }}>
               {selected
                 ? `♟️ محدد: ${selected.course_name} — انقر خلية فارغة للنقل أو محاضرة أخرى للتبديل`
-                : '♟️ انقر على محاضرة لتحديدها ثم انقر الوجهة (كقطع الشطرنج)'}
+                : '♟️ انقر محاضرة لتحديدها (نقل/تبديل) • أو انقر خلية فارغة لإضافة مقرر غير مدرج'}
             </Text>
           </View>
         )}
@@ -215,6 +263,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                     const isEmpty = items.length === 0;
                     const canDrop = editMode && selected && isEmpty
                       && selected.department_id === g.department_id && selected.level === g.level && selected.section === g.section;
+                    const canAdd = editMode && !selected && isEmpty;
                     return (
                       <td
                         key={`${day}-${ts.slot_number}`}
@@ -225,7 +274,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                           borderBottom: '1px solid #e3e9f2',
                           borderLeft: ti === time_slots.length - 1 ? '2px solid #c9d4e5' : '1px solid #eef1f6',
                           backgroundColor: canDrop ? '#e8f5e9' : undefined,
-                          cursor: canDrop ? 'pointer' : undefined,
+                          cursor: (canDrop || canAdd) ? 'pointer' : undefined,
                           outline: canDrop ? '2px dashed #43a047' : undefined, outlineOffset: -2,
                         }}
                       >
@@ -264,6 +313,60 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
           </tbody>
         </table>
       </div>
+
+      {/* نافذة إضافة مقرر غير مدرج في خلية فارغة */}
+      {addModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
+          backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl',
+        }} onClick={() => setAddModal(null)}>
+          <div onClick={(ev: any) => ev.stopPropagation()} style={{
+            backgroundColor: '#fff', borderRadius: 12, padding: 20, width: 440, maxWidth: '92%', maxHeight: '80vh', overflowY: 'auto',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+          }} data-testid="master-add-modal">
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#1a2540', marginBottom: 4, textAlign: 'right' }}>➕ إضافة محاضرة غير مدرجة</div>
+            <div style={{ fontSize: 12, color: '#5b6678', marginBottom: 12, textAlign: 'right' }}>
+              {addModal.group.department_name} · م{addModal.group.level}{addModal.group.section ? ` · ${addModal.group.section}` : ''} — {addModal.day} · الفترة {addModal.slotNumber}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 6, textAlign: 'right' }}>اختر المقرر (من غير المدرجة فقط):</div>
+            {(data?.unscheduled || [])
+              .filter((u: any) => u.department_id === addModal.group.department_id && u.level === addModal.group.level && u.section === addModal.group.section)
+              .map((u: any) => (
+                <div key={u.course_id} onClick={() => setAddCourseId(u.course_id)} style={{
+                  display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px', borderRadius: 8, marginBottom: 5, cursor: 'pointer',
+                  border: addCourseId === u.course_id ? '2px solid #1565c0' : '1px solid #e3e9f2',
+                  backgroundColor: addCourseId === u.course_id ? '#e3f2fd' : '#fafbfd',
+                }} data-testid={`add-course-option-${u.course_id}`}>
+                  <div style={{
+                    width: 12, height: 12, borderRadius: 3, backgroundColor: courseColor(u.course_id), flexShrink: 0,
+                  }} />
+                  <div style={{ flex: 1, textAlign: 'right' }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: '#333' }}>{u.course_name}</div>
+                    <div style={{ fontSize: 10.5, color: '#777' }}>{u.teacher_name} • ناقص {u.missing} من {u.needed} أسبوعياً</div>
+                  </div>
+                  {addCourseId === u.course_id && <Ionicons name="checkmark-circle" size={18} color="#1565c0" />}
+                </div>
+              ))}
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#333', margin: '10px 0 6px', textAlign: 'right' }}>القاعة:</div>
+            <select value={addRoomId} onChange={(ev: any) => setAddRoomId(ev.target.value)} style={{
+              width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc',
+            }} data-testid="add-room-select">
+              <option value="">-- بدون قاعة --</option>
+              {rooms.map((r: any) => <option key={r.id} value={r.id}>{r.name}{r.building ? ` (${r.building})` : ''}</option>)}
+            </select>
+            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
+              <button onClick={confirmAdd} disabled={!addCourseId || busy} style={{
+                flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: addCourseId ? 'pointer' : 'not-allowed',
+                backgroundColor: addCourseId ? '#2e7d32' : '#c8d2c9', color: '#fff', fontSize: 13.5, fontWeight: 700,
+              }} data-testid="confirm-add-slot-btn">{busy ? 'جاري الإضافة...' : 'إضافة المحاضرة'}</button>
+              <button onClick={() => setAddModal(null)} style={{
+                flex: 0.5, padding: '10px 0', borderRadius: 8, border: '1px solid #ddd', cursor: 'pointer',
+                backgroundColor: '#fff', color: '#555', fontSize: 13, fontWeight: 600,
+              }}>إلغاء</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* المقررات غير المدرجة */}
       {unscheduled.length > 0 && (

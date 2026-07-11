@@ -2619,6 +2619,7 @@ async def get_master_view(
             unscheduled.append({
                 "course_id": cid,
                 "course_name": c.get("name", ""),
+                "teacher_id": c.get("teacher_id", ""),
                 "teacher_name": teacher.get("full_name", ""),
                 "department_id": c.get("department_id", ""),
                 "department_name": depts_map.get(c.get("department_id", ""), ""),
