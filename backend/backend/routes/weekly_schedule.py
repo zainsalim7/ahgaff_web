@@ -2500,3 +2500,272 @@ async def generate_lectures_from_schedule(
         "courses_count": len(course_ids),
         "message": f"تم إنشاء {created} محاضرة لـ{len(course_ids)} مقرراً (تخطي {already + dup_skipped} موجودة مسبقاً)",
     }
+
+
+# ===== العرض الشامل (Master View) =====
+
+class MoveSlotRequest(BaseModel):
+    slot_id: str
+    target_day: str
+    target_slot_number: int
+
+
+class SwapSlotsRequest(BaseModel):
+    slot_a_id: str
+    slot_b_id: str
+
+
+def _needed_weekly_slots(credit_hours) -> int:
+    try:
+        credit = int(credit_hours or 3)
+    except (TypeError, ValueError):
+        credit = 3
+    if credit <= 2:
+        return 1
+    if credit <= 3:
+        return 2
+    return 3
+
+
+@router.get("/weekly-schedule/master-view")
+async def get_master_view(
+    faculty_id: str,
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """العرض الشامل: كل المستويات والشعب × الأيام والفترات + المقررات غير المدرجة"""
+    db = get_db()
+
+    settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"})
+    time_slots = (settings or {}).get("time_slots", [])
+    working_days = (settings or {}).get("working_days", [])
+
+    dept_query = {"faculty_id": faculty_id, "is_active": {"$ne": False}}
+    if department_id:
+        dept_query["_id"] = ObjectId(department_id)
+    departments = await db.departments.find(dept_query).to_list(100)
+    dept_ids = [str(d["_id"]) for d in departments]
+    depts_map = {str(d["_id"]): d.get("name", "") for d in departments}
+
+    slots = await db.weekly_schedule.find({"department_id": {"$in": dept_ids}}).to_list(5000)
+
+    courses = await db.courses.find({
+        "department_id": {"$in": dept_ids}, "is_active": True, "teacher_id": {"$ne": None}
+    }).to_list(2000)
+
+    course_ids = list({s["course_id"] for s in slots if s.get("course_id")} | {str(c["_id"]) for c in courses})
+    teacher_ids = list({s["teacher_id"] for s in slots if s.get("teacher_id")} | {c.get("teacher_id", "") for c in courses if c.get("teacher_id")})
+    room_ids = list({s["room_id"] for s in slots if s.get("room_id")})
+
+    courses_map = {}
+    if course_ids:
+        docs = await db.courses.find({"_id": {"$in": [ObjectId(x) for x in course_ids if x]}}).to_list(2000)
+        courses_map = {str(d["_id"]): d for d in docs}
+    teachers_map = {}
+    if teacher_ids:
+        docs = await db.teachers.find({"_id": {"$in": [ObjectId(x) for x in teacher_ids if x]}}).to_list(1000)
+        teachers_map = {str(d["_id"]): d for d in docs}
+    rooms_map = {}
+    if room_ids:
+        docs = await db.rooms.find({"_id": {"$in": [ObjectId(x) for x in room_ids if x]}}).to_list(500)
+        rooms_map = {str(d["_id"]): d for d in docs}
+
+    # الصفوف: (قسم، مستوى، شعبة) من الجدول + من المقررات (حتى تظهر المجموعات الفارغة)
+    group_keys = set()
+    for s in slots:
+        group_keys.add((s.get("department_id", ""), s.get("level") or 1, s.get("section", "") or ""))
+    for c in courses:
+        group_keys.add((c.get("department_id", ""), c.get("level") or 1, c.get("section", "") or ""))
+
+    groups = sorted(
+        [{"department_id": d, "department_name": depts_map.get(d, ""), "level": lv, "section": sec}
+         for (d, lv, sec) in group_keys if d in depts_map],
+        key=lambda g: (g["department_name"], g["level"], g["section"])
+    )
+
+    entries = []
+    scheduled_counts: dict = {}
+    for s in slots:
+        course = courses_map.get(s.get("course_id", ""), {})
+        teacher = teachers_map.get(s.get("teacher_id", ""), {})
+        room = rooms_map.get(s.get("room_id", ""), {})
+        entries.append({
+            "id": str(s["_id"]),
+            "department_id": s.get("department_id", ""),
+            "level": s.get("level") or 1,
+            "section": s.get("section", "") or "",
+            "day": s.get("day", ""),
+            "slot_number": s.get("slot_number"),
+            "course_id": s.get("course_id", ""),
+            "course_name": course.get("name", ""),
+            "teacher_id": s.get("teacher_id", ""),
+            "teacher_name": teacher.get("full_name", ""),
+            "room_name": room.get("name", ""),
+        })
+        ck = (s.get("course_id", ""), s.get("department_id", ""), s.get("level") or 1, s.get("section", "") or "")
+        scheduled_counts[ck] = scheduled_counts.get(ck, 0) + 1
+
+    # المقررات غير المدرجة أو المدرجة جزئياً
+    unscheduled = []
+    for c in courses:
+        cid = str(c["_id"])
+        needed = _needed_weekly_slots(c.get("credit_hours"))
+        ck = (cid, c.get("department_id", ""), c.get("level") or 1, c.get("section", "") or "")
+        have = scheduled_counts.get(ck, 0)
+        if have < needed:
+            teacher = teachers_map.get(c.get("teacher_id", ""), {})
+            unscheduled.append({
+                "course_id": cid,
+                "course_name": c.get("name", ""),
+                "teacher_name": teacher.get("full_name", ""),
+                "department_id": c.get("department_id", ""),
+                "department_name": depts_map.get(c.get("department_id", ""), ""),
+                "level": c.get("level") or 1,
+                "section": c.get("section", "") or "",
+                "needed": needed,
+                "scheduled": have,
+                "missing": needed - have,
+            })
+    unscheduled.sort(key=lambda u: (u["department_name"], u["level"], u["section"], u["course_name"]))
+
+    return {
+        "working_days": working_days,
+        "time_slots": time_slots,
+        "groups": groups,
+        "entries": entries,
+        "unscheduled": unscheduled,
+        "can_manage": can_manage_schedule(current_user),
+    }
+
+
+async def _check_slot_placement(db, slot: dict, target_day: str, target_slot: int, exclude_ids: set) -> List[str]:
+    """فحص إمكانية وضع محاضرة في (يوم، فترة) — يُرجع قائمة التعارضات"""
+    conflicts = []
+    exclude = {"$nin": [ObjectId(x) for x in exclude_ids]}
+
+    section_busy = await db.weekly_schedule.find_one({
+        "_id": exclude,
+        "department_id": slot.get("department_id"),
+        "level": slot.get("level"),
+        "section": slot.get("section", ""),
+        "day": target_day,
+        "slot_number": target_slot,
+    })
+    if section_busy:
+        c = await db.courses.find_one({"_id": ObjectId(section_busy["course_id"])}) if section_busy.get("course_id") else None
+        conflicts.append(f"تعارض شعبة: يوجد مقرر '{(c or {}).get('name', '')}' لنفس الشعبة في هذه الفترة")
+
+    if slot.get("teacher_id"):
+        teacher_busy = await db.weekly_schedule.find_one({
+            "_id": exclude,
+            "teacher_id": slot["teacher_id"],
+            "day": target_day,
+            "slot_number": target_slot,
+        })
+        if teacher_busy:
+            t = await db.teachers.find_one({"_id": ObjectId(slot["teacher_id"])})
+            c = await db.courses.find_one({"_id": ObjectId(teacher_busy["course_id"])}) if teacher_busy.get("course_id") else None
+            conflicts.append(f"تعارض معلم: '{(t or {}).get('full_name', '')}' لديه مقرر '{(c or {}).get('name', '')}' في نفس الفترة")
+
+        pref = await db.teacher_preferences.find_one({"teacher_id": slot["teacher_id"]})
+        if pref and _is_period_unavailable(pref, target_day, target_slot):
+            t = await db.teachers.find_one({"_id": ObjectId(slot["teacher_id"])})
+            conflicts.append(f"تعارض تفضيلات: '{(t or {}).get('full_name', '')}' غير متاح يوم {target_day} في الفترة {target_slot}")
+
+        if pref and target_day != slot.get("day"):
+            daily_count = await db.weekly_schedule.count_documents({
+                "_id": exclude, "teacher_id": slot["teacher_id"], "day": target_day
+            })
+            max_daily = pref.get("max_daily_lectures", 5)
+            if daily_count >= max_daily:
+                conflicts.append(f"تعارض تفضيلات: المعلم وصل الحد الأقصى ({max_daily} محاضرات) ليوم {target_day}")
+
+    if slot.get("room_id"):
+        room_busy = await db.weekly_schedule.find_one({
+            "_id": exclude,
+            "room_id": slot["room_id"],
+            "day": target_day,
+            "slot_number": target_slot,
+        })
+        if room_busy:
+            r = await db.rooms.find_one({"_id": ObjectId(slot["room_id"])})
+            c = await db.courses.find_one({"_id": ObjectId(room_busy["course_id"])}) if room_busy.get("course_id") else None
+            conflicts.append(f"تعارض قاعة: '{(r or {}).get('name', '')}' مشغولة بمقرر '{(c or {}).get('name', '')}' في نفس الفترة")
+
+    return conflicts
+
+
+@router.post("/weekly-schedule/move-slot")
+async def move_schedule_slot(
+    data: MoveSlotRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """نقل محاضرة إلى خلية فارغة (يوم/فترة) مع كامل فحوصات التعارض"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    slot = await db.weekly_schedule.find_one({"_id": ObjectId(data.slot_id)})
+    if not slot:
+        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
+
+    if slot.get("day") == data.target_day and slot.get("slot_number") == data.target_slot_number:
+        return {"message": "لا تغيير"}
+
+    conflicts = await _check_slot_placement(db, slot, data.target_day, data.target_slot_number, {data.slot_id})
+    if conflicts:
+        raise HTTPException(status_code=409, detail={"message": "يوجد تعارضات", "conflicts": conflicts})
+
+    try:
+        await db.weekly_schedule.update_one(
+            {"_id": ObjectId(data.slot_id)},
+            {"$set": {"day": data.target_day, "slot_number": data.target_slot_number}}
+        )
+    except DuplicateKeyError:
+        raise HTTPException(status_code=409, detail={"message": "تعارض في الجدول (مرفوض من قاعدة البيانات)", "conflicts": ["تعارض فريد في قاعدة البيانات"]})
+
+    await log_activity(current_user, "move_schedule_slot", "weekly_schedule", data.slot_id, None,
+                       {"from": f"{slot.get('day')}-{slot.get('slot_number')}", "to": f"{data.target_day}-{data.target_slot_number}"})
+    return {"message": "تم نقل المحاضرة بنجاح"}
+
+
+@router.post("/weekly-schedule/swap-slots")
+async def swap_schedule_slots(
+    data: SwapSlotsRequest,
+    current_user: dict = Depends(get_current_user),
+):
+    """تبديل مكاني محاضرتين (كقطع الشطرنج) مع فحص التعارضات للطرفين معاً"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    slot_a = await db.weekly_schedule.find_one({"_id": ObjectId(data.slot_a_id)})
+    slot_b = await db.weekly_schedule.find_one({"_id": ObjectId(data.slot_b_id)})
+    if not slot_a or not slot_b:
+        raise HTTPException(status_code=404, detail="إحدى المحاضرتين غير موجودة")
+
+    exclude = {data.slot_a_id, data.slot_b_id}
+    conflicts = []
+    conflicts += await _check_slot_placement(db, slot_a, slot_b["day"], slot_b["slot_number"], exclude)
+    conflicts += await _check_slot_placement(db, slot_b, slot_a["day"], slot_a["slot_number"], exclude)
+    if conflicts:
+        raise HTTPException(status_code=409, detail={"message": "يوجد تعارضات تمنع التبديل", "conflicts": conflicts})
+
+    pos_a = {"day": slot_a["day"], "slot_number": slot_a["slot_number"]}
+    pos_b = {"day": slot_b["day"], "slot_number": slot_b["slot_number"]}
+
+    # حذف الوثيقتين ثم إعادة إدراجهما بالمواقع المتبادلة (نفس الـ _id) لتفادي تعارض الفهارس الفريدة المؤقت
+    await db.weekly_schedule.delete_many({"_id": {"$in": [slot_a["_id"], slot_b["_id"]]}})
+    new_a = {**slot_a, **pos_b}
+    new_b = {**slot_b, **pos_a}
+    try:
+        await db.weekly_schedule.insert_many([new_a, new_b])
+    except DuplicateKeyError:
+        # استرجاع الوضع الأصلي
+        await db.weekly_schedule.delete_many({"_id": {"$in": [slot_a["_id"], slot_b["_id"]]}})
+        await db.weekly_schedule.insert_many([slot_a, slot_b])
+        raise HTTPException(status_code=409, detail={"message": "تعارض في الجدول (مرفوض من قاعدة البيانات)", "conflicts": ["تعارض فريد في قاعدة البيانات"]})
+
+    await log_activity(current_user, "swap_schedule_slots", "weekly_schedule", data.slot_a_id, None,
+                       {"a": f"{pos_a['day']}-{pos_a['slot_number']}", "b": f"{pos_b['day']}-{pos_b['slot_number']}"})
+    return {"message": "تم تبديل المحاضرتين بنجاح"}

@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { scheduleAPI, departmentsAPI, teachersAPI, coursesAPI } from '../src/services/api';
 import api from '../src/services/api';
+import { MasterScheduleView } from '../src/components/MasterScheduleView';
 
 const DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 const COLORS = ['#1565c0', '#2e7d32', '#e65100', '#6a1b9a', '#c62828', '#00838f', '#4e342e', '#37474f'];
@@ -67,7 +68,7 @@ export default function WeeklySchedulePage() {
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
-  const [viewMode, setViewMode] = useState<'section' | 'department' | 'course' | 'teacher'>('section');
+  const [viewMode, setViewMode] = useState<'section' | 'department' | 'course' | 'teacher' | 'master'>('section');
   const [scheduleTeacher, setScheduleTeacher] = useState('');
   const [scheduleCourse, setScheduleCourse] = useState('');
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
@@ -140,6 +141,7 @@ export default function WeeklySchedulePage() {
   // Load schedule
   const loadSchedule = useCallback(async () => {
     if (!selectedFaculty) return;
+    if (viewMode === 'master') return; // العرض الشامل يجلب بياناته بنفسه
     setLoading(true);
     try {
       const params: any = { faculty_id: selectedFaculty };
@@ -620,6 +622,7 @@ export default function WeeklySchedulePage() {
                   { key: 'department', label: 'بالقسم', icon: 'school-outline' },
                   { key: 'course', label: 'بالمقرر', icon: 'book-outline' },
                   { key: 'teacher', label: 'بالأستاذ', icon: 'person-outline' },
+                  { key: 'master', label: 'العرض الشامل', icon: 'grid-outline' },
                 ].map(m => {
                   const active = viewMode === m.key;
                   return (
@@ -672,6 +675,19 @@ export default function WeeklySchedulePage() {
                       </View>
                     </View>
                   </>
+                )}
+
+                {/* Master mode: optional department filter */}
+                {viewMode === 'master' && (
+                  <View style={{ flex: 1, minWidth: 140 }}>
+                    <Text style={st.label}>القسم (اختياري)</Text>
+                    <View style={st.pickerWrap}>
+                      <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 34, fontSize: 13 }}>
+                        <Picker.Item label="-- كامل الكلية --" value="" />
+                        {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                      </Picker>
+                    </View>
+                  </View>
                 )}
 
                 {/* Department mode: pick one department */}
@@ -908,8 +924,17 @@ export default function WeeklySchedulePage() {
               </View>
             )}
 
+            {/* Master View - العرض الشامل */}
+            {viewMode === 'master' ? (
+              !selectedFaculty ? (
+                <View style={st.emptyCard}><Ionicons name="grid-outline" size={28} color="#cdd5e0" /><Text style={st.emptyText}>اختر الكلية لعرض الجدول الشامل</Text></View>
+              ) : (
+                <MasterScheduleView facultyId={selectedFaculty} departmentId={selectedDept || undefined} />
+              )
+            ) : null}
+
             {/* Schedule Grid */}
-            {loading ? (
+            {viewMode === 'master' ? null : loading ? (
               <View style={st.emptyCard}><ActivityIndicator size="large" color="#1565c0" /></View>
             ) : !selectedFaculty ? (
               <View style={st.emptyCard}><Ionicons name="calendar-outline" size={28} color="#cdd5e0" /><Text style={st.emptyText}>اختر الكلية لعرض الجدول</Text></View>
