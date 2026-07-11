@@ -101,6 +101,7 @@ export default function WeeklySchedulePage() {
   // Add slot modal
   const [showAddSlot, setShowAddSlot] = useState(false);
   const [addSlotData, setAddSlotData] = useState({ day: '', slot_number: '', course_id: '', teacher_id: '', room_id: '' });
+  const [addSlotFreeRooms, setAddSlotFreeRooms] = useState<any[] | null>(null);
   const [courses, setCourses] = useState<any[]>([]);
 
   // Load initial data
@@ -196,6 +197,21 @@ export default function WeeklySchedulePage() {
       })();
     }
   }, [selectedDept]);
+
+  // 🏫 جلب القاعات الفارغة عند اختيار اليوم/الفترة في نافذة الإضافة اليدوية
+  useEffect(() => {
+    if (!showAddSlot || !selectedFaculty || !addSlotData.day || !addSlotData.slot_number) {
+      setAddSlotFreeRooms(null);
+      return;
+    }
+    setAddSlotFreeRooms(null);
+    setAddSlotData(p => ({ ...p, room_id: '' }));
+    api.get('/weekly-schedule/free-rooms', {
+      params: { faculty_id: selectedFaculty, day: addSlotData.day, slot_number: parseInt(addSlotData.slot_number) },
+    })
+      .then(res => setAddSlotFreeRooms(res.data || []))
+      .catch(() => setAddSlotFreeRooms([]));
+  }, [showAddSlot, selectedFaculty, addSlotData.day, addSlotData.slot_number]);
 
   // 📋 تحميل ملخص التفضيلات المحفوظة لكل معلمي القسم (تبويب التفضيلات)
   const loadPrefsSummary = useCallback(async () => {
@@ -907,10 +923,24 @@ export default function WeeklySchedulePage() {
                     </Picker></View>
                   </View>
                   <View style={{ flex: 1, minWidth: 120 }}>
-                    <Text style={st.miniLabel}>القاعة</Text>
-                    <View style={st.pickerWrap}><Picker selectedValue={addSlotData.room_id} onValueChange={v => setAddSlotData(p => ({ ...p, room_id: v }))} style={{ height: 38 }}>
-                      <Picker.Item label="--" value="" />{rooms.map(r => <Picker.Item key={r.id} label={r.name} value={r.id} />)}
+                    <Text style={st.miniLabel}>القاعة (الفارغة فقط)</Text>
+                    <View style={st.pickerWrap}><Picker selectedValue={addSlotData.room_id} onValueChange={v => setAddSlotData(p => ({ ...p, room_id: v }))} style={{ height: 38 }} testID="add-slot-room-picker">
+                      {(!addSlotData.day || !addSlotData.slot_number) ? (
+                        <Picker.Item label="اختر اليوم والفترة أولاً" value="" />
+                      ) : addSlotFreeRooms === null ? (
+                        <Picker.Item label="جاري فحص التوفر..." value="" />
+                      ) : (
+                        [<Picker.Item key="none" label="--" value="" />,
+                         ...addSlotFreeRooms.filter((r: any) => !r.busy).map((r: any) => (
+                          <Picker.Item key={r.id} label={`${r.name}${r.capacity ? ` (سعة ${r.capacity})` : ''}`} value={r.id} />
+                        ))]
+                      )}
                     </Picker></View>
+                    {addSlotData.day && addSlotData.slot_number && addSlotFreeRooms && addSlotFreeRooms.filter((r: any) => r.busy).length > 0 && (
+                      <Text style={{ fontSize: 10, color: '#e65100', marginTop: 3, textAlign: 'right' }} testID="add-slot-busy-note">
+                        🔒 مشغولة: {addSlotFreeRooms.filter((r: any) => r.busy).map((r: any) => r.name).join('، ')}
+                      </Text>
+                    )}
                   </View>
                 </View>
                 <View style={{ flexDirection: 'row', gap: 8, marginTop: 10 }}>
