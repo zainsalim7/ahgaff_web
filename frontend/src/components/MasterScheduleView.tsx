@@ -45,6 +45,8 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   const [addCourseId, setAddCourseId] = useState('');
   const [addRoomId, setAddRoomId] = useState('');
   const [slotRooms, setSlotRooms] = useState<any[] | null>(null); // قاعات (يوم/فترة) مع حالة الانشغال
+  const [validMap, setValidMap] = useState<Record<string, { valid: boolean; reasons: string[] }> | null>(null);
+  const [placing, setPlacing] = useState<any>(null); // مقرر غير مدرج قيد الإدراج
 
   const load = useCallback(async () => {
     if (!facultyId) return;
@@ -58,7 +60,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
     finally { setLoading(false); }
   }, [facultyId, departmentId]);
 
-  useEffect(() => { setSelected(null); load(); }, [load]);
+  useEffect(() => { setSelected(null); setPlacing(null); setValidMap(null); load(); }, [load]);
 
   const showMsg = (type: 'success' | 'error', text: string) => {
     setMsg({ type, text });
@@ -74,25 +76,73 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
     }
   };
 
+  // جلب الخلايا الصالحة (بدون تعارضات) لإضاءتها بصرياً
+  const fetchValidSlots = async (group: any, teacherId: string, roomId: string, excludeId: string) => {
+    setValidMap(null);
+    try {
+      const res = await api.get('/weekly-schedule/valid-slots', {
+        params: {
+          faculty_id: facultyId, department_id: group.department_id,
+          level: group.level, section: group.section,
+          teacher_id: teacherId || '', room_id: roomId || '', exclude_slot_id: excludeId || '',
+        },
+      });
+      const m: Record<string, { valid: boolean; reasons: string[] }> = {};
+      for (const c of res.data.cells || []) m[`${c.day}|${c.slot_number}`] = { valid: c.valid, reasons: c.reasons };
+      setValidMap(m);
+    } catch { setValidMap(null); }
+  };
+
   // نقرة على بلوك محاضرة
   const onEntryClick = async (entry: any) => {
     if (!editMode) return;
-    if (!selected) { setSelected(entry); return; }
-    if (selected.id === entry.id) { setSelected(null); return; }
+    if (placing) { setPlacing(null); setValidMap(null); }
+    if (!selected) {
+      setSelected(entry);
+      fetchValidSlots(
+        { department_id: entry.department_id, level: entry.level, section: entry.section },
+        entry.teacher_id, entry.room_id || '', entry.id
+      );
+      return;
+    }
+    if (selected.id === entry.id) { setSelected(null); setValidMap(null); return; }
     // تبديل
     setBusy(true);
     try {
       const res = await api.post('/weekly-schedule/swap-slots', { slot_a_id: selected.id, slot_b_id: entry.id });
       showMsg('success', `✅ ${res.data.message}`);
       setSelected(null);
+      setValidMap(null);
       await load();
     } catch (e: any) { handleConflictError(e); }
     finally { setBusy(false); }
   };
 
-  // نقرة على خلية فارغة: نقل المحاضرة المحددة، أو إضافة من قائمة غير المدرجة
+  // نقرة على خلية فارغة: نقل المحاضرة المحددة، أو إدراج المقرر قيد الإدراج، أو إضافة من القائمة
   const onEmptyCellClick = async (group: any, day: string, slotNumber: number) => {
     if (!editMode) return;
+    const vstate = validMap?.[`${day}|${slotNumber}`];
+
+    // وضع الإدراج: مقرر غير مدرج محدد من القائمة السفلية
+    if (placing && !selected) {
+      if (placing.department_id !== group.department_id || placing.level !== group.level || placing.section !== group.section) {
+        showMsg('error', '⚠️ هذا المقرر يخص شعبة أخرى — اختر خلية في صف شعبته المُضاء');
+        return;
+      }
+      if (vstate && !vstate.valid) {
+        showMsg('error', `❌ لا يمكن الإدراج هنا: ${vstate.reasons.join(' • ')}`);
+        return;
+      }
+      setAddCourseId(placing.course_id);
+      setAddRoomId('');
+      setSlotRooms(null);
+      setAddModal({ group, day, slotNumber });
+      api.get('/weekly-schedule/free-rooms', { params: { faculty_id: facultyId, day, slot_number: slotNumber } })
+        .then(res => setSlotRooms(res.data || []))
+        .catch(() => setSlotRooms([]));
+      return;
+    }
+
     if (!selected) {
       const candidates = (data?.unscheduled || []).filter((u: any) =>
         u.department_id === group.department_id && u.level === group.level && u.section === group.section);
@@ -113,14 +163,33 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
       showMsg('error', '⚠️ يمكن نقل المحاضرة فقط داخل صف نفس الشعبة (نفس القسم والمستوى والشعبة)');
       return;
     }
+    if (vstate && !vstate.valid) {
+      showMsg('error', `❌ لا يمكن النقل هنا: ${vstate.reasons.join(' • ')}`);
+      return;
+    }
     setBusy(true);
     try {
       const res = await api.post('/weekly-schedule/move-slot', { slot_id: selected.id, target_day: day, target_slot_number: slotNumber });
       showMsg('success', `✅ ${res.data.message}`);
       setSelected(null);
+      setValidMap(null);
       await load();
     } catch (e: any) { handleConflictError(e); }
     finally { setBusy(false); }
+  };
+
+  // اختيار مقرر غير مدرج من القائمة السفلية لإدراجه (وضع الإدراج)
+  const togglePlacing = (u: any) => {
+    if (!editMode) return;
+    if (placing?.course_id === u.course_id && placing?.section === u.section && placing?.level === u.level) {
+      setPlacing(null); setValidMap(null); return;
+    }
+    setSelected(null);
+    setPlacing(u);
+    fetchValidSlots(
+      { department_id: u.department_id, level: u.level, section: u.section },
+      u.teacher_id, '', ''
+    );
   };
 
   // تأكيد إضافة محاضرة غير مدرجة في الخلية الفارغة
@@ -143,6 +212,8 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
       });
       showMsg('success', `✅ ${res.data.message}`);
       setAddModal(null);
+      setPlacing(null);
+      setValidMap(null);
       await load();
     } catch (e: any) { handleConflictError(e); }
     finally { setBusy(false); }
@@ -330,21 +401,27 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                     const k = `${g.department_id}|${g.level}|${g.section}|${day}|${ts.slot_number}`;
                     const items = cellMap[k] || [];
                     const isEmpty = items.length === 0;
-                    const canDrop = editMode && selected && isEmpty
-                      && selected.department_id === g.department_id && selected.level === g.level && selected.section === g.section;
-                    const canAdd = editMode && !selected && isEmpty;
+                    const target = selected || placing; // المحاضرة المحددة أو المقرر قيد الإدراج
+                    const inTargetRow = editMode && target && isEmpty
+                      && target.department_id === g.department_id && target.level === g.level && target.section === g.section;
+                    const vstate = inTargetRow ? validMap?.[`${day}|${ts.slot_number}`] : undefined;
+                    const canDrop = inTargetRow && (!vstate || vstate.valid);
+                    const isBlocked = inTargetRow && vstate && !vstate.valid;
+                    const canAdd = editMode && !selected && !placing && isEmpty;
                     return (
                       <td
                         key={`${day}-${ts.slot_number}`}
                         onClick={isEmpty ? () => onEmptyCellClick(g, day, ts.slot_number) : undefined}
                         data-testid={`master-cell-${gi}-${day}-${ts.slot_number}`}
+                        title={isBlocked ? `❌ ${vstate!.reasons.join(' • ')}` : canDrop ? '✓ مكان صالح بدون تعارضات' : undefined}
                         style={{
                           padding: 2, verticalAlign: 'top', minWidth: 92, height: 34,
                           borderBottom: '1px solid #e3e9f2',
                           borderLeft: ti === time_slots.length - 1 ? '2px solid #c9d4e5' : '1px solid #eef1f6',
-                          backgroundColor: canDrop ? '#e8f5e9' : undefined,
-                          cursor: (canDrop || canAdd) ? 'pointer' : undefined,
-                          outline: canDrop ? '2px dashed #43a047' : undefined, outlineOffset: -2,
+                          backgroundColor: canDrop ? '#e8f5e9' : isBlocked ? '#fdecea' : undefined,
+                          cursor: canDrop ? 'pointer' : isBlocked ? 'not-allowed' : canAdd ? 'pointer' : undefined,
+                          outline: canDrop ? '2px dashed #43a047' : isBlocked ? '1px dashed #ef9a9a' : undefined,
+                          outlineOffset: -2,
                         }}
                       >
                         {items.map((item: any) => {
@@ -474,9 +551,23 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                 </tr>
               </thead>
               <tbody>
-                {unscheduled.map((u: any, i: number) => (
-                  <tr key={`${u.course_id}-${i}`} style={{ backgroundColor: i % 2 === 0 ? '#fffdf7' : '#fff' }}>
-                    <td style={{ padding: '5px 8px', fontSize: 11.5, fontWeight: 700, color: '#333', borderBottom: '1px solid #f5ead2' }}>{u.course_name}</td>
+                {unscheduled.map((u: any, i: number) => {
+                  const isPlacing = placing?.course_id === u.course_id && placing?.section === u.section && placing?.level === u.level;
+                  return (
+                  <tr
+                    key={`${u.course_id}-${i}`}
+                    onClick={() => togglePlacing(u)}
+                    data-testid={`unscheduled-row-${u.course_id}`}
+                    title={editMode ? (isPlacing ? 'انقر لإلغاء الإدراج' : 'انقر ليضيء لك الأماكن الصالحة في الجدول') : 'فعّل وضع التحرير أولاً للإدراج'}
+                    style={{
+                      backgroundColor: isPlacing ? '#e3f2fd' : i % 2 === 0 ? '#fffdf7' : '#fff',
+                      cursor: editMode ? 'pointer' : 'default',
+                      outline: isPlacing ? '2px solid #1565c0' : undefined, outlineOffset: -2,
+                    }}
+                  >
+                    <td style={{ padding: '5px 8px', fontSize: 11.5, fontWeight: 700, color: '#333', borderBottom: '1px solid #f5ead2' }}>
+                      {isPlacing ? '📌 ' : editMode ? '➕ ' : ''}{u.course_name}
+                    </td>
                     <td style={{ padding: '5px 8px', fontSize: 11, color: '#555', borderBottom: '1px solid #f5ead2' }}>{u.teacher_name}</td>
                     <td style={{ padding: '5px 8px', fontSize: 11, color: '#555', borderBottom: '1px solid #f5ead2' }}>{u.department_name}</td>
                     <td style={{ padding: '5px 8px', fontSize: 11, color: '#555', borderBottom: '1px solid #f5ead2' }}>م{u.level}{u.section ? ` · ${u.section}` : ''}</td>
@@ -484,7 +575,8 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                     <td style={{ padding: '5px 8px', fontSize: 11, color: u.scheduled > 0 ? '#2e7d32' : '#999', textAlign: 'center', fontWeight: 700, borderBottom: '1px solid #f5ead2' }}>{u.scheduled}</td>
                     <td style={{ padding: '5px 8px', fontSize: 11, color: '#c62828', textAlign: 'center', fontWeight: 800, borderBottom: '1px solid #f5ead2' }}>{u.missing}</td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

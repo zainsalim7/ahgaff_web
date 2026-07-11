@@ -2608,6 +2608,7 @@ async def _build_master_data(db, faculty_id: str, department_id: Optional[str] =
             "course_name": course.get("name", ""),
             "teacher_id": s.get("teacher_id", ""),
             "teacher_name": teacher.get("full_name", ""),
+            "room_id": s.get("room_id", ""),
             "room_name": room.get("name", ""),
         })
         ck = (s.get("course_id", ""), s.get("department_id", ""), s.get("level") or 1, s.get("section", "") or "")
@@ -3176,3 +3177,73 @@ async def get_free_rooms_for_slot(
         }
         for r in rooms
     ]
+
+
+@router.get("/weekly-schedule/valid-slots")
+async def get_valid_slots(
+    faculty_id: str,
+    department_id: str,
+    level: int,
+    section: str = "",
+    teacher_id: str = "",
+    room_id: str = "",
+    exclude_slot_id: str = "",
+    current_user: dict = Depends(get_current_user),
+):
+    """حساب الخلايا (يوم×فترة) الصالحة لنقل/إدراج محاضرة دون تعارضات — لإضاءتها بصرياً"""
+    db = get_db()
+
+    settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"})
+    time_slots = sorted((settings or {}).get("time_slots", []), key=lambda x: x.get("slot_number", 0))
+    working_days = (settings or {}).get("working_days", [])
+
+    exclude_oid = ObjectId(exclude_slot_id) if exclude_slot_id else None
+
+    # انشغال الشعبة (نفس القسم/المستوى/الشعبة)
+    section_slots = await db.weekly_schedule.find({
+        "department_id": department_id, "level": level, "section": section,
+    }).to_list(500)
+    section_busy = {(s["day"], s["slot_number"]) for s in section_slots if s["_id"] != exclude_oid}
+
+    # انشغال المعلم (عالمي عبر كل الكليات)
+    teacher_busy = set()
+    teacher_day_counts: dict = {}
+    pref = None
+    if teacher_id:
+        t_slots = await db.weekly_schedule.find({"teacher_id": teacher_id}).to_list(1000)
+        for s in t_slots:
+            if s["_id"] == exclude_oid:
+                continue
+            teacher_busy.add((s["day"], s["slot_number"]))
+            teacher_day_counts[s["day"]] = teacher_day_counts.get(s["day"], 0) + 1
+        pref = await db.teacher_preferences.find_one({"teacher_id": teacher_id})
+
+    # انشغال القاعة (عالمي)
+    room_busy = set()
+    if room_id:
+        r_slots = await db.weekly_schedule.find({"room_id": room_id}).to_list(1000)
+        room_busy = {(s["day"], s["slot_number"]) for s in r_slots if s["_id"] != exclude_oid}
+
+    max_daily = (pref or {}).get("max_daily_lectures", 99)
+
+    cells = []
+    for day in working_days:
+        for ts in time_slots:
+            sn = ts.get("slot_number")
+            reasons = []
+            if (day, sn) in section_busy:
+                reasons.append("الشعبة مشغولة")
+            if teacher_id:
+                if (day, sn) in teacher_busy:
+                    reasons.append("المعلم مشغول")
+                if pref and _is_period_unavailable(pref, day, sn):
+                    reasons.append("خارج تفضيلات المعلم")
+                if pref and teacher_day_counts.get(day, 0) >= max_daily:
+                    reasons.append(f"المعلم بلغ حده اليومي ({max_daily})")
+            if room_id and (day, sn) in room_busy:
+                reasons.append("القاعة مشغولة")
+            cells.append({"day": day, "slot_number": sn, "valid": len(reasons) == 0, "reasons": reasons})
+
+    return {"cells": cells}
