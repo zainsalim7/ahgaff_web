@@ -148,6 +148,23 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
     finally { setBusy(false); }
   };
 
+  // حذف المحاضرة المحددة من الجدول (تُحرر الفترة والقاعة والمعلم ويعود المقرر لغير المدرجة)
+  const deleteSelected = async () => {
+    if (!selected) return;
+    const ok = window.confirm(
+      `هل أنت متأكد من حذف "${selected.course_name}" من الجدول؟\n(${selected.day} · الفترة ${selected.slot_number})\n\nستتحرر الفترة والقاعة والمعلم، وسيعود المقرر لقائمة غير المدرجة.`
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      await api.delete(`/weekly-schedule/${selected.id}`);
+      showMsg('success', `✅ تم حذف "${selected.course_name}" من الجدول — عاد المقرر لقائمة غير المدرجة`);
+      setSelected(null);
+      await load();
+    } catch (e: any) { handleConflictError(e); }
+    finally { setBusy(false); }
+  };
+
   const downloadExport = async (fmt: 'pdf' | 'excel') => {
     setBusy(true);
     try {
@@ -211,12 +228,23 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
             <Text style={{ color: '#fff', fontSize: 13, fontWeight: '700' }}>{editMode ? 'إنهاء وضع التحرير' : 'وضع التحرير (نقل/تبديل)'}</Text>
           </TouchableOpacity>
         )}
+        {editMode && selected && (
+          <TouchableOpacity
+            onPress={deleteSelected}
+            disabled={busy}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#b71c1c' }}
+            testID="master-delete-selected-btn"
+          >
+            <Ionicons name="trash" size={14} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>حذف المحددة</Text>
+          </TouchableOpacity>
+        )}
         {editMode && (
           <View style={{ backgroundColor: '#fff8e1', borderWidth: 1, borderColor: '#ffe082', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 6 }}>
             <Text style={{ fontSize: 11, color: '#e65100', fontWeight: '600' }}>
               {selected
-                ? `♟️ محدد: ${selected.course_name} — انقر خلية فارغة للنقل أو محاضرة أخرى للتبديل`
-                : '♟️ انقر محاضرة لتحديدها (نقل/تبديل) • أو انقر خلية فارغة لإضافة مقرر غير مدرج'}
+                ? `♟️ محدد: ${selected.course_name} — انقر خلية فارغة للنقل أو محاضرة أخرى للتبديل أو زر الحذف`
+                : '♟️ انقر محاضرة لتحديدها (نقل/تبديل/حذف) • أو انقر خلية فارغة لإضافة مقرر غير مدرج'}
             </Text>
           </View>
         )}
