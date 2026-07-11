@@ -3247,3 +3247,139 @@ async def get_valid_slots(
             cells.append({"day": day, "slot_number": sn, "valid": len(reasons) == 0, "reasons": reasons})
 
     return {"cells": cells}
+
+
+@router.post("/weekly-schedule/auto-place-unscheduled")
+async def auto_place_unscheduled(
+    faculty_id: str,
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user),
+):
+    """إدراج تلقائي لكل المقررات غير المدرجة في أفضل الأماكن الصالحة (بكامل الاحترازات)"""
+    if not can_manage_schedule(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+
+    data = await _build_master_data(db, faculty_id, department_id)
+    unscheduled = data["unscheduled"]
+    if not unscheduled:
+        return {"placed": [], "failed": [], "message": "لا توجد مقررات غير مدرجة"}
+
+    settings = await db.schedule_settings.find_one({"_id": f"faculty_{faculty_id}"})
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"})
+    time_slots = sorted((settings or {}).get("time_slots", []), key=lambda x: x.get("slot_number", 0))
+    working_days = (settings or {}).get("working_days", [])
+    slot_numbers = [ts.get("slot_number") for ts in time_slots]
+
+    # بناء خرائط الانشغال الحالية (عالمية)
+    all_slots = await db.weekly_schedule.find({}).to_list(20000)
+    section_busy = set()
+    teacher_busy = set()
+    teacher_day_counts: dict = {}
+    room_busy = set()
+    course_days: dict = {}  # (course,dept,level,section) -> set(days)
+    for s in all_slots:
+        section_busy.add((s.get("department_id"), s.get("level"), s.get("section", ""), s["day"], s["slot_number"]))
+        if s.get("teacher_id"):
+            teacher_busy.add((s["teacher_id"], s["day"], s["slot_number"]))
+            teacher_day_counts[(s["teacher_id"], s["day"])] = teacher_day_counts.get((s["teacher_id"], s["day"]), 0) + 1
+        if s.get("room_id"):
+            room_busy.add((s["room_id"], s["day"], s["slot_number"]))
+        ck = (s.get("course_id"), s.get("department_id"), s.get("level"), s.get("section", ""))
+        course_days.setdefault(ck, set()).add(s["day"])
+
+    rooms = await db.rooms.find({"faculty_id": faculty_id, "is_active": True}).to_list(300)
+    prefs_cache: dict = {}
+
+    async def get_pref(tid):
+        if tid not in prefs_cache:
+            prefs_cache[tid] = await db.teacher_preferences.find_one({"teacher_id": tid})
+        return prefs_cache[tid]
+
+    placed, failed = [], []
+    now = datetime.now(timezone.utc)
+
+    for u in unscheduled:
+        tid = u.get("teacher_id", "")
+        pref = await get_pref(tid) if tid else None
+        max_daily = (pref or {}).get("max_daily_lectures", 99) if pref else 99
+        ck = (u["course_id"], u["department_id"], u["level"], u["section"])
+        for _ in range(u["missing"]):
+            # جمع المرشحين مع درجة تفضيل
+            candidates = []
+            for day in working_days:
+                for sn in slot_numbers:
+                    if (u["department_id"], u["level"], u["section"], day, sn) in section_busy:
+                        continue
+                    if tid:
+                        if (tid, day, sn) in teacher_busy:
+                            continue
+                        if pref and _is_period_unavailable(pref, day, sn):
+                            continue
+                        if pref and teacher_day_counts.get((tid, day), 0) >= max_daily:
+                            continue
+                    score = 0
+                    if day in course_days.get(ck, set()):
+                        score += 100  # تجنب تكرار نفس المقرر في نفس اليوم
+                    score += teacher_day_counts.get((tid, day), 0) * 5  # توزيع حمل المعلم
+                    score += sn  # تفضيل الفترات المبكرة
+                    candidates.append((score, day, sn))
+            if not candidates:
+                failed.append({"course_name": u["course_name"], "section": u["section"], "level": u["level"],
+                               "reason": "لا يوجد أي مكان صالح (تعارضات الشعبة/المعلم/التفضيلات)"})
+                break
+            candidates.sort()
+            _, day, sn = candidates[0]
+
+            # اختيار قاعة حرة في هذا الوقت
+            room_id = ""
+            room_name = ""
+            for r in rooms:
+                rid = str(r["_id"])
+                if (rid, day, sn) not in room_busy:
+                    room_id = rid
+                    room_name = r.get("name", "")
+                    break
+
+            doc = {
+                "faculty_id": faculty_id if not department_id else faculty_id,
+                "department_id": u["department_id"],
+                "level": u["level"],
+                "section": u["section"],
+                "day": day,
+                "slot_number": sn,
+                "course_id": u["course_id"],
+                "teacher_id": tid,
+                "room_id": room_id,
+                "created_at": now,
+                "created_by": current_user["id"],
+                "auto_placed": True,
+            }
+            try:
+                await db.weekly_schedule.insert_one(doc)
+            except DuplicateKeyError:
+                failed.append({"course_name": u["course_name"], "section": u["section"], "level": u["level"],
+                               "reason": f"تعارض فريد عند الحفظ ({day} ف{sn})"})
+                continue
+
+            # تحديث خرائط الانشغال داخل هذه الدفعة
+            section_busy.add((u["department_id"], u["level"], u["section"], day, sn))
+            if tid:
+                teacher_busy.add((tid, day, sn))
+                teacher_day_counts[(tid, day)] = teacher_day_counts.get((tid, day), 0) + 1
+            if room_id:
+                room_busy.add((room_id, day, sn))
+            course_days.setdefault(ck, set()).add(day)
+
+            placed.append({"course_name": u["course_name"], "teacher_name": u["teacher_name"],
+                           "level": u["level"], "section": u["section"],
+                           "day": day, "slot_number": sn, "room_name": room_name})
+
+    await log_activity(current_user, "auto_place_unscheduled", "weekly_schedule", faculty_id, None,
+                       {"placed": len(placed), "failed": len(failed)})
+    return {
+        "placed": placed,
+        "failed": failed,
+        "message": f"تم إدراج {len(placed)} محاضرة" + (f" وتعذر إدراج {len(failed)}" if failed else " بنجاح"),
+    }

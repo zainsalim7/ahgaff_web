@@ -236,6 +236,30 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
     finally { setBusy(false); }
   };
 
+  // إدراج تلقائي لكل المقررات غير المدرجة
+  const autoPlaceAll = async () => {
+    const count = data?.unscheduled?.length || 0;
+    if (!count) return;
+    const ok = window.confirm(
+      `سيتم توزيع ${count} مقرر غير مدرج تلقائياً على أفضل الأماكن الصالحة\n(مراعاة: تعارضات الشعبة والمعلم والقاعات وتفضيلات المعلمين وتوزيع الأيام)\n\nهل تريد المتابعة؟`
+    );
+    if (!ok) return;
+    setBusy(true);
+    try {
+      const params: any = { faculty_id: facultyId };
+      if (departmentId) params.department_id = departmentId;
+      const res = await api.post('/weekly-schedule/auto-place-unscheduled', null, { params });
+      const { placed = [], failed = [] } = res.data;
+      let text = `✅ ${res.data.message}`;
+      if (placed.length) text += ` — ${placed.slice(0, 4).map((p: any) => `${p.course_name} (${p.day} ف${p.slot_number}${p.room_name ? ` ${p.room_name}` : ''})`).join('، ')}${placed.length > 4 ? '...' : ''}`;
+      if (failed.length) text += ` | ⚠️ تعذر: ${failed.map((f: any) => `${f.course_name}: ${f.reason}`).join('، ')}`;
+      showMsg(failed.length ? 'error' : 'success', text);
+      setPlacing(null); setValidMap(null); setSelected(null);
+      await load();
+    } catch (e: any) { handleConflictError(e); }
+    finally { setBusy(false); }
+  };
+
   const downloadExport = async (fmt: 'pdf' | 'excel') => {
     setBusy(true);
     try {
@@ -537,9 +561,20 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
       {/* المقررات غير المدرجة */}
       {unscheduled.length > 0 && (
         <View style={{ marginTop: 12, backgroundColor: '#fff8e1', borderWidth: 1, borderColor: '#ffe082', borderRadius: 10, padding: 12 }} testID="unscheduled-courses-section">
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
             <Ionicons name="warning" size={16} color="#e65100" />
             <Text style={{ fontSize: 13, fontWeight: '800', color: '#e65100' }}>مقررات لم تُدرج في الجدول أو مدرجة جزئياً ({unscheduled.length})</Text>
+            {can_manage && (
+              <TouchableOpacity
+                onPress={autoPlaceAll}
+                disabled={busy}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#4527a0', marginRight: 'auto' }}
+                testID="auto-place-all-btn"
+              >
+                <Ionicons name="flash" size={13} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>⚡ إدراج تلقائي للكل</Text>
+              </TouchableOpacity>
+            )}
           </View>
           <div style={{ overflowX: 'auto', direction: 'rtl' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', backgroundColor: '#fff', borderRadius: 8 }}>
