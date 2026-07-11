@@ -32,7 +32,7 @@ function TeacherSearchBox({ teachers, selectedId, onSelect, placeholder }: { tea
   }
 
   return (
-    <div style={{ position: 'relative', direction: 'rtl' }}>
+    <div style={{ direction: 'rtl' }}>
       <div style={{ display: 'flex', alignItems: 'center', border: '1px solid #ddd', borderRadius: 8, backgroundColor: '#f5f5f5' }}>
         <input
           type="text"
@@ -45,7 +45,11 @@ function TeacherSearchBox({ teachers, selectedId, onSelect, placeholder }: { tea
         {selectedId && <button onClick={() => { onSelect(''); setQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '0 8px', color: '#e53935', fontSize: 16 }}>x</button>}
       </div>
       {open && (
-        <div style={{ position: 'absolute', top: 44, left: 0, right: 0, backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', zIndex: 1000, boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}>
+        <div style={{ backgroundColor: '#fff', border: '1px solid #ddd', borderRadius: 8, maxHeight: 220, overflowY: 'auto', marginTop: 4, boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 12px', backgroundColor: '#f5f8fc', borderBottom: '1px solid #e3e9f2', position: 'sticky', top: 0 }}>
+            <span style={{ fontSize: 11, color: '#5b6678' }}>{filtered.length} نتيجة</span>
+            <button onClick={() => { setOpen(false); setQuery(''); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#e53935', fontSize: 12, fontWeight: 700 }}>✕ إغلاق</button>
+          </div>
           {filtered.map((t: any) => (
             <div key={t.id} onClick={() => { onSelect(t.id); setQuery(''); setOpen(false); }}
               style={{ padding: '10px 12px', cursor: 'pointer', borderBottom: '1px solid #f0f0f0', backgroundColor: t.id === selectedId ? '#e3f2fd' : '#fff', textAlign: 'right' }}>
@@ -55,7 +59,6 @@ function TeacherSearchBox({ teachers, selectedId, onSelect, placeholder }: { tea
           {filtered.length === 0 && <div style={{ padding: 16, color: '#999', textAlign: 'center' }}>لا توجد نتائج</div>}
         </div>
       )}
-      {open && <div onClick={() => setOpen(false)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 999 }} />}
     </div>
   );
 }
