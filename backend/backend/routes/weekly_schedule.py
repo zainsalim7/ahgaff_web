@@ -64,8 +64,8 @@ class TeacherPreferenceUpdate(BaseModel):
     unavailable_days: List[str] = []  # ["الثلاثاء", "الأربعاء"] — يوم كامل
     unavailable_slots: List[int] = []  # [1, 5] = فترات تُطبَّق على كل الأيام (قديم/توافق رجعي)
     unavailable_periods: List[UnavailablePeriod] = []  # 🆕 شبكة يوم×فترة بدقة عالية
-    max_daily_lectures: int = 2
-    allow_consecutive_lectures: bool = False  # افتراضياً لا نسمح بمحاضرتين متتاليتين لنفس الأستاذ
+    max_daily_lectures: int = 3
+    allow_consecutive_lectures: bool = True
 
 
 def _derive_unavailable_periods(pref: dict, working_days: List[str], slot_numbers: List[int]) -> List[dict]:
@@ -533,9 +533,13 @@ async def list_teacher_preferences_summary(department_id: str, current_user: dic
     prefs_docs = await db.teacher_preferences.find({"teacher_id": {"$in": tids}}).to_list(1000)
     by_tid = {p.get("teacher_id"): p for p in prefs_docs}
 
-    # لعدّ الحقول القديمة (قبل شبكة الفترات) نحتاج عدد الفترات وأيام العمل
-    ts_count = await db.time_slots.count_documents({}) or 6
-    settings = await db.schedule_settings.find_one({})
+    # لعدّ الحقول القديمة (قبل شبكة الفترات) نستخدم إعدادات كلية القسم (وليس العامة)
+    dept = await db.departments.find_one({"_id": ObjectId(department_id)})
+    fac_id = (dept or {}).get("faculty_id", "")
+    settings = await db.schedule_settings.find_one({"_id": f"faculty_{fac_id}"}) if fac_id else None
+    if not settings:
+        settings = await db.schedule_settings.find_one({"_id": "global"}) or await db.schedule_settings.find_one({})
+    ts_count = len((settings or {}).get("time_slots", []) or []) or 6
     working_days_count = len((settings or {}).get("working_days", []) or []) or 6
 
     results = []
@@ -612,19 +616,21 @@ async def update_teacher_preferences(
     periods_set = set()
     for p in data.unavailable_periods or []:
         periods_set.add((p.day, int(p.slot_number)))
-    # أضف أيضاً كل ما ورد في الحقول القديمة (إن أرسلها الفرونت للتوافق)
+    # 🔧 الحقول القديمة تُدمج فقط إن كانت الشبكة الجديدة غير مرسلة (عميل قديم)
+    # وإلا فالشبكة هي مصدر الحقيقة الوحيد — يمنع "عودة" الخلايا الملغاة من الحقول القديمة
     settings = await db.schedule_settings.find_one({})
     working_days = (settings or {}).get("working_days", ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"])
     ts_docs = await db.time_slots.find({}).to_list(20)
     slot_numbers = sorted([ts.get("slot_number") for ts in ts_docs if ts.get("slot_number")])
     if not slot_numbers:
         slot_numbers = [1, 2, 3, 4, 5]
-    for d in data.unavailable_days or []:
-        for sn in slot_numbers:
-            periods_set.add((d, sn))
-    for sn in data.unavailable_slots or []:
-        for d in working_days:
-            periods_set.add((d, sn))
+    if not (data.unavailable_periods or []):
+        for d in data.unavailable_days or []:
+            for sn in slot_numbers:
+                periods_set.add((d, sn))
+        for sn in data.unavailable_slots or []:
+            for d in working_days:
+                periods_set.add((d, sn))
 
     normalized_periods = [{"day": d, "slot_number": sn} for (d, sn) in sorted(periods_set)]
 

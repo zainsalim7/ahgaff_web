@@ -257,11 +257,26 @@ export default function WeeklySchedulePage() {
       (async () => {
         try {
           const res = await scheduleAPI.getTeacherPrefs(selectedTeacher);
-          setPrefs(res.data);
+          const d = res.data || {};
+          // 🔧 تطبيع فوري: دمج الحقول القديمة في الشبكة مرة واحدة ثم تصفيرها
+          // حتى تكون unavailable_periods هي مصدر الحقيقة الوحيد (قابلة للتعديل والحفظ)
+          const periodsSet = new Set<string>();
+          (d.unavailable_periods || []).forEach((p: any) => periodsSet.add(`${p.day}|${Number(p.slot_number)}`));
+          (d.unavailable_days || []).forEach((day: string) => {
+            timeSlots.forEach(ts => periodsSet.add(`${day}|${ts.slot_number}`));
+          });
+          (d.unavailable_slots || []).forEach((sn: number) => {
+            DAYS.forEach(day => periodsSet.add(`${day}|${Number(sn)}`));
+          });
+          const normalized = Array.from(periodsSet).map(k => {
+            const [day, sn] = k.split('|');
+            return { day, slot_number: Number(sn) };
+          });
+          setPrefs({ ...d, unavailable_periods: normalized, unavailable_days: [], unavailable_slots: [] });
         } catch {}
       })();
     }
-  }, [selectedTeacher, activeTab]);
+  }, [selectedTeacher, activeTab, timeSlots]);
 
   const handleGenerate = async () => {
     if (!selectedFaculty) return;
@@ -1350,11 +1365,7 @@ export default function WeeklySchedulePage() {
                   // ونشتقّ الحقول القديمة عند الحفظ للتوافق الرجعي.
                   const periods: Array<{day: string; slot_number: number}> = Array.isArray(prefs.unavailable_periods) ? prefs.unavailable_periods : [];
                   const isCellUnavailable = (day: string, sn: number) => {
-                    if (periods.some(p => p.day === day && Number(p.slot_number) === sn)) return true;
-                    // fallback backward-compat للحالة النادرة قبل أول حفظ
-                    if ((prefs.unavailable_days || []).includes(day)) return true;
-                    if ((prefs.unavailable_slots || []).includes(sn)) return true;
-                    return false;
+                    return periods.some(p => p.day === day && Number(p.slot_number) === sn);
                   };
                   const toggleCell = (day: string, sn: number) => {
                     setPrefs((p: any) => {
