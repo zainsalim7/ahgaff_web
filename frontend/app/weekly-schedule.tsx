@@ -574,6 +574,20 @@ export default function WeeklySchedulePage() {
     finally { setSavingPrefs(false); }
   };
 
+  const handleClearPrefs = async () => {
+    if (!selectedTeacher) return;
+    if (Platform.OS === 'web' && !window.confirm('سيتم مسح كل التفضيلات لهذا المعلم (الفترات المحظورة) وإعادة الإعدادات الافتراضية (3 محاضرات يومياً + السماح بالمتتالية)\n\nهل أنت متأكد؟')) return;
+    setSavingPrefs(true);
+    try {
+      const cleared = { unavailable_days: [], unavailable_slots: [], unavailable_periods: [], max_daily_lectures: 3, allow_consecutive_lectures: true };
+      await scheduleAPI.saveTeacherPrefs(selectedTeacher, cleared);
+      setPrefs(cleared);
+      if (Platform.OS === 'web') window.alert('تم مسح كل التفضيلات — صفحة نظيفة');
+      loadPrefsSummary();
+    } catch {}
+    finally { setSavingPrefs(false); }
+  };
+
   const handleAddScheduleSlot = async () => {
     if (!addSlotData.day || !addSlotData.slot_number || !addSlotData.course_id || !addSlotData.room_id) {
       if (Platform.OS === 'web') window.alert('أكمل جميع الحقول');
@@ -1491,10 +1505,16 @@ export default function WeeklySchedulePage() {
                   </View>
                 </View>
 
-                <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32', marginTop: 16 }]} onPress={handleSavePrefs} disabled={savingPrefs}>
-                  <Ionicons name="save" size={16} color="#fff" />
-                  <Text style={st.btnText}>{savingPrefs ? 'جاري...' : 'حفظ التفضيلات'}</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 16, flexWrap: 'wrap' }}>
+                  <TouchableOpacity style={[st.btn, { backgroundColor: '#2e7d32', flex: 1 }]} onPress={handleSavePrefs} disabled={savingPrefs}>
+                    <Ionicons name="save" size={16} color="#fff" />
+                    <Text style={st.btnText}>{savingPrefs ? 'جاري...' : 'حفظ التفضيلات'}</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={[st.btn, { backgroundColor: '#b71c1c' }]} onPress={handleClearPrefs} disabled={savingPrefs} testID="clear-prefs-btn">
+                    <Ionicons name="trash" size={16} color="#fff" />
+                    <Text style={st.btnText}>مسح كل التفضيلات</Text>
+                  </TouchableOpacity>
+                </View>
               </View>
             )}
           </>
