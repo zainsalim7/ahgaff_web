@@ -232,7 +232,7 @@ import re as _re
 from routes.deps import activity_log_ctx as _activity_ctx
 
 # مسارات ضجيج لا تستحق التسجيل
-_AUTO_LOG_SKIP = ("/api/fcm/", "/api/notifications/", "/api/auth/refresh", "/api/students/import-preview")
+_AUTO_LOG_SKIP = ("/api/fcm/", "/api/notifications/", "/api/auth/refresh", "/api/students/import-preview", "/api/init-admin")
 
 _METHOD_AR = {"POST": "إنشاء", "PUT": "تعديل", "PATCH": "تعديل", "DELETE": "حذف"}
 

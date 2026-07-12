@@ -145,8 +145,14 @@ export default function ActivityLogsScreen() {
     fetchLogs(1, true);
   };
 
-  const getActionInfo = (action: string) => {
-    return ACTION_LABELS[action] || { label: action, icon: 'information-circle', color: '#666' };
+  const getActionInfo = (action: string, actionAr?: string) => {
+    const known = ACTION_LABELS[action];
+    if (known) return known;
+    // سجلات تلقائية: استخدم الوصف العربي من الخادم بدل الكود الإنجليزي
+    const method = (action || '').split('_')[0];
+    const color = method === 'delete' ? '#c62828' : method === 'post' ? '#2e7d32' : '#1565c0';
+    const icon = method === 'delete' ? 'trash' : method === 'post' ? 'add-circle' : 'create';
+    return { label: actionAr || action, icon, color };
   };
 
   const formatDate = (timestamp: string) => {
@@ -157,7 +163,14 @@ export default function ActivityLogsScreen() {
   };
 
   const renderLog = ({ item }: { item: ActivityLog }) => {
-    const actionInfo = getActionInfo(item.action);
+    const actionInfo = getActionInfo(item.action, (item as any).action_ar);
+    const detailsText = (() => {
+      if (!item.details) return '';
+      if (typeof item.details !== 'object') return String(item.details);
+      // سجلات تلقائية: اعرض المسار فقط بدل JSON خام
+      if (item.details.path) return item.details.path;
+      return JSON.stringify(item.details);
+    })();
     
     return (
       <View style={styles.logCard}>
@@ -175,13 +188,9 @@ export default function ActivityLogsScreen() {
           
           <Text style={styles.logUsername}>@{item.username}</Text>
           
-          {item.details && (
-            <Text style={styles.logDetails} numberOfLines={2}>
-              {typeof item.details === 'object' 
-                ? JSON.stringify(item.details)
-                : String(item.details)}
-            </Text>
-          )}
+          {detailsText ? (
+            <Text style={styles.logDetails} numberOfLines={2}>{detailsText}</Text>
+          ) : null}
           
           <Text style={styles.logTime}>{formatDate(item.timestamp)}</Text>
         </View>
