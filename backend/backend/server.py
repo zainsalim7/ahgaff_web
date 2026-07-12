@@ -7,6 +7,7 @@ from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 import os
 import logging
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -225,6 +226,160 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_with_headers)
 
 app.add_middleware(SecurityHeadersMiddleware)
+
+# ===== 🆕 التسجيل التلقائي الشامل للنشاطات =====
+import re as _re
+from routes.deps import activity_log_ctx as _activity_ctx
+
+# مسارات ضجيج لا تستحق التسجيل
+_AUTO_LOG_SKIP = ("/api/fcm/", "/api/notifications/", "/api/auth/refresh", "/api/students/import-preview")
+
+_METHOD_AR = {"POST": "إنشاء", "PUT": "تعديل", "PATCH": "تعديل", "DELETE": "حذف"}
+
+# قواعد وصف عربية: (regex على المسار, method أو None للكل, الوصف, entity_type)
+_AUTO_LOG_RULES = [
+    (r"^/api/students/bulk-change-level", None, "تغيير مستوى طلاب (جماعي)", "student"),
+    (r"^/api/students/bulk-activate", None, "تفعيل طلاب (جماعي)", "student"),
+    (r"^/api/students/bulk-deactivate", None, "تعطيل طلاب (جماعي)", "student"),
+    (r"^/api/students/[^/]+/activate", None, "تفعيل طالب", "student"),
+    (r"^/api/students/[^/]+/deactivate", None, "تعطيل طالب", "student"),
+    (r"^/api/students/[^/]+/reset-password", None, "إعادة تعيين كلمة مرور طالب", "student"),
+    (r"^/api/students/?$", "POST", "إنشاء طالب", "student"),
+    (r"^/api/students/[^/]+$", "PUT", "تعديل طالب", "student"),
+    (r"^/api/students/[^/]+$", "DELETE", "حذف طالب", "student"),
+    (r"^/api/teachers/[^/]+/activate", None, "تفعيل معلم", "teacher"),
+    (r"^/api/teachers/[^/]+/deactivate", None, "تعطيل معلم", "teacher"),
+    (r"^/api/teachers/[^/]+/reset-password", None, "إعادة تعيين كلمة مرور معلم", "teacher"),
+    (r"^/api/teachers/?$", "POST", "إنشاء معلم", "teacher"),
+    (r"^/api/teachers/[^/]+$", "PUT", "تعديل معلم", "teacher"),
+    (r"^/api/teachers/[^/]+$", "DELETE", "حذف معلم", "teacher"),
+    (r"^/api/courses/[^/]+/clone-section", None, "نسخ شعبة مقرر", "course"),
+    (r"^/api/courses/[^/]+/send-final-results", None, "إرسال النتائج النهائية", "course"),
+    (r"^/api/courses/[^/]+/auto-enroll", None, "تسجيل تلقائي لطلاب المقرر", "course"),
+    (r"^/api/courses/auto-enroll-all", None, "تسجيل تلقائي شامل للمقررات", "course"),
+    (r"^/api/courses/?$", "POST", "إنشاء مقرر", "course"),
+    (r"^/api/courses/[^/]+$", "PUT", "تعديل مقرر", "course"),
+    (r"^/api/courses/[^/]+$", "DELETE", "حذف مقرر", "course"),
+    (r"^/api/lectures/generate-semester", None, "توليد محاضرات الفصل", "lecture"),
+    (r"^/api/lectures/generate", None, "توليد محاضرات", "lecture"),
+    (r"^/api/lectures/[^/]+/reschedule", None, "إعادة جدولة محاضرة", "lecture"),
+    (r"^/api/lectures/[^/]+/room", None, "تغيير قاعة محاضرة", "lecture"),
+    (r"^/api/lectures/[^/]+/status", None, "تغيير حالة محاضرة", "lecture"),
+    (r"^/api/lectures/?$", "POST", "إنشاء محاضرة", "lecture"),
+    (r"^/api/lectures/[^/]+$", "PUT", "تعديل محاضرة", "lecture"),
+    (r"^/api/lectures/[^/]+$", "DELETE", "حذف محاضرة", "lecture"),
+    (r"^/api/attendance/session", None, "تسجيل جلسة حضور", "attendance"),
+    (r"^/api/attendance/single", None, "تسجيل حضور طالب", "attendance"),
+    (r"^/api/sync/attendance", None, "مزامنة حضور (تطبيق المعلم)", "attendance"),
+    (r"^/api/enrollments/bulk-copy", None, "نسخ تسجيلات (جماعي)", "enrollment"),
+    (r"^/api/enrollments/bulk-move", None, "نقل تسجيلات (جماعي)", "enrollment"),
+    (r"^/api/enrollments/[^/]+/import", None, "استيراد تسجيلات طلاب", "enrollment"),
+    (r"^/api/enrollments/[^/]+/[^/]+$", "DELETE", "إلغاء تسجيل طالب من مقرر", "enrollment"),
+    (r"^/api/enrollments/[^/]+$", "POST", "تسجيل طالب في مقرر", "enrollment"),
+    (r"^/api/users/[^/]+/role", None, "تغيير دور مستخدم", "user"),
+    (r"^/api/users/[^/]+/permissions", None, "تعديل صلاحيات مستخدم", "user"),
+    (r"^/api/users/?$", "POST", "إنشاء مستخدم", "user"),
+    (r"^/api/users/[^/]+$", "PUT", "تعديل مستخدم", "user"),
+    (r"^/api/users/[^/]+$", "DELETE", "حذف مستخدم", "user"),
+    (r"^/api/roles", None, "إدارة الأدوار والصلاحيات", "role"),
+    (r"^/api/departments/?$", "POST", "إنشاء قسم", "department"),
+    (r"^/api/departments/[^/]+$", "PUT", "تعديل قسم", "department"),
+    (r"^/api/departments/[^/]+$", "DELETE", "حذف قسم", "department"),
+    (r"^/api/semesters", None, "إدارة الفصول الدراسية", "semester"),
+    (r"^/api/schedule", None, "إدارة الجدول", "schedule"),
+    (r"^/api/weekly-schedule", None, "إدارة الجدول الأسبوعي", "weekly_schedule"),
+    (r"^/api/teacher-preferences", None, "تعديل تفضيلات معلم", "teacher_preferences"),
+    (r"^/api/schedule-settings", None, "تعديل إعدادات الجدولة", "schedule_settings"),
+    (r"^/api/auth/change-password", None, "تغيير كلمة المرور", "user"),
+    (r"^/api/auth/force-change-password", None, "تغيير كلمة مرور (إجباري)", "user"),
+    (r"^/api/holidays", None, "إدارة العطل", "holiday"),
+    (r"^/api/rooms", None, "إدارة القاعات", "room"),
+    (r"^/api/study-plans", None, "إدارة الخطط الدراسية", "study_plan"),
+    (r"^/api/curriculum", None, "إدارة المناهج", "curriculum"),
+]
+_AUTO_LOG_RULES_C = [(_re.compile(p), m, desc, et) for (p, m, desc, et) in _AUTO_LOG_RULES]
+
+
+def _describe_request(method: str, path: str):
+    for rx, m, desc, et in _AUTO_LOG_RULES_C:
+        if rx.match(path) and (m is None or m == method):
+            return desc, et
+    seg = path.replace("/api/", "").split("/")[0].replace("-", "_")
+    return f"{_METHOD_AR.get(method, method)} — {seg}", seg
+
+
+async def _auto_log_request(method: str, path: str, auth_header: str):
+    """تسجيل تلقائي لعملية كتابة لم تُسجَّل يدوياً"""
+    try:
+        user = {}
+        if auth_header.startswith("Bearer "):
+            try:
+                payload = jwt.decode(auth_header[7:], SECRET_KEY, algorithms=[ALGORITHM])
+                uid = payload.get("sub")
+                if uid:
+                    udoc = await db.users.find_one(
+                        {"_id": ObjectId(uid)} if len(uid) == 24 else {"_id": uid},
+                        {"username": 1, "role": 1, "faculty_id": 1, "department_id": 1},
+                    )
+                    if udoc:
+                        user = {**udoc, "id": str(udoc["_id"])}
+            except Exception:
+                pass
+        desc, entity_type = _describe_request(method, path)
+        await db.activity_logs.insert_one({
+            "user_id": user.get("id", ""),
+            "username": user.get("username", "غير معروف"),
+            "user_role": user.get("role", "غير محدد"),
+            "action": f"{method.lower()}_{entity_type}",
+            "action_ar": desc,
+            "entity_type": entity_type,
+            "entity_id": None,
+            "entity_name": None,
+            "details": {"path": path, "method": method},
+            "ip_address": None,
+            "user_agent": None,
+            "faculty_id": user.get("faculty_id"),
+            "department_id": user.get("department_id"),
+            "timestamp": get_yemen_time(),
+            "auto": True,
+        })
+    except Exception as e:
+        logging.warning(f"auto activity log failed: {e}")
+
+
+class AutoActivityLogMiddleware:
+    """ASGI middleware: يسجل تلقائياً كل عمليات الكتابة الناجحة غير المسجلة يدوياً"""
+
+    def __init__(self, app):
+        self.app = app
+
+    async def __call__(self, scope, receive, send):
+        if scope["type"] != "http" or scope.get("method") not in ("POST", "PUT", "PATCH", "DELETE"):
+            return await self.app(scope, receive, send)
+        path = scope.get("path", "")
+        if not path.startswith("/api/") or any(s in path for s in _AUTO_LOG_SKIP):
+            return await self.app(scope, receive, send)
+
+        ctx = {"manual": False}
+        token = _activity_ctx.set(ctx)
+        status_holder = {"status": 0}
+
+        async def send_wrapper(message):
+            if message["type"] == "http.response.start":
+                status_holder["status"] = message["status"]
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        finally:
+            _activity_ctx.reset(token)
+
+        if 200 <= status_holder["status"] < 300 and not ctx["manual"]:
+            headers = {k.decode().lower(): v.decode() for k, v in scope.get("headers", [])}
+            asyncio.create_task(_auto_log_request(scope["method"], path, headers.get("authorization", "")))
+
+
+app.add_middleware(AutoActivityLogMiddleware)
 
 # ==================== Rate Limiting ====================
 _login_attempts = {}  # {ip: [(timestamp, success), ...]}
@@ -587,6 +742,11 @@ def apply_fields(items: list, allowed: Optional[set]) -> list:
 
 # ترجمة أنواع الأنشطة إلى العربية
 ACTION_TRANSLATIONS = {
+    "move_schedule_slot": "نقل محاضرة في الجدول الأسبوعي",
+    "swap_schedule_slots": "تبديل محاضرتين في الجدول الأسبوعي",
+    "auto_place_unscheduled": "إدراج تلقائي للمقررات غير المدرجة",
+    "generate_lectures_from_schedule": "توليد محاضرات من الجدول الأسبوعي",
+    "auto_generate_schedule": "توليد الجدول الأسبوعي تلقائياً",
     "login": "تسجيل دخول",
     "logout": "تسجيل خروج",
     "password_change": "تغيير كلمة المرور",
@@ -639,6 +799,10 @@ async def log_activity(
     user_agent: str = None
 ):
     """تسجيل نشاط المستخدم في قاعدة البيانات"""
+    # إعلام الـmiddleware أن هذا الطلب سُجّل يدوياً (يمنع الازدواج)
+    _ctx = _activity_ctx.get()
+    if _ctx is not None:
+        _ctx["manual"] = True
     try:
         action_ar = ACTION_TRANSLATIONS.get(action, action)
         
@@ -15343,6 +15507,12 @@ async def get_activity_logs(
     
     result = []
     for log in logs:
+        # 🕐 تحويل الوقت إلى توقيت عدن (+3) — Mongo يخزّن UTC
+        ts = log.get("timestamp")
+        if isinstance(ts, datetime):
+            if ts.tzinfo is None:
+                ts = ts.replace(tzinfo=timezone.utc)
+            ts = ts.astimezone(YEMEN_TIMEZONE).isoformat()
         result.append({
             "id": str(log["_id"]),
             "user_id": log.get("user_id"),
@@ -15357,7 +15527,7 @@ async def get_activity_logs(
             "ip_address": log.get("ip_address"),
             "faculty_id": log.get("faculty_id"),
             "department_id": log.get("department_id"),
-            "timestamp": log.get("timestamp")
+            "timestamp": ts
         })
     
     return {

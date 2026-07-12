@@ -18,6 +18,16 @@ from models.permissions import UserRole, DEFAULT_PERMISSIONS, FULL_PERMISSION_MA
 # Rate Limiting
 import time as time_module
 
+# contextvar مشترك مع middleware التسجيل التلقائي في server.py (منع ازدواج السجلات)
+import contextvars
+activity_log_ctx: "contextvars.ContextVar" = contextvars.ContextVar("activity_log_ctx", default=None)
+
+
+def mark_manual_activity_logged():
+    ctx = activity_log_ctx.get()
+    if ctx is not None:
+        ctx["manual"] = True
+
 _login_attempts = {}
 RATE_LIMIT_WINDOW = 300  # 5 دقائق
 RATE_LIMIT_MAX_ATTEMPTS = 10
@@ -90,6 +100,11 @@ async def get_scope_filter(current_user: dict, scope_type: str) -> dict:
 
 # ترجمة أنواع الأنشطة إلى العربية
 ACTION_TRANSLATIONS = {
+    "move_schedule_slot": "نقل محاضرة في الجدول الأسبوعي",
+    "swap_schedule_slots": "تبديل محاضرتين في الجدول الأسبوعي",
+    "auto_place_unscheduled": "إدراج تلقائي للمقررات غير المدرجة",
+    "generate_lectures_from_schedule": "توليد محاضرات من الجدول الأسبوعي",
+    "auto_generate_schedule": "توليد الجدول الأسبوعي تلقائياً",
     "login": "تسجيل دخول",
     "logout": "تسجيل خروج",
     "password_change": "تغيير كلمة المرور",
@@ -226,6 +241,7 @@ async def log_activity(
     user_agent: str = None
 ):
     """تسجيل نشاط المستخدم في قاعدة البيانات"""
+    mark_manual_activity_logged()
     db = get_db()
     try:
         action_ar = ACTION_TRANSLATIONS.get(action, action)

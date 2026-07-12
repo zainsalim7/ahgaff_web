@@ -1,0 +1,31 @@
+{
+  "summary": "Tested new AutoActivityLogMiddleware, Yemen timezone conversion (+03:00), manual-log de-duplication, failed-op no-log, and regression endpoints (master-view, valid-slots, teacher-preferences defaults). Frontend smoke: /activity-logs and /weekly-schedule (master view). All 8 backend pytest cases pass. Two minor frontend observations.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "ActivityLogsScreen (frontend/app/activity-logs.tsx)", "issue": "Entries from AutoActivityLogMiddleware display raw English snake_case action code as badge (e.g. 'put_teacher_preferences', 'post_init_admin', 'delete_student') instead of Arabic action_ar (backend does populate action_ar like 'تعديل تفضيلات معلم', 'حذف طالب'). Only manually-logged 'تسجيل دخول' renders Arabic. Root cause is likely the UI reading `action` field instead of `action_ar` (or missing i18n mapping for these keys).", "selector": "activity-log-row badge", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_activity_logs_autolog.py", "/app/test_reports/pytest/iter_activity_logs.xml"],
+  "action_items": [
+    "In frontend/app/activity-logs.tsx, display item.action_ar (fallback to item.action) so auto-logged entries show Arabic descriptions instead of raw action codes like 'put_teacher_preferences'.",
+    "(Optional) The auto-log fallback for unmatched paths uses seg-based fallback: post /api/init-admin resulted in action_ar='إنشاء — init_admin'; consider adding an explicit skip or Arabic rule for /api/init-admin if noise.",
+    "(Optional) Auto-log payload includes {details.path, details.method} JSON that is rendered as raw JSON string in the timeline UI — consider suppressing details JSON display for auto logs and only show the Arabic description."
+  ],
+  "critical_code_review_comments": [
+    "server.py > 16k lines — very large monolith; consider splitting further.",
+    "AutoActivityLogMiddleware buffers no body (good perf) but auto-logs currently record entity_id=None and entity_name=None which loses linkage for auto entries; the frontend already relies on details.path/id substring; consider extracting id from path regex to populate entity_id.",
+    "_AUTO_LOG_RULES for /api/roles, /api/holidays, /api/rooms, /api/semesters etc. match any method incl. POST/PUT/DELETE — verify manual routes call mark_manual_activity_logged() to avoid duplicates (teacher-preferences confirmed OK: 2 PUTs = 2 logs).",
+    "students.py has a shadow delete_student without manual log; make sure only the server.py delete_student route (which calls log_activity + mark_manual_activity_logged via log_activity) is registered."
+  ],
+  "updated_files": ["/app/backend/tests/test_activity_logs_autolog.py"],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "90% (both screens load, minor label bug)"},
+  "test_credentials": "admin / admin123 (via /app/memory/test_credentials.md)",
+  "seed_data_creation": "Test student created and deleted within test (student_id starts with TEST-AUTOLOG-...). No residual data. Two PUTs to teacher-preferences 698e533beb4c6eb021c50302 with unavailable_periods finally empty (returned to empty state).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend middleware/timezone verified via pytest test_activity_logs_autolog.py (8/8). Key API test: GET /api/activity-logs returns dict OR list; timestamps must end with '+03:00'. Auto logs carry details.path; manual logs carry entity_id and no details.path. Frontend activity-logs page renders JSON details verbatim and uses action code instead of action_ar for auto logs — see action_items.",
+  "rca of the issue": "Reproduction of frontend label issue: login as admin, PUT /api/teacher-preferences/... then open /activity-logs — the new row shows badge 'put_teacher_preferences' instead of 'تعديل تفضيلات معلم'. Backend document DOES contain action_ar='تعديل تفضيلات معلم'. Fix should be in frontend/app/activity-logs.tsx to prefer action_ar when present."
+}
