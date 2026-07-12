@@ -742,6 +742,7 @@ def apply_fields(items: list, allowed: Optional[set]) -> list:
 
 # ترجمة أنواع الأنشطة إلى العربية
 ACTION_TRANSLATIONS = {
+    "delete_activity_logs": "حذف سجلات النشاطات",
     "move_schedule_slot": "نقل محاضرة في الجدول الأسبوعي",
     "swap_schedule_slots": "تبديل محاضرتين في الجدول الأسبوعي",
     "auto_place_unscheduled": "إدراج تلقائي للمقررات غير المدرجة",
@@ -15463,6 +15464,7 @@ async def get_activity_logs(
     department_id: Optional[str] = None,
     from_date: Optional[str] = None,
     to_date: Optional[str] = None,
+    source: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """جلب سجلات الأنشطة"""
@@ -15493,10 +15495,21 @@ async def get_activity_logs(
     # فلترة بالتاريخ
     if from_date or to_date:
         query["timestamp"] = {}
+        # التواريخ المدخلة بتوقيت عدن (+3) — تحويل إلى UTC للمطابقة مع التخزين
         if from_date:
-            query["timestamp"]["$gte"] = datetime.fromisoformat(from_date)
+            _dt = datetime.fromisoformat(from_date)
+            if _dt.tzinfo is None:
+                _dt = _dt.replace(tzinfo=YEMEN_TIMEZONE)
+            query["timestamp"]["$gte"] = _dt.astimezone(timezone.utc).replace(tzinfo=None)
         if to_date:
-            query["timestamp"]["$lte"] = datetime.fromisoformat(to_date)
+            _dt = datetime.fromisoformat(to_date)
+            if _dt.tzinfo is None:
+                _dt = _dt.replace(tzinfo=YEMEN_TIMEZONE) + timedelta(days=1)
+            query["timestamp"]["$lte"] = _dt.astimezone(timezone.utc).replace(tzinfo=None)
+    if source == "auto":
+        query["auto"] = True
+    elif source == "manual":
+        query["auto"] = {"$ne": True}
     
     # حساب العدد الكلي
     total = await db.activity_logs.count_documents(query)
@@ -15537,6 +15550,44 @@ async def get_activity_logs(
         "limit": limit,
         "pages": (total + limit - 1) // limit
     }
+
+@api_router.delete("/activity-logs")
+async def delete_activity_logs(
+    before_date: Optional[str] = None,
+    source: Optional[str] = None,
+    action: Optional[str] = None,
+    user_id: Optional[str] = None,
+    confirm: bool = False,
+    current_user: dict = Depends(get_current_user)
+):
+    """حذف سجلات النشاطات (مدير النظام فقط) — حسب الفلاتر أو الكل"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="حذف السجلات متاح لمدير النظام فقط")
+    if not confirm:
+        raise HTTPException(status_code=400, detail="يجب تأكيد الحذف (confirm=true)")
+
+    query = {}
+    if before_date:
+        _dt = datetime.fromisoformat(before_date)
+        if _dt.tzinfo is None:
+            _dt = _dt.replace(tzinfo=YEMEN_TIMEZONE)
+        query["timestamp"] = {"$lt": _dt.astimezone(timezone.utc).replace(tzinfo=None)}
+    if source == "auto":
+        query["auto"] = True
+    elif source == "manual":
+        query["auto"] = {"$ne": True}
+    if action:
+        query["action"] = action
+    if user_id:
+        query["user_id"] = user_id
+
+    result = await db.activity_logs.delete_many(query)
+    await log_activity(
+        current_user, "delete_activity_logs", "activity_logs", None, None,
+        {"deleted_count": result.deleted_count, "before_date": before_date, "source": source}
+    )
+    return {"deleted": result.deleted_count, "message": f"تم حذف {result.deleted_count} سجل"}
+
 
 @api_router.get("/activity-logs/stats")
 async def get_activity_logs_stats(

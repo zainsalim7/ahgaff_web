@@ -10,11 +10,13 @@ import {
   Modal,
   TextInput,
   ScrollView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
 import { activityLogsAPI, usersAPI } from '../src/services/api';
+import api from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { formatGregorianDate, formatTime } from '../src/utils/dateUtils';
 
@@ -61,6 +63,10 @@ export default function ActivityLogsScreen() {
   // Filters
   const [filterAction, setFilterAction] = useState<string>('');
   const [filterUser, setFilterUser] = useState<string>('');
+  const [filterSource, setFilterSource] = useState<string>('');
+  const [filterFrom, setFilterFrom] = useState<string>('');
+  const [filterTo, setFilterTo] = useState<string>('');
+  const [deleting, setDeleting] = useState(false);
   const [users, setUsers] = useState<{ id: string; username: string; full_name: string }[]>([]);
 
   const fetchLogs = useCallback(async (pageNum: number, refresh: boolean = false) => {
@@ -73,6 +79,9 @@ export default function ActivityLogsScreen() {
       const params: any = { page: pageNum, limit: 20 };
       if (filterAction) params.action = filterAction;
       if (filterUser) params.user_id = filterUser;
+      if (filterSource) params.source = filterSource;
+      if (filterFrom) params.from_date = filterFrom;
+      if (filterTo) params.to_date = filterTo;
 
       const response = await activityLogsAPI.getAll(params);
       const newLogs = response.data.logs || [];
@@ -92,7 +101,7 @@ export default function ActivityLogsScreen() {
       setRefreshing(false);
       setLoadingMore(false);
     }
-  }, [filterAction, filterUser]);
+  }, [filterAction, filterUser, filterSource, filterFrom, filterTo]);
 
   const fetchStats = useCallback(async () => {
     try {
@@ -140,9 +149,38 @@ export default function ActivityLogsScreen() {
   const clearFilters = () => {
     setFilterAction('');
     setFilterUser('');
+    setFilterSource('');
+    setFilterFrom('');
+    setFilterTo('');
     setShowFilters(false);
     setLoading(true);
     fetchLogs(1, true);
+  };
+
+  // حذف السجلات حسب الفلاتر الحالية (مدير النظام فقط)
+  const handleDeleteLogs = async () => {
+    const scope = [];
+    if (filterTo) scope.push(`الأقدم من ${filterTo}`);
+    if (filterSource) scope.push(filterSource === 'auto' ? 'التلقائية فقط' : 'اليدوية فقط');
+    if (filterAction) scope.push(`نوع: ${filterAction}`);
+    const scopeText = scope.length ? scope.join(' • ') : '⚠️ كل السجلات بلا استثناء';
+    if (Platform.OS === 'web' && !window.confirm(`سيتم حذف سجلات النشاطات نهائياً:\n${scopeText}\n\nهل أنت متأكد؟`)) return;
+    setDeleting(true);
+    try {
+      const params: any = { confirm: true };
+      if (filterTo) params.before_date = filterTo;
+      if (filterSource) params.source = filterSource;
+      if (filterAction) params.action = filterAction;
+      if (filterUser) params.user_id = filterUser;
+      const res = await api.delete('/activity-logs', { params });
+      if (Platform.OS === 'web') window.alert(res.data.message);
+      setShowFilters(false);
+      setLoading(true);
+      fetchLogs(1, true);
+    } catch (e: any) {
+      const d = e?.response?.data?.detail;
+      if (Platform.OS === 'web') window.alert(typeof d === 'string' ? d : 'فشل الحذف');
+    } finally { setDeleting(false); }
   };
 
   const getActionInfo = (action: string, actionAr?: string) => {
@@ -290,6 +328,44 @@ export default function ActivityLogsScreen() {
             </View>
 
             <ScrollView style={styles.modalContent}>
+              {/* Filter by Source (تلقائي/يدوي) */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>مصدر السجل</Text>
+                <View style={styles.filterOptions}>
+                  {[{ k: '', l: 'الكل' }, { k: 'manual', l: '✍️ يدوي (عمليات موثقة)' }, { k: 'auto', l: '⚙️ تلقائي' }].map(o => (
+                    <TouchableOpacity
+                      key={o.k}
+                      style={[styles.filterOption, filterSource === o.k && { backgroundColor: '#1565c0' }]}
+                      onPress={() => setFilterSource(o.k)}
+                      testID={`filter-source-${o.k || 'all'}`}
+                    >
+                      <Text style={[styles.filterOptionText, filterSource === o.k && { color: '#fff' }]}>{o.l}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+
+              {/* Filter by Date range (بتوقيت عدن) */}
+              <View style={styles.filterSection}>
+                <Text style={styles.filterLabel}>الفترة (بتوقيت عدن)</Text>
+                {Platform.OS === 'web' ? (
+                  <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center' }}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: '#888', marginBottom: 4, textAlign: 'right' }}>من</Text>
+                      <input type="date" value={filterFrom} onChange={(e: any) => setFilterFrom(e.target.value)}
+                        data-testid="filter-from-date"
+                        style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 11, color: '#888', marginBottom: 4, textAlign: 'right' }}>إلى</Text>
+                      <input type="date" value={filterTo} onChange={(e: any) => setFilterTo(e.target.value)}
+                        data-testid="filter-to-date"
+                        style={{ width: '100%', padding: 8, borderRadius: 8, border: '1px solid #ddd', fontSize: 13 }} />
+                    </View>
+                  </View>
+                ) : null}
+              </View>
+
               {/* Filter by Action */}
               <View style={styles.filterSection}>
                 <Text style={styles.filterLabel}>نوع النشاط</Text>
@@ -350,6 +426,17 @@ export default function ActivityLogsScreen() {
               <TouchableOpacity style={styles.applyBtn} onPress={applyFilters}>
                 <Text style={styles.applyBtnText}>تطبيق</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.applyBtn, { backgroundColor: '#b71c1c', marginTop: 8 }]}
+                onPress={handleDeleteLogs}
+                disabled={deleting}
+                testID="delete-logs-btn"
+              >
+                <Text style={styles.applyBtnText}>{deleting ? 'جاري الحذف...' : '🗑️ حذف السجلات المطابقة للفلاتر'}</Text>
+              </TouchableOpacity>
+              <Text style={{ fontSize: 10.5, color: '#999', textAlign: 'center', marginTop: 6 }}>
+                الحذف لمدير النظام فقط • بدون فلاتر = حذف كل السجلات
+              </Text>
             </View>
           </SafeAreaView>
         </Modal>
