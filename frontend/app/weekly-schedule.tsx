@@ -94,7 +94,7 @@ export default function WeeklySchedulePage() {
   // Prefs state
   const [teachers, setTeachers] = useState<any[]>([]);
   const [selectedTeacher, setSelectedTeacher] = useState('');
-  const [prefs, setPrefs] = useState<any>({ unavailable_days: [], unavailable_slots: [], unavailable_periods: [], max_daily_lectures: 2, allow_consecutive_lectures: false });
+  const [prefs, setPrefs] = useState<any>({ unavailable_days: [], unavailable_slots: [], unavailable_periods: [], max_daily_lectures: 3, allow_consecutive_lectures: true });
   const [savingPrefs, setSavingPrefs] = useState(false);
   // 📋 ملخص تفضيلات معلمي القسم (لقائمة تبويب التفضيلات)
   const [prefsSummary, setPrefsSummary] = useState<any[]>([]);
@@ -1446,10 +1446,10 @@ export default function WeeklySchedulePage() {
                   );
                 })()}
 
-                <Text style={st.miniLabel}>أقصى محاضرات يومياً (افتراضي: 2)</Text>
+                <Text style={st.miniLabel}>أقصى محاضرات يومياً (افتراضي: 3)</Text>
                 {Platform.OS === 'web' ? (
-                  <input type="number" min="1" max="8" value={prefs.max_daily_lectures ?? 2}
-                    onChange={(e: any) => setPrefs((p: any) => ({ ...p, max_daily_lectures: parseInt(e.target.value) || 2 }))}
+                  <input type="number" min="1" max="8" value={prefs.max_daily_lectures ?? 3}
+                    onChange={(e: any) => setPrefs((p: any) => ({ ...p, max_daily_lectures: parseInt(e.target.value) || 3 }))}
                     style={{ width: 80, padding: 8, borderRadius: 8, border: '1px solid #ddd', textAlign: 'center', fontSize: 14 }}
                     data-testid="max-daily-lectures-input" />
                 ) : null}
@@ -1474,8 +1474,8 @@ export default function WeeklySchedulePage() {
                     <Text style={{ fontSize: 13, fontWeight: '600', color: '#333', textAlign: 'right' }}>السماح بمحاضرات متتالية</Text>
                     <Text style={{ fontSize: 11, color: '#888', textAlign: 'right', marginTop: 2 }}>
                       {prefs.allow_consecutive_lectures
-                        ? 'يمكن جدولة محاضرتين للأستاذ في فترتين متتاليتين'
-                        : 'الافتراضي: لا يُسمح بوضع محاضرتين متتاليتين (فترة بينهما)'}
+                        ? 'الافتراضي: يُسمح بمحاضرتين متتاليتين كحد أقصى (لا ثلاث متتالية عند التوليد)'
+                        : 'لا يُسمح بوضع محاضرتين متتاليتين (فترة بينهما)'}
                     </Text>
                   </View>
                 </View>

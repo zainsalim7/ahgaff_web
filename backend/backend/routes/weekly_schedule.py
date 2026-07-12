@@ -556,8 +556,8 @@ async def list_teacher_preferences_summary(department_id: str, current_user: dic
             "full_name": t.get("full_name", ""),
             "has_prefs": bool(p),
             "unavailable_count": unavailable_count,
-            "max_daily_lectures": (p or {}).get("max_daily_lectures", 2),
-            "allow_consecutive_lectures": (p or {}).get("allow_consecutive_lectures", False),
+            "max_daily_lectures": (p or {}).get("max_daily_lectures", 3),
+            "allow_consecutive_lectures": (p or {}).get("allow_consecutive_lectures", True),
         })
     return results
 
@@ -572,8 +572,8 @@ async def get_teacher_preferences(teacher_id: str, current_user: dict = Depends(
             "unavailable_days": [],
             "unavailable_slots": [],
             "unavailable_periods": [],
-            "max_daily_lectures": 2,
-            "allow_consecutive_lectures": False,
+            "max_daily_lectures": 3,
+            "allow_consecutive_lectures": True,
         }
     # 🔄 لعرض نظيف: نُرجع الشبكة كما هي إن وُجدت،
     # وإلا نشتقّها من الحقول القديمة (backward compat) لسهولة عمل UI الجديدة
@@ -592,8 +592,8 @@ async def get_teacher_preferences(teacher_id: str, current_user: dict = Depends(
         "unavailable_days": pref.get("unavailable_days", []),
         "unavailable_slots": pref.get("unavailable_slots", []),
         "unavailable_periods": unavailable_periods,
-        "max_daily_lectures": pref.get("max_daily_lectures", 2),
-        "allow_consecutive_lectures": pref.get("allow_consecutive_lectures", False),
+        "max_daily_lectures": pref.get("max_daily_lectures", 3),
+        "allow_consecutive_lectures": pref.get("allow_consecutive_lectures", True),
     }
 
 
@@ -952,7 +952,7 @@ async def create_schedule_slot(
         daily_count = await db.weekly_schedule.count_documents({
             "teacher_id": data.teacher_id, "day": data.day
         })
-        max_daily = pref.get("max_daily_lectures", 5)
+        max_daily = pref.get("max_daily_lectures", 3)
         if daily_count >= max_daily:
             conflicts.append(f"تعارض تفضيلات: المعلم وصل الحد الأقصى ({max_daily} محاضرات) ليوم {data.day}")
 
@@ -1200,86 +1200,98 @@ async def auto_generate_schedule(
                     continue
 
                 pref = prefs_map.get(tid, {})
-                max_daily = pref.get("max_daily_lectures", 2)
-                allow_consecutive = pref.get("allow_consecutive_lectures", False)
+                max_daily = pref.get("max_daily_lectures", 3)
+                allow_consecutive = pref.get("allow_consecutive_lectures", True)
 
                 placed = 0
-                for day in working_days:
-                    if placed >= needed:
-                        break
-                    # 🆕 تجاوز اليوم إن كانت كل خلاياه محظورة (يوم كامل بلغة الشبكة)
-                    if all(_is_period_unavailable(pref, day, sn) for sn in slot_numbers):
+                # 🆕 أولوية التوليد: الفترات المبكرة (1-3) عبر كل الأيام أولاً، ثم المتأخرة (4+) إن تعذر
+                early_slots = [s for s in slot_numbers if s <= 3]
+                late_slots = [s for s in slot_numbers if s > 3]
+                for slot_pool in [early_slots, late_slots]:
+                    if placed >= needed or not slot_pool:
                         continue
-
-                    for sn in slot_numbers:
+                    for day in working_days:
                         if placed >= needed:
                             break
-                        # 🆕 فحص الخلية (يوم × فترة) عبر الشبكة الجديدة + توافق رجعي
-                        if _is_period_unavailable(pref, day, sn):
+                        # 🆕 تجاوز اليوم إن كانت كل خلاياه محظورة (يوم كامل بلغة الشبكة)
+                        if all(_is_period_unavailable(pref, day, sn) for sn in slot_numbers):
                             continue
 
-                        key_ts = (day, sn)
-                        sk = (dept_id, level, section, day, sn)
-
-                        # Check section free
-                        if sk in section_occupied:
-                            continue
-                        # Check teacher free
-                        if tid in teacher_occupied.get(key_ts, set()):
-                            continue
-                        # Check teacher daily limit
-                        dk = (tid, day)
-                        if teacher_daily_count.get(dk, 0) >= max_daily:
-                            continue
-                        # Check consecutive slots (unless teacher allows)
-                        if not allow_consecutive:
-                            taken_slots = teacher_day_slots.get(dk, set())
-                            if (sn - 1) in taken_slots or (sn + 1) in taken_slots:
+                        for sn in slot_pool:
+                            if placed >= needed:
+                                break
+                            # 🆕 فحص الخلية (يوم × فترة) عبر الشبكة الجديدة + توافق رجعي
+                            if _is_period_unavailable(pref, day, sn):
                                 continue
 
-                        # Find free room
-                        busy_rooms = room_occupied.get(key_ts, set())
-                        free_room = None
-                        for room in rooms:
-                            if str(room["_id"]) not in busy_rooms:
-                                free_room = room
-                                break
-                        if not free_room:
-                            continue
+                            key_ts = (day, sn)
+                            sk = (dept_id, level, section, day, sn)
 
-                        rid = str(free_room["_id"])
+                            # Check section free
+                            if sk in section_occupied:
+                                continue
+                            # Check teacher free
+                            if tid in teacher_occupied.get(key_ts, set()):
+                                continue
+                            # Check teacher daily limit
+                            dk = (tid, day)
+                            if teacher_daily_count.get(dk, 0) >= max_daily:
+                                continue
+                            # Check consecutive slots
+                            taken_slots = teacher_day_slots.get(dk, set())
+                            if not allow_consecutive:
+                                if (sn - 1) in taken_slots or (sn + 1) in taken_slots:
+                                    continue
+                            else:
+                                # 🆕 التتالي مسموح لمحاضرتين فقط — منع تكوين 3 محاضرات متتالية
+                                if (((sn - 1) in taken_slots and (sn - 2) in taken_slots)
+                                        or ((sn + 1) in taken_slots and (sn + 2) in taken_slots)
+                                        or ((sn - 1) in taken_slots and (sn + 1) in taken_slots)):
+                                    continue
 
-                        # Place it!
-                        doc = {
-                            "faculty_id": faculty_id,
-                            "department_id": dept_id,
-                            "level": level,
-                            "section": section,
-                            "day": day,
-                            "slot_number": sn,
-                            "course_id": cid,
-                            "teacher_id": tid,
-                            "room_id": rid,
-                            "created_at": datetime.now(timezone.utc),
-                            "created_by": current_user["id"],
-                            "auto_generated": True,
-                        }
-                        try:
-                            await db.weekly_schedule.insert_one(doc)
-                        except DuplicateKeyError:
-                            # فهرس DB منع التكرار (حماية إضافية) — تجاوز هذه الخلية
-                            skipped += 1
-                            continue
+                            # Find free room
+                            busy_rooms = room_occupied.get(key_ts, set())
+                            free_room = None
+                            for room in rooms:
+                                if str(room["_id"]) not in busy_rooms:
+                                    free_room = room
+                                    break
+                            if not free_room:
+                                continue
 
-                        # Update tracking
-                        teacher_occupied.setdefault(key_ts, set()).add(tid)
-                        room_occupied.setdefault(key_ts, set()).add(rid)
-                        section_occupied[sk] = True
-                        teacher_daily_count[dk] = teacher_daily_count.get(dk, 0) + 1
-                        teacher_day_slots.setdefault(dk, set()).add(sn)
+                            rid = str(free_room["_id"])
 
-                        created += 1
-                        placed += 1
+                            # Place it!
+                            doc = {
+                                "faculty_id": faculty_id,
+                                "department_id": dept_id,
+                                "level": level,
+                                "section": section,
+                                "day": day,
+                                "slot_number": sn,
+                                "course_id": cid,
+                                "teacher_id": tid,
+                                "room_id": rid,
+                                "created_at": datetime.now(timezone.utc),
+                                "created_by": current_user["id"],
+                                "auto_generated": True,
+                            }
+                            try:
+                                await db.weekly_schedule.insert_one(doc)
+                            except DuplicateKeyError:
+                                # فهرس DB منع التكرار (حماية إضافية) — تجاوز هذه الخلية
+                                skipped += 1
+                                continue
+
+                            # Update tracking
+                            teacher_occupied.setdefault(key_ts, set()).add(tid)
+                            room_occupied.setdefault(key_ts, set()).add(rid)
+                            section_occupied[sk] = True
+                            teacher_daily_count[dk] = teacher_daily_count.get(dk, 0) + 1
+                            teacher_day_slots.setdefault(dk, set()).add(sn)
+
+                            created += 1
+                            placed += 1
 
                 if placed < needed:
                     remaining = needed - placed
@@ -2685,7 +2697,7 @@ async def _check_slot_placement(db, slot: dict, target_day: str, target_slot: in
             daily_count = await db.weekly_schedule.count_documents({
                 "_id": exclude, "teacher_id": slot["teacher_id"], "day": target_day
             })
-            max_daily = pref.get("max_daily_lectures", 5)
+            max_daily = pref.get("max_daily_lectures", 3)
             if daily_count >= max_daily:
                 conflicts.append(f"تعارض تفضيلات: المعلم وصل الحد الأقصى ({max_daily} محاضرات) ليوم {target_day}")
 
@@ -3226,7 +3238,7 @@ async def get_valid_slots(
         r_slots = await db.weekly_schedule.find({"room_id": room_id}).to_list(1000)
         room_busy = {(s["day"], s["slot_number"]) for s in r_slots if s["_id"] != exclude_oid}
 
-    max_daily = (pref or {}).get("max_daily_lectures", 99)
+    max_daily = (pref or {}).get("max_daily_lectures", 3)
 
     cells = []
     for day in working_days:
@@ -3303,7 +3315,7 @@ async def auto_place_unscheduled(
     for u in unscheduled:
         tid = u.get("teacher_id", "")
         pref = await get_pref(tid) if tid else None
-        max_daily = (pref or {}).get("max_daily_lectures", 99) if pref else 99
+        max_daily = (pref or {}).get("max_daily_lectures", 3) if pref else 3
         ck = (u["course_id"], u["department_id"], u["level"], u["section"])
         for _ in range(u["missing"]):
             # جمع المرشحين مع درجة تفضيل
@@ -3323,7 +3335,15 @@ async def auto_place_unscheduled(
                     if day in course_days.get(ck, set()):
                         score += 100  # تجنب تكرار نفس المقرر في نفس اليوم
                     score += teacher_day_counts.get((tid, day), 0) * 5  # توزيع حمل المعلم
-                    score += sn  # تفضيل الفترات المبكرة
+                    # أولوية الفترات المبكرة (1-3)، والمتأخرة عند التعذر فقط
+                    score += sn if sn <= 3 else 50 + sn
+                    # التتالي مسموح لمحاضرتين فقط — منع تكوين 3 متتاليات للمعلم
+                    if tid and (
+                        ((tid, day, sn - 1) in teacher_busy and (tid, day, sn - 2) in teacher_busy)
+                        or ((tid, day, sn + 1) in teacher_busy and (tid, day, sn + 2) in teacher_busy)
+                        or ((tid, day, sn - 1) in teacher_busy and (tid, day, sn + 1) in teacher_busy)
+                    ):
+                        continue
                     candidates.append((score, day, sn))
             if not candidates:
                 failed.append({"course_name": u["course_name"], "section": u["section"], "level": u["level"],

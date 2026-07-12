@@ -15596,6 +15596,21 @@ app.include_router(curriculum_router, prefix="/api")
 app.include_router(student_status_router, prefix="/api")
 app.include_router(student_transfer_router, prefix="/api")
 
+async def migrate_teacher_prefs_defaults_v2():
+    """مرة واحدة: تحديث كل تفضيلات المعلمين الموجودة إلى (أقصى يومي 3 + السماح بالمتتالية)"""
+    try:
+        flag = await db.migrations.find_one({"_id": "teacher_prefs_defaults_v2"})
+        if flag:
+            return
+        r = await db.teacher_preferences.update_many(
+            {}, {"$set": {"max_daily_lectures": 3, "allow_consecutive_lectures": True}}
+        )
+        await db.migrations.insert_one({"_id": "teacher_prefs_defaults_v2", "applied_at": datetime.now(timezone.utc), "modified": r.modified_count})
+        logging.info(f"Migration teacher_prefs_defaults_v2: modified={r.modified_count}")
+    except Exception as e:
+        logging.warning(f"Migration teacher_prefs_defaults_v2 failed: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     from services.firebase_service import init_firebase
@@ -15609,6 +15624,8 @@ async def startup_event():
         logging.warning(f"Object storage init failed (non-critical): {e}")
     # إنشاء فهارس MongoDB لتسريع الاستعلامات
     await create_indexes()
+    # 🔧 Migration لمرة واحدة: تحديث تفضيلات المعلمين الافتراضية (أقصى يومي 3 + السماح بالمتتالية)
+    await migrate_teacher_prefs_defaults_v2()
     # تحديث صلاحيات الأدوار الافتراضية تلقائياً
     await sync_default_roles()
     # 🔧 Migration لمرة واحدة: استعادة صلاحيات المحاضرات للأدوار التي فقدتها بالخطأ
