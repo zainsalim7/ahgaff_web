@@ -300,7 +300,7 @@ export default function CourseDetailedReport() {
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>سجل المحاضرات ({reportData.lectures?.length || 0})</Text>
               {reportData.lectures?.map((lecture: any, index: number) => (
-                <View key={index} style={styles.lectureRow}>
+                <View key={index} style={[styles.lectureRow, lecture.status === 'absent' && { backgroundColor: '#fff8f0' }]}>
                   <View style={styles.lectureDate}>
                     <Text style={styles.lectureDateText}>
                       {formatGregorianDate(new Date(lecture.date), { includeYear: false, includeWeekday: false })}
@@ -309,16 +309,22 @@ export default function CourseDetailedReport() {
                   <View style={styles.lectureInfo}>
                     <Text style={styles.lectureTime}>{lecture.start_time}</Text>
                     <Text style={styles.lectureStats}>
-                      {lecture.present_count}/{lecture.total_students} حاضر
+                      {lecture.status === 'absent' ? 'لم تنعقد (غياب المدرس)' : `${lecture.present_count}/${lecture.total_students} حاضر`}
                     </Text>
                   </View>
-                  <View style={[
-                    styles.lectureRate,
-                    lecture.attendance_rate >= 80 ? styles.rateGood :
-                    lecture.attendance_rate >= 60 ? styles.rateMedium : styles.rateLow
-                  ]}>
-                    <Text style={styles.lectureRateText}>{lecture.attendance_rate}%</Text>
-                  </View>
+                  {lecture.status === 'absent' ? (
+                    <View style={[styles.lectureRate, { backgroundColor: '#fff3e0' }]}>
+                      <Text style={[styles.lectureRateText, { color: '#e65100' }]}>غياب</Text>
+                    </View>
+                  ) : (
+                    <View style={[
+                      styles.lectureRate,
+                      lecture.attendance_rate >= 80 ? styles.rateGood :
+                      lecture.attendance_rate >= 60 ? styles.rateMedium : styles.rateLow
+                    ]}>
+                      <Text style={styles.lectureRateText}>{lecture.attendance_rate}%</Text>
+                    </View>
+                  )}
                 </View>
               ))}
             </View>

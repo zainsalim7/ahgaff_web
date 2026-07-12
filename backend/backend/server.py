@@ -7326,7 +7326,43 @@ async def get_all_schedule_lectures(
         "course_id": {"$in": course_ids},
         "date": date
     }).sort("start_time", 1).to_list(200)
-    
+
+    # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب (تحديث فعلي في القاعدة)
+    now = get_yemen_time()
+    for lecture in lectures:
+        if lecture.get("status") == LectureStatus.SCHEDULED and not lecture.get("status_override"):
+            try:
+                lecture_end = datetime.strptime(f"{lecture['date']} {lecture['end_time']}", "%Y-%m-%d %H:%M").replace(tzinfo=YEMEN_TIMEZONE)
+                if now > lecture_end:
+                    await db.lectures.update_one(
+                        {"_id": lecture["_id"]},
+                        {"$set": {"status": LectureStatus.ABSENT}}
+                    )
+                    lecture["status"] = LectureStatus.ABSENT
+            except Exception:
+                pass
+
+    # جلب أسماء الأقسام والكليات دفعة واحدة
+    _dept_ids = {str(c.get("department_id")) for c in courses if c.get("department_id")}
+    _dept_map: dict = {}
+    _fac_ids: set = set()
+    if _dept_ids:
+        try:
+            _oids = [ObjectId(x) for x in _dept_ids if ObjectId.is_valid(x)]
+            async for d in db.departments.find({"_id": {"$in": _oids}}, {"name": 1, "faculty_id": 1}):
+                _dept_map[str(d["_id"])] = {"name": (d.get("name") or "").strip(), "faculty_id": str(d.get("faculty_id") or "") or None}
+                if d.get("faculty_id"): _fac_ids.add(str(d["faculty_id"]))
+        except Exception:
+            pass
+    _fac_map: dict = {}
+    if _fac_ids:
+        try:
+            _foids = [ObjectId(x) for x in _fac_ids if ObjectId.is_valid(x)]
+            async for f in db.faculties.find({"_id": {"$in": _foids}}, {"name": 1}):
+                _fac_map[str(f["_id"])] = (f.get("name") or "").strip()
+        except Exception:
+            pass
+
     # جلب أسماء المعلمين دفعة واحدة
     teacher_ids = set()
     for c in courses:
@@ -7341,12 +7377,17 @@ async def get_all_schedule_lectures(
     result = []
     for lecture in lectures:
         course = course_map.get(lecture["course_id"], {})
+        _cdept_id = str(course.get("department_id", "") or "")
+        _cdept_info = _dept_map.get(_cdept_id, {})
+        _cfac_id = _cdept_info.get("faculty_id")
         result.append({
             "id": str(lecture["_id"]),
             "course_id": lecture["course_id"],
             "course_name": course.get("name", ""),
             "course_code": course.get("code", ""),
             "section": course.get("section", ""),
+            "department_name": _cdept_info.get("name") or "",
+            "faculty_name": (_fac_map.get(_cfac_id, "") if _cfac_id else ""),
             "date": lecture["date"],
             "day": lecture.get("day", ""),
             "start_time": lecture["start_time"],
@@ -10370,11 +10411,12 @@ async def get_course_detailed_report(
         except Exception:
             pass
     
-    # جلب المحاضرات
+    # جلب المحاضرات (تشمل الغائبة لعرض التسلسل الزمني الكامل)
     active_lecture_ids = await get_active_lecture_ids(course_id)
     lectures = await db.lectures.find({
-        "_id": {"$in": [ObjectId(lid) for lid in active_lecture_ids]}
-    }).sort("date", 1).to_list(100)
+        "course_id": course_id,
+        "status": {"$in": [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT]}
+    }).sort("date", 1).to_list(500)
     
     # جلب التسجيلات
     enrollments = await db.enrollments.find({"course_id": course_id}).to_list(1000)
@@ -10433,6 +10475,7 @@ async def get_course_detailed_report(
             lectures_data.append({
                 "date": date_str,
                 "start_time": lecture.get("start_time", ""),
+                "status": lecture.get("status", LectureStatus.SCHEDULED),
                 "present_count": present,
                 "total_students": len(records),
                 "attendance_rate": round(present / len(records) * 100, 2) if records else 0
@@ -10454,7 +10497,8 @@ async def get_course_detailed_report(
         "lectures": lectures_data,
         "summary": {
             "total_students": len(students_data),
-            "total_lectures": len(lectures_data),
+            "total_lectures": sum(1 for l in lectures_data if l.get("status") != LectureStatus.ABSENT),
+            "absent_lectures": sum(1 for l in lectures_data if l.get("status") == LectureStatus.ABSENT),
             "avg_attendance_rate": round(sum(s["attendance_rate"] for s in students_data) / len(students_data), 2) if students_data else 0
         }
     }

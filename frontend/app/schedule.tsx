@@ -2,7 +2,7 @@ import { goBack } from '../src/utils/navigation';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Alert, FlatList,
-  Platform, ScrollView, KeyboardAvoidingView,
+  Platform, ScrollView, KeyboardAvoidingView, TextInput,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -54,6 +54,7 @@ export default function ScheduleScreen() {
   const [loading, setLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState(getToday);
   const [semesterSettings, setSemesterSettings] = useState<any>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const fetchLectures = useCallback(async (date: string) => {
     try {
@@ -142,6 +143,15 @@ export default function ScheduleScreen() {
     return counts;
   }, [lectures]);
 
+  const filteredLectures = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return lectures;
+    return lectures.filter((l) =>
+      [l.course_name, l.course_code, l.teacher_name, l.faculty_name, l.department_name, l.room]
+        .some((v) => (v || '').toLowerCase().includes(q))
+    );
+  }, [lectures, searchQuery]);
+
   const renderLectureCard = ({ item, index }: { item: any; index: number }) => {
     const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
     const courseColor = getCourseColor(item.course_id);
@@ -150,7 +160,7 @@ export default function ScheduleScreen() {
       <View style={s.lectureRow} data-testid={`lecture-card-${item.id}`}>
         <View style={s.timeline}>
           <View style={[s.timelineDot, { backgroundColor: courseColor }]} />
-          {index < lectures.length - 1 && <View style={s.timelineLine} />}
+          {index < filteredLectures.length - 1 && <View style={s.timelineLine} />}
         </View>
         <View style={s.card}>
           <View style={[s.cardBorder, { backgroundColor: courseColor }]} />
@@ -168,6 +178,14 @@ export default function ScheduleScreen() {
               </View>
             </View>
             <Text style={s.cardTitle}>{item.course_name}{item.section ? ` (${item.section})` : ''}</Text>
+            {(item.faculty_name || item.department_name) ? (
+              <View style={s.facultyRow} data-testid={`lecture-faculty-${item.id}`}>
+                <Ionicons name="business-outline" size={12} color="#6a1b9a" />
+                <Text style={s.facultyRowText}>
+                  {[item.faculty_name, item.department_name].filter(Boolean).join(' • ')}
+                </Text>
+              </View>
+            ) : null}
             <View style={s.cardDetailsRow}>
               {item.teacher_name ? (
                 <View style={s.cardDetail}>
@@ -355,21 +373,43 @@ export default function ScheduleScreen() {
             <View style={s.listCardHeader}>
               <Text style={s.listCardTitle}>محاضرات {DAYS_AR[new Date(selectedDate + 'T00:00:00').getDay()]}</Text>
               <Text style={s.listCardCount} data-testid="lecture-count">
-                {loading ? '...' : <>عرض <Text style={s.listCardCountAccent}>{lectures.length}</Text> محاضرة</>}
+                {loading ? '...' : <>عرض <Text style={s.listCardCountAccent}>{filteredLectures.length}</Text> من {lectures.length} محاضرة</>}
               </Text>
+            </View>
+
+            {/* Search bar */}
+            <View style={s.searchWrap}>
+              <View style={s.searchBox}>
+                <Ionicons name="search" size={16} color="#8a95a8" />
+                <TextInput
+                  style={s.searchInput}
+                  placeholder="بحث بالمقرر أو المدرّس أو الكلية أو القاعة..."
+                  placeholderTextColor="#a8b1c2"
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  data-testid="schedule-search-input"
+                />
+                {searchQuery.length > 0 && (
+                  <TouchableOpacity onPress={() => setSearchQuery('')} data-testid="schedule-search-clear">
+                    <Ionicons name="close-circle" size={16} color="#8a95a8" />
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             {loading ? (
               <View style={s.center}><LoadingScreen /></View>
-            ) : lectures.length === 0 ? (
+            ) : filteredLectures.length === 0 ? (
               <View style={s.emptyState}>
                 <Ionicons name="calendar-outline" size={56} color="#cfd6e1" />
-                <Text style={s.emptyTitle}>لا توجد محاضرات</Text>
-                <Text style={s.emptySubtitle}>لا توجد محاضرات مجدولة في {formatDateArabic(selectedDate)}</Text>
+                <Text style={s.emptyTitle}>{searchQuery ? 'لا توجد نتائج مطابقة' : 'لا توجد محاضرات'}</Text>
+                <Text style={s.emptySubtitle}>
+                  {searchQuery ? `لا توجد محاضرات تطابق "${searchQuery}"` : `لا توجد محاضرات مجدولة في ${formatDateArabic(selectedDate)}`}
+                </Text>
               </View>
             ) : (
               <FlatList
-                data={lectures}
+                data={filteredLectures}
                 keyExtractor={(item) => item.id}
                 contentContainerStyle={{ padding: 14 }}
                 renderItem={renderLectureCard}
@@ -429,6 +469,15 @@ const s = StyleSheet.create({
   listCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
   listCardCount: { fontSize: 12, color: '#5b6678' },
   listCardCountAccent: { color: '#1565c0', fontWeight: '700' },
+
+  // Search bar
+  searchWrap: { paddingHorizontal: 14, paddingTop: 12 },
+  searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#f7f9fc', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'web' ? 10 : 6 },
+  searchInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}) },
+
+  // Faculty/Department row
+  facultyRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, marginBottom: 8, backgroundColor: '#f3e5f5', alignSelf: 'flex-end', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 8 },
+  facultyRowText: { fontSize: 11, color: '#6a1b9a', fontWeight: '600' },
 
   // Lecture row (timeline)
   lectureRow: { flexDirection: 'row-reverse', marginBottom: 8 },
