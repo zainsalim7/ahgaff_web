@@ -4765,11 +4765,13 @@ async def get_teacher_courses(
         # جلب معلومات القسم
         dept_name = ""
         faculty_name = ""
+        course_faculty_id = ""
         if course.get("department_id"):
             dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
             if dept:
                 dept_name = dept.get("name", "")
                 if dept.get("faculty_id"):
+                    course_faculty_id = str(dept["faculty_id"])
                     faculty = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
                     faculty_name = faculty.get("name", "") if faculty else ""
 
@@ -4796,6 +4798,7 @@ async def get_teacher_courses(
             "section": course.get("section", ""),
             "department_id": course.get("department_id"),
             "department_name": dept_name,
+            "faculty_id": course_faculty_id,
             "faculty_name": faculty_name,
             "students_count": students_count,
             "lectures_count": lectures_count,
