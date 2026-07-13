@@ -946,6 +946,7 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 ## Architecture (key)
 - Backend: `/app/backend/backend/server.py` (~14k lines) + routes/
+- **📕 `/app/PERMISSIONS_ARCHITECTURE.md` — مرجع إلزامي قبل أي تعديل يخص المستخدمين/الأدوار/الصلاحيات/فلاتر النطاق (بطلب المستخدم 2026-07)**
 - Frontend: `/app/frontend/app/*.tsx` (Expo)
 - Dual deploy: Railway (native) + GCP Cloud Run (GitHub Actions)
 - DB: MongoDB Atlas M10 (AWS Oregon)
