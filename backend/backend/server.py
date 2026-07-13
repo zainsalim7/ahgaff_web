@@ -987,6 +987,13 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
     department_ids = user_data.get("department_ids", [])
     if not department_ids and department_id:
         department_ids = [department_id]
+    # 🧹 تنظيف: استبعاد الأقسام العالقة التي لا تنتمي لكلية المستخدم (بقايا تغيير كلية سابق)
+    if faculty_id and department_ids:
+        _fac_dept_ids = await get_faculty_department_ids(faculty_id)
+        _valid_depts = [d for d in department_ids if d in _fac_dept_ids]
+        if _valid_depts != department_ids:
+            department_ids = _valid_depts
+            department_id = department_ids[0] if department_ids else None
     teacher_record_id = user_data.get("teacher_record_id")
     
     # Dean (عميد) - يرى بيانات كليته
@@ -1059,12 +1066,14 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
                 query["_id"] = {"$in": [ObjectId(did) for did in user_dept_ids]}
     
     # Registration Manager / Registrar - نطاق مرن:
+    # 🔧 مدير التسجيل (registration_manager): نطاقه الكلية كاملة دائماً (تعريف الدور scope=faculty)
+    #    — أي أقسام عالقة في سجله لا تُقيّده.
+    # موظف التسجيل (registrar):
     # (1) إن كانت له أقسام محددة (department_ids) → يرى تلك الأقسام فقط
     # (2) إن كانت له كلية فقط (faculty_id) → يرى كل أقسام الكلية
-    # (3) إن كان له كل من faculty_id و department_ids → أولوية للأقسام (أكثر تحديداً)
     elif role in ["registration_manager", "registrar"]:
-        # 🔧 الحالة (1): أقسام محددة → استخدمها مباشرة
-        if department_ids and len(department_ids) > 0:
+        # 🔧 الحالة (1): أقسام محددة → استخدمها مباشرة (للـ registrar فقط)
+        if role == "registrar" and department_ids and len(department_ids) > 0:
             if scope_type in ["students", "courses", "teachers"]:
                 if len(department_ids) == 1:
                     query["department_id"] = department_ids[0]
@@ -1251,15 +1260,18 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
             status_code=400,
             detail=f"{role_ar} يجب أن يكون له كلية مُسنَدة. اختر الكلية أولاً."
         )
-    elif user.role in ["teacher", "student"]:
-        # نفس الحماية لو مُرّر role مباشرة
-        raise HTTPException(
-            status_code=400,
-            detail=f"لا يمكن إنشاء حساب بدور '{user.role}' من شاشة المستخدمين. استخدم شاشة 'إدارة {'المعلمين' if user.role == 'teacher' else 'الطلاب'}' المخصصة."
-        )
-    elif not user.role:
-        user_dict["role"] = "employee"  # افتراضي
-        user_dict["permissions"] = []
+    # 🔧 هذه الفحوصات تعمل فقط عند عدم تمرير role_id (كانت elif مربوطة خطأً بفحص الكلية
+    # أعلاه فتُعيد أي مستخدم جديد بدور role_id إلى employee وتصفّر صلاحياته)
+    if not user.role_id:
+        if user.role in ["teacher", "student"]:
+            # نفس الحماية لو مُرّر role مباشرة
+            raise HTTPException(
+                status_code=400,
+                detail=f"لا يمكن إنشاء حساب بدور '{user.role}' من شاشة المستخدمين. استخدم شاشة 'إدارة {'المعلمين' if user.role == 'teacher' else 'الطلاب'}' المخصصة."
+            )
+        if not user.role:
+            user_dict["role"] = "employee"  # افتراضي
+            user_dict["permissions"] = []
     
     # دعم الأقسام المتعددة - ضبط department_id للتوافق
     if user_dict.get("department_ids") and len(user_dict["department_ids"]) > 0:
@@ -16309,6 +16321,30 @@ async def migrate_broken_user_roles():
                     logging.info(f"Migration: '{u.get('username')}' role: '{current_role}' → '{sys_key}'")
             except Exception as e:
                 logging.warning(f"Migration: failed to fix user {u.get('username')}: {e}")
+        # 🔧 (2) مدير التسجيل نطاقه الكلية كاملة — إزالة أقسام عالقة تحجب باقي أقسام الكلية
+        try:
+            r2 = await db.users.update_many(
+                {"role": "registration_manager", "faculty_id": {"$nin": [None, ""]},
+                 "$or": [{"department_ids": {"$exists": True, "$ne": []}}, {"department_id": {"$nin": [None, ""]}}]},
+                {"$set": {"department_ids": [], "department_id": None}}
+            )
+            if r2.modified_count:
+                logging.info(f"Migration: cleared stale departments for {r2.modified_count} registration_manager(s)")
+                fixed_count += r2.modified_count
+        except Exception as e:
+            logging.warning(f"Migration: registration_manager scope cleanup failed: {e}")
+        # 🔧 (3) استعادة الصلاحيات الفارغة من الدور (ضحايا خطأ الإنشاء الذي صفّر permissions)
+        try:
+            async for u in db.users.find({"role_id": {"$nin": [None, ""]},
+                                          "role": {"$nin": ["admin", "teacher", "student"]},
+                                          "$or": [{"permissions": []}, {"permissions": None}]}):
+                role = await db.roles.find_one({"_id": ObjectId(u["role_id"])})
+                if role and role.get("permissions"):
+                    await db.users.update_one({"_id": u["_id"]}, {"$set": {"permissions": role["permissions"]}})
+                    fixed_count += 1
+                    logging.info(f"Migration: restored {len(role['permissions'])} permissions for '{u.get('username')}' from role '{role.get('name')}'")
+        except Exception as e:
+            logging.warning(f"Migration: empty permissions restore failed: {e}")
         if fixed_count > 0:
             logging.info(f"✅ User role migration: {fixed_count} user(s) fixed automatically.")
         else:
