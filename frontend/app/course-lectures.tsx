@@ -22,6 +22,7 @@ import api, { coursesAPI, lecturesAPI, settingsAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import AddLectureModal, { LectureFormData } from '../src/components/AddLectureModal';
 import RoomPicker from '../src/components/RoomPicker';
+import { TimeRangeSummary } from '../src/components/TimeRangeSummary';
 import { useAuthStore } from '../src/store/authStore';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { PERMISSIONS } from '../src/contexts/AuthContext';
@@ -1456,6 +1457,7 @@ export default function CourseLecturesScreen() {
                                   )}
                                 </View>
                               </View>
+                              <TimeRangeSummary start={slot.start_time} end={slot.end_time} compact />
                               {config.slots.length > 1 && (
                                 <TouchableOpacity
                                   style={styles.removeSlotBtn}
@@ -1586,11 +1588,14 @@ export default function CourseLecturesScreen() {
                   border: '1px solid #ddd',
                   fontSize: '16px',
                   textAlign: 'center',
-                  marginBottom: '24px',
+                  marginBottom: '8px',
                   boxSizing: 'border-box',
                   backgroundColor: '#f9f9f9',
                 }}
               />
+              <View style={{ marginBottom: 16 }}>
+                <TimeRangeSummary start={rescheduleData.start_time} end={rescheduleData.end_time} />
+              </View>
               
               {/* الأزرار */}
               <View style={{ flexDirection: 'row', gap: 12 }}>

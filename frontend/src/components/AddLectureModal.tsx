@@ -15,6 +15,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { settingsAPI } from '../services/api';
 import { WEEKDAYS_AR } from '../utils/dateUtils';
+import { formatTimeArabic } from '../utils/timeFormat';
+import { TimeRangeSummary } from './TimeRangeSummary';
 import RoomPicker from './RoomPicker';
 
 interface Course {
@@ -127,7 +129,12 @@ export default function AddLectureModal({
       return;
     }
     if (formData.start_time && formData.end_time && formData.end_time <= formData.start_time) {
-      showAlert('خطأ في الوقت', 'وقت النهاية يجب أن يكون بعد وقت البداية');
+      showAlert(
+        'خطأ في الوقت',
+        `وقت النهاية (${formatTimeArabic(formData.end_time)}) يقع قبل وقت البداية (${formatTimeArabic(formData.start_time)}).\n\n` +
+        `السبب الشائع: اختيار «ص» بدل «م» — أوقات ما بعد الظهر (من 12 ظهراً فما بعد) اختر لها «م».\n` +
+        `مثال: 12:30 ظهراً = «12:30 م» وليس «12:30 ص» (منتصف الليل).`
+      );
       return;
     }
 
@@ -368,6 +375,7 @@ export default function AddLectureModal({
                 </ScrollView>
               </>
             )}
+            <TimeRangeSummary start={formData.start_time} end={formData.end_time} />
           </View>
 
           {/* Room - قائمة منسدلة من القاعات المسجلة */}
@@ -414,7 +422,9 @@ export default function AddLectureModal({
                 </View>
                 <View style={styles.previewRow}>
                   <Ionicons name="time" size={16} color="#4caf50" />
-                  <Text style={styles.previewText}>{formData.start_time} - {formData.end_time}</Text>
+                  <Text style={styles.previewText}>
+                    من {formatTimeArabic(formData.start_time)} إلى {formatTimeArabic(formData.end_time)}
+                  </Text>
                 </View>
                 <View style={styles.previewRow}>
                   <Ionicons name="location" size={16} color="#f44336" />
