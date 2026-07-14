@@ -32,6 +32,8 @@ interface AddLectureModalProps {
   selectedCourseId?: string;
   showCourseSelector?: boolean;
   title?: string;
+  /** حصر القاعات على كلية المقرر */
+  facultyId?: string;
 }
 
 export interface LectureFormData {
@@ -59,6 +61,7 @@ export default function AddLectureModal({
   selectedCourseId,
   showCourseSelector = false,
   title = 'إضافة محاضرة',
+  facultyId,
 }: AddLectureModalProps) {
   const [saving, setSaving] = useState(false);
   const [semesterDates, setSemesterDates] = useState<{ start: string; end: string } | null>(null);
@@ -390,6 +393,7 @@ export default function AddLectureModal({
               value={formData.room}
               onChange={(room) => setFormData({ ...formData, room })}
               testID="lecture-room-picker"
+              facultyId={facultyId}
               occurrences={
                 formData.date && formData.start_time && formData.end_time
                   ? [{ date: formData.date, start_time: formData.start_time, end_time: formData.end_time }]

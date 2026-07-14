@@ -5599,13 +5599,19 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
         except:
             pass
     
-    # جلب اسم القسم
+    # جلب اسم القسم والكلية
     department_name = None
+    course_faculty_id = None
+    faculty_name = None
     if course.get("department_id"):
         try:
             dept = await db.departments.find_one({"_id": ObjectId(course["department_id"])})
             if dept:
                 department_name = dept.get("name")
+                if dept.get("faculty_id"):
+                    course_faculty_id = str(dept["faculty_id"])
+                    fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])})
+                    faculty_name = fac.get("name") if fac else None
         except:
             pass
     
@@ -5618,6 +5624,8 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
         "code": course["code"],
         "department_id": course["department_id"],
         "department_name": department_name,
+        "faculty_id": course_faculty_id,
+        "faculty_name": faculty_name,
         "teacher_id": course["teacher_id"],
         "teacher_name": teacher_name,
         "level": course["level"],

@@ -1228,6 +1228,7 @@ export default function CourseLecturesScreen() {
           onSave={handleSaveLecture}
           selectedCourseId={courseId}
           showCourseSelector={false}
+          facultyId={course?.faculty_id}
           accessibilityLabel="إضافة محاضرة"
         />
 
@@ -1335,6 +1336,7 @@ export default function CourseLecturesScreen() {
                   value={generateRoom}
                   onChange={setGenerateRoom}
                   testID="generate-room-picker"
+                  facultyId={course?.faculty_id}
                   occurrences={generateOccurrences}
                 />
               </View>
@@ -1648,6 +1650,7 @@ export default function CourseLecturesScreen() {
                 value={newRoom}
                 onChange={setNewRoom}
                 testID="change-room-picker"
+                facultyId={course?.faculty_id}
                 occurrences={
                   roomChangeModal.date && roomChangeModal.startTime && roomChangeModal.endTime
                     ? [{ date: roomChangeModal.date, start_time: roomChangeModal.startTime, end_time: roomChangeModal.endTime }]

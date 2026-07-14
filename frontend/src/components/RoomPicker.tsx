@@ -31,6 +31,8 @@ interface RoomPickerProps {
   occurrences?: RoomOccurrence[];
   /** استثناء محاضرة معينة من الفحص (عند تغيير قاعة محاضرة قائمة) */
   excludeLectureId?: string;
+  /** حصر القاعات على كلية محددة — قاعات كلية الشريعة لا تظهر لكلية البنات والعكس */
+  facultyId?: string;
 }
 
 const occValid = (occ?: RoomOccurrence[]) =>
@@ -43,7 +45,7 @@ const occValid = (occ?: RoomOccurrence[]) =>
  *   🟢 متاحة | 🔴 مشغولة (مع اسم المقرر الحاجز أو عدد المواعيد المشغولة)
  * القاعة المشغولة تبقى قابلة للاختيار مع تحذير أحمر (لحالة دمج شعبتين لنفس المعلم).
  */
-export default function RoomPicker({ value, onChange, testID = 'room-picker', occurrences, excludeLectureId }: RoomPickerProps) {
+export default function RoomPicker({ value, onChange, testID = 'room-picker', occurrences, excludeLectureId, facultyId }: RoomPickerProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [availability, setAvailability] = useState<Record<string, RoomAvailability>>({});
@@ -51,12 +53,13 @@ export default function RoomPicker({ value, onChange, testID = 'room-picker', oc
 
   useEffect(() => {
     let mounted = true;
-    api.get('/rooms')
+    setLoading(true);
+    api.get('/rooms', { params: facultyId ? { faculty_id: facultyId } : {} })
       .then(res => { if (mounted) setRooms(res.data || []); })
       .catch(() => { if (mounted) setRooms([]); })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
-  }, []);
+  }, [facultyId]);
 
   // فحص الإشغال كلما تغيّرت المواعيد
   const occKey = JSON.stringify(occurrences || []);
@@ -111,7 +114,9 @@ export default function RoomPicker({ value, onChange, testID = 'room-picker', oc
   if (rooms.length === 0) {
     return (
       <Text style={styles.emptyText}>
-        لا توجد قاعات مسجلة — أضف القاعات من صفحة الجدول الأسبوعي أولاً
+        {facultyId
+          ? 'لا توجد قاعات مسجلة لهذه الكلية — أضف قاعاتها من صفحة الجدول الأسبوعي أولاً'
+          : 'لا توجد قاعات مسجلة — أضف القاعات من صفحة الجدول الأسبوعي أولاً'}
       </Text>
     );
   }
