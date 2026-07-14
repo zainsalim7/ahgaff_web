@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { settingsAPI } from '../services/api';
 import { WEEKDAYS_AR } from '../utils/dateUtils';
-import { formatTimeArabic } from '../utils/timeFormat';
+import { formatTimeArabic, suggestEndTime } from '../utils/timeFormat';
 import { TimeRangeSummary } from './TimeRangeSummary';
 import RoomPicker from './RoomPicker';
 
@@ -298,7 +298,10 @@ export default function AddLectureModal({
                   <input
                     type="time"
                     value={formData.start_time}
-                    onChange={(e: any) => setFormData({ ...formData, start_time: e.target.value })}
+                    onChange={(e: any) => {
+                      const v = e.target.value;
+                      setFormData({ ...formData, start_time: v, end_time: v ? suggestEndTime(v, formData.start_time, formData.end_time) : formData.end_time });
+                    }}
                     data-testid="add-lecture-start-time"
                     style={{
                       width: '100%',
@@ -345,7 +348,7 @@ export default function AddLectureModal({
                         styles.timeBtn,
                         formData.start_time === time && styles.timeBtnActive
                       ]}
-                      onPress={() => setFormData({ ...formData, start_time: time })}
+                      onPress={() => setFormData({ ...formData, start_time: time, end_time: suggestEndTime(time, formData.start_time, formData.end_time) })}
                     >
                       <Text style={[
                         styles.timeBtnText,

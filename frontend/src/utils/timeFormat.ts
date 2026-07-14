@@ -34,3 +34,18 @@ export function earlyMorningWarning(start?: string): string | null {
   }
   return null;
 }
+
+export function addMinutes(time: string, mins: number): string {
+  const [h, m] = time.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return time;
+  let total = h * 60 + m + mins;
+  if (total > 23 * 60 + 59) total = 23 * 60 + 59;
+  return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
+}
+
+// اقتراح وقت النهاية تلقائياً: يحافظ على المدة السابقة إن كانت صالحة، وإلا 90 دقيقة
+export function suggestEndTime(newStart: string, prevStart?: string, prevEnd?: string): string {
+  const prevDiff = timeDiffMinutes(prevStart, prevEnd);
+  const duration = prevDiff !== null && prevDiff > 0 ? prevDiff : 90;
+  return addMinutes(newStart, duration);
+}

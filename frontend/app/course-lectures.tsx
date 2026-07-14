@@ -23,6 +23,7 @@ import { LoadingScreen } from '../src/components/LoadingScreen';
 import AddLectureModal, { LectureFormData } from '../src/components/AddLectureModal';
 import RoomPicker from '../src/components/RoomPicker';
 import { TimeRangeSummary } from '../src/components/TimeRangeSummary';
+import { suggestEndTime } from '../src/utils/timeFormat';
 import { useAuthStore } from '../src/store/authStore';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { PERMISSIONS } from '../src/contexts/AuthContext';
@@ -556,7 +557,12 @@ export default function CourseLecturesScreen() {
     setDayConfigs(prev => prev.map(config => {
       if (config.day === dayId) {
         const newSlots = [...config.slots];
-        newSlots[slotIndex] = { ...newSlots[slotIndex], [field]: value };
+        const prevSlot = newSlots[slotIndex];
+        newSlots[slotIndex] = { ...prevSlot, [field]: value };
+        // اقتراح النهاية تلقائياً عند تغيير البداية (يحافظ على المدة السابقة)
+        if (field === 'start_time' && value) {
+          newSlots[slotIndex].end_time = suggestEndTime(value, prevSlot.start_time, prevSlot.end_time);
+        }
         return { ...config, slots: newSlots };
       }
       return config;
@@ -1559,7 +1565,7 @@ export default function CourseLecturesScreen() {
               <input
                 type="time"
                 value={rescheduleData.start_time}
-                onChange={(e: any) => setRescheduleData(prev => ({ ...prev, start_time: e.target.value }))}
+                onChange={(e: any) => setRescheduleData(prev => ({ ...prev, start_time: e.target.value, end_time: e.target.value ? suggestEndTime(e.target.value, prev.start_time, prev.end_time) : prev.end_time }))}
                 data-testid="reschedule-start-time"
                 style={{
                   width: '100%',
