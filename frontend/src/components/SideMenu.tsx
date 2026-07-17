@@ -52,6 +52,11 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.MANAGE_COURSES, 'view_courses', 'add_course', 'edit_course', 'delete_course'
   ]},
 
+  // 🔄 ترحيل المقررات لفصل جديد — صلاحية مستقلة (الأدمن دائماً)
+  { id: 'migrate-courses', label: 'ترحيل المقررات', icon: 'swap-horizontal', path: '/migrate-courses', permissions: [
+    'migrate_courses'
+  ]},
+
   // 📖 الخطة الدراسية — صلاحية الخطة الدراسية (إدارة أو عرض)
   { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', permissions: [
     PERMISSIONS.MANAGE_CURRICULUM,

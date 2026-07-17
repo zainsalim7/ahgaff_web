@@ -74,6 +74,7 @@ export const PERMISSIONS = {
   EXPORT_ARCHIVE: 'export_archive',
   // صلاحيات الخطة الدراسية
   MANAGE_CURRICULUM: 'manage_curriculum',
+  MIGRATE_COURSES: 'migrate_courses',
   VIEW_CURRICULUM: 'view_curriculum',
   // صلاحيات الحضور
   MANAGE_ATTENDANCE: 'manage_attendance',

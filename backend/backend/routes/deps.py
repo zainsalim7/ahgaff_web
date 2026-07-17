@@ -105,6 +105,7 @@ ACTION_TRANSLATIONS = {
     "auto_place_unscheduled": "إدراج تلقائي للمقررات غير المدرجة",
     "generate_lectures_from_schedule": "توليد محاضرات من الجدول الأسبوعي",
     "auto_generate_schedule": "توليد الجدول الأسبوعي تلقائياً",
+    "migrate_courses": "ترحيل مقررات لفصل جديد",
     "login": "تسجيل دخول",
     "logout": "تسجيل خروج",
     "password_change": "تغيير كلمة المرور",

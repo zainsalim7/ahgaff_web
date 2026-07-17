@@ -110,6 +110,8 @@ class Permission:
     MANAGE_ROLES = "manage_roles"
     MANAGE_SETTINGS = "manage_settings"
     MANAGE_SEMESTERS = "manage_semesters"
+    # ترحيل مقررات فصل سابق إلى فصل جديد
+    MIGRATE_COURSES = "migrate_courses"
     
     # صلاحيات العبء التدريسي
     MANAGE_TEACHING_LOAD = "manage_teaching_load"
@@ -336,6 +338,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.MANAGE_ROLES, "label": "إدارة الأدوار", "category": "النظام"},
     {"key": Permission.MANAGE_SETTINGS, "label": "إدارة الإعدادات", "category": "النظام"},
     {"key": Permission.MANAGE_SEMESTERS, "label": "إدارة الفصول الدراسية", "category": "النظام"},
+    {"key": Permission.MIGRATE_COURSES, "label": "ترحيل المقررات لفصل جديد", "category": "المقررات"},
     {"key": Permission.MANAGE_TEACHING_LOAD, "label": "إدارة العبء التدريسي", "category": "العبء التدريسي"},
     {"key": Permission.VIEW_TEACHING_LOAD, "label": "عرض العبء التدريسي", "category": "العبء التدريسي"},
     {"key": Permission.CROSS_UNIVERSITY_ASSIGNMENT, "label": "إسناد عابر للجامعة (إسناد أساتذة من كل الكليات)", "category": "العبء التدريسي"},
