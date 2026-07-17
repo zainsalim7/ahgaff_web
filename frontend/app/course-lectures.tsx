@@ -138,7 +138,7 @@ export default function CourseLecturesScreen() {
   
   // إعادة جدولة
   const [rescheduleModal, setRescheduleModal] = useState<{lectureId: string; courseName: string; oldDate: string} | null>(null);
-  const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '08:00', end_time: '09:00' });
+  const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '08:00', end_time: '09:00', room: '' });
   const [rescheduling, setRescheduling] = useState(false);
   // 🏛️ تغيير القاعة فقط
   const [roomChangeModal, setRoomChangeModal] = useState<{lectureId: string; currentRoom: string; date: string; time: string; startTime: string; endTime: string} | null>(null);
@@ -836,7 +836,7 @@ export default function CourseLecturesScreen() {
             <TouchableOpacity
               style={styles.actBtnReschedule}
               onPress={() => {
-                setRescheduleData({ date: '', start_time: item.start_time || '08:00', end_time: item.end_time || '09:00' });
+                setRescheduleData({ date: '', start_time: item.start_time || '08:00', end_time: item.end_time || '09:00', room: item.room || '' });
                 setRescheduleModal({ lectureId: item.id, courseName: course?.name || '', oldDate: item.date });
               }}
               testID={`reschedule-${item.id}`}
@@ -1185,7 +1185,7 @@ export default function CourseLecturesScreen() {
                   {canReschedule && (lec.status === 'scheduled' || lec.status === 'absent') && (
                     <TouchableOpacity style={styles.menuItem} onPress={() => {
                       setOpenMenuId(null);
-                      setRescheduleData({ date: '', start_time: lec.start_time || '08:00', end_time: lec.end_time || '09:00' });
+                      setRescheduleData({ date: '', start_time: lec.start_time || '08:00', end_time: lec.end_time || '09:00', room: lec.room || '' });
                       setRescheduleModal({ lectureId: lec.id, courseName: course?.name || '', oldDate: lec.date });
                     }}>
                       <Ionicons name="calendar-outline" size={18} color="#ff9800" />
@@ -1601,8 +1601,27 @@ export default function CourseLecturesScreen() {
                   backgroundColor: '#f9f9f9',
                 }}
               />
-              <View style={{ marginBottom: 16 }}>
+              <View style={{ marginBottom: 8 }}>
                 <TimeRangeSummary start={rescheduleData.start_time} end={rescheduleData.end_time} />
+              </View>
+
+              {/* 🏛️ تغيير القاعة مع كشف التوفر في الموعد الجديد */}
+              <Text style={{ fontSize: 13, fontWeight: '700', color: '#3a4560', marginBottom: 6, textAlign: 'right' as any }}>
+                القاعة (يمكن تغييرها — 🟢 متاحة / 🔴 مشغولة في الموعد الجديد)
+              </Text>
+              <View style={{ marginBottom: 16 }}>
+                <RoomPicker
+                  value={rescheduleData.room}
+                  onChange={(room) => setRescheduleData(prev => ({ ...prev, room }))}
+                  testID="reschedule-room-picker"
+                  facultyId={course?.faculty_id}
+                  excludeLectureId={rescheduleModal?.lectureId}
+                  occurrences={
+                    rescheduleData.date && rescheduleData.start_time && rescheduleData.end_time
+                      ? [{ date: rescheduleData.date, start_time: rescheduleData.start_time, end_time: rescheduleData.end_time }]
+                      : undefined
+                  }
+                />
               </View>
               
               {/* الأزرار */}

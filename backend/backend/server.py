@@ -8722,6 +8722,7 @@ async def reschedule_lecture(
     new_date = body.get("date")
     new_start_time = body.get("start_time")
     new_end_time = body.get("end_time")
+    new_room = body.get("room")  # اختياري: تغيير القاعة مع إعادة الجدولة
     
     if not new_date:
         raise HTTPException(status_code=400, detail="يرجى تحديد التاريخ الجديد")
@@ -8750,9 +8751,10 @@ async def reschedule_lecture(
     if conflict and conflict["type"] == "error":
         raise HTTPException(status_code=400, detail=conflict["message"])
     
-    # 🏛️ فحص تعارض القاعة في الموعد الجديد
+    # 🏛️ فحص تعارض القاعة في الموعد الجديد (بالقاعة الجديدة إن غُيّرت)
+    effective_room = new_room if new_room else (lecture.get("room", "") or "")
     room_conflict = await check_room_lecture_conflict(
-        lecture.get("course_id", ""), lecture.get("room", "") or "", new_date, start_time, end_time,
+        lecture.get("course_id", ""), effective_room, new_date, start_time, end_time,
         exclude_lecture_id=lecture_id
     )
     if room_conflict and room_conflict["type"] == "error":
@@ -8783,6 +8785,8 @@ async def reschedule_lecture(
         update_data["start_time"] = new_start_time
     if new_end_time:
         update_data["end_time"] = new_end_time
+    if new_room and new_room != (lecture.get("room", "") or ""):
+        update_data["room"] = new_room
     
     try:
         await db.lectures.update_one({"_id": ObjectId(lecture_id)}, {"$set": update_data})
