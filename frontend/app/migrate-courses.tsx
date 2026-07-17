@@ -40,6 +40,8 @@ export default function MigrateCoursesScreen() {
   const canAccess = user?.role === 'admin' || hasAnyPermission(['migrate_courses']);
 
   const [semesters, setSemesters] = useState<Semester[]>([]);
+  const [departments, setDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [deptId, setDeptId] = useState('');
   const [sourceId, setSourceId] = useState('');
   const [targetId, setTargetId] = useState('');
   const [loadingSem, setLoadingSem] = useState(true);
@@ -57,6 +59,9 @@ export default function MigrateCoursesScreen() {
       .then(res => setSemesters(res.data || []))
       .catch(() => notify('error', 'فشل تحميل الفصول الدراسية'))
       .finally(() => setLoadingSem(false));
+    api.get('/departments')
+      .then(res => setDepartments((res.data || []).map((d: any) => ({ id: d.id, name: (d.name || '').trim() }))))
+      .catch(() => {});
   }, []);
 
   const sourceSem = semesters.find(s => s.id === sourceId);
@@ -69,7 +74,11 @@ export default function MigrateCoursesScreen() {
     setConfirming(false);
     try {
       const res = await api.get('/course-migration/preview', {
-        params: { source_semester_id: sourceId, target_semester_id: targetId },
+        params: {
+          source_semester_id: sourceId,
+          target_semester_id: targetId,
+          ...(deptId ? { department_id: deptId } : {}),
+        },
       });
       const list: PreviewCourse[] = res.data.courses || [];
       setCourses(list);
@@ -194,6 +203,45 @@ export default function MigrateCoursesScreen() {
               <Ionicons name="arrow-down" size={22} color="#1565c0" />
             </View>
             {renderSemesterSelect('الفصل الهدف (المنسوخ إليه)', targetId, (v) => { setTargetId(v); setCourses(null); setResult(null); }, sourceId, 'target-semester-select')}
+
+            {/* فلتر القسم (اختياري) */}
+            <View style={[s.selectBlock, { marginTop: 12 }]}>
+              <Text style={s.selectLabel}>القسم (اختياري — لترحيل قسم واحد فقط)</Text>
+              {Platform.OS === 'web' ? (
+                <select
+                  value={deptId}
+                  onChange={(e: any) => { setDeptId(e.target.value); setCourses(null); setResult(null); }}
+                  data-testid="department-filter-select"
+                  style={{
+                    width: '100%', padding: '12px', borderRadius: 10, border: '1px solid #e0e4ec',
+                    fontSize: 14, backgroundColor: '#fff', direction: 'rtl', boxSizing: 'border-box' as any,
+                  }}
+                >
+                  <option value="">كل الأقسام (ضمن نطاقك)</option>
+                  {departments.map(d => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              ) : (
+                <View>
+                  <TouchableOpacity
+                    style={[s.semOption, deptId === '' && s.semOptionActive]}
+                    onPress={() => { setDeptId(''); setCourses(null); setResult(null); }}
+                  >
+                    <Text style={[s.semOptionText, deptId === '' && s.semOptionTextActive]}>كل الأقسام (ضمن نطاقك)</Text>
+                  </TouchableOpacity>
+                  {departments.map(d => (
+                    <TouchableOpacity
+                      key={d.id}
+                      style={[s.semOption, deptId === d.id && s.semOptionActive]}
+                      onPress={() => { setDeptId(d.id); setCourses(null); setResult(null); }}
+                    >
+                      <Text style={[s.semOptionText, deptId === d.id && s.semOptionTextActive]}>{d.name}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              )}
+            </View>
 
             <Text style={s.hintText}>
               💡 لا يظهر هنا إلا الفصول التي أنشأها المدير مسبقاً من إدارة الفصول
