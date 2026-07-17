@@ -8152,6 +8152,18 @@ async def generate_semester_lectures_advanced(
                 if room_conflict and room_conflict["type"] == "error":
                     conflicts_skipped += 1
                     continue
+                # 🔧 لا تُعِد إنشاء محاضرة في موعد نُقلت منه محاضرة بإعادة الجدولة
+                # (وإلا زاد عدد المحاضرات عند إعادة التوليد بعد أي إعادة جدولة)
+                moved_away = await db.lectures.find_one({
+                    "course_id": data.course_id,
+                    "$or": [
+                        {"original_date": date_str},
+                        {"last_rescheduled_from": date_str},
+                    ],
+                }, {"_id": 1})
+                if moved_away:
+                    conflicts_skipped += 1
+                    continue
                 
                 lecture = {
                     "course_id": data.course_id,
@@ -10271,7 +10283,8 @@ async def get_daily_report(
     lectures = await db.lectures.find({
         "course_id": {"$in": course_ids},
         "date": {"$gte": day_start, "$lt": day_end},
-        "is_cancelled": {"$ne": True}
+        "is_cancelled": {"$ne": True},
+        "status": {"$ne": LectureStatus.CANCELLED}
     }).to_list(100)
     
     lectures_data = []
@@ -10991,13 +11004,15 @@ async def get_teacher_workload_report(
             end_str = end.strftime("%Y-%m-%d")
 
             # المحاضرات المجدولة في الفترة (دعم date كنص أو datetime)
+            # 🔧 استبعاد الملغاة: الإلغاء يضبط status=cancelled (حقل is_cancelled قديم يُبقى للتوافق)
             scheduled_lectures = await db.lectures.find({
                 "course_id": cid,
                 "$or": [
                     {"date": {"$gte": start_str, "$lte": end_str}},
                     {"date": {"$gte": start, "$lte": end}}
                 ],
-                "is_cancelled": {"$ne": True}
+                "is_cancelled": {"$ne": True},
+                "status": {"$ne": LectureStatus.CANCELLED}
             }).to_list(500)
             
             # المحاضرات التي تم تسجيل حضور فيها (المنفذة فعلياً)
