@@ -90,6 +90,7 @@ class CurriculumCourseUpdate(BaseModel):
     term: Optional[int] = Field(None, ge=1, le=3)
     description: Optional[str] = None
     prerequisites: Optional[List[str]] = None
+    sections_count: Optional[int] = Field(None, ge=0, le=10)  # عدد الشعب المحفوظ (0 = بدون شعب)
     is_active: Optional[bool] = None
 
 
@@ -533,8 +534,12 @@ async def generate_offerings_from_curriculum(
     created_items = []
     for cc in curriculum_list:
         cc_id = str(cc["_id"])
-        # تحديد عدد الشعب لهذا المقرر (من الخريطة أو الافتراضي)
-        n_sections = sections_map.get(cc_id, default_sections)
+        # تحديد عدد الشعب لهذا المقرر (الخريطة المرسلة ← ثم المحفوظ على المقرر ← ثم الافتراضي)
+        if cc_id in sections_map:
+            n_sections = sections_map[cc_id]
+        else:
+            stored = cc.get("sections_count")
+            n_sections = stored if (stored and int(stored) > 1) else default_sections
         n_sections = max(1, min(int(n_sections or 1), len(SECTION_LABELS_AR)))
 
         for sec_idx in range(n_sections):

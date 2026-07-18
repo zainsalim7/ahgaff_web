@@ -98,6 +98,15 @@ export default function CurriculumScreen() {
     try {
       const res = await api.get(`/curriculum/by-department/${selectedDept}`);
       setGrid(res.data);
+      // تهيئة عدد الشعب المحفوظ لكل مقرر من قاعدة البيانات
+      const initial: Record<string, string> = {};
+      (res.data?.grid || []).forEach((lvl: any) => {
+        [...(lvl.term1 || []), ...(lvl.term2 || []), ...(lvl.term3 || [])].forEach((c: any) => {
+          const n = parseInt(c.sections_count);
+          if (n && n > 0) initial[c.id] = String(n);
+        });
+      });
+      setSectionsMap(initial);
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشل التحميل';
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
@@ -174,7 +183,6 @@ export default function CurriculumScreen() {
       const r = res.data;
       const msg = `تم إنشاء ${r.created} جلسة، تخطي ${r.skipped} (موجودة مسبقاً)`;
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('تم', msg);
-      setSectionsMap({});
     } catch (e: any) {
       const msg = e?.response?.data?.detail || 'فشل التوليد';
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
@@ -1439,7 +1447,7 @@ const CurriculumCourseCard = ({ course: c, index: idx, isSelected, canManage, ac
       <View style={styles.sectionsBoxWrap} testID={`sections-wrap-${c.id}`}>
         <TextInput
           style={[styles.sectionsBox, !canManage && { backgroundColor: '#f1f5f9', color: '#64748b' }]}
-          placeholder="1"
+          placeholder="0"
           placeholderTextColor="#cfd6e1"
           keyboardType="numeric"
           maxLength={2}
@@ -1448,6 +1456,12 @@ const CurriculumCourseCard = ({ course: c, index: idx, isSelected, canManage, ac
             if (!canManage) return;
             const cleaned = v.replace(/[^0-9]/g, '');
             onSetSections(cleaned);
+          }}
+          onBlur={() => {
+            if (!canManage) return;
+            const n = parseInt(sectionsValue) || 0;
+            // حفظ عدد الشعب على المقرر في قاعدة البيانات (0 = بدون شعب)
+            api.put(`/curriculum/courses/${c.id}`, { sections_count: Math.min(n, 10) }).catch(() => {});
           }}
           editable={canManage}
           testID={`sections-input-${c.id}`}
