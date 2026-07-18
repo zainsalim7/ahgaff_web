@@ -7877,6 +7877,83 @@ async def check_room_lecture_conflict(course_id: str, room: str, date: str, star
     return None
 
 
+AR_WEEKDAYS = {0: "الاثنين", 1: "الثلاثاء", 2: "الأربعاء", 3: "الخميس", 4: "الجمعة", 5: "السبت", 6: "الأحد"}
+
+
+async def check_teacher_preferences_conflict(course_id: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None):
+    """🎯 فحص تفضيلات المدرّس عند إنشاء/توليد/إعادة جدولة محاضرة يومية:
+    1) الأيام/الفترات المحظورة (unavailable_days/slots/periods)
+    2) الحد الأقصى للمحاضرات اليومية (max_daily_lectures)
+    3) منع المحاضرات المتتالية إن كان معطلاً (allow_consecutive_lectures)
+    يعيد رسالة خطأ عربية أو None.
+    """
+    try:
+        course = await db.courses.find_one({"_id": ObjectId(course_id)}) if course_id and ObjectId.is_valid(course_id) else None
+    except Exception:
+        course = None
+    teacher_id = str(course.get("teacher_id")) if course and course.get("teacher_id") else None
+    if not teacher_id:
+        return None
+    pref = await db.teacher_preferences.find_one({"teacher_id": teacher_id})
+    if not pref:
+        return None
+
+    teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)}) if ObjectId.is_valid(teacher_id) else None
+    t_name = (teacher or {}).get("full_name", "المدرّس")
+
+    try:
+        day_ar = AR_WEEKDAYS[datetime.strptime(date, "%Y-%m-%d").weekday()]
+    except Exception:
+        return None
+
+    # 1) يوم كامل محظور
+    if day_ar in (pref.get("unavailable_days") or []):
+        return f"تفضيلات المدرّس: {t_name} غير متاح يوم {day_ar} (يوم محظور في تفضيلاته)"
+
+    # 2) الفترات المحظورة — تحويل وقت المحاضرة إلى فترات عبر إعدادات جدول الكلية
+    blocked_cells = {(str(p.get("day")), int(p.get("slot_number", -1)))
+                     for p in (pref.get("unavailable_periods") or []) if isinstance(p, dict)}
+    legacy_slots = {int(sn) for sn in (pref.get("unavailable_slots") or [])}
+    if blocked_cells or legacy_slots:
+        settings = None
+        dept_id = course.get("department_id")
+        if dept_id and ObjectId.is_valid(str(dept_id)):
+            dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
+            fac_id = (dept or {}).get("faculty_id")
+            if fac_id:
+                settings = await db.schedule_settings.find_one({"_id": f"faculty_{fac_id}"})
+        if not settings:
+            settings = await db.schedule_settings.find_one({"_id": "global"}) or await db.schedule_settings.find_one({})
+        for slot in (settings or {}).get("time_slots", []) or []:
+            s_start, s_end = slot.get("start_time", ""), slot.get("end_time", "")
+            sn = slot.get("slot_number")
+            if not (s_start and s_end and sn is not None):
+                continue
+            if start_time < s_end and end_time > s_start:  # تداخل مع الفترة
+                if (day_ar, int(sn)) in blocked_cells or int(sn) in legacy_slots:
+                    return f"تفضيلات المدرّس: {t_name} غير متاح يوم {day_ar} الفترة {sn} ({s_start}-{s_end})"
+
+    # محاضرات المدرّس الأخرى في نفس اليوم (عبر كل مقرراته)
+    teacher_course_ids = [str(c["_id"]) async for c in db.courses.find({"teacher_id": teacher_id}, {"_id": 1})]
+    q = {"course_id": {"$in": teacher_course_ids}, "date": date, "status": {"$ne": LectureStatus.CANCELLED}}
+    if exclude_lecture_id and ObjectId.is_valid(exclude_lecture_id):
+        q["_id"] = {"$ne": ObjectId(exclude_lecture_id)}
+    day_lectures = await db.lectures.find(q, {"start_time": 1, "end_time": 1}).to_list(100)
+
+    # 3) الحد الأقصى اليومي
+    max_daily = int(pref.get("max_daily_lectures") or 3)
+    if len(day_lectures) >= max_daily:
+        return f"تفضيلات المدرّس: {t_name} وصل الحد الأقصى ({max_daily} محاضرات) يوم {date}"
+
+    # 4) منع التتالي
+    if pref.get("allow_consecutive_lectures") is False:
+        for lec in day_lectures:
+            if lec.get("end_time") == start_time or lec.get("start_time") == end_time:
+                return f"تفضيلات المدرّس: {t_name} لا يسمح بمحاضرات متتالية — لديه محاضرة ملاصقة ({lec.get('start_time')}-{lec.get('end_time')}) يوم {date}"
+
+    return None
+
+
 
 @api_router.post("/lectures")
 async def create_lecture(
@@ -7924,6 +8001,11 @@ async def create_lecture(
             raise HTTPException(status_code=400, detail=room_conflict["message"])
         elif room_conflict["type"] == "warning" and not data.force:
             raise HTTPException(status_code=409, detail=room_conflict["message"])
+
+    # 🎯 فحص تفضيلات المدرّس (أيام/فترات محظورة، حد يومي، منع التتالي) — مستقل عن فحص القاعة
+    pref_conflict = await check_teacher_preferences_conflict(data.course_id, data.date, data.start_time, data.end_time)
+    if pref_conflict:
+        raise HTTPException(status_code=400, detail=pref_conflict)
     
     lecture = {
         "course_id": data.course_id,
@@ -8049,6 +8131,12 @@ async def generate_semester_lectures(
             conflicts_skipped += 1
             current += timedelta(days=7)
             continue
+        # 🎯 فحص تفضيلات المدرّس
+        pref_conflict = await check_teacher_preferences_conflict(data.course_id, date_str, data.start_time, data.end_time)
+        if pref_conflict:
+            conflicts_skipped += 1
+            current += timedelta(days=7)
+            continue
         lecture = {
             "course_id": data.course_id,
             "date": date_str,
@@ -8152,6 +8240,11 @@ async def generate_semester_lectures_advanced(
                 if room_conflict and room_conflict["type"] == "error":
                     conflicts_skipped += 1
                     continue
+                # 🎯 فحص تفضيلات المدرّس
+                pref_conflict = await check_teacher_preferences_conflict(data.course_id, date_str, slot.start_time, slot.end_time)
+                if pref_conflict:
+                    conflicts_skipped += 1
+                    continue
                 # 🔧 لا تُعِد إنشاء محاضرة في موعد نُقلت منه محاضرة بإعادة الجدولة
                 # (وإلا زاد عدد المحاضرات عند إعادة التوليد بعد أي إعادة جدولة)
                 moved_away = await db.lectures.find_one({
@@ -8232,6 +8325,13 @@ async def update_lecture(
         )
         if room_conflict and room_conflict["type"] == "error":
             raise HTTPException(status_code=400, detail=room_conflict["message"])
+        # 🎯 فحص تفضيلات المدرّس عند تغيير التاريخ/الوقت
+        if any(k in update_data for k in ("date", "start_time", "end_time")):
+            pref_conflict = await check_teacher_preferences_conflict(
+                lecture.get("course_id", ""), eff_date, new_start, new_end, exclude_lecture_id=lecture_id
+            )
+            if pref_conflict:
+                raise HTTPException(status_code=400, detail=pref_conflict)
 
     # عند إعادة الجدولة (تغيير التاريخ): احفظ التاريخ الأصلي
     new_date = update_data.get("date")
@@ -8759,6 +8859,13 @@ async def reschedule_lecture(
     )
     if room_conflict and room_conflict["type"] == "error":
         raise HTTPException(status_code=400, detail=room_conflict["message"])
+
+    # 🎯 فحص تفضيلات المدرّس في الموعد الجديد
+    pref_conflict = await check_teacher_preferences_conflict(
+        lecture.get("course_id", ""), new_date, start_time, end_time, exclude_lecture_id=lecture_id
+    )
+    if pref_conflict:
+        raise HTTPException(status_code=400, detail=pref_conflict)
     
     # حفظ التاريخ القديم للإشعار
     old_date = lecture.get("date", "")
@@ -12645,6 +12752,13 @@ async def import_lectures_from_excel(
                         continue
                     room_conflict = await check_room_lecture_conflict(course_id, room or "", date_str, start_time, end_time)
                     if room_conflict and room_conflict["type"] == "error":
+                        row_conflicts += 1
+                        total_conflicts += 1
+                        current += timedelta(days=7)
+                        continue
+                    # 🎯 فحص تفضيلات المدرّس
+                    pref_conflict = await check_teacher_preferences_conflict(course_id, date_str, start_time, end_time)
+                    if pref_conflict:
                         row_conflicts += 1
                         total_conflicts += 1
                         current += timedelta(days=7)
