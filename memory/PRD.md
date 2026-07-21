@@ -951,6 +951,14 @@ Comprehensive student/teacher management system for Ahgaff University with:
 
 - ✅ **Teacher Preferences enforcement on ALL lecture creation/edit paths (2026-07-18)**: كانت تفضيلات المدرّس تُتجاهل عند الإنشاء/التعديل اليدوي (انحدار بعد إضافة فحص القاعات). أُصلح بربط `check_teacher_preferences_conflict` (server.py ~7883) في 6 مسارات بجانب فحص القاعة دون أن يلغي أحدهما الآخر: `POST /lectures`، التوليد الأسبوعي، `POST /lectures/generate-semester`، `PUT /lectures/{id}` (عند تغيير التاريخ/الوقت)، `PUT /lectures/{id}/reschedule`، واستيراد Excel. الفحوصات: يوم محظور، فترة محظورة (عبر schedule_settings للكلية)، الحد اليومي الأقصى، منع التتالي. مسارات التوليد الجماعي تتخطى (conflicts_skipped) بينما المسارات اليدوية ترجع 400 برسالة عربية تبدأ بـ"تفضيلات المدرّس:". ملاحظة: `routes/lectures.py` نسخة ميتة غير مسجلة — لم تُعدَّل. توليد المحاضرات من الجدول الأسبوعي (weekly_schedule.py) يرث جدولاً مبنياً أصلاً باحترام التفضيلات. اختبار E2E: 9/9 (يوم محظور، فترة محددة، فترة أخرى مسموحة، حد يومي، تتالي، إعادة جدولة، تعديل، وتعارض القاعة ما زال يعمل).
 
+- ✅ **Excel Import for Master Weekly Schedule (2026-07-21)**: ميزة استيراد الجدول الأسبوعي الشامل من Excel (بطلب المستخدم مع نموذج مرفق). ملف جديد `routes/schedule_import.py` (مسجل في server.py):
+  - `GET /api/weekly-schedule/import-template?faculty_id=&department_id=`: يولّد قالباً بنفس بنية نموذج المستخدم (أيام × فترات، لكل مجموعة 3 صفوف: المقرر/القاعة/الأستاذ)، معبأ بالجدول الحالي + ورقة "الأدلة" بأسماء المقررات/الأساتذة/القاعات الدقيقة.
+  - `POST /api/weekly-schedule/import-master` (faculty_id, department_id, dry_run, file): تحليل مرن (كشف صف الأيام تلقائياً، دعم الدمج merged cells، تسميات المستويات بالأرقام أو الترتيب العربي "الثاني.."، تطبيع عربي للهمزات/التاء المربوطة).
+  - **السياسات المقررة من المستخدم**: (1أ) دمج — الخلايا المشغولة تُتخطى مع تقرير، (2ب) أي تعارض جدولة (معلم/قاعة/تفضيلات/حد يومي — داخل الملف أو مع الجدول القائم عبر كل الأقسام) يوقف الاستيراد كاملاً بلا حفظ، (3ج) اختلاف اسم الأستاذ عن المسند للمقرر = خطأ تُتخطى الخلية.
+  - تمييز المقررات متطابقة الاسم بالأستاذ + مقارنة الشعبة مطبّعة (أ/ا) — ثغرتان اكتُشفتا وأُصلحتا أثناء الاختبار.
+  - الواجهة (`MasterScheduleView.tsx`): زر "استيراد Excel" (بنفسجي، `master-import-excel-btn`) → نافذة (`master-import-modal`): اختيار قسم، تحميل قالب (`download-import-template-btn`)، اختيار ملف، معاينة إلزامية (`import-dry-run-btn`) بتقرير مفصل (تعارضات حمراء/أخطاء أسماء برتقالية/مشغولة رمادية)، ثم تأكيد (`import-confirm-btn`) يظهر فقط عند can_commit.
+  - اختبار E2E باك اند 4/4 (قالب، معاينة بخطأ أسماء، تأكيد إدراج، إعادة استيراد = دمج/تخطي) + إثبات إيقاف الاستيراد الكامل عند تعارض معلم/قاعة/حد يومي + لقطة شاشة للواجهة.
+
 ## P3 / Backlog
 - server.py modularization (Phase 2: Reports; Phase 3+: Templates, Courses, Lectures…)
 - Migrate Atlas cluster AWS Oregon → GCP Doha (latency)

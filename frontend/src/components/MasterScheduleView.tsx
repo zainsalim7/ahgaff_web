@@ -47,6 +47,62 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   const [slotRooms, setSlotRooms] = useState<any[] | null>(null); // قاعات (يوم/فترة) مع حالة الانشغال
   const [validMap, setValidMap] = useState<Record<string, { valid: boolean; reasons: string[] }> | null>(null);
   const [placing, setPlacing] = useState<any>(null); // مقرر غير مدرج قيد الإدراج
+  const [importModal, setImportModal] = useState(false);
+  const [importDept, setImportDept] = useState('');
+  const [importDepts, setImportDepts] = useState<any[]>([]);
+  const [importFile, setImportFile] = useState<File | null>(null);
+  const [importReport, setImportReport] = useState<any>(null);
+  const [importing, setImporting] = useState(false);
+
+  const openImportModal = async () => {
+    setImportReport(null); setImportFile(null);
+    setImportModal(true);
+    try {
+      const res = await api.get('/departments');
+      const list = (res.data || []).filter((d: any) => d.faculty_id === facultyId);
+      setImportDepts(list);
+      setImportDept(departmentId || (list.length === 1 ? list[0].id : ''));
+    } catch { setImportDepts([]); }
+  };
+
+  const downloadImportTemplate = async () => {
+    if (!importDept) { window.alert('اختر القسم أولاً'); return; }
+    setImporting(true);
+    try {
+      const res = await api.get('/weekly-schedule/import-template', {
+        params: { faculty_id: facultyId, department_id: importDept }, responseType: 'blob',
+      });
+      const url = URL.createObjectURL(res.data);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'schedule_import_template.xlsx'; a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      let m = 'فشل تحميل القالب';
+      try { const p = JSON.parse(await e?.response?.data?.text()); if (p?.detail) m = p.detail; } catch {}
+      window.alert(m);
+    } finally { setImporting(false); }
+  };
+
+  const runImport = async (dryRun: boolean) => {
+    if (!importDept || !importFile) { window.alert('اختر القسم والملف أولاً'); return; }
+    setImporting(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', importFile);
+      fd.append('faculty_id', facultyId);
+      fd.append('department_id', importDept);
+      fd.append('dry_run', dryRun ? '1' : '0');
+      const res = await api.post('/weekly-schedule/import-master', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      setImportReport(res.data);
+      if (!dryRun && res.data.created > 0) {
+        showMsg('success', res.data.message);
+        setImportModal(false);
+        await load();
+      }
+    } catch (e: any) {
+      window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'خطأ في الاستيراد');
+    } finally { setImporting(false); }
+  };
 
   const load = useCallback(async () => {
     if (!facultyId) return;
@@ -362,6 +418,17 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
           <Ionicons name="grid" size={14} color="#fff" />
           <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>Excel ملوّن</Text>
         </TouchableOpacity>
+        {can_manage && (
+          <TouchableOpacity
+            onPress={openImportModal}
+            disabled={busy}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: '#6a1b9a' }}
+            testID="master-import-excel-btn"
+          >
+            <Ionicons name="cloud-upload" size={14} color="#fff" />
+            <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>استيراد Excel</Text>
+          </TouchableOpacity>
+        )}
         <View style={{ marginLeft: 'auto', backgroundColor: '#e3f2fd', borderRadius: 6, paddingHorizontal: 10, paddingVertical: 6 }}>
           <Text style={{ fontSize: 12, color: '#1565c0', fontWeight: '600' }}>{groups.length} شعبة • {entries.length} محاضرة</Text>
         </View>
@@ -554,6 +621,110 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                 backgroundColor: '#fff', color: '#555', fontSize: 13, fontWeight: 600,
               }}>إلغاء</button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* نافذة استيراد الجدول من Excel */}
+      {importModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
+          backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl',
+        }} onClick={() => !importing && setImportModal(false)}>
+          <div onClick={(ev: any) => ev.stopPropagation()} style={{
+            backgroundColor: '#fff', borderRadius: 12, padding: 20, width: 560, maxWidth: '94%', maxHeight: '85vh', overflowY: 'auto',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+          }} data-testid="master-import-modal">
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#1a2540', marginBottom: 4, textAlign: 'right' }}>📥 استيراد الجدول الأسبوعي من Excel</div>
+            <div style={{ fontSize: 11.5, color: '#5b6678', marginBottom: 12, textAlign: 'right', lineHeight: 1.7 }}>
+              السياسة: <b>دمج</b> — الخلايا المشغولة مسبقاً تُتخطى • أخطاء الأسماء تُتخطى مع تقرير • <b style={{ color: '#c62828' }}>أي تعارض جدولة يوقف الاستيراد كاملاً</b>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 6, textAlign: 'right' }}>1) اختر القسم:</div>
+            <select value={importDept} onChange={(ev: any) => { setImportDept(ev.target.value); setImportReport(null); }} style={{
+              width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc', marginBottom: 12,
+            }} data-testid="import-dept-select">
+              <option value="">-- اختر القسم --</option>
+              {importDepts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' as any }}>
+              <button onClick={downloadImportTemplate} disabled={importing || !importDept} style={{
+                padding: '8px 14px', borderRadius: 8, border: 'none', cursor: importDept ? 'pointer' : 'not-allowed',
+                backgroundColor: importDept ? '#1565c0' : '#b0bec5', color: '#fff', fontSize: 12.5, fontWeight: 700,
+              }} data-testid="download-import-template-btn">⬇️ تحميل قالب القسم (بالأسماء الدقيقة)</button>
+              <button onClick={() => {
+                const input = document.createElement('input');
+                input.type = 'file'; input.accept = '.xlsx';
+                input.onchange = (ev: any) => {
+                  const f = ev.target.files?.[0];
+                  if (f) { setImportFile(f); setImportReport(null); }
+                };
+                input.click();
+              }} disabled={importing} style={{
+                padding: '8px 14px', borderRadius: 8, border: '1px dashed #6a1b9a', cursor: 'pointer',
+                backgroundColor: '#f3e5f5', color: '#6a1b9a', fontSize: 12.5, fontWeight: 700,
+              }} data-testid="pick-import-file-btn">📎 {importFile ? importFile.name : 'اختر ملف Excel'}</button>
+            </div>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button onClick={() => runImport(true)} disabled={importing || !importFile || !importDept} style={{
+                flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
+                cursor: importFile && importDept ? 'pointer' : 'not-allowed',
+                backgroundColor: importFile && importDept ? '#e65100' : '#cfd8dc', color: '#fff', fontSize: 13, fontWeight: 700,
+              }} data-testid="import-dry-run-btn">{importing ? 'جاري الفحص...' : '🔍 معاينة (فحص بدون حفظ)'}</button>
+              {importReport?.can_commit && importReport?.dry_run && (
+                <button onClick={() => runImport(false)} disabled={importing} style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  backgroundColor: '#2e7d32', color: '#fff', fontSize: 13, fontWeight: 700,
+                }} data-testid="import-confirm-btn">{importing ? 'جاري الاستيراد...' : `✅ تأكيد إدراج ${importReport.to_create} محاضرة`}</button>
+              )}
+            </div>
+
+            {importReport && (
+              <div data-testid="import-report">
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8, marginBottom: 8, fontSize: 12.5, fontWeight: 700, textAlign: 'right',
+                  backgroundColor: importReport.conflicts?.length ? '#ffebee' : '#e8f5e9',
+                  color: importReport.conflicts?.length ? '#c62828' : '#2e7d32',
+                }}>{importReport.message}</div>
+                {importReport.conflicts?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#c62828', textAlign: 'right', marginBottom: 4 }}>🛑 تعارضات توقف الاستيراد ({importReport.conflicts.length}):</div>
+                    <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #ef9a9a', borderRadius: 8, padding: 8, backgroundColor: '#fff8f8' }}>
+                      {importReport.conflicts.map((c: string, i: number) => (
+                        <div key={i} style={{ fontSize: 11, color: '#b71c1c', textAlign: 'right', padding: '3px 0', borderBottom: '1px dashed #ffcdd2' }}>{c}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {importReport.errors?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#e65100', textAlign: 'right', marginBottom: 4 }}>⚠️ خلايا مُتخطاة لأخطاء أسماء ({importReport.errors.length}):</div>
+                    <div style={{ maxHeight: 140, overflowY: 'auto', border: '1px solid #ffcc80', borderRadius: 8, padding: 8, backgroundColor: '#fffdf7' }}>
+                      {importReport.errors.map((c: string, i: number) => (
+                        <div key={i} style={{ fontSize: 11, color: '#bf5f00', textAlign: 'right', padding: '3px 0', borderBottom: '1px dashed #ffe0b2' }}>{c}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {importReport.skipped_existing?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', textAlign: 'right', marginBottom: 4 }}>⏭️ خلايا مشغولة مسبقاً تم تخطيها ({importReport.skipped_existing.length}):</div>
+                    <div style={{ maxHeight: 120, overflowY: 'auto', border: '1px solid #dde3ec', borderRadius: 8, padding: 8, backgroundColor: '#fafbfd' }}>
+                      {importReport.skipped_existing.map((c: string, i: number) => (
+                        <div key={i} style={{ fontSize: 11, color: '#5b6678', textAlign: 'right', padding: '3px 0', borderBottom: '1px dashed #e8edf4' }}>{c}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={() => setImportModal(false)} disabled={importing} style={{
+              width: '100%', padding: '9px 0', borderRadius: 8, border: '1px solid #ddd', cursor: 'pointer',
+              backgroundColor: '#fff', color: '#555', fontSize: 13, fontWeight: 600, marginTop: 4,
+            }} data-testid="close-import-modal-btn">إغلاق</button>
           </div>
         </div>
       )}
