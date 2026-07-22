@@ -959,6 +959,13 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - الواجهة (`MasterScheduleView.tsx`): زر "استيراد Excel" (بنفسجي، `master-import-excel-btn`) → نافذة (`master-import-modal`): اختيار قسم، تحميل قالب (`download-import-template-btn`)، اختيار ملف، معاينة إلزامية (`import-dry-run-btn`) بتقرير مفصل (تعارضات حمراء/أخطاء أسماء برتقالية/مشغولة رمادية)، ثم تأكيد (`import-confirm-btn`) يظهر فقط عند can_commit.
   - اختبار E2E باك اند 4/4 (قالب، معاينة بخطأ أسماء، تأكيد إدراج، إعادة استيراد = دمج/تخطي) + إثبات إيقاف الاستيراد الكامل عند تعارض معلم/قاعة/حد يومي + لقطة شاشة للواجهة.
 
+- ✅ **Smart Resolver — الحلحلة الذكية (2026-07-22)**: خوارزمية Chain-Repair لإدراج المقررات المتعثرة بنقل محاضرات قائمة. ملف جديد `routes/schedule_resolver.py` (مسجل في server.py):
+  - `POST /api/weekly-schedule/resolve-unscheduled/preview` (faculty_id, department_id): يبني خطة (نقلات + إدراجات + متعذرة بأسبابها) دون حفظ. `POST .../commit`: ينفذ الخطة المعتمدة بعد إعادة التحقق الكامل ضد الحالة الحالية (أي تغيير منذ المعاينة → 409 "أعد المعاينة").
+  - **السياسات المقررة من المستخدم**: لا تُمس إلا محاضرات نفس القسم • معاينة إلزامية قبل التنفيذ • حتى نقلتين متسلسلتين لكل إدراج.
+  - المنطق: مرحلة 1 إدراج مباشر (كمنطق auto-place) → مرحلة 2 تحليل مانعي كل خلية (شعبة/معلم/قاعة) ونقلهم لخلايا صالحة بكامل الفحوصات (تفضيلات كل المعلمين خط أحمر لا يُنتهك، منع 3 متتاليات، الحد اليومي). نقلة مزدوجة مدعومة (نقل C لإفساح مكان لـB ثم B ثم إدراج U) مع undo كامل عند الفشل. المحاضرات المنقولة توسم `moved_by_resolver` والمدرجة `placed_by_resolver`.
+  - الواجهة (`MasterScheduleView.tsx`): زر "🧩 حلحلة ذكية" (testID `smart-resolver-btn`) بجانب الإدراج التلقائي في قسم غير المدرجة → نافذة (`resolver-modal`): اختيار قسم، بناء الخطة (`resolver-preview-btn`)، عرض النقلات (برتقالي) والإدراجات (أخضر) والمتعذرة بأسبابها (أحمر)، تنفيذ (`resolver-commit-btn`).
+  - اختبار E2E: 6/6 (سيناريو نقل إجباري: معاينة، عدم انتهاك التفضيلات، تنفيذ، تحقق DB، رفض خطة قديمة stale 409، حالة مستحيلة بسبب واضح) + 2/2 سلسلة مزدوجة (C3 يتحرك أولاً ثم C2 ثم إدراج C1 بالترتيب الصحيح) + لقطة شاشة للواجهة.
+
 ## P3 / Backlog
 - server.py modularization (Phase 2: Reports; Phase 3+: Templates, Courses, Lectures…)
 - Migrate Atlas cluster AWS Oregon → GCP Doha (latency)

@@ -53,6 +53,53 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   const [importFile, setImportFile] = useState<File | null>(null);
   const [importReport, setImportReport] = useState<any>(null);
   const [importing, setImporting] = useState(false);
+  const [resolverModal, setResolverModal] = useState(false);
+  const [resolverDept, setResolverDept] = useState('');
+  const [resolverDepts, setResolverDepts] = useState<any[]>([]);
+  const [resolverPlan, setResolverPlan] = useState<any>(null);
+  const [resolving, setResolving] = useState(false);
+
+  const openResolverModal = async () => {
+    setResolverPlan(null);
+    setResolverModal(true);
+    try {
+      const res = await api.get('/departments');
+      const list = (res.data || []).filter((d: any) => d.faculty_id === facultyId);
+      setResolverDepts(list);
+      setResolverDept(departmentId || (list.length === 1 ? list[0].id : ''));
+    } catch { setResolverDepts([]); }
+  };
+
+  const runResolverPreview = async () => {
+    if (!resolverDept) { window.alert('اختر القسم أولاً'); return; }
+    setResolving(true);
+    try {
+      const res = await api.post('/weekly-schedule/resolve-unscheduled/preview', null, {
+        params: { faculty_id: facultyId, department_id: resolverDept },
+      });
+      setResolverPlan(res.data);
+    } catch (e: any) {
+      window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'خطأ في بناء الخطة');
+    } finally { setResolving(false); }
+  };
+
+  const commitResolverPlan = async () => {
+    if (!resolverPlan) return;
+    setResolving(true);
+    try {
+      const res = await api.post('/weekly-schedule/resolve-unscheduled/commit', {
+        faculty_id: facultyId,
+        department_id: resolverDept,
+        moves: (resolverPlan.moves || []).map((m: any) => ({ slot_id: m.slot_id, to_day: m.to_day, to_slot: m.to_slot, room_id: m.room_id || '' })),
+        placements: (resolverPlan.placements || []).map((p: any) => ({ course_id: p.course_id, level: p.level, section: p.section || '', day: p.day, slot_number: p.slot_number, room_id: p.room_id || '' })),
+      });
+      showMsg('success', res.data.message);
+      setResolverModal(false);
+      await load();
+    } catch (e: any) {
+      window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'فشل تنفيذ الخطة');
+    } finally { setResolving(false); }
+  };
 
   const openImportModal = async () => {
     setImportReport(null); setImportFile(null);
@@ -729,6 +776,101 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
         </div>
       )}
 
+      {/* نافذة الحلحلة الذكية */}
+      {resolverModal && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
+          backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl',
+        }} onClick={() => !resolving && setResolverModal(false)}>
+          <div onClick={(ev: any) => ev.stopPropagation()} style={{
+            backgroundColor: '#fff', borderRadius: 12, padding: 20, width: 620, maxWidth: '94%', maxHeight: '85vh', overflowY: 'auto',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
+          }} data-testid="resolver-modal">
+            <div style={{ fontSize: 15, fontWeight: 800, color: '#1a2540', marginBottom: 4, textAlign: 'right' }}>🧩 الحلحلة الذكية للمقررات غير المدرجة</div>
+            <div style={{ fontSize: 11.5, color: '#5b6678', marginBottom: 12, textAlign: 'right', lineHeight: 1.7 }}>
+              يبحث النظام عن حلول بنقل محاضرات قائمة (<b>من نفس القسم فقط</b>، حتى نقلتين لكل إدراج) دون انتهاك أي تعارض أو تفضيلات معلم. <b>لا يُنفذ شيء قبل موافقتك على الخطة.</b>
+            </div>
+
+            <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 6, textAlign: 'right' }}>القسم:</div>
+            <select value={resolverDept} onChange={(ev: any) => { setResolverDept(ev.target.value); setResolverPlan(null); }} style={{
+              width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc', marginBottom: 12,
+            }} data-testid="resolver-dept-select">
+              <option value="">-- اختر القسم --</option>
+              {resolverDepts.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+            </select>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <button onClick={runResolverPreview} disabled={resolving || !resolverDept} style={{
+                flex: 1, padding: '10px 0', borderRadius: 8, border: 'none',
+                cursor: resolverDept ? 'pointer' : 'not-allowed',
+                backgroundColor: resolverDept ? '#00695c' : '#cfd8dc', color: '#fff', fontSize: 13, fontWeight: 700,
+              }} data-testid="resolver-preview-btn">{resolving ? 'جاري بناء الخطة...' : '🔍 ابنِ خطة الحلحلة (معاينة)'}</button>
+              {resolverPlan && (resolverPlan.placements?.length > 0) && (
+                <button onClick={commitResolverPlan} disabled={resolving} style={{
+                  flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
+                  backgroundColor: '#2e7d32', color: '#fff', fontSize: 13, fontWeight: 700,
+                }} data-testid="resolver-commit-btn">{resolving ? 'جاري التنفيذ...' : `✅ نفّذ الخطة (${resolverPlan.placements.length} إدراج${resolverPlan.moves?.length ? ` + ${resolverPlan.moves.length} نقلة` : ''})`}</button>
+              )}
+            </div>
+
+            {resolverPlan && (
+              <div data-testid="resolver-plan">
+                <div style={{
+                  padding: '10px 12px', borderRadius: 8, marginBottom: 8, fontSize: 12.5, fontWeight: 700, textAlign: 'right',
+                  backgroundColor: resolverPlan.placements?.length ? '#e8f5e9' : '#fff8e1',
+                  color: resolverPlan.placements?.length ? '#2e7d32' : '#e65100',
+                }}>{resolverPlan.message}</div>
+
+                {resolverPlan.moves?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#e65100', textAlign: 'right', marginBottom: 4 }}>🔀 النقلات المقترحة ({resolverPlan.moves.length}):</div>
+                    <div style={{ maxHeight: 170, overflowY: 'auto', border: '1px solid #ffcc80', borderRadius: 8, padding: 8, backgroundColor: '#fffdf7' }}>
+                      {resolverPlan.moves.map((m: any, i: number) => (
+                        <div key={i} style={{ fontSize: 11.5, color: '#6d4c00', textAlign: 'right', padding: '4px 0', borderBottom: '1px dashed #ffe0b2', lineHeight: 1.6 }}>
+                          <b>{m.course_name}</b> ({m.teacher_name} · {m.group}): {m.from_day} ف{m.from_slot} ← <b>{m.to_day} ف{m.to_slot}</b>
+                          {m.room_changed ? ` · قاعة جديدة: ${m.room_name}` : m.room_name ? ` · ${m.room_name}` : ''}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {resolverPlan.placements?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#2e7d32', textAlign: 'right', marginBottom: 4 }}>➕ الإدراجات ({resolverPlan.placements.length}):</div>
+                    <div style={{ maxHeight: 170, overflowY: 'auto', border: '1px solid #a5d6a7', borderRadius: 8, padding: 8, backgroundColor: '#f7fdf8' }}>
+                      {resolverPlan.placements.map((p: any, i: number) => (
+                        <div key={i} style={{ fontSize: 11.5, color: '#1b5e20', textAlign: 'right', padding: '4px 0', borderBottom: '1px dashed #c8e6c9', lineHeight: 1.6 }}>
+                          <b>{p.course_name}</b> ({p.teacher_name} · {p.group}) → <b>{p.day} ف{p.slot_number}</b>{p.room_name ? ` · ${p.room_name}` : ' · بدون قاعة'}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {resolverPlan.failed?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#c62828', textAlign: 'right', marginBottom: 4 }}>❌ تعذر حلها ({resolverPlan.failed.length}):</div>
+                    <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid #ef9a9a', borderRadius: 8, padding: 8, backgroundColor: '#fff8f8' }}>
+                      {resolverPlan.failed.map((f: any, i: number) => (
+                        <div key={i} style={{ fontSize: 11.5, color: '#b71c1c', textAlign: 'right', padding: '4px 0', borderBottom: '1px dashed #ffcdd2', lineHeight: 1.6 }}>
+                          <b>{f.course_name}</b> (م{f.level}{f.section ? `/${f.section}` : ''}) — {f.reason}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <button onClick={() => setResolverModal(false)} disabled={resolving} style={{
+              width: '100%', padding: '9px 0', borderRadius: 8, border: '1px solid #ddd', cursor: 'pointer',
+              backgroundColor: '#fff', color: '#555', fontSize: 13, fontWeight: 600, marginTop: 4,
+            }} data-testid="close-resolver-modal-btn">إغلاق</button>
+          </div>
+        </div>
+      )}
+
       {/* المقررات غير المدرجة */}
       {unscheduled.length > 0 && (
         <View style={{ marginTop: 12, backgroundColor: '#fff8e1', borderWidth: 1, borderColor: '#ffe082', borderRadius: 10, padding: 12 }} testID="unscheduled-courses-section">
@@ -736,15 +878,26 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
             <Ionicons name="warning" size={16} color="#e65100" />
             <Text style={{ fontSize: 13, fontWeight: '800', color: '#e65100' }}>مقررات لم تُدرج في الجدول أو مدرجة جزئياً ({unscheduled.length})</Text>
             {can_manage && (
+              <>
+              <TouchableOpacity
+                onPress={openResolverModal}
+                disabled={busy}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#00695c', marginRight: 'auto' }}
+                testID="smart-resolver-btn"
+              >
+                <Ionicons name="git-compare" size={13} color="#fff" />
+                <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>🧩 حلحلة ذكية (بنقل محاضرات)</Text>
+              </TouchableOpacity>
               <TouchableOpacity
                 onPress={autoPlaceAll}
                 disabled={busy}
-                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#4527a0', marginRight: 'auto' }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, backgroundColor: '#4527a0' }}
                 testID="auto-place-all-btn"
               >
                 <Ionicons name="flash" size={13} color="#fff" />
                 <Text style={{ color: '#fff', fontSize: 12, fontWeight: '700' }}>⚡ إدراج تلقائي للكل</Text>
               </TouchableOpacity>
+              </>
             )}
           </View>
           <div style={{ overflowX: 'auto', direction: 'rtl' }}>
