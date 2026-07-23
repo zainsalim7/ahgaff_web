@@ -233,7 +233,8 @@ async def import_master_schedule(
     current_user: dict = Depends(get_current_user),
 ):
     """استيراد الجدول الأسبوعي الشامل من Excel لقسم محدد.
-    السياسة: دمج (الخلايا المشغولة تُتخطى) + أخطاء الأسماء تُتخطى مع التقرير + أي تعارض جدولة يوقف الاستيراد كاملاً.
+    السياسة: الإكسل هو الأساس — الخلايا المعبأة في الملف تستبدل ما يقابلها في النظام (استبدال على مستوى الخلية)
+    + الخلايا الفارغة في الملف لا تمس الموجود + أخطاء الأسماء تُتخطى مع التقرير + أي تعارض جدولة يوقف الاستيراد كاملاً.
     """
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -289,10 +290,12 @@ async def import_master_schedule(
     courses_by_name = {}
     for cdoc in courses:
         courses_by_name.setdefault(_norm(cdoc.get("name")), []).append(cdoc)
+    courses_by_id = {str(c["_id"]): c.get("name", "") for c in courses}
     t_ids = list({c.get("teacher_id") for c in courses if c.get("teacher_id")})
     teachers_map = {str(t["_id"]): t for t in await db.teachers.find({"_id": {"$in": [ObjectId(x) for x in t_ids]}}).to_list(1000)} if t_ids else {}
     rooms = await db.rooms.find({"faculty_id": faculty_id, "is_active": True}).to_list(300)
     rooms_by_name = {_norm(r.get("name")): r for r in rooms}
+    rooms_by_id = {str(r["_id"]): r.get("name", "") for r in rooms}
 
     existing_slots = await db.weekly_schedule.find({"department_id": department_id}).to_list(5000)
     existing_cells = {(s.get("level"), s.get("section", "") or "", s.get("day"), s.get("slot_number")): s for s in existing_slots}
@@ -367,12 +370,19 @@ async def import_master_schedule(
                 errors.append(f"{loc} القاعة '{room_txt}' غير مسجلة في الكلية — تُخُطيت الخلية")
                 continue
 
-            # الخلية مشغولة مسبقاً → دمج: تخطٍ مع تنبيه
+            # 🔁 الخلية مشغولة مسبقاً → الإكسل هو الأساس: استبدال (أو تخطٍ إن كانت مطابقة تماماً)
+            replace_id = None
+            replace_desc = ""
             ex = existing_cells.get((level, section_val, day, slot_number))
             if ex:
-                same = ex.get("course_id") == str(course["_id"])
-                skipped_existing.append(f"{loc} الخلية مشغولة مسبقاً بـ'{course_txt if same else 'مقرر آخر'}' — {'مطابقة للملف' if same else 'تم الإبقاء على الموجود'}")
-                continue
+                same = ex.get("course_id") == str(course["_id"]) and (ex.get("room_id") or "") == str(room["_id"])
+                if same:
+                    skipped_existing.append(f"{loc} مطابقة تماماً للموجود في النظام — لا تغيير")
+                    continue
+                replace_id = str(ex["_id"])
+                old_name = courses_by_id.get(ex.get("course_id", ""), "مقرر آخر")
+                old_room = rooms_by_id.get(ex.get("room_id", ""), "")
+                replace_desc = f"{loc} سيُستبدل '{old_name}'{f' ({old_room})' if old_room else ''} ← بـ'{course.get('name', '')}' ({room.get('name', '')})"
 
             to_create.append({
                 "faculty_id": faculty_id,
@@ -388,11 +398,18 @@ async def import_master_schedule(
                 "_course_name": course.get("name", ""),
                 "_teacher_name": teacher.get("full_name", ""),
                 "_room_name": room.get("name", ""),
+                "_replace_id": replace_id,
+                "_replace_desc": replace_desc,
             })
         r += 3
 
+    replaced_msgs = [it["_replace_desc"] for it in to_create if it["_replace_id"]]
+    replaced_ids = {it["_replace_id"] for it in to_create if it["_replace_id"]}
+
     # ===== 4) فحص التعارضات (داخل الملف + مع الجدول القائم عبر كل الأقسام) =====
+    # الخلايا المستبدلة تُستثنى من خرائط الانشغال (القديم سيُلغى فلا يُحسب تعارضاً)
     all_slots = await db.weekly_schedule.find({}, {"teacher_id": 1, "room_id": 1, "day": 1, "slot_number": 1, "department_id": 1, "level": 1, "section": 1}).to_list(20000)
+    all_slots = [s for s in all_slots if str(s["_id"]) not in replaced_ids]
     busy_teacher = {(s.get("teacher_id"), s.get("day"), s.get("slot_number")) for s in all_slots if s.get("teacher_id")}
     busy_room = {(s.get("room_id"), s.get("day"), s.get("slot_number")) for s in all_slots if s.get("room_id")}
     teacher_daily = {}
@@ -430,10 +447,13 @@ async def import_master_schedule(
         seen_room.add(rk)
         seen_cell.add(ck)
 
+    new_count = sum(1 for it in to_create if not it["_replace_id"])
     can_commit = len(conflicts) == 0 and len(to_create) > 0
     report = {
         "dry_run": is_dry,
-        "to_create": len(to_create),
+        "to_create": new_count,
+        "to_replace": len(replaced_msgs),
+        "replaced": replaced_msgs,
         "created": 0,
         "skipped_existing": skipped_existing,
         "errors": errors,
@@ -445,25 +465,46 @@ async def import_master_schedule(
         report["message"] = f"🛑 تم إيقاف الاستيراد: يوجد {len(conflicts)} تعارض جدولة — عالج التعارضات ثم أعد المحاولة (لم يُحفظ أي شيء)"
         return report
     if is_dry:
-        report["message"] = f"معاينة: سيتم إدراج {len(to_create)} محاضرة" + (f" • تخطي {len(skipped_existing)} مشغولة" if skipped_existing else "") + (f" • {len(errors)} خطأ أسماء" if errors else "")
+        report["message"] = (
+            f"معاينة: سيتم إدراج {new_count} محاضرة جديدة"
+            + (f" • استبدال {len(replaced_msgs)} خلية بمحتوى الملف" if replaced_msgs else "")
+            + (f" • {len(skipped_existing)} مطابقة بلا تغيير" if skipped_existing else "")
+            + (f" • {len(errors)} خطأ أسماء" if errors else "")
+        )
         return report
 
+    # ===== 5) تنفيذ: حذف المستبدلة أولاً ثم إدراج كل محاضرات الملف =====
+    if replaced_ids:
+        await db.weekly_schedule.delete_many({"_id": {"$in": [ObjectId(x) for x in replaced_ids]}})
+
     created = 0
+    replaced_count = 0
     for item in to_create:
         doc = {k: v for k, v in item.items() if not k.startswith("_")}
         doc["created_at"] = datetime.now(timezone.utc)
         doc["created_by"] = current_user["id"]
         doc["imported_from_excel"] = True
+        if item["_replace_id"]:
+            doc["replaced_existing"] = True
         try:
             await db.weekly_schedule.insert_one(doc)
-            created += 1
+            if item["_replace_id"]:
+                replaced_count += 1
+            else:
+                created += 1
         except DuplicateKeyError:
             conflicts.append(f"{item['_loc']} رُفض من قاعدة البيانات (تعارض فريد لحظي)")
 
     await log_activity(
         current_user, "import_master_schedule_excel", "weekly_schedule", department_id, None,
-        {"faculty_id": faculty_id, "created": created, "errors": len(errors), "skipped_existing": len(skipped_existing)},
+        {"faculty_id": faculty_id, "created": created, "replaced": replaced_count, "errors": len(errors), "skipped_identical": len(skipped_existing)},
     )
     report["created"] = created
-    report["message"] = f"✅ تم إدراج {created} محاضرة في الجدول الأسبوعي" + (f" • تخطي {len(skipped_existing)} مشغولة مسبقاً" if skipped_existing else "") + (f" • {len(errors)} خلية بأخطاء أسماء (انظر التقرير)" if errors else "")
+    report["replaced_count"] = replaced_count
+    report["message"] = (
+        f"✅ تم إدراج {created} محاضرة جديدة"
+        + (f" • استُبدلت {replaced_count} خلية بمحتوى الملف" if replaced_count else "")
+        + (f" • {len(skipped_existing)} مطابقة بلا تغيير" if skipped_existing else "")
+        + (f" • {len(errors)} خلية بأخطاء أسماء (انظر التقرير)" if errors else "")
+    )
     return report

@@ -684,7 +684,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
           }} data-testid="master-import-modal">
             <div style={{ fontSize: 15, fontWeight: 800, color: '#1a2540', marginBottom: 4, textAlign: 'right' }}>📥 استيراد الجدول الأسبوعي من Excel</div>
             <div style={{ fontSize: 11.5, color: '#5b6678', marginBottom: 12, textAlign: 'right', lineHeight: 1.7 }}>
-              السياسة: <b>دمج</b> — الخلايا المشغولة مسبقاً تُتخطى • أخطاء الأسماء تُتخطى مع تقرير • <b style={{ color: '#c62828' }}>أي تعارض جدولة يوقف الاستيراد كاملاً</b>
+              السياسة: <b style={{ color: '#6a1b9a' }}>الإكسل هو الأساس</b> — الخلايا المعبأة في الملف <b>تستبدل</b> ما يقابلها في النظام • الخلايا الفارغة في الملف لا تمس الموجود • أخطاء الأسماء تُتخطى مع تقرير • <b style={{ color: '#c62828' }}>أي تعارض جدولة يوقف الاستيراد كاملاً</b>
             </div>
 
             <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 6, textAlign: 'right' }}>1) اختر القسم:</div>
@@ -724,7 +724,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                 <button onClick={() => runImport(false)} disabled={importing} style={{
                   flex: 1, padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer',
                   backgroundColor: '#2e7d32', color: '#fff', fontSize: 13, fontWeight: 700,
-                }} data-testid="import-confirm-btn">{importing ? 'جاري الاستيراد...' : `✅ تأكيد إدراج ${importReport.to_create} محاضرة`}</button>
+                }} data-testid="import-confirm-btn">{importing ? 'جاري الاستيراد...' : `✅ تأكيد (${importReport.to_create} إدراج${importReport.to_replace ? ` + ${importReport.to_replace} استبدال` : ''})`}</button>
               )}
             </div>
 
@@ -745,6 +745,16 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                     </div>
                   </div>
                 )}
+                {importReport.replaced?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#6a1b9a', textAlign: 'right', marginBottom: 4 }}>🔁 خلايا ستُستبدل بمحتوى الملف ({importReport.replaced.length}):</div>
+                    <div style={{ maxHeight: 150, overflowY: 'auto', border: '1px solid #ce93d8', borderRadius: 8, padding: 8, backgroundColor: '#faf5fc' }}>
+                      {importReport.replaced.map((c: string, i: number) => (
+                        <div key={i} style={{ fontSize: 11, color: '#4a148c', textAlign: 'right', padding: '3px 0', borderBottom: '1px dashed #e1bee7' }}>{c}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
                 {importReport.errors?.length > 0 && (
                   <div style={{ marginBottom: 8 }}>
                     <div style={{ fontSize: 12, fontWeight: 800, color: '#e65100', textAlign: 'right', marginBottom: 4 }}>⚠️ خلايا مُتخطاة لأخطاء أسماء ({importReport.errors.length}):</div>
@@ -757,7 +767,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                 )}
                 {importReport.skipped_existing?.length > 0 && (
                   <div style={{ marginBottom: 8 }}>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', textAlign: 'right', marginBottom: 4 }}>⏭️ خلايا مشغولة مسبقاً تم تخطيها ({importReport.skipped_existing.length}):</div>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', textAlign: 'right', marginBottom: 4 }}>✓ خلايا مطابقة تماماً للموجود — بلا تغيير ({importReport.skipped_existing.length}):</div>
                     <div style={{ maxHeight: 120, overflowY: 'auto', border: '1px solid #dde3ec', borderRadius: 8, padding: 8, backgroundColor: '#fafbfd' }}>
                       {importReport.skipped_existing.map((c: string, i: number) => (
                         <div key={i} style={{ fontSize: 11, color: '#5b6678', textAlign: 'right', padding: '3px 0', borderBottom: '1px dashed #e8edf4' }}>{c}</div>
