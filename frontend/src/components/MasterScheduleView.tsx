@@ -141,7 +141,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
       fd.append('dry_run', dryRun ? '1' : '0');
       const res = await api.post('/weekly-schedule/import-master', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
       setImportReport(res.data);
-      if (!dryRun && res.data.created > 0) {
+      if (!dryRun && !(res.data.conflicts?.length)) {
         showMsg('success', res.data.message);
         setImportModal(false);
         await load();

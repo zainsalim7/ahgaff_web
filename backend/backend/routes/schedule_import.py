@@ -405,6 +405,7 @@ async def import_master_schedule(
             # 🔁 الخلية مشغولة مسبقاً → الإكسل هو الأساس: استبدال (أو تخطٍ إن كانت مطابقة تماماً)
             replace_id = None
             replace_desc = ""
+            replace_teacher = ""
             ex = existing_cells.get((level, section_val, day, slot_number))
             if ex:
                 same = ex.get("course_id") == str(course["_id"]) and (ex.get("room_id") or "") == str(room["_id"])
@@ -412,6 +413,7 @@ async def import_master_schedule(
                     skipped_existing.append(f"{loc} مطابقة تماماً للموجود في النظام — لا تغيير")
                     continue
                 replace_id = str(ex["_id"])
+                replace_teacher = ex.get("teacher_id", "") or ""
                 old_name = courses_by_id.get(ex.get("course_id", ""), "مقرر آخر")
                 old_room = rooms_by_id.get(ex.get("room_id", ""), "")
                 replace_desc = f"{loc} سيُستبدل '{old_name}'{f' ({old_room})' if old_room else ''} ← بـ'{course.get('name', '')}' ({room.get('name', '')})"
@@ -432,6 +434,7 @@ async def import_master_schedule(
                 "_room_name": room.get("name", ""),
                 "_replace_id": replace_id,
                 "_replace_desc": replace_desc,
+                "_replaced_teacher": replace_teacher,
             })
         r += 3
 
@@ -518,11 +521,13 @@ async def import_master_schedule(
         elif rk in seen_room:
             conflicts.append(f"{loc} تعارض قاعة داخل الملف: '{item['_room_name']}' مذكورة في خليتين بنفس (اليوم/الفترة)")
         pref = prefs_map.get(item["teacher_id"])
-        if pref and _is_period_unavailable(pref, item["day"], item["slot_number"]):
+        # استبدال محايد زمنياً: نفس المعلم في نفس (اليوم/الفترة) كان يشغل الخلية أصلاً — لا يُعامل كمحاضرة إضافية
+        neutral_time = bool(item["_replace_id"]) and item.get("_replaced_teacher") == item["teacher_id"]
+        if pref and not neutral_time and _is_period_unavailable(pref, item["day"], item["slot_number"]):
             conflicts.append(f"{loc} تعارض تفضيلات: '{item['_teacher_name']}' غير متاح يوم {item['day']} الفترة {item['slot_number']}")
         dk = (item["teacher_id"], item["day"])
         teacher_daily[dk] = teacher_daily.get(dk, 0) + 1
-        if pref and teacher_daily[dk] > int(pref.get("max_daily_lectures") or 3):
+        if pref and not neutral_time and teacher_daily[dk] > int(pref.get("max_daily_lectures") or 3):
             conflicts.append(f"{loc} تعارض تفضيلات: '{item['_teacher_name']}' سيتجاوز الحد اليومي ({pref.get('max_daily_lectures', 3)}) يوم {item['day']}")
         seen_teacher.add(tk)
         seen_room.add(rk)
@@ -553,6 +558,13 @@ async def import_master_schedule(
         report["message"] = f"🛑 تم إيقاف الاستيراد: يوجد {len(conflicts)} تعارض جدولة — عالج التعارضات ثم أعد المحاولة (لم يُحفظ أي شيء)"
         return report
     if is_dry:
+        if not to_create and not reassign_map:
+            report["message"] = (
+                "الملف مطابق تماماً للجدول الحالي — لا توجد تغييرات للاستيراد"
+                + (f" ({len(skipped_existing)} خلية مطابقة)" if skipped_existing else "")
+                + (f" • {len(errors)} خطأ أسماء (انظر التقرير)" if errors else "")
+            )
+            return report
         report["message"] = (
             f"معاينة: سيتم إدراج {new_count} محاضرة جديدة"
             + (f" • استبدال {len(replaced_msgs)} خلية بمحتوى الملف" if replaced_msgs else "")
