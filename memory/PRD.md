@@ -976,6 +976,8 @@ Comprehensive student/teacher management system for Ahgaff University with:
   - اختبار E2E: 5/5 (إسناد غير المسند، تغيير إسناد + cascade، Idempotency، ملف متناقض يُحظر، أستاذ مجهول = خطأ خلية) + 2/2 كشف تصادم الكاسكيد الصافي وعدم مساس DB.
   - ثغرتان اكتُشفتا وأُصلحتا أثناء الاختبار: كشف تصادم الكاسكيد كان يعتمد على ترتيب المرور، وupdate_many كان قد يرفع 500 بدل 409.
 
+- ✅ **Unscheduled courses metric simplified (2026-07-23)**: بطلب المستخدم (ظهرت 96 "غير مدرجة" رغم إدراج الكل عبر Excel): كان `_build_master_data` يحسب المطلوب من الساعات المعتمدة (3 ساعات = خليتان أسبوعياً، والافتراضي 3) فتظهر المدرجة مرة واحدة كـ"ناقصة". عُدّل المعيار: **خلية واحدة على الأقل = مدرج**؛ القائمة تعرض فقط المقررات بلا أي خلية (`have == 0`, `missing=1`). يسري تلقائياً على العرض الشامل وPDF والحلحلة والإدراج التلقائي (كلها تقرأ نفس الدالة). `_needed_weekly_slots` لم تعد مستخدمة في هذا المسار. اختبار: مقرر له خلايا لا يظهر + مقرر بلا خلايا يظهر بـmissing=1.
+
 ## P3 / Backlog
 - server.py modularization (Phase 2: Reports; Phase 3+: Templates, Courses, Lectures…)
 - Migrate Atlas cluster AWS Oregon → GCP Doha (latency)

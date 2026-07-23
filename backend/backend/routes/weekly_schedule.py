@@ -2632,14 +2632,13 @@ async def _build_master_data(db, faculty_id: str, department_id: Optional[str] =
         ck = (s.get("course_id", ""), s.get("department_id", ""), s.get("level") or 1, s.get("section", "") or "")
         scheduled_counts[ck] = scheduled_counts.get(ck, 0) + 1
 
-    # المقررات غير المدرجة أو المدرجة جزئياً
+    # المقررات غير المدرجة إطلاقاً (المقياس: خلية واحدة على الأقل في الجدول = مدرج)
     unscheduled = []
     for c in courses:
         cid = str(c["_id"])
-        needed = _needed_weekly_slots(c.get("credit_hours"))
         ck = (cid, c.get("department_id", ""), c.get("level") or 1, c.get("section", "") or "")
         have = scheduled_counts.get(ck, 0)
-        if have < needed:
+        if have == 0:
             teacher = teachers_map.get(c.get("teacher_id", ""), {})
             unscheduled.append({
                 "course_id": cid,
@@ -2650,9 +2649,9 @@ async def _build_master_data(db, faculty_id: str, department_id: Optional[str] =
                 "department_name": depts_map.get(c.get("department_id", ""), ""),
                 "level": c.get("level") or 1,
                 "section": c.get("section", "") or "",
-                "needed": needed,
-                "scheduled": have,
-                "missing": needed - have,
+                "needed": 1,
+                "scheduled": 0,
+                "missing": 1,
             })
     unscheduled.sort(key=lambda u: (u["department_name"], u["level"], u["section"], u["course_name"]))
 
