@@ -291,8 +291,11 @@ async def import_master_schedule(
     for cdoc in courses:
         courses_by_name.setdefault(_norm(cdoc.get("name")), []).append(cdoc)
     courses_by_id = {str(c["_id"]): c.get("name", "") for c in courses}
-    t_ids = list({c.get("teacher_id") for c in courses if c.get("teacher_id")})
-    teachers_map = {str(t["_id"]): t for t in await db.teachers.find({"_id": {"$in": [ObjectId(x) for x in t_ids]}}).to_list(1000)} if t_ids else {}
+    all_teachers = await db.teachers.find({}).to_list(3000)
+    teachers_map = {str(t["_id"]): t for t in all_teachers}
+    teachers_by_name = {}
+    for t in all_teachers:
+        teachers_by_name.setdefault(_norm(t.get("full_name")), []).append(t)
     rooms = await db.rooms.find({"faculty_id": faculty_id, "is_active": True}).to_list(300)
     rooms_by_name = {_norm(r.get("name")): r for r in rooms}
     rooms_by_id = {str(r["_id"]): r.get("name", "") for r in rooms}
@@ -302,6 +305,8 @@ async def import_master_schedule(
 
     # ===== 3) المرور على كتل المجموعات (3 صفوف لكل مجموعة) =====
     to_create = []
+    reassign_map = {}  # course_id -> {"new_id", "new_name", "old_id", "old_name", "course_name"}
+    file_teachers = {}  # course_id -> {normalized_name: raw_name} لكشف التناقضات
     r = periods_row + 1
     while r <= ws.max_row:
         label = ws.cell(row=r, column=1).value
@@ -355,13 +360,40 @@ async def import_master_schedule(
                     errors.append(f"{loc} المقرر '{course_txt}' غير موجود في القسم — تُخُطيت الخلية")
                 continue
             section_val = course.get("section") or ""
-            if not course.get("teacher_id"):
-                errors.append(f"{loc} المقرر '{course_txt}' بلا أستاذ مسند في النظام — تُخُطيت الخلية")
+            cid_str = str(course["_id"])
+            assigned = teachers_map.get(course.get("teacher_id", "") or "", {})
+            assigned_norm = _norm(assigned.get("full_name", ""))
+
+            # 🧑‍🏫 الإكسل هو الأساس في الإسناد أيضاً:
+            # - مقرر بلا إسناد + اسم أستاذ في الملف → يُسند إليه
+            # - اسم أستاذ مختلف عن المسند → يُستبدل الإسناد بما في الملف
+            if teacher_txt and _norm(teacher_txt) != assigned_norm:
+                cands = teachers_by_name.get(_norm(teacher_txt), [])
+                if not cands:
+                    errors.append(f"{loc} الأستاذ '{teacher_txt}' غير موجود في النظام — تُخُطيت الخلية")
+                    continue
+                if len(cands) > 1:
+                    errors.append(f"{loc} يوجد أكثر من معلم بالاسم '{teacher_txt}' في النظام — تُخُطيت الخلية")
+                    continue
+                new_tid = str(cands[0]["_id"])
+                prev = reassign_map.get(cid_str)
+                if prev and prev["new_id"] != new_tid:
+                    conflicts.append(f"{loc} تناقض داخل الملف: المقرر '{course.get('name', '')}' مذكور بأستاذين مختلفين ('{prev['new_name']}' و'{teacher_txt}')")
+                    continue
+                if not prev:
+                    reassign_map[cid_str] = {
+                        "new_id": new_tid, "new_name": cands[0].get("full_name", ""),
+                        "old_id": course.get("teacher_id") or "", "old_name": assigned.get("full_name", ""),
+                        "course_name": course.get("name", ""),
+                    }
+            elif not course.get("teacher_id") and cid_str not in reassign_map:
+                errors.append(f"{loc} المقرر '{course_txt}' بلا أستاذ مسند في النظام ولا اسم أستاذ في الملف — تُخُطيت الخلية")
                 continue
-            teacher = teachers_map.get(course["teacher_id"], {})
-            if teacher_txt and _norm(teacher_txt) != _norm(teacher.get("full_name", "")):
-                errors.append(f"{loc} اسم الأستاذ في الملف '{teacher_txt}' يختلف عن الأستاذ المسند للمقرر '{teacher.get('full_name', '')}' — تُخُطيت الخلية")
-                continue
+
+            effective_tid = reassign_map[cid_str]["new_id"] if cid_str in reassign_map else course["teacher_id"]
+            teacher = teachers_map.get(effective_tid, {})
+            if teacher_txt:
+                file_teachers.setdefault(cid_str, {})[_norm(teacher_txt)] = teacher_txt
             if not room_txt:
                 errors.append(f"{loc} القاعة مطلوبة — تُخُطيت الخلية")
                 continue
@@ -392,7 +424,7 @@ async def import_master_schedule(
                 "day": day,
                 "slot_number": slot_number,
                 "course_id": str(course["_id"]),
-                "teacher_id": course["teacher_id"],
+                "teacher_id": effective_tid,
                 "room_id": str(room["_id"]),
                 "_loc": loc,
                 "_course_name": course.get("name", ""),
@@ -406,19 +438,68 @@ async def import_master_schedule(
     replaced_msgs = [it["_replace_desc"] for it in to_create if it["_replace_id"]]
     replaced_ids = {it["_replace_id"] for it in to_create if it["_replace_id"]}
 
+    # تناقض الإسناد: نفس المقرر بأكثر من اسم أستاذ داخل الملف
+    for cid, names in file_teachers.items():
+        if len(names) > 1:
+            conflicts.append(f"تناقض داخل الملف: المقرر '{courses_by_id.get(cid, '')}' مذكور بأكثر من أستاذ ({'، '.join(names.values())}) — وحّد الاسم ثم أعد الرفع")
+
+    # ما بعد المرور: طبّق الإسنادات الجديدة على كل خلايا الملف لنفس المقرر (حتى المذكورة قبل اكتشاف الإسناد)
+    for it in to_create:
+        if it["course_id"] in reassign_map:
+            it["teacher_id"] = reassign_map[it["course_id"]]["new_id"]
+            it["_teacher_name"] = reassign_map[it["course_id"]]["new_name"]
+
     # ===== 4) فحص التعارضات (داخل الملف + مع الجدول القائم عبر كل الأقسام) =====
-    # الخلايا المستبدلة تُستثنى من خرائط الانشغال (القديم سيُلغى فلا يُحسب تعارضاً)
-    all_slots = await db.weekly_schedule.find({}, {"teacher_id": 1, "room_id": 1, "day": 1, "slot_number": 1, "department_id": 1, "level": 1, "section": 1}).to_list(20000)
+    # الخلايا المستبدلة تُستثنى، والإسنادات الجديدة تسري على المحاضرات القائمة لنفس المقرر (تحديث متسلسل)
+    all_slots = await db.weekly_schedule.find({}, {"teacher_id": 1, "room_id": 1, "day": 1, "slot_number": 1, "department_id": 1, "level": 1, "section": 1, "course_id": 1}).to_list(20000)
     all_slots = [s for s in all_slots if str(s["_id"]) not in replaced_ids]
-    busy_teacher = {(s.get("teacher_id"), s.get("day"), s.get("slot_number")) for s in all_slots if s.get("teacher_id")}
+    reassign_new = {cid: info["new_id"] for cid, info in reassign_map.items()}
+
+    pref_tids = list({x["teacher_id"] for x in to_create} | set(reassign_new.values()))
+    prefs_map = {p["teacher_id"]: p for p in await db.teacher_preferences.find({"teacher_id": {"$in": pref_tids}}).to_list(500)} if pref_tids else {}
+
+    def _eff_tid(s):
+        return reassign_new.get(s.get("course_id", ""), s.get("teacher_id"))
+
+    busy_teacher_owner = {}
     busy_room = {(s.get("room_id"), s.get("day"), s.get("slot_number")) for s in all_slots if s.get("room_id")}
     teacher_daily = {}
     for s in all_slots:
-        if s.get("teacher_id"):
-            k = (s["teacher_id"], s.get("day"))
-            teacher_daily[k] = teacher_daily.get(k, 0) + 1
+        tid = _eff_tid(s)
+        if not tid:
+            continue
+        k = (tid, s.get("day"), s.get("slot_number"))
+        if k in busy_teacher_owner:
+            other_cid = busy_teacher_owner[k]
+            # تصادم قائم بسبب إسناد جديد (أياً كان ترتيب المرور)
+            if s.get("course_id", "") in reassign_new or other_cid in reassign_new:
+                tname = teachers_map.get(tid, {}).get("full_name", "")
+                conflicts.append(f"الإسناد الجديد للأستاذ '{tname}' يجعل محاضرتين قائمتين تتصادمان يوم {s.get('day')} الفترة {s.get('slot_number')}")
+        else:
+            busy_teacher_owner[k] = s.get("course_id", "")
+        dk = (tid, s.get("day"))
+        teacher_daily[dk] = teacher_daily.get(dk, 0) + 1
+    busy_teacher = set(busy_teacher_owner)
 
-    prefs_map = {p["teacher_id"]: p for p in await db.teacher_preferences.find({"teacher_id": {"$in": list({x["teacher_id"] for x in to_create})}}).to_list(500)} if to_create else {}
+    # تحقق أن المحاضرات القائمة للمقررات المعاد إسنادها تحترم تفضيلات الأستاذ الجديد وحدّه اليومي
+    for s in all_slots:
+        cid = s.get("course_id", "")
+        if cid not in reassign_new:
+            continue
+        tid = reassign_new[cid]
+        pref = prefs_map.get(tid)
+        tname = teachers_map.get(tid, {}).get("full_name", "")
+        if pref and _is_period_unavailable(pref, s.get("day"), s.get("slot_number")):
+            conflicts.append(f"الإسناد الجديد: '{tname}' غير متاح يوم {s.get('day')} الفترة {s.get('slot_number')} لمحاضرة قائمة لمقرر '{courses_by_id.get(cid, '')}'")
+    for tid in set(reassign_new.values()):
+        pref = prefs_map.get(tid)
+        if not pref:
+            continue
+        max_daily = int(pref.get("max_daily_lectures") or 3)
+        tname = teachers_map.get(tid, {}).get("full_name", "")
+        for (t, d), cnt in teacher_daily.items():
+            if t == tid and cnt > max_daily:
+                conflicts.append(f"الإسناد الجديد: '{tname}' سيتجاوز الحد اليومي ({max_daily}) يوم {d} بالمحاضرات القائمة")
 
     seen_teacher, seen_room, seen_cell = set(), set(), set()
     for item in to_create:
@@ -448,12 +529,19 @@ async def import_master_schedule(
         seen_cell.add(ck)
 
     new_count = sum(1 for it in to_create if not it["_replace_id"])
-    can_commit = len(conflicts) == 0 and len(to_create) > 0
+    reassign_msgs = [
+        (f"المقرر '{info['course_name']}': كان بلا إسناد ← سيُسند إلى '{info['new_name']}'" if not info["old_id"]
+         else f"المقرر '{info['course_name']}': الإسناد سيتغير من '{info['old_name']}' ← إلى '{info['new_name']}' (يسري على كل محاضراته)")
+        for info in reassign_map.values()
+    ]
+    can_commit = len(conflicts) == 0 and (len(to_create) > 0 or len(reassign_map) > 0)
     report = {
         "dry_run": is_dry,
         "to_create": new_count,
         "to_replace": len(replaced_msgs),
         "replaced": replaced_msgs,
+        "to_reassign": len(reassign_msgs),
+        "reassigned": reassign_msgs,
         "created": 0,
         "skipped_existing": skipped_existing,
         "errors": errors,
@@ -468,14 +556,22 @@ async def import_master_schedule(
         report["message"] = (
             f"معاينة: سيتم إدراج {new_count} محاضرة جديدة"
             + (f" • استبدال {len(replaced_msgs)} خلية بمحتوى الملف" if replaced_msgs else "")
+            + (f" • تغيير إسناد {len(reassign_msgs)} مقرر" if reassign_msgs else "")
             + (f" • {len(skipped_existing)} مطابقة بلا تغيير" if skipped_existing else "")
             + (f" • {len(errors)} خطأ أسماء" if errors else "")
         )
         return report
 
-    # ===== 5) تنفيذ: حذف المستبدلة أولاً ثم إدراج كل محاضرات الملف =====
+    # ===== 5) تنفيذ: حذف المستبدلة ← تطبيق الإسنادات ← إدراج محاضرات الملف =====
     if replaced_ids:
         await db.weekly_schedule.delete_many({"_id": {"$in": [ObjectId(x) for x in replaced_ids]}})
+
+    for cid, info in reassign_map.items():
+        try:
+            await db.weekly_schedule.update_many({"course_id": cid}, {"$set": {"teacher_id": info["new_id"]}})
+        except DuplicateKeyError:
+            raise HTTPException(status_code=409, detail=f"تعذر تغيير إسناد '{info['course_name']}': تصادم في جدول الأستاذ '{info['new_name']}' — أعد المعاينة")
+        await db.courses.update_one({"_id": ObjectId(cid)}, {"$set": {"teacher_id": info["new_id"]}})
 
     created = 0
     replaced_count = 0
@@ -497,13 +593,14 @@ async def import_master_schedule(
 
     await log_activity(
         current_user, "import_master_schedule_excel", "weekly_schedule", department_id, None,
-        {"faculty_id": faculty_id, "created": created, "replaced": replaced_count, "errors": len(errors), "skipped_identical": len(skipped_existing)},
+        {"faculty_id": faculty_id, "created": created, "replaced": replaced_count, "reassigned": len(reassign_map), "errors": len(errors), "skipped_identical": len(skipped_existing)},
     )
     report["created"] = created
     report["replaced_count"] = replaced_count
     report["message"] = (
         f"✅ تم إدراج {created} محاضرة جديدة"
         + (f" • استُبدلت {replaced_count} خلية بمحتوى الملف" if replaced_count else "")
+        + (f" • تغيّر إسناد {len(reassign_map)} مقرر" if reassign_map else "")
         + (f" • {len(skipped_existing)} مطابقة بلا تغيير" if skipped_existing else "")
         + (f" • {len(errors)} خلية بأخطاء أسماء (انظر التقرير)" if errors else "")
     )

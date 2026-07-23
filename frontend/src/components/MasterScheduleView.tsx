@@ -684,7 +684,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
           }} data-testid="master-import-modal">
             <div style={{ fontSize: 15, fontWeight: 800, color: '#1a2540', marginBottom: 4, textAlign: 'right' }}>📥 استيراد الجدول الأسبوعي من Excel</div>
             <div style={{ fontSize: 11.5, color: '#5b6678', marginBottom: 12, textAlign: 'right', lineHeight: 1.7 }}>
-              السياسة: <b style={{ color: '#6a1b9a' }}>الإكسل هو الأساس</b> — الخلايا المعبأة في الملف <b>تستبدل</b> ما يقابلها في النظام • الخلايا الفارغة في الملف لا تمس الموجود • أخطاء الأسماء تُتخطى مع تقرير • <b style={{ color: '#c62828' }}>أي تعارض جدولة يوقف الاستيراد كاملاً</b>
+              السياسة: <b style={{ color: '#6a1b9a' }}>الإكسل هو الأساس</b> — الخلايا المعبأة في الملف <b>تستبدل</b> ما يقابلها في النظام، و<b>الإسناد يتبع اسم الأستاذ في الملف</b> (مقرر بلا إسناد يُسند، وإسناد مختلف يُستبدل) • الخلايا الفارغة لا تمس الموجود • أخطاء الأسماء تُتخطى مع تقرير • <b style={{ color: '#c62828' }}>أي تعارض جدولة يوقف الاستيراد كاملاً</b>
             </div>
 
             <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 6, textAlign: 'right' }}>1) اختر القسم:</div>
@@ -741,6 +741,16 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                     <div style={{ maxHeight: 160, overflowY: 'auto', border: '1px solid #ef9a9a', borderRadius: 8, padding: 8, backgroundColor: '#fff8f8' }}>
                       {importReport.conflicts.map((c: string, i: number) => (
                         <div key={i} style={{ fontSize: 11, color: '#b71c1c', textAlign: 'right', padding: '3px 0', borderBottom: '1px dashed #ffcdd2' }}>{c}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {importReport.reassigned?.length > 0 && (
+                  <div style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, fontWeight: 800, color: '#1565c0', textAlign: 'right', marginBottom: 4 }}>🧑‍🏫 إسنادات ستتغير ({importReport.reassigned.length}):</div>
+                    <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid #90caf9', borderRadius: 8, padding: 8, backgroundColor: '#f4f9ff' }}>
+                      {importReport.reassigned.map((c: string, i: number) => (
+                        <div key={i} style={{ fontSize: 11, color: '#0d47a1', textAlign: 'right', padding: '3px 0', borderBottom: '1px dashed #bbdefb' }}>{c}</div>
                       ))}
                     </div>
                   </div>
