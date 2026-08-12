@@ -25,4 +25,4 @@ ENV DB_NAME=ahgaff_attendance
 EXPOSE 8080
 
 # Run the application (JSON form via sh -c to expand $PORT)
-CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port $PORT"]
+CMD ["sh", "-c", "uvicorn server:app --host 0.0.0.0 --port $PORT --workers 4 --worker-class uvicorn.workers.UvicornWorker"]

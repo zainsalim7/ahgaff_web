@@ -318,33 +318,53 @@ async def sync_offline_attendance(
     
     synced = 0
     errors = []
-    
+    pending_records = []
+    now = datetime.utcnow()
+
+    # Collect local_ids that already exist to skip duplicates in one query
+    local_ids = [r.get("local_id") for r in data.attendance_records if r.get("local_id")]
+    existing_local_ids = set()
+    if local_ids:
+        existing_cursor = db.attendance.find(
+            {"local_id": {"$in": local_ids}},
+            {"local_id": 1}
+        )
+        async for doc in existing_cursor:
+            existing_local_ids.add(doc["local_id"])
+
     for record in data.attendance_records:
         try:
-            # Check if already synced (using local_id if provided)
-            if record.get("local_id"):
-                existing = await db.attendance.find_one({"local_id": record["local_id"]})
-                if existing:
-                    continue
-            
+            # Skip records already synced
+            if record.get("local_id") and record["local_id"] in existing_local_ids:
+                continue
+
             att_record = {
                 "course_id": record["course_id"],
                 "student_id": record["student_id"],
                 "status": record.get("status", AttendanceStatus.PRESENT),
-                "date": datetime.fromisoformat(record["date"]) if record.get("date") else datetime.utcnow(),
+                "date": datetime.fromisoformat(record["date"]) if record.get("date") else now,
                 "recorded_by": current_user["id"],
                 "method": record.get("method", "manual"),
                 "notes": record.get("notes"),
                 "local_id": record.get("local_id"),
-                "created_at": datetime.utcnow(),
-                "synced_at": datetime.utcnow()
+                "created_at": now,
+                "synced_at": now,
             }
-            
-            await db.attendance.insert_one(att_record)
-            synced += 1
+            pending_records.append(att_record)
         except Exception as e:
             errors.append(str(e))
-    
+
+    # Batch insert in chunks of 500 to reduce MongoDB round-trips
+    BATCH_SIZE = 500
+    for i in range(0, len(pending_records), BATCH_SIZE):
+        batch = pending_records[i : i + BATCH_SIZE]
+        try:
+            if batch:
+                await db.attendance.insert_many(batch, ordered=False)
+                synced += len(batch)
+        except Exception as e:
+            errors.append(str(e))
+
     return {
         "synced": synced,
         "errors": errors,
