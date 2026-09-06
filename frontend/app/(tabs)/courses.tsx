@@ -112,8 +112,6 @@ export default function AddCourseScreen() {
   const [sortBy, setSortBy] = useState<string | null>(null);
   const [sharedDetailCourse, setSharedDetailCourse] = useState<Course | null>(null);
   const [sharedDetailData, setSharedDetailData] = useState<any>(null);
-  const [auditData, setAuditData] = useState<any>(null);
-  const [auditLoading, setAuditLoading] = useState(false);
   const [integrityOpen, setIntegrityOpen] = useState(false);
   const [integrityData, setIntegrityData] = useState<any>(null);
   const [fixingLinks, setFixingLinks] = useState(false);
@@ -1555,60 +1553,6 @@ export default function AddCourseScreen() {
         );
       })()}
 
-      {/* 🔎 نافذة فحص تكرار الطلاب بالشعب — قراءة فقط */}
-      {auditData !== null && (
-        <Modal visible transparent animationType="fade" onRequestClose={() => setAuditData(null)}>
-          <View style={styles.modalOverlay}>
-            <TouchableOpacity style={StyleSheet.absoluteFill} activeOpacity={1} onPress={() => setAuditData(null)} />
-            <View style={[styles.menuModalCard, { maxWidth: 620, padding: 16, maxHeight: '88%' }]} testID="section-audit-modal">
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-                <Text style={styles.menuModalTitle}>🔎 فحص تكرار الطلاب بالشعب — قراءة فقط</Text>
-                <TouchableOpacity onPress={() => setAuditData(null)} testID="section-audit-close"><Ionicons name="close" size={20} color="#5b6678" /></TouchableOpacity>
-              </View>
-              {auditLoading ? (
-                <ActivityIndicator size="small" color="#c62828" style={{ marginVertical: 24 }} />
-              ) : auditData.error ? (
-                <Text style={{ color: '#f44336', textAlign: 'center', marginVertical: 20 }}>{auditData.error}</Text>
-              ) : auditData.summary ? (
-                <ScrollView style={{ maxHeight: 520 }}>
-                  <View style={{ backgroundColor: auditData.summary.flagged ? '#fff3e0' : '#e8f5e9', borderRadius: 10, padding: 10, marginBottom: 10 }} testID="section-audit-summary">
-                    <Text style={{ fontSize: 12.5, textAlign: 'right', lineHeight: 20, color: '#37455c' }}>
-                      فُحص <Text style={{ fontWeight: '800' }}>{auditData.summary.courses}</Text> مقرراً في الفصل النشط —
-                      {auditData.summary.flagged
-                        ? ` ⚠️ ${auditData.summary.flagged} مقرر عليه ملاحظات: ${auditData.summary.uncovered_students} طالباً من شعب غير مغطاة · ${auditData.summary.duplicates} تسجيلاً مكرراً · ${auditData.summary.other_level_students} طالباً بمستوى مختلف`
-                        : ' ✅ لا توجد أي ملاحظات، كل التسجيلات مطابقة'}
-                    </Text>
-                  </View>
-                  {(auditData.courses || []).filter((c: any) => c.flagged).map((c: any, i: number) => (
-                    <View key={c.id} style={{ borderWidth: 1, borderColor: '#ffcc80', backgroundColor: '#fffaf3', borderRadius: 10, padding: 10, marginBottom: 8 }} testID={`audit-course-${i}`}>
-                      <Text style={{ fontSize: 13, fontWeight: '800', color: '#1a2540', textAlign: 'right' }}>
-                        {c.name} ({c.code}) — م{c.level} · شعبة المقرر: {c.section} · يغطي: {(c.covered_sections || []).join('، ')}
-                      </Text>
-                      <Text style={{ fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 3 }}>
-                        المسجلون: {c.enrolled_total} — {Object.entries(c.by_section || {}).map(([s, n]) => `شعبة ${s}: ${n}`).join(' · ')}
-                        {c.cross_department ? ` · عابر أقسام: ${c.cross_department}` : ''}
-                      </Text>
-                      {Object.entries(c.uncovered || {}).map(([sec, g]: any) => (
-                        <Text key={sec} style={{ fontSize: 11.5, color: '#c62828', textAlign: 'right', marginTop: 4, lineHeight: 18 }}>
-                          ⚠️ {g.count} طالباً من شعبة {sec} غير مغطاة: {g.names.join('، ')}{g.count > g.names.length ? ` ... (+${g.count - g.names.length})` : ''}
-                        </Text>
-                      ))}
-                      {c.duplicates > 0 && <Text style={{ fontSize: 11.5, color: '#6a1b9a', textAlign: 'right', marginTop: 3 }}>🔁 تسجيلات مكررة: {c.duplicates}</Text>}
-                      {c.other_level_students > 0 && <Text style={{ fontSize: 11.5, color: '#e65100', textAlign: 'right', marginTop: 3 }}>↕️ طلاب بمستوى مختلف عن المقرر: {c.other_level_students}</Text>}
-                    </View>
-                  ))}
-                  {(auditData.courses || []).some((c: any) => !c.flagged) && (
-                    <Text style={{ fontSize: 11.5, color: '#2e7d32', textAlign: 'right', marginTop: 4 }}>
-                      ✅ {(auditData.courses || []).filter((c: any) => !c.flagged).length} مقرراً سليماً بلا ملاحظات
-                    </Text>
-                  )}
-                </ScrollView>
-              ) : null}
-            </View>
-          </View>
-        </Modal>
-      )}
-
       {/* قائمة "المزيد" - أدوات إضافية */}
       {reassignCourse && (
         <Modal visible transparent animationType="fade" onRequestClose={() => setReassignCourse(null)}>
@@ -1733,17 +1677,6 @@ export default function AddCourseScreen() {
                 }} disabled={enrollingAll}>
                   <Ionicons name="people-outline" size={18} color="#00897b" />
                   <Text style={styles.menuText}>{enrollingAll ? 'جاري التسجيل...' : 'تسجيل تلقائي للكل'}</Text>
-                </TouchableOpacity>
-              )}
-              {filterDept && filterDept !== 'all' && (
-                <TouchableOpacity style={styles.menuItem} testID="section-audit-btn" onPress={async () => {
-                  setOpenMenuId(null); setAuditLoading(true); setAuditData({});
-                  try { const r = await api.get(`/courses-tools/section-audit?department_id=${filterDept}`); setAuditData(r.data); }
-                  catch (e: any) { setAuditData({ error: e?.response?.data?.detail || 'فشل الفحص' }); }
-                  finally { setAuditLoading(false); }
-                }}>
-                  <Ionicons name="search-outline" size={18} color="#c62828" />
-                  <Text style={styles.menuText}>فحص تكرار الطلاب بالشعب (قراءة فقط)</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity style={styles.menuItem} testID="sync-enrollments-btn" onPress={async () => {
