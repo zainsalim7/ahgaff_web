@@ -1728,7 +1728,7 @@ async def get_course_shared_details(
     fac_id = course.get("faculty_id") or (slots[0].get("faculty_id", "") if slots else "")
     settings = await db.schedule_settings.find_one({"_id": f"faculty_{fac_id}"}) or await db.schedule_settings.find_one({"_id": "global"})
     slot_meta = {ts.get("slot_number"): ts for ts in (settings or {}).get("time_slots", [])}
-    own_key = (course.get("department_id", ""), course.get("level"))
+    own_key = (course.get("department_id", ""), course.get("level"), (course.get("section") or "").strip())
     groups: dict = {}
     for s in slots:
         key = (s.get("department_id", ""), s.get("level"), s.get("section", "") or "")
@@ -1737,7 +1737,7 @@ async def get_course_shared_details(
             "department_name": dep_names.get(key[0], ""),
             "level": key[1],
             "section": key[2],
-            "is_native": (key[0], key[1]) == own_key,
+            "is_native": (key[0], key[1], (key[2] or "").strip()) == own_key,
             "slots": [],
         })
         meta = slot_meta.get(s.get("slot_number"), {})
