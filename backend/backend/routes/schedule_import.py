@@ -12,7 +12,7 @@ from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 
 from .deps import get_db, get_current_user, log_activity
-from .weekly_schedule import can_manage_schedule, _is_period_unavailable, _build_master_data, _sync_future_lectures, _resolve_day_times, _sync_course_shared_links
+from .weekly_schedule import can_manage_schedule, _is_period_unavailable, _build_master_data, _sync_future_lectures, _resolve_day_times, _sync_course_shared_links, _master_course_color, _master_text_color
 
 router = APIRouter(tags=["استيراد الجدول الأسبوعي"])
 
@@ -225,7 +225,11 @@ async def download_import_template(
                     if e:
                         _cname = e["course_name"] + (f" ({e['duration_minutes']}د)" if e.get("duration_minutes") else "")
                         cell.value = [_cname, e["room_name"], e["teacher_name"]][i]
-                        cell.fill = PatternFill("solid", fgColor="FFF8E1")
+                        # 🎨 تلوين المحاضرة (المقرر/القاعة/الأستاذ) بنفس لون الجدول الشامل
+                        _bg = _master_course_color(e.get("course_id", ""))
+                        _fg = _master_text_color(_bg)
+                        cell.fill = PatternFill("solid", fgColor=_bg[1:].upper())
+                        cell.font = Font(size=8, bold=(i == 0), color=_fg[1:].upper())
         r += 3
 
     ws.column_dimensions["A"].width = 22
