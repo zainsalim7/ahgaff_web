@@ -264,6 +264,7 @@ export default function StudentsScreen() {
       };
       if (newStudent.phone.trim()) body.phone = newStudent.phone.trim();
       if (newStudent.email.trim()) body.email = newStudent.email.trim();
+      if (newStudent.nationality.trim()) body.nationality = newStudent.nationality.trim();
       if (newStudent.password.trim()) body.password = newStudent.password.trim();
       if (newStudent.program_code.trim()) body.program_code = newStudent.program_code.trim().toUpperCase();
       if (newStudent.enrollment_year.trim()) {
@@ -1853,6 +1854,7 @@ export default function StudentsScreen() {
               onCancel={() => setShowAddModal(false)}
               submitting={adding}
               departments={departments.map(d => ({ id: d.id, name: d.name }))}
+              getSections={getSectionsAtLevel}
             />
           </View>
         </View>

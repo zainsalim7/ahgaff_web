@@ -43,6 +43,8 @@ interface Props {
    */
   mode: 'standalone' | 'course';
   departments?: Array<{ id: string; name: string }>;
+  /** اقتراحات الشعب الموجودة في مستوى معيّن (توحيد مع نموذج التعديل) */
+  getSections?: (deptId: string, level: string) => string[];
   /** نص ملخّص في رأس النموذج (مثل اسم المقرر) */
   contextLabel?: string;
   submitLabel?: string;
@@ -50,7 +52,7 @@ interface Props {
 
 export const AddStudentForm: React.FC<Props> = ({
   values, onChange, onSubmit, onCancel, submitting,
-  mode, departments = [], contextLabel, submitLabel,
+  mode, departments = [], getSections, contextLabel, submitLabel,
 }) => {
   const set = (patch: Partial<StudentFormValues>) => onChange({ ...values, ...patch });
 
@@ -112,7 +114,7 @@ export const AddStudentForm: React.FC<Props> = ({
                   style={styles.picker}
                   testID="add-student-level-picker"
                 >
-                  {[1,2,3,4,5,6,7,8].map(lv => (
+                  {[1,2,3,4,5].map(lv => (
                     <Picker.Item key={lv} label={`المستوى ${lv}`} value={String(lv)} />
                   ))}
                 </Picker>
@@ -129,30 +131,63 @@ export const AddStudentForm: React.FC<Props> = ({
               />
             </View>
           </View>
+          {(() => {
+            const suggestions = (getSections && values.department_id) ? getSections(values.department_id, values.level) : [];
+            if (!suggestions.length) return null;
+            return (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+                <Text style={{ fontSize: 11, color: '#666', width: '100%', textAlign: 'right' }}>
+                  الشعب الموجودة في م{values.level}:
+                </Text>
+                {suggestions.map(sec => (
+                  <TouchableOpacity
+                    key={sec}
+                    testID={`add-section-suggest-${sec}`}
+                    onPress={() => set({ section: sec })}
+                    style={{
+                      paddingHorizontal: 10, paddingVertical: 5, borderRadius: 12, borderWidth: 1,
+                      borderColor: values.section === sec ? '#1976d2' : '#bbdefb',
+                      backgroundColor: values.section === sec ? '#1976d2' : '#e3f2fd',
+                    }}
+                  >
+                    <Text style={{ fontSize: 12, fontWeight: '700', color: values.section === sec ? '#fff' : '#1976d2' }}>
+                      {sec}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            );
+          })()}
         </>
       )}
 
       <View style={[styles.row, styles.mt10]}>
         <View style={styles.col}>
-          <Text style={styles.label}>رمز البرنامج (اختياري)</Text>
-          <TextInput
-            value={values.program_code}
-            onChangeText={(v) => set({ program_code: v.toUpperCase() })}
-            placeholder="افتراضي من القسم"
-            autoCapitalize="characters"
-            maxLength={3}
-            style={styles.input}
-            testID="add-student-program-input"
-          />
+          <Text style={styles.label}>البرنامج (اختياري)</Text>
+          <View style={styles.pickerWrap}>
+            <Picker
+              selectedValue={values.program_code}
+              onValueChange={(v) => set({ program_code: String(v) })}
+              style={styles.picker}
+              testID="add-student-program-picker"
+            >
+              <Picker.Item label="(افتراضي من القسم)" value="" />
+              <Picker.Item label="بكالوريوس (B)" value="B" />
+              <Picker.Item label="ماجستير (M)" value="M" />
+              <Picker.Item label="دكتوراه (D)" value="D" />
+              <Picker.Item label="دبلوم (P)" value="P" />
+              <Picker.Item label="عن بُعد (E)" value="E" />
+            </Picker>
+          </View>
         </View>
         <View style={styles.col}>
-          <Text style={styles.label}>عام الالتحاق (اختياري)</Text>
+          <Text style={styles.label}>سنة الالتحاق (مثال: 25)</Text>
           <TextInput
             value={values.enrollment_year}
-            onChangeText={(v) => set({ enrollment_year: v.replace(/[^0-9]/g, '') })}
-            placeholder="25 أو 2025"
+            onChangeText={(v) => set({ enrollment_year: v.replace(/[^0-9]/g, '').slice(0, 2) })}
+            placeholder="25 / 26 / 27"
             keyboardType="numeric"
-            maxLength={4}
+            maxLength={2}
             style={styles.input}
             testID="add-student-year-input"
           />
