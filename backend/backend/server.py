@@ -4015,6 +4015,10 @@ async def get_student(student_id: str, current_user: dict = Depends(get_current_
         "phone": student.get("phone"),
         "email": student.get("email"),
         "nationality": student.get("nationality"),
+        "program_code": student.get("program_code"),
+        "enrollment_year": student.get("enrollment_year"),
+        "reference_number": student.get("reference_number"),
+        "status": student.get("status"),
         "user_id": student.get("user_id"),
         "qr_code": student["qr_code"],
         "created_at": student["created_at"],
@@ -4259,6 +4263,8 @@ class StudentUpdate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     nationality: Optional[str] = None
+    program_code: Optional[str] = None
+    enrollment_year: Optional[str] = None
 
 @api_router.put("/students/{student_id}", response_model=StudentResponse)
 async def update_student(student_id: str, data: StudentUpdate, current_user: dict = Depends(get_current_user)):
