@@ -2,6 +2,7 @@
  * نظام الدرجات: استيراد كشوفات الإكسل + السجل الأكاديمي + بيان حالة ودرجات PDF
  */
 import React, { useState, useEffect } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { View, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Platform, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -149,7 +150,7 @@ export default function GradesScreen() {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const a = document.createElement('a');
       a.href = url;
-      a.download = 'grades_template.xlsx';
+      a.download = 'قالب استيراد النتائج.xlsx';
       a.click();
       window.URL.revokeObjectURL(url);
     } catch { showMsg('error', '❌ فشل تنزيل النموذج'); }
@@ -190,7 +191,7 @@ export default function GradesScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const a = document.createElement('a');
         a.href = url;
-        a.download = `grade_statement_${record?.[0]?.reg_no || 'student'}.pdf`;
+        a.download = filenameFromResponse(res, exportName(['بيان درجات', record?.[0]?.student_name || record?.[0]?.reg_no], 'pdf'));
         a.click();
         window.URL.revokeObjectURL(url);
       }

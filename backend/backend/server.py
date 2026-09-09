@@ -45,7 +45,7 @@ def ar_export_filename(*parts, ext: str) -> str:
     """📁 اسم ملف تصدير عربي: الأجزاء - التاريخ.امتداد"""
     from urllib.parse import quote as _q
     label = " - ".join([str(p).strip() for p in parts if p and str(p).strip()])
-    return _q(f"{label} - {get_yemen_time().strftime('%Y-%m-%d')}.{ext}")
+    return _q(f"{label} - {get_yemen_time().strftime('%Y-%m-%d %H-%M')}.{ext}")
 
 
 def ar_export_headers(fname: str) -> dict:
@@ -5497,11 +5497,11 @@ async def export_selected_teachers(request: Request, current_user: dict = Depend
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
-    fname = f"teachers_selected_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+    fname = ar_export_filename("المدرسون المحددون", f"{len(teachers)} مدرس", ext="xlsx")
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers=ar_export_headers(fname),
     )
 
 @api_router.post("/teachers/export-selected/pdf")
@@ -5575,11 +5575,11 @@ async def export_selected_teachers_pdf(request: Request, current_user: dict = De
     elements.append(table)
     doc.build(elements)
     buf.seek(0)
-    fname = f"teachers_selected_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    fname = ar_export_filename("المدرسون المحددون", f"{len(teachers)} مدرس", ext="pdf")
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers=ar_export_headers(fname),
     )
 
 @api_router.post("/auth/change-password")
@@ -10209,14 +10209,11 @@ async def export_lecture_attendance_pdf(
     c.save()
     buffer.seek(0)
 
-    filename = f"{course_name}_{lecture['date']}.pdf"
-    # URL encode for HTTP header (Arabic characters)
-    from urllib.parse import quote
-    encoded_filename = quote(filename)
+    encoded_filename = ar_export_filename("كشف حضور محاضرة", course_name, lecture.get("date", ""), ext="pdf")
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+        headers=ar_export_headers(encoded_filename)
     )
 
 
@@ -12398,7 +12395,7 @@ async def export_teacher_attendance_excel(
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers=ar_export_headers(ar_export_filename("تقرير حضور الأساتذة", ext="xlsx"))
+        headers=ar_export_headers(ar_export_filename("تقرير حضور الأساتذة", (f"من {start_date} إلى {end_date}" if start_date and end_date else ""), await _dept_name_for_export(department_id), ext="xlsx"))
     )
 
 
@@ -12519,7 +12516,7 @@ async def export_teacher_attendance_pdf(
     return StreamingResponse(
         iter([buf.getvalue()]),
         media_type="application/pdf",
-        headers=ar_export_headers(ar_export_filename("تقرير حضور الأساتذة", ext="pdf"))
+        headers=ar_export_headers(ar_export_filename("تقرير حضور الأساتذة", (f"من {start_date} إلى {end_date}" if start_date and end_date else ""), await _dept_name_for_export(department_id), ext="pdf"))
     )
 
 
@@ -12923,7 +12920,7 @@ async def export_daily_excel(
     
     report_date = date or get_yemen_time().strftime("%Y-%m-%d")
     from urllib.parse import quote as _q
-    _fn = _q(f"التقرير اليومي - {report_date}.xlsx")
+    _fn = _q(f"التقرير اليومي - {report_date} - {get_yemen_time().strftime('%Y-%m-%d %H-%M')}.xlsx")
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -13497,13 +13494,11 @@ async def export_semester_report_pdf(
     c_pdf.save()
     buffer.seek(0)
     
-    filename = f"تقرير_الفصل_{now.strftime('%Y%m%d')}.pdf"
-    from urllib.parse import quote
-    encoded_filename = quote(filename)
+    encoded_filename = ar_export_filename("تقرير الفصل الدراسي", ext="pdf")
     return StreamingResponse(
         buffer,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"}
+        headers=ar_export_headers(encoded_filename)
     )
 
 # ==================== Initialize Admin ====================
@@ -14071,7 +14066,7 @@ async def get_teachers_template(current_user: dict = Depends(get_current_user)):
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=teachers_template.xlsx"}
+        headers=ar_export_headers(__import__("urllib.parse", fromlist=["quote"]).quote("قالب استيراد المدرسين.xlsx"))
     )
 
 # ==================== استيراد المحاضرات من Excel ====================
@@ -14101,7 +14096,7 @@ async def get_lectures_template(current_user: dict = Depends(get_current_user)):
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=lectures_template.xlsx"}
+        headers=ar_export_headers(__import__("urllib.parse", fromlist=["quote"]).quote("قالب استيراد المحاضرات.xlsx"))
     )
 
 
@@ -14329,7 +14324,7 @@ async def get_courses_template(current_user: dict = Depends(get_current_user)):
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=courses_template.xlsx"}
+        headers=ar_export_headers(__import__("urllib.parse", fromlist=["quote"]).quote("قالب استيراد المقررات.xlsx"))
     )
 
 @api_router.post("/import/courses")
@@ -14663,19 +14658,21 @@ async def export_students_to_excel(
     output.seek(0)
     
     # اسم ملف ديناميكي حسب الفلاتر
-    filename_parts = ["students"]
-    if department_id and department_id in dept_map:
-        filename_parts.append(dept_map[department_id].get("code", "dept"))
-    if level:
-        filename_parts.append(f"L{level}")
-    if section:
-        filename_parts.append(section)
-    filename = "_".join(filename_parts) + ".xlsx"
+    _dept = dept_map.get(department_id or "", {})
+    filename = ar_export_filename(
+        "كشف الطلاب",
+        fac_map.get(_dept.get("faculty_id", ""), "") if _dept else "",
+        _dept.get("name", "") if _dept else "كل الأقسام",
+        f"المستوى {level}" if level else "",
+        f"شعبة {section}" if section else "",
+        f"{len(students)} طالب",
+        ext="xlsx",
+    )
     
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers=ar_export_headers(filename)
     )
 
 @api_router.get("/export/attendance/{course_id}")
@@ -14775,12 +14772,12 @@ async def export_course_attendance(
     
     output.seek(0)
     
-    filename = f"attendance_{course['code']}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    filename = ar_export_filename("سجل حضور المقرر", course.get("name", ""), course.get("code", ""), f"المستوى {course.get('level', '')}" if course.get("level") else "", f"شعبة {course.get('section')}" if course.get("section") else "", ext="xlsx")
     
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers=ar_export_headers(filename)
     )
 
 @api_router.get("/export/report/{dept_id}")
@@ -14857,12 +14854,12 @@ async def export_department_report(
     
     output.seek(0)
     
-    filename = f"report_{dept['code']}_{datetime.now().strftime('%Y%m%d')}.xlsx"
+    filename = ar_export_filename("تقرير القسم", dept.get("name", ""), ext="xlsx")
     
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers=ar_export_headers(filename)
     )
 
 @api_router.get("/template/students")
@@ -14888,7 +14885,7 @@ async def get_students_template(current_user: dict = Depends(get_current_user)):
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": "attachment; filename=students_template.xlsx"}
+        headers=ar_export_headers(__import__("urllib.parse", fromlist=["quote"]).quote("قالب استيراد الطلاب.xlsx"))
     )
 
 # ==================== PDF Export Routes ====================
@@ -15052,7 +15049,7 @@ async def export_students_pdf(
     return StreamingResponse(
         output,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=students_{datetime.now().strftime('%Y%m%d')}.pdf"}
+        headers=ar_export_headers(ar_export_filename("كشف الطلاب", dept_map.get(department_id, "") if department_id else "كل الأقسام", f"{len(students)} طالب", ext="pdf"))
     )
 
 @api_router.get("/export/attendance/{course_id}/pdf")
@@ -15237,12 +15234,12 @@ async def export_attendance_pdf(
     doc.build(elements)
     output.seek(0)
     
-    filename = f"attendance_{course['code']}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    filename = ar_export_filename("سجل حضور المقرر", course.get("name", ""), course.get("code", ""), f"المستوى {course.get('level', '')}" if course.get("level") else "", f"شعبة {course.get('section')}" if course.get("section") else "", ext="pdf")
     
     return StreamingResponse(
         output,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers=ar_export_headers(filename)
     )
 
 @api_router.get("/export/report/{dept_id}/pdf")
@@ -15336,12 +15333,12 @@ async def export_department_report_pdf(
     doc.build(elements)
     output.seek(0)
     
-    filename = f"report_{dept['code']}_{datetime.now().strftime('%Y%m%d')}.pdf"
+    filename = ar_export_filename("تقرير القسم", dept.get("name", ""), ext="pdf")
     
     return StreamingResponse(
         output,
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={filename}"}
+        headers=ar_export_headers(filename)
     )
 
 # ==================== Semesters Routes (إدارة الفصول الدراسية) ====================

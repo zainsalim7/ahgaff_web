@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity
+from .deps import get_db, get_current_user, log_activity, export_filename, export_headers
 from .statements import get_verify_base, _can_issue
 
 router = APIRouter()
@@ -207,7 +207,7 @@ async def certificate_pdf(cert_id: str, current_user: dict = Depends(get_current
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"تعذر توليد ملف الشهادة: {type(e).__name__}: {e}")
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename=certificate_{s.get('serial')}.pdf"})
+                             headers=export_headers(export_filename("شهادة تخرج", s.get("student_name") or s.get("full_name") or s.get("serial"), ext="pdf")))
 
 
 def _build_certificate_pdf(s: dict, photo_bytes: Optional[bytes]) -> bytes:

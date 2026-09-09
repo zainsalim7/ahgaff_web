@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { exportName } from '../src/utils/exportName';
 import {
   View,
   Text,
@@ -140,7 +141,8 @@ export default function ManageTeachersScreen() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `teachers_selected_${Date.now()}.${format === 'pdf' ? 'pdf' : 'xlsx'}`;
+      const xf = res.headers.get('x-filename');
+      a.download = xf ? decodeURIComponent(xf) : exportName(['المدرسون المحددون', `${selectedIds.length} مدرس`], format === 'pdf' ? 'pdf' : 'xlsx');
       a.click();
       URL.revokeObjectURL(url);
     } catch (e: any) {
@@ -315,7 +317,7 @@ export default function ManageTeachersScreen() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `backup_teacher_${getTeacherName(deleteTarget)}_${new Date().toISOString().split('T')[0]}.json`;
+          a.download = exportName(['نسخة احتياطية - مدرس', getTeacherName(deleteTarget)], 'json');
           a.click();
           URL.revokeObjectURL(url);
         }
@@ -397,7 +399,7 @@ export default function ManageTeachersScreen() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'teachers_template.xlsx';
+        a.download = 'قالب استيراد المدرسين.xlsx';
         a.click();
         URL.revokeObjectURL(url);
       }

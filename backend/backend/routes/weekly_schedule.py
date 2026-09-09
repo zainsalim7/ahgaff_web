@@ -10,7 +10,7 @@ from typing import Optional, List
 from pydantic import BaseModel
 from pymongo.errors import DuplicateKeyError
 
-from .deps import get_db, get_current_user, has_permission, log_activity, ACTION_TRANSLATIONS
+from .deps import get_db, get_current_user, has_permission, log_activity, ACTION_TRANSLATIONS, export_stamp
 from .schedule_notify import notify_time_shifts, notify_slot_teachers
 from models.permissions import Permission
 
@@ -2742,7 +2742,7 @@ async def _weekly_export_filename(db, faculty_id, department_id, level, section,
         parts.append(f"المستوى {level}")
     if section:
         parts.append(f"شعبة {section}")
-    parts.append(datetime.now().strftime("%Y-%m-%d"))
+    parts.append(export_stamp())
     return quote((" - ".join([p for p in parts if p])) + f".{ext}")
 
 
@@ -5446,7 +5446,7 @@ async def _master_export_filename(db, faculty_id: str, department_id, ext: str) 
                 parts.append((dept.get("name") or "").strip())
         except Exception:
             pass
-    parts.append(datetime.now().strftime("%Y-%m-%d"))
+    parts.append(export_stamp())
     label = " - ".join([p for p in parts if p])
     return quote(f"{label}.{ext}")
 

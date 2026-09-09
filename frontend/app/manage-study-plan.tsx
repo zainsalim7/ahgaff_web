@@ -269,7 +269,7 @@ export default function ManageStudyPlanScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'study_plan_template.xlsx';
+        link.download = 'قالب استيراد الخطة الدراسية.xlsx';
         link.click();
         window.URL.revokeObjectURL(url);
       } else {

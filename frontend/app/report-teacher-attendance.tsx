@@ -1,4 +1,5 @@
 import { goBack } from '../src/utils/navigation';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -129,8 +130,7 @@ export default function TeacherAttendanceReport() {
         ? await reportsAPI.exportTeacherAttendanceExcel(params)
         : await reportsAPI.exportTeacherAttendancePDF(params);
       const ext = type === 'excel' ? 'xlsx' : 'pdf';
-      const namePart = selectedTeacher ? `_${selectedTeacher.full_name.replace(/\s+/g, '_')}` : '';
-      await downloadBlob(new Blob([res.data]), `teacher_attendance${namePart}_${dateFrom}_${dateTo}.${ext}`);
+      await downloadBlob(new Blob([res.data]), filenameFromResponse(res, exportName(['تقرير حضور الأساتذة', selectedTeacher?.full_name, `من ${dateFrom} إلى ${dateTo}`], ext)));
     } catch (e) {
       console.error('Export error', e);
       if (Platform.OS === 'web') window.alert('فشل في التصدير');

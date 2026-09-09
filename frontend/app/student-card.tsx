@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, ActivityIndicator, Image,
 } from 'react-native';
@@ -52,7 +53,7 @@ export default function StudentCardScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const a = document.createElement('a');
         a.href = url;
-        a.download = `card_${card?.enrollment_no || 'student'}.${fmt}`;
+        a.download = filenameFromResponse(res, exportName(['بطاقة الطالب', card?.full_name, card?.enrollment_no], fmt));
         a.click();
         window.URL.revokeObjectURL(url);
       }

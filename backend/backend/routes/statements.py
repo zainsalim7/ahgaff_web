@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity
+from .deps import get_db, get_current_user, log_activity, export_stamp
 
 router = APIRouter()
 
@@ -456,9 +456,8 @@ async def bulk_issue_statements(data: BulkIssueRequest, current_user: dict = Dep
         d = await _safe_dept(db, s)
         dept_names.add(((d or {}).get("name", "") or "بدون قسم").strip())
     dept_label = dept_names.pop() if len(dept_names) == 1 else "أقسام متعددة"
-    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     from urllib.parse import quote
-    fname = quote(f"إفادات {dept_label} {today}.pdf")
+    fname = quote(f"إفادات {dept_label} - {len(students)} طالب - {export_stamp()}.pdf")
     return StreamingResponse(io.BytesIO(out.getvalue()), media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}",
                                       "X-Issued-Count": str(len(students)),
@@ -562,9 +561,9 @@ async def statement_pdf(statement_id: str, current_user: dict = Depends(get_curr
     settings = await db.statement_settings.find_one({"_id": f"faculty_{s.get('faculty_id')}"}) or {}
     pdf = _build_pdf(s, settings)
     from urllib.parse import quote
-    fname = quote(f"إفادة {s.get('student_name', '') or s.get('serial', '')}.pdf")
+    fname = quote(f"إفادة {s.get('student_name', '') or s.get('serial', '')} - {export_stamp()}.pdf")
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}"})
+                             headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
 
 
 def _build_pdf(s: dict, settings: dict) -> bytes:

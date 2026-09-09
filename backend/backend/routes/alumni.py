@@ -16,7 +16,7 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
-from .deps import get_current_user, get_db, has_any_permission, get_scope_filter
+from .deps import get_current_user, get_db, has_any_permission, get_scope_filter, export_stamp
 from models.permissions import Permission
 
 router = APIRouter(tags=["الخريجون"])
@@ -765,7 +765,7 @@ async def export_alumni_excel(
     wb.save(out)
     out.seek(0)
     from urllib.parse import quote as _q
-    _fn = _q(f"الخريجون{f' - دفعة {year}' if year else ''} - {datetime.now().strftime('%Y-%m-%d')}.xlsx")
+    _fn = _q(f"الخريجون{f' - دفعة {year}' if year else ''} - {export_stamp()}.xlsx")
     return StreamingResponse(
         out,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -893,7 +893,7 @@ async def export_alumni_pdf(
     doc.build(elements)
     buf.seek(0)
     from urllib.parse import quote as _q
-    _fn = _q(f"الخريجون{f' - دفعة {year}' if year else ''} - {datetime.now().strftime('%Y-%m-%d')}.pdf")
+    _fn = _q(f"الخريجون{f' - دفعة {year}' if year else ''} - {export_stamp()}.pdf")
     return StreamingResponse(
         buf,
         media_type="application/pdf",

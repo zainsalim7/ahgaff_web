@@ -7,6 +7,7 @@
  * - تحرير + استرجاع + تصدير Excel/PDF
  */
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput,
   ActivityIndicator, Alert, Platform, Modal,
@@ -212,7 +213,7 @@ export default function AlumniScreen() {
           const url = window.URL.createObjectURL(new Blob([pdf.data]));
           const el = document.createElement('a');
           el.href = url;
-          el.download = `certificate_${certAlumni.student_id || 'alumni'}.pdf`;
+          el.download = filenameFromResponse(pdf, exportName(['شهادة تخرج', certAlumni.full_name || certAlumni.student_id], 'pdf'));
           el.click();
           window.URL.revokeObjectURL(url);
         }

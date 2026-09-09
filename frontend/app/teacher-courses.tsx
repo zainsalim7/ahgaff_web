@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import {
   View,
   Text,
@@ -244,7 +245,7 @@ export default function TeacherCoursesScreen() {
       if (Platform.OS === 'web') {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `teacher_workload_${(data?.teacher_name || teacherDisplay || 'teacher').replace(/\s+/g, '_')}.pdf`;
+        a.download = filenameFromResponse(res, exportName(['العبء التدريسي', data?.teacher_name || teacherDisplay], 'pdf'));
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -274,7 +275,7 @@ export default function TeacherCoursesScreen() {
       if (Platform.OS === 'web') {
         const a = document.createElement('a');
         a.href = url;
-        a.download = `teacher_workload_${(data?.teacher_name || teacherDisplay || 'teacher').replace(/\s+/g, '_')}.xlsx`;
+        a.download = filenameFromResponse(res, exportName(['العبء التدريسي', data?.teacher_name || teacherDisplay], 'xlsx'));
         document.body.appendChild(a);
         a.click();
         a.remove();

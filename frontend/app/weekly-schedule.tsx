@@ -1329,7 +1329,7 @@ export default function WeeklySchedulePage() {
                           const url = window.URL.createObjectURL(blob);
                           const a = document.createElement('a');
                           a.href = url;
-                          a.download = 'rooms_template.xlsx';
+                          a.download = 'قالب استيراد القاعات.xlsx';
                           a.click();
                           window.URL.revokeObjectURL(url);
                         } catch { if (Platform.OS === 'web') window.alert('خطأ في تحميل القالب'); }

@@ -1,4 +1,5 @@
 import { goBack } from '../src/utils/navigation';
+import { exportName } from '../src/utils/exportName';
 import React, { useEffect, useState, useCallback } from 'react';
 import {
   View,
@@ -159,7 +160,8 @@ export default function TakeAttendanceScreen() {
         const blobUrl = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = blobUrl;
-        a.download = `${course?.name || courseName || 'attendance'}_${lecture?.date || 'report'}.pdf`;
+        const xf = response.headers.get('x-filename');
+        a.download = xf ? decodeURIComponent(xf) : exportName(['كشف حضور محاضرة', course?.name || courseName, lecture?.date], 'pdf');
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 from typing import Optional
 from pydantic import BaseModel
 
-from .deps import get_db, get_current_user, has_permission, log_activity
+from .deps import get_db, get_current_user, has_permission, log_activity, export_stamp
 from models.permissions import Permission
 
 router = APIRouter(tags=["العبء التدريسي"])
@@ -1601,7 +1601,7 @@ async def export_teaching_load_excel(
     output.seek(0)
 
     from urllib.parse import quote as _q
-    _fn = _q(f"العبء التدريسي - {datetime.now().strftime('%Y-%m-%d')}.xlsx")
+    _fn = _q(f"العبء التدريسي - {export_stamp()}.xlsx")
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -1907,7 +1907,7 @@ async def export_teaching_load_pdf(
     buffer.seek(0)
 
     from urllib.parse import quote as _q
-    _fn = _q(f"العبء التدريسي - {datetime.now().strftime('%Y-%m-%d')}.pdf")
+    _fn = _q(f"العبء التدريسي - {export_stamp()}.pdf")
     return StreamingResponse(
         buffer,
         media_type="application/pdf",

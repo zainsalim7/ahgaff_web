@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse, Response
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity
+from .deps import get_db, get_current_user, log_activity, export_filename, export_headers
 from .statements import _can_issue as _can_manage, get_verify_base
 
 router = APIRouter()
@@ -659,7 +659,7 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
         c.showPage()
     c.save()
     return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename=batch_cards.pdf"})
+                             headers=export_headers(export_filename("بطاقات الطلاب", f"{len(pngs)} بطاقة", ext="pdf")))
 
 
 @router.get("/cards/batch-count")
@@ -962,10 +962,10 @@ async def download_student_card(
         except Exception:
             photo_bytes = None
     png = _render_card_png(p, photo_bytes, p["verify_url"])
-    fname = f"card_{p.get('enrollment_no', 'student')}"
+    _card_label = ("بطاقة الطالب", p.get("full_name") or student.get("full_name") or "", p.get("enrollment_no", ""))
     if fmt == "png":
         return StreamingResponse(io.BytesIO(png), media_type="image/png",
-                                 headers={"Content-Disposition": f"attachment; filename={fname}.png"})
+                                 headers=export_headers(export_filename(*_card_label, ext="png")))
     # PDF بمقاس البطاقة القياسي CR80
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as pdfcanvas
@@ -978,4 +978,4 @@ async def download_student_card(
     c.showPage()
     c.save()
     return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename={fname}.pdf"})
+                             headers=export_headers(export_filename(*_card_label, ext="pdf")))

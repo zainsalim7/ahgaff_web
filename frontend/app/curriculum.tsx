@@ -9,6 +9,7 @@
  *  - شبكة المستوى × الفصل مع مدخل عدد الشعب لكل مقرر
  */
 import React, { useEffect, useState, useCallback } from 'react';
+import { exportName } from '../src/utils/exportName';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, TextInput, Platform, Modal, Alert, KeyboardAvoidingView,
@@ -360,12 +361,13 @@ export default function CurriculumScreen() {
         throw new Error(txt || 'فشل التصدير');
       }
       const blob = await res.blob();
-      const deptName = (departments.find((d: any) => (d.id || d._id) === selectedDept)?.name || 'curriculum').replace(/\s+/g, '_');
-      let suffix = 'all';
-      if (exportScope === 'level') suffix = `level_${exportLevel}`;
-      else if (exportScope === 'term') suffix = `term_${exportTerm}`;
-      else if (exportScope === 'level_term') suffix = `L${exportLevel}_T${exportTerm}`;
-      const filename = `الخطة_${deptName}_${suffix}.${exportFormat}`;
+      const deptName = departments.find((d: any) => (d.id || d._id) === selectedDept)?.name;
+      let suffix = 'كامل الخطة';
+      if (exportScope === 'level') suffix = `المستوى ${exportLevel}`;
+      else if (exportScope === 'term') suffix = `الفصل ${exportTerm}`;
+      else if (exportScope === 'level_term') suffix = `المستوى ${exportLevel} - الفصل ${exportTerm}`;
+      const xf = res.headers.get('x-filename');
+      const filename = xf ? decodeURIComponent(xf) : exportName(['المنهج الدراسي', deptName, suffix], exportFormat);
       if (Platform.OS === 'web') {
         const blobUrl = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -391,7 +393,7 @@ export default function CurriculumScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'curriculum_template.xlsx';
+        a.download = 'قالب استيراد المنهج الدراسي.xlsx';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

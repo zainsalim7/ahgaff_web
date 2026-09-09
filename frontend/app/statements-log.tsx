@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
   Platform, ActivityIndicator, Modal, RefreshControl,
@@ -81,7 +82,7 @@ export default function StatementsLogScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
         const a = document.createElement('a');
         a.href = url;
-        a.download = `إفادة ${s.student_name || s.number_display.replace(/\//g, '-')}.pdf`;
+        a.download = filenameFromResponse(res, exportName(['إفادة', s.student_name || s.number_display], 'pdf'));
         a.click();
         window.URL.revokeObjectURL(url);
       }

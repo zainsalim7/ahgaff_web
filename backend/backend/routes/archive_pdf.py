@@ -27,7 +27,7 @@ from reportlab.platypus import (
 )
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
 
-from .deps import get_current_user, get_db
+from .deps import get_current_user, get_db, export_filename, export_headers
 from models.permissions import Permission
 
 router = APIRouter(tags=["تقارير الأرشيف PDF"])
@@ -136,10 +136,10 @@ def _build_pdf(elements) -> io.BytesIO:
     return buf
 
 
-def _pdf_response(buf: io.BytesIO, filename: str) -> StreamingResponse:
+def _pdf_response(buf: io.BytesIO, *label_parts) -> StreamingResponse:
     return StreamingResponse(
         buf, media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        headers=export_headers(export_filename(*label_parts, ext="pdf")),
     )
 
 
@@ -395,8 +395,7 @@ async def archive_student_report_pdf(
     _add_signature_footer(elements, sig)
 
     buf = _build_pdf(elements)
-    fname = f"student-report-{student.get('student_id') or student_id}.pdf"
-    return _pdf_response(buf, fname)
+    return _pdf_response(buf, "تقرير الطالب الأرشيفي", student.get("full_name"), student.get("student_id") or student_id)
 
 
 @router.get("/archives/{semester_id}/teachers/{teacher_id}/pdf")
@@ -507,8 +506,7 @@ async def archive_teacher_report_pdf(
     _add_signature_footer(elements, sig)
 
     buf = _build_pdf(elements)
-    fname = f"teacher-report-{teacher.get('teacher_id') or teacher_id}.pdf"
-    return _pdf_response(buf, fname)
+    return _pdf_response(buf, "تقرير الأستاذ الأرشيفي", teacher.get("full_name"), teacher.get("teacher_id") or teacher_id)
 
 
 @router.get("/archives/students/{student_id}/history/pdf")
@@ -585,7 +583,7 @@ async def archive_student_history_pdf(
 
     buf = _build_pdf(elements)
     sid = (first_snap or {}).get("student_id") or student_id
-    return _pdf_response(buf, f"student-history-{sid}.pdf")
+    return _pdf_response(buf, "السجل الأكاديمي للطالب", (first_snap or {}).get("full_name"), sid)
 
 
 @router.get("/archives/teachers/{teacher_id}/history/pdf")
@@ -689,7 +687,7 @@ async def archive_teacher_history_pdf(
 
     buf = _build_pdf(elements)
     tid = (first_snap or {}).get("teacher_id") or teacher_id
-    return _pdf_response(buf, f"teacher-history-{tid}.pdf")
+    return _pdf_response(buf, "السجل التدريسي للأستاذ", (first_snap or {}).get("full_name"), tid)
 
 
 @router.get("/archives/courses/{course_code}/history/pdf")
@@ -759,4 +757,4 @@ async def archive_course_history_pdf(
     _add_signature_footer(elements, sig)
 
     buf = _build_pdf(elements)
-    return _pdf_response(buf, f"course-history-{course_code}.pdf")
+    return _pdf_response(buf, "سجل المقرر الأرشيفي", course_name, course_code)

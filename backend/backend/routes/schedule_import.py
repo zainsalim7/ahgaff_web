@@ -11,7 +11,7 @@ from fastapi.responses import StreamingResponse
 from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 
-from .deps import get_db, get_current_user, log_activity
+from .deps import get_db, get_current_user, log_activity, export_stamp
 from .weekly_schedule import can_manage_schedule, _is_period_unavailable, _build_master_data, _sync_future_lectures, _resolve_day_times, _sync_course_shared_links, _master_course_color, _master_text_color
 
 router = APIRouter(tags=["استيراد الجدول الأسبوعي"])
@@ -286,7 +286,7 @@ async def download_import_template(
             parts.append((dept.get("name") or "").strip())
     except Exception:
         pass
-    parts.append(datetime.now().strftime("%Y-%m-%d"))
+    parts.append(export_stamp())
     fname = quote((" - ".join([p for p in parts if p])) + ".xlsx")
     return StreamingResponse(
         iter([buf.getvalue()]),

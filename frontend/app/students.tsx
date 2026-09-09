@@ -1,4 +1,5 @@
 import { goBack } from '../src/utils/navigation';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View,
@@ -456,8 +457,7 @@ export default function StudentsScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const a = document.createElement('a');
         a.href = url;
-        const xf = res.headers?.['x-filename'];
-        a.download = xf ? decodeURIComponent(xf) : `إفادات ${new Date().toISOString().slice(0, 10)}.pdf`;
+        a.download = filenameFromResponse(res, exportName(['إفادات'], 'pdf'));
         a.click();
         window.URL.revokeObjectURL(url);
       }
@@ -811,7 +811,7 @@ export default function StudentsScreen() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `backup_student_${deleteTarget.full_name}_${new Date().toISOString().split('T')[0]}.json`;
+          a.download = exportName(['نسخة احتياطية - طالب', deleteTarget.full_name], 'json');
           a.click();
           URL.revokeObjectURL(url);
         }
@@ -968,7 +968,7 @@ export default function StudentsScreen() {
         const ws = XLSX.utils.json_to_sheet(rows);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, 'الطلاب المحددون');
-        XLSX.writeFile(wb, `selected_students_${selectedStudents.length}.xlsx`);
+        XLSX.writeFile(wb, exportName(['الطلاب المحددون', `${selectedStudents.length} طالب`], 'xlsx'));
         return;
       }
 
@@ -986,12 +986,12 @@ export default function StudentsScreen() {
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      const deptName = selectedDeptFilter
-        ? (departments.find(d => d.id === selectedDeptFilter)?.name || 'all').replace(/\s+/g, '_')
-        : 'all';
-      const levelPart = selectedLevelFilter ? `_L${selectedLevelFilter}` : '';
-      const sectionPart = selectedSectionFilter ? `_${selectedSectionFilter}` : '';
-      a.download = `students_${deptName}${levelPart}${sectionPart}.xlsx`;
+      const deptName = selectedDeptFilter ? departments.find(d => d.id === selectedDeptFilter)?.name : 'كل الأقسام';
+      a.download = filenameFromResponse(res, exportName([
+        'كشف الطلاب', deptName,
+        selectedLevelFilter ? `المستوى ${selectedLevelFilter}` : '',
+        selectedSectionFilter ? `شعبة ${selectedSectionFilter}` : '',
+      ], 'xlsx'));
       document.body.appendChild(a);
       a.click();
       a.remove();
@@ -1011,7 +1011,7 @@ export default function StudentsScreen() {
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', 'students_template.xlsx');
+      link.setAttribute('download', 'قالب استيراد الطلاب.xlsx');
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -1413,7 +1413,7 @@ export default function StudentsScreen() {
               <TouchableOpacity
                 style={[styles.headerBtn, styles.btnGhost]}
                 onPress={handleExportStudents}
-                data-testid="export-students-btn"
+                testID="export-students-btn"
               >
                 <Ionicons name="download-outline" size={16} color="#1a2540" />
                 <Text style={styles.btnGhostText}>تصدير</Text>

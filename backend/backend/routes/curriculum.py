@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from .deps import get_current_user, get_db
+from .deps import get_current_user, get_db, export_filename, export_headers
 from models.permissions import Permission
 
 router = APIRouter(tags=["الخطة الدراسية"])
@@ -1536,11 +1536,7 @@ async def export_curriculum(
     if term is not None:
         scope_parts.append(_term_label(term))
     scope_label = " - ".join(scope_parts) if scope_parts else "كامل الخطة"
-    filename_safe = f"curriculum_{department_id}"
-    if level is not None:
-        filename_safe += f"_L{level}"
-    if term is not None:
-        filename_safe += f"_T{term}"
+    filename_safe = export_filename("المنهج الدراسي", fac_name, dept_name, scope_label, ext="")[:-1]
 
     if format.lower() == "pdf":
         return _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe)
@@ -1697,7 +1693,7 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename_safe}.xlsx"'},
+        headers=export_headers(f"{filename_safe}.xlsx"),
     )
 
 
@@ -1831,5 +1827,5 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
     return StreamingResponse(
         buf,
         media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename_safe}.pdf"'},
+        headers=export_headers(f"{filename_safe}.pdf"),
     )

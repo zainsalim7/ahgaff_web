@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { exportName } from '../../src/utils/exportName';
 import {
   View,
   Text,
@@ -579,7 +580,7 @@ export default function AddCourseScreen() {
           const url = URL.createObjectURL(blob);
           const a = document.createElement('a');
           a.href = url;
-          a.download = `backup_${deleteTarget.name}_${new Date().toISOString().split('T')[0]}.json`;
+          a.download = exportName(['نسخة احتياطية - مقرر', deleteTarget.name], 'json');
           a.click();
           URL.revokeObjectURL(url);
         }
@@ -665,7 +666,7 @@ export default function AddCourseScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'courses_template.xlsx';
+        link.download = 'قالب استيراد المقررات.xlsx';
         link.click();
         window.URL.revokeObjectURL(url);
       }
@@ -681,7 +682,7 @@ export default function AddCourseScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const link = document.createElement('a');
         link.href = url;
-        link.download = 'lectures_template.xlsx';
+        link.download = 'قالب استيراد المحاضرات.xlsx';
         link.click();
         window.URL.revokeObjectURL(url);
       }

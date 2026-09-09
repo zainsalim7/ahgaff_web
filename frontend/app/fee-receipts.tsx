@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { View, Text, TouchableOpacity, Image, Modal, TextInput, Platform, Alert, ScrollView } from 'react-native';
 import { Stack, router } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -68,7 +69,7 @@ export default function FeeReceiptsScreen() {
       if (Platform.OS === 'web') {
         const url = window.URL.createObjectURL(new Blob([r.data]));
         const a = document.createElement('a');
-        a.href = url; a.download = `غير_الدافعين_${name}.xlsx`; a.click();
+        a.href = url; a.download = filenameFromResponse(r, exportName(['كشف غير الدافعين', name], 'xlsx')); a.click();
         window.URL.revokeObjectURL(url);
       }
     } catch { notify('فشل التصدير'); }

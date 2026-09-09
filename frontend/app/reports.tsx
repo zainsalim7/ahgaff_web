@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import {
   View,
   Text,
@@ -291,7 +292,7 @@ export default function ReportsScreen() {
     setExporting('template');
     try {
       const response = await exportAPI.getStudentsTemplate();
-      await downloadBlob(response.data, 'students_template.xlsx');
+      await downloadBlob(response.data, 'قالب استيراد الطلاب.xlsx');
       Alert.alert('نجاح', 'تم تحميل القالب');
     } catch (error) {
       console.error('Template error:', error);
@@ -305,7 +306,7 @@ export default function ReportsScreen() {
     setExporting('students');
     try {
       const response = await exportAPI.exportStudents(selectedDept || undefined);
-      await downloadBlob(response.data, 'students.xlsx');
+      await downloadBlob(response.data, filenameFromResponse(response, exportName(['كشف الطلاب', departments.find(d => d.id === selectedDept)?.name], 'xlsx')));
       Alert.alert('نجاح', 'تم تصدير قائمة الطلاب');
     } catch (error) {
       console.error('Export students error:', error);
@@ -324,12 +325,12 @@ export default function ReportsScreen() {
     setExporting('attendance');
     try {
       const course = courses.find(c => c.id === attCourse);
-      const filename = `attendance_${course?.code || 'course'}.xlsx`;
+      const filename = exportName(['سجل حضور المقرر', course?.name, course?.code], 'xlsx');
       const params: any = {};
       if (attDateFrom) params.date_from = attDateFrom;
       if (attDateTo) params.date_to = attDateTo;
       const response = await exportAPI.exportAttendance(attCourse, params);
-      await downloadBlob(response.data, filename);
+      await downloadBlob(response.data, filenameFromResponse(response, filename));
       Alert.alert('نجاح', 'تم تصدير سجل الحضور');
     } catch (error) {
       console.error('Export attendance error:', error);
@@ -348,10 +349,10 @@ export default function ReportsScreen() {
     setExporting('report');
     try {
       const dept = departments.find(d => d.id === selectedDept);
-      const filename = `report_${dept?.code || 'dept'}.xlsx`;
+      const filename = exportName(['تقرير القسم', dept?.name], 'xlsx');
       
       const response = await exportAPI.exportDeptReport(selectedDept);
-      await downloadBlob(response.data, filename);
+      await downloadBlob(response.data, filenameFromResponse(response, filename));
       Alert.alert('نجاح', 'تم تصدير تقرير القسم');
     } catch (error) {
       console.error('Export report error:', error);
@@ -366,7 +367,7 @@ export default function ReportsScreen() {
     setExporting('students_pdf');
     try {
       const response = await exportAPI.exportStudentsPDF(selectedDept || undefined);
-      await downloadBlob(response.data, `students_${new Date().toISOString().split('T')[0]}.pdf`);
+      await downloadBlob(response.data, filenameFromResponse(response, exportName(['كشف الطلاب', departments.find(d => d.id === selectedDept)?.name], 'pdf')));
       Alert.alert('نجاح', 'تم تصدير قائمة الطلاب كـ PDF');
     } catch (error) {
       console.error('Export students PDF error:', error);

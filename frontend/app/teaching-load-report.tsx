@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Platform, TextInput } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -92,12 +93,10 @@ export default function TeachingLoadReport() {
       const blob = new Blob([res.data], { type: mime });
       const url = URL.createObjectURL(blob);
       if (Platform.OS === 'web') {
-        const name = scope === 'teacher' && selectedTeacherObj
-          ? `teacher_workload_${(selectedTeacherObj.full_name || 'teacher').replace(/\s+/g, '_')}`
-          : 'teaching_load_report';
+        const name = exportName(['العبء التدريسي', scope === 'teacher' && selectedTeacherObj ? selectedTeacherObj.full_name : 'تقرير شامل'], ext);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${name}.${ext}`;
+        a.download = filenameFromResponse(res, name);
         document.body.appendChild(a);
         a.click();
         a.remove();

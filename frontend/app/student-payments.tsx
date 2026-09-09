@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { View, Text, TouchableOpacity, TextInput, Platform, Alert, ScrollView } from 'react-native';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -60,7 +61,7 @@ export default function StudentPaymentsScreen() {
       if (Platform.OS === 'web') {
         const url = window.URL.createObjectURL(new Blob([r.data]));
         const a = document.createElement('a');
-        a.href = url; a.download = `سدادات_${name || 'طالب'}.${fmt === 'excel' ? 'xlsx' : 'pdf'}`; a.click();
+        a.href = url; a.download = filenameFromResponse(r, exportName(['سدادات الطالب', name], fmt === 'excel' ? 'xlsx' : 'pdf')); a.click();
         window.URL.revokeObjectURL(url);
       }
     } catch { notify('فشل التصدير'); }

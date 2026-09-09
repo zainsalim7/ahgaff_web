@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity, has_permission
+from .deps import get_db, get_current_user, log_activity, has_permission, export_stamp, export_filename, export_headers
 
 router = APIRouter()
 
@@ -141,7 +141,7 @@ async def download_grades_template(current_user: dict = Depends(get_current_user
     wb.save(out)
     out.seek(0)
     return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": "attachment; filename=grades_template.xlsx"})
+                             headers=export_headers(__import__("urllib.parse", fromlist=["quote"]).quote("قالب استيراد النتائج.xlsx")))
 
 
 def _parse_template_sheet(sh) -> Optional[dict]:
@@ -899,9 +899,8 @@ async def issue_grade_statement(data: GradeStatementRequest, current_user: dict 
 
     await log_activity(current_user, "issue_grade_statement", "grades", token, student_name,
                        {"summary": f"إصدار بيان حالة ودرجات للطالب «{student_name}» ({len(recs)} فصل)"})
-    safe_reg = re.sub(r"[^A-Za-z0-9_-]", "", reg_no) or "student"
-    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
-                             headers={"Content-Disposition": f"attachment; filename=grade_statement_{safe_reg}.pdf"})
+    _fn = export_filename("بيان درجات", student_name or reg_no, ext="pdf")
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers=export_headers(_fn))
 
 
 @router.get("/grades/verify/{token}")
@@ -1142,7 +1141,7 @@ def _analysis_fname(a: dict, ext: str) -> str:
         parts.append(f"فصل {info['semester_no']}")
     if info.get("academic_year"):
         parts.append(str(info["academic_year"]))
-    parts.append(datetime.now(timezone.utc).strftime("%Y-%m-%d"))
+    parts.append(export_stamp())
     return " - ".join(parts) + f".{ext}"
 
 

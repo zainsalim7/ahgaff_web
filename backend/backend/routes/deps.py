@@ -163,6 +163,28 @@ def get_db() -> AsyncIOMotorDatabase:
     return _db
 
 
+def export_stamp() -> str:
+    """📁 ختم التاريخ والوقت (توقيت اليمن) لأسماء ملفات التصدير: 2026-06-15 14-30"""
+    from datetime import timezone as _tz
+    return datetime.now(_tz(timedelta(hours=3))).strftime("%Y-%m-%d %H-%M")
+
+
+def export_filename(*parts, ext: str) -> str:
+    """📁 اسم ملف تصدير عربي واضح (مُرمَّز للهيدر): الأجزاء - التاريخ الوقت.امتداد"""
+    from urllib.parse import quote
+    clean = []
+    for p in parts:
+        s = str(p or "").strip().replace("/", "-").replace("\\", "-").replace(":", "-")
+        if s and s not in clean:
+            clean.append(s)
+    return quote(f"{' - '.join(clean)} - {export_stamp()}.{ext}")
+
+
+def export_headers(fname: str) -> dict:
+    return {"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname}
+
+
+
 def set_scope_filter(fn):
     """تسجيل دالة فلتر النطاق (Faculty/Department scoping) من server.py"""
     global _scope_filter_fn

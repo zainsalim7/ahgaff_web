@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView,
   Platform, ActivityIndicator,
@@ -99,7 +100,7 @@ export default function BatchPrintScreen() {
         const url = window.URL.createObjectURL(new Blob([res.data]));
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'batch_cards.pdf';
+        a.download = filenameFromResponse(res, exportName(['بطاقات الطلاب'], 'pdf'));
         a.click();
         window.URL.revokeObjectURL(url);
       }

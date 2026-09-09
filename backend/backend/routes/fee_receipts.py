@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, has_permission, log_activity
+from .deps import get_db, get_current_user, has_permission, log_activity, export_filename, export_headers
 
 router = APIRouter(tags=["السندات المالية"])
 
@@ -500,7 +500,7 @@ async def export_unpaid(type_id: str, current_user: dict = Depends(get_current_u
                        {"summary": f"تصدير كشف غير الدافعين لـ«{type_name}» ({n - 1} طالباً)"})
     from fastapi.responses import StreamingResponse
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers={"Content-Disposition": "attachment; filename=unpaid.xlsx"})
+                             headers=export_headers(export_filename("كشف غير الدافعين", type_name, f"العام {year}", f"{n - 1} طالب", ext="xlsx")))
 
 
 @router.post("/fees/receipts/{receipt_id}/unapprove")
@@ -654,7 +654,7 @@ async def payment_report(date_from: str, date_to: str, student_ids: Optional[str
         wb.save(buf)
         buf.seek(0)
         return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                 headers={"Content-Disposition": "attachment; filename=payments.xlsx"})
+                                 headers=export_headers(export_filename("تقرير السدادات", f"من {date_from} إلى {date_to}", ext="xlsx")))
 
     # PDF
     import arabic_reshaper
@@ -703,7 +703,7 @@ async def payment_report(date_from: str, date_to: str, student_ids: Optional[str
     doc.build(elems)
     buf.seek(0)
     return StreamingResponse(buf, media_type="application/pdf",
-                             headers={"Content-Disposition": "attachment; filename=payments.pdf"})
+                             headers=export_headers(export_filename("تقرير السدادات", f"من {date_from} إلى {date_to}", ext="pdf")))
 
 
 class RemindBody(BaseModel):
