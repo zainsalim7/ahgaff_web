@@ -51,6 +51,7 @@ export default function StudentReport() {
   // بيانات التقرير
   const [studentData, setStudentData] = useState<any>(null);
   const [detailed, setDetailed] = useState<any>(null);
+  const [reportMode, setReportMode] = useState<'detailed' | 'summary'>('detailed');
 
   // جلب بيانات الفلاتر عند الدخول للصفحة
   useEffect(() => {
@@ -226,9 +227,9 @@ export default function StudentReport() {
 
   // دالة تصدير PDF
   const downloadDetailed = async (fmt: 'pdf' | 'excel') => {
-    const res = await api.get(`/reports/student/${detailed.student.id}/detailed/export`, { params: { fmt }, responseType: 'blob' });
+    const res = await api.get(`/reports/student/${detailed.student.id}/detailed/export`, { params: { fmt, view: reportMode }, responseType: 'blob' });
     const st = detailed.student;
-    const fallback = exportName(['تقرير حضور الطالب', st.full_name, st.department_name, st.level ? `المستوى ${st.level}` : '', st.section ? `شعبة ${st.section}` : ''], fmt === 'pdf' ? 'pdf' : 'xlsx');
+    const fallback = exportName([reportMode === 'summary' ? 'تقرير حضور الطالب (مختصر)' : 'تقرير حضور الطالب', st.full_name, st.department_name, st.level ? `المستوى ${st.level}` : '', st.section ? `شعبة ${st.section}` : ''], fmt === 'pdf' ? 'pdf' : 'xlsx');
     const name = filenameFromResponse(res, fallback);
     if (Platform.OS === 'web') {
       const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -530,7 +531,19 @@ export default function StudentReport() {
         )}
 
         {/* التقرير المفصّل الجديد (الإدارة) */}
-        {!isStudent && detailed && !loading && <StudentDetailedReport data={detailed} />}
+        {!isStudent && detailed && !loading && (
+          <>
+            <View style={{ flexDirection: 'row-reverse', gap: 8, marginHorizontal: 16, marginBottom: 12 }} testID="sr-mode-switch">
+              {([['detailed', '📋 التقرير المفصّل'], ['summary', '📊 التقرير المختصر (جدول واحد)']] as const).map(([k, label]) => (
+                <TouchableOpacity key={k} onPress={() => setReportMode(k)} testID={`sr-mode-${k}`}
+                  style={{ backgroundColor: reportMode === k ? '#1565c0' : '#fff', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: '#1565c0' }}>
+                  <Text style={{ color: reportMode === k ? '#fff' : '#1565c0', fontWeight: '800', fontSize: 12 }}>{label}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <StudentDetailedReport data={detailed} mode={reportMode} />
+          </>
+        )}
 
         {/* بيانات الطالب */}
         {studentData && !loading && (isStudent || !detailed) && (

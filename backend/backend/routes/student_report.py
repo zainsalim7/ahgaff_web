@@ -175,27 +175,30 @@ async def student_detailed_report(student_id: str, current_user: dict = Depends(
     return data
 
 
-def _fname_parts(d: dict):
+def _fname_parts(d: dict, view: str = "detailed"):
     s = d["student"]
-    return ("تقرير حضور الطالب", s["full_name"], s["department_name"],
+    return ("تقرير حضور الطالب" + (" (مختصر)" if view == "summary" else ""), s["full_name"], s["department_name"],
             f"المستوى {s['level']}" if s.get("level") else "", f"شعبة {s['section']}" if s.get("section") else "")
 
 
 @router.get("/reports/student/{student_id}/detailed/export")
-async def student_detailed_export(student_id: str, fmt: str = "excel", current_user: dict = Depends(get_current_user)):
+async def student_detailed_export(student_id: str, fmt: str = "excel", view: str = "detailed",
+                                  current_user: dict = Depends(get_current_user)):
+    """view=detailed (كل المحاضرات) | summary (جدول واحد بكل المقررات)"""
     _check(current_user)
     db = get_db()
     d = await build_student_report(db, student_id)
     await _assert_scope(db, current_user, {"_id": ObjectId(d["student"]["id"])})
+    summary_only = view == "summary"
     if fmt == "pdf":
-        buf = _build_pdf(d)
-        return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(export_filename(*_fname_parts(d), ext="pdf")))
-    buf = _build_excel(d)
+        buf = _build_pdf(d, summary_only)
+        return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(export_filename(*_fname_parts(d, view), ext="pdf")))
+    buf = _build_excel(d, summary_only)
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                             headers=export_headers(export_filename(*_fname_parts(d), ext="xlsx")))
+                             headers=export_headers(export_filename(*_fname_parts(d, view), ext="xlsx")))
 
 
-def _build_excel(d: dict) -> io.BytesIO:
+def _build_excel(d: dict, summary_only: bool = False) -> io.BytesIO:
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
@@ -234,6 +237,11 @@ def _build_excel(d: dict) -> io.BytesIO:
     for ci, w in enumerate([5, 30, 10, 24, 10, 10, 8, 8, 8, 8, 8, 12], 1):
         ws.column_dimensions[get_column_letter(ci)].width = w
 
+    if summary_only:
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return buf
     ws2 = wb.create_sheet("المحاضرات")
     ws2.sheet_view.rightToLeft = True
     heads2 = ["م", "المقرر", "الرمز", "التاريخ", "اليوم", "الوقت", "القاعة", "الموضوع", "حالة المحاضرة", "حالة الطالب", "سبب الإلغاء"]
@@ -256,7 +264,7 @@ def _build_excel(d: dict) -> io.BytesIO:
     return buf
 
 
-def _build_pdf(d: dict) -> io.BytesIO:
+def _build_pdf(d: dict, summary_only: bool = False) -> io.BytesIO:
     from reportlab.lib import colors
     from reportlab.lib.pagesizes import A4, landscape
     from reportlab.lib.units import mm
@@ -311,6 +319,16 @@ def _build_pdf(d: dict) -> io.BytesIO:
                     [sm["total_courses"], sm["total_lectures"], sm["executed"], sm["present"], sm["absent"], sm["late"], sm["upcoming"], sm["cancelled"], rate_txt]],
                    [28 * mm] * 9, font_size=9.5))
     el.append(Spacer(1, 5 * mm))
+    if summary_only:
+        rows = [["#", "المقرر", "الرمز", "الأستاذ", "المدرجة", "المنفَّذة", "حاضر", "غائب", "متأخر", "قادمة", "ملغاة", "نسبة الحضور"]]
+        for i, c in enumerate(d["courses"], 1):
+            r = f"{c['attendance_rate']}%" if c["attendance_rate"] is not None else "—"
+            rows.append([i, c["course_name"], c["course_code"], c["teacher_name"], c["total_lectures"], c["executed"], c["present"],
+                         c["absent"], c["late"], c["upcoming"], c["cancelled"], r + (" ⚠" if c["warning"] else "")])
+        rows.append(["", "الإجمالي", "", "", sm["total_lectures"], sm["executed"], sm["present"], sm["absent"], sm["late"], sm["upcoming"], sm["cancelled"], rate_txt])
+        el.append(Paragraph(ar("ملخص المقررات — الفصل النشط"), sec))
+        el.append(grid(rows, [8 * mm, 62 * mm, 20 * mm, 44 * mm, 16 * mm, 16 * mm, 14 * mm, 14 * mm, 14 * mm, 14 * mm, 14 * mm, 22 * mm], font_size=9))
+        d["courses"] = []
     for c in d["courses"]:
         r = f"{c['attendance_rate']}%" if c["attendance_rate"] is not None else "—"
         warn = "  ⚠ أقل من 75%" if c["warning"] else ""

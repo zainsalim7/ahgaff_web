@@ -74,7 +74,33 @@ const CourseBlock = ({ c, open, onToggle }: { c: any; open: boolean; onToggle: (
   );
 };
 
-export const StudentDetailedReport = ({ data }: { data: any }) => {
+const SUM_COLS = ['#', 'المقرر', 'الرمز', 'الأستاذ', 'المدرجة', 'المنفَّذة', 'حاضر', 'غائب', 'متأخر', 'قادمة', 'ملغاة', 'نسبة الحضور'];
+const SUMW = [{ width: 32 }, { flex: 1, minWidth: 160 }, { width: 70 }, { width: 140 }, { width: 62 }, { width: 62 }, { width: 55 }, { width: 55 }, { width: 55 }, { width: 55 }, { width: 55 }, { width: 90 }];
+
+const SummaryTable = ({ courses, sm }: { courses: any[]; sm: any }) => {
+  const rate = sm.overall_attendance_rate;
+  return (
+    <View testID="sr-summary-table">
+      <View style={[s.row, s.rowHead]}>{SUM_COLS.map((h, i) => <Text key={h} style={[s.cell, s.cellHead, SUMW[i]]}>{h}</Text>)}</View>
+      {courses.map((c: any, i: number) => {
+        const vals = [i + 1, c.course_name, c.course_code, c.teacher_name || '—', c.total_lectures, c.executed, c.present, c.absent, c.late, c.upcoming, c.cancelled];
+        return (
+          <View key={c.course_id} style={[s.row, i % 2 ? s.rowAlt : null]} testID={`sr-summary-row-${c.course_id}`}>
+            {vals.map((v, j) => <Text key={j} style={[s.cell, SUMW[j], j === 1 ? { fontWeight: '800', textAlign: 'right' } : null, j === 6 ? { color: C.green } : null, j === 7 ? { color: C.red } : null, j === 8 ? { color: C.amber } : null]} numberOfLines={1}>{v}</Text>)}
+            <Text style={[s.cell, SUMW[11], { fontWeight: '900', color: c.attendance_rate === null ? C.grey : c.warning ? C.red : C.green }]}>{c.attendance_rate === null ? '—' : `${c.attendance_rate}%`}{c.warning ? ' ⚠️' : ''}</Text>
+          </View>
+        );
+      })}
+      <View style={[s.row, { backgroundColor: '#e3f2fd' }]} testID="sr-summary-total">
+        {['', 'الإجمالي', '', '', sm.total_lectures, sm.executed, sm.present, sm.absent, sm.late, sm.upcoming, sm.cancelled, rate === null ? '—' : `${rate}%`].map((v, j) => (
+          <Text key={j} style={[s.cell, SUMW[j], { fontWeight: '900', color: '#1a2540' }, j === 1 ? { textAlign: 'right' } : null]}>{v}</Text>
+        ))}
+      </View>
+    </View>
+  );
+};
+
+export const StudentDetailedReport = ({ data, mode = 'detailed' }: { data: any; mode?: 'detailed' | 'summary' }) => {
   const { student: st, semester: sem, summary: sm, courses } = data;
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
   const allOpen = courses.length > 0 && openIds.size === courses.length;
@@ -118,7 +144,15 @@ export const StudentDetailedReport = ({ data }: { data: any }) => {
         </View>
       </View>
 
-      <View style={s.card}>
+      {mode === 'summary' && (
+        <View style={s.card}>
+          <Text style={[s.secTitle, { marginBottom: 10 }]}>ملخص المقررات — الفصل النشط ({courses.length})</Text>
+          {courses.length === 0 ? <Text style={s.empty}>لا توجد مقررات مسجلة للطالب في الفصل النشط</Text> : <SummaryTable courses={courses} sm={sm} />}
+          <Text style={s.foot}>🔴 نسبة الحضور تُحسب من المحاضرات المنفَّذة فقط — تحذير لأي مقرر تحت 75%</Text>
+        </View>
+      )}
+
+      {mode === 'detailed' && <View style={s.card}>
         <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
           <Text style={s.secTitle}>المقررات والمحاضرات المدرجة للفصل النشط ({courses.length})</Text>
           <TouchableOpacity onPress={() => setOpenIds(allOpen ? new Set() : new Set(courses.map((c: any) => c.course_id)))} testID="sr-toggle-all">
@@ -128,7 +162,7 @@ export const StudentDetailedReport = ({ data }: { data: any }) => {
         {courses.length === 0 && <Text style={s.empty}>لا توجد مقررات مسجلة للطالب في الفصل النشط</Text>}
         {courses.map((c: any) => <CourseBlock key={c.course_id} c={c} open={openIds.has(c.course_id)} onToggle={() => toggle(c.course_id)} />)}
         <Text style={s.foot}>🔴 يظهر تحذير أحمر بجانب أي مقرر تقل نسبة حضوره عن 75% — المحاضرات الملغاة تظهر ولا تُحسب</Text>
-      </View>
+      </View>}
     </View>
   );
 };
