@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, has_permission, log_activity, export_filename, export_headers
+from .deps import get_db, get_current_user, has_permission, log_activity, export_filename, export_headers, get_scope_filter
 
 router = APIRouter(tags=["السندات المالية"])
 
@@ -22,6 +22,40 @@ def _now():
 
 def can_manage_fees(user: dict) -> bool:
     return user.get("role") == "admin" or has_permission(user, "manage_fee_receipts")
+
+
+def is_admin(user: dict) -> bool:
+    return user.get("role") == "admin"
+
+
+async def _scope_query(current_user: dict) -> dict:
+    """🔒 فلتر طلاب نطاق المستخدم (كليته/أقسامه) — {} للأدمن = الكل"""
+    if is_admin(current_user):
+        return {}
+    return await get_scope_filter(current_user, "students") or {"_id": ObjectId("000000000000000000000000")}
+
+
+async def _scoped_student_ids(db, current_user: dict):
+    """معرفات طلاب النطاق كنصوص — None للأدمن (بلا تقييد)"""
+    q = await _scope_query(current_user)
+    if not q:
+        return None
+    return {str(s["_id"]) async for s in db.students.find(q, {"_id": 1})}
+
+
+async def _assert_in_scope(db, current_user: dict, student_id: str):
+    q = await _scope_query(current_user)
+    if not q:
+        return
+    ok = ObjectId.is_valid(student_id) and await db.students.find_one({"$and": [q, {"_id": ObjectId(student_id)}]}, {"_id": 1})
+    if not ok:
+        raise HTTPException(status_code=403, detail="هذا الطالب خارج نطاق صلاحيتك (كليتك/قسمك)")
+
+
+async def _scope_departments(db, current_user: dict) -> list:
+    """أقسام النطاق لقوائم الفلاتر في الواجهة"""
+    dq = {} if is_admin(current_user) else (await get_scope_filter(current_user, "departments") or {"_id": ObjectId("000000000000000000000000")})
+    return [{"id": str(d["_id"]), "name": d.get("name", "")} async for d in db.departments.find(dq, {"name": 1}).sort("name", 1)]
 
 
 async def _seed_types(db):
@@ -86,9 +120,9 @@ async def list_fee_types(current_user: dict = Depends(get_current_user)):
 
 @router.put("/fees/types/{type_id}")
 async def update_fee_type(type_id: str, data: FeeTypeUpdate, current_user: dict = Depends(get_current_user)):
-    """تبديل نوع الرسوم بين سنوي ومتكرر (شهري)"""
-    if not can_manage_fees(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    """تبديل نوع الرسوم بين سنوي ومتكرر (شهري) — الأدمن فقط"""
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="إدارة أنواع الرسوم مقصورة على مدير النظام")
     db = get_db()
     t = await db.fee_types.find_one({"_id": ObjectId(type_id)})
     if not t:
@@ -101,8 +135,8 @@ async def update_fee_type(type_id: str, data: FeeTypeUpdate, current_user: dict 
 
 @router.post("/fees/types")
 async def create_fee_type(data: FeeTypeCreate, current_user: dict = Depends(get_current_user)):
-    if not can_manage_fees(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="إدارة أنواع الرسوم مقصورة على مدير النظام")
     db = get_db()
     name = data.name.strip()
     if not name:
@@ -118,8 +152,8 @@ async def create_fee_type(data: FeeTypeCreate, current_user: dict = Depends(get_
 
 @router.delete("/fees/types/{type_id}")
 async def delete_fee_type(type_id: str, current_user: dict = Depends(get_current_user)):
-    if not can_manage_fees(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if not is_admin(current_user):
+        raise HTTPException(status_code=403, detail="إدارة أنواع الرسوم مقصورة على مدير النظام")
     db = get_db()
     t = await db.fee_types.find_one({"_id": ObjectId(type_id)})
     if not t:
@@ -258,7 +292,8 @@ async def my_fee_status(current_user: dict = Depends(get_current_user)):
 
 @router.get("/fees/receipts")
 async def list_receipts(status: Optional[str] = None, type_id: Optional[str] = None,
-                        department_id: Optional[str] = None,
+                        department_id: Optional[str] = None, level: Optional[int] = None,
+                        search: Optional[str] = None, sort: Optional[str] = "newest",
                         current_user: dict = Depends(get_current_user)):
     if not can_manage_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -269,7 +304,10 @@ async def list_receipts(status: Optional[str] = None, type_id: Optional[str] = N
         q["status"] = status
     if type_id:
         q["type_id"] = type_id
-    receipts = await db.fee_receipts.find(q, {"image_base64": 0}).sort("uploaded_at", -1).to_list(1000)
+    scoped = await _scoped_student_ids(db, current_user)
+    if scoped is not None:
+        q["student_id"] = {"$in": list(scoped)}
+    receipts = await db.fee_receipts.find(q, {"image_base64": 0}).sort("uploaded_at", -1).to_list(2000)
     sids = [ObjectId(r["student_id"]) for r in receipts if ObjectId.is_valid(r["student_id"])]
     smap = {str(s["_id"]): s for s in await db.students.find({"_id": {"$in": sids}}).to_list(2000)}
     deps = {str(d["_id"]): d.get("name", "") for d in await db.departments.find({}, {"name": 1}).to_list(500)}
@@ -284,6 +322,14 @@ async def list_receipts(status: Optional[str] = None, type_id: Optional[str] = N
         s = smap.get(r["student_id"], {})
         if department_id and s.get("department_id") != department_id:
             continue
+        if level is not None and s.get("level") != level:
+            continue
+        if search:
+            _needle = search.strip().lower()
+            _hay = " ".join([s.get("full_name", ""), str(s.get("student_id", "")), r.get("receipt_no", "") or "",
+                             str(s.get("reference_number", "") or "")]).lower()
+            if _needle not in _hay:
+                continue
         out.append({
             "id": str(r["_id"]), "student_id": r["student_id"],
             "student_name": s.get("full_name", "؟"), "student_number": s.get("student_id", ""),
@@ -298,7 +344,11 @@ async def list_receipts(status: Optional[str] = None, type_id: Optional[str] = N
             "duplicate_receipt_no": bool(r.get("receipt_no")) and dup_nos.get(r.get("receipt_no"), 0) > 1,
             "manual_entry": bool(r.get("manual_entry")),
         })
-    return {"receipts": out, "academic_year": year}
+    if sort == "oldest":
+        out.sort(key=lambda x: x.get("uploaded_at", ""))
+    elif sort == "name":
+        out.sort(key=lambda x: x.get("student_name", ""))
+    return {"receipts": out, "academic_year": year, "total": len(out)}
 
 
 @router.get("/fees/receipts/{receipt_id}/image")
@@ -311,6 +361,8 @@ async def receipt_image(receipt_id: str, current_user: dict = Depends(get_curren
         student = await db.students.find_one({"user_id": current_user["id"]})
         if not student or str(student["_id"]) != r["student_id"]:
             raise HTTPException(status_code=403, detail="غير مصرح لك")
+    else:
+        await _assert_in_scope(db, current_user, r["student_id"])
     return {"image_base64": r.get("image_base64", "")}
 
 
@@ -324,6 +376,12 @@ async def _review(db, receipt_id, current_user, status, reason=""):
     r = await db.fee_receipts.find_one({"_id": ObjectId(receipt_id)})
     if not r:
         raise HTTPException(status_code=404, detail="السند غير موجود")
+    await _assert_in_scope(db, current_user, r["student_id"])
+    return await _apply_review(db, r, current_user, status, reason)
+
+
+async def _apply_review(db, r: dict, current_user: dict, status: str, reason: str = ""):
+    receipt_id = str(r["_id"])
     await db.fee_receipts.update_one({"_id": r["_id"]}, {"$set": {
         "status": status, "rejection_reason": reason,
         "reviewed_by": current_user.get("full_name") or current_user.get("username", ""),
@@ -354,6 +412,47 @@ async def reject_receipt(receipt_id: str, data: RejectBody, current_user: dict =
     return await _review(get_db(), receipt_id, current_user, "rejected", data.reason.strip())
 
 
+class BulkReviewBody(BaseModel):
+    receipt_ids: list
+    action: str  # approve | reject
+    reason: Optional[str] = ""
+
+
+@router.post("/fees/receipts/bulk-review")
+async def bulk_review(data: BulkReviewBody, current_user: dict = Depends(get_current_user)):
+    """✅ اعتماد/رفض جماعي للسندات المعلقة — يتحقق من النطاق لكل سند ويرجع تقريراً"""
+    if not can_manage_fees(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if data.action not in ("approve", "reject"):
+        raise HTTPException(status_code=400, detail="إجراء غير معروف")
+    reason = (data.reason or "").strip()
+    if data.action == "reject" and not reason:
+        raise HTTPException(status_code=400, detail="سبب الرفض مطلوب")
+    ids = [i for i in (data.receipt_ids or []) if ObjectId.is_valid(i)][:500]
+    if not ids:
+        raise HTTPException(status_code=400, detail="لم يتم تحديد أي سند")
+    db = get_db()
+    scoped = await _scoped_student_ids(db, current_user)
+    status = "approved" if data.action == "approve" else "rejected"
+    done, skipped = 0, []
+    for rid in ids:
+        r = await db.fee_receipts.find_one({"_id": ObjectId(rid)})
+        if not r:
+            skipped.append({"id": rid, "reason": "السند غير موجود"})
+            continue
+        if r.get("status") != "pending":
+            skipped.append({"id": rid, "reason": "السند ليس قيد المراجعة"})
+            continue
+        if scoped is not None and r["student_id"] not in scoped:
+            skipped.append({"id": rid, "reason": "خارج نطاق صلاحيتك"})
+            continue
+        await _apply_review(db, r, current_user, status, reason)
+        done += 1
+    verb = "اعتماد" if status == "approved" else "رفض"
+    return {"message": f"تم {verb} {done} سند" + (f" — تخطي {len(skipped)}" if skipped else ""),
+            "done": done, "skipped": skipped}
+
+
 @router.get("/fees/stats")
 async def fee_stats(current_user: dict = Depends(get_current_user)):
     if not can_manage_fees(current_user):
@@ -361,11 +460,15 @@ async def fee_stats(current_user: dict = Depends(get_current_user)):
     db = get_db()
     await _seed_types(db)
     year = await _academic_year(db)
-    total_students = await db.students.count_documents({"is_active": True})
+    scope_q = await _scope_query(current_user)
+    total_students = await db.students.count_documents({**scope_q, "is_active": True} if "_id" not in scope_q else {"$and": [scope_q, {"is_active": True}]})
+    scoped = await _scoped_student_ids(db, current_user)
     out = []
     async for t in db.fee_types.find({"is_active": {"$ne": False}}):
         tid = str(t["_id"])
         base = {"type_id": tid, "academic_year": year}
+        if scoped is not None:
+            base["student_id"] = {"$in": list(scoped)}
         approved = await db.fee_receipts.count_documents({**base, "status": "approved"})
         pending = await db.fee_receipts.count_documents({**base, "status": "pending"})
         rejected = await db.fee_receipts.count_documents({**base, "status": "rejected"})
@@ -378,7 +481,8 @@ async def fee_stats(current_user: dict = Depends(get_current_user)):
                     "rejected": rejected, "recurring": recurring, "paid_students": paid_students,
                     "not_paid": max(total_students - paid_students, 0) if recurring
                     else max(total_students - approved - pending - rejected, 0)})
-    return {"academic_year": year, "total_students": total_students, "stats": out}
+    return {"academic_year": year, "total_students": total_students, "stats": out,
+            "is_admin": is_admin(current_user), "departments": await _scope_departments(db, current_user)}
 
 
 class ManualPayment(BaseModel):
@@ -403,6 +507,7 @@ async def manual_payment(data: ManualPayment, current_user: dict = Depends(get_c
     student = await db.students.find_one({"_id": ObjectId(data.student_id)})
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    await _assert_in_scope(db, current_user, data.student_id)
     if data.type_id == "other" and not (data.other_label or "").strip():
         raise HTTPException(status_code=400, detail="اكتب نوع الرسوم في الحقل الحر")
     year = await _academic_year(db)
@@ -479,7 +584,8 @@ async def export_unpaid(type_id: str, current_user: dict = Depends(get_current_u
     status_txt = {"pending": "قيد المراجعة", "rejected": "مرفوض — بانتظار إعادة الرفع"}
     row = 3
     n = 1
-    async for s in db.students.find({"is_active": True}).sort([("department_id", 1), ("level", 1), ("full_name", 1)]):
+    _sq = await _scope_query(current_user)
+    async for s in db.students.find({"$and": [_sq, {"is_active": True}]} if _sq else {"is_active": True}).sort([("department_id", 1), ("level", 1), ("full_name", 1)]):
         if str(s["_id"]) in approved_ids:
             continue
         st = receipts.get(str(s["_id"]))
@@ -514,6 +620,7 @@ async def unapprove_receipt(receipt_id: str, current_user: dict = Depends(get_cu
         raise HTTPException(status_code=404, detail="السند غير موجود")
     if r.get("status") != "approved":
         raise HTTPException(status_code=400, detail="السند ليس معتمداً")
+    await _assert_in_scope(db, current_user, r["student_id"])
     await db.fee_receipts.update_one({"_id": r["_id"]}, {"$set": {
         "status": "pending", "reviewed_by": "", "reviewed_at": "", "rejection_reason": ""}})
     student = await db.students.find_one({"_id": ObjectId(r["student_id"])}) if ObjectId.is_valid(r["student_id"]) else None
@@ -556,6 +663,7 @@ async def student_receipts(student_id: str, current_user: dict = Depends(get_cur
     if not can_manage_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
+    await _assert_in_scope(db, current_user, student_id)
     receipts = await db.fee_receipts.find({"student_id": student_id}, {"image_base64": 0}).sort("uploaded_at", -1).to_list(500)
     return {"receipts": [{
         "id": str(r["_id"]), "type_name": r.get("type_name", ""), "statement": r.get("statement", ""),
@@ -581,8 +689,13 @@ async def payment_report(date_from: str, date_to: str, student_ids: Optional[str
     if status and status != "all":
         q["status"] = status
     sid_list = [s.strip() for s in (student_ids or "").split(",") if s.strip()]
+    scoped = await _scoped_student_ids(db, current_user)
     if sid_list:
+        if scoped is not None:
+            sid_list = [s for s in sid_list if s in scoped]
         q["student_id"] = {"$in": sid_list}
+    elif scoped is not None:
+        q["student_id"] = {"$in": list(scoped)}
     receipts = await db.fee_receipts.find(q, {"image_base64": 0}).to_list(20000)
     rows = []
     for r in receipts:
@@ -722,7 +835,9 @@ async def remind_unpaid(data: RemindBody, current_user: dict = Depends(get_curre
     title = f"💰 تذكير: {type_name}"
     msg = f"لم يصلنا سند دفع «{type_name}» للعام {year}. يرجى رفع السند من التطبيق."
     sent = 0
-    async for s in db.students.find({"is_active": True, "user_id": {"$exists": True, "$ne": ""}}):
+    _sq = await _scope_query(current_user)
+    _base = {"is_active": True, "user_id": {"$exists": True, "$ne": ""}}
+    async for s in db.students.find({"$and": [_sq, _base]} if _sq else _base):
         if str(s["_id"]) in covered:
             continue
         await _notify_student(db, s, title, msg)

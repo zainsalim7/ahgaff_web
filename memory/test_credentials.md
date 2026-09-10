@@ -7,11 +7,13 @@
 ## Dean
 - Username: Salim
 - Password: test1234  (تم إعادة التعيين 2026-06-20 لاختبار RBAC)
+- custom_permissions: manage_fee_receipts (أُضيفت 2026-09 لاختبار نطاق السندات المالية)
 
 ## Department Head
 - Username: Saeed
 - Password: test1234  (تم إعادة التعيين 2026-06-20 لاختبار RBAC)
 - Department: الدراسات الإسلامية / كلية البنات
+- custom_permissions: manage_fee_receipts (أُضيفت 2026-09 لاختبار نطاق السندات المالية)
 
 ## View-Curriculum Test User (Added 2026-06-26)
 - Username: view_curr_user

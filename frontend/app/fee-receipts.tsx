@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import api from '../src/services/api';
 
 const notify = (msg: string) => { if (Platform.OS === 'web') window.alert(msg); else Alert.alert('', msg); };
+const selStyle: any = { padding: 7, borderRadius: 8, border: '1px solid #ddd', fontSize: 12, fontFamily: 'inherit', background: '#fff', minWidth: 150 };
 
 export default function FeeReceiptsScreen() {
   const [tab, setTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
@@ -31,20 +32,67 @@ export default function FeeReceiptsScreen() {
   const [mStatement, setMStatement] = useState('');
   const [mDate, setMDate] = useState('');
   const [newTypeRecurring, setNewTypeRecurring] = useState(false);
+  // 🔎 بحث وفرز
+  const [search, setSearch] = useState('');
+  const [debounced, setDebounced] = useState('');
+  const [fType, setFType] = useState('');
+  const [fDept, setFDept] = useState('');
+  const [fLevel, setFLevel] = useState('');
+  const [sort, setSort] = useState<'newest' | 'oldest' | 'name'>('newest');
+  // ☑️ اعتماد جماعي
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkReason, setBulkReason] = useState('');
+  const [showBulkReject, setShowBulkReject] = useState(false);
+  const isAdmin = !!stats?.is_admin;
 
-  const load = useCallback(async () => {
+  useEffect(() => { const t = setTimeout(() => setDebounced(search.trim()), 350); return () => clearTimeout(t); }, [search]);
+
+  const loadMeta = useCallback(async () => {
     try {
-      const [r, s, t] = await Promise.all([
-        api.get('/fees/receipts', { params: { status: tab } }),
-        api.get('/fees/stats'),
-        api.get('/fees/types'),
-      ]);
-      setReceipts(r.data.receipts || []);
+      const [s, t] = await Promise.all([api.get('/fees/stats'), api.get('/fees/types')]);
       setStats(s.data);
       setTypes((t.data.types || []).filter((x: any) => x.id !== 'other'));
     } catch { notify('فشل التحميل — تأكد من صلاحيتك'); }
-  }, [tab]);
-  useEffect(() => { load(); }, [load]);
+  }, []);
+  const loadReceipts = useCallback(async () => {
+    try {
+      const params: any = { status: tab, sort };
+      if (debounced) params.search = debounced;
+      if (fType) params.type_id = fType;
+      if (fDept) params.department_id = fDept;
+      if (fLevel) params.level = parseInt(fLevel, 10);
+      const r = await api.get('/fees/receipts', { params });
+      setReceipts(r.data.receipts || []);
+    } catch { notify('فشل تحميل السندات'); }
+  }, [tab, sort, debounced, fType, fDept, fLevel]);
+  const load = useCallback(async () => { await Promise.all([loadMeta(), loadReceipts()]); }, [loadMeta, loadReceipts]);
+  useEffect(() => { loadMeta(); }, [loadMeta]);
+  useEffect(() => { loadReceipts(); }, [loadReceipts]);
+  useEffect(() => { setSelectedIds(new Set()); setSelectMode(false); }, [tab]);
+
+  const toggleSelect = (id: string) => setSelectedIds((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const isSuspicious = (r: any) => !!(r.duplicate_receipt_no || r.date_warning);
+  const selectAllVisible = () => {
+    const safe = receipts.filter((r) => !isSuspicious(r)).map((r) => r.id);
+    const skipped = receipts.length - safe.length;
+    setSelectedIds(new Set(safe));
+    if (skipped > 0) notify(`تم تحديد ${safe.length} سند — استُثني ${skipped} سند يحمل تحذيراً (رقم مكرر/تاريخ خارج العام) ويحتاج مراجعة فردية`);
+  };
+  const bulkReview = async (action: 'approve' | 'reject') => {
+    if (selectedIds.size === 0) { notify('لم يتم تحديد أي سند'); return; }
+    if (action === 'reject' && !bulkReason.trim()) { notify('اكتب سبب الرفض المشترك'); return; }
+    if (action === 'approve' && Platform.OS === 'web' && !window.confirm(`اعتماد ${selectedIds.size} سند دفعة واحدة؟`)) return;
+    setLoading(true);
+    try {
+      const r = await api.post('/fees/receipts/bulk-review', { receipt_ids: Array.from(selectedIds), action, reason: bulkReason.trim() });
+      const sk = (r.data.skipped || []) as any[];
+      notify(r.data.message + (sk.length ? `\n${sk.map((x) => `• ${x.reason}`).join('\n')}` : ''));
+      setSelectedIds(new Set()); setSelectMode(false); setShowBulkReject(false); setBulkReason('');
+      load();
+    } catch (e: any) { notify(e?.response?.data?.detail || 'فشلت العملية'); }
+    finally { setLoading(false); }
+  };
 
   const openReceipt = async (item: any) => {
     setSelected(item); setImage(''); setRejectReason('');
@@ -152,10 +200,12 @@ export default function FeeReceiptsScreen() {
                 style={{ backgroundColor: '#e8f5e9', borderRadius: 10, padding: 10, justifyContent: 'center' }}>
                 <Text style={{ color: '#2e7d32', fontWeight: '800', fontSize: 12 }}>✍️ تسجيل دفع يدوي</Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => setShowTypes(true)} testID="fee-types-btn"
-                style={{ backgroundColor: '#e8eaf6', borderRadius: 10, padding: 10, justifyContent: 'center' }}>
-                <Text style={{ color: '#3949ab', fontWeight: '800', fontSize: 12 }}>⚙️ أنواع الرسوم</Text>
-              </TouchableOpacity>
+              {isAdmin && (
+                <TouchableOpacity onPress={() => setShowTypes(true)} testID="fee-types-btn"
+                  style={{ backgroundColor: '#e8eaf6', borderRadius: 10, padding: 10, justifyContent: 'center' }}>
+                  <Text style={{ color: '#3949ab', fontWeight: '800', fontSize: 12 }}>⚙️ أنواع الرسوم</Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
           <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 12 }}>
@@ -166,12 +216,68 @@ export default function FeeReceiptsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          {receipts.length === 0 && <Text style={{ textAlign: 'center', color: '#999', marginTop: 30 }}>لا توجد سندات</Text>}
+          <View style={{ backgroundColor: '#fff', borderRadius: 10, padding: 10, marginBottom: 12, gap: 8 }} testID="fee-filter-bar">
+            <View style={{ flexDirection: 'row-reverse', alignItems: 'center', borderWidth: 1, borderColor: '#ddd', borderRadius: 8, paddingHorizontal: 8 }}>
+              <Ionicons name="search" size={16} color="#999" />
+              <TextInput value={search} onChangeText={setSearch} placeholder="بحث: اسم الطالب / رقم القيد / رقم السند"
+                style={{ flex: 1, padding: 8, textAlign: 'right', fontSize: 12 }} testID="fee-search-input" />
+              {!!search && <TouchableOpacity onPress={() => setSearch('')} testID="fee-search-clear"><Ionicons name="close-circle" size={16} color="#999" /></TouchableOpacity>}
+            </View>
+            {Platform.OS === 'web' && (
+              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+                <select value={fType} onChange={(e: any) => setFType(e.target.value)} data-testid="fee-filter-type" style={selStyle}>
+                  <option value="">كل أنواع الرسوم</option>
+                  {types.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+                <select value={fDept} onChange={(e: any) => setFDept(e.target.value)} data-testid="fee-filter-dept" style={selStyle}>
+                  <option value="">{isAdmin ? 'كل الأقسام' : 'كل أقسام نطاقي'}</option>
+                  {(stats?.departments || []).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                </select>
+                <select value={fLevel} onChange={(e: any) => setFLevel(e.target.value)} data-testid="fee-filter-level" style={selStyle}>
+                  <option value="">كل المستويات</option>
+                  {[1, 2, 3, 4, 5, 6].map((l) => <option key={l} value={String(l)}>المستوى {l}</option>)}
+                </select>
+                <select value={sort} onChange={(e: any) => setSort(e.target.value)} data-testid="fee-sort" style={selStyle}>
+                  <option value="newest">الأحدث أولاً</option>
+                  <option value="oldest">الأقدم أولاً</option>
+                  <option value="name">حسب اسم الطالب</option>
+                </select>
+                {(fType || fDept || fLevel || search) && (
+                  <TouchableOpacity onPress={() => { setFType(''); setFDept(''); setFLevel(''); setSearch(''); }} testID="fee-filter-reset">
+                    <Text style={{ color: '#c62828', fontSize: 11, fontWeight: '800' }}>✖ مسح الفلاتر</Text>
+                  </TouchableOpacity>
+                )}
+                <Text style={{ fontSize: 11, color: '#666', marginRight: 'auto' }} testID="fee-count">{receipts.length} سند</Text>
+              </View>
+            )}
+            {tab === 'pending' && receipts.length > 0 && (
+              <View style={{ flexDirection: 'row-reverse', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                <TouchableOpacity onPress={() => { setSelectMode(!selectMode); setSelectedIds(new Set()); }} testID="fee-select-mode-btn"
+                  style={{ backgroundColor: selectMode ? '#1565c0' : '#e3f2fd', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 }}>
+                  <Text style={{ color: selectMode ? '#fff' : '#1565c0', fontWeight: '800', fontSize: 12 }}>{selectMode ? 'إلغاء التحديد' : '☑️ تحديد للاعتماد الجماعي'}</Text>
+                </TouchableOpacity>
+                {selectMode && (
+                  <TouchableOpacity onPress={selectAllVisible} testID="fee-select-all-btn" style={{ backgroundColor: '#f0f0f0', borderRadius: 8, paddingVertical: 6, paddingHorizontal: 12 }}>
+                    <Text style={{ fontWeight: '800', fontSize: 12, color: '#333' }}>تحديد الكل (المعروض)</Text>
+                  </TouchableOpacity>
+                )}
+                {selectMode && <Text style={{ fontSize: 12, color: '#1565c0', fontWeight: '800' }} testID="fee-selected-count">المحدد: {selectedIds.size}</Text>}
+              </View>
+            )}
+          </View>
+          {receipts.length === 0 && <Text style={{ textAlign: 'center', color: '#999', marginTop: 30 }} testID="fee-empty">لا توجد سندات</Text>}
           {receipts.map((item) => (
-            <TouchableOpacity key={item.id} onPress={() => openReceipt(item)} testID={`fee-receipt-${item.id}`}
-              style={{ backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8 }}>
-              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between' }}>
-                <Text style={{ fontWeight: '800', fontSize: 13 }}>{item.student_name}</Text>
+            <TouchableOpacity key={item.id} onPress={() => (selectMode ? toggleSelect(item.id) : openReceipt(item))} testID={`fee-receipt-${item.id}`}
+              style={{ backgroundColor: selectedIds.has(item.id) ? '#e3f2fd' : '#fff', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: selectedIds.has(item.id) ? 1 : 0, borderColor: '#1565c0' }}>
+              <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8 }}>
+                  {selectMode && (
+                    <TouchableOpacity onPress={() => toggleSelect(item.id)} testID={`fee-check-${item.id}`}>
+                      <Ionicons name={selectedIds.has(item.id) ? 'checkbox' : 'square-outline'} size={20} color="#1565c0" />
+                    </TouchableOpacity>
+                  )}
+                  <Text style={{ fontWeight: '800', fontSize: 13 }}>{item.student_name}</Text>
+                </View>
                 <Text style={{ fontSize: 11, color: '#1565c0', fontWeight: '800' }}>{item.type_name}</Text>
               </View>
               <Text style={{ textAlign: 'right', fontSize: 11, color: '#666', marginTop: 3 }}>
@@ -195,6 +301,37 @@ export default function FeeReceiptsScreen() {
             </TouchableOpacity>
           ))}
         </ScrollView>
+        {selectMode && selectedIds.size > 0 && (
+          <View style={{ flexDirection: 'row-reverse', gap: 8, padding: 12, backgroundColor: '#fff', borderTopWidth: 1, borderColor: '#e0e0e0', alignItems: 'center' }} testID="fee-bulk-bar">
+            <TouchableOpacity disabled={loading} onPress={() => bulkReview('approve')} testID="fee-bulk-approve-btn"
+              style={{ flex: 1, backgroundColor: '#2e7d32', borderRadius: 8, padding: 12 }}>
+              <Text style={{ color: '#fff', fontWeight: '800', textAlign: 'center' }}>✅ اعتماد المحدد ({selectedIds.size})</Text>
+            </TouchableOpacity>
+            <TouchableOpacity disabled={loading} onPress={() => setShowBulkReject(true)} testID="fee-bulk-reject-btn"
+              style={{ flex: 1, backgroundColor: '#c62828', borderRadius: 8, padding: 12 }}>
+              <Text style={{ color: '#fff', fontWeight: '800', textAlign: 'center' }}>❌ رفض المحدد</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <Modal visible={showBulkReject} transparent animationType="fade" onRequestClose={() => setShowBulkReject(false)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 16, width: '100%', maxWidth: 420 }} testID="fee-bulk-reject-modal">
+              <Text style={{ fontWeight: '800', textAlign: 'right', marginBottom: 8 }}>رفض {selectedIds.size} سند — سبب مشترك</Text>
+              <TextInput value={bulkReason} onChangeText={setBulkReason} placeholder="سبب الرفض (سيُرسل لكل الطلاب المحددين)"
+                style={{ borderWidth: 1, borderColor: '#ddd', borderRadius: 8, padding: 8, textAlign: 'right', fontSize: 12 }} testID="fee-bulk-reason" />
+              <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 10 }}>
+                <TouchableOpacity disabled={loading} onPress={() => bulkReview('reject')} testID="fee-bulk-reject-confirm"
+                  style={{ flex: 1, backgroundColor: '#c62828', borderRadius: 8, padding: 10 }}>
+                  <Text style={{ color: '#fff', fontWeight: '800', textAlign: 'center' }}>تأكيد الرفض</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setShowBulkReject(false)} style={{ flex: 1, borderRadius: 8, padding: 10, borderWidth: 1, borderColor: '#ddd' }}>
+                  <Text style={{ textAlign: 'center', color: '#333', fontWeight: '800' }}>إلغاء</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
 
         <Modal visible={!!selected} transparent animationType="fade" onRequestClose={() => setSelected(null)}>
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
