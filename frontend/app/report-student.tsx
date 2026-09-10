@@ -1,4 +1,7 @@
 import { goBack } from '../src/utils/navigation';
+import { StudentDetailedReport } from '../src/components/StudentDetailedReport';
+import api from '../src/services/api';
+import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -47,6 +50,7 @@ export default function StudentReport() {
   
   // بيانات التقرير
   const [studentData, setStudentData] = useState<any>(null);
+  const [detailed, setDetailed] = useState<any>(null);
 
   // جلب بيانات الفلاتر عند الدخول للصفحة
   useEffect(() => {
@@ -188,12 +192,17 @@ export default function StudentReport() {
     
     setLoading(true);
     try {
-      const reportRes = await reportsAPI.getStudentReport(studentId);
+      const [reportRes, detRes] = await Promise.all([
+        reportsAPI.getStudentReport(studentId),
+        api.get(`/reports/student/${studentId}/detailed`),
+      ]);
       setStudentData(reportRes.data);
-    } catch (error) {
+      setDetailed(detRes.data);
+    } catch (error: any) {
       console.error('Error fetching report:', error);
-      Alert.alert('خطأ', 'فشل في جلب تقرير الطالب');
+      Alert.alert('خطأ', error?.response?.data?.detail || 'فشل في جلب تقرير الطالب');
       setStudentData(null);
+      setDetailed(null);
     } finally {
       setLoading(false);
     }
@@ -202,7 +211,8 @@ export default function StudentReport() {
   // عند تغيير الطالب المحدد - لا نُنفذ التقرير تلقائياً، فقط نُحدّث الاختيار
   const handleStudentChange = (studentId: string) => {
     setSelectedStudent(studentId);
-    setStudentData(null); // مسح البيانات الحالية حتى يضغط المستخدم "تنفيذ التقرير"
+    setStudentData(null);
+    setDetailed(null); // مسح البيانات الحالية حتى يضغط المستخدم "تنفيذ التقرير"
   };
 
   // تنفيذ التقرير (بضغط الزر)
@@ -215,8 +225,35 @@ export default function StudentReport() {
   };
 
   // دالة تصدير PDF
+  const downloadDetailed = async (fmt: 'pdf' | 'excel') => {
+    const res = await api.get(`/reports/student/${detailed.student.id}/detailed/export`, { params: { fmt }, responseType: 'blob' });
+    const st = detailed.student;
+    const fallback = exportName(['تقرير حضور الطالب', st.full_name, st.department_name, st.level ? `المستوى ${st.level}` : '', st.section ? `شعبة ${st.section}` : ''], fmt === 'pdf' ? 'pdf' : 'xlsx');
+    const name = filenameFromResponse(res, fallback);
+    if (Platform.OS === 'web') {
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const a = document.createElement('a');
+      a.href = url; a.download = name; a.click();
+      window.URL.revokeObjectURL(url);
+    } else {
+      const path = `${FileSystem.documentDirectory}${name}`;
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        await FileSystem.writeAsStringAsync(path, (reader.result as string).split(',')[1], { encoding: FileSystem.EncodingType.Base64 });
+        await Sharing.shareAsync(path);
+      };
+      reader.readAsDataURL(new Blob([res.data]));
+    }
+  };
+
   const handleExportPDF = async () => {
     if (!studentData?.student) return;
+    if (!isStudent && detailed) {
+      try { setExportingPDF(true); await downloadDetailed('pdf'); }
+      catch { Alert.alert('خطأ', 'فشل في تصدير PDF'); }
+      finally { setExportingPDF(false); }
+      return;
+    }
     try {
       setExportingPDF(true);
       const reportData = prepareStudentReportData(studentData.student, studentData.courses || []);
@@ -231,6 +268,12 @@ export default function StudentReport() {
   // دالة تصدير Excel
   const exportToExcel = async () => {
     if (!studentData?.student?.id) return;
+    if (!isStudent && detailed) {
+      try { setExporting(true); await downloadDetailed('excel'); }
+      catch { Alert.alert('خطأ', 'فشل في تصدير Excel'); }
+      finally { setExporting(false); }
+      return;
+    }
     
     try {
       setExporting(true);
@@ -271,6 +314,7 @@ export default function StudentReport() {
     setSelectedStudent('');
     setStudentSearch('');
     setStudentData(null);
+    setDetailed(null);
   };
 
   // إذا كان الـ auth قيد التحميل
@@ -298,6 +342,7 @@ export default function StudentReport() {
             <TouchableOpacity 
               style={styles.exportBtn}
               onPress={handleExportPDF}
+              testID="sr-export-pdf-btn"
               disabled={exportingPDF || !studentData}
               accessibilityLabel="تصدير PDF"
             >
@@ -311,6 +356,7 @@ export default function StudentReport() {
           <TouchableOpacity 
             style={styles.exportBtn}
             onPress={exportToExcel}
+            testID="sr-export-excel-btn"
             disabled={exporting || !studentData}
             accessibilityLabel="تصدير Excel"
           >
@@ -483,8 +529,11 @@ export default function StudentReport() {
           </View>
         )}
 
+        {/* التقرير المفصّل الجديد (الإدارة) */}
+        {!isStudent && detailed && !loading && <StudentDetailedReport data={detailed} />}
+
         {/* بيانات الطالب */}
-        {studentData && !loading && (
+        {studentData && !loading && (isStudent || !detailed) && (
           <>
             {/* معلومات الطالب */}
             <View style={styles.studentCard}>
