@@ -76,6 +76,7 @@ async def get_my_notifications(
             "title": n.get("title", ""),
             "message": n.get("message", ""),
             "type": n.get("type", "info"),
+            "data": n.get("data") or {},
             "is_read": n.get("is_read", False),
             "course_name": n.get("course_name", ""),
             "created_at": n.get("created_at", ""),

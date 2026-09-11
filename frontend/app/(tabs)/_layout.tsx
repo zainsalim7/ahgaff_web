@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, router as appRouter } from 'expo-router';
 import { View, Text, StyleSheet, Platform, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../../src/store/authStore';
@@ -70,11 +70,18 @@ export default function TabsLayout() {
           });
         } else {
           // Mobile: استخدم Expo Notifications
-          const { registerForPushNotifications, addNotificationReceivedListener } = await import('../../src/services/pushNotifications');
+          const { registerForPushNotifications, addNotificationReceivedListener, addNotificationResponseListener } = await import('../../src/services/pushNotifications');
           await registerForPushNotifications();
           
           addNotificationReceivedListener((notification) => {
             console.log('Notification received:', notification);
+          });
+          // 🔗 النقر على الإشعار يفتح المسار المرسل في data.route (مثل بوابة الوافدين)
+          addNotificationResponseListener((response) => {
+            const route = (response?.notification?.request?.content?.data as any)?.route;
+            if (typeof route === 'string' && route.startsWith('/')) {
+              appRouter.push(route as any);
+            }
           });
         }
       } catch (error) {

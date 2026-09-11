@@ -226,6 +226,10 @@ export default function NotificationsPage() {
                 if (!notification.is_read) {
                   markAsRead(notification.id);
                 }
+                const route = (notification as any).data?.route;
+                if (route && typeof route === 'string' && route.startsWith('/')) {
+                  router.push(route as any);
+                }
               }}
             >
               <View style={styles.notificationHeader}>

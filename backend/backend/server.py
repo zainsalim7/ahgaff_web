@@ -17553,6 +17553,8 @@ from routes.fee_receipts import router as fee_receipts_router
 app.include_router(fee_receipts_router, prefix="/api")
 from routes.student_report import router as student_report_router
 app.include_router(student_report_router, prefix="/api")
+from routes.internal_push import router as internal_push_router
+app.include_router(internal_push_router, prefix="/api")
 app.include_router(schedule_import_router, prefix="/api")
 app.include_router(schedule_resolver_router, prefix="/api")
 app.include_router(lectures_purge_router, prefix="/api")
