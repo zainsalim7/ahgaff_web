@@ -12877,6 +12877,38 @@ async def export_absent_students_excel(
         headers=ar_export_headers(_fn)
     )
 
+@api_router.get("/export/report/teacher-workload/pdf")
+async def export_teacher_workload_pdf(
+    teacher_id: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    department_id: Optional[str] = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """📄 تصدير تقرير نصاب المدرسين إلى PDF احترافي (reportlab)"""
+    from routes.teacher_workload_pdf import build_workload_pdf
+    from routes.deps import export_filename, export_headers
+    report = await get_teacher_workload_report(teacher_id, start_date, end_date, current_user)
+    scope_label = ""
+    if department_id:
+        report["teachers"] = [t for t in report["teachers"] if t.get("department_id") == department_id]
+        dep = await db.departments.find_one({"_id": ObjectId(department_id)}, {"name": 1}) if ObjectId.is_valid(department_id) else None
+        scope_label = (dep or {}).get("name", "")
+        ts = report["teachers"]
+        report["summary"] = {
+            "total_teachers": len(ts),
+            "total_required_hours": round(sum(t["summary"]["required_hours"] for t in ts), 2),
+            "total_scheduled_hours": round(sum(t["summary"]["total_scheduled_hours"] for t in ts), 2),
+            "total_actual_hours": round(sum(t["summary"]["total_actual_hours"] for t in ts), 2),
+            "total_difference_hours": round(sum(t["summary"]["difference_hours"] for t in ts), 2),
+        }
+    if len(report["teachers"]) == 1:
+        scope_label = report["teachers"][0].get("teacher_name", scope_label)
+    buf = build_workload_pdf(report, scope_label, current_user.get("full_name", ""))
+    fname = export_filename("تقرير نصاب المدرسين", scope_label, f"{str(report['period']['start_date'])[:10]} الى {str(report['period']['end_date'])[:10]}", ext="pdf")
+    return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(fname))
+
+
 @api_router.get("/export/report/teacher-workload/excel")
 async def export_teacher_workload_excel(
     teacher_id: Optional[str] = None,
