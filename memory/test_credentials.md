@@ -68,3 +68,7 @@
 - Username: president
 - Password: test1234
 - Role: university_president (role_id 698c93119a944c07ac7f80c1 «رئيس الجامعة») — نطاق الجامعة كلها، أي POST/PUT/DELETE → 403 «حسابك للاطلاع فقط»
+
+## Fee staff (موظفو السندات حسب نوع الرسوم — أُنشئوا 2026-09)
+- fee_dorm / test1234 — employee، كلية الشريعة والقانون، custom_permissions: manage_fee_receipts, view_students — مسؤول عن «رسوم السكن الداخلي»
+- fee_general / test1234 — employee، نفس الكلية — مسؤول عن «تجديد القيد الدراسي»

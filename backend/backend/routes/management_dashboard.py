@@ -283,7 +283,8 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
     # ── المالية
     finance = None
     if sections["finance"] and (scope["is_admin"] or has_permission(user, "manage_fee_receipts")):
-        finance = await _finance(db, dept_ids, active_sem, students_count)
+        from .fee_receipts import _allowed_type_ids
+        finance = await _finance(db, dept_ids, active_sem, students_count, await _allowed_type_ids(db, user))
 
     # ── سجل النشاط
     act_q = {"action": {"$nin": ["view_page", "view_report"]}}
@@ -506,7 +507,7 @@ async def _phase2(db, scope, dept_ids, lectures, today_lectures, course_map, act
     return {"teachers": teachers, "students": students, "rooms": rooms}
 
 
-async def _finance(db, dept_ids, active_sem, total_students) -> dict:
+async def _finance(db, dept_ids, active_sem, total_students, allowed_types=None) -> dict:
     year = (active_sem or {}).get("academic_year") or ""
     if not year:
         try:
@@ -518,6 +519,8 @@ async def _finance(db, dept_ids, active_sem, total_students) -> dict:
     if dept_ids is not None:
         sid_filter = [str(s["_id"]) for s in await db.students.find({"department_id": {"$in": dept_ids}}, {"_id": 1}).to_list(50000)]
     types = await db.fee_types.find({"is_active": {"$ne": False}}).to_list(100)
+    if allowed_types is not None:
+        types = [t for t in types if str(t["_id"]) in allowed_types]
     out = []
     tot_amount = 0.0
     for t in types:

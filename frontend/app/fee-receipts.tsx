@@ -21,6 +21,10 @@ export default function FeeReceiptsScreen() {
   const [image, setImage] = useState('');
   const [rejectReason, setRejectReason] = useState('');
   const [showTypes, setShowTypes] = useState(false);
+  // 🎯 المسؤولون عن كل نوع رسوم (الأدمن)
+  const [staff, setStaff] = useState<{ id: string; name: string; username: string }[]>([]);
+  const [respType, setRespType] = useState<any>(null);
+  const [respIds, setRespIds] = useState<string[]>([]);
   const [newType, setNewType] = useState('');
   const [loading, setLoading] = useState(false);
   // ✍️ تسجيل دفع يدوي
@@ -165,6 +169,15 @@ export default function FeeReceiptsScreen() {
   const addType = async () => {
     if (!newType.trim()) return;
     try { await api.post('/fees/types', { name: newType.trim(), recurring: newTypeRecurring }); setNewType(''); setNewTypeRecurring(false); load(); }
+    catch (e: any) { notify(e?.response?.data?.detail || 'فشل'); }
+  };
+  const openResp = async (t: any) => {
+    setRespType(t); setRespIds(t.responsible_user_ids || []);
+    if (staff.length === 0) { try { const r = await api.get('/fees/staff'); setStaff(r.data.staff || []); } catch { /* ignore */ } }
+  };
+  const saveResp = async () => {
+    if (!respType) return;
+    try { await api.put(`/fees/types/${respType.id}`, { responsible_user_ids: respIds }); setRespType(null); load(); }
     catch (e: any) { notify(e?.response?.data?.detail || 'فشل'); }
   };
   const toggleRecurring = async (t: any) => {
@@ -459,10 +472,17 @@ export default function FeeReceiptsScreen() {
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
             <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 16, width: '100%', maxWidth: 420 }} testID="fee-types-modal">
               <Text style={{ fontWeight: '800', textAlign: 'right', marginBottom: 8 }}>أنواع الرسوم</Text>
-              {types.map((t) => (
-                <View key={t.id} style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, borderBottomWidth: 1, borderColor: '#f0f0f0' }}>
+              <Text style={{ fontSize: 11, color: '#666', textAlign: 'right', marginBottom: 6 }}>👤 المسؤولون: من تحدده يرى سندات هذا النوع ويعمّدها وحده؛ النوع بلا مسؤول يظهر لكل موظفي السندات.</Text>
+              {types.filter((t) => t.id !== 'other').map((t) => (
+                <View key={t.id} style={{ paddingVertical: 6, borderBottomWidth: 1, borderColor: '#f0f0f0' }}>
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text style={{ fontSize: 13 }}>{t.name}{t.builtin ? '  (أساسي)' : ''}{t.recurring ? '  🔁' : ''}</Text>
                   <View style={{ flexDirection: 'row-reverse', gap: 8, alignItems: 'center' }}>
+                    <TouchableOpacity onPress={() => openResp(t)} testID={`fee-type-resp-${t.id}`}
+                      style={{ backgroundColor: '#e3f2fd', borderRadius: 12, paddingVertical: 3, paddingHorizontal: 8, flexDirection: 'row-reverse', alignItems: 'center', gap: 4 }}>
+                      <Ionicons name="person-outline" size={12} color="#1565c0" />
+                      <Text style={{ fontSize: 10, fontWeight: '800', color: '#1565c0' }}>{(t.responsible_user_ids || []).length ? `${t.responsible_user_ids.length} مسؤول` : 'الجميع'}</Text>
+                    </TouchableOpacity>
                     <TouchableOpacity onPress={() => toggleRecurring(t)} testID={`fee-type-recurring-${t.id}`}
                       style={{ backgroundColor: t.recurring ? '#e8f5e9' : '#f0f0f0', borderRadius: 12, paddingVertical: 3, paddingHorizontal: 8 }}>
                       <Text style={{ fontSize: 10, fontWeight: '800', color: t.recurring ? '#2e7d32' : '#666' }}>{t.recurring ? 'شهري 🔁' : 'سنوي'}</Text>
@@ -473,6 +493,10 @@ export default function FeeReceiptsScreen() {
                       </TouchableOpacity>
                     )}
                   </View>
+                </View>
+                {!!(t.responsible_names || []).length && (
+                  <Text style={{ fontSize: 10.5, color: '#1565c0', textAlign: 'right', marginTop: 2 }} testID={`fee-type-resp-names-${t.id}`}>👤 {t.responsible_names.join('، ')}</Text>
+                )}
                 </View>
               ))}
               <TouchableOpacity onPress={() => setNewTypeRecurring(!newTypeRecurring)} testID="fee-type-recurring-check"
@@ -490,6 +514,34 @@ export default function FeeReceiptsScreen() {
               <TouchableOpacity onPress={() => setShowTypes(false)} style={{ marginTop: 10, padding: 6 }}>
                 <Text style={{ textAlign: 'center', color: '#1565c0', fontWeight: '800' }}>إغلاق</Text>
               </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal visible={!!respType} transparent animationType="fade" onRequestClose={() => setRespType(null)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 16, width: '100%', maxWidth: 420 }} testID="fee-resp-modal">
+              <Text style={{ fontWeight: '800', textAlign: 'right' }}>المسؤولون عن «{respType?.name}»</Text>
+              <Text style={{ fontSize: 11, color: '#666', textAlign: 'right', marginTop: 4, marginBottom: 8 }}>اختر موظفاً أو أكثر — بلا اختيار = يظهر لكل موظفي السندات. القيادات (الأدمن/العميد/رئيس القسم) ترى كل الأنواع دائماً.</Text>
+              {staff.length === 0 && <Text style={{ fontSize: 12, color: '#999', textAlign: 'center', padding: 10 }}>لا يوجد موظفون لديهم صلاحية السندات</Text>}
+              {staff.map((u) => {
+                const on = respIds.includes(u.id);
+                return (
+                  <TouchableOpacity key={u.id} onPress={() => setRespIds(on ? respIds.filter((i) => i !== u.id) : [...respIds, u.id])} testID={`fee-resp-user-${u.id}`}
+                    style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingVertical: 7, borderBottomWidth: 1, borderColor: '#f0f0f0' }}>
+                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={18} color="#1565c0" />
+                    <Text style={{ fontSize: 13, flex: 1, textAlign: 'right' }}>{u.name} <Text style={{ color: '#999', fontSize: 11 }}>({u.username})</Text></Text>
+                  </TouchableOpacity>
+                );
+              })}
+              <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 12 }}>
+                <TouchableOpacity onPress={saveResp} style={{ flex: 1, backgroundColor: '#1565c0', borderRadius: 8, padding: 10 }} testID="fee-resp-save">
+                  <Text style={{ color: '#fff', fontWeight: '800', textAlign: 'center', fontSize: 12 }}>حفظ</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setRespType(null)} style={{ flex: 1, backgroundColor: '#f0f0f0', borderRadius: 8, padding: 10 }} testID="fee-resp-cancel">
+                  <Text style={{ fontWeight: '800', textAlign: 'center', fontSize: 12 }}>إلغاء</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </Modal>
