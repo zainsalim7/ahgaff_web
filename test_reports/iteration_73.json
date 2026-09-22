@@ -1,0 +1,35 @@
+{
+  "summary": "Tested unified reports refactor: backend PDF/Excel exports + JSON base + RBAC (25/25 pytest passed) and frontend Playwright of all 10 report screens. All hero (data-testid=*-hero), report-back-btn, run-report-btn present and functional. Real downloads verified with Arabic X-Filename headers on attendance-overview, teacher-delays, teacher-attendance, course (auto-run via ?id=), teacher-summary. Threshold chips, date controls, tabs (tab-warnings/tab-deprivations, tab-by-teacher/tab-by-lecture, tab-students/tab-lectures) all appear after running the report. No crashes on empty datasets; export buttons hidden when result empty (canExport) as intended.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All screens (React Native Web)", "issues": [
+        "Console warnings: 'shadow*' style props deprecated (use boxShadow), props.pointerEvents deprecated (use style.pointerEvents) — non-blocking",
+        "Console error (non-fatal): 'Unexpected text node: . A text node cannot be a child of a <View>.' emitted on some screens (login redirect, /report-student, /report-lesson-completion). Likely a stray whitespace/string inside a <View> in one of the shared components. Not blocking rendering."
+      ]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_reports_pdf.py",
+    "/app/test_reports/pytest/iter73.xml"
+  ],
+  "action_items": [
+    "Clean up React Native Web console warnings: replace shadow* props with boxShadow and props.pointerEvents with style.pointerEvents in ReportShell / hero components.",
+    "Investigate 'Unexpected text node' React warning — likely a bare string/space inside a <View> in ReportShell, ReportEmpty, or the student/lesson-completion screens. Non-blocking but should be cleaned."
+  ],
+  "critical_code_review_comments": [
+    "PDF endpoints correctly return application/pdf with X-Filename header carrying Arabic-encoded name; downloads verified end-to-end.",
+    "RBAC: teacher without export_reports permission correctly gets 403 on /reports/attendance-overview/export-pdf, and can export own /reports/teacher-summary/export-pdf without teacher_id (200) as designed.",
+    "canExport gating hides PDF/Excel buttons on empty results (warnings, daily) — this is intentional but may confuse users; consider disabled+tooltip instead.",
+    "test account teacher180156 has no linked teacher record (returns 404 on teacher-summary) — used '9999' (حسن صالح) for RBAC teacher tests instead."
+  ],
+  "updated_files": ["/app/backend/tests/test_reports_pdf.py"],
+  "success_rate": {"backend": "100% (25/25)", "frontend": "100% (10/10 screens loaded; all tested exports downloaded; all interactive testIDs verified)"},
+  "test_credentials": "admin/admin123, teacher 9999/teacher123",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file /app/backend/tests/test_reports_pdf.py covers all 6 new PDF endpoints + 8 legacy Excel/PDF + 9 base JSON + 2 RBAC checks. Uses teacher '9999' for RBAC (teacher180156 has no teacher doc). Frontend tested via public URL; teacher-input in /report-teacher-summary is a button (not fillable) — click it and then click a [data-testid^='teacher-option-'] child."
+}

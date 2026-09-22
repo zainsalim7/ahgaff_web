@@ -18,7 +18,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { departmentsAPI, coursesAPI, reportsAPI, exportAPI, facultiesAPI, API_URL } from '../src/services/api';
@@ -305,7 +305,7 @@ export default function ReportsScreen() {
   const handleExportStudents = async () => {
     setExporting('students');
     try {
-      const response = await exportAPI.exportStudents(selectedDept || undefined);
+      const response = await exportAPI.exportStudents(selectedDept ? { department_id: selectedDept } : undefined);
       await downloadBlob(response.data, filenameFromResponse(response, exportName(['كشف الطلاب', departments.find(d => d.id === selectedDept)?.name], 'xlsx')));
       Alert.alert('نجاح', 'تم تصدير قائمة الطلاب');
     } catch (error) {
@@ -1170,13 +1170,6 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
-  },
-  filterLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 8,
-    marginTop: 12,
   },
   filterScrollRow: {
     marginBottom: 8,

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { OfflineAttendance } from '../types';
-import * as uuid from 'expo-crypto';
 
 interface OfflineState {
   pendingAttendance: OfflineAttendance[];
