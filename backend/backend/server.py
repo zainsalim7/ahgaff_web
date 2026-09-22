@@ -12083,6 +12083,188 @@ async def get_teacher_delays_report(
     }
 
 
+@api_router.get("/reports/teacher-delays/export-pdf")
+async def export_teacher_delays_pdf(
+    start_date: str = None,
+    end_date: str = None,
+    department_id: str = None,
+    faculty_id: str = None,
+    current_user: dict = Depends(get_current_user)
+):
+    """📄 تقرير تأخر المعلمين PDF احترافي"""
+    if not has_permission(current_user, "export_reports"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    from routes.report_pdf import build_report_pdf
+    from routes.deps import export_filename, export_headers
+    report = await get_teacher_delays_report(start_date, end_date, department_id, faculty_id, current_user)
+    teachers, s = report["teachers"], report["summary"]
+    scope = ""
+    if department_id and ObjectId.is_valid(department_id):
+        dep = await db.departments.find_one({"_id": ObjectId(department_id)}, {"name": 1})
+        scope = (dep or {}).get("name", "")
+    rows = [["#", "المعلم", "الرقم الوظيفي", "المحاضرات", "متأخرة", "نسبة التأخر", "متوسط التأخير (د)", "أقصى تأخير (د)"]]
+    for i, t in enumerate(teachers, 1):
+        pct = round(t["delayed_lectures"] * 100 / t["total_lectures"], 1) if t.get("total_lectures") else 0
+        rows.append([i, t["teacher_name"], t.get("employee_id", ""), t["total_lectures"], t["delayed_lectures"], f"{pct}%", t["avg_delay_minutes"], t["max_delay_minutes"]])
+    detail = [["المعلم", "المقرر", "التاريخ", "الوقت المحدد", "بدء التحضير", "التأخير (د)"]]
+    for t in teachers:
+        for d in t.get("delays", []):
+            detail.append([t["teacher_name"], d.get("course_name", ""), d.get("date", ""), d.get("start_time", ""), d.get("started_at", ""), d.get("delay_minutes", 0)])
+    period = f"{start_date or 'البداية'} → {end_date or 'اليوم'}"
+    buf = build_report_pdf(
+        "تقرير تأخر المعلمين", f"الفترة: {period}" + (f"   |   القسم: {scope}" if scope else ""),
+        kpis=[("المعلمون", s["total_teachers"]), ("معلمون تأخروا", s["total_delayed_teachers"]), ("حالات التأخر", s["total_delay_incidents"])],
+        sections=[{"title": "ملخص المعلمين", "rows": rows, "widths_mm": [10, 70, 30, 26, 26, 30, 40, 38], "show_empty": True},
+                  {"title": "تفاصيل حالات التأخر", "rows": detail, "widths_mm": [60, 80, 30, 30, 30, 40], "head_bg": "#37474f", "fs": 8.5}],
+        footer="التأخير = الفرق بين وقت بداية المحاضرة المجدول ووقت بدء تسجيل الحضور.", generated_by=current_user.get("full_name", ""))
+    fname = export_filename("تقرير تأخر المعلمين", scope, period.replace("→", "الى"), ext="pdf")
+    return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(fname))
+
+
+def _pdf_stream(buf, *name_parts):
+    from routes.deps import export_filename, export_headers
+    return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(export_filename(*name_parts, ext="pdf")))
+
+
+@api_router.get("/reports/attendance-overview/export-pdf")
+async def export_attendance_overview_pdf(department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📄 تقرير الحضور الشامل PDF"""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    from routes.report_pdf import build_report_pdf
+    report = await get_attendance_overview_report(department_id, None, None, current_user)
+    courses, s = sorted(report["courses"], key=lambda c: -c["attendance_rate"]), report["summary"]
+    dept = await _dept_name_for_export(department_id)
+    rows = [["#", "المقرر", "الرمز", "المدرّس", "حاضر", "متأخر", "غائب", "السجلات", "نسبة الحضور"]]
+    for i, c in enumerate(courses, 1):
+        rows.append([i, c["course_name"], c["course_code"], c.get("teacher_name", ""), c["present_count"], c["late_count"], c["absent_count"], c["total_records"], f"{c['attendance_rate']}%"])
+    low = [["المقرر", "المدرّس", "نسبة الحضور"]] + [[c["course_name"], c.get("teacher_name", ""), f"{c['attendance_rate']}%"] for c in courses if c["attendance_rate"] < 60]
+    buf = build_report_pdf(
+        "تقرير الحضور الشامل", f"النطاق: {dept or 'جميع الأقسام'}",
+        kpis=[("المقررات", s["total_courses"]), ("متوسط الحضور", f"{s['avg_attendance_rate']}%"), ("مقررات دون 60%", len(low) - 1)],
+        sections=[{"title": "نسب الحضور حسب المقرر", "rows": rows, "widths_mm": [10, 70, 28, 55, 22, 22, 22, 24, 30], "show_empty": True},
+                  {"title": "مقررات بحضور منخفض (أقل من 60%)", "rows": low, "widths_mm": [110, 100, 60], "head_bg": "#b91c1c"}],
+        footer="نسبة الحضور = (الحاضر + المتأخر × 0.5) ÷ إجمالي السجلات.", generated_by=current_user.get("full_name", ""))
+    return _pdf_stream(buf, "تقرير الحضور الشامل", dept)
+
+
+@api_router.get("/reports/warnings/export-pdf")
+async def export_warnings_pdf(department_id: Optional[str] = None, warning_threshold: float = 25.0, deprivation_threshold: float = 40.0, current_user: dict = Depends(get_current_user)):
+    """📄 تقرير الإنذارات والحرمان PDF"""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    from routes.report_pdf import build_report_pdf
+    report = await get_warnings_report(department_id, warning_threshold, deprivation_threshold, current_user)
+    dept = await _dept_name_for_export(department_id)
+    head = ["#", "الطالب", "رقم القيد", "المقرر", "الرمز", "المحاضرات", "الغياب", "نسبة الغياب", "المتبقي المسموح"]
+    def _rows(items):
+        return [head] + [[i, x["student_name"], x["student_id"], x["course_name"], x["course_code"], x["total_lectures"], x["absent_count"], f"{x['absence_rate']}%", x.get("remaining_allowed", "")] for i, x in enumerate(items, 1)]
+    buf = build_report_pdf(
+        "تقرير الإنذارات والحرمان", f"النطاق: {dept or 'جميع الأقسام'}   |   حد الإنذار: {warning_threshold:g}%   |   حد الحرمان: {deprivation_threshold:g}%",
+        kpis=[("إنذار", len(report["warnings"])), ("محروم", len(report["deprivations"])), ("الإجمالي", len(report["warnings"]) + len(report["deprivations"]))],
+        sections=[{"title": f"الطلاب المستحقون للإنذار (غياب ≥ {warning_threshold:g}%)", "rows": _rows(report["warnings"]), "widths_mm": [10, 60, 28, 62, 24, 22, 20, 24, 30], "head_bg": "#c2410c", "show_empty": True},
+                  {"title": f"الطلاب المحرومون (غياب ≥ {deprivation_threshold:g}%)", "rows": _rows(report["deprivations"]), "widths_mm": [10, 60, 28, 62, 24, 22, 20, 24, 30], "head_bg": "#b91c1c", "show_empty": True}],
+        footer="المتبقي المسموح = عدد مرات الغياب المتاحة قبل الوصول إلى حد الحرمان.", generated_by=current_user.get("full_name", ""))
+    return _pdf_stream(buf, "تقرير الإنذارات والحرمان", dept)
+
+
+@api_router.get("/reports/absent-students/export-pdf")
+async def export_absent_students_pdf(department_id: Optional[str] = None, course_id: Optional[str] = None, min_absence_rate: float = 25.0, current_user: dict = Depends(get_current_user)):
+    """📄 تقرير الطلاب المتغيبين PDF"""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    from routes.report_pdf import build_report_pdf
+    report = await get_absent_students_report(department_id, course_id, min_absence_rate, current_user)
+    students = report["students"]
+    dept = await _dept_name_for_export(department_id)
+    course_name = ""
+    if course_id and ObjectId.is_valid(course_id):
+        c = await db.courses.find_one({"_id": ObjectId(course_id)}, {"name": 1})
+        course_name = (c or {}).get("name", "")
+    rows = [["#", "الطالب", "رقم القيد", "القسم", "المستوى", "المقرر", "المحاضرات", "غياب", "تأخير", "حضور", "نسبة الغياب", "آخر غياب"]]
+    for i, x in enumerate(students, 1):
+        lvl = f"م{x['level']}" + (f" ({x['section']})" if x.get("section") else "") if x.get("level") else ""
+        rows.append([i, x["student_name"], x["student_id"], x.get("department_name", ""), lvl, x["course_name"], x["total_lectures"], x["absent_count"], x.get("late_count", 0), x.get("present_count", 0), f"{x['absence_rate']}%", x.get("last_absent_date") or ""])
+    scope = " | ".join([p for p in [dept, course_name] if p]) or "جميع الأقسام"
+    buf = build_report_pdf(
+        "تقرير الطلاب المتغيبين", f"النطاق: {scope}   |   الحد الأدنى لنسبة الغياب: {min_absence_rate:g}%",
+        kpis=[("حالات الغياب", len(students)), ("طلاب فريدون", len({x["student_id"] for x in students})), ("حد الغياب", f"{min_absence_rate:g}%+")],
+        sections=[{"title": "الطلاب المتجاوزون للحد", "rows": rows, "widths_mm": [8, 48, 24, 34, 18, 46, 18, 14, 14, 14, 20, 22], "fs": 8, "show_empty": True}],
+        footer="مرتب تنازلياً حسب نسبة الغياب. المحاضرات الملغاة غير محسوبة.", generated_by=current_user.get("full_name", ""))
+    return _pdf_stream(buf, "تقرير الطلاب المتغيبين", dept, course_name)
+
+
+@api_router.get("/reports/daily/export-pdf")
+async def export_daily_pdf(date: Optional[str] = None, department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📄 التقرير اليومي PDF"""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    from routes.report_pdf import build_report_pdf
+    report = await get_daily_report(date, department_id, current_user)
+    lectures, s = report["lectures"], report["summary"]
+    dept = await _dept_name_for_export(department_id)
+    day = (report.get("date") or "")[:10]
+    rows = [["#", "المقرر", "الرمز", "الوقت", "حاضر", "متأخر", "غائب", "المسجَّلون", "نسبة الحضور"]]
+    for i, l in enumerate(lectures, 1):
+        rows.append([i, l["course_name"], l["course_code"], f"{l['start_time']} - {l['end_time']}", l["present"], l["late"], l["absent"], l["total_students"], f"{l['attendance_rate']}%"])
+    buf = build_report_pdf(
+        "التقرير اليومي للحضور", f"اليوم: {day}   |   النطاق: {dept or 'جميع الأقسام'}",
+        kpis=[("المحاضرات", s["total_lectures"]), ("حاضر", s["total_present"]), ("متأخر", s["total_late"]), ("غائب", s["total_absent"]), ("نسبة الحضور", f"{s['overall_attendance_rate']}%")],
+        sections=[{"title": "محاضرات اليوم", "rows": rows, "widths_mm": [10, 74, 28, 36, 22, 22, 22, 26, 30], "show_empty": True}],
+        footer="نسبة الحضور = (الحاضر + المتأخر × 0.5) ÷ المسجَّلون في المحاضرة.", generated_by=current_user.get("full_name", ""))
+    return _pdf_stream(buf, "التقرير اليومي", dept, day)
+
+
+@api_router.get("/reports/course/{course_id}/export-pdf")
+async def export_course_detailed_pdf(course_id: str, current_user: dict = Depends(get_current_user)):
+    """📄 تقرير المقرر التفصيلي PDF"""
+    if not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    from routes.report_pdf import build_report_pdf
+    report = await get_course_detailed_report(course_id, current_user)
+    c, s = report["course"], report["summary"]
+    st_rows = [["#", "الطالب", "رقم القيد", "حاضر", "متأخر", "غائب", "نسبة الحضور", "الحالة"]]
+    for i, x in enumerate(report["students"], 1):
+        state = "منتظم" if x["attendance_rate"] >= 75 else ("إنذار" if x["attendance_rate"] >= 60 else "حرمان محتمل")
+        st_rows.append([i, x["student_name"], x["student_id"], x["present"], x["late"], x["absent"], f"{x['attendance_rate']}%", state])
+    lec_rows = [["#", "التاريخ", "الوقت", "الحالة", "حاضر / المسجَّلون", "نسبة الحضور"]]
+    _st = {"completed": "منعقدة", "scheduled": "مجدولة", "cancelled": "ملغاة", "absent": "غياب المدرّس"}
+    for i, l in enumerate(report["lectures"], 1):
+        lec_rows.append([i, l["date"], l["start_time"], _st.get(l["status"], l["status"]), f"{l['present_count']} / {l['total_students']}", f"{l['attendance_rate']}%" if l["status"] != "absent" else "—"])
+    sub = f"الرمز: {c['code']}" + (f"   |   المدرّس: {c['teacher_name']}" if c.get("teacher_name") else "") + (f"   |   المستوى {c['level']}" if c.get("level") else "") + (f"   |   شعبة {c['section']}" if c.get("section") else "")
+    buf = build_report_pdf(
+        f"تقرير المقرر: {c['name']}", sub,
+        kpis=[("الطلاب", s["total_students"]), ("المحاضرات المنعقدة", s["total_lectures"]), ("غياب المدرّس", s.get("absent_lectures", 0)), ("متوسط الحضور", f"{s['avg_attendance_rate']}%")],
+        sections=[{"title": "حضور الطلاب (مرتب تنازلياً)", "rows": st_rows, "widths_mm": [10, 80, 32, 22, 22, 22, 32, 40], "show_empty": True},
+                  {"title": "سجل المحاضرات", "rows": lec_rows, "widths_mm": [10, 40, 30, 50, 60, 40], "head_bg": "#37474f", "fs": 8.5}],
+        footer="الحالة: منتظم ≥ 75% · إنذار 60–75% · حرمان محتمل < 60%.", generated_by=current_user.get("full_name", ""))
+    return _pdf_stream(buf, "تقرير المقرر", c["name"], c.get("section"))
+
+
+@api_router.get("/reports/teacher-summary/export-pdf")
+async def export_teacher_summary_pdf(teacher_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📄 ملخص المعلم PDF"""
+    if current_user["role"] != UserRole.TEACHER and not has_permission(current_user, Permission.EXPORT_REPORTS):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
+    from routes.report_pdf import build_report_pdf
+    report = await get_teacher_summary_report(teacher_id, current_user)
+    t, s = report["teacher"], report["summary"]
+    rows = [["#", "المقرر", "الرمز", "القسم", "المستوى / الشعبة", "الطلاب", "المحاضرات (منعقدة/الكل)", "حاضر", "متأخر", "غائب", "نسبة الحضور"]]
+    for i, c in enumerate(report["courses"], 1):
+        lvl = " / ".join([p for p in [f"م{c['level']}" if c.get("level") else "", c.get("section") or ""] if p])
+        rows.append([i, c["course_name"], c["course_code"], c.get("department_name", ""), lvl, c["students_count"], f"{c['held_lectures']} / {c['total_lectures']}", c["present_count"], c["late_count"], c["absent_count"], f"{c['attendance_rate']}%"])
+    sub = " | ".join([p for p in [f"الرقم الوظيفي: {t['teacher_id']}" if t.get("teacher_id") else "", t.get("phone") or ""] if p])
+    buf = build_report_pdf(
+        f"ملخص المعلم: {t['full_name']}", sub,
+        kpis=[("المقررات", s["total_courses"]), ("الطلاب", s["total_students"]), ("المحاضرات", s["total_lectures"]), ("حاضر", s["total_present"]), ("متأخر", s["total_late"]), ("غائب", s["total_absent"]), ("نسبة الحضور", f"{s['overall_attendance_rate']}%")],
+        sections=[{"title": "مقررات المعلم (مرتبة تنازلياً حسب نسبة الحضور)", "rows": rows, "widths_mm": [8, 56, 22, 40, 26, 16, 34, 16, 16, 16, 24], "fs": 8.5, "show_empty": True}],
+        footer="نسبة الحضور = (الحاضر + المتأخر × 0.5) ÷ إجمالي سجلات الحضور في المقرر.", generated_by=current_user.get("full_name", ""))
+    return _pdf_stream(buf, "ملخص المعلم", t["full_name"])
+
+
+
+
+
 @api_router.get("/reports/teacher-delays/export")
 async def export_teacher_delays_report(
     start_date: str = None,
@@ -17726,6 +17908,9 @@ async def startup_event():
     init_firebase()
     # 📬 الملخص الأسبوعي للوحة القيادة (السبت 07:00 اليمن)
     asyncio.create_task(weekly_digest_loop())
+    # 🔔 الملخص اليومي للسندات المعلقة (08:00 اليمن)
+    from routes.fee_alerts import fee_daily_loop
+    asyncio.create_task(fee_daily_loop())
     # تهيئة خدمة التخزين
     try:
         from services.storage_service import init_storage

@@ -164,9 +164,14 @@ export default function RootLayout() {
           <Stack.Screen name="report-student" options={{ title: 'تقرير الطالب' }} />
           <Stack.Screen name="dashboard-digests" options={{ title: 'الملخصات الأسبوعية' }} />
           <Stack.Screen name="report-teacher-workload" options={{ title: 'تقرير نصاب المدرسين' }} />
+          <Stack.Screen name="report-lesson-completion" options={{ title: 'تقرير إنجاز الدروس' }} />
+          <Stack.Screen name="report-teacher-delays" options={{ title: 'تقرير تأخر المعلمين' }} />
           <Stack.Screen name="report-warnings" options={{ title: 'الإنذارات' }} />
           <Stack.Screen name="report-daily" options={{ title: 'التقرير اليومي' }} />
           <Stack.Screen name="report-course" options={{ title: 'تقرير المقرر' }} />
+          <Stack.Screen name="report-teacher-summary" options={{ title: 'ملخص المعلم' }} />
+          <Stack.Screen name="report-teacher-attendance" options={{ title: 'حضور الأساتذة' }} />
+          <Stack.Screen name="report-absent-students" options={{ title: 'الطلاب المتغيبون' }} />
           <Stack.Screen name="activity-logs" options={{ title: 'سجلات النشاط' }} />
           <Stack.Screen name="teaching-load" options={{ title: 'العبء التدريسي' }} />
           <Stack.Screen name="teaching-load-report" options={{ title: 'تقارير العبء التدريسي' }} />

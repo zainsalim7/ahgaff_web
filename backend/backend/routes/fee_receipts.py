@@ -1,3 +1,4 @@
+import asyncio
 """💰 السندات المالية: رفع الطلاب لسندات الرسوم (تجديد القيد/القسم الداخلي/أخرى) وتعميدها"""
 import logging
 from datetime import datetime, timezone, timedelta
@@ -306,6 +307,9 @@ async def upload_receipt(data: ReceiptUpload, current_user: dict = Depends(get_c
         rid = str(existing["_id"])
     else:
         rid = str((await db.fee_receipts.insert_one(doc)).inserted_id)
+    # 🔔 إشعار الموظفين المسؤولين عن هذا النوع (مجمَّع خلال 10 دقائق)
+    from .fee_alerts import notify_new_receipt
+    asyncio.create_task(notify_new_receipt(db, doc, student))
     return {"id": rid, "message": "تم رفع السند وهو الآن قيد المراجعة", "status": "pending"}
 
 

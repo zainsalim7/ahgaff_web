@@ -183,3 +183,12 @@ async def internal_weekly_digest(x_internal_key: Optional[str] = Header(None)):
     if not x_internal_key or not hmac.compare_digest(x_internal_key, expected):
         raise HTTPException(status_code=401, detail="unauthorized")
     return await generate_and_send_digest(get_db(), trigger="scheduler")
+
+
+@router.post("/fees/alerts/daily-summary/send-now")
+async def fee_daily_summary_now(current_user: dict = Depends(get_current_user)):
+    """اختبار فوري للملخص اليومي للسندات المعلقة — الأدمن فقط"""
+    if current_user["role"] != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="للمدير فقط")
+    from .fee_alerts import send_daily_pending_summary
+    return await send_daily_pending_summary(get_db())

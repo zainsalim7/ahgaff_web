@@ -1,5 +1,4 @@
 import { goBack } from '../src/utils/navigation';
-import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -15,9 +14,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import * as FileSystem from 'expo-file-system';
-import * as Sharing from 'expo-sharing';
 import { reportsAPI, departmentsAPI, facultiesAPI, teachersAPI } from '../src/services/api';
+import { useAuth } from '../src/contexts/AuthContext';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   executed: { label: 'نُفّذت', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' },
@@ -30,6 +29,7 @@ const getStatusMeta = (status: string) => STATUS_META[status] || { label: status
 
 export default function TeacherAttendanceReport() {
   const today = new Date().toISOString().split('T')[0];
+  const { hasPermission } = useAuth();
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const [hasRun, setHasRun] = useState(false);
@@ -45,7 +45,6 @@ export default function TeacherAttendanceReport() {
   const [viewMode, setViewMode] = useState<'teacher' | 'lecture'>('teacher');
   const [data, setData] = useState<any>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const [exporting, setExporting] = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -96,48 +95,16 @@ export default function TeacherAttendanceReport() {
     }
   }, [dateFrom, dateTo, departmentId, facultyId, selectedTeacher]);
 
-  const downloadBlob = async (blob: Blob, filename: string) => {
-    if (Platform.OS === 'web') {
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } else {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const base64 = (reader.result as string).split(',')[1];
-        const fileUri = FileSystem.documentDirectory + filename;
-        await FileSystem.writeAsStringAsync(fileUri, base64, { encoding: FileSystem.EncodingType.Base64 });
-        if (await Sharing.isAvailableAsync()) await Sharing.shareAsync(fileUri);
-      };
-      reader.readAsDataURL(blob);
-    }
-  };
-
+  const [exporting, setExporting] = useState<'' | 'pdf' | 'excel'>('');
   const handleExport = async (type: 'excel' | 'pdf') => {
-    if (!hasRun) { Alert.alert('تنبيه', 'نفّذ التقرير أولاً'); return; }
+    if (!hasRun) return;
     setExporting(type);
-    try {
-      const params: any = { start_date: dateFrom, end_date: dateTo };
-      if (departmentId) params.department_id = departmentId;
-      if (facultyId) params.faculty_id = facultyId;
-      if (selectedTeacher) params.teacher_id = selectedTeacher.id;
-      const res = type === 'excel'
-        ? await reportsAPI.exportTeacherAttendanceExcel(params)
-        : await reportsAPI.exportTeacherAttendancePDF(params);
-      const ext = type === 'excel' ? 'xlsx' : 'pdf';
-      await downloadBlob(new Blob([res.data]), filenameFromResponse(res, exportName(['تقرير حضور الأساتذة', selectedTeacher?.full_name, `من ${dateFrom} إلى ${dateTo}`], ext)));
-    } catch (e) {
-      console.error('Export error', e);
-      if (Platform.OS === 'web') window.alert('فشل في التصدير');
-      else Alert.alert('خطأ', 'فشل في التصدير');
-    } finally {
-      setExporting(null);
-    }
+    const params: any = { start_date: dateFrom, end_date: dateTo };
+    if (departmentId) params.department_id = departmentId;
+    if (facultyId) params.faculty_id = facultyId;
+    if (selectedTeacher) params.teacher_id = selectedTeacher.id;
+    await downloadReport(type === 'excel' ? '/reports/teacher-attendance/export/excel' : '/reports/teacher-attendance/export/pdf', params, ['تقرير حضور الأساتذة', selectedTeacher?.full_name, `من ${dateFrom} إلى ${dateTo}`], type === 'excel' ? 'xlsx' : 'pdf');
+    setExporting('');
   };
 
   if (loading) {
@@ -152,40 +119,20 @@ export default function TeacherAttendanceReport() {
   const summary = data?.summary;
 
   return (
-    <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} accessibilityLabel="رجوع">
-          <Ionicons name="arrow-forward" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>حضور الأساتذة وتنفيذ المحاضرات</Text>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => handleExport('pdf')}
-            disabled={!hasRun || exporting !== null}
-            testID="export-teacher-att-pdf"
-            accessibilityLabel="تصدير PDF"
-          >
-            {exporting === 'pdf' ? <ActivityIndicator size="small" color="#e53935" /> :
-              <Ionicons name="document-text-outline" size={22} color={hasRun ? '#e53935' : '#ccc'} />}
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.iconBtn}
-            onPress={() => handleExport('excel')}
-            disabled={!hasRun || exporting !== null}
-            testID="export-teacher-att-excel"
-            accessibilityLabel="تصدير Excel"
-          >
-            {exporting === 'excel' ? <ActivityIndicator size="small" color="#2e7d32" /> :
-              <Ionicons name="download-outline" size={24} color={hasRun ? '#2e7d32' : '#ccc'} />}
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <ScrollView style={styles.scrollView}>
-        {/* الفلاتر */}
-        <View style={styles.card}>
+    <SafeAreaView style={reportPage.container} edges={['bottom']}>
+      <ScrollView contentContainerStyle={reportPage.content}>
+        <ReportHero
+          title="حضور الأساتذة وتنفيذ المحاضرات"
+          subtitle="حالة كل محاضرة في الفترة: نُفّذت / غياب الأستاذ / ملغاة / لم يحن وقتها"
+          onBack={() => goBack()}
+          canExport={hasRun && hasPermission('export_reports')}
+          onPdf={() => handleExport('pdf')}
+          onExcel={() => handleExport('excel')}
+          exporting={exporting}
+          testID="teacher-attendance-hero"
+        />
+        <ReportFilters onRun={runReport} running={executing} hasRun={hasRun}>
+        <View style={{ width: '100%' }}>
           <View style={styles.dateRow}>
             <View style={{ flex: 1 }}>
               <Text style={styles.fieldLabel}>من تاريخ</Text>
@@ -295,60 +242,26 @@ export default function TeacherAttendanceReport() {
             </View>
           )}
 
-          <TouchableOpacity
-            style={[styles.runBtn, executing && { opacity: 0.7 }]}
-            onPress={runReport}
-            disabled={executing}
-            testID="run-report-btn"
-          >
-            {executing ? (
-              <><ActivityIndicator size="small" color="#fff" /><Text style={styles.runBtnText}>جاري التنفيذ...</Text></>
-            ) : (
-              <><Ionicons name="play" size={18} color="#fff" /><Text style={styles.runBtnText}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text></>
-            )}
-          </TouchableOpacity>
         </View>
+        </ReportFilters>
 
-        {!hasRun && !executing && (
-          <View style={styles.emptyCard}>
-            <Ionicons name="information-circle-outline" size={48} color="#90a4ae" />
-            <Text style={styles.emptyText}>اختر الفترة والفلاتر ثم اضغط "تنفيذ التقرير"</Text>
-          </View>
-        )}
+        {!hasRun && !executing && <ReportEmpty text="اختر الفترة والفلاتر ثم اضغط «تنفيذ التقرير»" icon="information-circle-outline" />}
 
-        {/* الملخص */}
-        {summary && (
-          <View style={styles.summaryCard}>
-            {!!data?.teacher_filter_name && (
-              <View style={styles.filterBanner} testID="teacher-filter-banner">
-                <Ionicons name="person-circle" size={18} color="#1565c0" />
-                <Text style={styles.filterBannerText}>تقرير خاص بالأستاذ: {data.teacher_filter_name}</Text>
-              </View>
-            )}
-            <View style={styles.summaryGrid}>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryValue, { color: '#1565c0' }]}>{summary.total_lectures}</Text>
-                <Text style={styles.summaryLabel}>محاضرة</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryValue, { color: '#2e7d32' }]}>{summary.executed}</Text>
-                <Text style={styles.summaryLabel}>نُفّذت</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryValue, { color: '#c62828' }]}>{summary.absent}</Text>
-                <Text style={styles.summaryLabel}>غياب</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryValue, { color: '#616161' }]}>{summary.cancelled}</Text>
-                <Text style={styles.summaryLabel}>ملغاة</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={[styles.summaryValue, { color: '#ef6c00' }]}>{summary.execution_rate}%</Text>
-                <Text style={styles.summaryLabel}>نسبة التنفيذ</Text>
-              </View>
+        {summary && (<>
+          {!!data?.teacher_filter_name && (
+            <View style={styles.filterBanner} testID="teacher-filter-banner">
+              <Ionicons name="person-circle" size={18} color="#1565c0" />
+              <Text style={styles.filterBannerText}>تقرير خاص بالأستاذ: {data.teacher_filter_name}</Text>
             </View>
-          </View>
-        )}
+          )}
+          <ReportKpis items={[
+            { label: 'المحاضرات', value: summary.total_lectures, color: '#1565c0', icon: 'calendar' },
+            { label: 'نُفّذت', value: summary.executed, color: '#16a34a', icon: 'checkmark-circle' },
+            { label: 'غياب الأستاذ', value: summary.absent, color: '#dc2626', icon: 'close-circle' },
+            { label: 'ملغاة', value: summary.cancelled, color: '#64748b', icon: 'remove-circle' },
+            { label: 'نسبة التنفيذ', value: `${summary.execution_rate}%`, color: summary.execution_rate >= 80 ? '#16a34a' : summary.execution_rate >= 60 ? '#f97316' : '#dc2626', icon: 'speedometer' },
+          ]} />
+        </>)}
 
         {/* مبدّل العرض */}
         {hasRun && (
@@ -448,15 +361,8 @@ export default function TeacherAttendanceReport() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#eee' },
-  headerTitle: { fontSize: 16, fontWeight: '700', color: '#333', flex: 1, textAlign: 'center' },
-  headerButtons: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: { padding: 4 },
-  scrollView: { flex: 1, padding: 16 },
-  card: { backgroundColor: '#fff', borderRadius: 12, padding: 14, marginBottom: 16 },
   dateRow: { flexDirection: 'row', gap: 10 },
   fieldLabel: { fontSize: 13, color: '#666', marginBottom: 6, marginTop: 12 },
   dateBtn: { backgroundColor: '#f5f5f5', borderRadius: 8, padding: 12 },
@@ -464,15 +370,8 @@ const styles = StyleSheet.create({
   todayChipText: { fontSize: 12, color: '#1565c0', fontWeight: '600' },
   pickerWrapper: { backgroundColor: '#f5f5f5', borderRadius: 8, overflow: 'hidden' },
   picker: { height: 45 },
-  runBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#2e7d32', paddingVertical: 12, borderRadius: 10, marginTop: 16 },
-  runBtnText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   emptyCard: { backgroundColor: '#fff', borderRadius: 12, padding: 32, alignItems: 'center', marginBottom: 12 },
   emptyText: { marginTop: 10, fontSize: 15, fontWeight: '600', color: '#455a64', textAlign: 'center' },
-  summaryCard: { backgroundColor: '#fff', borderRadius: 12, padding: 16, marginBottom: 16 },
-  summaryGrid: { flexDirection: 'row', justifyContent: 'space-between' },
-  summaryItem: { alignItems: 'center', flex: 1 },
-  summaryValue: { fontSize: 20, fontWeight: '800' },
-  summaryLabel: { fontSize: 11, color: '#666', marginTop: 4, textAlign: 'center' },
   tabRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
   tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e0e0e0' },
   tabActive: { backgroundColor: '#2e7d32', borderColor: '#2e7d32' },

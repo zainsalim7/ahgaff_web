@@ -6,6 +6,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import api, { departmentsAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 interface TeacherDelay {
   teacher_id: string;
@@ -65,27 +66,13 @@ export default function TeacherDelaysReport() {
     }
   }, [filterDept]);
 
-  const handleExport = async () => {
-    setExporting(true);
-    try {
-      const params = new URLSearchParams();
-      if (filterDept) params.append('department_id', filterDept);
-      const response = await api.get(`/reports/teacher-delays/export?${params.toString()}`, { responseType: 'blob' });
-      if (Platform.OS === 'web') {
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const a = document.createElement('a');
-        a.href = url;
-        const xf = (response.headers as any)?.['x-filename'];
-        a.download = xf ? decodeURIComponent(xf) : 'teacher_delays_report.xlsx';
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-      }
-    } catch (error) {
-      console.error('Export error:', error);
-    } finally {
-      setExporting(false);
-    }
+  const [exportingFmt, setExportingFmt] = useState<'' | 'pdf' | 'excel'>('');
+  const handleExport = async (fmt: 'pdf' | 'excel' = 'excel') => {
+    setExporting(true); setExportingFmt(fmt);
+    const params: any = {}; if (filterDept) params.department_id = filterDept;
+    const deptName = departments.find(d => d.id === filterDept)?.name;
+    await downloadReport(fmt === 'pdf' ? '/reports/teacher-delays/export-pdf' : '/reports/teacher-delays/export', params, ['تقرير تأخر المعلمين', deptName], fmt === 'pdf' ? 'pdf' : 'xlsx');
+    setExporting(false); setExportingFmt('');
   };
 
   const getDelayColor = (minutes: number) => {
@@ -184,104 +171,50 @@ export default function TeacherDelaysReport() {
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtn} accessibilityLabel="رجوع">
-          <Ionicons name="arrow-back" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>تقرير تأخر المعلمين</Text>
-        {hasPermission('export_reports') && (
-          <TouchableOpacity 
-            style={styles.exportBtn} 
-            onPress={handleExport}
-            disabled={exporting}
-            data-testid="export-teacher-delays-btn"
-            accessibilityLabel="تصدير Excel"
-          >
-            {exporting ? (
-              <ActivityIndicator color="#fff" size="small" />
-            ) : (
-              <Ionicons name="download-outline" size={20} color="#fff" />
-            )}
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* ملخص */}
-      <View style={styles.summaryRow}>
-        <View style={[styles.summaryCard, { backgroundColor: '#e3f2fd' }]}>
-          <Ionicons name="people" size={24} color="#1565c0" />
-          <Text style={styles.summaryValue}>{summary.total_teachers}</Text>
-          <Text style={styles.summaryLabel}>معلم</Text>
+      <View style={reportPage.content}>
+      <ReportHero
+        title="تقرير تأخر المعلمين"
+        subtitle="الفرق بين وقت بداية المحاضرة المجدول ووقت بدء تسجيل الحضور"
+        onBack={() => router.back()}
+        canExport={hasPermission('export_reports')}
+        onPdf={() => handleExport('pdf')}
+        onExcel={() => handleExport('excel')}
+        exporting={exporting ? exportingFmt : ''}
+        testID="teacher-delays-hero"
+      />
+      <ReportKpis items={[
+        { label: 'المعلمون', value: summary.total_teachers, color: '#1565c0', icon: 'people' },
+        { label: 'معلمون تأخروا', value: summary.total_delayed_teachers, color: '#f97316', icon: 'warning', sub: summary.total_teachers ? `${Math.round((summary.total_delayed_teachers * 100) / summary.total_teachers)}% من المعلمين` : undefined },
+        { label: 'حالات التأخر', value: summary.total_delay_incidents, color: '#dc2626', icon: 'time' },
+      ]} />
+      <ReportFilters onRun={fetchData} running={executing} hasRun={hasRun}>
+        <View style={{ flex: 1, minWidth: 220 }}>
+          <Text style={reportPage.label}>القسم</Text>
+          <View style={reportPage.pickerBox}>
+            <Picker selectedValue={filterDept} onValueChange={setFilterDept} style={reportPage.picker}>
+              <Picker.Item label="جميع الأقسام" value="" />
+              {departments.map(d => (
+                <Picker.Item key={d.id} label={d.name} value={d.id} />
+              ))}
+            </Picker>
+          </View>
         </View>
-        <View style={[styles.summaryCard, { backgroundColor: '#fff3e0' }]}>
-          <Ionicons name="warning" size={24} color="#ff9800" />
-          <Text style={styles.summaryValue}>{summary.total_delayed_teachers}</Text>
-          <Text style={styles.summaryLabel}>متأخرين</Text>
-        </View>
-        <View style={[styles.summaryCard, { backgroundColor: '#ffebee' }]}>
-          <Ionicons name="time" size={24} color="#f44336" />
-          <Text style={styles.summaryValue}>{summary.total_delay_incidents}</Text>
-          <Text style={styles.summaryLabel}>حالة تأخر</Text>
-        </View>
-      </View>
-
-      {/* فلتر القسم */}
-      <View style={styles.filterRow}>
-        <Picker
-          selectedValue={filterDept}
-          onValueChange={setFilterDept}
-          style={styles.picker}
-        >
-          <Picker.Item label="جميع الأقسام" value="" />
-          {departments.map(d => (
-            <Picker.Item key={d.id} label={d.name} value={d.id} />
-          ))}
-        </Picker>
-      </View>
-
-      {/* زر التنفيذ */}
-      <View style={{ paddingHorizontal: 16, paddingTop: 8 }}>
-        <TouchableOpacity
-          style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#1565c0', paddingVertical: 12, borderRadius: 10 }, executing && { opacity: 0.7 }]}
-          onPress={fetchData}
-          disabled={executing}
-          testID="run-report-btn"
-        >
-          {executing ? (
-            <>
-              <ActivityIndicator size="small" color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>جاري التنفيذ...</Text>
-            </>
-          ) : (
-            <>
-              <Ionicons name="play" size={18} color="#fff" />
-              <Text style={{ color: '#fff', fontSize: 15, fontWeight: '700' }}>{hasRun ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
-            </>
-          )}
-        </TouchableOpacity>
+      </ReportFilters>
       </View>
 
       {/* القائمة */}
       {loading || executing ? (
         <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 40 }} />
       ) : !hasRun ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="information-circle-outline" size={60} color="#90a4ae" />
-          <Text style={styles.emptyText}>اضغط "تنفيذ التقرير" لعرض البيانات</Text>
-        </View>
+        <View style={reportPage.content}><ReportEmpty text="اضغط «تنفيذ التقرير» لعرض البيانات" icon="information-circle-outline" /></View>
       ) : teachers.length === 0 ? (
-        <View style={styles.emptyState}>
-          <Ionicons name="checkmark-circle" size={60} color="#4caf50" />
-          <Text style={styles.emptyText}>لا توجد بيانات تأخر</Text>
-          <Text style={styles.emptySubtext}>سيظهر التقرير عندما يبدأ المعلمون بالتحضير</Text>
-        </View>
+        <View style={reportPage.content}><ReportEmpty text="لا توجد بيانات تأخر — سيظهر التقرير عندما يبدأ المعلمون بالتحضير" icon="checkmark-circle-outline" /></View>
       ) : (
         <FlatList
           data={teachers}
           keyExtractor={item => item.teacher_id}
           renderItem={renderTeacher}
-          contentContainerStyle={{ padding: 16, paddingBottom: 32 }}
+          contentContainerStyle={[reportPage.content, { paddingTop: 0 }]}
         />
       )}
     </SafeAreaView>
@@ -289,7 +222,7 @@ export default function TeacherDelaysReport() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f4f6fa' },
   header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
   backBtn: { padding: 4, marginRight: 12 },
   headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#333' },

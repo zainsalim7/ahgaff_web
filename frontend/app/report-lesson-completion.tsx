@@ -15,6 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
+import { ReportHero, ReportKpis, ReportFilters, reportPage } from '../src/components/reports/ReportShell';
 import api, { departmentsAPI } from '../src/services/api';
 
 interface CourseCompletion {
@@ -310,47 +311,38 @@ export default function LessonCompletionReport() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack(router)} style={styles.backBtn} accessibilityLabel="رجوع">
-          <Ionicons name="arrow-forward" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>تقرير إنجاز الدروس</Text>
-        {Platform.OS === 'web' ? (
-          <TouchableOpacity onPress={exportExcel} style={styles.backBtn} accessibilityLabel="تصدير Excel">
-            <Ionicons name="download-outline" size={24} color="#4caf50" />
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 40 }} />
-        )}
-      </View>
-
       <ScrollView
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-        contentContainerStyle={{ padding: 16 }}
+        contentContainerStyle={reportPage.content}
       >
-        {/* فلتر القسم + المقرر */}
-        <View style={{ backgroundColor: '#fff', borderRadius: 12, padding: 12, marginBottom: 16 }}>
-          <Text style={{ fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 6 }}>1. اختر القسم</Text>
-          <View style={{ backgroundColor: '#f5f5f5', borderRadius: 8, overflow: 'hidden' }}>
-            <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={{ height: 45 }}>
-              <Picker.Item label="-- اختر القسم --" value="" />
-              {departments.map(d => (
-                <Picker.Item key={d.id} label={d.name} value={d.id} />
-              ))}
-            </Picker>
+        <ReportHero
+          title="تقرير إنجاز الدروس"
+          subtitle="مقارنة الخطة الدراسية بالدروس المنفَّذة فعلياً لكل مقرر"
+          onBack={() => goBack()}
+          canExport={Platform.OS === 'web' && reportRun}
+          onExcel={exportExcel}
+          testID="lesson-completion-hero"
+        />
+        <ReportFilters onRun={runReport} running={loading} hasRun={reportRun} disabled={!selectedCourse} runLabel={!selectedCourse ? 'اختر القسم والمقرر ثم نفّذ' : undefined}>
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={reportPage.label}>1. القسم</Text>
+            <View style={reportPage.pickerBox}>
+              <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker}>
+                <Picker.Item label="-- اختر القسم --" value="" />
+                {departments.map(d => (
+                  <Picker.Item key={d.id} label={d.name} value={d.id} />
+                ))}
+              </Picker>
+            </View>
           </View>
-
-          {/* المقرر (يظهر بعد اختيار القسم) */}
           {selectedDept && (
-            <>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: '#666', marginBottom: 6, marginTop: 12 }}>
-                2. اختر المقرر
-              </Text>
+            <View style={{ flex: 1, minWidth: 220 }}>
+              <Text style={reportPage.label}>2. المقرر</Text>
               {loadingCourses ? (
-                <ActivityIndicator size="small" color="#4caf50" />
+                <ActivityIndicator size="small" color="#4caf50" style={{ height: 40 }} />
               ) : (
-                <View style={{ backgroundColor: '#f5f5f5', borderRadius: 8, overflow: 'hidden' }}>
-                  <Picker selectedValue={selectedCourse} onValueChange={setSelectedCourse} style={{ height: 45 }}>
+                <View style={reportPage.pickerBox}>
+                  <Picker selectedValue={selectedCourse} onValueChange={setSelectedCourse} style={reportPage.picker}>
                     <Picker.Item label={`-- اختر المقرر (${coursesInDept.length} مقرر) --`} value="" />
                     {coursesInDept.map((c: any) => (
                       <Picker.Item key={c.id} label={`${c.name}${c.code ? ` (${c.code})` : ''}`} value={c.id} />
@@ -358,60 +350,16 @@ export default function LessonCompletionReport() {
                   </Picker>
                 </View>
               )}
-            </>
+            </View>
           )}
+        </ReportFilters>
 
-          {/* زر تنفيذ التقرير */}
-          <TouchableOpacity
-            onPress={runReport}
-            disabled={!selectedCourse || loading}
-            style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-              marginTop: 12, padding: 12, borderRadius: 8,
-              backgroundColor: !selectedCourse || loading ? '#b0bec5' : '#1565c0',
-            }}
-            testID="run-lesson-completion-btn"
-          >
-            {loading ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <>
-                <Ionicons name="play" size={18} color="#fff" />
-                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>تنفيذ التقرير</Text>
-              </>
-            )}
-          </TouchableOpacity>
-
-          {Platform.OS === 'web' && reportRun && (
-            <TouchableOpacity
-              onPress={exportExcel}
-              style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8, backgroundColor: '#4caf50', padding: 10, borderRadius: 8 }}
-            >
-              <Ionicons name="download-outline" size={20} color="#fff" />
-              <Text style={{ color: '#fff', fontWeight: '700', fontSize: 14 }}>تصدير Excel</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-
-        {/* إحصائيات سريعة */}
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-          <View style={[styles.statCard, { backgroundColor: '#e3f2fd' }]}>
-            <Text style={[styles.statNum, { color: '#1565c0' }]}>{totalCourses}</Text>
-            <Text style={styles.statLabel}>مقرر</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#e8f5e9' }]}>
-            <Text style={[styles.statNum, { color: '#4caf50' }]}>{withPlan}</Text>
-            <Text style={styles.statLabel}>لديه خطة</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#fff3e0' }]}>
-            <Text style={[styles.statNum, { color: '#ff9800' }]}>{withoutPlan}</Text>
-            <Text style={styles.statLabel}>بدون خطة</Text>
-          </View>
-          <View style={[styles.statCard, { backgroundColor: '#f3e5f5' }]}>
-            <Text style={[styles.statNum, { color: '#9c27b0' }]}>{avgCompletion}%</Text>
-            <Text style={styles.statLabel}>متوسط الإنجاز</Text>
-          </View>
-        </View>
+        <ReportKpis items={[
+          { label: 'المقررات', value: totalCourses, color: '#1565c0', icon: 'book' },
+          { label: 'لديه خطة دراسية', value: withPlan, color: '#16a34a', icon: 'checkmark-circle' },
+          { label: 'بدون خطة', value: withoutPlan, color: '#f97316', icon: 'alert-circle' },
+          { label: 'متوسط الإنجاز', value: `${avgCompletion}%`, color: avgCompletion >= 75 ? '#16a34a' : avgCompletion >= 50 ? '#f97316' : '#dc2626', icon: 'speedometer' },
+        ]} />
 
         {/* قائمة المقررات */}
         {data.map((course) => (
@@ -456,7 +404,7 @@ export default function LessonCompletionReport() {
                 ))}
                 {course.completed_lessons.length > 5 && (
                   <Text style={{ fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' }}>
-                    ...و {course.completed_lessons.length - 5} درس آخر (اضغط "مقارنة")
+                    ...و {course.completed_lessons.length - 5} درس آخر (اضغط «مقارنة»)
                   </Text>
                 )}
               </View>
@@ -531,7 +479,7 @@ export default function LessonCompletionReport() {
               <>
                 <Ionicons name="filter-outline" size={56} color="#bbb" />
                 <Text style={{ color: '#999', marginTop: 12, fontSize: 14, textAlign: 'center' }}>
-                  اختر القسم ثم المقرر ثم اضغط "تنفيذ التقرير"
+                  اختر القسم ثم المقرر ثم اضغط «تنفيذ التقرير»
                 </Text>
               </>
             )}
@@ -794,7 +742,7 @@ export default function LessonCompletionReport() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  container: { flex: 1, backgroundColor: '#f4f6fa' },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#fff',

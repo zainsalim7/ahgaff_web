@@ -20,9 +20,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { reportsAPI, studentsAPI, departmentsAPI, coursesAPI } from '../src/services/api';
+import { reportsAPI, studentsAPI, departmentsAPI, coursesAPI, enrollmentAPI } from '../src/services/api';
+import { ReportHero, reportPage } from '../src/components/reports/ReportShell';
 import { exportToPDF, prepareStudentReportData } from '../src/utils/pdfExport';
 import { useAuth } from '../src/contexts/AuthContext';
 
@@ -156,7 +157,7 @@ export default function StudentReport() {
     // فلتر حسب المقرر (الطلاب المسجلين في المقرر)
     if (selectedCourse) {
       try {
-        const enrollmentsRes = await coursesAPI.getEnrolledStudents(selectedCourse);
+        const enrollmentsRes = await enrollmentAPI.getEnrolledStudents(selectedCourse);
         const enrolledIds = (enrollmentsRes.data || []).map((e: any) => e.id);
         filtered = filtered.filter(s => enrolledIds.includes(s.id));
       } catch (error) {
@@ -334,42 +335,17 @@ export default function StudentReport() {
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} accessibilityLabel="رجوع">
-          <Ionicons name="arrow-forward" size={24} color="#333" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>{isStudent ? 'تقرير حضوري' : 'تقرير حضور طالب'}</Text>
-        <View style={styles.headerButtons}>
-          {Platform.OS === 'web' && (
-            <TouchableOpacity 
-              style={styles.exportBtn}
-              onPress={handleExportPDF}
-              testID="sr-export-pdf-btn"
-              disabled={exportingPDF || !studentData}
-              accessibilityLabel="تصدير PDF"
-            >
-              {exportingPDF ? (
-                <ActivityIndicator size="small" color="#e53935" />
-              ) : (
-                <Ionicons name="document-text-outline" size={22} color={studentData ? "#e53935" : "#ccc"} />
-              )}
-            </TouchableOpacity>
-          )}
-          <TouchableOpacity 
-            style={styles.exportBtn}
-            onPress={exportToExcel}
-            testID="sr-export-excel-btn"
-            disabled={exporting || !studentData}
-            accessibilityLabel="تصدير Excel"
-          >
-            {exporting ? (
-              <ActivityIndicator size="small" color="#4caf50" />
-            ) : (
-              <Ionicons name="download-outline" size={24} color={studentData ? "#4caf50" : "#ccc"} />
-            )}
-          </TouchableOpacity>
-        </View>
+      <View style={[reportPage.content, { paddingBottom: 0 }]}>
+        <ReportHero
+          title={isStudent ? 'تقرير حضوري' : 'تقرير حضور طالب'}
+          subtitle={studentData?.student ? [studentData.student.full_name, studentData.student.student_id, studentData.student.department_name].filter(Boolean).join('  ·  ') : 'حضور الطالب في جميع مقررات الفصل النشط'}
+          onBack={() => goBack()}
+          canExport={!!studentData}
+          onPdf={handleExportPDF}
+          onExcel={exportToExcel}
+          exporting={exportingPDF ? 'pdf' : exporting ? 'excel' : ''}
+          testID="student-report-hero"
+        />
       </View>
 
       <ScrollView style={styles.scrollView}>
@@ -493,7 +469,7 @@ export default function StudentReport() {
                 </View>
                 {studentSearch.trim().length > 0 && searchedStudents.length === 0 && (
                   <Text style={{ fontSize: 12, color: '#e65100', textAlign: 'center', marginTop: 6 }}>
-                    لا توجد نتائج مطابقة للبحث "{studentSearch.trim()}"
+                    لا توجد نتائج مطابقة للبحث «{studentSearch.trim()}»
                   </Text>
                 )}
               </View>
