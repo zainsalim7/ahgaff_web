@@ -296,6 +296,16 @@ async def get_employee(emp_id: str, current_user: dict = Depends(get_current_use
     d = (await _enrich(db, [e]))[0]
     d["subordinates"] = [{"id": str(s["_id"]), "full_name": s.get("full_name", ""), "job_title": s.get("job_title", "")} for s in await db.employees.find({"manager_employee_id": emp_id}, {"full_name": 1, "job_title": 1}).to_list(200)]
     d["history"] = [_ser(h) for h in await db.employee_history.find({"employee_id": emp_id}).sort("at", -1).limit(50).to_list(50)]
+    d["role_id"], d["role_name"], d["account_username"] = None, None, None
+    if d.get("user_id") and ObjectId.is_valid(d["user_id"]):
+        u = await db.users.find_one({"_id": ObjectId(d["user_id"])}, {"role_id": 1, "role": 1, "username": 1})
+        if u:
+            d["account_username"] = u.get("username")
+            if u.get("role_id") and ObjectId.is_valid(u["role_id"]):
+                rd = await db.roles.find_one({"_id": ObjectId(u["role_id"])}, {"name": 1})
+                d["role_id"], d["role_name"] = u["role_id"], (rd or {}).get("name")
+            elif u.get("role") and u["role"] not in ("employee",):
+                d["role_name"] = {"admin": "مدير النظام", "dean": "عميد", "department_head": "رئيس قسم", "registrar": "مسجّل", "registration_manager": "مدير التسجيل", "university_president": "رئيس الجامعة", "teacher": "معلم"}.get(u["role"], u["role"])
     if d.get("teacher_id") and ObjectId.is_valid(d["teacher_id"]):
         t = await db.teachers.find_one({"_id": ObjectId(d["teacher_id"])}, {"teacher_id": 1, "department_id": 1})
         if t:
@@ -402,9 +412,33 @@ async def sync_teachers(current_user: dict = Depends(get_current_user)):
     return {"created": created, "message": f"تم إنشاء {created} ملفاً إدارياً للمعلمين"}
 
 
+class AccountIn(BaseModel):
+    role_id: Optional[str] = None
+
+
+async def _resolve_role(db, role_id: Optional[str]) -> Optional[dict]:
+    if not role_id:
+        return None
+    r = await db.roles.find_one({"_id": _oid(role_id, "الدور")})
+    if not r or r.get("system_key") == "admin":
+        raise HTTPException(status_code=400, detail="الدور غير صالح")
+    return r
+
+
+@router.get("/roles")
+async def hr_roles(current_user: dict = Depends(get_current_user)):
+    """الأدوار التي يمكن إسنادها لحساب موظف (كل الأدوار ما عدا مدير النظام/الطالب/المعلم)"""
+    _guard(current_user, P_MANAGE)
+    db = get_db()
+    out = []
+    async for r in db.roles.find({"system_key": {"$nin": ["admin", "student", "teacher"]}}).sort("name", 1):
+        out.append({"id": str(r["_id"]), "name": r["name"], "description": r.get("description", ""), "permissions_count": len(r.get("permissions", [])), "preset_key": r.get("preset_key"), "is_system": r.get("is_system", False), "hr": any(p.startswith("hr_") for p in r.get("permissions", []))})
+    return {"roles": sorted(out, key=lambda x: (not x["hr"], x["name"]))}
+
+
 @router.post("/employees/{emp_id}/account")
-async def create_employee_account(emp_id: str, current_user: dict = Depends(get_current_user)):
-    """🔐 إنشاء حساب دخول (خدمة ذاتية) — اسم المستخدم = الرقم الوظيفي، كلمة مرور أولية = الرقم الوظيفي مع إلزام التغيير"""
+async def create_employee_account(emp_id: str, data: AccountIn = None, current_user: dict = Depends(get_current_user)):
+    """🔐 إنشاء حساب دخول (خدمة ذاتية) — اسم المستخدم = الرقم الوظيفي، كلمة مرور أولية = الرقم الوظيفي مع إلزام التغيير، مع دور اختياري"""
     _guard(current_user, P_MANAGE)
     db = get_db()
     e = await db.employees.find_one({"_id": _oid(emp_id)})
@@ -414,17 +448,40 @@ async def create_employee_account(emp_id: str, current_user: dict = Depends(get_
         raise HTTPException(status_code=400, detail="لدى الموظف حساب بالفعل")
     if e.get("teacher_id"):
         raise HTTPException(status_code=400, detail="حساب المعلم يُفعَّل من شاشة المعلمين")
+    role = await _resolve_role(db, (data.role_id if data else None))
     username = e["employee_no"]
     if await db.users.find_one({"username": username}):
         raise HTTPException(status_code=400, detail="يوجد مستخدم بهذا الرقم الوظيفي")
     user = {"username": username, "password": get_password_hash(username), "hashed_password": get_password_hash(username), "full_name": e.get("full_name", ""), "role": "employee",
-            "email": e.get("email") or None, "phone": e.get("phone") or "", "employee_record_id": emp_id, "permissions": [], "custom_permissions": [],
+            "role_id": str(role["_id"]) if role else None, "email": e.get("email") or None, "phone": e.get("phone") or "", "employee_record_id": emp_id, "permissions": [], "custom_permissions": [],
             "must_change_password": True, "is_active": True, "created_at": datetime.now(YEMEN_TZ)}
     r = await db.users.insert_one(user)
     await db.employees.update_one({"_id": e["_id"]}, {"$set": {"user_id": str(r.inserted_id)}})
-    await _history(db, emp_id, "account_created", current_user, {"username": username})
-    await log_activity(current_user, "hr_create_account", "employee", emp_id, e.get("full_name", ""))
-    return {"username": username, "temp_password": username, "must_change_password": True, "message": f"تم إنشاء الحساب: اسم المستخدم وكلمة المرور الأولية = {username} (يُطلب تغييرها عند أول دخول)"}
+    await _history(db, emp_id, "account_created", current_user, {"username": username, **({"role": role["name"]} if role else {})})
+    await log_activity(current_user, "hr_create_account", "employee", emp_id, e.get("full_name", ""), {"role": role["name"] if role else "موظف"})
+    return {"username": username, "temp_password": username, "must_change_password": True, "role_name": role["name"] if role else None,
+            "message": f"تم إنشاء الحساب: اسم المستخدم وكلمة المرور الأولية = {username}" + (f" — بدور «{role['name']}»" if role else "") + " (يُطلب تغييرها عند أول دخول)"}
+
+
+@router.put("/employees/{emp_id}/account-role")
+async def set_account_role(emp_id: str, data: AccountIn, current_user: dict = Depends(get_current_user)):
+    """تغيير دور حساب الموظف (أو إزالته ليصبح موظفاً عادياً)"""
+    _guard(current_user, P_MANAGE)
+    db = get_db()
+    e = await db.employees.find_one({"_id": _oid(emp_id)})
+    if not e or not e.get("user_id"):
+        raise HTTPException(status_code=404, detail="لا يوجد حساب لهذا الموظف")
+    u = await db.users.find_one({"_id": ObjectId(e["user_id"])}) if ObjectId.is_valid(e["user_id"]) else None
+    if not u:
+        raise HTTPException(status_code=404, detail="حساب المستخدم غير موجود")
+    if u.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="لا يمكن تغيير دور مدير النظام من هنا")
+    role = await _resolve_role(db, data.role_id)
+    old = await db.roles.find_one({"_id": ObjectId(u["role_id"])}, {"name": 1}) if u.get("role_id") and ObjectId.is_valid(u["role_id"]) else None
+    await db.users.update_one({"_id": u["_id"]}, {"$set": {"role_id": str(role["_id"]) if role else None}})
+    await _history(db, emp_id, "role_changed", current_user, {"الدور": {"from": (old or {}).get("name") or "موظف", "to": role["name"] if role else "موظف (بدون دور إداري)"}})
+    await log_activity(current_user, "hr_account_role", "employee", emp_id, e.get("full_name", ""), {"role": role["name"] if role else None})
+    return {"role_name": role["name"] if role else None, "message": f"تم تعيين الدور: {role['name'] if role else 'موظف بدون دور إداري'} — يسري عند تسجيل الدخول التالي"}
 
 
 # ══════════════ استيراد Excel ══════════════

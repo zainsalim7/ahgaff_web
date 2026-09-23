@@ -81,3 +81,4 @@
 - Username: EMP-100 / Password: EMP-100  (موظف تجريبي — مديره المباشر EMP-200)
 - Username: EMP-200 / Password: EMP-200  (مدير تجريبي — يرى "طلبات فريقي" في /hr-my-leaves)
 - Note: must_change_password=true but not enforced on web.
+- EMP-300 / EMP-300 (موظف تجريبي ثالث — بلا دور إداري حالياً؛ يمكن إسناد دور من درج الموظف)

@@ -707,7 +707,9 @@ export const hrAPI = {
   updateEmployee: (id: string, data: any) => api.put(`/hr/employees/${id}`, data),
   deleteEmployee: (id: string) => api.delete(`/hr/employees/${id}`),
   syncTeachers: () => api.post('/hr/employees/sync-teachers'),
-  createAccount: (id: string) => api.post(`/hr/employees/${id}/account`),
+  createAccount: (id: string, role_id: string | null = null) => api.post(`/hr/employees/${id}/account`, { role_id }),
+  setAccountRole: (id: string, role_id: string | null) => api.put(`/hr/employees/${id}/account-role`, { role_id }),
+  hrRoles: () => api.get('/hr/roles'),
   importPreview: (form: FormData) => api.post('/hr/employees/import/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   importRun: (form: FormData) => api.post('/hr/employees/import?update_existing=true', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   // الإجازات

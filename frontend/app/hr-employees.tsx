@@ -8,6 +8,7 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { EmployeeFormModal, Portal, inp, btn } from '../src/components/hr/EmployeeFormModal';
 import { EmployeeDocuments } from '../src/components/hr/EmployeeDocuments';
+import { AccountRoleModal } from '../src/components/hr/AccountRoleModal';
 
 const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f97316', leave: '#0284c7', suspended: '#dc2626', ended: '#64748b' };
 
@@ -16,6 +17,7 @@ export default function HrEmployees() {
   const { hasPermission, user } = useAuth();
   const canManage = user?.role === 'admin' || hasPermission('hr_manage_employees');
   const [meta, setMeta] = useState<any>(null);
+  const [acct, setAcct] = useState<{ emp: any; mode: 'create' | 'change' } | null>(null);
   const [units, setUnits] = useState<any[]>([]);
   const [data, setData] = useState<any>({ employees: [], total: 0, stats: {} });
   const [q, setQ] = useState({ search: '', org_unit_id: '', category: '', status: '', contract_type: '', page: 1 });
@@ -46,7 +48,7 @@ export default function HrEmployees() {
 
   const openDetail = async (id: string) => { try { setDetail((await hrAPI.employee(id)).data); } catch (e) { alertMsg(e); } };
   const syncTeachers = async () => { if (!window.confirm('إنشاء ملف إداري لكل معلم ليس له ملف؟')) return; try { const r = await hrAPI.syncTeachers(); window.alert(r.data.message); load(); } catch (e) { alertMsg(e); } };
-  const createAccount = async (emp: any) => { if (!window.confirm(`إنشاء حساب دخول للموظف ${emp.full_name}؟\nاسم المستخدم وكلمة المرور الأولية = ${emp.employee_no}`)) return; try { const r = await hrAPI.createAccount(emp.id); window.alert(r.data.message); load(); if (detail) openDetail(emp.id); } catch (e) { alertMsg(e); } };
+  const createAccount = (emp: any) => setAcct({ emp, mode: 'create' });
   const remove = async (emp: any) => { if (!window.confirm(`حذف الموظف ${emp.full_name}؟ (يمكن استعادته من سلة المحذوفات)`)) return; try { const r = await hrAPI.deleteEmployee(emp.id); window.alert(r.data.message); setDetail(null); load(); } catch (e) { alertMsg(e); } };
   const downloadTemplate = async () => {
     try {
@@ -145,15 +147,17 @@ export default function HrEmployees() {
             {detail.teacher && <div style={{ marginTop: 10, backgroundColor: '#ede9fe', color: '#5b21b6', padding: '8px 10px', borderRadius: 8, fontSize: 12 }}>🎓 عضو هيئة تدريس · الرقم الأكاديمي {detail.teacher.teacher_id} · {detail.teacher.courses_count} مقرر نشط</div>}
             {detail.subordinates?.length > 0 && <div style={{ marginTop: 12 }}><div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 4 }}>يرأس ({detail.subordinates.length})</div>{detail.subordinates.map((s: any) => <div key={s.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>{s.full_name}{s.job_title ? ` — ${s.job_title}` : ''}</div>)}</div>}
             {detail.notes && <div style={{ marginTop: 10, fontSize: 12, color: '#475569', backgroundColor: '#fafafa', padding: 8, borderRadius: 8 }}>{detail.notes}</div>}
+            {detail.has_account && <div style={{ marginTop: 10, fontSize: 12.5, backgroundColor: '#f3e8ff', color: '#4c1d95', padding: '8px 10px', borderRadius: 8, textAlign: 'right' }} data-testid="hr-detail-role">حساب الدخول: <b>{detail.account_username}</b> · الدور: <b>{detail.role_name || 'موظف (خدمة ذاتية فقط)'}</b></div>}
             <EmployeeDocuments employeeId={detail.id} canManage={canManage} />
             {canManage && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 16 }}>
                 <button onClick={() => setForm({ open: true, emp: detail })} style={btn('#1565c0')} data-testid="hr-detail-edit">تعديل</button>
                 {!detail.has_account && !detail.teacher_id && <button onClick={() => createAccount(detail)} style={btn('#16a34a')} data-testid="hr-detail-create-account">إنشاء حساب دخول</button>}
+                {detail.has_account && <button onClick={() => setAcct({ emp: detail, mode: 'change' })} style={btn('#ede9fe', '#6d28d9')} data-testid="hr-detail-change-role">تغيير الدور</button>}
                 {!detail.teacher_id && <button onClick={() => remove(detail)} style={btn('#ffebee', '#c62828')} data-testid="hr-detail-delete">حذف</button>}
               </div>
             )}
-            {detail.history?.length > 0 && <div style={{ marginTop: 16 }}><div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 4 }}>سجل التغييرات</div>{detail.history.map((h: any) => <div key={h.id} style={{ fontSize: 11.5, color: '#475569', padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}><b>{{ created: 'إنشاء الملف', updated: 'تعديل', account_created: 'إنشاء حساب' }[h.action as string] || h.action}</b> · {h.by_name} · {String(h.at).slice(0, 16).replace('T', ' ')}{h.details && Object.keys(h.details).length ? <div style={{ color: '#94a3b8' }}>{Object.entries(h.details).map(([k, v]: any) => `${k}: ${v?.from ?? '—'} → ${v?.to ?? '—'}`).join(' · ')}</div> : null}</div>)}</div>}
+            {detail.history?.length > 0 && <div style={{ marginTop: 16 }}><div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 4 }}>سجل التغييرات</div>{detail.history.map((h: any) => <div key={h.id} style={{ fontSize: 11.5, color: '#475569', padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}><b>{{ created: 'إنشاء الملف', updated: 'تعديل', account_created: 'إنشاء حساب', role_changed: 'تغيير الدور' }[h.action as string] || h.action}</b> · {h.by_name} · {String(h.at).slice(0, 16).replace('T', ' ')}{h.details && Object.keys(h.details).length ? <div style={{ color: '#94a3b8' }}>{Object.entries(h.details).map(([k, v]: any) => `${k}: ${v?.from ?? '—'} → ${v?.to ?? '—'}`).join(' · ')}</div> : null}</div>)}</div>}
           </div>
         </div>
       </Portal>)}
@@ -182,6 +186,7 @@ export default function HrEmployees() {
           </div>
         </div>
       </Portal>)}
+      {acct && <AccountRoleModal employee={acct.emp} mode={acct.mode} onClose={() => setAcct(null)} onDone={(m) => { window.alert(m); load(); openDetail(acct.emp.id); }} />}
     </SafeAreaView>
   );
 }
