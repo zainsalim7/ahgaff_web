@@ -233,6 +233,58 @@ async def list_day_shifts(date: Optional[str] = None, status: Optional[str] = "a
     return out
 
 
+@router.get("/day-shift/my-today")
+async def my_day_shift(date: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📱 للطالب/المعلم: هل يومه مُزاح؟ (شعار في التطبيقات) — يُعيد الإزاحة ومحاضراته الجديدة فقط إن كانت محاضراته هو متأثرة"""
+    db = get_db()
+    day = date or datetime.now(YEMEN_TZ).strftime("%Y-%m-%d")
+    shifts = await db.day_shifts.find({"status": "active", "date_from": {"$lte": day}, "date_to": {"$gte": day}}, {"changes": 0}).to_list(50)
+    if not shifts:
+        return {"shifted": False, "date": day}
+    shift_ids = [str(s["_id"]) for s in shifts]
+    lecs = await db.lectures.find({"date": day, "day_shift_id": {"$in": shift_ids}, "status": {"$nin": ["cancelled"]}}).sort("start_time", 1).to_list(2000)
+    if not lecs:
+        return {"shifted": False, "date": day}
+    courses = {str(c["_id"]): c for c in await db.courses.find({"_id": {"$in": [ObjectId(l["course_id"]) for l in lecs if ObjectId.is_valid(l["course_id"])]}}).to_list(2000)}
+
+    role = current_user.get("role")
+    mine: list = []
+    if role == "teacher":
+        u = await db.users.find_one({"_id": ObjectId(current_user["id"])}, {"teacher_record_id": 1})
+        tids = {current_user["id"], (u or {}).get("teacher_record_id")}
+        mine = [l for l in lecs if courses.get(l["course_id"], {}).get("teacher_id") in tids]
+    elif role == "student":
+        st = await db.students.find_one({"user_id": current_user["id"]}, {"_id": 1})
+        if st:
+            ok_courses: dict = {}
+            for l in lecs:
+                cid = l["course_id"]
+                if cid not in ok_courses:
+                    c = courses.get(cid)
+                    ok_courses[cid] = bool(c) and await db.students.find_one({**build_course_student_query(c), "_id": st["_id"]}, {"_id": 1}) is not None
+                if ok_courses[cid]:
+                    mine.append(l)
+    else:
+        mine = lecs
+    if not mine:
+        return {"shifted": False, "date": day}
+
+    sh = next((s for s in shifts if str(s["_id"]) == mine[0].get("day_shift_id")), shifts[0])
+    d = next((x for x in sh.get("days", []) if x.get("date") == day), {})
+    offset = mine[0].get("day_shift_offset") or d.get("offset_minutes") or 0
+    return {
+        "shifted": True, "date": day, "offset_minutes": offset, "offset_label": _fmt_offset(offset),
+        "old_first": d.get("old_first"), "new_first": d.get("new_first"), "new_last_end": d.get("new_last_end"),
+        "reason": sh.get("reason", ""), "shift_id": str(sh["_id"]),
+        "my_lectures": [{
+            "id": str(l["_id"]), "course_id": l["course_id"], "course_name": courses.get(l["course_id"], {}).get("name", ""),
+            "start_time": l.get("start_time"), "end_time": l.get("end_time"),
+            "original_start_time": _m2t(_t2m(l["start_time"]) - (l.get("day_shift_offset") or offset)) if _t2m(l.get("start_time", "")) is not None else None,
+            "room": l.get("room", ""),
+        } for l in mine],
+    }
+
+
 @router.post("/day-shift/{shift_id}/revert")
 async def revert_day_shift(shift_id: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user)

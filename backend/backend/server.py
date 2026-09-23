@@ -8051,6 +8051,8 @@ async def get_today_lectures(
             "date": lecture["date"],
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
+            "day_shifted": bool(lecture.get("day_shift_id")),
+            "day_shift_offset": lecture.get("day_shift_offset") or 0,
             "room": lecture.get("room", ""),
             "status": lecture.get("status", LectureStatus.SCHEDULED),
             "notes": lecture.get("notes", ""),
