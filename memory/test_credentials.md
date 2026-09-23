@@ -76,3 +76,8 @@
 ## HR (شؤون الموظفين) — 2026-09
 - صلاحيات جديدة: hr_view_employees / hr_manage_employees / hr_manage_org (admin يملكها ضمنياً)
 - إنشاء حساب موظف من شاشة سجل الموظفين: اسم المستخدم = كلمة المرور الأولية = الرقم الوظيفي (must_change_password=true, role=employee)
+
+## HR Self-Service Test Accounts (Added 2026-09-23, role: employee)
+- Username: EMP-100 / Password: EMP-100  (موظف تجريبي — مديره المباشر EMP-200)
+- Username: EMP-200 / Password: EMP-200  (مدير تجريبي — يرى "طلبات فريقي" في /hr-my-leaves)
+- Note: must_change_password=true but not enforced on web.

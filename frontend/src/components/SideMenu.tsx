@@ -142,7 +142,11 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-divider', label: 'شؤون الموظفين', icon: 'people-circle', path: '', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
   { id: 'hr-employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
   { id: 'hr-org-units', label: 'الهيكل التنظيمي', icon: 'git-network', path: '/hr-org-units', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
+  { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES] },
+  { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE] },
+  { id: 'hr-correspondence', label: 'المراسلات والتعاميم', icon: 'mail-open', path: '/hr-correspondence', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_CORRESPONDENCE] },
   { id: 'hr-my-profile', label: 'ملفي الإداري', icon: 'person-circle', path: '/hr-my-profile', permissions: [], forAll: true },
+  { id: 'hr-my-leaves', label: 'إجازاتي', icon: 'calendar', path: '/hr-my-leaves', permissions: [], forAll: true },
 
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: [], adminOnly: true },

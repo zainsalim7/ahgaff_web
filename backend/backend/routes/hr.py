@@ -278,16 +278,8 @@ async def list_employees(search: Optional[str] = None, org_unit_id: Optional[str
 async def my_employee_profile(current_user: dict = Depends(get_current_user)):
     """👤 الخدمة الذاتية: ملفي الإداري"""
     db = get_db()
-    uid = current_user.get("id") or str(current_user.get("_id", ""))
-    e = await db.employees.find_one({"user_id": uid})
-    if not e and current_user.get("role") == "teacher":
-        u = await db.users.find_one({"_id": ObjectId(uid)}, {"teacher_record_id": 1, "username": 1})
-        tid = (u or {}).get("teacher_record_id")
-        if not tid:
-            t = await db.teachers.find_one({"$or": [{"user_id": uid}, {"teacher_id": (u or {}).get("username", "")}]}, {"_id": 1})
-            tid = str(t["_id"]) if t else None
-        if tid:
-            e = await db.employees.find_one({"teacher_id": tid})
+    from .hr_common import find_my_employee
+    e = await find_my_employee(db, current_user)
     if not e:
         return {"profile": None}
     return {"profile": (await _enrich(db, [e]))[0]}

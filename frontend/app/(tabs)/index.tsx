@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 import { useAuthStore } from '../../src/store/authStore';
+import HrMyProfile from '../hr-my-profile';
 import { useAuth, PERMISSIONS } from '../../src/contexts/AuthContext';
 import {
   usersAPI,
@@ -98,6 +99,7 @@ interface StatCard {
 
 export default function HomeDashboardScreen() {
   const { user } = useAuthStore();
+  if (user?.role === 'employee') return <HrMyProfile />;
   if (user && user.role !== 'teacher' && user.role !== 'student') return <ManagementDashboard />;
   return <LegacyHomeScreen />;
 }

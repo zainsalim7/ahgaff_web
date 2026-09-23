@@ -87,6 +87,9 @@ export const PERMISSIONS = {
   HR_VIEW_EMPLOYEES: 'hr_view_employees',
   HR_MANAGE_EMPLOYEES: 'hr_manage_employees',
   HR_MANAGE_ORG: 'hr_manage_org',
+  HR_MANAGE_LEAVES: 'hr_manage_leaves',
+  HR_MANAGE_ATTENDANCE: 'hr_manage_attendance',
+  HR_MANAGE_CORRESPONDENCE: 'hr_manage_correspondence',
   // صلاحيات أخرى
   CROSS_UNIVERSITY_ASSIGNMENT: 'cross_university_assignment',
   MANAGE_SETTINGS: 'manage_settings',

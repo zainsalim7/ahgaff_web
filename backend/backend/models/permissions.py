@@ -87,6 +87,9 @@ class Permission:
     HR_VIEW_EMPLOYEES = "hr_view_employees"
     HR_MANAGE_EMPLOYEES = "hr_manage_employees"
     HR_MANAGE_ORG = "hr_manage_org"
+    HR_MANAGE_LEAVES = "hr_manage_leaves"
+    HR_MANAGE_ATTENDANCE = "hr_manage_attendance"
+    HR_MANAGE_CORRESPONDENCE = "hr_manage_correspondence"
     
     # صلاحيات التسجيل
     MANAGE_ENROLLMENTS = "manage_enrollments"
@@ -334,6 +337,9 @@ ALL_PERMISSIONS = [
     {"key": Permission.HR_VIEW_EMPLOYEES, "label": "عرض سجل الموظفين والهيكل التنظيمي", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_EMPLOYEES, "label": "إدارة الموظفين (إضافة/تعديل/حذف/استيراد/إنشاء حسابات)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_ORG, "label": "إدارة الهيكل التنظيمي (الوحدات والإدارات)", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_LEAVES, "label": "إدارة الإجازات (اعتماد/رفض/تسجيل/أرصدة)", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_ATTENDANCE, "label": "إدارة الحضور الإداري (الكشف اليومي/إعدادات الدوام)", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_CORRESPONDENCE, "label": "إدارة المراسلات والتعاميم", "category": "شؤون الموظفين"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},
@@ -449,6 +455,9 @@ FULL_PERMISSION_MAPPING = {
     Permission.HR_MANAGE_EMPLOYEES: [
         Permission.HR_VIEW_EMPLOYEES
     ],
+    Permission.HR_MANAGE_LEAVES: [Permission.HR_VIEW_EMPLOYEES],
+    Permission.HR_MANAGE_ATTENDANCE: [Permission.HR_VIEW_EMPLOYEES],
+    Permission.HR_MANAGE_CORRESPONDENCE: [Permission.HR_VIEW_EMPLOYEES],
     Permission.MANAGE_CURRICULUM: [
         Permission.VIEW_CURRICULUM
     ],

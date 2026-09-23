@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { goBack } from '../src/utils/navigation';
 import { hrAPI } from '../src/services/api';
 import { ReportHero, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
+import { MyAttendanceCard, MyCorrespondenceCard, MyLeavesShortcut } from '../src/components/hr/SelfServiceCards';
 
 const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f97316', leave: '#0284c7', suspended: '#dc2626', ended: '#64748b' };
 
@@ -24,7 +25,10 @@ export default function HrMyProfile() {
         <ReportHero kicker="شؤون الموظفين" title="ملفي الإداري" subtitle="بياناتك الوظيفية كما هي مسجّلة لدى شؤون الموظفين — لتعديل أي بيان راجع إدارة الموارد البشرية" onBack={() => goBack()} canExport={false} testID="hr-me-hero" />
         {loading ? <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 30 }} />
           : !p ? <ReportEmpty text="لا يوجد ملف إداري مرتبط بحسابك بعد — سيظهر هنا بعد أن تُنشئه إدارة شؤون الموظفين" icon="id-card-outline" />
-          : (
+          : (<>
+            <MyLeavesShortcut />
+            <MyAttendanceCard />
+            <MyCorrespondenceCard />
             <View style={reportPage.card} testID="hr-me-card">
               <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                 <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#0f2440', alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#fff', fontSize: 22, fontWeight: '800' }}>{(p.full_name || '?').trim().charAt(0)}</Text></View>
@@ -44,7 +48,7 @@ export default function HrMyProfile() {
                 ))}
               </View>
             </View>
-          )}
+          </>)}
       </ScrollView>
     </SafeAreaView>
   );
