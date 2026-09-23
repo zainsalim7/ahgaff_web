@@ -410,6 +410,22 @@ export default function ManageRolesScreen() {
         </Text>
       </View>
 
+      {/* 🏢 أدوار شؤون الموظفين الجاهزة */}
+      <View style={[styles.infoCard, { backgroundColor: '#f3e8ff', justifyContent: 'space-between' }]} testID="hr-presets-card">
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.infoText, { fontWeight: '800', color: '#4c1d95' }]}>أدوار شؤون الموظفين الجاهزة</Text>
+          <Text style={[styles.infoText, { fontSize: 11.5 }]}>مدير شؤون الموظفين · أخصائي · مسؤول الحضور · مسؤول المراسلات · مراقب (اطّلاع). يمكن تعديل صلاحياتها لاحقاً.</Text>
+        </View>
+        <TouchableOpacity
+          onPress={async () => {
+            try { const r = await rolesAPI.createHrPresets(); Alert.alert('تم', r.data.message); hasFetched.current = false; setRoles([]); fetchData(); }
+            catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل إنشاء الأدوار'); }
+          }}
+          style={{ backgroundColor: '#6d28d9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} data-testid="create-hr-presets-btn">
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>إنشاء / تحديث</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Roles List */}
       <ScrollView 
         style={styles.scrollView}

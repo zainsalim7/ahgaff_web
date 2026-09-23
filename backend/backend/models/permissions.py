@@ -400,9 +400,25 @@ for _r in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD):
 READ_ONLY_ROLES = {UserRole.UNIVERSITY_PRESIDENT}
 READ_ONLY_PERMISSIONS = [
     p["key"] for p in ALL_PERMISSIONS
-    if p["key"].startswith(("view_", "report_", "export_", "dashboard_")) or p["key"] in ("search_archive", "manage_fee_receipts")
+    if p["key"].startswith(("view_", "report_", "export_", "dashboard_")) or p["key"] in ("search_archive", "manage_fee_receipts", Permission.HR_VIEW_EMPLOYEES)
 ]  # manage_fee_receipts = المفتاح الوحيد لقراءة السندات المالية؛ الكتابة محجوبة بحارس القراءة
 DEFAULT_PERMISSIONS[UserRole.UNIVERSITY_PRESIDENT] = list(READ_ONLY_PERMISSIONS)
+
+# 🏢 أدوار شؤون الموظفين الجاهزة (تُنشأ بزر واحد من إدارة الأدوار)
+_HR_ALL = [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_EMPLOYEES, Permission.HR_MANAGE_ORG, Permission.HR_MANAGE_LEAVES, Permission.HR_MANAGE_ATTENDANCE,
+           Permission.HR_MANAGE_CORRESPONDENCE, Permission.HR_MANAGE_TASKS, Permission.HR_MANAGE_APPRAISALS]
+HR_ROLE_PRESETS = [
+    {"key": "hr_manager", "name": "مدير شؤون الموظفين", "description": "كامل صلاحيات شؤون الموظفين: السجل والمستندات، الهيكل التنظيمي، اعتماد الإجازات والأرصدة، الحضور الإداري، المراسلات، إسناد المهام، اعتماد التقييم السنوي، التقرير السنوي وبطاقة HR في لوحة القيادة",
+     "permissions": _HR_ALL + [Permission.DASHBOARD_ALERTS]},
+    {"key": "hr_officer", "name": "أخصائي شؤون الموظفين", "description": "التشغيل اليومي دون سلطة اعتماد: إدارة سجلات الموظفين والمستندات، الحضور الإداري، المراسلات، وعرض الإجازات والتقييمات",
+     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_EMPLOYEES, Permission.HR_MANAGE_ATTENDANCE, Permission.HR_MANAGE_CORRESPONDENCE]},
+    {"key": "hr_attendance_clerk", "name": "مسؤول الحضور والانصراف", "description": "الكشف اليومي للحضور الإداري والتقرير الشهري فقط، مع عرض سجل الموظفين",
+     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_ATTENDANCE]},
+    {"key": "hr_correspondence_clerk", "name": "مسؤول المراسلات (السكرتارية)", "description": "تسجيل الوارد والصادر والمذكرات والتعاميم ومتابعتها فقط، مع عرض سجل الموظفين",
+     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_CORRESPONDENCE]},
+    {"key": "hr_auditor", "name": "مراقب شؤون الموظفين (اطّلاع فقط)", "description": "اطّلاع كامل على السجل والإجازات والحضور والمراسلات والتقييمات والتقرير السنوي وبطاقة HR دون أي تعديل — مناسب للإدارة العليا",
+     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.DASHBOARD_ALERTS]},
+]
 
 FULL_PERMISSION_MAPPING = {
     Permission.MANAGE_DEPARTMENTS: [

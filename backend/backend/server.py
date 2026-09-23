@@ -121,7 +121,7 @@ from bidi.algorithm import get_display
 # استيراد النماذج من الملفات المنفصلة
 from models.permissions import (
     UserRole, Permission, DEFAULT_PERMISSIONS, ALL_PERMISSIONS, DASHBOARD_PERMISSIONS,
-    FULL_PERMISSION_MAPPING, ScopeType, user_has_permission
+    FULL_PERMISSION_MAPPING, ScopeType, user_has_permission, HR_ROLE_PRESETS
 )
 from models.users import (
     UserBase, UserCreate, UserLogin, UserResponse, Token,
@@ -1936,6 +1936,23 @@ async def delete_role(role_id: str, current_user: dict = Depends(get_current_use
     await db.roles.delete_one({"_id": ObjectId(role_id)})
     
     return {"message": "تم حذف الدور بنجاح"}
+
+@api_router.post("/roles/hr-presets")
+async def create_hr_role_presets(current_user: dict = Depends(get_current_user)):
+    """🏢 إنشاء/تحديث أدوار شؤون الموظفين الجاهزة (idempotent حسب preset_key)"""
+    if current_user["role"] != "admin" and not has_permission(current_user, "manage_roles"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    created, updated = [], []
+    for p in HR_ROLE_PRESETS:
+        ex = await db.roles.find_one({"$or": [{"preset_key": p["key"]}, {"name": p["name"]}]})
+        if ex:
+            await db.roles.update_one({"_id": ex["_id"]}, {"$set": {"preset_key": p["key"], "description": p["description"], "permissions": p["permissions"]}})
+            updated.append(p["name"])
+        else:
+            await db.roles.insert_one({"name": p["name"], "description": p["description"], "permissions": p["permissions"], "is_system": False, "preset_key": p["key"], "created_at": get_yemen_time(), "created_by": current_user["id"]})
+            created.append(p["name"])
+    return {"created": created, "updated": updated, "message": f"تم إنشاء {len(created)} دور وتحديث {len(updated)} — أسندها للمستخدمين من إدارة المستخدمين"}
+
 
 @api_router.post("/roles/init")
 async def init_default_roles(current_user: dict = Depends(get_current_user)):

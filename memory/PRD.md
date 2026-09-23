@@ -454,3 +454,9 @@
 - **PDF التقييم الموقّع** `GET /hr/appraisals/{id}/pdf` (للمعتمد فقط؛ owner/manager/HR): A4 عمودي بـ reportlab+Amiri — بيانات الموظف، مؤشرات النظام، جدول المعايير، النتيجة والتقدير، التعليقات، خانات توقيع ثلاثية (المدير المباشر/شؤون الموظفين/الموظف بتواريخهم) + QR ورقم تحقق (`verify_token` يُولَّد أول مرة). تحقق عام بدون تسجيل: `GET /api/hr/verify/appraisal/{token}` + صفحة `verify-appraisal.tsx` (أُضيفت إلى VERIFY_PATHS). زر «تحميل PDF موقّع» في نافذة التقييم.
 - **التقرير السنوي** `routes/hr_reports.py`: `GET /hr/reports/annual?year&org_unit_id` (يشمل فروع الوحدة) → القوى العاملة (فئة/حالة/تعاقد/وحدة، تعيينات وخروج)، اتجاه الحضور الشهري (نسبة حضور وتغطية، تأخير، إجازات)، الإجازات (بالنوع/الوحدة/الطلبات)، التقييم (توزيع التقديرات، المتوسط، حسب الوحدة)، المهام. تصدير `/annual/export?fmt=pdf|xlsx` (PDF عبر `build_report_pdf`). شاشة `hr-annual-report.tsx` (فلاتر سنة/وحدة، KPIs، أشرطة CSS، مخطط أعمدة شهري، جداول). قائمة جانبية: «التقرير السنوي HR».
 - **الاختبار**: iteration_77 — الباكند 27/27، الواجهة 100%.
+
+## 2026-09-23: 🔐 أدوار شؤون الموظفين الجاهزة ✅
+- `HR_ROLE_PRESETS` في `models/permissions.py` + `POST /api/roles/hr-presets` (idempotent عبر `preset_key`): مدير شؤون الموظفين (كل hr_* + dashboard_alerts) · أخصائي (view+manage_employees+attendance+correspondence) · مسؤول الحضور (view+attendance) · مسؤول المراسلات (view+correspondence) · مراقب اطّلاع (view+dashboard_alerts). زر «إنشاء / تحديث» في شاشة إدارة الأدوار (`hr-presets-card`). الأدوار أُنشئت فعلياً في قاعدة البيانات.
+- «مدير الوحدة» ليس دوراً بل ارتباط `manager_employee_id` (موافقة أولى على الإجازات، إسناد مهام، تقييم الفريق).
+- `hr_view_employees` أُضيف إلى READ_ONLY_PERMISSIONS (رئيس الجامعة يرى HR للاطّلاع).
+- إصلاح: `hr_manager_user_ids` يشمل الآن من يملك الصلاحية عبر role_id أو دور نظامي (كانت تشمل الصلاحيات المباشرة فقط) — تم التحقق بإسناد الدور لمستخدم EMP-200 مؤقتاً (200 على كل نقاط HR + مدرج في مستلمي الإشعارات) ثم إعادته.

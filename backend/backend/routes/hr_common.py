@@ -141,9 +141,16 @@ async def notify_users(db, user_ids: Iterable[str], title: str, message: str, nt
 
 
 async def hr_manager_user_ids(db, perm: str) -> List[str]:
-    """مستخدمو الإدارة الذين يملكون صلاحية معيّنة (أو admin)"""
+    """مستخدمو الإدارة الذين يملكون صلاحية معيّنة: admin، أو مباشرة، أو عبر دور (role_id / دور نظامي)"""
+    role_ids = [str(r["_id"]) for r in await db.roles.find({"permissions": perm}, {"_id": 1}).to_list(500)]
+    system_keys = [r["system_key"] for r in await db.roles.find({"permissions": perm, "system_key": {"$exists": True, "$ne": ""}}, {"system_key": 1}).to_list(50)]
+    ors = [{"role": "admin"}, {"permissions": perm}, {"custom_permissions": perm}]
+    if role_ids:
+        ors.append({"role_id": {"$in": role_ids}})
+    if system_keys:
+        ors.append({"role": {"$in": system_keys}, "role_id": {"$in": [None, ""]}})
     out = []
-    async for u in db.users.find({"is_active": {"$ne": False}, "$or": [{"role": "admin"}, {"permissions": perm}, {"custom_permissions": perm}]}, {"_id": 1}):
+    async for u in db.users.find({"is_active": {"$ne": False}, "$or": ors}, {"_id": 1}):
         out.append(str(u["_id"]))
     return out
 
