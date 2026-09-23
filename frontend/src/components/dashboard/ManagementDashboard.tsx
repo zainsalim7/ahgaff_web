@@ -14,6 +14,7 @@ import { DashKpis } from './DashKpis';
 import { DashAlerts } from './DashAlerts';
 import { DashAttendanceChart } from './DashAttendanceChart';
 import { DashFinance } from './DashFinance';
+import { DashHR } from './DashHR';
 import { DashTeachers } from './DashTeachers';
 import { DashStudents } from './DashStudents';
 import { DashRooms } from './DashRooms';
@@ -140,6 +141,7 @@ export const ManagementDashboard = () => {
               {data.rooms && <View style={{ flex: 1 }}><DashRooms r={data.rooms} /></View>}
             </View>
             {data.finance && <DashFinance f={data.finance} />}
+            {data.hr && <DashHR h={data.hr} />}
           </>
         )}
       </ScrollView>

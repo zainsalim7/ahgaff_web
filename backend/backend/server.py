@@ -219,6 +219,9 @@ from routes.hr import router as hr_router
 from routes.hr_leaves import router as hr_leaves_router
 from routes.hr_attendance import router as hr_attendance_router
 from routes.hr_correspondence import router as hr_corr_router
+from routes.hr_tasks import router as hr_tasks_router
+from routes.hr_appraisals import router as hr_appraisals_router
+from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
 from routes.schedule_integrity import router as schedule_integrity_router
 from routes.statements import router as statements_router
 from routes.grades import router as grades_router
@@ -17902,6 +17905,9 @@ app.include_router(hr_router, prefix="/api")
 app.include_router(hr_leaves_router, prefix="/api")
 app.include_router(hr_attendance_router, prefix="/api")
 app.include_router(hr_corr_router, prefix="/api")
+app.include_router(hr_tasks_router, prefix="/api")
+app.include_router(hr_appraisals_router, prefix="/api")
+app.include_router(hr_alerts_router, prefix="/api")
 app.include_router(schedule_integrity_router, prefix="/api")
 app.include_router(statements_router, prefix="/api")
 app.include_router(grades_router, prefix="/api")
@@ -17948,6 +17954,8 @@ async def startup_event():
     # 🔔 الملخص اليومي للسندات المعلقة (08:00 اليمن)
     from routes.fee_alerts import fee_daily_loop
     asyncio.create_task(fee_daily_loop())
+    # 🏢 تنبيهات شؤون الموظفين (يومي 08:00 + أسبوعي السبت)
+    asyncio.create_task(hr_alerts_loop())
     # تهيئة خدمة التخزين
     try:
         from services.storage_service import init_storage

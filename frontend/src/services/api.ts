@@ -746,6 +746,31 @@ export const hrAPI = {
   deleteCorr: (id: string) => api.delete(`/hr/correspondence/${id}`),
   myCorr: () => api.get('/hr/correspondence/my'),
   ackCorr: (id: string) => api.post(`/hr/correspondence/${id}/ack`),
+  // المهام
+  tasksMeta: () => api.get('/hr/tasks/meta'),
+  tasksAssignable: () => api.get('/hr/tasks/assignable'),
+  tasks: (params?: any) => api.get('/hr/tasks', { params }),
+  task: (id: string) => api.get(`/hr/tasks/${id}`),
+  createTask: (data: any) => api.post('/hr/tasks', data),
+  updateTask: (id: string, data: any) => api.put(`/hr/tasks/${id}`, data),
+  taskProgress: (id: string, data: any) => api.post(`/hr/tasks/${id}/progress`, data),
+  deleteTask: (id: string) => api.delete(`/hr/tasks/${id}`),
+  // التقييم السنوي
+  appraisalsMeta: () => api.get('/hr/appraisals/meta'),
+  appraisalsOverview: (params?: any) => api.get('/hr/appraisals/overview', { params }),
+  myAppraisals: () => api.get('/hr/appraisals/my'),
+  appraisalMetrics: (employeeId: string, year?: number) => api.get(`/hr/appraisals/metrics/${employeeId}`, { params: year ? { year } : {} }),
+  createAppraisal: (employee_id: string, year: number) => api.post('/hr/appraisals', { employee_id, year }),
+  appraisal: (id: string) => api.get(`/hr/appraisals/${id}`),
+  saveAppraisal: (id: string, data: any) => api.put(`/hr/appraisals/${id}`, data),
+  submitAppraisal: (id: string) => api.post(`/hr/appraisals/${id}/submit`),
+  approveAppraisal: (id: string, comment = '') => api.post(`/hr/appraisals/${id}/approve`, { comment }),
+  returnAppraisal: (id: string, comment = '') => api.post(`/hr/appraisals/${id}/return`, { comment }),
+  acknowledgeAppraisal: (id: string, comment = '') => api.post(`/hr/appraisals/${id}/acknowledge`, { comment }),
+  deleteAppraisal: (id: string) => api.delete(`/hr/appraisals/${id}`),
+  // التنبيهات
+  hrSummary: () => api.get('/hr/alerts/summary'),
+  hrRunAlerts: (kind: 'daily' | 'weekly') => api.post(`/hr/alerts/run-now?kind=${kind}`),
 };
 
 export const lecturesAPI = {

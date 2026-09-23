@@ -2,6 +2,7 @@
 import io
 import os
 import asyncio
+import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
@@ -324,6 +325,14 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
         if not sections[k]:
             phase2[k] = None
 
+    hr = None
+    if scope["is_admin"] or has_permission(user, "hr_view_employees"):
+        try:
+            from .hr_alerts import hr_dashboard_summary
+            hr = await hr_dashboard_summary(db)
+        except Exception as e:
+            logging.warning(f"hr dashboard summary failed: {e}")
+
     return {
         "generated_at": now.strftime("%Y-%m-%d %H:%M"),
         "sections": sections,
@@ -345,6 +354,7 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
         "chart": {"group_by": group_by, "points": chart_points} if sections["attendance"] else None,
         "alerts": alerts if sections["alerts"] else [],
         "finance": finance,
+        "hr": hr,
         "activity": activity,
     }
 

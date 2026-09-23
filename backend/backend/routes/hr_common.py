@@ -11,6 +11,7 @@ from .deps import has_permission
 YEMEN_TZ = timezone(timedelta(hours=3))
 P_VIEW, P_MANAGE, P_ORG = "hr_view_employees", "hr_manage_employees", "hr_manage_org"
 P_LEAVES, P_ATTEND, P_CORR = "hr_manage_leaves", "hr_manage_attendance", "hr_manage_correspondence"
+P_TASKS, P_APPRAISE = "hr_manage_tasks", "hr_manage_appraisals"
 
 AR_DAYS = {5: "السبت", 6: "الأحد", 0: "الاثنين", 1: "الثلاثاء", 2: "الأربعاء", 3: "الخميس", 4: "الجمعة"}
 DEFAULT_SETTINGS = {
@@ -160,3 +161,21 @@ async def enrich_employee_refs(db, docs: List[dict], key: str = "employee_id") -
         d["job_title"] = e.get("job_title", "")
         d["org_unit_name"] = units.get(e.get("org_unit_id") or "", "")
     return docs
+
+
+async def team_of(db, emp: Optional[dict]) -> List[dict]:
+    """الموظفون الذين مديرهم المباشر هو هذا الموظف"""
+    if not emp:
+        return []
+    return await db.employees.find({"manager_employee_id": str(emp["_id"]), "status": {"$ne": "ended"}}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1}).sort("full_name", 1).to_list(500)
+
+
+async def can_act_on(db, current_user: dict, target_employee_id: str, perm: str) -> bool:
+    """HR بالصلاحية، أو المدير المباشر للموظف"""
+    if has_permission(current_user, perm):
+        return True
+    me = await find_my_employee(db, current_user)
+    if not me or not ObjectId.is_valid(target_employee_id):
+        return False
+    t = await db.employees.find_one({"_id": ObjectId(target_employee_id)}, {"manager_employee_id": 1})
+    return bool(t and t.get("manager_employee_id") == str(me["_id"]))

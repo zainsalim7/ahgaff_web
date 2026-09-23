@@ -90,6 +90,8 @@ class Permission:
     HR_MANAGE_LEAVES = "hr_manage_leaves"
     HR_MANAGE_ATTENDANCE = "hr_manage_attendance"
     HR_MANAGE_CORRESPONDENCE = "hr_manage_correspondence"
+    HR_MANAGE_TASKS = "hr_manage_tasks"
+    HR_MANAGE_APPRAISALS = "hr_manage_appraisals"
     
     # صلاحيات التسجيل
     MANAGE_ENROLLMENTS = "manage_enrollments"
@@ -340,6 +342,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.HR_MANAGE_LEAVES, "label": "إدارة الإجازات (اعتماد/رفض/تسجيل/أرصدة)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_ATTENDANCE, "label": "إدارة الحضور الإداري (الكشف اليومي/إعدادات الدوام)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_CORRESPONDENCE, "label": "إدارة المراسلات والتعاميم", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_TASKS, "label": "إسناد المهام لأي موظف ومتابعتها (المدير المباشر يسند لفريقه دون هذه الصلاحية)", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_APPRAISALS, "label": "اعتماد التقييم السنوي وإدارته لكل الموظفين", "category": "شؤون الموظفين"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},
@@ -458,6 +462,8 @@ FULL_PERMISSION_MAPPING = {
     Permission.HR_MANAGE_LEAVES: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_ATTENDANCE: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_CORRESPONDENCE: [Permission.HR_VIEW_EMPLOYEES],
+    Permission.HR_MANAGE_TASKS: [Permission.HR_VIEW_EMPLOYEES],
+    Permission.HR_MANAGE_APPRAISALS: [Permission.HR_VIEW_EMPLOYEES],
     Permission.MANAGE_CURRICULUM: [
         Permission.VIEW_CURRICULUM
     ],

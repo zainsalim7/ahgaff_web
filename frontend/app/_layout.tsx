@@ -177,6 +177,8 @@ export default function RootLayout() {
           <Stack.Screen name="hr-my-leaves" options={{ title: 'إجازاتي' }} />
           <Stack.Screen name="hr-attendance" options={{ title: 'الحضور الإداري' }} />
           <Stack.Screen name="hr-correspondence" options={{ title: 'المراسلات والتعاميم' }} />
+          <Stack.Screen name="hr-tasks" options={{ title: 'المهام' }} />
+          <Stack.Screen name="hr-appraisals" options={{ title: 'التقييم السنوي' }} />
           <Stack.Screen name="report-teacher-summary" options={{ title: 'ملخص المعلم' }} />
           <Stack.Screen name="report-teacher-attendance" options={{ title: 'حضور الأساتذة' }} />
           <Stack.Screen name="report-absent-students" options={{ title: 'الطلاب المتغيبون' }} />
