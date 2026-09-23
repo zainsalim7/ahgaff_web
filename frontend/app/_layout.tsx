@@ -169,6 +169,7 @@ export default function RootLayout() {
           <Stack.Screen name="report-warnings" options={{ title: 'الإنذارات' }} />
           <Stack.Screen name="report-daily" options={{ title: 'التقرير اليومي' }} />
           <Stack.Screen name="report-course" options={{ title: 'تقرير المقرر' }} />
+          <Stack.Screen name="trash" options={{ title: 'سلة المحذوفات' }} />
           <Stack.Screen name="report-teacher-summary" options={{ title: 'ملخص المعلم' }} />
           <Stack.Screen name="report-teacher-attendance" options={{ title: 'حضور الأساتذة' }} />
           <Stack.Screen name="report-absent-students" options={{ title: 'الطلاب المتغيبون' }} />

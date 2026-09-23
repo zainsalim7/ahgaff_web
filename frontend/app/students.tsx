@@ -1423,6 +1423,23 @@ export default function StudentsScreen() {
                 <Ionicons name="download-outline" size={16} color="#1a2540" />
                 <Text style={styles.btnGhostText}>تصدير</Text>
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnGhost]}
+                onPress={handleRestoreStudent}
+                disabled={restoringStudent}
+                testID="restore-student-btn"
+              >
+                {restoringStudent ? <ActivityIndicator size="small" color="#1565c0" /> : <Ionicons name="cloud-upload-outline" size={16} color="#1565c0" />}
+                <Text style={[styles.btnGhostText, { color: '#1565c0' }]}>استعادة من ملف</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.headerBtn, styles.btnGhost]}
+                onPress={() => router.push('/trash')}
+                testID="open-trash-btn"
+              >
+                <Ionicons name="trash-outline" size={16} color="#6b7280" />
+                <Text style={[styles.btnGhostText, { color: '#6b7280' }]}>سلة المحذوفات</Text>
+              </TouchableOpacity>
             </View>
           )}
         </View>

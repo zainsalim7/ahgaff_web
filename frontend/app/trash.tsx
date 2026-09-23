@@ -164,6 +164,42 @@ export default function TrashScreen() {
     }
   };
 
+  // 📂 استعادة من ملف نسخة احتياطية (طالب / معلم / مقرر) — يكتشف النوع تلقائياً
+  const [restoringFile, setRestoringFile] = useState(false);
+  const RESTORE_ROUTES: Record<string, { url: string; label: string; name: (d: any) => string }> = {
+    student_backup: { url: '/api/students/restore', label: 'الطالب', name: (d) => d.student?.full_name },
+    teacher_backup: { url: '/api/teachers/restore', label: 'المعلم', name: (d) => d.teacher?.full_name },
+    course_backup: { url: '/api/courses/restore', label: 'المقرر', name: (d) => d.course?.name },
+  };
+  const handleRestoreFromFile = () => {
+    if (typeof document === 'undefined') return;
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,application/json';
+    input.onchange = async (e: any) => {
+      const file = e.target?.files?.[0];
+      if (!file) return;
+      setRestoringFile(true);
+      try {
+        const data = JSON.parse(await file.text());
+        const route = RESTORE_ROUTES[data?.backup_type];
+        if (!route) { showMessage('خطأ', 'ملف النسخة الاحتياطية غير صالح — يجب أن يكون ملف حذف طالب أو معلم أو مقرر من هذا النظام'); return; }
+        const name = route.name(data) || 'غير معروف';
+        if (!window.confirm(`استعادة ${route.label} «${name}» من الملف؟`)) return;
+        const token = await AsyncStorage.getItem('token');
+        const res = await fetch(`${API_URL}${route.url}`, { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+        const out = await res.json();
+        if (res.ok) { showMessage('نجاح', out.message || `تم استعادة ${route.label} «${name}» بنجاح`); fetchTrash(); }
+        else showMessage('خطأ', out.detail || 'فشل في الاستعادة');
+      } catch {
+        showMessage('خطأ', 'فشل في قراءة الملف — تأكد أنه ملف JSON صالح');
+      } finally {
+        setRestoringFile(false);
+      }
+    };
+    input.click();
+  };
+
   const formatDate = (isoString: string) => {
     try {
       const d = new Date(isoString);
@@ -266,6 +302,15 @@ export default function TrashScreen() {
               {items.length} عنصر في السلة
             </Text>
           </View>
+          <TouchableOpacity
+            style={[styles.clearAllBtn, { borderColor: '#1565c0', backgroundColor: '#e3f2fd' }]}
+            onPress={handleRestoreFromFile}
+            disabled={restoringFile}
+            testID="restore-from-file-btn"
+          >
+            {restoringFile ? <ActivityIndicator size="small" color="#1565c0" /> : <Ionicons name="cloud-upload-outline" size={16} color="#1565c0" />}
+            <Text style={[styles.clearAllBtnText, { color: '#1565c0' }]}>استعادة من ملف</Text>
+          </TouchableOpacity>
           {items.length > 0 && (
             <TouchableOpacity
               style={styles.clearAllBtn}
@@ -279,7 +324,7 @@ export default function TrashScreen() {
         </View>
         
         <Text style={styles.retentionNote}>
-          يتم حذف العناصر تلقائياً بعد 30 يوم من تاريخ الحذف
+          يتم حذف العناصر تلقائياً بعد 30 يوم من تاريخ الحذف — بعد ذلك يمكن الاستعادة من ملف النسخة الاحتياطية (JSON) الذي نُزّل على جهازك عند الحذف
         </Text>
 
         <FlatList
@@ -365,6 +410,8 @@ const styles = StyleSheet.create({
   },
   infoBar: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
