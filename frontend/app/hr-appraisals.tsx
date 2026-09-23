@@ -29,7 +29,7 @@ export default function HrAppraisals() {
       else setOv((await hrAPI.appraisalsOverview({ year, view: tab })).data);
     } catch (e) { alertErr(e); } finally { setLoading(false); }
   }, [tab, year]);
-  useEffect(() => { hrAPI.appraisalsMeta().then((r) => setMeta(r.data)).catch(() => {}); }, []);
+  useEffect(() => { hrAPI.appraisalsMeta().then((r) => setMeta(r.data)).catch(() => {}); if (!isHr) hrAPI.appraisalsOverview({ year, view: 'team' }).then((r) => { if (!(r.data.rows || []).length) setTab('my'); }).catch(() => setTab('my')); }, []);
   useEffect(() => { load(); }, [load]);
 
   const start = async (r: any) => { try { const res = await hrAPI.createAppraisal(r.employee_id, year); setOpenId(res.data.id); } catch (e) { alertErr(e); } };

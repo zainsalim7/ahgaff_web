@@ -113,14 +113,14 @@ async def overview(year: Optional[int] = None, view: str = "team", current_user:
     if view == "all":
         if not (_can_view(current_user) or has_permission(current_user, P_APPRAISE)):
             raise HTTPException(status_code=403, detail="غير مصرح")
-        emps = await db.employees.find({"status": {"$ne": "ended"}}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1, "manager_employee_id": 1}).sort("full_name", 1).to_list(5000)
+        emps = [_ser(e) for e in await db.employees.find({"status": {"$ne": "ended"}}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1, "manager_employee_id": 1}).sort("full_name", 1).to_list(5000)]
     else:
         emps = await team_of(db, me)
-    ids = [str(e["_id"]) for e in emps]
+    ids = [e["id"] for e in emps]
     apps = {a["employee_id"]: a for a in await db.hr_appraisals.find({"employee_id": {"$in": ids}, "year": year}).to_list(5000)}
     rows = []
     for e in emps:
-        eid = str(e["_id"])
+        eid = e["id"]
         a = apps.get(eid)
         rows.append({"employee_id": eid, "appraisal_id": str(a["_id"]) if a else None, "status": a["status"] if a else None, "status_label": STATUSES.get(a["status"]) if a else "لم يبدأ",
                      "total_score": a.get("total_score") if a else None, "grade": a.get("grade") if a else None, "evaluator_name": a.get("evaluator_name", "") if a else ""})

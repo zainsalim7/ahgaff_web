@@ -65,11 +65,11 @@ async def assignable(current_user: dict = Depends(get_current_user)):
     db = get_db()
     me = await find_my_employee(db, current_user)
     if has_permission(current_user, P_TASKS):
-        emps = await db.employees.find({"status": {"$nin": ["ended", "suspended"]}}, {"full_name": 1, "employee_no": 1, "job_title": 1}).sort("full_name", 1).to_list(2000)
+        emps = [_ser(e) for e in await db.employees.find({"status": {"$nin": ["ended", "suspended"]}}, {"full_name": 1, "employee_no": 1, "job_title": 1}).sort("full_name", 1).to_list(2000)]
         scope = "all"
     else:
         emps, scope = await team_of(db, me), "team"
-    return {"scope": scope, "employees": [{"id": str(e["_id"]), "full_name": e.get("full_name", ""), "employee_no": e.get("employee_no", ""), "job_title": e.get("job_title", "")} for e in emps]}
+    return {"scope": scope, "employees": [{"id": e["id"], "full_name": e.get("full_name", ""), "employee_no": e.get("employee_no", ""), "job_title": e.get("job_title", "")} for e in emps]}
 
 
 @router.get("")
@@ -83,7 +83,7 @@ async def list_tasks(view: str = "mine", status: Optional[str] = None, priority:
     if view == "mine":
         q["assignee_employee_id"] = my_id or "__none__"
     elif view == "team":
-        q["assignee_employee_id"] = {"$in": [str(e["_id"]) for e in await team_of(db, me)]}
+        q["assignee_employee_id"] = {"$in": [e["id"] for e in await team_of(db, me)]}
     elif view == "assigned":
         q["assigner_user_id"] = user_id_of(current_user)
     elif view == "all":

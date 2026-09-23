@@ -167,7 +167,8 @@ async def team_of(db, emp: Optional[dict]) -> List[dict]:
     """الموظفون الذين مديرهم المباشر هو هذا الموظف"""
     if not emp:
         return []
-    return await db.employees.find({"manager_employee_id": str(emp["_id"]), "status": {"$ne": "ended"}}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1}).sort("full_name", 1).to_list(500)
+    docs = await db.employees.find({"manager_employee_id": str(emp["_id"]), "status": {"$ne": "ended"}}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1}).sort("full_name", 1).to_list(500)
+    return [_ser(d) for d in docs]
 
 
 async def can_act_on(db, current_user: dict, target_employee_id: str, perm: str) -> bool:
