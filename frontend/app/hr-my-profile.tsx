@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { goBack } from '../src/utils/navigation';
 import { hrAPI } from '../src/services/api';
 import { ReportHero, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
-import { MyAttendanceCard, MyCorrespondenceCard, MyLeavesShortcut } from '../src/components/hr/SelfServiceCards';
+import { MyAttendanceCard, MyCorrespondenceCard, MyLeavesShortcut, MyDocumentsCard } from '../src/components/hr/SelfServiceCards';
 
 const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f97316', leave: '#0284c7', suspended: '#dc2626', ended: '#64748b' };
 
@@ -29,6 +29,7 @@ export default function HrMyProfile() {
             <MyLeavesShortcut />
             <MyAttendanceCard />
             <MyCorrespondenceCard />
+            <MyDocumentsCard />
             <View style={reportPage.card} testID="hr-me-card">
               <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 14 }}>
                 <View style={{ width: 54, height: 54, borderRadius: 27, backgroundColor: '#0f2440', alignItems: 'center', justifyContent: 'center' }}><Text style={{ color: '#fff', fontSize: 22, fontWeight: '800' }}>{(p.full_name || '?').trim().charAt(0)}</Text></View>

@@ -145,6 +145,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES] },
   { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-correspondence', label: 'المراسلات والتعاميم', icon: 'mail-open', path: '/hr-correspondence', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_CORRESPONDENCE] },
+  { id: 'hr-annual-report', label: 'التقرير السنوي HR', icon: 'stats-chart', path: '/hr-annual-report', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
   { id: 'hr-tasks', label: 'المهام', icon: 'checkbox', path: '/hr-tasks', permissions: [], forAll: true },
   { id: 'hr-appraisals', label: 'التقييم السنوي', icon: 'star', path: '/hr-appraisals', permissions: [], forAll: true },
   { id: 'hr-my-profile', label: 'ملفي الإداري', icon: 'person-circle', path: '/hr-my-profile', permissions: [], forAll: true },

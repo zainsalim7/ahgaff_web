@@ -287,3 +287,126 @@ async def delete_appraisal(aid: str, current_user: dict = Depends(get_current_us
         raise HTTPException(status_code=400, detail="تُحذف المسودات فقط")
     await db.hr_appraisals.delete_one({"_id": a["_id"]})
     return {"message": "تم حذف المسودة"}
+
+
+# ══════════════ PDF موقّع + تحقق عام ══════════════
+public_router = APIRouter(prefix="/hr/verify", tags=["شؤون الموظفين - تحقق عام"])
+
+
+def _appraisal_pdf(a: dict, emp: dict, unit_name: str, verify_url: str) -> bytes:
+    import io as _io
+    import os
+    import qrcode
+    from reportlab.lib import colors
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    import arabic_reshaper
+    from bidi.algorithm import get_display
+
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    font, bold = "Helvetica", "Helvetica-Bold"
+    try:
+        pdfmetrics.registerFont(TTFont("Amiri", os.path.join(here, "fonts", "Amiri-Regular.ttf")))
+        pdfmetrics.registerFont(TTFont("Amiri-Bold", os.path.join(here, "fonts", "Amiri-Bold.ttf")))
+        font, bold = "Amiri", "Amiri-Bold"
+    except Exception:
+        pass
+
+    def ar(t):
+        try:
+            return get_display(arabic_reshaper.reshape(str(t if t is not None else "")))
+        except Exception:
+            return str(t or "")
+
+    NAVY, GREY = colors.HexColor("#0f2440"), colors.HexColor("#64748b")
+    st_t = ParagraphStyle("t", fontName=bold, fontSize=16, leading=24, alignment=TA_CENTER, textColor=NAVY)
+    st_s = ParagraphStyle("s", fontName=font, fontSize=9.5, leading=14, alignment=TA_CENTER, textColor=GREY)
+    st_h = ParagraphStyle("h", fontName=bold, fontSize=11.5, alignment=TA_RIGHT, textColor=NAVY, spaceBefore=7, spaceAfter=3)
+    st_p = ParagraphStyle("p", fontName=font, fontSize=9.5, leading=15, alignment=TA_RIGHT, textColor=colors.HexColor("#334155"))
+    W = A4[0] - 28 * mm
+
+    def grid(rows, widths, head=True, fs=9.5, bg=NAVY):
+        rows = [[ar(c) for c in reversed(r)] for r in rows]
+        t = Table(rows, colWidths=list(reversed([w * mm for w in widths])))
+        st = [("FONTNAME", (0, 0), (-1, -1), font), ("FONTSIZE", (0, 0), (-1, -1), fs), ("GRID", (0, 0), (-1, -1), 0.4, colors.HexColor("#cbd5e1")),
+              ("ALIGN", (0, 0), (-1, -1), "CENTER"), ("VALIGN", (0, 0), (-1, -1), "MIDDLE"), ("TOPPADDING", (0, 0), (-1, -1), 4), ("BOTTOMPADDING", (0, 0), (-1, -1), 4)]
+        if head:
+            st += [("FONTNAME", (0, 0), (-1, 0), bold), ("BACKGROUND", (0, 0), (-1, 0), bg), ("TEXTCOLOR", (0, 0), (-1, 0), colors.white)]
+        t.setStyle(TableStyle(st))
+        return t
+
+    m = a.get("metrics") or {}
+    el = [Paragraph(ar("جامعة الأحقاف — شؤون الموظفين"), st_t), Paragraph(ar(f"نموذج التقييم السنوي للأداء — سنة {a['year']}"), st_s), Spacer(1, 4 * mm)]
+    el.append(grid([["الاسم", emp.get("full_name", ""), "الرقم الوظيفي", emp.get("employee_no", "")], ["المسمى الوظيفي", emp.get("job_title", "") or "—", "الوحدة التنظيمية", unit_name or "—"],
+                    ["المقيّم (المدير المباشر)", a.get("evaluator_name", ""), "اعتماد شؤون الموظفين", a.get("approved_by_name", "") or "—"]], [38, 54, 38, 54], head=False, fs=9.5))
+    el.append(Paragraph(ar("مؤشرات النظام التلقائية"), st_h))
+    el.append(grid([["نسبة الحضور", "التأخير (مرة)", "الغياب", "أيام الإجازة", "المهام المنجزة", "في وقتها"],
+                    [f"{m.get('attendance_rate')}%" if m.get("attendance_rate") is not None else "—", m.get("late", 0), m.get("absent", 0), m.get("leave_days", 0), f"{m.get('tasks_done', 0)}/{m.get('tasks_total', 0)}", f"{m.get('tasks_on_time_rate')}%" if m.get("tasks_on_time_rate") is not None else "—"]],
+                   [30, 30, 30, 30, 32, 32], bg=colors.HexColor("#173a63")))
+    el.append(Paragraph(ar("معايير التقييم (1 ضعيف — 5 ممتاز)"), st_h))
+    rows = [["#", "المعيار", "الدرجة", "التقدير", "ملاحظة"]]
+    for i, c in enumerate(CRITERIA, 1):
+        s = (a.get("scores") or {}).get(c["key"])
+        rows.append([i, c["label"], s or "—", SCALE.get(s, "—") if s else "—", (a.get("comments") or {}).get(c["key"], "")])
+    el.append(grid(rows, [8, 55, 16, 24, 81]))
+    el.append(Spacer(1, 3 * mm))
+    el.append(grid([["النتيجة الإجمالية", f"{a.get('total_score')} / 100", "التقدير العام", a.get("grade", "")]], [46, 46, 46, 46], head=False, fs=12))
+    for k, l in (("strengths", "نقاط القوة"), ("improvements", "جوانب التحسين"), ("goals", "أهداف السنة القادمة"), ("evaluator_comment", "تعليق المقيّم"), ("hr_comment", "تعليق شؤون الموظفين"), ("employee_comment", "تعليق الموظف")):
+        if a.get(k):
+            el += [Paragraph(ar(l), st_h), Paragraph(ar(a[k]), st_p)]
+    el.append(Spacer(1, 8 * mm))
+    d = lambda v: (v or "")[:10]
+    sig = [["الموظف", "شؤون الموظفين", "المدير المباشر"],
+           [f"{emp.get('full_name', '')}\n{('اطّلع بتاريخ ' + d(a.get('acknowledged_at'))) if a.get('acknowledged_at') else 'لم يُسجَّل الاطّلاع بعد'}", f"{a.get('approved_by_name', '')}\nاعتُمد بتاريخ {d(a.get('approved_at'))}", f"{a.get('evaluator_name', '')}\nأُرسل بتاريخ {d(a.get('submitted_at'))}"]]
+    el.append(grid(sig, [61, 61, 61], bg=colors.HexColor("#334155"), fs=9))
+    qr = qrcode.make(verify_url, box_size=5, border=1).convert("RGB")
+    qb = _io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)
+    foot = Table([[Image(qb, 28 * mm, 28 * mm), Paragraph(ar(f"وثيقة إلكترونية موقّعة رقمياً — رقم التحقق: {a.get('verify_token', '')[:12].upper()}\nللتحقق من صحتها امسح الرمز أو زر: {verify_url}\nتاريخ الإصدار: {_now()[:16].replace('T', ' ')}"), ParagraphStyle("f", fontName=font, fontSize=8, leading=12, alignment=TA_RIGHT, textColor=GREY))]], colWidths=[32 * mm, W - 32 * mm])
+    foot.setStyle(TableStyle([("VALIGN", (0, 0), (-1, -1), "MIDDLE")]))
+    el += [Spacer(1, 6 * mm), foot]
+    buf = _io.BytesIO()
+    SimpleDocTemplate(buf, pagesize=A4, leftMargin=14 * mm, rightMargin=14 * mm, topMargin=12 * mm, bottomMargin=12 * mm, title=f"appraisal-{a['year']}").build(el)
+    return buf.getvalue()
+
+
+@router.get("/{aid}/pdf")
+async def appraisal_pdf(aid: str, current_user: dict = Depends(get_current_user)):
+    """📄 PDF موقّع للتقييم المعتمد (مع رمز تحقق عام)"""
+    import uuid
+    from fastapi.responses import StreamingResponse
+    import io as _io
+    db = get_db()
+    a = await _load(db, aid)
+    acc = await _access(db, current_user, a)
+    if not any(acc.values()):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if a["status"] not in ("approved", "acknowledged"):
+        raise HTTPException(status_code=400, detail="يُصدر الملف للتقييمات المعتمدة فقط")
+    if not a.get("verify_token"):
+        a["verify_token"] = uuid.uuid4().hex
+        await db.hr_appraisals.update_one({"_id": a["_id"]}, {"$set": {"verify_token": a["verify_token"], "pdf_first_issued_at": _now()}})
+    from .statements import get_verify_base
+    base = await get_verify_base(db)
+    verify_url = f"{base}/verify-appraisal?token={a['verify_token']}" if base else a["verify_token"]
+    emp = await db.employees.find_one({"_id": ObjectId(a["employee_id"])}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1}) or {}
+    unit = await db.org_units.find_one({"_id": ObjectId(emp["org_unit_id"])}, {"name": 1}) if emp.get("org_unit_id") and ObjectId.is_valid(emp["org_unit_id"]) else None
+    pdf = _appraisal_pdf(a, emp, (unit or {}).get("name", ""), verify_url)
+    from .deps import export_headers, export_filename
+    return StreamingResponse(_io.BytesIO(pdf), media_type="application/pdf", headers=export_headers(export_filename("تقييم", emp.get("full_name", ""), str(a["year"]), ext="pdf")))
+
+
+@public_router.get("/appraisal/{token}")
+async def verify_appraisal(token: str):
+    """تحقق عام من صحة وثيقة تقييم — بدون تسجيل دخول"""
+    db = get_db()
+    a = await db.hr_appraisals.find_one({"verify_token": token})
+    if not a or a["status"] not in ("approved", "acknowledged"):
+        return {"valid": False, "message": "لا توجد وثيقة تقييم معتمدة بهذا الرمز"}
+    emp = await db.employees.find_one({"_id": ObjectId(a["employee_id"])}, {"full_name": 1, "employee_no": 1, "job_title": 1}) or {}
+    return {"valid": True, "message": "وثيقة تقييم صحيحة ومعتمدة من شؤون الموظفين", "employee_name": emp.get("full_name", ""), "employee_no": emp.get("employee_no", ""), "job_title": emp.get("job_title", ""),
+            "year": a["year"], "total_score": a.get("total_score"), "grade": a.get("grade"), "evaluator_name": a.get("evaluator_name", ""), "approved_by": a.get("approved_by_name", ""), "approved_at": (a.get("approved_at") or "")[:10], "reference": token[:12].upper()}

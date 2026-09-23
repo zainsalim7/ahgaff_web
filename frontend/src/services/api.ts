@@ -771,6 +771,19 @@ export const hrAPI = {
   // التنبيهات
   hrSummary: () => api.get('/hr/alerts/summary'),
   hrRunAlerts: (kind: 'daily' | 'weekly') => api.post(`/hr/alerts/run-now?kind=${kind}`),
+  // المستندات
+  docsMeta: () => api.get('/hr/documents/meta'),
+  docs: (employeeId: string) => api.get(`/hr/documents/${employeeId}`),
+  myDocs: () => api.get('/hr/documents/my'),
+  docsExpiring: (days = 60) => api.get('/hr/documents/expiring', { params: { days } }),
+  uploadDoc: (employeeId: string, form: FormData) => api.post(`/hr/documents/${employeeId}`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  updateDoc: (id: string, data: any) => api.put(`/hr/documents/${id}`, data),
+  deleteDoc: (id: string) => api.delete(`/hr/documents/${id}`),
+  docFile: (id: string) => api.get(`/hr/documents/file/${id}`, { responseType: 'blob' }),
+  // PDF التقييم + التقرير السنوي
+  appraisalPdf: (id: string) => api.get(`/hr/appraisals/${id}/pdf`, { responseType: 'blob' }),
+  annualReport: (params?: any) => api.get('/hr/reports/annual', { params }),
+  annualExport: (params?: any) => api.get('/hr/reports/annual/export', { params, responseType: 'blob' }),
 };
 
 export const lecturesAPI = {

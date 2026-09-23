@@ -220,7 +220,9 @@ from routes.hr_leaves import router as hr_leaves_router
 from routes.hr_attendance import router as hr_attendance_router
 from routes.hr_correspondence import router as hr_corr_router
 from routes.hr_tasks import router as hr_tasks_router
-from routes.hr_appraisals import router as hr_appraisals_router
+from routes.hr_appraisals import router as hr_appraisals_router, public_router as hr_verify_router
+from routes.hr_documents import router as hr_documents_router
+from routes.hr_reports import router as hr_reports_router
 from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
 from routes.schedule_integrity import router as schedule_integrity_router
 from routes.statements import router as statements_router
@@ -17907,6 +17909,9 @@ app.include_router(hr_attendance_router, prefix="/api")
 app.include_router(hr_corr_router, prefix="/api")
 app.include_router(hr_tasks_router, prefix="/api")
 app.include_router(hr_appraisals_router, prefix="/api")
+app.include_router(hr_verify_router, prefix="/api")
+app.include_router(hr_documents_router, prefix="/api")
+app.include_router(hr_reports_router, prefix="/api")
 app.include_router(hr_alerts_router, prefix="/api")
 app.include_router(schedule_integrity_router, prefix="/api")
 app.include_router(statements_router, prefix="/api")

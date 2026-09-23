@@ -70,6 +70,8 @@ async def run_daily_alerts(db, force: bool = False) -> dict:
     for u, titles in by_user.items():
         await notify_users(db, [u], f"لديك {len(titles)} مهمة متأخرة", " · ".join(titles[:3]) + (" …" if len(titles) > 3 else ""), "hr_task")
         out["tasks_overdue"] += 1
+    from .hr_documents import documents_expiring_alerts
+    out["documents_expiring"] = await documents_expiring_alerts(db, notify_users, employee_user_ids)
     return out
 
 
@@ -90,6 +92,10 @@ async def run_weekly_alerts(db, force: bool = False) -> dict:
         lines.append(f"عقود تنتهي خلال 60 يوماً: {len(contracts)} (" + "، ".join(f"{c['full_name']} {c['contract_end_date']}" for c in contracts[:3]) + (" …" if len(contracts) > 3 else "") + ")")
     if ids:
         lines.append(f"هويات/إقامات تنتهي: {len(ids)}")
+    exp_docs = await db.hr_documents.count_documents({"expiry_date": {"$ne": None, "$lte": limit}})
+    out["expiring_documents"] = exp_docs
+    if exp_docs:
+        lines.append(f"مستندات موظفين تنتهي خلال 60 يوماً: {exp_docs}")
     if out["pending_leaves"]:
         lines.append(f"طلبات إجازة معلّقة: {out['pending_leaves']}")
     if out["pending_appraisals"]:

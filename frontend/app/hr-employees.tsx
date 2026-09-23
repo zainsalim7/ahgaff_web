@@ -7,6 +7,7 @@ import { hrAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { EmployeeFormModal, Portal, inp, btn } from '../src/components/hr/EmployeeFormModal';
+import { EmployeeDocuments } from '../src/components/hr/EmployeeDocuments';
 
 const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f97316', leave: '#0284c7', suspended: '#dc2626', ended: '#64748b' };
 
@@ -144,6 +145,7 @@ export default function HrEmployees() {
             {detail.teacher && <div style={{ marginTop: 10, backgroundColor: '#ede9fe', color: '#5b21b6', padding: '8px 10px', borderRadius: 8, fontSize: 12 }}>🎓 عضو هيئة تدريس · الرقم الأكاديمي {detail.teacher.teacher_id} · {detail.teacher.courses_count} مقرر نشط</div>}
             {detail.subordinates?.length > 0 && <div style={{ marginTop: 12 }}><div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 4 }}>يرأس ({detail.subordinates.length})</div>{detail.subordinates.map((s: any) => <div key={s.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>{s.full_name}{s.job_title ? ` — ${s.job_title}` : ''}</div>)}</div>}
             {detail.notes && <div style={{ marginTop: 10, fontSize: 12, color: '#475569', backgroundColor: '#fafafa', padding: 8, borderRadius: 8 }}>{detail.notes}</div>}
+            <EmployeeDocuments employeeId={detail.id} canManage={canManage} />
             {canManage && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 16 }}>
                 <button onClick={() => setForm({ open: true, emp: detail })} style={btn('#1565c0')} data-testid="hr-detail-edit">تعديل</button>

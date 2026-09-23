@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { hrAPI } from '../../services/api';
 import { reportPage } from '../reports/ReportShell';
 import { Badge, btn, alertErr, fmtDT, ATT_COLOR, CORR_COLOR } from './ui';
+import { DocRow } from './EmployeeDocuments';
 
 export const MyAttendanceCard: React.FC = () => {
   const [d, setD] = useState<any>(null);
@@ -68,5 +69,18 @@ export const MyLeavesShortcut: React.FC = () => {
       <button onClick={() => router.push('/hr-tasks')} style={btn('#0f2440')} data-testid="hr-me-goto-tasks">✅ مهامي</button>
       <button onClick={() => router.push('/hr-appraisals')} style={btn('#f1f5f9', '#0f2440')} data-testid="hr-me-goto-appraisals">⭐ تقييمي السنوي</button>
     </div>
+  );
+};
+
+export const MyDocumentsCard: React.FC = () => {
+  const [items, setItems] = useState<any[]>([]);
+  useEffect(() => { hrAPI.myDocs().then((r) => setItems(r.data.items || [])).catch(() => setItems([])); }, []);
+  if (!items.length) return null;
+  return (
+    <View style={reportPage.card} testID="hr-me-documents">
+      <Text style={{ fontSize: 14, fontWeight: '800', color: '#0f2440', textAlign: 'right', marginBottom: 4 }}>مستنداتي ({items.length})</Text>
+      <Text style={{ fontSize: 11.5, color: '#64748b', textAlign: 'right', marginBottom: 6 }}>المستندات المحفوظة في ملفك لدى شؤون الموظفين — ستصلك تذكيرات قبل انتهاء أي منها</Text>
+      {items.map((d) => <DocRow key={d.id} d={d} />)}
+    </View>
   );
 };

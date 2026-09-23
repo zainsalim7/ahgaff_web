@@ -32,6 +32,7 @@ export const AppraisalModal: React.FC<{ id: string; meta: any; onClose: () => vo
   const save = () => run(() => hrAPI.saveAppraisal(id, { scores, comments, ...txt }));
   const submit = async () => { if (!filled) { window.alert('أكمل المعايير الستة'); return; } await hrAPI.saveAppraisal(id, { scores, comments, ...txt }).catch(() => {}); if (window.confirm('إرسال التقييم لاعتماد شؤون الموظفين؟ لن يمكن تعديله بعدها إلا بإعادته.')) run(() => hrAPI.submitAppraisal(id)); };
   const readOnly = !a.can_edit;
+  const downloadPdf = async () => { setBusy(true); try { const r = await hrAPI.appraisalPdf(id); const url = URL.createObjectURL(r.data); const el = document.createElement('a'); el.href = url; el.download = `تقييم ${a.employee_name} ${a.year}.pdf`; el.click(); URL.revokeObjectURL(url); } catch (e) { window.alert(errMsg(e)); } finally { setBusy(false); } };
 
   return (
     <Modal title={`التقييم السنوي ${a.year} — ${a.employee_name}`} onClose={onClose} width={760} busy={busy} testID="appraisal-modal">
@@ -65,6 +66,7 @@ export const AppraisalModal: React.FC<{ id: string; meta: any; onClose: () => vo
       <div style={{ display: 'flex', gap: 8, marginTop: 14, flexWrap: 'wrap', direction: 'rtl' }}>
         {a.can_edit && <button onClick={save} disabled={busy} style={btn('#1565c0')} data-testid="appraisal-save">حفظ المسودة</button>}
         {a.can_submit && <button onClick={submit} disabled={busy || !filled} style={btn(filled ? '#16a34a' : '#cbd5e1')} data-testid="appraisal-submit">إرسال للاعتماد</button>}
+        {['approved', 'acknowledged'].includes(a.status) && <button onClick={downloadPdf} disabled={busy} style={btn('#0f2440')} data-testid="appraisal-pdf">📄 تحميل PDF موقّع</button>}
       </div>
       {a.can_approve && (
         <div style={{ marginTop: 12, borderTop: '1px solid #eee', paddingTop: 10, direction: 'rtl' }}>
