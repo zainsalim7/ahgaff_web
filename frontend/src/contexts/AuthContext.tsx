@@ -84,6 +84,9 @@ export const PERMISSIONS = {
   VIEW_SCHEDULE: 'view_schedule',
   MANAGE_SCHEDULE: 'manage_schedule',
   SHIFT_DAY: 'shift_day',
+  HR_VIEW_EMPLOYEES: 'hr_view_employees',
+  HR_MANAGE_EMPLOYEES: 'hr_manage_employees',
+  HR_MANAGE_ORG: 'hr_manage_org',
   // صلاحيات أخرى
   CROSS_UNIVERSITY_ASSIGNMENT: 'cross_university_assignment',
   MANAGE_SETTINGS: 'manage_settings',

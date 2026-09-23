@@ -82,6 +82,11 @@ class Permission:
     VIEW_SCHEDULE = "view_schedule"
     MANAGE_SCHEDULE = "manage_schedule"
     SHIFT_DAY = "shift_day"  # ⏰ إزاحة اليوم الدراسي (تأخير/تقديم بداية اليوم)
+
+    # 🏢 شؤون الموظفين
+    HR_VIEW_EMPLOYEES = "hr_view_employees"
+    HR_MANAGE_EMPLOYEES = "hr_manage_employees"
+    HR_MANAGE_ORG = "hr_manage_org"
     
     # صلاحيات التسجيل
     MANAGE_ENROLLMENTS = "manage_enrollments"
@@ -326,6 +331,9 @@ ALL_PERMISSIONS = [
     {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات", "hidden": True},
     {"key": Permission.MANAGE_SCHEDULE, "label": "إدارة كاملة للجداول الدراسية", "category": "الجداول الدراسية"},
     {"key": Permission.SHIFT_DAY, "label": "إزاحة اليوم الدراسي (تأخير/تقديم بداية اليوم لكل المحاضرات)", "category": "الجداول الدراسية"},
+    {"key": Permission.HR_VIEW_EMPLOYEES, "label": "عرض سجل الموظفين والهيكل التنظيمي", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_EMPLOYEES, "label": "إدارة الموظفين (إضافة/تعديل/حذف/استيراد/إنشاء حسابات)", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_ORG, "label": "إدارة الهيكل التنظيمي (الوحدات والإدارات)", "category": "شؤون الموظفين"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},
@@ -437,6 +445,9 @@ FULL_PERMISSION_MAPPING = {
     ],
     Permission.MANAGE_SCHEDULE: [
         Permission.VIEW_SCHEDULE
+    ],
+    Permission.HR_MANAGE_EMPLOYEES: [
+        Permission.HR_VIEW_EMPLOYEES
     ],
     Permission.MANAGE_CURRICULUM: [
         Permission.VIEW_CURRICULUM

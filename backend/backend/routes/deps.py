@@ -205,6 +205,8 @@ async def get_scope_filter(current_user: dict, scope_type: str) -> dict:
 
 # ترجمة أنواع الأنشطة إلى العربية
 ACTION_TRANSLATIONS = {
+    "hr_create_employee": "إضافة موظف", "hr_update_employee": "تعديل بيانات موظف", "hr_delete_employee": "حذف موظف", "hr_sync_teachers": "مزامنة المعلمين مع سجل الموظفين",
+    "hr_create_account": "إنشاء حساب موظف", "hr_import_employees": "استيراد موظفين من Excel", "hr_sync_org": "مزامنة الهيكل التنظيمي", "hr_create_org_unit": "إضافة وحدة تنظيمية", "hr_delete_org_unit": "حذف وحدة تنظيمية",
     "day_shift_apply": "إزاحة اليوم الدراسي",
     "day_shift_revert": "التراجع عن إزاحة اليوم الدراسي",
     "fee_manual_payment": "تسجيل دفع يدوي",

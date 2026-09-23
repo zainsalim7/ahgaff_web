@@ -72,3 +72,7 @@
 ## Fee staff (موظفو السندات حسب نوع الرسوم — أُنشئوا 2026-09)
 - fee_dorm / test1234 — employee، كلية الشريعة والقانون، custom_permissions: manage_fee_receipts, view_students — مسؤول عن «رسوم السكن الداخلي»
 - fee_general / test1234 — employee، نفس الكلية — مسؤول عن «تجديد القيد الدراسي»
+
+## HR (شؤون الموظفين) — 2026-09
+- صلاحيات جديدة: hr_view_employees / hr_manage_employees / hr_manage_org (admin يملكها ضمنياً)
+- إنشاء حساب موظف من شاشة سجل الموظفين: اسم المستخدم = كلمة المرور الأولية = الرقم الوظيفي (must_change_password=true, role=employee)

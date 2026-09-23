@@ -693,6 +693,25 @@ export const enrollmentAPI = {
 };
 
 // Lectures API - المحاضرات/الحصص
+export const hrAPI = {
+  meta: () => api.get('/hr/employees/meta'),
+  orgUnits: () => api.get('/hr/org-units'),
+  syncOrg: () => api.post('/hr/org-units/sync-academic'),
+  createUnit: (data: any) => api.post('/hr/org-units', data),
+  updateUnit: (id: string, data: any) => api.put(`/hr/org-units/${id}`, data),
+  deleteUnit: (id: string) => api.delete(`/hr/org-units/${id}`),
+  employees: (params?: any) => api.get('/hr/employees', { params }),
+  employee: (id: string) => api.get(`/hr/employees/${id}`),
+  me: () => api.get('/hr/employees/me'),
+  createEmployee: (data: any) => api.post('/hr/employees', data),
+  updateEmployee: (id: string, data: any) => api.put(`/hr/employees/${id}`, data),
+  deleteEmployee: (id: string) => api.delete(`/hr/employees/${id}`),
+  syncTeachers: () => api.post('/hr/employees/sync-teachers'),
+  createAccount: (id: string) => api.post(`/hr/employees/${id}/account`),
+  importPreview: (form: FormData) => api.post('/hr/employees/import/preview', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+  importRun: (form: FormData) => api.post('/hr/employees/import?update_existing=true', form, { headers: { 'Content-Type': 'multipart/form-data' } }),
+};
+
 export const lecturesAPI = {
   getToday: () => api.get('/lectures/today'),
   

@@ -215,6 +215,7 @@ from routes.schedule_import import router as schedule_import_router
 from routes.schedule_resolver import router as schedule_resolver_router
 from routes.lectures_purge import router as lectures_purge_router
 from routes.day_shift import router as day_shift_router
+from routes.hr import router as hr_router
 from routes.schedule_integrity import router as schedule_integrity_router
 from routes.statements import router as statements_router
 from routes.grades import router as grades_router
@@ -743,6 +744,15 @@ async def restore_from_trash_helper(backup_data: dict):
         
         return {"message": "تم استعادة الطالب بنجاح", "new_id": new_id}
     
+    if backup_type == "employee_backup":
+        emp = dict(backup_data.get("employee") or {})
+        emp.pop("_id", None); emp.pop("id", None)
+        if await db.employees.find_one({"employee_no": emp.get("employee_no")}):
+            raise HTTPException(status_code=400, detail=f"الموظف بالرقم الوظيفي {emp.get('employee_no')} موجود بالفعل")
+        r = await db.employees.insert_one(emp)
+        if emp.get("user_id") and ObjectId.is_valid(emp["user_id"]):
+            await db.users.update_one({"_id": ObjectId(emp["user_id"])}, {"$set": {"is_active": True}})
+        return {"message": "تم استعادة الموظف بنجاح", "new_employee_id": str(r.inserted_id)}
     raise HTTPException(status_code=400, detail="نوع النسخة الاحتياطية غير معروف")
 
 # Configure logging
@@ -17885,6 +17895,7 @@ app.include_router(schedule_import_router, prefix="/api")
 app.include_router(schedule_resolver_router, prefix="/api")
 app.include_router(lectures_purge_router, prefix="/api")
 app.include_router(day_shift_router, prefix="/api")
+app.include_router(hr_router, prefix="/api")
 app.include_router(schedule_integrity_router, prefix="/api")
 app.include_router(statements_router, prefix="/api")
 app.include_router(grades_router, prefix="/api")
