@@ -1,0 +1,28 @@
+{
+  "summary": "HR Phase 4 (Employee Documents, Appraisal PDF + public verify, Annual HR report) tested end-to-end. Backend: 27/27 pytest cases passed against public REACT_APP_BACKEND_URL. Frontend: all requested data-testids present and behavior matches spec on admin, EMP-100. No blocking issues.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_hr_phase4.py",
+    "/app/test_reports/pytest/hr_phase4.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "hr_documents.py: file download does not scope by employee_id in the URL (only doc_id) but does check _can_read via the doc's stored employee_id — OK, but a defensive route like /file/{employee_id}/{doc_id} would prevent doc-id enumeration attacks.",
+    "hr_documents.py list route uses path GET /{employee_id} which conflicts semantically with GET /file/{doc_id}, GET /expiring, GET /my — FastAPI dispatches by literal-prefix ordering that happens to work because /expiring, /my, /meta and /file/... are declared before /{employee_id}. Any future refactor that reorders declarations could break routing. Consider explicit route module organization or a Depends() guard.",
+    "hr_reports.build_annual: months slice ends at 'today' meaning report changes over time; consider param `full_year` to force 12 months for closed years.",
+    "hr_reports export xlsx sheet title is truncated to 30 chars with `.title[:30]` which may cause duplicate sheet-name errors if two sections share the same first 30 chars (currently not the case, but risky)."
+  ],
+  "updated_files": ["/app/backend/tests/test_hr_phase4.py (new)"],
+  "success_rate": {"backend": "100% (27/27)", "frontend": "100% (all requested data-testids verified; PDF/Excel downloads triggered)"},
+  "test_credentials": "admin/admin123 ; EMP-100/EMP-100 ; EMP-200/EMP-200 (as provided).",
+  "seed_data_creation": "Backend tests uploaded and deleted TEST_cert_phase4 for EMP-100; ensured EXISTING_DOC_ID (6ab42ee7efb8b139d9e771c8) contract for EMP-100 remains present (re-uploaded a similar TEST_contract_reup if missing). Verified appraisal 6ab42193... verify_token exists (3752e9a5...).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Public verify page loads without auth and displays green shield card with employee_name/grade/total_score/reference and QR-verified reference. Real verify_token for appraisal 6ab42193ce78fea2f1416d28 = 3752e9a538c6417dace6e234086415d0. Annual report months=9 (Jan..Sep 2026) matches server date 2026-09-23 Yemen TZ. Appraisal PDF is application/pdf >10KB and downloadable for admin, owner, manager. EMP-100 self-service home shows hr-me-documents card listing contract with doc-open button.",
+  "rca of the issue": "No blocking bug. Two initial pytest failures were test-side issues fixed by (a) org-units endpoint returns {units:[...]} not {items:[...]}, and (b) expiring-docs assertion was overly specific; both fixed in test file. Product endpoints behaved correctly throughout."
+}
