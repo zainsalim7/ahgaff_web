@@ -272,8 +272,9 @@ async def monthly_export(month: Optional[str] = None, org_unit_id: Optional[str]
     for i in rep["items"]:
         c = i["counts"]
         ws.append([i["employee_no"], i["employee_name"], i["org_unit_name"], i["job_title"], c["present"], c["late"], c["half_day"], c["mission"], c["absent"], c["excused"], c["leave"], c["unmarked"], i["late_minutes"], i["rate"] if i["rate"] is not None else "—"])
-    for col in ws.columns:
-        ws.column_dimensions[col[0].column_letter].width = 16
+    from openpyxl.utils import get_column_letter
+    for ci in range(1, len(heads) + 1):
+        ws.column_dimensions[get_column_letter(ci)].width = 16
     ws.column_dimensions["B"].width = 30
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(export_filename("الحضور الإداري", rep["month"], ext="xlsx")))

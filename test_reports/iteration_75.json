@@ -1,0 +1,45 @@
+{
+  "summary": "HR Phase 2 (Leaves / Attendance / Correspondence) tested end-to-end. Backend: 18/19 pytest passed (only /hr/attendance/monthly/export returns 500 due to openpyxl MergedCell iteration bug). Frontend: all required data-testids present on /hr-leaves, /hr-attendance, /hr-correspondence, /hr-my-leaves and home HR self-service; approval chain (EMP-100 → EMP-200 → admin) works, circular acknowledgement works, balance/overlap validation works, correspondence ref_no auto-generates (HR-CIR-2026-0002, HR-INT-2026-0001), circular is visible to EMP-100 and increments ack_count in admin GET.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/hr/attendance/monthly/export",
+        "issue": "500 Internal Server Error — AttributeError: 'MergedCell' object has no attribute 'column_letter'. Caused by iterating `ws.columns` after merging A1:L1; first column contains a MergedCell. Fix: iterate over column indices/letters (e.g. `for col_idx in range(1, ws.max_column+1): ws.column_dimensions[get_column_letter(col_idx)].width = 16`) instead of `for col in ws.columns: ws.column_dimensions[col[0].column_letter].width = 16` in /app/backend/backend/routes/hr_attendance.py monthly_export.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_hr_phase2.py",
+    "/app/test_reports/pytest/hr_phase2_results.xml"
+  ],
+  "action_items": [
+    "Fix xlsx export in hr_attendance.py monthly_export: replace `for col in ws.columns: ws.column_dimensions[col[0].column_letter].width = 16` with a MergedCell-safe loop using openpyxl.utils.get_column_letter over column indices."
+  ],
+  "critical_code_review_comments": [
+    "hr_attendance.py monthly_export: MergedCell iteration bug (see action_items) — crashes any xlsx export.",
+    "hr_correspondence.py: `_recipients` returns duplicates possible only via set unioning — fine; but when `to_all_employees=True` and status draft on create, the `_dispatch` still correctly guarded — ok.",
+    "hr_leaves.py `_create_request`: when submitter's own user_id equals manager_user_id the flow sets status to hr_pending directly, which is the intended fallback but not documented — consider a comment.",
+    "hr_common.find_my_employee: performs several roundtrips per request; consider caching per request scope if used repeatedly.",
+    "General: numerous endpoints correctly exclude Mongo _id via _ser helper — good."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_hr_phase2.py (new)"
+  ],
+  "success_rate": {
+    "backend": "94% (18/19)",
+    "frontend": "100% (all key data-testids and flows verified)"
+  },
+  "test_credentials": "admin/admin123 ; EMP-100/EMP-100 ; EMP-200/EMP-200 (as provided).",
+  "seed_data_creation": "Created via tests: leave requests for EMP-100 (TEST chain approved 2026-12-06→08, TEST reject 12-13→14, TEST cancel 12-16→17) and EMP-200 registered 12-19→21 approved; correspondence HR-INT-2026-0001 (updated → in_progress) and HR-CIR-2026-0002 (circular to_all_employees) plus a deleted draft; a couple of hr_attendance records on 2026-09-22 (deleted for EMP-100). Balance override for EMP-100 in 2026: entitlement=25, carried_over=2.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Only bug remaining is xlsx export; frontend tests confirmed via data-testids. Test file at /app/backend/tests/test_hr_phase2.py runs with REACT_APP_BACKEND_URL exported. If EMP-100 self check-in button appears MISSING on home, that means the employee already has today's attendance record (checkout button appears instead) — this is expected behavior, not a bug.",
+  "rca of the issue": "openpyxl monthly export: after merging cells in row 1 (`ws.merge_cells('A1:L1')`), iterating `ws.columns` yields the merged region's cells first — for columns >A the top cell is a MergedCell that lacks `column_letter`. The loop `ws.column_dimensions[col[0].column_letter].width = 16` therefore raises AttributeError on the second column. Reproduce: GET /api/hr/attendance/monthly/export?month=2026-09 as admin → 500. Fix: iterate by column index using `openpyxl.utils.get_column_letter`."
+}
