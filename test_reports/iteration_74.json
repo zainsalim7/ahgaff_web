@@ -1,0 +1,25 @@
+{
+  "summary": "اختبار ميزة «إزاحة اليوم الدراسي» (day-shift) — الباكند والفرونتاند كلاهما يعملان بشكل صحيح. جميع اختبارات pytest نجحت (9/9) وسيناريو UI الكامل (فتح النافذة، معاينة، تنفيذ، شارة، تراجع، وضع المدى) نجح بلا مشاكل.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_day_shift.py",
+    "/app/test_reports/pytest/day_shift.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py في /app/backend/backend/server.py بحجم ~17885 سطر — يجب تقسيمه إلى modules أصغر (>700 سطر لكل ملف).",
+    "day_shift.py: منطق _notify يجعل student_cache مبنياً على course_id فقط — إذا تكرر نفس المقرر في عدة أيام سيُعاد استخدام نفس القائمة (سلوك صحيح للأداء لكن يستحق comment).",
+    "revert لا يحمي من إعادة استخدام lecture_id تم تعديله يدوياً بعد الإزاحة (يتجاوز عبر kept counter — سلوك آمن ومغطى)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_day_shift.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin/admin123 · fee_general/test1234 (بلا صلاحية)",
+  "seed_data_creation": "أُنشئت 3 محاضرات مؤقتة بتاريخ 2026-11-02 مع مقررات مختلفة (08:00-09:30, 09:45-11:15, 13:15-14:45)، الثالثة completed. نُظِّفت بالكامل في النهاية (0 محاضرات، 0 day_shifts، 0 إشعارات متبقية).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "day-shift API stable. Tests at /app/backend/tests/test_day_shift.py cover preview/apply/revert/permissions/errors/range/offset_minutes. Frontend testids on /schedule + DayShiftModal all correct. seed lectures at future date then cleanup.",
+  "rca of the issue": "لا توجد مشاكل — كل السيناريوهات المُطلوبة تعمل: preview يعيد total_lectures=2, total_skipped=1, skipped_reasons.completed=1, offset=120, faculty_name='جميع الكليات'. apply يُحدّث 2 ويستثني 1 مع time_locked=true و day_shift_id. list يخفي changes ويعرض created_by_name. revert يُعيد الأوقات ويُزيل time_locked، ثاني revert = 400. حالات الخطأ (date_to<from، >60 يوم، بلا وقت، صيغة سيئة، إزاحة خارج اليوم، apply بلا محاضرات) كلها 400. 403 لمستخدم fee_general. GET /api/permissions/all يحوي shift_day. الفرونتاند: النافذة والشارة والتراجع ووضع المدى (تعطيل الزر حتى تعبئة date-to) تعمل."
+}
