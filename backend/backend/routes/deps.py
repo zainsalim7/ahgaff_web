@@ -205,6 +205,8 @@ async def get_scope_filter(current_user: dict, scope_type: str) -> dict:
 
 # ترجمة أنواع الأنشطة إلى العربية
 ACTION_TRANSLATIONS = {
+    "day_shift_apply": "إزاحة اليوم الدراسي",
+    "day_shift_revert": "التراجع عن إزاحة اليوم الدراسي",
     "fee_manual_payment": "تسجيل دفع يدوي",
     "fee_bulk_manual_payment": "تسجيل دفع جماعي",
     "create_schedule_slot": "إضافة محاضرة للجدول",

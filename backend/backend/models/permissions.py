@@ -81,6 +81,7 @@ class Permission:
     # صلاحيات الجداول الدراسية (اليومي/الأسبوعي)
     VIEW_SCHEDULE = "view_schedule"
     MANAGE_SCHEDULE = "manage_schedule"
+    SHIFT_DAY = "shift_day"  # ⏰ إزاحة اليوم الدراسي (تأخير/تقديم بداية اليوم)
     
     # صلاحيات التسجيل
     MANAGE_ENROLLMENTS = "manage_enrollments"
@@ -324,6 +325,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.RESCHEDULE_LECTURE, "label": "إعادة جدولة المحاضرات", "category": "المحاضرات", "hidden": True},
     {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات", "hidden": True},
     {"key": Permission.MANAGE_SCHEDULE, "label": "إدارة كاملة للجداول الدراسية", "category": "الجداول الدراسية"},
+    {"key": Permission.SHIFT_DAY, "label": "إزاحة اليوم الدراسي (تأخير/تقديم بداية اليوم لكل المحاضرات)", "category": "الجداول الدراسية"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},

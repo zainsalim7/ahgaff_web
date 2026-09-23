@@ -11,6 +11,7 @@ import { settingsAPI, lecturesAPI } from '../src/services/api';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import api from '../src/services/api';
+import { DayShiftModal } from '../src/components/DayShiftModal';
 
 const DAYS_AR: Record<number, string> = {
   0: 'الأحد', 1: 'الإثنين', 2: 'الثلاثاء', 3: 'الأربعاء',
@@ -69,6 +70,29 @@ export default function ScheduleScreen() {
   const [purging, setPurging] = useState(false);
 
   const canPurge = user?.role === 'admin' || user?.permissions?.includes('manage_lectures');
+  const canShiftDay = user?.role === 'admin' || user?.permissions?.includes('shift_day');
+  const [shiftModal, setShiftModal] = useState(false);
+  const [dayShifts, setDayShifts] = useState<any[]>([]);
+  const [reverting, setReverting] = useState('');
+
+  const fetchDayShifts = useCallback(async (date: string) => {
+    try {
+      const r = await api.get(`/day-shift?date=${date}`);
+      setDayShifts(r.data || []);
+    } catch { setDayShifts([]); }
+  }, []);
+
+  const revertShift = async (id: string) => {
+    if (!window.confirm('التراجع عن الإزاحة وإعادة محاضرات اليوم إلى أوقاتها الأصلية؟\n(المحاضرات التي انعقدت أو بدأ تحضيرها لن تُمس)')) return;
+    setReverting(id);
+    try {
+      const r = await api.post(`/day-shift/${id}/revert`);
+      window.alert(`✅ ${r.data.message}`);
+      fetchLectures(selectedDate); fetchDayShifts(selectedDate);
+    } catch (e: any) {
+      window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'فشل التراجع');
+    } finally { setReverting(''); }
+  };
 
   const openPurgeModal = async () => {
     setPurgePreview(null); setPurgeModal(true);
@@ -147,7 +171,8 @@ export default function ScheduleScreen() {
 
   useEffect(() => {
     fetchLectures(selectedDate);
-  }, [selectedDate, fetchLectures]);
+    fetchDayShifts(selectedDate);
+  }, [selectedDate, fetchLectures, fetchDayShifts]);
 
   const isToday = selectedDate === getToday();
   const isTeacher = user?.role === 'teacher';
@@ -354,6 +379,16 @@ export default function ScheduleScreen() {
                 <Ionicons name="refresh" size={15} color="#1a2540" />
                 <Text style={s.btnGhostText}>تحديث</Text>
               </TouchableOpacity>
+              {canShiftDay && Platform.OS === 'web' && (
+                <TouchableOpacity
+                  style={[s.headerBtn, { backgroundColor: '#e3f2fd', borderWidth: 1, borderColor: '#90caf9' }]}
+                  onPress={() => setShiftModal(true)}
+                  testID="day-shift-open-btn"
+                >
+                  <Ionicons name="time-outline" size={15} color="#1565c0" />
+                  <Text style={{ color: '#1565c0', fontSize: 13, fontWeight: '700' }}>إزاحة اليوم الدراسي</Text>
+                </TouchableOpacity>
+              )}
               {canPurge && Platform.OS === 'web' && (
                 <TouchableOpacity
                   style={[s.headerBtn, { backgroundColor: '#ffebee', borderWidth: 1, borderColor: '#ef9a9a' }]}
@@ -435,6 +470,24 @@ export default function ScheduleScreen() {
                 <Ionicons name="chevron-back" size={20} color="#1a237e" />
               </TouchableOpacity>
             </View>
+            {dayShifts.map((sh) => {
+              const d = (sh.days || []).find((x: any) => x.date === selectedDate);
+              if (!d || !d.lectures) return null;
+              return (
+                <View key={sh.id} style={s.shiftStrip} testID={`day-shift-badge-${sh.id}`}>
+                  <Ionicons name="time" size={14} color="#e65100" />
+                  <Text style={s.shiftStripText}>
+                    بداية مؤخَّرة: {d.old_first} ← {d.new_first} ({d.offset_minutes > 0 ? '+' : ''}{d.offset_minutes} د · {d.lectures} محاضرة){sh.reason ? ` — ${sh.reason}` : ''}{sh.created_by_name ? ` · ${sh.created_by_name}` : ''}
+                  </Text>
+                  {canShiftDay && (
+                    <TouchableOpacity onPress={() => revertShift(sh.id)} disabled={reverting === sh.id} style={s.shiftRevertBtn} testID={`day-shift-revert-${sh.id}`}>
+                      <Ionicons name="arrow-undo" size={12} color="#fff" />
+                      <Text style={s.shiftRevertText}>{reverting === sh.id ? '...' : 'تراجع'}</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
             {semesterSettings?.semester_start_date && semesterSettings?.semester_end_date && (
               <View style={s.semesterStrip}>
                 <Ionicons name="information-circle" size={13} color="#1565c0" />
@@ -543,6 +596,9 @@ export default function ScheduleScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      {Platform.OS === 'web' && (
+        <DayShiftModal open={shiftModal} onClose={() => setShiftModal(false)} initialDate={selectedDate} onApplied={() => { fetchLectures(selectedDate); fetchDayShifts(selectedDate); }} />
+      )}
       {purgeModal && Platform.OS === 'web' && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
@@ -728,6 +784,10 @@ const s = StyleSheet.create({
   dateNavDate: { fontSize: 12, color: '#5b6678', fontWeight: '500' },
   semesterStrip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#e3f2fd', padding: 8, borderRadius: 8, marginTop: 10 },
   semesterStripText: { fontSize: 11, color: '#1565c0', fontWeight: '600' },
+  shiftStrip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#fff3e0', borderWidth: 1, borderColor: '#ffcc80', padding: 8, borderRadius: 8, marginTop: 10 },
+  shiftStripText: { flex: 1, fontSize: 11.5, color: '#e65100', fontWeight: '700', textAlign: 'right' },
+  shiftRevertBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#e65100', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
+  shiftRevertText: { fontSize: 11, color: '#fff', fontWeight: '700' },
 
   // List card
   listCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },

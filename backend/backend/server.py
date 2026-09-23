@@ -214,6 +214,7 @@ from routes.weekly_schedule import router as weekly_schedule_router
 from routes.schedule_import import router as schedule_import_router
 from routes.schedule_resolver import router as schedule_resolver_router
 from routes.lectures_purge import router as lectures_purge_router
+from routes.day_shift import router as day_shift_router
 from routes.schedule_integrity import router as schedule_integrity_router
 from routes.statements import router as statements_router
 from routes.grades import router as grades_router
@@ -17881,6 +17882,7 @@ app.include_router(internal_push_router, prefix="/api")
 app.include_router(schedule_import_router, prefix="/api")
 app.include_router(schedule_resolver_router, prefix="/api")
 app.include_router(lectures_purge_router, prefix="/api")
+app.include_router(day_shift_router, prefix="/api")
 app.include_router(schedule_integrity_router, prefix="/api")
 app.include_router(statements_router, prefix="/api")
 app.include_router(grades_router, prefix="/api")

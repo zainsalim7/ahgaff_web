@@ -83,6 +83,7 @@ export const PERMISSIONS = {
   // صلاحيات الجداول الدراسية (اليومي/الأسبوعي)
   VIEW_SCHEDULE: 'view_schedule',
   MANAGE_SCHEDULE: 'manage_schedule',
+  SHIFT_DAY: 'shift_day',
   // صلاحيات أخرى
   CROSS_UNIVERSITY_ASSIGNMENT: 'cross_university_assignment',
   MANAGE_SETTINGS: 'manage_settings',
