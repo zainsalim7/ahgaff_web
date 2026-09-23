@@ -42,6 +42,8 @@ interface Lecture {
   // ملاحظات الإلغاء وإعادة الجدولة
   original_date?: string | null;
   last_rescheduled_from?: string | null;
+  time_locked?: boolean;
+  time_locked_by_name?: string | null;
   last_rescheduled_at?: string | null;
   rescheduled_by_name?: string | null;
   cancellation_reason?: string | null;
@@ -695,6 +697,17 @@ export default function CourseLecturesScreen() {
     }
   };
 
+  const unlockLectureTime = async (lectureId: string) => {
+    const ok = Platform.OS === 'web' ? window.confirm('فك حماية الوقت لهذه المحاضرة؟ ستشملها «مزامنة الأوقات» مستقبلاً وقد يعود وقتها إلى وقت خانتها في الجدول.') : true;
+    if (!ok) return;
+    try {
+      await lecturesAPI.update(lectureId, { time_locked: false });
+      fetchData(1, false);
+    } catch (e: any) {
+      window.alert(e?.response?.data?.detail || 'فشل فك الحماية');
+    }
+  };
+
   const handleCancelLecture = async (lectureId: string) => {
     let reason = '';
     // 🔗 محاضرة مشتركة؟ اسأل عن تطبيق الإلغاء على كل الشعب
@@ -885,6 +898,19 @@ export default function CourseLecturesScreen() {
                 {item.rescheduled_by_name ? ` · ${item.rescheduled_by_name}` : ''}
               </Text>
             </View>
+          )}
+          {item.time_locked && (
+            <TouchableOpacity
+              style={[styles.noteBoxInfoNew, { backgroundColor: '#fff8e1' }]}
+              onPress={() => unlockLectureTime(item.id)}
+              disabled={!canManageLectures}
+              testID={`time-locked-badge-${item.id}`}
+            >
+              <Ionicons name="lock-closed" size={12} color="#b26a00" />
+              <Text style={[styles.noteTextNew, { color: '#b26a00' }]} numberOfLines={1}>
+                وقت معدَّل يدوياً — محمي من مزامنة الأوقات{item.time_locked_by_name ? ` · ${item.time_locked_by_name}` : ''}{canManageLectures ? '  (اضغط لفك الحماية)' : ''}
+              </Text>
+            </TouchableOpacity>
           )}
         </View>
 

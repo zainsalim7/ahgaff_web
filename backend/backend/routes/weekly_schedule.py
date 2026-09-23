@@ -3675,7 +3675,7 @@ async def _resync_slot_times_for_day(db, faculty_id: str, day: str) -> int:
         for i, lec in enumerate(group):
             if i >= len(expected):
                 break
-            if lec.get("original_date") or lec.get("last_rescheduled_from"):
+            if lec.get("original_date") or lec.get("last_rescheduled_from") or lec.get("time_locked"):
                 continue
             _, st, en = expected[i]
             if lec.get("start_time") != st or lec.get("end_time") != en:
@@ -4678,6 +4678,7 @@ class ResyncLectureTimesRequest(BaseModel):
     faculty_id: str
     department_id: Optional[str] = None
     dry_run: bool = True
+    include_locked: bool = False  # 🔒 شمول المحاضرات المعدَّلة يدوياً (المقفلة) في المزامنة
 
 
 @router.post("/weekly-schedule/resync-lecture-times")
@@ -4730,6 +4731,10 @@ async def resync_lecture_times(
         "status": {"$ne": "cancelled"},
     }).to_list(50000)
 
+    # 🔒 المحاضرات المعدَّلة يدوياً (time_locked) تُتجاوَز افتراضياً
+    locked = [l for l in lecs if l.get("time_locked")]
+    locked_ids = {l["_id"] for l in locked}
+
     by_course_date: dict = defaultdict(list)
     for l in lecs:
         by_course_date[(l.get("course_id"), l.get("date", ""))].append(l)
@@ -4749,18 +4754,22 @@ async def resync_lecture_times(
                 break
             _, st, en = expected[i]
             if lec.get("start_time") != st or lec.get("end_time") != en:
+                if lec["_id"] in locked_ids and not data.include_locked:
+                    continue
                 changes.append({
                     "_id": lec["_id"], "date": date_str,
                     "old": f"{lec.get('start_time', '')} - {lec.get('end_time', '')}",
                     "new": f"{st} - {en}", "st": st, "en": en,
+                    "locked": lec["_id"] in locked_ids,
                 })
 
     if not data.dry_run and changes:
         for ch in changes:
             try:
+                _set = {"start_time": ch["st"], "end_time": ch["en"]}
                 await db.lectures.update_one(
                     {"_id": ch["_id"]},
-                    {"$set": {"start_time": ch["st"], "end_time": ch["en"]}},
+                    {"$set": _set, **({"$unset": {"time_locked": "", "time_locked_at": "", "time_locked_by_name": ""}} if ch["locked"] else {})},
                 )
             except DuplicateKeyError:
                 pass
@@ -4774,14 +4783,22 @@ async def resync_lecture_times(
     for ch in changes:
         patterns[f"{ch['old']} ← {ch['new']}"] = patterns.get(f"{ch['old']} ← {ch['new']}", 0) + 1
 
+    locked_skipped = 0 if data.include_locked else len(locked)
+    locked_sample = [
+        {"date": l.get("date", ""), "time": f"{l.get('start_time', '')} - {l.get('end_time', '')}", "by": l.get("time_locked_by_name", "")}
+        for l in sorted(locked, key=lambda x: x.get("date", ""))[:5]
+    ]
     return {
         "dry_run": data.dry_run,
         "lectures_checked": len(lecs),
         ("to_update" if data.dry_run else "updated"): len(changes),
+        "locked_skipped": locked_skipped,
+        "locked_total": len(locked),
+        "locked_sample": locked_sample,
         "patterns": [{"change": k, "count": v} for k, v in sorted(patterns.items(), key=lambda x: -x[1])[:10]],
         "message": (
-            f"سيتم تحديث {len(changes)} محاضرة من أصل {len(lecs)}" if data.dry_run
-            else f"تم تحديث أوقات {len(changes)} محاضرة بنجاح"
+            f"سيتم تحديث {len(changes)} محاضرة من أصل {len(lecs)}" + (f" (تم تجاوز {locked_skipped} محاضرة معدَّلة يدوياً)" if locked_skipped else "") if data.dry_run
+            else f"تم تحديث أوقات {len(changes)} محاضرة بنجاح" + (f" — وتُركت {locked_skipped} محاضرة معدَّلة يدوياً دون تغيير" if locked_skipped else "")
         ),
     }
 

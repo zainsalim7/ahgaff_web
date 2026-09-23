@@ -8439,6 +8439,8 @@ async def get_course_lectures(
             "last_rescheduled_from": lecture.get("last_rescheduled_from"),
             "last_rescheduled_at": lecture.get("last_rescheduled_at"),
             "rescheduled_by_name": lecture.get("rescheduled_by_name"),
+            "time_locked": bool(lecture.get("time_locked")),
+            "time_locked_by_name": lecture.get("time_locked_by_name"),
             "cancellation_reason": lecture.get("cancellation_reason"),
             "cancelled_at": lecture.get("cancelled_at"),
             "cancelled_by_name": lecture.get("cancelled_by_name"),
@@ -9290,6 +9292,15 @@ async def update_lecture(
         update_data["last_rescheduled_from"] = old_date
         update_data["rescheduled_by_name"] = current_user.get("full_name", "")
 
+    # 🔒 تعديل يدوي للوقت/التاريخ على محاضرة مولّدة من الجدول → قفل يحميها من «مزامنة الأوقات»
+    _time_changed = any(k in update_data and update_data[k] != lecture.get(k) for k in ("date", "start_time", "end_time"))
+    if _time_changed and lecture.get("generated_from_schedule") and data.time_locked is None:
+        update_data.update({"time_locked": True, "time_locked_at": get_yemen_time(), "time_locked_by_name": current_user.get("full_name", "")})
+    if data.time_locked is False:
+        update_data["time_locked"] = False
+    elif data.time_locked is True:
+        update_data.update({"time_locked": True, "time_locked_at": get_yemen_time(), "time_locked_by_name": current_user.get("full_name", "")})
+
     # عند تغيير الحالة لـ cancelled، احفظ السبب
     new_status = update_data.get("status")
     if new_status in (LectureStatus.CANCELLED, LectureStatus.ABSENT):
@@ -9893,6 +9904,9 @@ async def reschedule_lecture(
         update_data["end_time"] = new_end_time
     if new_room and new_room != (lecture.get("room", "") or ""):
         update_data["room"] = new_room
+    # 🔒 تعديل يدوي على محاضرة مولّدة من الجدول → حمايتها من مزامنة الأوقات
+    if lecture.get("generated_from_schedule"):
+        update_data.update({"time_locked": True, "time_locked_at": get_yemen_time(), "time_locked_by_name": current_user.get("full_name", "")})
     
     # 🔗 الشعب المشتركة (تُحدَّد قبل التحديث لأن البحث بالتاريخ/الوقت القديم)
     siblings = await _find_sibling_lectures(lecture) if apply_to_shared else []

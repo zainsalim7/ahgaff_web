@@ -345,26 +345,30 @@ export default function WeeklySchedulePage() {
   const runResyncTimes = async () => {
     setResyncLoading(true);
     try {
-      const preview = await api.post('/weekly-schedule/resync-lecture-times', {
-        faculty_id: selectedFaculty,
-        department_id: selectedDept || null,
-        dry_run: true,
-      });
+      const body = { faculty_id: selectedFaculty, department_id: selectedDept || null };
+      const preview = await api.post('/weekly-schedule/resync-lecture-times', { ...body, dry_run: true });
       const cnt = preview.data?.to_update || 0;
-      if (cnt === 0) {
-        window.alert('✅ كل أوقات المحاضرات المولدة مطابقة للفترات الحالية — لا شيء يحتاج تصحيحاً');
+      const lockedTotal = preview.data?.locked_total || 0;
+      let includeLocked = false;
+      if (lockedTotal > 0 && Platform.OS === 'web') {
+        const sample = (preview.data?.locked_sample || []).map((l: any) => `   • ${l.date} (${l.time})${l.by ? ` — ${l.by}` : ''}`).join('\n');
+        includeLocked = window.confirm(`🔒 توجد ${lockedTotal} محاضرة عُدِّل وقتها/تاريخها يدوياً وهي محمية من المزامنة:\n${sample}${lockedTotal > 5 ? '\n   • ...' : ''}\n\nاضغط «موافق» لشمولها في المزامنة (ستعود لوقت خانتها وتُفكّ حمايتها)\nأو «إلغاء» لتجاوزها وإبقائها كما هي (موصى به)`);
+      }
+      const prev2 = includeLocked ? await api.post('/weekly-schedule/resync-lecture-times', { ...body, dry_run: true, include_locked: true }) : preview;
+      const cnt2 = prev2.data?.to_update || 0;
+      if (cnt2 === 0) {
+        window.alert(lockedTotal && !includeLocked
+          ? `✅ كل أوقات المحاضرات المولدة مطابقة للفترات الحالية — تم تجاوز ${lockedTotal} محاضرة معدَّلة يدوياً (محمية)`
+          : '✅ كل أوقات المحاضرات المولدة مطابقة للفترات الحالية — لا شيء يحتاج تصحيحاً');
         return;
       }
-      const patterns = (preview.data?.patterns || []).map((p: any) => `• ${p.change} (${p.count} محاضرة)`).join('\n');
+      const patterns = (prev2.data?.patterns || []).map((p: any) => `• ${p.change} (${p.count} محاضرة)`).join('\n');
+      const skippedNote = prev2.data?.locked_skipped ? `\n\n🔒 سيتم تجاوز ${prev2.data.locked_skipped} محاضرة معدَّلة يدوياً (محمية)` : '';
       const ok = Platform.OS === 'web'
-        ? window.confirm(`سيتم تصحيح أوقات ${cnt} محاضرة وفق أوقات الفترات الحالية:\n\n${patterns}\n\nهل تريد المتابعة؟`)
+        ? window.confirm(`سيتم تصحيح أوقات ${cnt2} محاضرة وفق أوقات الفترات الحالية:\n\n${patterns}${skippedNote}\n\nهل تريد المتابعة؟`)
         : true;
       if (!ok) return;
-      const res = await api.post('/weekly-schedule/resync-lecture-times', {
-        faculty_id: selectedFaculty,
-        department_id: selectedDept || null,
-        dry_run: false,
-      });
+      const res = await api.post('/weekly-schedule/resync-lecture-times', { ...body, dry_run: false, include_locked: includeLocked });
       window.alert(`✅ ${res.data?.message || 'تمت المزامنة'}`);
     } catch (e: any) {
       window.alert(`❌ ${e?.response?.data?.detail || 'فشلت المزامنة'}`);
