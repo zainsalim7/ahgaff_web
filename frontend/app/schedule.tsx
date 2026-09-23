@@ -55,6 +55,9 @@ export default function ScheduleScreen() {
   const [selectedDate, setSelectedDate] = useState(getToday);
   const [semesterSettings, setSemesterSettings] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterFaculty, setFilterFaculty] = useState('');
+  const [filterDept, setFilterDept] = useState('');
+  const [filterTime, setFilterTime] = useState('');
   const [purgeModal, setPurgeModal] = useState(false);
   const [purgeScope, setPurgeScope] = useState<'faculty' | 'department' | 'course'>('department');
   const [purgeFaculty, setPurgeFaculty] = useState('');
@@ -194,14 +197,38 @@ export default function ScheduleScreen() {
     return counts;
   }, [lectures]);
 
+  // 🎛️ خيارات الفلاتر مستخرجة من محاضرات اليوم نفسها (كلية ← قسم ← وقت)
+  const filterOptions = useMemo(() => {
+    const fac = new Map<string, string>(); const dep = new Map<string, { name: string; faculty_id: string }>(); const times = new Map<string, { start: string; end: string }>();
+    lectures.forEach((l) => {
+      if (l.faculty_id) fac.set(l.faculty_id, l.faculty_name || 'بدون اسم');
+      if (l.department_id) dep.set(l.department_id, { name: l.department_name || 'بدون اسم', faculty_id: l.faculty_id || '' });
+      if (l.start_time) times.set(l.start_time, { start: l.start_time, end: l.end_time || '' });
+    });
+    const byName = (a: string, b: string) => a.localeCompare(b, 'ar');
+    return {
+      faculties: [...fac.entries()].map(([id, name]) => ({ id, name })).sort((a, b) => byName(a.name, b.name)),
+      departments: [...dep.entries()].map(([id, v]) => ({ id, ...v })).filter((d) => !filterFaculty || d.faculty_id === filterFaculty).sort((a, b) => byName(a.name, b.name)),
+      times: [...times.values()].sort((a, b) => a.start.localeCompare(b.start)),
+    };
+  }, [lectures, filterFaculty]);
+
+  useEffect(() => { setFilterDept(''); }, [filterFaculty]);
+
+  const activeFiltersCount = [filterFaculty, filterDept, filterTime].filter(Boolean).length;
+  const clearFilters = () => { setFilterFaculty(''); setFilterDept(''); setFilterTime(''); };
+
   const filteredLectures = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return lectures;
-    return lectures.filter((l) =>
-      [l.course_name, l.course_code, l.teacher_name, l.faculty_name, l.department_name, l.room]
-        .some((v) => (v || '').toLowerCase().includes(q))
-    );
-  }, [lectures, searchQuery]);
+    return lectures.filter((l) => {
+      if (filterFaculty && l.faculty_id !== filterFaculty) return false;
+      if (filterDept && l.department_id !== filterDept) return false;
+      if (filterTime && l.start_time !== filterTime) return false;
+      if (!q) return true;
+      return [l.course_name, l.course_code, l.teacher_name, l.faculty_name, l.department_name, l.room]
+        .some((v) => (v || '').toLowerCase().includes(q));
+    });
+  }, [lectures, searchQuery, filterFaculty, filterDept, filterTime]);
 
   // 🗂️ تجميع المحاضرات حسب الفترة الزمنية (قروبات مرتبة زمنياً)
   const timeGroups = useMemo(() => {
@@ -447,14 +474,47 @@ export default function ScheduleScreen() {
               </View>
             </View>
 
+            {/* 🎛️ فلاتر: الكلية / القسم / الوقت */}
+            {Platform.OS === 'web' && lectures.length > 0 && (
+              <View style={s.filterBar} testID="schedule-filter-bar">
+                <View style={s.filterField}>
+                  <Ionicons name="business-outline" size={14} color="#1565c0" />
+                  <select value={filterFaculty} onChange={(e: any) => setFilterFaculty(e.target.value)} style={filterSelectStyle} data-testid="filter-faculty-select">
+                    <option value="">كل الكليات ({filterOptions.faculties.length})</option>
+                    {filterOptions.faculties.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                  </select>
+                </View>
+                <View style={s.filterField}>
+                  <Ionicons name="git-branch-outline" size={14} color="#1565c0" />
+                  <select value={filterDept} onChange={(e: any) => setFilterDept(e.target.value)} style={filterSelectStyle} data-testid="filter-department-select">
+                    <option value="">كل الأقسام ({filterOptions.departments.length})</option>
+                    {filterOptions.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                  </select>
+                </View>
+                <View style={s.filterField}>
+                  <Ionicons name="time-outline" size={14} color="#1565c0" />
+                  <select value={filterTime} onChange={(e: any) => setFilterTime(e.target.value)} style={filterSelectStyle} data-testid="filter-time-select">
+                    <option value="">كل الأوقات ({filterOptions.times.length})</option>
+                    {filterOptions.times.map((t) => <option key={t.start} value={t.start}>{t.start}{t.end ? ` – ${t.end}` : ''}</option>)}
+                  </select>
+                </View>
+                {activeFiltersCount > 0 && (
+                  <TouchableOpacity onPress={clearFilters} style={s.filterClearBtn} testID="filter-clear-btn">
+                    <Ionicons name="close-circle" size={14} color="#c62828" />
+                    <Text style={s.filterClearText}>مسح الفلاتر ({activeFiltersCount})</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
             {loading ? (
               <View style={s.center}><LoadingScreen /></View>
             ) : filteredLectures.length === 0 ? (
               <View style={s.emptyState}>
                 <Ionicons name="calendar-outline" size={56} color="#cfd6e1" />
-                <Text style={s.emptyTitle}>{searchQuery ? 'لا توجد نتائج مطابقة' : 'لا توجد محاضرات'}</Text>
+                <Text style={s.emptyTitle}>{searchQuery || activeFiltersCount ? 'لا توجد نتائج مطابقة' : 'لا توجد محاضرات'}</Text>
                 <Text style={s.emptySubtitle}>
-                  {searchQuery ? `لا توجد محاضرات تطابق "${searchQuery}"` : `لا توجد محاضرات مجدولة في ${formatDateArabic(selectedDate)}`}
+                  {searchQuery ? `لا توجد محاضرات تطابق «${searchQuery}»` : activeFiltersCount ? 'لا توجد محاضرات تطابق الفلاتر المحددة' : `لا توجد محاضرات مجدولة في ${formatDateArabic(selectedDate)}`}
                 </Text>
               </View>
             ) : (
@@ -574,6 +634,8 @@ export default function ScheduleScreen() {
   );
 }
 
+const filterSelectStyle: any = { flex: 1, border: 'none', background: 'transparent', fontSize: 13, color: '#1a2540', padding: '9px 0', fontFamily: 'inherit', direction: 'rtl', outline: 'none', cursor: 'pointer', minWidth: 0 };
+
 const s = StyleSheet.create({
   gGroupHead: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 10 },
   gTimePill: { flexDirection: 'row-reverse', alignItems: 'center', gap: 5, backgroundColor: '#1565c0', borderRadius: 20, paddingVertical: 5, paddingHorizontal: 14 },
@@ -676,6 +738,10 @@ const s = StyleSheet.create({
 
   // Search bar
   searchWrap: { paddingHorizontal: 14, paddingTop: 12 },
+  filterBar: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, paddingHorizontal: 14, paddingTop: 10, alignItems: 'center' },
+  filterField: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#f7f9fc', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 10, minWidth: 180, flexGrow: 1, flexBasis: 180 },
+  filterClearBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#ffebee', borderRadius: 10, paddingHorizontal: 10, paddingVertical: 8 },
+  filterClearText: { fontSize: 12, color: '#c62828', fontWeight: '700' },
   searchBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#f7f9fc', borderWidth: 1, borderColor: '#e3e7ee', borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'web' ? 10 : 6 },
   searchInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right', ...(Platform.OS === 'web' ? { outlineStyle: 'none' } as any : {}) },
 
