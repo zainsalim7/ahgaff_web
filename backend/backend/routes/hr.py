@@ -99,8 +99,9 @@ async def sync_academic_units(current_user: dict = Depends(get_current_user)):
             created += 1
         elif ex.get("name") != d.get("name") or ex.get("parent_id") != parent:
             await db.org_units.update_one({"_id": ex["_id"]}, {"$set": {"name": d.get("name", ""), "parent_id": parent}})
-    await log_activity(current_user, "hr_sync_org", "org_unit", root_id, "الهيكل التنظيمي", {"created": created})
-    return {"created": created, "message": f"تمت مزامنة الهيكل — أُضيفت {created} وحدة جديدة"}
+    rl = await relink_teacher_units(db)
+    await log_activity(current_user, "hr_sync_org", "org_unit", root_id, "الهيكل التنظيمي", {"created": created, "linked": rl["linked"]})
+    return {"created": created, "linked": rl["linked"], "message": f"تمت مزامنة الهيكل — أُضيفت {created} وحدة جديدة" + (f" وربط {rl['linked']} معلماً بوحداتهم" if rl["linked"] else "")}
 
 
 @router.post("/org-units")
@@ -383,6 +384,44 @@ async def delete_employee(emp_id: str, current_user: dict = Depends(get_current_
     return {"message": "تم حذف الموظف (يمكن استعادته من سلة المحذوفات) وتعطيل حسابه إن وُجد", "backup": backup}
 
 
+async def relink_teacher_units(db, force: bool = False) -> dict:
+    """🔗 ربط ملفات المعلمين بوحدة القسم (أو الكلية) وفق بيانات المعلم — idempotent"""
+    linked, skipped, unresolved = 0, 0, []
+    dept_units = {u["department_id"]: str(u["_id"]) async for u in db.org_units.find({"type": "department", "department_id": {"$ne": None}}, {"department_id": 1})}
+    fac_units = {u["faculty_id"]: str(u["_id"]) async for u in db.org_units.find({"type": "faculty", "faculty_id": {"$ne": None}}, {"faculty_id": 1})}
+    dept_fac = {str(d["_id"]): str(d.get("faculty_id") or "") async for d in db.departments.find({}, {"faculty_id": 1})}
+    async for e in db.employees.find({"teacher_id": {"$ne": None}}, {"full_name": 1, "org_unit_id": 1, "teacher_id": 1}):
+        if e.get("org_unit_id") and not force:
+            skipped += 1
+            continue
+        t = await db.teachers.find_one({"_id": ObjectId(e["teacher_id"])}, {"department_id": 1, "department_ids": 1, "faculty_id": 1}) if ObjectId.is_valid(e["teacher_id"]) else None
+        if not t:
+            unresolved.append({"id": str(e["_id"]), "name": e.get("full_name", ""), "reason": "سجل المعلم غير موجود"})
+            continue
+        dept = str(t.get("department_id") or (t.get("department_ids") or [None])[0] or "")
+        fac = str(t.get("faculty_id") or dept_fac.get(dept) or "")
+        unit = dept_units.get(dept) or fac_units.get(fac)
+        if not unit:
+            unresolved.append({"id": str(e["_id"]), "name": e.get("full_name", ""), "reason": "لا قسم/كلية للمعلم أو لم تُزامَن وحدته بعد"})
+            continue
+        if unit != e.get("org_unit_id"):
+            await db.employees.update_one({"_id": e["_id"]}, {"$set": {"org_unit_id": unit, "updated_at": _now()}})
+            linked += 1
+        else:
+            skipped += 1
+    return {"linked": linked, "skipped": skipped, "unresolved": unresolved}
+
+
+@router.post("/employees/link-units")
+async def link_units(force: bool = False, current_user: dict = Depends(get_current_user)):
+    """🔗 ربط المعلمين بوحداتهم التنظيمية (القسم أو الكلية). force=true يعيد الربط حتى للمرتبطين"""
+    _guard(current_user, P_MANAGE)
+    res = await relink_teacher_units(get_db(), force)
+    await log_activity(current_user, "hr_link_units", "employee", "", "ربط المعلمين بالوحدات", {"linked": res["linked"]})
+    msg = f"تم ربط {res['linked']} موظفاً بوحداتهم" + (f" · {res['skipped']} مرتبط مسبقاً" if res["skipped"] else "") + (f" · {len(res['unresolved'])} بلا وحدة (اربطهم يدوياً من «تعديل»)" if res["unresolved"] else "")
+    return {**res, "message": msg}
+
+
 @router.post("/employees/sync-teachers")
 async def sync_teachers(current_user: dict = Depends(get_current_user)):
     """🔄 إنشاء ملف إداري لكل معلم موجود ليس له ملف (idempotent)"""
@@ -408,8 +447,9 @@ async def sync_teachers(current_user: dict = Depends(get_current_user)):
             "created_at": _now(), "created_by_name": "مزامنة المعلمين",
         })
         created += 1
-    await log_activity(current_user, "hr_sync_teachers", "employee", None, "مزامنة المعلمين", {"created": created})
-    return {"created": created, "message": f"تم إنشاء {created} ملفاً إدارياً للمعلمين"}
+    rl = await relink_teacher_units(db)
+    await log_activity(current_user, "hr_sync_teachers", "employee", None, "مزامنة المعلمين", {"created": created, "linked": rl["linked"]})
+    return {"created": created, "linked": rl["linked"], "unresolved": rl["unresolved"], "message": f"تم إنشاء {created} ملفاً إدارياً للمعلمين" + (f" وربط {rl['linked']} بوحداتهم" if rl["linked"] else "") + (f" · {len(rl['unresolved'])} بلا وحدة" if rl["unresolved"] else "")}
 
 
 class AccountIn(BaseModel):

@@ -47,6 +47,7 @@ export default function HrEmployees() {
   const alertMsg = (e: any) => window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'حدث خطأ');
 
   const openDetail = async (id: string) => { try { setDetail((await hrAPI.employee(id)).data); } catch (e) { alertMsg(e); } };
+  const linkUnits = async () => { const force = window.confirm('ربط المعلمين بوحدات أقسامهم/كلياتهم.\n«موافق» = إعادة الربط للجميع وفق بيانات المعلم · «إلغاء» = ربط من لا وحدة له فقط'); try { const r = await hrAPI.linkUnits(force); window.alert(r.data.message + (r.data.unresolved?.length ? '\n\nبلا وحدة: ' + r.data.unresolved.map((u: any) => `${u.name} (${u.reason})`).join('، ') : '')); load(); } catch (e) { alertMsg(e); } };
   const syncTeachers = async () => { if (!window.confirm('إنشاء ملف إداري لكل معلم ليس له ملف؟')) return; try { const r = await hrAPI.syncTeachers(); window.alert(r.data.message); load(); } catch (e) { alertMsg(e); } };
   const createAccount = (emp: any) => setAcct({ emp, mode: 'create' });
   const remove = async (emp: any) => { if (!window.confirm(`حذف الموظف ${emp.full_name}؟ (يمكن استعادته من سلة المحذوفات)`)) return; try { const r = await hrAPI.deleteEmployee(emp.id); window.alert(r.data.message); setDetail(null); load(); } catch (e) { alertMsg(e); } };
@@ -70,6 +71,7 @@ export default function HrEmployees() {
             <button onClick={() => setForm({ open: true, emp: null })} style={btn('#1565c0')} data-testid="hr-add-employee-btn">+ إضافة موظف</button>
             <button onClick={() => setShowImport(true)} style={btn('#0f2440')} data-testid="hr-import-btn">📥 استيراد من Excel</button>
             <button onClick={syncTeachers} style={btn('#e3f2fd', '#1565c0')} data-testid="hr-sync-teachers-btn">🔄 مزامنة المعلمين</button>
+            <button onClick={linkUnits} style={btn('#ede9fe', '#6d28d9')} data-testid="hr-link-units-btn">🔗 ربط المعلمين بوحداتهم</button>
             <button onClick={() => router.push('/hr-org-units')} style={btn('#f1f5f9', '#0f2440')} data-testid="hr-goto-org-btn">🏢 الهيكل التنظيمي</button>
           </div>
         )}
