@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, has_permission, log_activity, get_password_hash
+from .hr_common import _today
 
 router = APIRouter(prefix="/hr", tags=["شؤون الموظفين"])
 YEMEN_TZ = timezone(timedelta(hours=3))
@@ -244,19 +245,13 @@ async def employees_meta(current_user: dict = Depends(get_current_user)):
     return {"categories": CATEGORIES, "contract_types": CONTRACT_TYPES, "statuses": STATUSES, "unit_types": UNIT_TYPES}
 
 
-@router.get("/employees")
-async def list_employees(search: Optional[str] = None, org_unit_id: Optional[str] = None, category: Optional[str] = None, status: Optional[str] = None,
-                         contract_type: Optional[str] = None, page: int = 1, per_page: int = 30, current_user: dict = Depends(get_current_user)):
-    if not _can_view(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح")
-    db = get_db()
+async def _build_query(db, search, org_unit_id, category, status, contract_type) -> dict:
     q: dict = {}
     if search:
         import re
         rx = {"$regex": re.escape(search.strip()), "$options": "i"}
         q["$or"] = [{"full_name": rx}, {"employee_no": rx}, {"job_title": rx}, {"phone": rx}, {"national_id": rx}]
     if org_unit_id:
-        # الوحدة وكل أبنائها
         ids, frontier = {org_unit_id}, [org_unit_id]
         while frontier:
             kids = [str(u["_id"]) for u in await db.org_units.find({"parent_id": {"$in": frontier}}, {"_id": 1}).to_list(2000)]
@@ -266,6 +261,47 @@ async def list_employees(search: Optional[str] = None, org_unit_id: Optional[str
     for k, v in (("category", category), ("status", status), ("contract_type", contract_type)):
         if v:
             q[k] = v
+    return q
+
+
+@router.get("/employees/export")
+async def export_employees(search: Optional[str] = None, org_unit_id: Optional[str] = None, category: Optional[str] = None, status: Optional[str] = None,
+                           contract_type: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📊 تصدير سجل الموظفين (بنفس الفلاتر) إلى Excel"""
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    q = await _build_query(db, search, org_unit_id, category, status, contract_type)
+    emps = await _enrich(db, await db.employees.find(q).sort("full_name", 1).to_list(10000))
+    import io
+    from fastapi.responses import StreamingResponse
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    from .deps import export_headers, export_filename
+    wb = Workbook(); ws = wb.active; ws.title = "الموظفون"; ws.sheet_view.rightToLeft = True
+    heads = ["الرقم الوظيفي", "الاسم", "الفئة", "المسمى الوظيفي", "الدرجة", "الوحدة التنظيمية", "المدير المباشر", "نوع التعاقد", "تاريخ التعيين", "انتهاء العقد", "الحالة", "الجنس", "الهاتف", "البريد", "الرقم الوطني", "انتهاء الهوية", "المؤهل", "التخصص", "تاريخ الميلاد", "حساب دخول", "ملاحظات"]
+    ws.append(heads)
+    for c in ws[1]:
+        c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="0F2440"); c.alignment = Alignment(horizontal="center")
+    for e in emps:
+        ws.append([e.get("employee_no"), e.get("full_name"), CATEGORIES.get(e.get("category"), e.get("category")), e.get("job_title"), e.get("grade"), e.get("org_unit_name"), e.get("manager_name"),
+                   CONTRACT_TYPES.get(e.get("contract_type"), e.get("contract_type")), e.get("hire_date"), e.get("contract_end_date"), STATUSES.get(e.get("status"), e.get("status")), e.get("gender"), e.get("phone"), e.get("email"),
+                   e.get("national_id"), e.get("id_expiry_date"), e.get("qualification"), e.get("specialization"), e.get("birth_date"), "نعم" if e.get("has_account") else "لا", e.get("notes")])
+    for i in range(1, len(heads) + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 18
+    ws.column_dimensions["B"].width = 30
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(export_filename("سجل الموظفين", _today(), ext="xlsx")))
+
+
+@router.get("/employees")
+async def list_employees(search: Optional[str] = None, org_unit_id: Optional[str] = None, category: Optional[str] = None, status: Optional[str] = None,
+                         contract_type: Optional[str] = None, page: int = 1, per_page: int = 30, current_user: dict = Depends(get_current_user)):
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    q = await _build_query(db, search, org_unit_id, category, status, contract_type)
     total = await db.employees.count_documents(q)
     per_page = max(1, min(per_page, 200))
     emps = await db.employees.find(q).sort("full_name", 1).skip((page - 1) * per_page).limit(per_page).to_list(per_page)
@@ -284,6 +320,75 @@ async def my_employee_profile(current_user: dict = Depends(get_current_user)):
     if not e:
         return {"profile": None}
     return {"profile": (await _enrich(db, [e]))[0]}
+
+
+class BulkIn(BaseModel):
+    ids: List[str]
+    action: str  # move_unit | set_status | set_manager | set_category | set_contract_type | delete | register_leave
+    value: Optional[str] = None
+    leave: Optional[dict] = None
+
+
+BULK_LABELS = {"move_unit": "نقل إلى وحدة", "set_status": "تغيير الحالة", "set_manager": "تعيين مدير مباشر", "set_category": "تغيير الفئة", "set_contract_type": "تغيير نوع التعاقد", "delete": "حذف", "register_leave": "تسجيل إجازة"}
+
+
+@router.post("/employees/bulk")
+async def bulk_action(data: BulkIn, current_user: dict = Depends(get_current_user)):
+    """⚡ إجراء جماعي على عدة موظفين"""
+    _guard(current_user, P_MANAGE)
+    db = get_db()
+    if data.action not in BULK_LABELS:
+        raise HTTPException(status_code=400, detail="إجراء غير معروف")
+    ids = [ObjectId(i) for i in data.ids if ObjectId.is_valid(i)]
+    if not ids:
+        raise HTTPException(status_code=400, detail="لم يُحدَّد موظفون")
+    emps = await db.employees.find({"_id": {"$in": ids}}).to_list(len(ids))
+    label_to = None
+    if data.action == "move_unit":
+        u = await db.org_units.find_one({"_id": _oid(data.value or "", "الوحدة")})
+        if not u:
+            raise HTTPException(status_code=404, detail="الوحدة غير موجودة")
+        label_to = u.get("name")
+    elif data.action == "set_status" and data.value not in STATUSES:
+        raise HTTPException(status_code=400, detail="حالة غير صحيحة")
+    elif data.action == "set_category" and data.value not in CATEGORIES:
+        raise HTTPException(status_code=400, detail="فئة غير صحيحة")
+    elif data.action == "set_contract_type" and data.value not in CONTRACT_TYPES:
+        raise HTTPException(status_code=400, detail="نوع تعاقد غير صحيح")
+    elif data.action == "set_manager":
+        if data.value:
+            m = await db.employees.find_one({"_id": _oid(data.value, "المدير")}, {"full_name": 1})
+            if not m:
+                raise HTTPException(status_code=404, detail="المدير غير موجود")
+            label_to = m.get("full_name")
+    elif data.action == "register_leave":
+        from .hr_leaves import LeaveIn, _create_request
+        lv = data.leave or {}
+        if not (lv.get("start_date") and lv.get("end_date")):
+            raise HTTPException(status_code=400, detail="حدد فترة الإجازة")
+    ok, errors = 0, []
+    for e in emps:
+        eid = str(e["_id"])
+        try:
+            if data.action == "delete":
+                await _delete_employee(db, e, current_user, force=True)
+            elif data.action == "register_leave":
+                await _create_request(db, e, LeaveIn(employee_id=eid, type=lv.get("type", "annual"), start_date=lv["start_date"], end_date=lv["end_date"], reason=lv.get("reason", "")), current_user, auto_approve=True)
+            else:
+                field = {"move_unit": "org_unit_id", "set_status": "status", "set_manager": "manager_employee_id", "set_category": "category", "set_contract_type": "contract_type"}[data.action]
+                if data.action == "set_manager" and data.value == eid:
+                    raise HTTPException(status_code=400, detail="لا يمكن أن يكون الموظف مديراً لنفسه")
+                old = e.get(field)
+                if old != (data.value or None):
+                    await db.employees.update_one({"_id": e["_id"]}, {"$set": {field: data.value or None, "updated_at": _now()}})
+                    await _history(db, eid, "updated", current_user, {field: {"from": old, "to": data.value or None}, "bulk": BULK_LABELS[data.action]})
+            ok += 1
+        except HTTPException as ex:
+            errors.append({"id": eid, "name": e.get("full_name", ""), "error": ex.detail})
+        except Exception as ex:
+            errors.append({"id": eid, "name": e.get("full_name", ""), "error": str(ex)})
+    await log_activity(current_user, "hr_bulk", "employee", "", BULK_LABELS[data.action], {"count": ok, "value": label_to or data.value})
+    return {"ok": ok, "errors": errors, "message": f"{BULK_LABELS[data.action]}: نجح {ok}" + (f" · تعذّر {len(errors)}" if errors else "")}
 
 
 @router.get("/employees/{emp_id}")
@@ -363,22 +468,27 @@ async def update_employee(emp_id: str, data: EmployeeIn, current_user: dict = De
 
 
 @router.delete("/employees/{emp_id}")
-async def delete_employee(emp_id: str, current_user: dict = Depends(get_current_user)):
+async def delete_employee(emp_id: str, force: bool = False, current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_MANAGE)
     db = get_db()
-    oid = _oid(emp_id)
-    e = await db.employees.find_one({"_id": oid})
+    e = await db.employees.find_one({"_id": _oid(emp_id)})
     if not e:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
-    if e.get("teacher_id"):
-        raise HTTPException(status_code=400, detail="ملف المعلم يُحذف من شاشة المعلمين — أو غيّر حالته إلى «منتهية خدمته»")
+    return await _delete_employee(db, e, current_user, force)
+
+
+async def _delete_employee(db, e: dict, current_user: dict, force: bool = False) -> dict:
+    """حذف ناعم إلى سلة المحذوفات + تعطيل الحساب. ملف المعلم يُحذف فقط بـ force (سجل المعلم الأكاديمي يبقى)"""
+    emp_id, oid = str(e["_id"]), e["_id"]
+    if e.get("teacher_id") and not force:
+        raise HTTPException(status_code=400, detail="هذا ملف معلم — احذفه بتأكيد «حذف الملف الإداري فقط» (يبقى سجله الأكاديمي في شاشة المعلمين)")
     if await db.employees.count_documents({"manager_employee_id": emp_id}):
         raise HTTPException(status_code=400, detail="هذا الموظف مدير لموظفين آخرين — غيّر مديرهم أولاً")
     backup = {"backup_type": "employee_backup", "deleted_at": _now(), "deleted_by": current_user.get("full_name", ""), "employee": {**e, "_id": str(e["_id"])}}
     await db.trash.insert_one({"item_type": "employee", "item_name": e.get("full_name", ""), "backup_data": backup, "deleted_by": current_user.get("full_name", ""),
                                "deleted_at": datetime.now(YEMEN_TZ), "expires_at": datetime.now(YEMEN_TZ) + timedelta(days=30)})
     await db.employees.delete_one({"_id": oid})
-    if e.get("user_id") and ObjectId.is_valid(e["user_id"]):
+    if e.get("user_id") and ObjectId.is_valid(e["user_id"]) and not e.get("teacher_id"):
         await db.users.update_one({"_id": ObjectId(e["user_id"])}, {"$set": {"is_active": False}})
     await log_activity(current_user, "hr_delete_employee", "employee", emp_id, e.get("full_name", ""))
     return {"message": "تم حذف الموظف (يمكن استعادته من سلة المحذوفات) وتعطيل حسابه إن وُجد", "backup": backup}

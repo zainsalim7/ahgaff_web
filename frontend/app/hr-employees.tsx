@@ -9,6 +9,7 @@ import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/componen
 import { EmployeeFormModal, Portal, inp, btn } from '../src/components/hr/EmployeeFormModal';
 import { EmployeeDocuments } from '../src/components/hr/EmployeeDocuments';
 import { AccountRoleModal } from '../src/components/hr/AccountRoleModal';
+import { BulkToolbar } from '../src/components/hr/BulkToolbar';
 
 const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f97316', leave: '#0284c7', suspended: '#dc2626', ended: '#64748b' };
 
@@ -18,6 +19,8 @@ export default function HrEmployees() {
   const canManage = user?.role === 'admin' || hasPermission('hr_manage_employees');
   const [meta, setMeta] = useState<any>(null);
   const [acct, setAcct] = useState<{ emp: any; mode: 'create' | 'change' } | null>(null);
+  const [sel, setSel] = useState<Record<string, string>>({});
+  const [exporting, setExporting] = useState(false);
   const [units, setUnits] = useState<any[]>([]);
   const [data, setData] = useState<any>({ employees: [], total: 0, stats: {} });
   const [q, setQ] = useState({ search: '', org_unit_id: '', category: '', status: '', contract_type: '', page: 1 });
@@ -50,7 +53,11 @@ export default function HrEmployees() {
   const linkUnits = async () => { const force = window.confirm('ربط المعلمين بوحدات أقسامهم/كلياتهم.\n«موافق» = إعادة الربط للجميع وفق بيانات المعلم · «إلغاء» = ربط من لا وحدة له فقط'); try { const r = await hrAPI.linkUnits(force); window.alert(r.data.message + (r.data.unresolved?.length ? '\n\nبلا وحدة: ' + r.data.unresolved.map((u: any) => `${u.name} (${u.reason})`).join('، ') : '')); load(); } catch (e) { alertMsg(e); } };
   const syncTeachers = async () => { if (!window.confirm('إنشاء ملف إداري لكل معلم ليس له ملف؟')) return; try { const r = await hrAPI.syncTeachers(); window.alert(r.data.message); load(); } catch (e) { alertMsg(e); } };
   const createAccount = (emp: any) => setAcct({ emp, mode: 'create' });
-  const remove = async (emp: any) => { if (!window.confirm(`حذف الموظف ${emp.full_name}؟ (يمكن استعادته من سلة المحذوفات)`)) return; try { const r = await hrAPI.deleteEmployee(emp.id); window.alert(r.data.message); setDetail(null); load(); } catch (e) { alertMsg(e); } };
+  const remove = async (emp: any) => { const msg = emp.teacher_id ? `حذف الملف الإداري للمعلم ${emp.full_name}؟\nيبقى سجله الأكاديمي في شاشة المعلمين، ويمكن استعادة الملف من سلة المحذوفات.` : `حذف الموظف ${emp.full_name}؟ (يمكن استعادته من سلة المحذوفات، ويُعطَّل حسابه)`; if (!window.confirm(msg)) return; try { const r = await hrAPI.deleteEmployee(emp.id, !!emp.teacher_id); window.alert(r.data.message); setDetail(null); load(); } catch (e) { alertMsg(e); } };
+  const exportXlsx = async () => { setExporting(true); try { const r = await hrAPI.exportEmployees(Object.fromEntries(Object.entries(q).filter(([k, v]) => v && k !== 'page'))); const url = URL.createObjectURL(r.data); const a = document.createElement('a'); a.href = url; a.download = 'سجل الموظفين.xlsx'; a.click(); URL.revokeObjectURL(url); } catch (e) { alertMsg(e); } finally { setExporting(false); } };
+  const toggleSel = (e: any) => setSel((p) => { const n = { ...p }; if (n[e.id]) delete n[e.id]; else n[e.id] = e.full_name; return n; });
+  const allSel = data.employees.length > 0 && data.employees.every((e: any) => sel[e.id]);
+  const toggleAll = () => setSel((p) => { const n = { ...p }; if (allSel) data.employees.forEach((e: any) => delete n[e.id]); else data.employees.forEach((e: any) => { n[e.id] = e.full_name; }); return n; });
   const downloadTemplate = async () => {
     try {
       const res = await (await import('../src/services/api')).default.get('/hr/employees/import/template', { responseType: 'blob' });
@@ -73,8 +80,10 @@ export default function HrEmployees() {
             <button onClick={syncTeachers} style={btn('#e3f2fd', '#1565c0')} data-testid="hr-sync-teachers-btn">🔄 مزامنة المعلمين</button>
             <button onClick={linkUnits} style={btn('#ede9fe', '#6d28d9')} data-testid="hr-link-units-btn">🔗 ربط المعلمين بوحداتهم</button>
             <button onClick={() => router.push('/hr-org-units')} style={btn('#f1f5f9', '#0f2440')} data-testid="hr-goto-org-btn">🏢 الهيكل التنظيمي</button>
+            <button onClick={exportXlsx} disabled={exporting} style={btn('#1b5e20')} data-testid="hr-export-btn">{exporting ? '...' : '📊 تصدير Excel'}</button>
           </div>
         )}
+        {canManage && Object.keys(sel).length > 0 && <BulkToolbar ids={Object.keys(sel)} names={Object.values(sel)} meta={meta} units={units} onDone={load} onClear={() => setSel({})} />}
 
         <ReportKpis items={[
           { label: 'إجمالي الموظفين', value: st.total || 0, color: '#1565c0', icon: 'people' },
@@ -99,10 +108,11 @@ export default function HrEmployees() {
           : (
             <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, direction: 'rtl' }} data-testid="hr-employees-table">
-                <thead><tr style={{ backgroundColor: '#0f2440', color: '#fff' }}>{['الرقم', 'الاسم', 'الفئة', 'المسمى', 'الوحدة', 'التعاقد', 'الحالة', 'حساب', ''].map((h) => <th key={h} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>{h}</th>)}</tr></thead>
+                <thead><tr style={{ backgroundColor: '#0f2440', color: '#fff' }}>{canManage && <th style={{ padding: '10px 8px', width: 34 }}><input type="checkbox" checked={allSel} onChange={toggleAll} data-testid="hr-select-all" /></th>}{['الرقم', 'الاسم', 'الفئة', 'المسمى', 'الوحدة', 'التعاقد', 'الحالة', 'حساب', ''].map((h) => <th key={h} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>{h}</th>)}</tr></thead>
                 <tbody>
                   {data.employees.map((e: any) => (
-                    <tr key={e.id} style={{ borderBottom: '1px solid #eef2f7', cursor: 'pointer' }} onClick={() => openDetail(e.id)} data-testid={`hr-emp-row-${e.id}`}>
+                    <tr key={e.id} style={{ borderBottom: '1px solid #eef2f7', cursor: 'pointer', backgroundColor: sel[e.id] ? '#eff6ff' : undefined }} onClick={() => openDetail(e.id)} data-testid={`hr-emp-row-${e.id}`}>
+                      {canManage && <td style={{ padding: '9px 8px' }} onClick={(ev) => ev.stopPropagation()}><input type="checkbox" checked={!!sel[e.id]} onChange={() => toggleSel(e)} data-testid={`hr-select-${e.id}`} /></td>}
                       <td style={{ padding: '9px 8px', fontWeight: 700, color: '#475569' }}>{e.employee_no}</td>
                       <td style={{ padding: '9px 8px', fontWeight: 700, color: '#0f2440' }}>{e.full_name}{e.alerts?.length ? <span title={e.alerts.join(' · ')} style={{ marginRight: 6, color: '#dc2626' }}>⚠</span> : null}</td>
                       <td style={{ padding: '9px 8px' }}>{e.category_label}</td>
@@ -113,6 +123,7 @@ export default function HrEmployees() {
                       <td style={{ padding: '9px 8px' }}>{e.has_account ? '✅' : '—'}</td>
                       <td style={{ padding: '9px 8px', whiteSpace: 'nowrap' }} onClick={(ev) => ev.stopPropagation()}>
                         {canManage && <button onClick={() => setForm({ open: true, emp: e })} style={btn('#e3f2fd', '#1565c0', { padding: '5px 10px', fontSize: 11.5 })} data-testid={`hr-edit-${e.id}`}>تعديل</button>}
+                        {canManage && <button onClick={() => remove(e)} title="حذف" style={btn('transparent', '#c62828', { padding: '5px 6px', fontSize: 12 })} data-testid={`hr-delete-${e.id}`}>🗑</button>}
                       </td>
                     </tr>
                   ))}
@@ -156,7 +167,7 @@ export default function HrEmployees() {
                 <button onClick={() => setForm({ open: true, emp: detail })} style={btn('#1565c0')} data-testid="hr-detail-edit">تعديل</button>
                 {!detail.has_account && !detail.teacher_id && <button onClick={() => createAccount(detail)} style={btn('#16a34a')} data-testid="hr-detail-create-account">إنشاء حساب دخول</button>}
                 {detail.has_account && <button onClick={() => setAcct({ emp: detail, mode: 'change' })} style={btn('#ede9fe', '#6d28d9')} data-testid="hr-detail-change-role">تغيير الدور</button>}
-                {!detail.teacher_id && <button onClick={() => remove(detail)} style={btn('#ffebee', '#c62828')} data-testid="hr-detail-delete">حذف</button>}
+                <button onClick={() => remove(detail)} style={btn('#ffebee', '#c62828')} data-testid="hr-detail-delete">{detail.teacher_id ? 'حذف الملف الإداري' : 'حذف'}</button>
               </div>
             )}
             {detail.history?.length > 0 && <div style={{ marginTop: 16 }}><div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 4 }}>سجل التغييرات</div>{detail.history.map((h: any) => <div key={h.id} style={{ fontSize: 11.5, color: '#475569', padding: '5px 0', borderBottom: '1px solid #f1f5f9' }}><b>{{ created: 'إنشاء الملف', updated: 'تعديل', account_created: 'إنشاء حساب', role_changed: 'تغيير الدور' }[h.action as string] || h.action}</b> · {h.by_name} · {String(h.at).slice(0, 16).replace('T', ' ')}{h.details && Object.keys(h.details).length ? <div style={{ color: '#94a3b8' }}>{Object.entries(h.details).map(([k, v]: any) => `${k}: ${v?.from ?? '—'} → ${v?.to ?? '—'}`).join(' · ')}</div> : null}</div>)}</div>}
