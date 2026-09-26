@@ -22,6 +22,7 @@ class Permission:
     DASHBOARD_STUDENTS = "dashboard_students"
     DASHBOARD_ROOMS = "dashboard_rooms"
     DASHBOARD_FINANCE = "dashboard_finance"
+    DASHBOARD_HR = "dashboard_hr"
     DASHBOARD_EXPORT = "dashboard_export"
 
     # صلاحيات الأقسام
@@ -386,14 +387,15 @@ ALL_PERMISSIONS = [
     {"key": Permission.DASHBOARD_STUDENTS, "label": "إحصائيات الطلاب", "category": "لوحة القيادة"},
     {"key": Permission.DASHBOARD_ROOMS, "label": "القاعات والجدول", "category": "لوحة القيادة"},
     {"key": Permission.DASHBOARD_FINANCE, "label": "الإحصائيات المالية (تحتاج أيضاً صلاحية السندات)", "category": "لوحة القيادة"},
+    {"key": Permission.DASHBOARD_HR, "label": "شؤون الموظفين (الأعداد، الدوام الإداري، الإجازات، المهام)", "category": "لوحة القيادة"},
     {"key": Permission.DASHBOARD_EXPORT, "label": "تصدير اللوحة PDF/Excel والملخصات الأسبوعية", "category": "لوحة القيادة"},
 ]
 
 DASHBOARD_PERMISSIONS = [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_ATTENDANCE, Permission.DASHBOARD_TEACHERS,
-                         Permission.DASHBOARD_STUDENTS, Permission.DASHBOARD_ROOMS, Permission.DASHBOARD_FINANCE, Permission.DASHBOARD_EXPORT]
-# الأدوار القيادية تحصل على كل أجزاء اللوحة افتراضياً
+                         Permission.DASHBOARD_STUDENTS, Permission.DASHBOARD_ROOMS, Permission.DASHBOARD_FINANCE, Permission.DASHBOARD_HR, Permission.DASHBOARD_EXPORT]
+# الأدوار القيادية تحصل على كل أجزاء اللوحة افتراضياً (قسم شؤون الموظفين للأدمن ورئيس الجامعة ومدير HR فقط)
 for _r in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD):
-    DEFAULT_PERMISSIONS[_r] = DEFAULT_PERMISSIONS.get(_r, []) + [p for p in DASHBOARD_PERMISSIONS if p not in DEFAULT_PERMISSIONS.get(_r, [])]
+    DEFAULT_PERMISSIONS[_r] = DEFAULT_PERMISSIONS.get(_r, []) + [p for p in DASHBOARD_PERMISSIONS if p not in DEFAULT_PERMISSIONS.get(_r, []) and (p != Permission.DASHBOARD_HR or _r == UserRole.ADMIN)]
 
 # الصلاحيات الكاملة تشمل الصلاحيات الفرعية
 # 🏛️ الأدوار القرائية: نطاق الجامعة كلها + صلاحيات العرض/التقارير/التصدير فقط — أي تعديل يُرفض بحارس القراءة
@@ -409,7 +411,7 @@ _HR_ALL = [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_EMPLOYEES, Permiss
            Permission.HR_MANAGE_CORRESPONDENCE, Permission.HR_MANAGE_TASKS, Permission.HR_MANAGE_APPRAISALS]
 HR_ROLE_PRESETS = [
     {"key": "hr_manager", "name": "مدير شؤون الموظفين", "description": "كامل صلاحيات شؤون الموظفين: السجل والمستندات، الهيكل التنظيمي، اعتماد الإجازات والأرصدة، الحضور الإداري، المراسلات، إسناد المهام، اعتماد التقييم السنوي، التقرير السنوي وبطاقة HR في لوحة القيادة",
-     "permissions": _HR_ALL + [Permission.DASHBOARD_ALERTS]},
+     "permissions": _HR_ALL + [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_HR]},
     {"key": "hr_officer", "name": "أخصائي شؤون الموظفين", "description": "التشغيل اليومي دون سلطة اعتماد: إدارة سجلات الموظفين والمستندات، الحضور الإداري، المراسلات، وعرض الإجازات والتقييمات",
      "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_EMPLOYEES, Permission.HR_MANAGE_ATTENDANCE, Permission.HR_MANAGE_CORRESPONDENCE]},
     {"key": "hr_attendance_clerk", "name": "مسؤول الحضور والانصراف", "description": "الكشف اليومي للحضور الإداري والتقرير الشهري فقط، مع عرض سجل الموظفين",
@@ -417,7 +419,7 @@ HR_ROLE_PRESETS = [
     {"key": "hr_correspondence_clerk", "name": "مسؤول المراسلات (السكرتارية)", "description": "تسجيل الوارد والصادر والمذكرات والتعاميم ومتابعتها فقط، مع عرض سجل الموظفين",
      "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_CORRESPONDENCE]},
     {"key": "hr_auditor", "name": "مراقب شؤون الموظفين (اطّلاع فقط)", "description": "اطّلاع كامل على السجل والإجازات والحضور والمراسلات والتقييمات والتقرير السنوي وبطاقة HR دون أي تعديل — مناسب للإدارة العليا",
-     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.DASHBOARD_ALERTS]},
+     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_HR]},
 ]
 
 FULL_PERMISSION_MAPPING = {

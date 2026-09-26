@@ -42,7 +42,7 @@ def _is_management(user: dict) -> bool:
 
 SECTION_PERMS = {"alerts": Permission.DASHBOARD_ALERTS, "attendance": Permission.DASHBOARD_ATTENDANCE, "teachers": Permission.DASHBOARD_TEACHERS,
                  "students": Permission.DASHBOARD_STUDENTS, "rooms": Permission.DASHBOARD_ROOMS, "finance": Permission.DASHBOARD_FINANCE,
-                 "export": Permission.DASHBOARD_EXPORT}
+                 "hr": Permission.DASHBOARD_HR, "export": Permission.DASHBOARD_EXPORT}
 
 
 def dashboard_sections(user: dict) -> dict:
@@ -326,12 +326,12 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
             phase2[k] = None
 
     hr = None
-    if scope["is_admin"] or has_permission(user, "hr_view_employees"):
+    if sections["hr"]:
         try:
-            from .hr_alerts import hr_dashboard_summary
-            hr = await hr_dashboard_summary(db)
+            from .hr_dashboard import hr_dashboard_section
+            hr = await hr_dashboard_section(db, period, d_from, d_to)
         except Exception as e:
-            logging.warning(f"hr dashboard summary failed: {e}")
+            logging.warning(f"hr dashboard section failed: {e}")
 
     return {
         "generated_at": now.strftime("%Y-%m-%d %H:%M"),
@@ -614,6 +614,30 @@ def _phase2_tables(d: dict):
     return out
 
 
+def _hr_tables(d: dict):
+    """جداول شؤون الموظفين للتصدير"""
+    h = d.get("hr")
+    if not h:
+        return []
+    out = []
+    hc, p = h.get("headcount"), h.get("period")
+    if hc:
+        out.append(("الموظفون حسب الفئة", [["الفئة", "العدد"]] + [[c["label"], c["count"]] for c in hc["by_category"]] + [["الإجمالي على رأس العمل", hc["total_active"]]]))
+        out.append(("موظفو الوحدات", [["الوحدة", "النوع", "الإجمالي", "أكاديمي", "إداري", "غيرهم"]] + [[u["name"], u["type_label"], u["total"], u["academic"], u["administrative"], u["other"]] for u in hc["by_unit"]]))
+    if p:
+        out.append((f"الدوام الإداري — {d['period_label']}", [["البيان", "القيمة"], ["أيام العمل", p["work_days"]], ["نسبة الالتزام %", p["commitment_rate"] if p["commitment_rate"] is not None else "—"],
+                    ["حضور", p["present"]], ["متأخر", p["late"]], ["غياب", p["absent"]], ["بعذر", p["excused"]], ["لم يُسجَّل", p["unmarked"]], ["ساعات التأخير", p["late_hours"]],
+                    ["إجازات معتمدة", p["leaves_approved"]], ["أيام الإجازات", p["leave_days"]], ["مهام منجزة", p["tasks_done"]], ["مهام جديدة", p["tasks_created"]]]))
+        if p["chart"]["points"]:
+            gb = "التاريخ" if p["chart"]["group_by"] == "date" else "الوحدة"
+            out.append(("مخطط الدوام الإداري", [[gb, "حاضر", "متأخر", "غائب", "النسبة %"]] + [[x.get("date") or x["label"], x["present"], x["late"], x["absent"], x["rate"] if x["rate"] is not None else "—"] for x in p["chart"]["points"]]))
+        if p["units_attendance"]:
+            out.append(("الوحدات الأعلى غياباً", [["الوحدة", "حاضر", "متأخر", "غائب", "دقائق التأخير", "النسبة %"]] + [[u["unit"], u["present"], u["late"], u["absent"], u["late_minutes"], u["rate"] if u["rate"] is not None else "—"] for u in p["units_attendance"]]))
+        if p["bottom_employees"]:
+            out.append(("الأقل التزاماً", [["الموظف", "الوحدة", "حاضر", "متأخر", "غائب", "دقائق التأخير", "النسبة %"]] + [[e["name"], e["unit"], e["present"], e["late"], e["absent"], e["late_minutes"], e["rate"] if e["rate"] is not None else "—"] for e in p["bottom_employees"]]))
+    return out
+
+
 def _build_excel(d: dict) -> io.BytesIO:
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -653,6 +677,8 @@ def _build_excel(d: dict) -> io.BytesIO:
         sheet("المالية", [["نوع الرسوم", "معتمد", "معلق", "مرفوض", "طلاب دافعون", "غير دافعين", "نسبة الدفع %", "المبالغ المعتمدة"]] +
               [[t["name"] + (" (متكرر)" if t["recurring"] else ""), t["approved"], t["pending"], t["rejected"], t["paid_students"], t["not_paid"], t["paid_pct"], t["amount"]] for t in d["finance"]["types"]])
     for title, rows in _phase2_tables(d):
+        sheet(title, rows)
+    for title, rows in _hr_tables(d):
         sheet(title, rows)
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return buf
@@ -734,6 +760,10 @@ def _build_pdf(d: dict) -> io.BytesIO:
         if len(rows) > 1:
             n = len(rows[0]); w = (270 * mm) / n
             el += [Paragraph(ar(title), sec), grid(rows, [w] * n, head_bg="#00695c", fs=8)]
+    for title, rows in _hr_tables(d):
+        if len(rows) > 1:
+            n = len(rows[0]); w = (270 * mm) / n
+            el += [Paragraph(ar(title), sec), grid(rows, [w] * n, head_bg="#6d28d9", fs=8)]
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm).build(el)
     buf.seek(0)

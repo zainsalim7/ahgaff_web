@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { goBack } from '../src/utils/navigation';
 import { hrAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
@@ -15,6 +15,7 @@ const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f
 
 export default function HrEmployees() {
   const router = useRouter();
+  const sp = useLocalSearchParams<{ category?: string; org_unit_id?: string; status?: string }>();
   const { hasPermission, user } = useAuth();
   const canManage = user?.role === 'admin' || hasPermission('hr_manage_employees');
   const [meta, setMeta] = useState<any>(null);
@@ -23,7 +24,7 @@ export default function HrEmployees() {
   const [exporting, setExporting] = useState(false);
   const [units, setUnits] = useState<any[]>([]);
   const [data, setData] = useState<any>({ employees: [], total: 0, stats: {} });
-  const [q, setQ] = useState({ search: '', org_unit_id: '', category: '', status: '', contract_type: '', page: 1 });
+  const [q, setQ] = useState({ search: '', org_unit_id: String(sp.org_unit_id || ''), category: String(sp.category || ''), status: String(sp.status || ''), contract_type: '', page: 1 });
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ open: boolean; emp: any | null }>({ open: false, emp: null });
   const [detail, setDetail] = useState<any>(null);

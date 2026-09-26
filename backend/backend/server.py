@@ -18742,6 +18742,8 @@ async def sync_default_roles():
                 "created_at": get_yemen_time(),
             })
             logging.info(f"تم إنشاء دور {system_key}")
+    # 📊 قسم شؤون الموظفين في لوحة القيادة: يُمنح تلقائياً لأدوار HR الجاهزة (المدير والمراقب)
+    await db.roles.update_many({"preset_key": {"$in": ["hr_manager", "hr_auditor"]}}, {"$addToSet": {"permissions": Permission.DASHBOARD_HR}})
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

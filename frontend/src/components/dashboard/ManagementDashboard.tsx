@@ -141,7 +141,7 @@ export const ManagementDashboard = () => {
               {data.rooms && <View style={{ flex: 1 }}><DashRooms r={data.rooms} /></View>}
             </View>
             {data.finance && <DashFinance f={data.finance} />}
-            {data.hr && <DashHR h={data.hr} />}
+            {data.hr && <DashHR h={data.hr} periodLabel={data.period_label} width={Math.min(width, 1400) - 64} />}
           </>
         )}
       </ScrollView>

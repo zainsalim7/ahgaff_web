@@ -3,8 +3,10 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { DASH, NUM_FONT, dashStyles } from './dashTheme';
+import { DashHRHeadcount } from './DashHRHeadcount';
+import { DashHRPeriod } from './DashHRPeriod';
 
-export const DashHR = ({ h }: { h: any }) => {
+export const DashHR = ({ h, periodLabel, width }: { h: any; periodLabel: string; width: number }) => {
   const router = useRouter();
   const go = (p: string) => router.push(p as any);
   const tiles = [
@@ -36,6 +38,8 @@ export const DashHR = ({ h }: { h: any }) => {
           <Ionicons name="arrow-back" size={12} color={DASH.blue} />
         </TouchableOpacity>
       </View>
+      {h.headcount && <DashHRHeadcount hc={h.headcount} />}
+      <Text style={styles.blockTitle}>موقف اليوم · {h.date}</Text>
       <View style={styles.tiles}>
         {tiles.map((t) => (
           <TouchableOpacity key={t.id} style={styles.tile} onPress={() => go(t.route)} testID={`dash-hr-tile-${t.id}`}>
@@ -54,11 +58,13 @@ export const DashHR = ({ h }: { h: any }) => {
           </View>
         ))}
       </View>
+      {h.period && <DashHRPeriod p={h.period} periodLabel={periodLabel} width={width} />}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
+  blockTitle: { fontSize: 12.5, fontWeight: '800', color: DASH.ink, textAlign: 'right', marginBottom: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 },
   tiles: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   tile: { flexGrow: 1, flexBasis: 140, backgroundColor: '#f8fafc', borderRadius: 12, padding: 10 },
   tileLabel: { fontSize: 11, color: DASH.muted, textAlign: 'right', fontWeight: '700' },

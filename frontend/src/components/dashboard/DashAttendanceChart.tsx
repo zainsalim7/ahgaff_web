@@ -5,12 +5,15 @@ import { Ionicons } from '@expo/vector-icons';
 import { DASH, NUM_FONT, dashStyles } from './dashTheme';
 
 export interface ChartPoint { label: string; date?: string; lectures: number; completed: number; present: number; late: number; absent: number; rate: number | null }
-interface Props { groupBy: 'date' | 'department' | 'course'; points: ChartPoint[]; periodLabel: string; width: number }
+interface Props {
+  groupBy: 'date' | 'department' | 'course' | 'unit'; points: ChartPoint[]; periodLabel: string; width: number;
+  title?: string; subtitle?: string; emptyText?: string; testID?: string; tipRender?: (p: ChartPoint) => string; plain?: boolean;
+}
 
 const H = 200;
 const PAD = { top: 16, bottom: 34, left: 34, right: 12 };
 
-export const DashAttendanceChart = ({ groupBy, points, periodLabel, width }: Props) => {
+export const DashAttendanceChart = ({ groupBy, points, periodLabel, width, title, subtitle, emptyText, testID, tipRender, plain }: Props) => {
   const [tip, setTip] = useState<number | null>(null);
   const hasData = points.some((p) => p.lectures > 0);
   const barW = Math.max(18, Math.min(44, (width - PAD.left - PAD.right) / Math.max(points.length, 1) - 10));
@@ -21,17 +24,17 @@ export const DashAttendanceChart = ({ groupBy, points, periodLabel, width }: Pro
   const y = (v: number) => PAD.top + plotH - (v / maxV) * plotH;
   const x = (i: number) => PAD.left + i * (innerW / Math.max(points.length, 1)) + (innerW / Math.max(points.length, 1) - barW) / 2;
   const ratePts = points.map((p, i) => (p.rate === null ? null : `${x(i) + barW / 2},${PAD.top + plotH - (p.rate / 100) * plotH}`)).filter(Boolean).join(' ');
-  const gbLabel = { date: 'حسب اليوم', department: 'حسب القسم', course: 'حسب المقرر' }[groupBy];
+  const gbLabel = { date: 'حسب اليوم', department: 'حسب القسم', course: 'حسب المقرر', unit: 'حسب الوحدة' }[groupBy];
   const sel = tip !== null ? points[tip] : null;
 
   return (
-    <View style={[dashStyles.card, { marginBottom: 16 }]} testID="dash-attendance-chart">
+    <View style={plain ? { marginBottom: 8 } : [dashStyles.card, { marginBottom: 16 }]} testID={testID || 'dash-attendance-chart'}>
       <View style={dashStyles.sectionHead}>
         <View style={dashStyles.sectionTitleRow}>
           <View style={[dashStyles.iconBox, { backgroundColor: '#dbeafe' }]}><Ionicons name="bar-chart" size={17} color={DASH.blue} /></View>
           <View>
-            <Text style={dashStyles.sectionTitle}>مخطط الحضور — {periodLabel}</Text>
-            <Text style={dashStyles.sectionSub}>{gbLabel} · الأعمدة: حاضر/متأخر/غائب · الخط: نسبة الحضور</Text>
+            <Text style={dashStyles.sectionTitle}>{title || 'مخطط الحضور'} — {periodLabel}</Text>
+            <Text style={dashStyles.sectionSub}>{subtitle || `${gbLabel} · الأعمدة: حاضر/متأخر/غائب · الخط: نسبة الحضور`}</Text>
           </View>
         </View>
         <View style={styles.legend}>
@@ -43,7 +46,7 @@ export const DashAttendanceChart = ({ groupBy, points, periodLabel, width }: Pro
       {!hasData ? (
         <View style={dashStyles.empty}>
           <Ionicons name="analytics-outline" size={36} color="#cbd5e1" />
-          <Text style={dashStyles.emptyText}>لا توجد محاضرات منفَّذة في هذه الفترة</Text>
+          <Text style={dashStyles.emptyText}>{emptyText || 'لا توجد محاضرات منفَّذة في هذه الفترة'}</Text>
         </View>
       ) : (
         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
@@ -82,7 +85,7 @@ export const DashAttendanceChart = ({ groupBy, points, periodLabel, width }: Pro
       {sel && (
         <View style={styles.tip} testID="dash-chart-tooltip">
           <Text style={styles.tipTitle}>{sel.label}{sel.date ? ` (${sel.date})` : ''}</Text>
-          <Text style={[styles.tipText, NUM_FONT]}>محاضرات {sel.lectures} · منفَّذة {sel.completed} · حاضر {sel.present} · متأخر {sel.late} · غائب {sel.absent}{sel.rate !== null ? ` · النسبة ${sel.rate}%` : ''}</Text>
+          <Text style={[styles.tipText, NUM_FONT]}>{tipRender ? tipRender(sel) : `محاضرات ${sel.lectures} · منفَّذة ${sel.completed} · حاضر ${sel.present} · متأخر ${sel.late} · غائب ${sel.absent}${sel.rate !== null ? ` · النسبة ${sel.rate}%` : ''}`}</Text>
         </View>
       )}
     </View>
