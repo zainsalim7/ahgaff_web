@@ -1,0 +1,28 @@
+{
+  "summary": "Tested new Management Dashboard split into Academic vs HR views (dash-view-tabs) + new dedicated /api/dashboard/management/hr endpoint. Backend: 13/13 pytest cases passed (structure for week/month/day, units listing, faculty & department scoping, invalid org_unit_id fallback, academic endpoint no longer contains 'hr' block but sections.hr still true for admin, RBAC 403 for dean & department head, HR Excel export with required sheets (الملخص, الموظفون حسب الفئة, موظفو الوحدات, الدوام الإداري*), HR Excel with org_unit_id, HR PDF (%PDF magic bytes), and academic Excel export does NOT include HR sheets). Frontend: all data-testid elements present. Default view is Academic (kicker 'لوحة القيادة'; dash-kpis + dash-attendance-chart shown; no dash-hr). Clicking dash-view-tab-hr swaps to hr-dashboard-view: kicker becomes 'لوحة القيادة — شؤون الموظفين', shows dash-hr-kpis (employees/units/present/absent/rate/pending), dash-alerts titled 'التنبيهات الإدارية' with dash-alert-hr_pending_leaves/hr_absent/hr_overdue_tasks/hr_contracts/hr_appraisals; expanding hr_pending_leaves reveals dash-alert-hr_pending_leaves-list; dash-hr-headcount-card, dash-hr-hc-units, dash-hr-period-card, dash-hr-chart, dash-hr today card all render; academic KPIs/chart hidden. Unit dropdown modal opens with dash-unit-all + unit rows; selecting كلية البنات updates label, dash-unit-clear appears, employees KPI 6 → 1 (correct child scope); clear restores 'كل الوحدات التنظيمية'. Period switch (day/month) updates period card title. Excel export button in HR view triggers /api/dashboard/management/hr/export?fmt=excel (network captured). Switching back to dash-view-tab-academic restores dash-kpis and dash-scope-dropdown. RBAC: Salim (dean) sees no dash-view-tabs and no hr-dashboard-view, only academic (dash-kpis present).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "app-wide", "issues": ["Existing React-Native-Web warnings (Unexpected text node, unknown onResponder* handlers) still present — noisy but non-blocking, unchanged from iteration_78."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_hr_dashboard_v2.py",
+    "/app/test_reports/pytest/iter79_hr_v2.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "management_dashboard.py continues to grow — HR export helpers (_hr_tables, _hr_summary_rows) and academic helpers share large build_* functions; splitting into hr_export.py vs academic_export.py would improve maintainability.",
+    "hr_dashboard.hr_dashboard_section accepts optional org_unit_id but silently ignores unknown ids (returns unscoped) — good defensive behavior, but consider surfacing a warning field in scope for the UI (e.g., scope.fallback=true) so client can inform user.",
+    "Frontend DashAlerts: individual alert items don't have per-item data-testid — the list has dash-alert-<key>-list but items only. Consider adding dash-alert-<key>-item-<i> for stronger E2E assertions."
+  ],
+  "updated_files": ["/app/backend/tests/test_hr_dashboard_v2.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin/admin123, Salim/test1234 (dean), Saeed/test1234 (dept head) — all worked; no data modified.",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "HR is now a dedicated view. Backend endpoint: GET /api/dashboard/management/hr[?period=day|week|month][&org_unit_id=...] returns {view:'hr', units[], hr{scope, headcount, period, alerts, today fields}}. Export: /api/dashboard/management/hr/export?fmt=excel|pdf. Academic endpoint /api/dashboard/management no longer contains 'hr' key (sections.hr still boolean). Test file: /app/backend/tests/test_hr_dashboard_v2.py (13 tests, ~4.5s). Frontend selectors: dash-view-tabs, dash-view-tab-academic|hr, hr-dashboard-view, dash-unit-dropdown|-label|-clear|-all|-<id>|-expand-<id>, dash-hr-kpis|-kpi-*, dash-hr-headcount-card, dash-hr-period-card, dash-hr-chart, dash-hr, dash-alert-<key>[-toggle|-list|-count|-route]. Small dataset: 6 active employees (3 academic / 3 admin); faculty كلية البنات holds 1 employee."
+}

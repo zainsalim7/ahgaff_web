@@ -481,3 +481,10 @@
 - التصدير PDF/Excel يشمل جداول HR (`_hr_tables`).
 - Frontend: `DashHR.tsx` يجمع `DashHRHeadcount.tsx` + موقف اليوم + `DashHRPeriod.tsx`؛ `DashAttendanceChart` أصبح قابلاً لإعادة الاستخدام (title/subtitle/plain/tipRender). البلاطات تنقل إلى `/hr-employees?category=..|org_unit_id=..` (الشاشة تقرأ الاستعلام).
 - اختبار: iteration_78 — 8/8 backend + كل الواجهات ✅
+
+## 2026-09-26: 🗂️ لوحة القيادة بتبويبين: «الأداء الأكاديمي» / «شؤون الموظفين» ✅
+- تبويبان في صف فلتر النطاق (`DashViewTabs`). الافتراضي أكاديمي؛ تبويب HR يظهر فقط لمن يملك `dashboard_hr` (الأدمن/رئيس الجامعة/hr_manager/hr_auditor). بطاقة HR أُزيلت من العرض الأكاديمي (اختيار المستخدم a).
+- Backend: `GET /api/dashboard/management/hr?period&org_unit_id` (+ `/hr/export?fmt=pdf|excel`) → `build_hr_dashboard` يُرجع `units` (الهيكل التنظيمي) و`hr` مفلتراً بالوحدة وفروعها (headcount حسب الوحدات الفرعية المباشرة + «مباشرة في الوحدة»، موقف اليوم، الفترة، التنبيهات الإدارية `_hr_alerts`). `hr_dashboard_summary(db, emp_ids)` أصبح يقبل نطاق موظفين ويُرجع قوائم المهام المتأخرة والتقييمات.
+- عرض HR الأكاديمي `/dashboard/management` لم يعد يحمل `hr` (فقط `sections.hr`). تصدير الأكاديمي بدون جداول HR؛ تصدير HR مستقل (الملخص، التنبيهات، الفئات، الوحدات، الدوام، القوائم اليومية).
+- Frontend: `HRDashboardView` = `DashHRKpis` + `DashAlerts(title)` + بطاقة الأعداد (`DashHRHeadcount`) + بطاقة الفترة (`DashHRPeriod`) + `DashHR` (موقف اليوم). `DashUnitFilter` قائمة منسدلة هرمية للوحدات. `DashHeader` يأخذ `kicker`/`scopeIcon`. الفترة/التحديث/التصدير تعمل على العرض الحالي.
+- اختبار: iteration_79 — 13/13 backend + كل الواجهات + RBAC ✅
