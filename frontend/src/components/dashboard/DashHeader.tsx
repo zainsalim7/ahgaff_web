@@ -24,9 +24,11 @@ interface Props {
   compact: boolean;
   readOnly?: boolean;
   canExport?: boolean;
+  kicker?: string;
+  scopeIcon?: keyof typeof Ionicons.glyphMap;
 }
 
-export const DashHeader = ({ userName, scopeLabel, semester, generatedAt, period, onPeriod, exporting, onExport, onRefresh, compact, readOnly, canExport = true }: Props) => {
+export const DashHeader = ({ userName, scopeLabel, semester, generatedAt, period, onPeriod, exporting, onExport, onRefresh, compact, readOnly, canExport = true, kicker = 'لوحة القيادة', scopeIcon = 'business-outline' }: Props) => {
   const router = useRouter();
   return (
   <View style={styles.hero} testID="dash-header">
@@ -50,7 +52,7 @@ export const DashHeader = ({ userName, scopeLabel, semester, generatedAt, period
         </TouchableOpacity>}
       </View>
       <View style={{ flex: 1 }}>
-        <Text style={styles.kicker}>لوحة القيادة</Text>
+        <Text style={styles.kicker} testID="dash-kicker">{kicker}</Text>
         <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <Text style={styles.title} testID="dash-title">{userName ? `مرحباً، ${userName}` : 'لوحة القيادة'}</Text>
           {readOnly && (
@@ -62,7 +64,7 @@ export const DashHeader = ({ userName, scopeLabel, semester, generatedAt, period
         </View>
         <View style={styles.metaRow}>
           <View style={styles.metaChip} testID="dash-scope-label">
-            <Ionicons name="business-outline" size={12} color={DASH.gold} />
+            <Ionicons name={scopeIcon} size={12} color={DASH.gold} />
             <Text style={styles.metaText}>{scopeLabel}</Text>
           </View>
           {!!semester && (

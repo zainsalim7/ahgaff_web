@@ -3,10 +3,9 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { DASH, NUM_FONT, dashStyles } from './dashTheme';
-import { DashHRHeadcount } from './DashHRHeadcount';
-import { DashHRPeriod } from './DashHRPeriod';
 
-export const DashHR = ({ h, periodLabel, width }: { h: any; periodLabel: string; width: number }) => {
+/** 📅 موقف اليوم في شؤون الموظفين: بلاطات + قوائم (الغائبون، في إجازة، طلبات معلّقة، عقود) */
+export const DashHR = ({ h }: { h: any }) => {
   const router = useRouter();
   const go = (p: string) => router.push(p as any);
   const tiles = [
@@ -18,7 +17,7 @@ export const DashHR = ({ h, periodLabel, width }: { h: any; periodLabel: string;
     { label: 'تقييمات للاعتماد', value: h.pending_appraisals, sub: '', color: h.pending_appraisals ? DASH.orange : DASH.muted, route: '/hr-appraisals', id: 'appraisals' },
   ];
   const lists: { title: string; items: any[]; render: (i: any) => string; empty: string; id: string }[] = [
-    { id: 'absent', title: 'الغائبون اليوم', items: h.absent_today, render: (i) => `${i.employee_name}${i.note ? ` — ${i.note}` : ''}`, empty: h.is_work_day ? 'لا غياب مسجّل' : 'اليوم عطلة' },
+    { id: 'absent', title: 'الغائبون اليوم', items: h.absent_today, render: (i) => `${i.employee_name}${i.org_unit_name ? ` (${i.org_unit_name})` : ''}${i.note ? ` — ${i.note}` : ''}`, empty: h.is_work_day ? 'لا غياب مسجّل' : 'اليوم عطلة' },
     { id: 'leave', title: 'في إجازة اليوم', items: h.on_leave_today, render: (i) => `${i.employee_name} — ${i.type} حتى ${i.end_date}`, empty: 'لا أحد في إجازة' },
     { id: 'pending', title: 'طلبات إجازة معلّقة', items: h.pending_leaves, render: (i) => `${i.employee_name} — ${i.type} من ${i.start_date} (${i.days} يوم) · ${i.status === 'pending' ? 'لدى المدير' : 'لدى HR'}`, empty: 'لا طلبات معلّقة' },
     { id: 'contracts', title: 'عقود تنتهي خلال 60 يوماً', items: h.expiring_contracts, render: (i) => `${i.employee_name} — ${i.contract_end_date}`, empty: 'لا عقود قريبة الانتهاء' },
@@ -27,19 +26,17 @@ export const DashHR = ({ h, periodLabel, width }: { h: any; periodLabel: string;
     <View style={[dashStyles.card, { marginBottom: 16 }]} testID="dash-hr">
       <View style={dashStyles.sectionHead}>
         <View style={dashStyles.sectionTitleRow}>
-          <View style={[dashStyles.iconBox, { backgroundColor: '#ede9fe' }]}><Ionicons name="people-circle" size={17} color="#6d28d9" /></View>
+          <View style={[dashStyles.iconBox, { backgroundColor: '#ede9fe' }]}><Ionicons name="today" size={17} color="#6d28d9" /></View>
           <View>
-            <Text style={dashStyles.sectionTitle}>شؤون الموظفين</Text>
+            <Text style={dashStyles.sectionTitle}>موقف اليوم</Text>
             <Text style={dashStyles.sectionSub}>{h.date} · {h.employees_active} موظف على رأس العمل{!h.is_work_day ? ' · اليوم عطلة' : ''}</Text>
           </View>
         </View>
-        <TouchableOpacity style={dashStyles.linkBtn} onPress={() => go('/hr-employees')} testID="dash-hr-route">
-          <Text style={dashStyles.linkText}>سجل الموظفين</Text>
+        <TouchableOpacity style={dashStyles.linkBtn} onPress={() => go('/hr-attendance')} testID="dash-hr-route">
+          <Text style={dashStyles.linkText}>كشف الدوام</Text>
           <Ionicons name="arrow-back" size={12} color={DASH.blue} />
         </TouchableOpacity>
       </View>
-      {h.headcount && <DashHRHeadcount hc={h.headcount} />}
-      <Text style={styles.blockTitle}>موقف اليوم · {h.date}</Text>
       <View style={styles.tiles}>
         {tiles.map((t) => (
           <TouchableOpacity key={t.id} style={styles.tile} onPress={() => go(t.route)} testID={`dash-hr-tile-${t.id}`}>
@@ -58,13 +55,11 @@ export const DashHR = ({ h, periodLabel, width }: { h: any; periodLabel: string;
           </View>
         ))}
       </View>
-      {h.period && <DashHRPeriod p={h.period} periodLabel={periodLabel} width={width} />}
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  blockTitle: { fontSize: 12.5, fontWeight: '800', color: DASH.ink, textAlign: 'right', marginBottom: 8, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 },
   tiles: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   tile: { flexGrow: 1, flexBasis: 140, backgroundColor: '#f8fafc', borderRadius: 12, padding: 10 },
   tileLabel: { fontSize: 11, color: DASH.muted, textAlign: 'right', fontWeight: '700' },

@@ -20,6 +20,12 @@ const itemLine = (key: string, it: any) => {
   if (key === 'low_attendance') return { main: `${it.name} (${it.student_id})`, side: `${it.rate}%`, sub: `${it.department} · م${it.level} · غياب ${it.absent}/${it.lectures}` };
   if (key === 'missed_today') return { main: it.course, side: it.time, sub: `${it.teacher} · ${it.room || 'بلا قاعة'}` };
   if (key === 'late_teachers') return { main: it.name, side: `${it.count} مرة`, sub: `أقصى تأخير ${it.max_delay} د · المجموع ${it.total_delay} د` };
+  if (key === 'hr_absent') return { main: it.employee_name, side: 'غائب', sub: `${it.org_unit_name || ''}${it.note ? ` · ${it.note}` : ''}` };
+  if (key === 'hr_pending_leaves') return { main: it.employee_name, side: `${it.days} يوم`, sub: `${it.type} من ${it.start_date} · ${it.status === 'pending' ? 'لدى المدير' : 'لدى HR'}` };
+  if (key === 'hr_overdue_tasks') return { main: it.title, side: it.due_date || '', sub: `${it.employee_name}${it.org_unit_name ? ` · ${it.org_unit_name}` : ''}` };
+  if (key === 'hr_contracts') return { main: it.employee_name, side: it.contract_end_date, sub: `${it.job_title || ''}${it.org_unit_name ? ` · ${it.org_unit_name}` : ''}` };
+  if (key === 'hr_appraisals') return { main: it.employee_name, side: it.grade || '', sub: `تقييم ${it.year} · ${it.total_score ?? ''}` };
+  if (key === 'hr_low_commitment') return { main: it.name, side: `${it.rate}%`, sub: `${it.unit || ''} · غائب ${it.absent} · متأخر ${it.late}` };
   return { main: String(it.name || ''), side: '', sub: '' };
 };
 
@@ -66,7 +72,7 @@ const AlertCard = ({ a }: { a: Alert }) => {
   );
 };
 
-export const DashAlerts = ({ alerts }: { alerts: Alert[] }) => {
+export const DashAlerts = ({ alerts, title = 'التنبيهات' }: { alerts: Alert[]; title?: string }) => {
   const active = alerts.filter((a) => a.level !== 'ok').length;
   return (
     <View style={[dashStyles.card, { marginBottom: 16 }]} testID="dash-alerts">
@@ -74,7 +80,7 @@ export const DashAlerts = ({ alerts }: { alerts: Alert[] }) => {
         <View style={dashStyles.sectionTitleRow}>
           <View style={[dashStyles.iconBox, { backgroundColor: '#fee2e2' }]}><Ionicons name="notifications" size={17} color={DASH.red} /></View>
           <View>
-            <Text style={dashStyles.sectionTitle}>التنبيهات</Text>
+            <Text style={dashStyles.sectionTitle}>{title}</Text>
             <Text style={dashStyles.sectionSub}>{active ? `${active} تنبيهات تحتاج انتباهك` : 'كل شيء على ما يرام'}</Text>
           </View>
         </View>

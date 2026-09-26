@@ -122,27 +122,34 @@ async def hr_alerts_loop():
         await asyncio.sleep(60)
 
 
-async def hr_dashboard_summary(db) -> dict:
-    """ملخص شؤون الموظفين للوحة القيادة: غياب اليوم، في إجازة، طلبات معلّقة، مهام متأخرة، عقود تنتهي"""
+async def hr_dashboard_summary(db, emp_ids: Optional[list] = None) -> dict:
+    """ملخص شؤون الموظفين للوحة القيادة: غياب اليوم، في إجازة، طلبات معلّقة، مهام متأخرة، عقود تنتهي (اختيارياً ضمن مجموعة موظفين)"""
     t = _today()
     settings = await get_hr_settings(db)
     from .hr_leaves import LEAVE_TYPES
-    on_leave = [{"employee_id": l["employee_id"], "type": LEAVE_TYPES.get(l["type"], ""), "end_date": l["end_date"]} for l in await db.leave_requests.find({"status": "approved", "start_date": {"$lte": t}, "end_date": {"$gte": t}}, {"employee_id": 1, "type": 1, "end_date": 1}).to_list(500)]
-    absent = [{"employee_id": r["employee_id"], "note": r.get("note", "")} for r in await db.hr_attendance.find({"date": t, "status": "absent"}, {"employee_id": 1, "note": 1}).to_list(500)]
-    late = await db.hr_attendance.count_documents({"date": t, "status": "late"})
-    present = await db.hr_attendance.count_documents({"date": t, "status": {"$in": ["present", "late", "half_day", "mission"]}})
-    active = await db.employees.count_documents({"status": {"$nin": ["ended", "suspended"]}})
-    pending = [{"employee_id": l["employee_id"], "type": LEAVE_TYPES.get(l["type"], ""), "start_date": l["start_date"], "days": l["days"], "status": l["status"]} for l in await db.leave_requests.find({"status": {"$in": ["pending", "hr_pending"]}}, {"employee_id": 1, "type": 1, "start_date": 1, "days": 1, "status": 1}).sort("created_at", 1).limit(20).to_list(20)]
+    eq = {"employee_id": {"$in": emp_ids}} if emp_ids is not None else {}
+    tq = {"assignee_employee_id": {"$in": emp_ids}} if emp_ids is not None else {}
+    xq = {"_id": {"$in": [ObjectId(i) for i in emp_ids if ObjectId.is_valid(i)]}} if emp_ids is not None else {}
+    on_leave = [{"employee_id": l["employee_id"], "type": LEAVE_TYPES.get(l["type"], ""), "end_date": l["end_date"]} for l in await db.leave_requests.find({**eq, "status": "approved", "start_date": {"$lte": t}, "end_date": {"$gte": t}}, {"employee_id": 1, "type": 1, "end_date": 1}).to_list(500)]
+    absent = [{"employee_id": r["employee_id"], "note": r.get("note", "")} for r in await db.hr_attendance.find({**eq, "date": t, "status": "absent"}, {"employee_id": 1, "note": 1}).to_list(500)]
+    late = await db.hr_attendance.count_documents({**eq, "date": t, "status": "late"})
+    present = await db.hr_attendance.count_documents({**eq, "date": t, "status": {"$in": ["present", "late", "half_day", "mission"]}})
+    active = await db.employees.count_documents({**xq, "status": {"$nin": ["ended", "suspended"]}})
+    pending = [{"employee_id": l["employee_id"], "type": LEAVE_TYPES.get(l["type"], ""), "start_date": l["start_date"], "days": l["days"], "status": l["status"]} for l in await db.leave_requests.find({**eq, "status": {"$in": ["pending", "hr_pending"]}}, {"employee_id": 1, "type": 1, "start_date": 1, "days": 1, "status": 1}).sort("created_at", 1).limit(20).to_list(20)]
     limit = (datetime.now(YEMEN_TZ).date() + timedelta(days=60)).strftime("%Y-%m-%d")
-    expiring = [{"employee_id": str(e["_id"]), "contract_end_date": e["contract_end_date"]} for e in await db.employees.find({"status": {"$ne": "ended"}, "contract_end_date": {"$ne": None, "$lte": limit}}, {"contract_end_date": 1}).sort("contract_end_date", 1).limit(20).to_list(20)]
-    for lst in (on_leave, absent, pending, expiring):
+    expiring = [{"employee_id": str(e["_id"]), "contract_end_date": e["contract_end_date"]} for e in await db.employees.find({**xq, "status": {"$ne": "ended"}, "contract_end_date": {"$ne": None, "$lte": limit}}, {"contract_end_date": 1}).sort("contract_end_date", 1).limit(20).to_list(20)]
+    overdue = [{"task_id": str(x["_id"]), "title": x.get("title", ""), "due_date": x.get("due_date"), "employee_id": x.get("assignee_employee_id"), "status": x.get("status")}
+               for x in await db.hr_tasks.find({**tq, "status": {"$in": ["open", "in_progress"]}, "due_date": {"$lt": t, "$ne": None}}, {"title": 1, "due_date": 1, "assignee_employee_id": 1, "status": 1}).sort("due_date", 1).limit(20).to_list(20)]
+    appraisals = [{"appraisal_id": str(a["_id"]), "employee_id": a.get("employee_id"), "year": a.get("year"), "grade": a.get("grade"), "total_score": a.get("total_score")}
+                  for a in await db.hr_appraisals.find({**eq, "status": "submitted"}, {"employee_id": 1, "year": 1, "grade": 1, "total_score": 1}).limit(20).to_list(20)]
+    for lst in (on_leave, absent, pending, expiring, overdue, appraisals):
         await enrich_employee_refs(db, lst)
     is_wd = is_work_day(parse_date(t), settings)
     return {"date": t, "is_work_day": is_wd, "employees_active": active, "present_today": present, "late_today": late, "absent_today": absent, "on_leave_today": on_leave,
-            "unmarked_today": max(0, active - present - len(absent) - len(on_leave) - await db.hr_attendance.count_documents({"date": t, "status": {"$in": ["excused"]}})) if is_wd else 0,
-            "pending_leaves": pending, "pending_leaves_count": await db.leave_requests.count_documents({"status": {"$in": ["pending", "hr_pending"]}}),
-            "overdue_tasks": await db.hr_tasks.count_documents({"status": {"$in": ["open", "in_progress"]}, "due_date": {"$lt": t, "$ne": None}}),
-            "pending_appraisals": await db.hr_appraisals.count_documents({"status": "submitted"}), "expiring_contracts": expiring}
+            "unmarked_today": max(0, active - present - len(absent) - len(on_leave) - await db.hr_attendance.count_documents({**eq, "date": t, "status": {"$in": ["excused"]}})) if is_wd else 0,
+            "pending_leaves": pending, "pending_leaves_count": await db.leave_requests.count_documents({**eq, "status": {"$in": ["pending", "hr_pending"]}}),
+            "overdue_tasks": await db.hr_tasks.count_documents({**tq, "status": {"$in": ["open", "in_progress"]}, "due_date": {"$lt": t, "$ne": None}}), "overdue_tasks_list": overdue,
+            "pending_appraisals": await db.hr_appraisals.count_documents({**eq, "status": "submitted"}), "pending_appraisals_list": appraisals, "expiring_contracts": expiring}
 
 
 @router.get("/summary")

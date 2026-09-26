@@ -31,7 +31,6 @@ export const DashHRPeriod = ({ p, periodLabel, width }: { p: any; periodLabel: s
   ];
   return (
     <View style={styles.wrap} testID="dash-hr-period">
-      <Text style={styles.blockTitle}>إحصاءات الفترة · {periodLabel}</Text>
       <View style={styles.tiles}>
         {kpis.map((k) => (
           <View key={k.id} style={styles.tile} testID={`dash-hr-period-${k.id}`}>
@@ -63,7 +62,7 @@ export const DashHRPeriod = ({ p, periodLabel, width }: { p: any; periodLabel: s
 };
 
 const styles = StyleSheet.create({
-  wrap: { marginBottom: 14, borderTopWidth: 1, borderTopColor: '#f1f5f9', paddingTop: 12 },
+  wrap: { marginBottom: 4 },
   blockTitle: { fontSize: 12.5, fontWeight: '800', color: DASH.ink, textAlign: 'right', marginBottom: 8 },
   tiles: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, marginBottom: 12 },
   tile: { flexGrow: 1, flexBasis: 150, backgroundColor: '#f8fafc', borderRadius: 12, padding: 10 },

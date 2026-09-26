@@ -325,14 +325,6 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
         if not sections[k]:
             phase2[k] = None
 
-    hr = None
-    if sections["hr"]:
-        try:
-            from .hr_dashboard import hr_dashboard_section
-            hr = await hr_dashboard_section(db, period, d_from, d_to)
-        except Exception as e:
-            logging.warning(f"hr dashboard section failed: {e}")
-
     return {
         "generated_at": now.strftime("%Y-%m-%d %H:%M"),
         "sections": sections,
@@ -354,7 +346,6 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
         "chart": {"group_by": group_by, "points": chart_points} if sections["attendance"] else None,
         "alerts": alerts if sections["alerts"] else [],
         "finance": finance,
-        "hr": hr,
         "activity": activity,
     }
 
@@ -574,13 +565,50 @@ async def management_dashboard_export(fmt: str = "pdf", period: str = "week", fa
     if not dashboard_sections(current_user)["export"]:
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية تصدير لوحة القيادة")
     d = await build_dashboard(get_db(), current_user, period, faculty_id or None, department_id or None)
+    return _stream(d, fmt, "لوحة القيادة", d["scope"]["label"])
+
+
+async def build_hr_dashboard(db, user: dict, period: str, org_unit_id: Optional[str]) -> dict:
+    """عرض «شؤون الموظفين» الكامل للوحة القيادة (يتطلب صلاحية dashboard_hr)"""
+    from .hr_dashboard import hr_dashboard_section, hr_units_list
+    period = period if period in PERIOD_LABELS else "week"
+    d_from, d_to = _period_range(period)
+    hr = await hr_dashboard_section(db, period, d_from, d_to, org_unit_id or None)
+    return {"view": "hr", "generated_at": _now_yemen().strftime("%Y-%m-%d %H:%M"), "period": period, "period_label": PERIOD_LABELS[period],
+            "date_from": d_from.isoformat(), "date_to": d_to.isoformat(), "sections": dashboard_sections(user),
+            "read_only": user.get("role") in READ_ONLY_ROLES, "units": await hr_units_list(db), "hr": hr}
+
+
+def _hr_guard(user: dict):
+    if not _is_management(user):
+        raise HTTPException(status_code=403, detail="لوحة القيادة متاحة للإدارة فقط")
+    if not dashboard_sections(user)["hr"]:
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية عرض شؤون الموظفين في لوحة القيادة")
+
+
+@router.get("/dashboard/management/hr")
+async def management_dashboard_hr(period: str = "week", org_unit_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    _hr_guard(current_user)
+    return await build_hr_dashboard(get_db(), current_user, period, org_unit_id)
+
+
+@router.get("/dashboard/management/hr/export")
+async def management_dashboard_hr_export(fmt: str = "pdf", period: str = "week", org_unit_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    _hr_guard(current_user)
+    if not dashboard_sections(current_user)["export"]:
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية تصدير لوحة القيادة")
+    d = await build_hr_dashboard(get_db(), current_user, period, org_unit_id)
+    return _stream(d, fmt, "لوحة القيادة - شؤون الموظفين", d["hr"]["scope"]["label"])
+
+
+def _stream(d: dict, fmt: str, base: str, scope_label: str):
     if fmt == "excel":
         buf = _build_excel(d)
-        fname = export_filename("لوحة القيادة", d["scope"]["label"], d["period_label"], ext="xlsx")
+        fname = export_filename(base, scope_label, d["period_label"], ext="xlsx")
         media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     else:
         buf = _build_pdf(d)
-        fname = export_filename("لوحة القيادة", d["scope"]["label"], d["period_label"], ext="pdf")
+        fname = export_filename(base, scope_label, d["period_label"], ext="pdf")
         media = "application/pdf"
     return StreamingResponse(buf, media_type=media, headers=export_headers(fname))
 
@@ -638,6 +666,33 @@ def _hr_tables(d: dict):
     return out
 
 
+def _hr_summary_rows(h: dict):
+    hc, p = h.get("headcount") or {}, h.get("period") or {}
+    cats = " · ".join(f"{c['label']} {c['count']}" for c in hc.get("by_category", []))
+    rows = [["الموظفون على رأس العمل", hc.get("total_active", h["employees_active"])], ["حسب الفئة", cats], ["الوحدات التنظيمية", f"{hc.get('units_with_staff', 0)} بها موظفون من {hc.get('units_count', 0)}"],
+            ["حضر اليوم", h["present_today"]], ["متأخر اليوم", h["late_today"]], ["غائب اليوم", len(h["absent_today"])], ["في إجازة اليوم", len(h["on_leave_today"])], ["لم يُسجَّل اليوم", h["unmarked_today"]],
+            ["طلبات إجازة معلّقة", h["pending_leaves_count"]], ["مهام متأخرة", h["overdue_tasks"]], ["تقييمات للاعتماد", h["pending_appraisals"]], ["عقود تنتهي خلال 60 يوماً", len(h["expiring_contracts"])]]
+    if p:
+        rows += [["نسبة الالتزام بالدوام", f"{p['commitment_rate']}%" if p["commitment_rate"] is not None else "—"], ["أيام العمل في الفترة", p["work_days"]], ["أيام حضور / تأخر / غياب", f"{p['attended']} / {p['late']} / {p['absent']}"],
+                 ["ساعات التأخير", p["late_hours"]], ["إجازات معتمدة (أيام)", f"{p['leaves_approved']} ({p['leave_days']})"], ["مهام منجزة / جديدة", f"{p['tasks_done']} / {p['tasks_created']}"]]
+    return rows
+
+
+def _hr_today_tables(h: dict):
+    out = []
+    if h["absent_today"]:
+        out.append(("الغائبون اليوم", [["الموظف", "الوحدة", "ملاحظة"]] + [[i["employee_name"], i["org_unit_name"], i.get("note", "")] for i in h["absent_today"]]))
+    if h["on_leave_today"]:
+        out.append(("في إجازة اليوم", [["الموظف", "الوحدة", "النوع", "حتى"]] + [[i["employee_name"], i["org_unit_name"], i["type"], i["end_date"]] for i in h["on_leave_today"]]))
+    if h["pending_leaves"]:
+        out.append(("طلبات إجازة معلّقة", [["الموظف", "الوحدة", "النوع", "من", "الأيام", "لدى"]] + [[i["employee_name"], i["org_unit_name"], i["type"], i["start_date"], i["days"], "المدير" if i["status"] == "pending" else "HR"] for i in h["pending_leaves"]]))
+    if h["expiring_contracts"]:
+        out.append(("عقود تنتهي", [["الموظف", "الوحدة", "تاريخ الانتهاء"]] + [[i["employee_name"], i["org_unit_name"], i["contract_end_date"]] for i in h["expiring_contracts"]]))
+    if h.get("overdue_tasks_list"):
+        out.append(("مهام متأخرة", [["المهمة", "المكلَّف", "الاستحقاق"]] + [[i["title"], i["employee_name"], i["due_date"]] for i in h["overdue_tasks_list"]]))
+    return out
+
+
 def _build_excel(d: dict) -> io.BytesIO:
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -655,6 +710,22 @@ def _build_excel(d: dict) -> io.BytesIO:
         for col in ws.columns:
             ws.column_dimensions[col[0].column_letter].width = max(14, min(50, max(len(str(c.value or "")) for c in col) + 4))
         return ws
+
+    if d.get("view") == "hr":
+        h = d["hr"]
+        ws = sheet("الملخص", [["البيان", "القيمة"]] + _hr_summary_rows(h), first=True)
+        ws.insert_rows(1, 3)
+        ws["A1"] = f"لوحة القيادة — شؤون الموظفين — {h['scope']['label']} — {d['period_label']} ({d['date_from']} → {d['date_to']})"
+        ws["A1"].font = Font(bold=True, size=13)
+        ws["A2"] = f"تاريخ الإصدار: {d['generated_at']}"
+        if h["alerts"]:
+            sheet("التنبيهات", [["التنبيه", "العدد", "التفاصيل"]] + [[a["title"], a["count"], a["hint"]] for a in h["alerts"]])
+        for title, rows in _hr_tables(d):
+            sheet(title, rows)
+        for title, rows in _hr_today_tables(h):
+            sheet(title, rows)
+        buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+        return buf
 
     ws = sheet("الأرقام", [["البيان", "القيمة"]] + _numbers_rows(d), first=True)
     ws.insert_rows(1, 3)
@@ -677,8 +748,6 @@ def _build_excel(d: dict) -> io.BytesIO:
         sheet("المالية", [["نوع الرسوم", "معتمد", "معلق", "مرفوض", "طلاب دافعون", "غير دافعين", "نسبة الدفع %", "المبالغ المعتمدة"]] +
               [[t["name"] + (" (متكرر)" if t["recurring"] else ""), t["approved"], t["pending"], t["rejected"], t["paid_students"], t["not_paid"], t["paid_pct"], t["amount"]] for t in d["finance"]["types"]])
     for title, rows in _phase2_tables(d):
-        sheet(title, rows)
-    for title, rows in _hr_tables(d):
         sheet(title, rows)
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return buf
@@ -725,6 +794,28 @@ def _build_pdf(d: dict) -> io.BytesIO:
         ]))
         return t
 
+    if d.get("view") == "hr":
+        h = d["hr"]
+        el = [Paragraph(ar(f"جامعة الأحقاف — لوحة القيادة: شؤون الموظفين — {h['scope']['label']}"), title),
+              Paragraph(ar(f"{d['period_label']} ({d['date_from']} → {d['date_to']})   |   تاريخ الإصدار: {d['generated_at']}"), sub)]
+        nr = _hr_summary_rows(h)
+        half = (len(nr) + 1) // 2
+        rows = [["البيان", "القيمة", "البيان", "القيمة"]]
+        for i in range(half):
+            a = nr[i]; b = nr[i + half] if i + half < len(nr) else ["", ""]
+            rows.append([a[0], a[1], b[0], b[1]])
+        el += [Paragraph(ar("الملخص"), sec), grid(rows, [55 * mm, 35 * mm, 55 * mm, 35 * mm], head_bg="#6d28d9", fs=9), Spacer(1, 3 * mm)]
+        if h["alerts"]:
+            el += [Paragraph(ar("التنبيهات الإدارية"), sec), grid([["التنبيه", "العدد", "التفاصيل"]] + [[a["title"], a["count"], a["hint"]] for a in h["alerts"]], [90 * mm, 25 * mm, 90 * mm], head_bg="#b91c1c")]
+        for title_, rows_ in _hr_tables(d) + _hr_today_tables(h):
+            if len(rows_) > 1:
+                n = len(rows_[0]); w = (270 * mm) / n
+                el += [Paragraph(ar(title_), sec), grid(rows_, [w] * n, head_bg="#6d28d9", fs=8)]
+        buf = io.BytesIO()
+        SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm).build(el)
+        buf.seek(0)
+        return buf
+
     el = [Paragraph(ar(f"جامعة الأحقاف — لوحة القيادة: {d['scope']['label']}"), title),
           Paragraph(ar(f"{d['period_label']} ({d['date_from']} → {d['date_to']})   |   {d['semester']['name']} {d['semester']['academic_year']}   |   تاريخ الإصدار: {d['generated_at']}"), sub)]
     nr = _numbers_rows(d)
@@ -760,10 +851,6 @@ def _build_pdf(d: dict) -> io.BytesIO:
         if len(rows) > 1:
             n = len(rows[0]); w = (270 * mm) / n
             el += [Paragraph(ar(title), sec), grid(rows, [w] * n, head_bg="#00695c", fs=8)]
-    for title, rows in _hr_tables(d):
-        if len(rows) > 1:
-            n = len(rows[0]); w = (270 * mm) / n
-            el += [Paragraph(ar(title), sec), grid(rows, [w] * n, head_bg="#6d28d9", fs=8)]
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm).build(el)
     buf.seek(0)

@@ -113,7 +113,7 @@ export const DashScopeFilter = ({ faculties, departments, facultyId, departmentI
 };
 
 const styles = StyleSheet.create({
-  wrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 16, flexWrap: 'wrap' },
+  wrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   trigger: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: '#fff', borderWidth: 1, borderColor: DASH.line, borderRadius: 12, paddingVertical: 9, paddingHorizontal: 12, minWidth: 260, maxWidth: 420 },
   triggerIcon: { width: 28, height: 28, borderRadius: 8, backgroundColor: DASH.navy, alignItems: 'center', justifyContent: 'center' },
   triggerText: { flex: 1, fontSize: 13, fontWeight: '800', color: DASH.ink, textAlign: 'right' },

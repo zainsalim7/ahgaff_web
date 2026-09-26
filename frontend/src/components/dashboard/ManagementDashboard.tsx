@@ -14,12 +14,31 @@ import { DashKpis } from './DashKpis';
 import { DashAlerts } from './DashAlerts';
 import { DashAttendanceChart } from './DashAttendanceChart';
 import { DashFinance } from './DashFinance';
-import { DashHR } from './DashHR';
 import { DashTeachers } from './DashTeachers';
 import { DashStudents } from './DashStudents';
 import { DashRooms } from './DashRooms';
+import { DashViewTabs, DashView } from './DashViewTabs';
+import { DashUnitFilter } from './DashUnitFilter';
+import { HRDashboardView } from './HRDashboardView';
 
 type Period = 'day' | 'week' | 'month';
+
+const downloadBlob = async (res: any, name: string) => {
+  if (Platform.OS === 'web') {
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const a = document.createElement('a');
+    a.href = url; a.download = name; a.click();
+    window.URL.revokeObjectURL(url);
+    return;
+  }
+  const path = `${FileSystem.documentDirectory}${name}`;
+  const reader = new FileReader();
+  reader.onloadend = async () => {
+    await FileSystem.writeAsStringAsync(path, (reader.result as string).split(',')[1], { encoding: FileSystem.EncodingType.Base64 });
+    await Sharing.shareAsync(path);
+  };
+  reader.readAsDataURL(new Blob([res.data]));
+};
 
 export const ManagementDashboard = () => {
   const { user } = useAuthStore();
@@ -34,8 +53,13 @@ export const ManagementDashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
   const [exporting, setExporting] = useState<'' | 'pdf' | 'excel'>('');
+  const [view, setView] = useState<DashView>('academic');
+  const [orgUnitId, setOrgUnitId] = useState('');
+  const [hrData, setHrData] = useState<any>(null);
+  const [hrLoading, setHrLoading] = useState(false);
 
   const params = { period, faculty_id: facultyId || undefined, department_id: departmentId || undefined };
+  const hrParams = { period, org_unit_id: orgUnitId || undefined };
 
   const load = useCallback(async (silent = false) => {
     if (!silent) setLoading(true);
@@ -51,27 +75,31 @@ export const ManagementDashboard = () => {
     }
   }, [period, facultyId, departmentId]);
 
+  const loadHR = useCallback(async () => {
+    setHrLoading(true);
+    setError('');
+    try {
+      const res = await api.get('/dashboard/management/hr', { params: { period, org_unit_id: orgUnitId || undefined } });
+      setHrData(res.data);
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || 'تعذر تحميل بيانات شؤون الموظفين');
+    } finally {
+      setHrLoading(false);
+      setRefreshing(false);
+    }
+  }, [period, orgUnitId]);
+
   useEffect(() => { load(); }, [load]);
+  useEffect(() => { if (view === 'hr') loadHR(); }, [view, loadHR]);
 
   const onExport = async (fmt: 'pdf' | 'excel') => {
     setExporting(fmt);
     try {
-      const res = await api.get('/dashboard/management/export', { params: { ...params, fmt }, responseType: 'blob' });
-      const name = filenameFromResponse(res, exportName(['لوحة القيادة', data?.scope?.label, data?.period_label], fmt === 'pdf' ? 'pdf' : 'xlsx'));
-      if (Platform.OS === 'web') {
-        const url = window.URL.createObjectURL(new Blob([res.data]));
-        const a = document.createElement('a');
-        a.href = url; a.download = name; a.click();
-        window.URL.revokeObjectURL(url);
-      } else {
-        const path = `${FileSystem.documentDirectory}${name}`;
-        const reader = new FileReader();
-        reader.onloadend = async () => {
-          await FileSystem.writeAsStringAsync(path, (reader.result as string).split(',')[1], { encoding: FileSystem.EncodingType.Base64 });
-          await Sharing.shareAsync(path);
-        };
-        reader.readAsDataURL(new Blob([res.data]));
-      }
+      const isHR = view === 'hr';
+      const res = await api.get(isHR ? '/dashboard/management/hr/export' : '/dashboard/management/export', { params: { ...(isHR ? hrParams : params), fmt }, responseType: 'blob' });
+      const label = isHR ? hrData?.hr?.scope?.label : data?.scope?.label;
+      const name = filenameFromResponse(res, exportName([isHR ? 'لوحة القيادة - شؤون الموظفين' : 'لوحة القيادة', label, data?.period_label], fmt === 'pdf' ? 'pdf' : 'xlsx'));
+      await downloadBlob(res, name);
     } catch {
       setError('تعذر تصدير اللوحة');
     } finally {
@@ -104,33 +132,45 @@ export const ManagementDashboard = () => {
   const semester = data?.semester?.name ? `${data.semester.name}` : '';
   const twoCol = width >= 1100;
 
+  const isHR = view === 'hr';
+  const showHR = !!data?.sections?.hr;
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <ScrollView
         contentContainerStyle={[styles.content, { maxWidth: 1400, alignSelf: 'center', width: '100%' }]}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); load(true); }} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); isHR ? loadHR() : load(true); }} />}
         testID="management-dashboard"
       >
         <DashHeader
           userName={user?.full_name}
-          scopeLabel={data?.scope?.label || ''}
-          semester={semester}
-          generatedAt={data?.generated_at || ''}
+          kicker={isHR ? 'لوحة القيادة — شؤون الموظفين' : 'لوحة القيادة'}
+          scopeIcon={isHR ? 'people-circle-outline' : 'business-outline'}
+          scopeLabel={isHR ? hrData?.hr?.scope?.label || 'كل الوحدات التنظيمية' : data?.scope?.label || ''}
+          semester={isHR ? '' : semester}
+          generatedAt={(isHR ? hrData?.generated_at : data?.generated_at) || ''}
           period={period}
           onPeriod={setPeriod}
           exporting={exporting}
           onExport={onExport}
-          onRefresh={() => load(true)}
+          onRefresh={() => (isHR ? loadHR() : load(true))}
           compact={compact}
           readOnly={!!data?.scope?.read_only}
           canExport={data?.sections?.export !== false}
         />
-        {data?.scope?.can_filter && (
-          <DashScopeFilter faculties={data.scope.faculties} departments={data.scope.departments} facultyId={facultyId} departmentId={departmentId} onChange={onScope} />
-        )}
+        <View style={styles.filterRow}>
+          {isHR ? (
+            <DashUnitFilter units={hrData?.units || []} value={orgUnitId} onChange={setOrgUnitId} />
+          ) : data?.scope?.can_filter ? (
+            <DashScopeFilter faculties={data.scope.faculties} departments={data.scope.departments} facultyId={facultyId} departmentId={departmentId} onChange={onScope} />
+          ) : <View />}
+          <DashViewTabs view={view} onChange={setView} showHR={showHR} />
+        </View>
         {!!error && <View style={styles.inlineErr} testID="dash-inline-error"><Text style={styles.inlineErrText}>{error}</Text></View>}
-        {loading && <View style={styles.overlay}><ActivityIndicator color={DASH.navy} /></View>}
-        {data && (
+        {(loading || hrLoading) && <View style={styles.overlay}><ActivityIndicator color={DASH.navy} /></View>}
+        {isHR ? (
+          hrData?.hr && <HRDashboardView data={hrData} compact={compact} width={Math.min(width, 1400) - 64} />
+        ) : data && (
           <>
             <DashKpis n={data.numbers} periodLabel={data.period_label} compact={compact} />
             {data.sections?.alerts && <DashAlerts alerts={data.alerts} />}
@@ -141,7 +181,6 @@ export const ManagementDashboard = () => {
               {data.rooms && <View style={{ flex: 1 }}><DashRooms r={data.rooms} /></View>}
             </View>
             {data.finance && <DashFinance f={data.finance} />}
-            {data.hr && <DashHR h={data.hr} periodLabel={data.period_label} width={Math.min(width, 1400) - 64} />}
           </>
         )}
       </ScrollView>
@@ -152,6 +191,7 @@ export const ManagementDashboard = () => {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: DASH.bg },
   content: { padding: 16, paddingBottom: 40 },
+  filterRow: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap', marginBottom: 16 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12, padding: 24 },
   loadingText: { color: DASH.muted, fontSize: 13 },
   errText: { color: DASH.red, fontSize: 14, textAlign: 'center' },

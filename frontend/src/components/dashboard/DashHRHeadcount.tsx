@@ -9,7 +9,7 @@ export const DashHRHeadcount = ({ hc }: { hc: any }) => {
   const router = useRouter();
   return (
     <View style={styles.wrap} testID="dash-hr-headcount">
-      <Text style={styles.blockTitle}>الأعداد الثابتة · {hc.total_active} موظف على رأس العمل{hc.total_all > hc.total_active ? ` (من ${hc.total_all} في السجل)` : ''}</Text>
+      <Text style={styles.blockTitle}>{hc.total_active} موظف على رأس العمل{hc.total_all > hc.total_active ? ` (من ${hc.total_all} في السجل)` : ''}</Text>
       <View style={styles.tiles}>
         <TouchableOpacity style={[styles.tile, { borderColor: DASH.navy }]} onPress={() => router.push('/hr-employees' as any)} testID="dash-hr-hc-total">
           <Text style={styles.tileLabel}>إجمالي الموظفين</Text>
