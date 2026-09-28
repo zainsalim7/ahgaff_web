@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text } from 'react-native';
-import { router } from 'expo-router';
 import { hrAPI } from '../../services/api';
 import { reportPage, ReportEmpty } from '../reports/ReportShell';
 import { Th, td, table, inp, btn, alertErr, Modal, Badge, ATT_COLOR } from './ui';
@@ -65,46 +64,4 @@ export const AttendanceMonthly: React.FC<{ units: any[]; meta: any }> = ({ units
       </Modal>
     )}
   </>);
-};
-
-export const AttendanceSettings: React.FC<{ meta: any; onSaved: () => void }> = ({ meta, onSaved }) => {
-  const [s, setS] = useState<any>(null);
-  const [busy, setBusy] = useState(false);
-  useEffect(() => { hrAPI.attSettings().then((r) => setS(r.data)).catch(alertErr); }, []);
-  if (!s) return <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text>;
-  const set = (k: string, v: any) => setS((p: any) => ({ ...p, [k]: v }));
-  const toggleDay = (d: string) => set('work_days', s.work_days.includes(d) ? s.work_days.filter((x: string) => x !== d) : [...s.work_days, d]);
-  const save = async () => { setBusy(true); try { const r = await hrAPI.saveAttSettings({ ...s, late_grace_minutes: Number(s.late_grace_minutes), early_leave_grace_minutes: Number(s.early_leave_grace_minutes || 0), annual_leave_days: Number(s.annual_leave_days) }); window.alert(r.data.message); setS(r.data.settings); onSaved(); } catch (e) { alertErr(e); } finally { setBusy(false); } };
-  const lbl: React.CSSProperties = { fontSize: 11.5, fontWeight: 700, color: '#333', marginBottom: 4, textAlign: 'right' };
-  return (
-    <View style={reportPage.card} testID="att-settings">
-      <div style={{ direction: 'rtl' }}>
-        <div style={lbl}>أيام العمل</div>
-        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 12 }}>
-          {(meta?.days || []).map((d: string) => <button key={d} onClick={() => toggleDay(d)} style={btn(s.work_days.includes(d) ? '#0f2440' : '#f1f5f9', s.work_days.includes(d) ? '#fff' : '#0f2440', { padding: '6px 12px', borderRadius: 16, fontSize: 12 })} data-testid={`att-day-${d}`}>{d}</button>)}
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
-          <div><div style={lbl}>بداية الدوام</div><input type="time" value={s.work_start} onChange={(e) => set('work_start', e.target.value)} style={{ ...inp, direction: 'ltr' }} data-testid="att-set-start" /></div>
-          <div><div style={lbl}>نهاية الدوام</div><input type="time" value={s.work_end} onChange={(e) => set('work_end', e.target.value)} style={{ ...inp, direction: 'ltr' }} data-testid="att-set-end" /></div>
-          <div><div style={lbl}>سماحية التأخير (دقيقة)</div><input type="number" value={s.late_grace_minutes} onChange={(e) => set('late_grace_minutes', e.target.value)} style={inp} data-testid="att-set-grace" /></div>
-          <div><div style={lbl}>الإجازة السنوية الافتراضية (يوم)</div><input type="number" value={s.annual_leave_days} onChange={(e) => set('annual_leave_days', e.target.value)} style={inp} data-testid="att-set-annual" /></div>
-        </div>
-        <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={!!s.allow_self_checkin} onChange={(e) => set('allow_self_checkin', e.target.checked)} data-testid="att-set-self" /> السماح للموظفين بتسجيل الحضور/الانصراف ذاتياً من «ملفي الإداري»</label>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={s.geofence_required !== false} onChange={(e) => set('geofence_required', e.target.checked)} data-testid="att-set-geofence" /> 📍 التحقق الجغرافي: رفض التسجيل الذاتي خارج مواقع العمل المعتمدة</label>
-          <button onClick={() => router.push('/hr-locations' as any)} style={btn('#eef4ff', '#1565c0', { fontSize: 12 })} data-testid="att-goto-locations">إدارة مواقع العمل والخريطة ←</button>
-        </div>
-        <div style={{ ...lbl, marginTop: 16 }}>العطل الرسمية</div>
-        {(s.holidays || []).map((h: any, i: number) => (
-          <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
-            <input type="date" value={h.date} onChange={(e) => set('holidays', s.holidays.map((x: any, j: number) => j === i ? { ...x, date: e.target.value } : x))} style={{ ...inp, width: 160, direction: 'ltr' }} data-testid={`att-holiday-date-${i}`} />
-            <input value={h.name} placeholder="اسم العطلة" onChange={(e) => set('holidays', s.holidays.map((x: any, j: number) => j === i ? { ...x, name: e.target.value } : x))} style={{ ...inp, flex: 1 }} data-testid={`att-holiday-name-${i}`} />
-            <button onClick={() => set('holidays', s.holidays.filter((_: any, j: number) => j !== i))} style={btn('#ffebee', '#c62828', { padding: '6px 10px' })}>✕</button>
-          </div>
-        ))}
-        <button onClick={() => set('holidays', [...(s.holidays || []), { date: '', name: '' }])} style={btn('#f1f5f9', '#0f2440', { fontSize: 12 })} data-testid="att-add-holiday">+ إضافة عطلة</button>
-        <div style={{ marginTop: 16 }}><button onClick={save} disabled={busy} style={btn('#1565c0')} data-testid="att-settings-save">{busy ? 'جاري الحفظ...' : 'حفظ الإعدادات'}</button></div>
-      </div>
-    </View>
-  );
 };

@@ -188,6 +188,7 @@ class EmployeeIn(BaseModel):
     specialization: Optional[str] = ""
     notes: Optional[str] = ""
     teacher_id: Optional[str] = None
+    shift_ids: Optional[List[str]] = None
 
 
 def _validate(data: EmployeeIn):

@@ -12,6 +12,7 @@ YEMEN_TZ = timezone(timedelta(hours=3))
 P_VIEW, P_MANAGE, P_ORG = "hr_view_employees", "hr_manage_employees", "hr_manage_org"
 P_LEAVES, P_ATTEND, P_CORR = "hr_manage_leaves", "hr_manage_attendance", "hr_manage_correspondence"
 P_TASKS, P_APPRAISE = "hr_manage_tasks", "hr_manage_appraisals"
+P_WORK_SETTINGS = "hr_manage_work_settings"
 
 AR_DAYS = {5: "السبت", 6: "الأحد", 0: "الاثنين", 1: "الثلاثاء", 2: "الأربعاء", 3: "الخميس", 4: "الجمعة"}
 DEFAULT_SETTINGS = {
@@ -63,7 +64,49 @@ def user_id_of(u: dict) -> str:
 
 async def get_hr_settings(db) -> dict:
     doc = await db.hr_settings.find_one({"_id": "global"}) or {}
-    return {**DEFAULT_SETTINGS, **{k: v for k, v in doc.items() if k != "_id"}}
+    return normalize_shifts({**DEFAULT_SETTINGS, **{k: v for k, v in doc.items() if k != "_id"}})
+
+
+def normalize_shifts(s: dict) -> dict:
+    """يضمن وجود فترات الدوام؛ الفترة الأولى (الأساسية) تُغذّي الحقول القديمة work_start/work_end للتوافق"""
+    shifts = [sh for sh in (s.get("shifts") or []) if sh.get("id")]
+    if not shifts:
+        shifts = [{"id": "main", "name": "الدوام الأساسي", "work_start": s.get("work_start", "08:00"), "work_end": s.get("work_end", "14:00"),
+                   "late_grace_minutes": int(s.get("late_grace_minutes", 15)), "early_leave_grace_minutes": int(s.get("early_leave_grace_minutes", 0)), "is_active": True}]
+    main = shifts[0]
+    return {**s, "shifts": shifts, "work_start": main["work_start"], "work_end": main["work_end"], "late_grace_minutes": int(main.get("late_grace_minutes", 0)),
+            "early_leave_grace_minutes": int(main.get("early_leave_grace_minutes", 0))}
+
+
+def employee_shifts(emp: dict, settings: dict) -> list:
+    """فترات الموظف (المفعّلة)؛ من لا تكليف له → الفترة الأساسية"""
+    shifts = settings["shifts"]
+    ids = [i for i in (emp.get("shift_ids") or []) if any(sh["id"] == i for sh in shifts)]
+    chosen = [sh for sh in shifts if sh["id"] in ids and sh.get("is_active", True)] if ids else []
+    return chosen or [shifts[0]]
+
+
+def _hm_min(s: str) -> int:
+    h, m = (s or "00:00").split(":")[:2]
+    return int(h) * 60 + int(m)
+
+
+def pick_shift(shifts: list, now_hm: str) -> dict:
+    """الفترة المناسبة لتسجيل الحضور الآن: الجارية، وإلا القادمة الأقرب، وإلا الأخيرة المنقضية"""
+    now = _hm_min(now_hm)
+    running = [sh for sh in shifts if _hm_min(sh["work_start"]) - 90 <= now <= _hm_min(sh["work_end"])]
+    if running:
+        return min(running, key=lambda sh: abs(now - _hm_min(sh["work_start"])))
+    upcoming = [sh for sh in shifts if _hm_min(sh["work_start"]) > now]
+    if upcoming:
+        return min(upcoming, key=lambda sh: _hm_min(sh["work_start"]))
+    return max(shifts, key=lambda sh: _hm_min(sh["work_end"]))
+
+
+def shift_late(check_in: Optional[str], shift: dict) -> int:
+    if not check_in:
+        return 0
+    return max(0, _hm_min(check_in) - _hm_min(shift["work_start"]) - int(shift.get("late_grace_minutes", 0)))
 
 
 def is_work_day(d: date, settings: dict) -> bool:

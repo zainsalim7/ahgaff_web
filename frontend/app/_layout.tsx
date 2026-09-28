@@ -187,6 +187,7 @@ export default function RootLayout() {
           <Stack.Screen name="hr-photo-approvals" options={{ title: 'اعتماد صور البطاقات' }} />
           <Stack.Screen name="hr-locations" options={{ title: 'مواقع العمل والتحقق الجغرافي' }} />
           <Stack.Screen name="hr-presence-checks" options={{ title: 'تأكيد التواجد العشوائي' }} />
+          <Stack.Screen name="hr-work-settings" options={{ title: 'إعدادات الدوام والفترات' }} />
           <Stack.Screen name="hr-annual-report" options={{ title: 'التقرير السنوي لشؤون الموظفين' }} />
           <Stack.Screen name="report-teacher-summary" options={{ title: 'ملخص المعلم' }} />
           <Stack.Screen name="report-teacher-attendance" options={{ title: 'حضور الأساتذة' }} />

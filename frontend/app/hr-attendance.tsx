@@ -7,27 +7,32 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, reportPage } from '../src/components/reports/ReportShell';
 import { Tabs } from '../src/components/hr/ui';
 import { AttendanceDaily } from '../src/components/hr/AttendanceDaily';
-import { AttendanceMonthly, AttendanceSettings } from '../src/components/hr/AttendanceMonthly';
+import { AttendanceMonthly } from '../src/components/hr/AttendanceMonthly';
+import { router } from 'expo-router';
+import { btn } from '../src/components/hr/ui';
 
 export default function HrAttendance() {
   const { hasPermission, user } = useAuth();
   const canManage = user?.role === 'admin' || hasPermission('hr_manage_attendance');
+  const canWorkSettings = user?.role === 'admin' || hasPermission('hr_manage_work_settings');
   const [tab, setTab] = useState('daily');
   const [meta, setMeta] = useState<any>(null);
   const [units, setUnits] = useState<any[]>([]);
-  const [key, setKey] = useState(0);
+  const [key] = useState(0);
 
   useEffect(() => { hrAPI.attMeta().then((r) => setMeta(r.data)).catch(() => {}); hrAPI.orgUnits().then((r) => setUnits(r.data.units || [])).catch(() => {}); }, []);
 
-  const tabs = [{ key: 'daily', label: 'الكشف اليومي' }, { key: 'monthly', label: 'التقرير الشهري' }, ...(canManage ? [{ key: 'settings', label: 'إعدادات الدوام' }] : [])];
+  const tabs = [{ key: 'daily', label: 'الكشف اليومي' }, { key: 'monthly', label: 'التقرير الشهري' }];
   return (
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={reportPage.content}>
-        <ReportHero kicker="شؤون الموظفين" title="الحضور الإداري" subtitle="كشف الحضور اليومي للموظفين، التقرير الشهري، وإعدادات الدوام والعطل" onBack={() => goBack()} canExport={false} testID="hr-attendance-hero" />
-        <Tabs tabs={tabs} value={tab} onChange={setTab} testID="hr-att-tabs" />
+        <ReportHero kicker="شؤون الموظفين" title="الحضور الإداري" subtitle="كشف الحضور اليومي للموظفين والتقرير الشهري — إعدادات الدوام والفترات في صفحتها المستقلة" onBack={() => goBack()} canExport={false} testID="hr-attendance-hero" />
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center', direction: 'rtl', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1 }}><Tabs tabs={tabs} value={tab} onChange={setTab} testID="hr-att-tabs" /></div>
+          {canWorkSettings && <button onClick={() => router.push('/hr-work-settings' as any)} style={btn('#eef4ff', '#1565c0', { fontSize: 12 })} data-testid="att-goto-work-settings">⏰ إعدادات الدوام والفترات ←</button>}
+        </div>
         {tab === 'daily' && <AttendanceDaily key={`d${key}`} canManage={canManage} units={units} meta={meta} />}
         {tab === 'monthly' && <AttendanceMonthly key={`m${key}`} units={units} meta={meta} />}
-        {tab === 'settings' && <AttendanceSettings meta={meta} onSaved={() => setKey((k) => k + 1)} />}
       </ScrollView>
     </SafeAreaView>
   );

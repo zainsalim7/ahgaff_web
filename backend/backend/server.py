@@ -226,6 +226,7 @@ from routes.hr_letters import router as hr_letters_router, public_router as hr_l
 from routes.hr_profile_requests import router as hr_profile_requests_router
 from routes.hr_locations import router as hr_locations_router
 from routes.hr_presence import router as hr_presence_router, presence_check_loop
+from routes.hr_shifts import router as hr_shifts_router
 from routes.hr_documents import router as hr_documents_router
 from routes.hr_reports import router as hr_reports_router
 from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
@@ -17937,6 +17938,7 @@ app.include_router(day_shift_router, prefix="/api")
 app.include_router(hr_profile_requests_router, prefix="/api")
 app.include_router(hr_locations_router, prefix="/api")
 app.include_router(hr_presence_router, prefix="/api")
+app.include_router(hr_shifts_router, prefix="/api")
 app.include_router(hr_letters_router, prefix="/api")
 app.include_router(hr_letters_public_router, prefix="/api")
 app.include_router(hr_cards_router, prefix="/api")

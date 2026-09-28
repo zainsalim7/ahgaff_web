@@ -30,9 +30,10 @@ export const MyAttendanceCard: React.FC = () => {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          {d.today && <Badge color={ATT_COLOR[d.today.status]} testID="hr-me-today-status">{d.today.status_label}</Badge>}
+          {d.today && <Badge color={ATT_COLOR[d.today.status]} testID="hr-me-today-status">{d.today.status_label}{d.multi_shift && d.today.shift_name ? ` · ${d.today.shift_name}` : ''}</Badge>}
+          {d.multi_shift && (d.today_shifts || []).map((ts: any) => <Badge key={ts.shift.id} color={ts.record ? (ts.record.check_out ? '#16a34a' : '#f97316') : '#94a3b8'} testID={`hr-me-shift-${ts.shift.id}`}>{ts.shift.name} {ts.shift.work_start}–{ts.shift.work_end}{ts.record ? ` ✓ ${ts.record.check_in}${ts.record.check_out ? `→${ts.record.check_out}` : ''}` : ''}</Badge>)}
           {d.today?.check_in_geo && <Badge color={({ in_range: '#16a34a', out_of_range: '#dc2626', no_location: '#f97316', exempt: '#7c3aed' } as any)[d.today.check_in_geo.status] || '#94a3b8'} testID="hr-me-today-geo">📍 {d.today.check_in_geo.location_name || d.today.check_in_geo.status_label}</Badge>}
-          {d.can_check_in && <button onClick={() => act(hrAPI.checkIn)} disabled={busy} style={btn('#16a34a')} data-testid="hr-me-checkin-btn">{busy ? '📍 جاري تحديد موقعك…' : '🕐 تسجيل حضور'}</button>}
+          {d.can_check_in && <button onClick={() => act(hrAPI.checkIn)} disabled={busy} style={btn('#16a34a')} data-testid="hr-me-checkin-btn">{busy ? '📍 جاري تحديد موقعك…' : `🕐 تسجيل حضور${d.multi_shift && d.next_shift ? ` (${d.next_shift.name})` : ''}`}</button>}
           {d.can_check_out && <button onClick={() => act(hrAPI.checkOut)} disabled={busy} style={btn('#0f2440')} data-testid="hr-me-checkout-btn">🏁 تسجيل انصراف</button>}
         </div>
       </div>

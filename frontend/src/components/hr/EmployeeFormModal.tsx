@@ -12,7 +12,7 @@ export const btn = (bg: string, color = '#fff', extra: React.CSSProperties = {})
 export const EMPTY_EMP = {
   employee_no: '', full_name: '', category: 'administrative', job_title: '', grade: '', org_unit_id: '', manager_employee_id: '', contract_type: 'permanent',
   hire_date: '', contract_end_date: '', status: 'active', gender: '', nationality: '', national_id: '', id_expiry_date: '', birth_date: '', phone: '', email: '',
-  address: '', emergency_contact: '', qualification: '', specialization: '', notes: '',
+  address: '', emergency_contact: '', qualification: '', specialization: '', notes: '', shift_ids: [] as string[],
 };
 
 interface Props { open: boolean; onClose: () => void; onSaved: () => void; employee?: any | null; meta: any; units: any[]; }
@@ -20,14 +20,16 @@ interface Props { open: boolean; onClose: () => void; onSaved: () => void; emplo
 export const EmployeeFormModal: React.FC<Props> = ({ open, onClose, onSaved, employee, meta, units }) => {
   const [f, setF] = useState<any>(EMPTY_EMP);
   const [managers, setManagers] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
 
   useEffect(() => {
     if (!open) return;
     setErr('');
-    setF(employee ? { ...EMPTY_EMP, ...Object.fromEntries(Object.entries(employee).filter(([k]) => k in EMPTY_EMP).map(([k, v]) => [k, v ?? ''])) } : EMPTY_EMP);
+    setF(employee ? { ...EMPTY_EMP, ...Object.fromEntries(Object.entries(employee).filter(([k]) => k in EMPTY_EMP).map(([k, v]) => [k, v ?? (k === 'shift_ids' ? [] : '')])) } : EMPTY_EMP);
     hrAPI.employees({ per_page: 200, status: 'active' }).then((r) => setManagers(r.data.employees || [])).catch(() => setManagers([]));
+    hrAPI.attSettings().then((r) => setShifts(r.data.shifts || [])).catch(() => setShifts([]));
   }, [open, employee]);
 
   if (!open) return null;
@@ -70,6 +72,15 @@ export const EmployeeFormModal: React.FC<Props> = ({ open, onClose, onSaved, emp
           <Field k="grade" label="الدرجة" />
           <Field k="org_unit_id" label="الوحدة التنظيمية"><select value={f.org_unit_id || ''} onChange={set('org_unit_id')} style={inp} data-testid="emp-org_unit_id"><option value="">— غير محدد —</option>{units.map((u) => <option key={u.id} value={u.id}>{u.type_label} · {u.name}</option>)}</select></Field>
           <Field k="manager_employee_id" label="المدير المباشر"><select value={f.manager_employee_id || ''} onChange={set('manager_employee_id')} style={inp} data-testid="emp-manager_employee_id"><option value="">— لا يوجد —</option>{managers.filter((m) => m.id !== employee?.id).map((m) => <option key={m.id} value={m.id}>{m.full_name}{m.job_title ? ` (${m.job_title})` : ''}</option>)}</select></Field>
+          {shifts.length > 1 && <Field k="shift_ids" label="فترات الدوام" span={3}>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }} data-testid="emp-shifts">
+              {shifts.map((sh: any) => { const on = (f.shift_ids || []).includes(sh.id); return (
+                <label key={sh.id} style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer', padding: '6px 10px', borderRadius: 10, border: `1px solid ${on ? '#1565c0' : '#e2e8f0'}`, backgroundColor: on ? '#eef4ff' : '#fff' }}>
+                  <input type="checkbox" checked={on} onChange={(e) => setF((p: any) => ({ ...p, shift_ids: e.target.checked ? [...(p.shift_ids || []), sh.id] : (p.shift_ids || []).filter((x: string) => x !== sh.id) }))} data-testid={`emp-shift-${sh.id}`} />
+                  <b>{sh.name}</b> <span style={{ color: '#64748b', direction: 'ltr' }}>{sh.work_start}–{sh.work_end}</span></label>); })}
+              <span style={{ fontSize: 11, color: '#94a3b8', alignSelf: 'center' }}>بلا تحديد = الفترة الأساسية</span>
+            </div>
+          </Field>}
           <Field k="status" label="الحالة"><select value={f.status} onChange={set('status')} style={inp} data-testid="emp-status">{opt(meta?.statuses)}</select></Field>
           <Field k="contract_type" label="نوع التعاقد"><select value={f.contract_type} onChange={set('contract_type')} style={inp} data-testid="emp-contract_type">{opt(meta?.contract_types)}</select></Field>
           <Field k="hire_date" label="تاريخ التعيين" type="date" />

@@ -15,7 +15,7 @@ from pydantic import BaseModel
 
 from .deps import get_db, get_current_user, log_activity
 from .hr_common import (P_ATTEND, YEMEN_TZ, _now, _today, _oid, _ser, _guard, get_hr_settings, is_work_day, parse_date, find_my_employee,
-                        employee_user_ids, enrich_employee_refs)
+                        employee_user_ids, enrich_employee_refs, employee_shifts)
 from .hr_locations import GeoIn, active_locations, rank_locations
 from .internal_push import _check_key
 
@@ -64,7 +64,7 @@ async def _target_employees(db, settings: dict, d: str) -> List[dict]:
     ids = settings.get("employee_ids")
     if isinstance(ids, list):
         q["_id"] = {"$in": [ObjectId(i) for i in ids if ObjectId.is_valid(i)]}
-    emps = await db.employees.find(q, {"full_name": 1}).to_list(5000)
+    emps = await db.employees.find(q, {"full_name": 1, "shift_ids": 1}).to_list(5000)
     from .hr_attendance import _leave_map
     on_leave = await _leave_map(db, d)
     emps = [e for e in emps if str(e["_id"]) not in on_leave]
@@ -74,16 +74,18 @@ async def _target_employees(db, settings: dict, d: str) -> List[dict]:
     return emps
 
 
-def _random_times(work_start: int, work_end: int, n: int, gap: int, timeout: int, not_before: int) -> List[int]:
-    """أوقات عشوائية (بالدقائق) داخل الدوام، بفاصل أدنى، لا قبل الآن"""
-    lo, hi = max(work_start, not_before), work_end - timeout
-    if hi <= lo:
+def _random_times(windows: List[tuple], n: int, gap: int, timeout: int, not_before: int) -> List[int]:
+    """أوقات عشوائية (بالدقائق) داخل نوافذ الدوام (فترات الموظف)، بفاصل أدنى، لا قبل الآن"""
+    spans = [(max(a, not_before), b - timeout) for a, b in windows]
+    spans = [(a, b) for a, b in spans if b > a]
+    if not spans:
         return []
     out: List[int] = []
     for _ in range(n * 25):
         if len(out) >= n:
             break
-        t = random.randint(lo, hi)
+        a, b = random.choices(spans, weights=[b - a for a, b in spans])[0]
+        t = random.randint(a, b)
         if all(abs(t - x) >= gap for x in out):
             out.append(t)
     return sorted(out)
@@ -109,7 +111,8 @@ async def plan_day(db, force: bool = False) -> dict:
             continue
         last = [c async for c in db.hr_presence_checks.find({"employee_id": eid, "date": d}, {"scheduled_at": 1})]
         taken = [_hm(c["scheduled_at"][11:16]) for c in last if c.get("scheduled_at")]
-        times = [t for t in _random_times(_hm(hr["work_start"]), _hm(hr["work_end"]), need, int(s["min_interval_minutes"]), int(s["response_timeout_minutes"]), now_m + 2)
+        windows = [(_hm(sh["work_start"]), _hm(sh["work_end"])) for sh in employee_shifts(e, hr)]
+        times = [t for t in _random_times(windows, need, int(s["min_interval_minutes"]), int(s["response_timeout_minutes"]), now_m + 2)
                  if all(abs(t - x) >= int(s["min_interval_minutes"]) for x in taken)]
         for t in times:
             at = now.replace(hour=t // 60, minute=t % 60, second=0, microsecond=0)
