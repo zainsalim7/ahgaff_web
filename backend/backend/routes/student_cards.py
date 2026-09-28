@@ -17,6 +17,19 @@ from .statements import _can_issue as _can_manage, get_verify_base
 router = APIRouter()
 
 TEMPLATES = ("green", "dark", "horizontal", "official", "custom")
+CARD_SCALE = 2  # دقة مضاعفة للطباعة (1280×2020)
+
+# 🔤 خطوط البطاقة: (ملف الخط، محاور الخط المتغير [slnt, wght] أو [wght]) — كلها عريضة للطباعة
+CARD_FONTS = {
+    "amiri": ("Amiri-Bold.ttf", None),
+    "cairo": ("Cairo-Variable.ttf", [700, 0]),
+    "tajawal": ("Tajawal-Bold.ttf", None),
+    "kufi": ("NotoKufiArabic-Variable.ttf", [700]),
+    "almarai": ("Almarai-Bold.ttf", None),
+    "changa": ("Changa-Variable.ttf", [700]),
+}
+DEFAULT_CARD_FONT = "kufi"
+CARD_FONT_LABELS = {"amiri": "أميري عريض (نسخي كلاسيكي)", "cairo": "القاهرة عريض (عصري)", "tajawal": "تجوّل عريض (بسيط واضح)", "kufi": "نوتو كوفي عريض (كوفي رسمي)", "almarai": "المرعي عريض (هندسي)", "changa": "تشانغا عريض (مميز)"}
 
 # 📐 المواضع الافتراضية لعناصر القالب المخصص (نسب مئوية من أبعاد البطاقة)
 DEFAULT_CUSTOM_LAYOUT = {
@@ -91,6 +104,7 @@ async def _resolve_faculty(db, student: dict):
 # ==================== إعدادات التصميم لكل كلية ====================
 class CardSettings(BaseModel):
     template: str = "green"
+    font: Optional[str] = None
     custom_bg_base64: Optional[str] = None
     custom_layout: Optional[dict] = None
 
@@ -103,6 +117,8 @@ async def get_card_settings(faculty_id: str, current_user: dict = Depends(get_cu
     doc = await db.card_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
     return {
         "template": doc.get("template", "green"),
+        "font": doc.get("font") or DEFAULT_CARD_FONT,
+        "fonts": [{"key": k, "label": v} for k, v in CARD_FONT_LABELS.items()],
         "custom_bg_base64": doc.get("custom_bg_base64", ""),
         "custom_layout": doc.get("custom_layout") or DEFAULT_CUSTOM_LAYOUT,
         "custom_orientation": doc.get("custom_orientation", "portrait"),
@@ -116,7 +132,9 @@ async def update_card_settings(faculty_id: str, data: CardSettings, current_user
     if data.template not in TEMPLATES:
         raise HTTPException(status_code=400, detail="قالب غير معروف")
     db = get_db()
-    update = {"template": data.template}
+    if data.font and data.font not in CARD_FONTS:
+        raise HTTPException(status_code=400, detail="خط غير معروف")
+    update = {"template": data.template, "font": data.font or DEFAULT_CARD_FONT}
     if data.custom_layout is not None:
         update["custom_layout"] = data.custom_layout
     if data.custom_bg_base64:
@@ -157,6 +175,7 @@ async def _card_payload(db, student: dict, base_url: str) -> dict:
         "department_name": dept_name,
         "academic_year": card["academic_year"],
         "template": settings.get("template", "green"),
+        "font": settings.get("font") or DEFAULT_CARD_FONT,
         "photo_upload_used": bool(student.get("photo_upload_used")),
         "photo_upload_allowed": bool(student.get("photo_upload_allowed")),
         "can_upload_photo": (not student.get("photo_upload_used")) or bool(student.get("photo_upload_allowed")),
@@ -605,6 +624,7 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
             "faculty_name": s.get("_fac_name", "") if ids_mode else faculty_name,
             "academic_year": card["academic_year"],
             "template": s_tpl,
+            "font": s_settings.get("font") or DEFAULT_CARD_FONT,
             "custom_bg_base64": s_settings.get("custom_bg_base64", ""),
             "custom_layout": s_settings.get("custom_layout") or {},
             "custom_orientation": s_settings.get("custom_orientation", "portrait"),
@@ -701,10 +721,73 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
 
     _dir = {"direction": "rtl"} if HAS_RAQM else {}
 
-    font_path = str(Path(__file__).parent.parent / "fonts" / "Amiri-Regular.ttf")
+    _fonts_dir = Path(__file__).parent.parent / "fonts"
+    font_key = p.get("font") or DEFAULT_CARD_FONT
+    font_file, font_axes = CARD_FONTS.get(font_key, CARD_FONTS[DEFAULT_CARD_FONT])
+    font_path = str(_fonts_dir / font_file)
+    _font_cache: dict = {}
 
     def F(size):
-        return ImageFont.truetype(font_path, size)
+        size = int(size)
+        if size not in _font_cache:
+            f = ImageFont.truetype(font_path, size * CARD_SCALE)
+            if font_axes:
+                try:
+                    f.set_variation_by_axes(font_axes)
+                except Exception:
+                    pass
+            _font_cache[size] = f
+        return _font_cache[size]
+
+    S = CARD_SCALE
+
+    class _SDraw:
+        """رسم بمقياس مضاعف: الإحداثيات تُضرب في S، والخطوط مُهيّأة مسبقاً بالمقياس"""
+        def __init__(self, d): self.d = d
+        def _sc(self, xy): return [tuple(v * S for v in pt) if isinstance(pt, (tuple, list)) else pt * S for pt in xy]
+        def rectangle(self, xy, **kw):
+            if kw.get("width"): kw["width"] = int(kw["width"] * S)
+            self.d.rectangle(self._sc(xy), **kw)
+        def rounded_rectangle(self, xy, radius=0, **kw):
+            if kw.get("width"): kw["width"] = int(kw["width"] * S)
+            self.d.rounded_rectangle(self._sc(xy), radius=radius * S, **kw)
+        def ellipse(self, xy, **kw):
+            if kw.get("width"): kw["width"] = int(kw["width"] * S)
+            self.d.ellipse(self._sc(xy), **kw)
+        def line(self, xy, **kw):
+            if kw.get("width"): kw["width"] = int(kw["width"] * S)
+            self.d.line(self._sc(xy), **kw)
+        def text(self, xy, t, **kw): self.d.text((xy[0] * S, xy[1] * S), t, **kw)
+        def textlength(self, t, **kw): return self.d.textlength(t, **kw) / S
+
+    class _SImage:
+        def __init__(self, im): self.im = im
+        def paste(self, src, box, mask=None):
+            same = mask is src
+            if not getattr(src, "_scaled", False):
+                src = src.resize((src.width * S, src.height * S), Image.LANCZOS)
+            if same:
+                mask = src
+            elif mask is not None and mask.size != src.size:
+                mask = mask.resize(src.size, Image.LANCZOS)
+            self.im.paste(src, (int(box[0] * S), int(box[1] * S)), mask)
+        def save(self, *a, **kw): return self.im.save(*a, **kw)
+
+    def _canvas(w, h, color):
+        return _SImage(Image.new("RGB", (w * S, h * S), color))
+
+    def _draw(img):
+        return _SDraw(ImageDraw.Draw(img.im if isinstance(img, _SImage) else img))
+
+    def _mark(im):
+        im._scaled = True
+        return im
+
+    def _logo(size):
+        return _mark(logo.resize((size * S, size * S), Image.LANCZOS)) if logo else None
+
+    def _qr(size):
+        return _mark(qr_img.resize((size * S, size * S), Image.NEAREST))
 
     def rtl(draw, right_x, y, text, font, fill):
         t = ar(text)
@@ -728,10 +811,10 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
     def paste_watermark(im, cx, cy, size, alpha=26):
         if not logo:
             return
-        wm = logo.resize((size, size)).convert("RGBA")
+        wm = logo.resize((size * S, size * S), Image.LANCZOS).convert("RGBA")
         mask = wm.convert("L").point(lambda v: 0 if v > 235 else alpha)
         wm.putalpha(mask)
-        im.paste(wm, (cx - size // 2, cy - size // 2), wm)
+        im.im.paste(wm, ((cx - size // 2) * S, (cy - size // 2) * S), wm)
 
     # صورة الطالب
     photo = None
@@ -742,11 +825,12 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
             photo = None
 
     def fit_photo(img, w, h):
+        w, h = w * S, h * S
         ratio = max(w / img.width, h / img.height)
-        img = img.resize((int(img.width * ratio) + 1, int(img.height * ratio) + 1))
+        img = img.resize((int(img.width * ratio) + 1, int(img.height * ratio) + 1), Image.LANCZOS)
         left = (img.width - w) // 2
         top = (img.height - h) // 2
-        return img.crop((left, top, left + w, top + h))
+        return _mark(img.crop((left, top, left + w, top + h)))
 
     qr_img = qrcode.make(verify_url, box_size=6, border=1).convert("RGB")
 
@@ -768,8 +852,8 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
             bg = None
         if bg is not None:
             W, H = (1010, 640) if bg.width > bg.height else (640, 1010)
-            img = fit_photo(bg, W, H)
-            d = ImageDraw.Draw(img)
+            img = _SImage(fit_photo(bg, W, H))
+            d = _draw(img)
             L = {**DEFAULT_CUSTOM_LAYOUT, **{k: v for k, v in (p.get("custom_layout") or {}).items() if isinstance(v, dict)}}
             if photo:
                 ph = L["photo"]
@@ -779,7 +863,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
                 d.rectangle([pxp, pyp, pxp + pw, pyp + phh], outline=(255, 255, 255), width=3)
             q = L["qr"]
             qs = max(40, int(q.get("w", 18) / 100 * W))
-            img.paste(qr_img.resize((qs, qs)), (int(q.get("x", 8) / 100 * W), int(q.get("y", 66) / 100 * H)))
+            img.paste(_qr(qs), (int(q.get("x", 8) / 100 * W), int(q.get("y", 66) / 100 * H)))
 
             def _txt(key, value):
                 el = L.get(key) or DEFAULT_CUSTOM_LAYOUT[key]
@@ -800,8 +884,8 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         MUT = (96, 125, 102)
         NAVY = (26, 37, 64)
         W, H = 640, 1010
-        img = Image.new("RGB", (W, H), (255, 255, 255))
-        d = ImageDraw.Draw(img)
+        img = _canvas(W, H, (255, 255, 255))
+        d = _draw(img)
         # زخارف دوائر خفيفة
         d.ellipse([-150, -150, 170, 170], outline=LG, width=3)
         d.ellipse([-95, -95, 115, 115], outline=LG, width=3)
@@ -816,7 +900,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         d.ellipse([W // 2 - 76, cy - 76, W // 2 + 76, cy + 76], outline=LG, width=10)
         d.ellipse([W // 2 - 66, cy - 66, W // 2 + 66, cy + 66], outline=DG, width=3)
         if logo:
-            lg = logo.resize((108, 108))
+            lg = _logo(108)
             img.paste(lg, (W // 2 - 54, cy - 54), lg)
         center(d, W // 2, 176, "جامعة الأحقاف", F(40), DG)
         center(d, W // 2, 234, "AL-AHGAFF UNIVERSITY", F(18), MUT)
@@ -848,7 +932,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
             rtl(d, W - 216, y, value, F(21), NAVY)
             y += spacing
         d.rounded_rectangle([36, 748, 198, 948], radius=10, outline=LG, width=4)
-        q = qr_img.resize((140, 140))
+        q = _qr(140)
         img.paste(q, (47, 760))
         center(d, 117, 908, "امسح للتحقق", F(16), MUT)
         # الشريط السفلي
@@ -857,21 +941,21 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         center(d, W // 2, H - 50, f"صالحة للعام الجامعي {p.get('academic_year', '')}", F(23), DG)
     elif not horizontal:
         W, H = 640, 1010
-        img = Image.new("RGB", (W, H), theme["bg"])
-        d = ImageDraw.Draw(img)
+        img = _canvas(W, H, theme["bg"])
+        d = _draw(img)
         # الشريط العلوي
         d.rectangle([0, 0, W, 180], fill=theme["band"])
         paste_watermark(img, W // 2, 620, 460)
         if logo:
-            lg = logo.resize((110, 110))
-            white = Image.new("RGB", (122, 122), (255, 255, 255))
-            img.paste(white, (W // 2 - 61, 24))
-            img.paste(lg, (W // 2 - 55, 30), lg)
+            lg = _logo(104)
+            white = Image.new("RGB", (116, 116), (255, 255, 255))
+            img.paste(white, (W // 2 - 58, 14))
+            img.paste(lg, (W // 2 - 52, 20), lg)
         center(d, W // 2 - 170, 40, "AL-AHGAFF", F(26), theme["band_text"])
         center(d, W // 2 - 170, 76, "UNIVERSITY", F(26), theme["band_text"])
         center(d, W // 2 + 170, 44, "جامعة الأحقاف", F(34), theme["band_text"])
         center(d, W // 2 + 170, 96, p.get("faculty_name", ""), F(22), theme["band_text"])
-        center(d, W // 2, 140, "بطاقة طالب", F(26), theme["band_text"])
+        center(d, W // 2, 138, "بطاقة طالب", F(26), theme["band_text"])
         # صورة الطالب
         py = 210
         if photo:
@@ -890,7 +974,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
             rtl(d, W - 210, y, value, F(24), theme["text"])
             y += 44
         # QR
-        q = qr_img.resize((150, 150))
+        q = _qr(150)
         img.paste(q, (40, H - 226))
         rtl(d, W - 50, H - 190, "امسح الرمز للتحقق", F(20), theme["muted"])
         rtl(d, W - 50, H - 158, "من صحة البطاقة", F(20), theme["muted"])
@@ -900,12 +984,12 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
     else:
         W, H = 1010, 640
         theme = THEMES["green"]
-        img = Image.new("RGB", (W, H), theme["bg"])
-        d = ImageDraw.Draw(img)
+        img = _canvas(W, H, theme["bg"])
+        d = _draw(img)
         d.rectangle([0, 0, W, 120], fill=theme["band"])
         paste_watermark(img, 420, 380, 380)
         if logo:
-            lg = logo.resize((92, 92))
+            lg = _logo(92)
             white = Image.new("RGB", (100, 100), (255, 255, 255))
             img.paste(white, (W // 2 - 50, 14))
             img.paste(lg, (W // 2 - 46, 18), lg)
@@ -930,7 +1014,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
             rtl(d, px - 200, y, value, F(24), theme["text"])
             y += 48
         # QR أسفل يسار مع مساحة فاصلة
-        q = qr_img.resize((130, 130))
+        q = _qr(130)
         img.paste(q, (36, H - 196))
         center(d, 101, H - 226, "امسح للتحقق", F(18), theme["muted"])
         d.rectangle([0, H - 52, W, H], fill=theme["strip"])

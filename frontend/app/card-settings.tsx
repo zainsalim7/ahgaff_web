@@ -37,6 +37,8 @@ export default function CardSettingsScreen() {
   const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
   const [facultyId, setFacultyId] = useState<string>((params.facultyId as string) || '');
   const [template, setTemplate] = useState('green');
+  const [font, setFont] = useState('kufi');
+  const [fonts, setFonts] = useState<{ key: string; label: string }[]>([]);
   const [customBg, setCustomBg] = useState('');
   const [layout, setLayout] = useState<Record<string, any>>(DEFAULT_LAYOUT);
   const [selectedEl, setSelectedEl] = useState('name');
@@ -63,6 +65,8 @@ export default function CardSettingsScreen() {
     if (!facultyId) return;
     api.get(`/cards/settings/${facultyId}`).then((r) => {
       setTemplate(r.data?.template || 'green');
+      setFont(r.data?.font || 'kufi');
+      setFonts(r.data?.fonts || []);
       setCustomBg(r.data?.custom_bg_base64 || '');
       setLayout({ ...DEFAULT_LAYOUT, ...(r.data?.custom_layout || {}) });
     }).catch(() => { setTemplate('green'); setCustomBg(''); setLayout(DEFAULT_LAYOUT); });
@@ -112,7 +116,7 @@ export default function CardSettingsScreen() {
     setSaving(true);
     setMsg('');
     try {
-      const body: any = { template, custom_layout: layout };
+      const body: any = { template, font, custom_layout: layout };
       if (template === 'custom' && customBg && customBg.startsWith('data:')) body.custom_bg_base64 = customBg;
       await api.put(`/cards/settings/${facultyId}`, body);
       setMsg('✅ تم حفظ تصميم البطاقة — يسري على كل بطاقات هذه الكلية');
@@ -164,6 +168,16 @@ export default function CardSettingsScreen() {
               </TouchableOpacity>
             ))}
           </View>
+
+          <Text style={[styles.label, { marginTop: 18 }]}>خط البطاقة (عريض للطباعة)</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }} testID="card-font-options">
+            {fonts.map((f) => (
+              <TouchableOpacity key={f.key} onPress={() => setFont(f.key)} style={[styles.fontChip, font === f.key && styles.fontChipActive]} testID={`card-font-${f.key}`}>
+                <Text style={{ fontSize: 12.5, fontWeight: '800', color: font === f.key ? '#fff' : '#1a2540' }}>{f.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={{ fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 6 }}>تُطبَّق على جميع القوالب وتُولَّد البطاقة بدقة مضاعفة (1280×2020) لطباعة أوضح. المعاينة أدناه تعكس الخط بعد الحفظ.</Text>
 
           {template === 'custom' && Platform.OS === 'web' && (
             <View style={{ marginTop: 16 }}>
@@ -254,6 +268,8 @@ export default function CardSettingsScreen() {
 }
 
 const styles = StyleSheet.create({
+  fontChip: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 18, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
+  fontChipActive: { backgroundColor: '#00796b', borderColor: '#00796b' },
   container: { flex: 1, backgroundColor: '#f4f6fb' },
   cardBox: { backgroundColor: '#fff', borderRadius: 14, padding: 18, maxWidth: 560, width: '100%', alignSelf: 'center', borderWidth: 1, borderColor: '#e6eaf2' },
   title: { fontSize: 16, fontWeight: '800', color: '#1a2540', textAlign: 'right', marginBottom: 6 },
