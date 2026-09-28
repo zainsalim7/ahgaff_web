@@ -1,0 +1,30 @@
+{
+  "summary": "Backend + focused UI test of HR multi-shift work-settings (feature A) and presence-check (feature B). Created /app/backend/tests/test_hr_shifts_presence.py with 39 pytest cases — 39/39 PASS in 13s covering: work-settings CRUD (add/edit/delete-main-forbidden), shift assignment via employee and via shift (preserves other memberships), permission gating (Salim 403 on general/shifts/legacy settings), legacy /api/hr/attendance/settings mirrors main shift + shifts[], multi-shift daily sheet emits 2 rows/employee with shift_id + row_key + shift_name, /my has multi_shift=true and today_shifts[2] + next_shift, self check-in/out full 7-step lifecycle (first→open→out→other shift→out→'كل فتراتك'→'بالفعل'), mark with shift_id updates only that shift's record (no dup), DELETE record?shift_id=evening deletes only that record, monthly.shifts_count=2 with due_days≈work_days*2, DELETE shift also $pulls it from employees, presence-check settings validation (checks_per_day=11→400, enriched employees on GET), run-now returns plan+dispatch, send-now with employee+'bad' creates 1/skips 'موظف غير موجود' with sent_at/expires_at + notifications type=presence_check w/ data.check_id, /my pending with remaining_seconds>0, confirm 4 branches (biometric false→403 'هويتك'; no coords→400; out-of-range→403 'خارج نطاق'; in-range+bio→200 confirmed; repeat→400), report shape + employee_name enrichment, internal /run requires X-Internal-Key (401 without, 200 with). UI smoke on /hr-work-settings, /hr-attendance, /hr-presence-checks confirmed all required data-testids present (hr-work-settings-hero, shift-card-*, shift-add-btn, work-general, att-set-self/geofence, att-goto-locations, att-add-holiday, att-settings-save, att-goto-work-settings on /hr-attendance, hr-att-tabs-daily, hr-presence-hero, presence-send-now-btn, presence-tabs-settings).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/hr-presence-checks report tab", "issues": ["Date field uses browser native date picker (renders as '09/28/2026' MM/DD/YYYY) instead of shadcn calendar — inconsistent with rest of app and confusing in RTL Arabic UI."]},
+      {"screen": "global", "issues": ["Console warning: 'Unexpected text node: . A text node cannot be a child of a <View>' — still appears (same as iteration_83). Not blocking, but worth cleaning up."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_hr_shifts_presence.py", "/app/test_reports/pytest/shifts_presence.xml"],
+  "action_items": [
+    "Optional: replace native date input on /hr-presence-checks with the shadcn calendar picker used elsewhere.",
+    "Optional: investigate lingering 'Unexpected text node' React warning after login (carried over from prev iterations)."
+  ],
+  "critical_code_review_comments": [
+    "hr_shifts.py:170 set_shift_employees iterates the full employees collection and issues one update per doc — for large employee sets this is O(N) round-trips; consider two bulk update_many ($addToSet / $pull) calls scoped by `_id $in oids` and `shift_id: shift_id, _id $nin oids` for efficiency.",
+    "hr_shifts.py:169 comment notes 'we handle main-shift by inserting explicitly'; the actual code only adds `main_id` to `cur` when `shift_id == main_id`. Employees implicitly on main who are removed from a non-main shift are unaffected — behaves correctly, but the comment is misleading.",
+    "hr_attendance.py:187 uses `$or: [{shift_id: sh.id}, {shift_id: {$exists: false}}]` filter with update_one upsert=true — when there are two legacy rows (one without shift_id, one with) this could match the legacy one and leave the shift_id row untouched; risk is limited to migration-era data.",
+    "hr_presence.py:296 GET /my always calls dispatch_due(db) — invoking from an employee endpoint may cause a burst under many concurrent employee polls; consider rate-limiting or moving to loop-only."
+  ],
+  "updated_files": ["/app/backend/tests/test_hr_shifts_presence.py"],
+  "success_rate": {"backend": "100% (39/39)", "frontend": "100% of documented data-testids present"},
+  "test_credentials": "admin/admin123, Salim/test1234",
+  "seed_data_creation": "Transient shift 'TEST_evening' (16:00-20:00) auto-cleaned. Transient location 'TEST_PRES_LOC' auto-cleaned. Presence settings snapshot restored (enabled=orig). hr_attendance rows and hr_presence_checks/notifications for admin employee for today deleted post-run. Admin's shift_ids restored to original value. TEST_-prefixed shifts scrubbed from hr_settings at teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/test_hr_shifts_presence.py -v. All 39 tests idempotent (each fixture cleans up). The test infra uses direct pymongo to (a) locate/insert admin employee record, (b) verify DB state after multi-shift check-in/mark. Companion file /app/backend/tests/test_hr_geofencing.py (iteration 83) still passes."
+}

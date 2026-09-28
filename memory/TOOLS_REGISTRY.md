@@ -78,6 +78,8 @@
 | backfill-sections.tsx | تعبئة الشعب |
 | migrate-courses.tsx | ترحيل مقررات |
 | hr-locations.tsx | مواقع العمل والتحقق الجغرافي (Geofencing): CRUD مواقع بنصف قطر + خريطة Leaflet، تقرير مواقع تسجيل الموظفين، استثناءات (أدمن) — API: /api/hr/locations* |
+| hr-presence-checks.tsx | تأكيد التواجد العشوائي (بصمة+GPS): إعدادات، فحص فوري، تقرير — API: /api/hr/presence-check/* |
+| hr-work-settings.tsx | إعدادات الدوام والفترات (صلاحية hr_manage_work_settings): فترات متعددة، تكليف الموظفين، أيام العمل والعطل — API: /api/hr/work-settings/* |
 | offline-sync.tsx | مزامنة أوفلاين |
 | trash.tsx | سلة المحذوفات (حذف آمن/استعادة) |
 
