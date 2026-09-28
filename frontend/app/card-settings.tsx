@@ -39,6 +39,19 @@ export default function CardSettingsScreen() {
   const [template, setTemplate] = useState('green');
   const [font, setFont] = useState('kufi');
   const [fonts, setFonts] = useState<{ key: string; label: string }[]>([]);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [previewBusy, setPreviewBusy] = useState(false);
+  useEffect(() => {
+    if (!facultyId || Platform.OS !== 'web') return;
+    setPreviewBusy(true);
+    const t = setTimeout(() => {
+      api.get(`/cards/preview/${facultyId}`, { params: { template, font }, responseType: 'blob' })
+        .then((r) => setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(r.data); }))
+        .catch(() => setPreviewUrl(''))
+        .finally(() => setPreviewBusy(false));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [facultyId, template, font]);
   const [customBg, setCustomBg] = useState('');
   const [layout, setLayout] = useState<Record<string, any>>(DEFAULT_LAYOUT);
   const [selectedEl, setSelectedEl] = useState('name');
@@ -177,7 +190,16 @@ export default function CardSettingsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={{ fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 6 }}>تُطبَّق على جميع القوالب وتُولَّد البطاقة بدقة مضاعفة (1280×2020) لطباعة أوضح. المعاينة أدناه تعكس الخط بعد الحفظ.</Text>
+          <Text style={{ fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 6 }}>تُطبَّق على جميع القوالب وتُولَّد البطاقة بدقة مضاعفة (1280×2020) لطباعة أوضح.</Text>
+
+          {Platform.OS === 'web' && (
+            <View style={{ marginTop: 14, alignItems: 'center' }} testID="card-live-preview">
+              <Text style={[styles.label, { alignSelf: 'flex-end' }]}>معاينة فورية (بيانات تجريبية — تتغير مع القالب والخط قبل الحفظ)</Text>
+              <View style={{ width: '100%', minHeight: 320, borderRadius: 12, backgroundColor: '#f1f5f9', alignItems: 'center', justifyContent: 'center', padding: 10, opacity: previewBusy ? 0.6 : 1 }}>
+                {previewUrl ? <img src={previewUrl} alt="معاينة البطاقة" style={{ maxWidth: '100%', maxHeight: 520, borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.15)' }} data-testid="card-live-preview-img" /> : <ActivityIndicator color="#00796b" />}
+              </View>
+            </View>
+          )}
 
           {template === 'custom' && Platform.OS === 'web' && (
             <View style={{ marginTop: 16 }}>

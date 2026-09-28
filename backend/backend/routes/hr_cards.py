@@ -301,3 +301,85 @@ async def public_employee_photo(token: str):
     except Exception:
         raise HTTPException(status_code=404, detail="لا توجد صورة")
     return Response(content=data, media_type=ct or "image/jpeg", headers={"Cache-Control": "public, max-age=3600"})
+
+
+# ══════════════ تحميل البطاقة PNG/PDF (نفس مولّد بطاقة الطالب: خط عريض ودقة مضاعفة) ══════════════
+
+HR_CARD_SETTINGS_ID = "hr_employees"
+
+
+async def _hr_card_settings(db) -> dict:
+    from .student_cards import DEFAULT_CARD_FONT
+    doc = await db.card_settings.find_one({"_id": HR_CARD_SETTINGS_ID}) or {}
+    return {"template": doc.get("template", "green"), "font": doc.get("font") or DEFAULT_CARD_FONT}
+
+
+async def _render_employee_card(db, emp: dict, base: str, fmt: str):
+    from .student_cards import _render_card_png, export_filename, export_headers
+    from fastapi.responses import StreamingResponse
+    import io
+    p = await card_payload(db, emp, base)
+    s = await _hr_card_settings(db)
+    payload = {**p, **s, "student_name": p["full_name"], "enrollment_no": p["number"], "academic_year": f"{(p.get('issued_at') or '')[:4]}-{(p.get('valid_until') or '')[:4]}".strip("-"),
+               "level": 1, "section": "", "validity_text": f"سارية حتى {(p.get('valid_until') or '')[:10]}"}
+    photo_bytes = None
+    if emp.get("photo_path"):
+        try:
+            from services.storage_service import get_object
+            photo_bytes, _ = get_object(emp["photo_path"])
+        except Exception:
+            photo_bytes = None
+    png = _render_card_png(payload, photo_bytes, p["verify_url"])
+    label = ("بطاقة موظف", p["full_name"], p["number"])
+    if fmt == "png":
+        return StreamingResponse(io.BytesIO(png), media_type="image/png", headers=export_headers(export_filename(*label, ext="png")))
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdfcanvas
+    from reportlab.lib.utils import ImageReader
+    horizontal = s["template"] == "horizontal"
+    page = (85.6 * mm, 54 * mm) if horizontal else (54 * mm, 85.6 * mm)
+    buf = io.BytesIO()
+    c = pdfcanvas.Canvas(buf, pagesize=page)
+    c.drawImage(ImageReader(io.BytesIO(png)), 0, 0, page[0], page[1])
+    c.showPage(); c.save()
+    return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf", headers=export_headers(export_filename(*label, ext="pdf")))
+
+
+@router.get("/employees/me/card/download")
+async def my_card_download(request: Request, fmt: str = "png", current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    emp = await find_my_employee(db, current_user)
+    if not emp:
+        raise HTTPException(status_code=404, detail="لا يوجد ملف إداري مرتبط بحسابك")
+    return await _render_employee_card(db, emp, _req_base(request), fmt)
+
+
+@router.get("/employees/{emp_id}/card/download")
+async def employee_card_download(emp_id: str, request: Request, fmt: str = "png", current_user: dict = Depends(get_current_user)):
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    emp = await db.employees.find_one({"_id": _oid(emp_id)})
+    if not emp:
+        raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    return await _render_employee_card(db, emp, _req_base(request), fmt)
+
+
+@router.get("/card-settings")
+async def get_hr_card_settings(current_user: dict = Depends(get_current_user)):
+    from .student_cards import CARD_FONT_LABELS, TEMPLATES
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    s = await _hr_card_settings(get_db())
+    return {**s, "fonts": [{"key": k, "label": v} for k, v in CARD_FONT_LABELS.items()], "templates": [t for t in TEMPLATES if t != "custom"]}
+
+
+@router.put("/card-settings")
+async def put_hr_card_settings(data: dict, current_user: dict = Depends(get_current_user)):
+    from .student_cards import CARD_FONTS, TEMPLATES
+    _guard(current_user, P_MANAGE)
+    tpl, font = data.get("template", "green"), data.get("font", "kufi")
+    if tpl not in TEMPLATES or tpl == "custom" or font not in CARD_FONTS:
+        raise HTTPException(status_code=400, detail="قالب أو خط غير معروف")
+    await get_db().card_settings.update_one({"_id": HR_CARD_SETTINGS_ID}, {"$set": {"template": tpl, "font": font, "updated_at": _now()}}, upsert=True)
+    return {"message": "تم حفظ إعدادات بطاقة الموظف", "template": tpl, "font": font}

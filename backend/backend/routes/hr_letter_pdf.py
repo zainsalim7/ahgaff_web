@@ -3,14 +3,29 @@ import io
 import os
 
 
-def _font_setup():
+LETTER_FONTS = {
+    "amiri": ("Amiri-Regular.ttf", "Amiri-Bold.ttf", "أميري (نسخي رسمي)"),
+    "amiri_bold": ("Amiri-Bold.ttf", "Amiri-Bold.ttf", "أميري عريض بالكامل"),
+    "kufi": ("NotoKufiArabic-Regular.ttf", "NotoKufiArabic-Bold.ttf", "نوتو كوفي (واضح للطباعة)"),
+    "cairo": ("Cairo-Regular.ttf", "Cairo-Bold.ttf", "القاهرة (عصري)"),
+    "tajawal": ("Tajawal-Regular.ttf", "Tajawal-Bold.ttf", "تجوّل (بسيط)"),
+    "almarai": ("Almarai-Regular.ttf", "Almarai-Bold.ttf", "المرعي (هندسي)"),
+}
+DEFAULT_LETTER_FONT = "kufi"
+_registered: set = set()
+
+
+def _font_setup(key: str = None):
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    reg, bold, _ = LETTER_FONTS.get(key or DEFAULT_LETTER_FONT, LETTER_FONTS[DEFAULT_LETTER_FONT])
     try:
-        pdfmetrics.registerFont(TTFont("Amiri", os.path.join(here, "fonts", "Amiri-Regular.ttf")))
-        pdfmetrics.registerFont(TTFont("Amiri-Bold", os.path.join(here, "fonts", "Amiri-Bold.ttf")))
-        return "Amiri", "Amiri-Bold"
+        for name, fn in ((f"L-{reg}", reg), (f"L-{bold}", bold)):
+            if name not in _registered:
+                pdfmetrics.registerFont(TTFont(name, os.path.join(here, "fonts", fn)))
+                _registered.add(name)
+        return f"L-{reg}", f"L-{bold}"
     except Exception:
         return "Helvetica", "Helvetica-Bold"
 
@@ -54,7 +69,7 @@ def build_letter_pdf(letter: dict, settings: dict, verify_url: str) -> bytes:
     from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, KeepTogether
     from .hr_letters import LETTER_TYPES, LETTER_TYPES_EN
 
-    font, bold = _font_setup()
+    font, bold = _font_setup(settings.get("font"))
     lang = letter.get("language", "ar")
     rtl = lang != "en"
     W, H = A4
@@ -71,7 +86,7 @@ def build_letter_pdf(letter: dict, settings: dict, verify_url: str) -> bytes:
     align_body = TA_RIGHT if rtl else TA_JUSTIFY
     st_title = ParagraphStyle("t", fontName=bold, fontSize=17, leading=26, alignment=TA_CENTER, textColor=NAVY, spaceAfter=4)
     st_meta = ParagraphStyle("m", fontName=font, fontSize=10.5, leading=15, alignment=TA_RIGHT if rtl else TA_LEFT, textColor=GREY)
-    st_body = ParagraphStyle("b", fontName=font, fontSize=12.5, leading=22, alignment=align_body, textColor=colors.HexColor("#1e293b"))
+    st_body = ParagraphStyle("b", fontName=font, fontSize=13, leading=23, alignment=align_body, textColor=colors.HexColor("#1e293b"))
     st_sig_name = ParagraphStyle("sn", fontName=bold, fontSize=12, leading=17, alignment=TA_CENTER, textColor=NAVY)
     st_sig_title = ParagraphStyle("stt", fontName=font, fontSize=10.5, leading=15, alignment=TA_CENTER, textColor=GREY)
     st_foot = ParagraphStyle("f", fontName=font, fontSize=8.5, leading=12, alignment=TA_CENTER, textColor=GREY)

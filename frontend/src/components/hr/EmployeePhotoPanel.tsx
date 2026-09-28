@@ -40,6 +40,9 @@ export const EmployeePhotoPanel: React.FC<{ employeeId: string; canManage: boole
     <div style={{ marginTop: 12, backgroundColor: '#f8fafc', borderRadius: 10, padding: 10, direction: 'rtl' }} data-testid="hr-photo-panel">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678' }}>🪪 البطاقة الرقمية · {card.kind_label}</div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          {(['png', 'pdf'] as const).map((f) => <button key={f} onClick={async () => { try { const r = await api.get(`/hr/employees/${employeeId}/card/download?fmt=${f}`, { responseType: 'blob' }); const u = URL.createObjectURL(r.data); const a = document.createElement('a'); a.href = u; a.download = `employee-card-${card.number || employeeId}.${f}`; a.click(); setTimeout(() => URL.revokeObjectURL(u), 3000); } catch (e) { alertErr(e); } }} style={btn('#eef4ff', '#1565c0', { padding: '3px 9px', fontSize: 11 })} data-testid={`emp-card-dl-${f}`}>⬇ {f.toUpperCase()}</button>)}
+        </div>
         <a href={card.verify_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: '#1565c0', fontWeight: 700 }} data-testid="hr-photo-verify-link">صفحة التحقق ↗</a>
       </div>
       <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>

@@ -50,6 +50,7 @@ export const LetterSettingsModal: React.FC<{ onClose: () => void }> = ({ onClose
         <Field label="English footer (optional)"><input value={s.footer_en || ''} onChange={set('footer_en')} style={{ ...inp, direction: 'ltr' }} data-testid="letter-footer-en" /></Field>
         <Field label="الهامش العلوي (مم) — مساحة الترويسة في الكليشة"><input type="number" value={s.top_margin_mm} onChange={set('top_margin_mm')} style={inp} data-testid="letter-top-margin" /></Field>
         <Field label="الهامش السفلي (مم) — مساحة التذييل"><input type="number" value={s.bottom_margin_mm} onChange={set('bottom_margin_mm')} style={inp} data-testid="letter-bottom-margin" /></Field>
+        <Field label="خط الخطاب (عريض للطباعة)"><select value={s.font || 'kufi'} onChange={set('font')} style={inp} data-testid="letter-font">{(s.fonts || []).map((f: any) => <option key={f.key} value={f.key}>{f.label}</option>)}</select></Field>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
         <button disabled={busy} onClick={save} style={btn('#1565c0')} data-testid="letter-settings-save">حفظ</button>

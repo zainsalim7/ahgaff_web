@@ -21,7 +21,7 @@ LANGS = {"ar": "عربي", "en": "English"}
 STATUSES = {"pending": "بانتظار الاعتماد", "approved": "معتمد وصادر", "rejected": "مرفوض", "cancelled": "ملغى"}
 SETTINGS_ID = "letters"
 DEFAULT_SETTINGS = {"signer_name": "", "signer_title": "مدير شؤون الموظفين", "signer_name_en": "", "signer_title_en": "Director of Human Resources",
-                    "footer_ar": "", "footer_en": "", "top_margin_mm": 45, "bottom_margin_mm": 35, "letterhead_path": "", "signature_path": ""}
+                    "footer_ar": "", "footer_en": "", "top_margin_mm": 45, "bottom_margin_mm": 35, "letterhead_path": "", "signature_path": "", "font": "kufi"}
 
 
 class RequestIn(BaseModel):
@@ -50,6 +50,7 @@ class SettingsIn(BaseModel):
     footer_en: str = ""
     top_margin_mm: int = 45
     bottom_margin_mm: int = 35
+    font: str = "kufi"
 
 
 def _today():
@@ -225,11 +226,15 @@ async def letter_settings(current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     s = await get_settings(get_db())
-    return {**s, "has_letterhead": bool(s.get("letterhead_path")), "has_signature": bool(s.get("signature_path"))}
+    from .hr_letter_pdf import LETTER_FONTS
+    return {**s, "has_letterhead": bool(s.get("letterhead_path")), "has_signature": bool(s.get("signature_path")), "fonts": [{"key": k, "label": v[2]} for k, v in LETTER_FONTS.items()]}
 
 
 @router.put("/settings")
 async def save_letter_settings(data: SettingsIn, current_user: dict = Depends(get_current_user)):
+    from .hr_letter_pdf import LETTER_FONTS
+    if data.font not in LETTER_FONTS:
+        raise HTTPException(status_code=400, detail="خط غير معروف")
     _guard(current_user, P_MANAGE)
     await get_db().hr_settings.update_one({"_id": SETTINGS_ID}, {"$set": data.model_dump()}, upsert=True)
     return {"message": "تم حفظ إعدادات الخطابات"}

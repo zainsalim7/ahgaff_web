@@ -835,14 +835,29 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
     qr_img = qrcode.make(verify_url, box_size=6, border=1).convert("RGB")
 
     level_ar = LEVEL_AR.get(p.get("level") or 1, str(p.get("level")))
-    rows = [
-        ("رقم القيد", p.get("enrollment_no", "")),
-        ("التخصص", p.get("department_name", "")),
-        ("المستوى", f"المستوى {level_ar}"),
-    ]
-    if (p.get("section") or "").strip():
-        rows.append(("الشعبة", str(p["section"]).strip()))
-    rows.append(("الجنسية", p.get("nationality", "")))
+    is_emp = p.get("kind") in ("employee", "academic")
+    title_ar = p.get("title_ar") or ("بطاقة موظف" if p.get("kind") == "employee" else "بطاقة أكاديمية" if p.get("kind") == "academic" else "بطاقة طالب")
+    title_en = "STAFF ID CARD" if is_emp else "STUDENT ID CARD"
+    if is_emp:
+        rows = [(("رقم أكاديمي" if p.get("kind") == "academic" and p.get("academic_no") else "رقم وظيفي"), p.get("academic_no") or p.get("enrollment_no", ""))]
+        if (p.get("job_title") or "").strip():
+            rows.append(("المسمى", p["job_title"]))
+        if (p.get("org_unit_name") or p.get("department_name") or "").strip():
+            rows.append(("الوحدة" if p.get("kind") == "employee" else "القسم", p.get("org_unit_name") or p.get("department_name")))
+        if (p.get("category_label") or "").strip():
+            rows.append(("الفئة", p["category_label"]))
+        rows.append(("الجنسية", p.get("nationality", "")))
+    else:
+        rows = [
+            ("رقم القيد", p.get("enrollment_no", "")),
+            ("التخصص", p.get("department_name", "")),
+            ("المستوى", f"المستوى {level_ar}"),
+        ]
+        if (p.get("section") or "").strip():
+            rows.append(("الشعبة", str(p["section"]).strip()))
+        rows.append(("الجنسية", p.get("nationality", "")))
+    rows = [(k, v) for k, v in rows if str(v or "").strip()]
+    valid_text = p.get("validity_text") or f"صالحة للعام الجامعي {p.get('academic_year', '')}"
 
     if template == "custom" and p.get("custom_bg_base64"):
         import base64 as _b64
@@ -870,8 +885,8 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
                 center(d, int(el.get("x", 50) / 100 * W), int(el.get("y", 50) / 100 * H), value, F(int(el.get("size", 24))), el.get("color", "#1a2540"))
 
             _txt("name", p.get("student_name", ""))
-            _txt("enrollment", f"رقم القيد: {p.get('enrollment_no', '')}")
-            _txt("dept", f"{p.get('department_name', '')} — المستوى {level_ar}")
+            _txt("enrollment", f"{rows[0][0]}: {rows[0][1]}" if rows else "")
+            _txt("dept", f"{p.get('department_name', '')} — المستوى {level_ar}" if not is_emp else " — ".join(v for k, v in rows[1:3]))
             _txt("year", f"العام الجامعي: {p.get('academic_year', '')}")
             buf = io.BytesIO()
             img.save(buf, format="PNG")
@@ -910,7 +925,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         center(d, W // 2, 281, p.get("faculty_name", ""), F(22), DG)
         # شريط بطاقة طالب
         d.rounded_rectangle([W // 2 - 108, 334, W // 2 + 108, 378], radius=10, fill=DG)
-        center(d, W // 2, 340, "بطاقة طالب", F(24), (255, 255, 255))
+        center(d, W // 2, 340, title_ar, F(24), (255, 255, 255))
         # الصورة بإطار أخضر مزدوج
         py = 404
         d.rounded_rectangle([W // 2 - 114, py - 14, W // 2 + 114, py + 264], radius=14, fill=LG)
@@ -938,7 +953,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         # الشريط السفلي
         d.rectangle([0, H - 64, W, H - 60], fill=DG)
         d.rectangle([0, H - 60, W, H], fill=LG)
-        center(d, W // 2, H - 50, f"صالحة للعام الجامعي {p.get('academic_year', '')}", F(23), DG)
+        center(d, W // 2, H - 50, valid_text, F(23), DG)
     elif not horizontal:
         W, H = 640, 1010
         img = _canvas(W, H, theme["bg"])
@@ -955,7 +970,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         center(d, W // 2 - 170, 76, "UNIVERSITY", F(26), theme["band_text"])
         center(d, W // 2 + 170, 44, "جامعة الأحقاف", F(34), theme["band_text"])
         center(d, W // 2 + 170, 96, p.get("faculty_name", ""), F(22), theme["band_text"])
-        center(d, W // 2, 138, "بطاقة طالب", F(26), theme["band_text"])
+        center(d, W // 2, 138, title_ar, F(26), theme["band_text"])
         # صورة الطالب
         py = 210
         if photo:
@@ -980,7 +995,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         rtl(d, W - 50, H - 158, "من صحة البطاقة", F(20), theme["muted"])
         # شريط الصلاحية
         d.rectangle([0, H - 56, W, H], fill=theme["strip"])
-        center(d, W // 2, H - 46, f"صالحة للعام الجامعي {p.get('academic_year', '')}", F(24), theme["strip_text"])
+        center(d, W // 2, H - 46, valid_text, F(24), theme["strip_text"])
     else:
         W, H = 1010, 640
         theme = THEMES["green"]
@@ -996,7 +1011,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         rtl(d, W - 30, 22, "جامعة الأحقاف", F(32), theme["band_text"])
         rtl(d, W - 30, 70, p.get("faculty_name", ""), F(22), theme["band_text"])
         d.text((30, 28), "AL-AHGAFF UNIVERSITY", font=F(24), fill=theme["band_text"])
-        d.text((30, 66), "STUDENT ID CARD", font=F(20), fill=theme["band_text"])
+        d.text((30, 66), title_en, font=F(20), fill=theme["band_text"])
         # الصورة يميناً
         px, py = W - 290, 160
         if photo:
@@ -1018,7 +1033,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
         img.paste(q, (36, H - 196))
         center(d, 101, H - 226, "امسح للتحقق", F(18), theme["muted"])
         d.rectangle([0, H - 52, W, H], fill=theme["strip"])
-        center(d, W // 2, H - 44, f"صالحة للعام الجامعي {p.get('academic_year', '')}", F(22), theme["strip_text"])
+        center(d, W // 2, H - 44, valid_text, F(22), theme["strip_text"])
 
     buf = io.BytesIO()
     img.save(buf, format="PNG")
@@ -1063,3 +1078,24 @@ async def download_student_card(
     c.save()
     return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
                              headers=export_headers(export_filename(*_card_label, ext="pdf")))
+
+
+@router.get("/cards/preview/{faculty_id}")
+async def card_preview(faculty_id: str, template: str = "green", font: str = DEFAULT_CARD_FONT, current_user: dict = Depends(get_current_user)):
+    """🖼️ معاينة فورية للقالب والخط ببيانات تجريبية (بلا حفظ)"""
+    if not _can_manage(current_user, faculty_id):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if template not in TEMPLATES or font not in CARD_FONTS:
+        raise HTTPException(status_code=400, detail="قالب أو خط غير معروف")
+    db = get_db()
+    fac = None
+    try:
+        fac = await db.faculties.find_one({"_id": ObjectId(faculty_id)}, {"name": 1})
+    except Exception:
+        pass
+    saved = await db.card_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
+    p = {"template": template, "font": font, "student_name": "محمد عبدالله سالم باعباد", "enrollment_no": "20231045", "department_name": "التخصص التجريبي",
+         "faculty_name": (fac or {}).get("name") or "الكلية", "level": 2, "section": "أ", "nationality": "يمني", "academic_year": "2025-2026",
+         "custom_bg_base64": saved.get("custom_bg_base64", ""), "custom_layout": saved.get("custom_layout") or {}}
+    png = _render_card_png(p, None, "https://ahgaff.net/verify-card?token=preview")
+    return StreamingResponse(io.BytesIO(png), media_type="image/png", headers={"Cache-Control": "no-store"})
