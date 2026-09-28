@@ -298,30 +298,124 @@ async def integration_students(p: dict = Depends(_common_params), _k: str = Depe
     if p["active_only"]:
         q["is_active"] = True
 
-    def mapper(s):
-        dept = s.get("department_id")
-        lvl = s.get("level")
+    names = await _org_names(db)
+    return await _paged(db.students, q, p["page"], p["page_size"], lambda s: _student_row(s, names))
+
+
+async def _org_names(db):
+    facs = {str(f["_id"]): (f.get("name") or "") for f in await db.faculties.find({}, {"name": 1}).to_list(500)}
+    depts = {str(d["_id"]): {"name": d.get("name") or "", "faculty_id": str(d.get("faculty_id") or "") or None}
+             for d in await db.departments.find({}, {"name": 1, "faculty_id": 1}).to_list(2000)}
+    return {"faculties": facs, "departments": depts}
+
+
+def _student_row(s, names):
+    dept = s.get("department_id")
+    lvl = s.get("level")
+    dinfo = names["departments"].get(str(dept or ""), {})
+    fac_id = s.get("faculty_id") or dinfo.get("faculty_id")
+    return {
+        "external_student_id": str(s["_id"]),
+        "student_number": s.get("student_id"),
+        "reference_number": s.get("reference_number"),
+        "full_name": s.get("full_name", ""),
+        "gender": s.get("gender"),
+        "email": s.get("email"),
+        "phone": s.get("phone"),
+        "status": s.get("status") or ("active" if s.get("is_active", True) else "inactive"),
+        "is_active": bool(s.get("is_active", True)),
+        "college_id": fac_id,
+        "college_name": names["faculties"].get(str(fac_id or ""), ""),
+        "department_id": dept,
+        "department_name": dinfo.get("name", ""),
+        "program_id": f"prog-{dept}" if dept else None,
+        "program_code": s.get("program_code"),
+        "level_id": f"level-{lvl}" if lvl else None,
+        "level_number": lvl,
+        "section": s.get("section"),
+        "admission_year": s.get("enrollment_year"),
+        "is_alumni": bool(s.get("is_alumni")),
+        "created_at": _iso(s.get("created_at")),
+        "updated_at": _iso(s.get("updated_at") or s.get("status_changed_at")),
+    }
+
+
+# ==================== Student lookup by number (بحث برقم القيد) ====================
+
+@router.get("/students/by-number/{student_number}")
+async def integration_student_by_number(student_number: str, _k: str = Depends(require_service_key)):
+    db = get_db()
+    num = student_number.strip()
+    s = await db.students.find_one({"$or": [{"student_id": num}, {"reference_number": num}]})
+    if not s:
+        raise HTTPException(status_code=404, detail="student_not_found")
+    names = await _org_names(db)
+    row = _student_row(s, names)
+
+    sid = str(s["_id"])
+    enrolls = await db.enrollments.find({"student_id": sid}).to_list(500)
+    cids = [ObjectId(e["course_id"]) for e in enrolls if ObjectId.is_valid(str(e.get("course_id", "")))]
+    courses = await db.courses.find({"_id": {"$in": cids}}).to_list(500) if cids else []
+    tids = [ObjectId(c["teacher_id"]) for c in courses if ObjectId.is_valid(str(c.get("teacher_id", "")))]
+    teachers = {str(t["_id"]): t.get("full_name", "") for t in await db.teachers.find({"_id": {"$in": tids}}, {"full_name": 1}).to_list(500)} if tids else {}
+    sems = {str(x["_id"]): x for x in await db.semesters.find({}, {"name": 1, "academic_year": 1, "status": 1}).to_list(2000)}
+
+    def crow(c):
+        sem = sems.get(str(c.get("semester_id") or ""), {})
         return {
-            "external_student_id": str(s["_id"]),
-            "student_number": s.get("student_id"),
-            "reference_number": s.get("reference_number"),
-            "full_name": s.get("full_name", ""),
-            "gender": s.get("gender"),
-            "status": s.get("status") or ("active" if s.get("is_active", True) else "inactive"),
-            "college_id": s.get("faculty_id"),
-            "department_id": dept,
-            "program_id": f"prog-{dept}" if dept else None,
-            "program_code": s.get("program_code"),
-            "level_id": f"level-{lvl}" if lvl else None,
-            "level_number": lvl,
-            "section": s.get("section"),
-            "admission_year": s.get("enrollment_year"),
-            "is_alumni": bool(s.get("is_alumni")),
-            "created_at": _iso(s.get("created_at")),
-            "updated_at": _iso(s.get("updated_at") or s.get("status_changed_at")),
+            "external_course_id": str(c["_id"]),
+            "course_code": c.get("code"),
+            "course_name_ar": c.get("name", ""),
+            "credit_hours": c.get("credit_hours"),
+            "level_number": c.get("level"),
+            "section": c.get("section"),
+            "teacher_id": c.get("teacher_id"),
+            "teacher_name": teachers.get(str(c.get("teacher_id") or ""), ""),
+            "semester_id": str(c["semester_id"]) if c.get("semester_id") else None,
+            "semester_name": sem.get("name"),
+            "academic_year": c.get("academic_year") or sem.get("academic_year"),
+            "semester_is_active": sem.get("status") == "active",
+            "status": "active" if c.get("is_active", True) else "inactive",
         }
 
-    return await _paged(db.students, q, p["page"], p["page_size"], mapper)
+    row["courses"] = [crow(c) for c in courses]
+    return row
+
+
+# ==================== Sections (الشعب — مشتقة من الطلاب) ====================
+
+@router.get("/sections")
+async def integration_sections(p: dict = Depends(_common_params), _k: str = Depends(require_service_key)):
+    db = get_db()
+    match = {"section": {"$nin": [None, ""]}}
+    if p["active_only"]:
+        match["is_active"] = True
+    pipeline = [
+        {"$match": match},
+        {"$group": {"_id": {"d": "$department_id", "l": "$level", "s": "$section"}, "students_count": {"$sum": 1}}},
+        {"$sort": {"_id.d": 1, "_id.l": 1, "_id.s": 1}},
+    ]
+    rows = await db.students.aggregate(pipeline).to_list(10000)
+    names = await _org_names(db)
+    items = []
+    for r in rows:
+        k = r["_id"]
+        dinfo = names["departments"].get(str(k.get("d") or ""), {})
+        items.append({
+            "external_section_id": f"sec-{k.get('d')}-{k.get('l')}-{k.get('s')}",
+            "department_id": k.get("d"),
+            "department_name": dinfo.get("name", ""),
+            "college_id": dinfo.get("faculty_id"),
+            "college_name": names["faculties"].get(str(dinfo.get("faculty_id") or ""), ""),
+            "level_id": f"level-{k.get('l')}" if k.get("l") else None,
+            "level_number": k.get("l"),
+            "section": k.get("s"),
+            "students_count": r["students_count"],
+        })
+    total = len(items)
+    start = (p["page"] - 1) * p["page_size"]
+    return {"items": items[start:start + p["page_size"]], "page": p["page"], "page_size": p["page_size"],
+            "total": total, "has_more": p["page"] * p["page_size"] < total}
 
 
 # ==================== Enrollments (التسجيلات) ====================
