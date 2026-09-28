@@ -77,6 +77,7 @@
 | backfill-lecture-semesters.tsx | تعبئة فصول المحاضرات القديمة |
 | backfill-sections.tsx | تعبئة الشعب |
 | migrate-courses.tsx | ترحيل مقررات |
+| hr-locations.tsx | مواقع العمل والتحقق الجغرافي (Geofencing): CRUD مواقع بنصف قطر + خريطة Leaflet، تقرير مواقع تسجيل الموظفين، استثناءات (أدمن) — API: /api/hr/locations* |
 | offline-sync.tsx | مزامنة أوفلاين |
 | trash.tsx | سلة المحذوفات (حذف آمن/استعادة) |
 
