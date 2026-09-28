@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { View, Text } from 'react-native';
+import { router } from 'expo-router';
 import { hrAPI } from '../../services/api';
 import { reportPage, ReportEmpty } from '../reports/ReportShell';
 import { Th, td, table, inp, btn, alertErr, Modal, Badge, ATT_COLOR } from './ui';
@@ -89,6 +90,10 @@ export const AttendanceSettings: React.FC<{ meta: any; onSaved: () => void }> = 
           <div><div style={lbl}>الإجازة السنوية الافتراضية (يوم)</div><input type="number" value={s.annual_leave_days} onChange={(e) => set('annual_leave_days', e.target.value)} style={inp} data-testid="att-set-annual" /></div>
         </div>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={!!s.allow_self_checkin} onChange={(e) => set('allow_self_checkin', e.target.checked)} data-testid="att-set-self" /> السماح للموظفين بتسجيل الحضور/الانصراف ذاتياً من «ملفي الإداري»</label>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={s.geofence_required !== false} onChange={(e) => set('geofence_required', e.target.checked)} data-testid="att-set-geofence" /> 📍 التحقق الجغرافي: رفض التسجيل الذاتي خارج مواقع العمل المعتمدة</label>
+          <button onClick={() => router.push('/hr-locations' as any)} style={btn('#eef4ff', '#1565c0', { fontSize: 12 })} data-testid="att-goto-locations">إدارة مواقع العمل والخريطة ←</button>
+        </div>
         <div style={{ ...lbl, marginTop: 16 }}>العطل الرسمية</div>
         {(s.holidays || []).map((h: any, i: number) => (
           <div key={i} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>

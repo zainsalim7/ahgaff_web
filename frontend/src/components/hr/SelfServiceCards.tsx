@@ -12,7 +12,13 @@ export const MyAttendanceCard: React.FC = () => {
   const load = useCallback(async () => { try { setD((await hrAPI.myAttendance()).data); } catch { setD(null); } }, []);
   useEffect(() => { load(); }, [load]);
   if (!d?.profile) return null;
-  const act = async (fn: () => Promise<any>) => { setBusy(true); try { const r = await fn(); window.alert(r.data.message); load(); } catch (e) { alertErr(e); } finally { setBusy(false); } };
+  const act = async (fn: (geo?: any) => Promise<any>) => {
+    setBusy(true);
+    try {
+      const geo = await new Promise<any>((res) => { if (!navigator.geolocation) return res(undefined); navigator.geolocation.getCurrentPosition((p) => res({ latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy }), () => res(undefined), { enableHighAccuracy: true, timeout: 8000, maximumAge: 30000 }); });
+      const r = await fn(geo); window.alert(r.data.message); load();
+    } catch (e) { alertErr(e); } finally { setBusy(false); }
+  };
   const c = d.counts || {};
   return (
     <View style={reportPage.card} testID="hr-me-attendance">
@@ -25,7 +31,8 @@ export const MyAttendanceCard: React.FC = () => {
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {d.today && <Badge color={ATT_COLOR[d.today.status]} testID="hr-me-today-status">{d.today.status_label}</Badge>}
-          {d.can_check_in && <button onClick={() => act(hrAPI.checkIn)} disabled={busy} style={btn('#16a34a')} data-testid="hr-me-checkin-btn">🕐 تسجيل حضور</button>}
+          {d.today?.check_in_geo && <Badge color={({ in_range: '#16a34a', out_of_range: '#dc2626', no_location: '#f97316', exempt: '#7c3aed' } as any)[d.today.check_in_geo.status] || '#94a3b8'} testID="hr-me-today-geo">📍 {d.today.check_in_geo.location_name || d.today.check_in_geo.status_label}</Badge>}
+          {d.can_check_in && <button onClick={() => act(hrAPI.checkIn)} disabled={busy} style={btn('#16a34a')} data-testid="hr-me-checkin-btn">{busy ? '📍 جاري تحديد موقعك…' : '🕐 تسجيل حضور'}</button>}
           {d.can_check_out && <button onClick={() => act(hrAPI.checkOut)} disabled={busy} style={btn('#0f2440')} data-testid="hr-me-checkout-btn">🏁 تسجيل انصراف</button>}
         </div>
       </div>

@@ -11,6 +11,7 @@ from bson import ObjectId
 from .deps import get_db, get_current_user, log_activity, export_headers, export_filename
 from .hr_common import (P_ATTEND, YEMEN_TZ, AR_DAYS, DEFAULT_SETTINGS, _now, _today, _oid, _ser, _can_view, _guard, parse_date, get_hr_settings,
                         is_work_day, holiday_name, find_my_employee, enrich_employee_refs)
+from .hr_locations import GeoIn, evaluate_geo
 
 router = APIRouter(prefix="/hr/attendance", tags=["شؤون الموظفين - الحضور الإداري"])
 
@@ -28,6 +29,7 @@ class SettingsIn(BaseModel):
     allow_self_checkin: bool = True
     annual_leave_days: int = 30
     holidays: List[dict] = []
+    geofence_required: bool = True
 
 
 class Entry(BaseModel):
@@ -320,11 +322,12 @@ async def my_attendance(month: Optional[str] = None, current_user: dict = Depend
     return {"profile": {"id": eid, "full_name": emp.get("full_name", "")}, "date": t, "day_name": AR_DAYS[day.weekday()], "now": now_hm, "is_work_day": is_work_day(day, settings),
             "holiday": holiday_name(day, settings), "on_leave": leaves.get(eid), "today": ({**_ser(today_rec), "status_label": ATT_STATUS.get(today_rec["status"], "")} if today_rec else None),
             "can_check_in": can_in, "can_check_out": can_out, "settings": {k: settings[k] for k in ("work_start", "work_end", "late_grace_minutes", "allow_self_checkin")},
+            "geofence": {"required": bool(settings.get("geofence_required", True)), "exempt": bool(emp.get("geofence_exempt")), "locations_count": await db.hr_locations.count_documents({"is_active": True})},
             "month": m, "records": recs, "counts": counts, "late_minutes": sum(int(r.get("late_minutes") or 0) for r in recs)}
 
 
 @router.post("/check-in")
-async def check_in(current_user: dict = Depends(get_current_user)):
+async def check_in(geo: Optional[GeoIn] = None, current_user: dict = Depends(get_current_user)):
     db = get_db()
     emp = await find_my_employee(db, current_user)
     if not emp:
@@ -340,15 +343,18 @@ async def check_in(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="أنت في إجازة معتمدة اليوم")
     if await db.hr_attendance.find_one({"employee_id": eid, "date": t}):
         raise HTTPException(status_code=400, detail="تم تسجيل حضورك اليوم بالفعل")
+    geo_rec = await evaluate_geo(db, emp, geo, settings)
     now_hm = datetime.now(YEMEN_TZ).strftime("%H:%M")
     late = _late(now_hm, settings)
-    doc = {"employee_id": eid, "date": t, "status": "late" if late else "present", "check_in": now_hm, "check_out": None, "late_minutes": late, "note": "", "source": "self", "by_name": current_user.get("full_name", ""), "created_at": _now(), "updated_at": _now()}
+    doc = {"employee_id": eid, "date": t, "status": "late" if late else "present", "check_in": now_hm, "check_out": None, "late_minutes": late, "note": "", "source": "self", "by_name": current_user.get("full_name", ""),
+           "check_in_geo": geo_rec, "created_at": _now(), "updated_at": _now()}
     await db.hr_attendance.insert_one(doc)
-    return {"check_in": now_hm, "status": doc["status"], "late_minutes": late, "message": f"تم تسجيل الحضور {now_hm}" + (f" — متأخر {late} دقيقة" if late else "")}
+    loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else (" — بدون موقع" if geo_rec["status"] == "no_location" else "")
+    return {"check_in": now_hm, "status": doc["status"], "late_minutes": late, "location": geo_rec, "message": f"تم تسجيل الحضور {now_hm}" + (f" — متأخر {late} دقيقة" if late else "") + loc}
 
 
 @router.post("/check-out")
-async def check_out(current_user: dict = Depends(get_current_user)):
+async def check_out(geo: Optional[GeoIn] = None, current_user: dict = Depends(get_current_user)):
     db = get_db()
     emp = await find_my_employee(db, current_user)
     if not emp:
@@ -359,6 +365,8 @@ async def check_out(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=400, detail="لم يُسجَّل حضورك اليوم")
     if rec.get("check_out"):
         raise HTTPException(status_code=400, detail="تم تسجيل الانصراف بالفعل")
+    geo_rec = await evaluate_geo(db, emp, geo, await get_hr_settings(db))
     now_hm = datetime.now(YEMEN_TZ).strftime("%H:%M")
-    await db.hr_attendance.update_one({"_id": rec["_id"]}, {"$set": {"check_out": now_hm, "updated_at": _now()}})
-    return {"check_out": now_hm, "message": f"تم تسجيل الانصراف {now_hm}"}
+    await db.hr_attendance.update_one({"_id": rec["_id"]}, {"$set": {"check_out": now_hm, "check_out_geo": geo_rec, "updated_at": _now()}})
+    loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else ""
+    return {"check_out": now_hm, "location": geo_rec, "message": f"تم تسجيل الانصراف {now_hm}{loc}"}
