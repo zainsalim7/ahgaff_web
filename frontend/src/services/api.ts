@@ -783,6 +783,14 @@ export const hrAPI = {
   geoExemptions: () => api.get('/hr/locations/exemptions'),
   setGeoExemption: (employeeId: string, exempt: boolean, reason = '') => api.put(`/hr/locations/exemptions/${employeeId}`, { exempt, reason }),
   locationsReport: (date?: string) => api.get('/hr/locations/report', { params: date ? { date } : {} }),
+  // تأكيد التواجد العشوائي
+  presenceSettings: () => api.get('/hr/presence-check/settings'),
+  savePresenceSettings: (data: any) => api.put('/hr/presence-check/settings', data),
+  presenceSendNow: (employee_ids: string[], timeout_minutes?: number) => api.post('/hr/presence-check/send-now', { employee_ids, timeout_minutes }),
+  presenceReport: (date?: string) => api.get('/hr/presence-check/report', { params: date ? { date } : {} }),
+  presenceRunNow: () => api.post('/hr/presence-check/run-now'),
+  myPresence: () => api.get('/hr/presence-check/my'),
+  confirmPresence: (id: string, data: any) => api.post(`/hr/presence-check/${id}/confirm`, data),
   // المراسلات
   corrMeta: () => api.get('/hr/correspondence/meta'),
   corrList: (params?: any) => api.get('/hr/correspondence', { params }),

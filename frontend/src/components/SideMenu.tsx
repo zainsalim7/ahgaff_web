@@ -145,6 +145,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES] },
   { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-locations', label: 'مواقع العمل (Geofencing)', icon: 'location', path: '/hr-locations', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE] },
+  { id: 'hr-presence-checks', label: 'تأكيد التواجد العشوائي', icon: 'notifications', path: '/hr-presence-checks', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-correspondence', label: 'المراسلات والتعاميم', icon: 'mail-open', path: '/hr-correspondence', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_CORRESPONDENCE] },
   { id: 'hr-annual-report', label: 'التقرير السنوي HR', icon: 'stats-chart', path: '/hr-annual-report', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
   { id: 'hr-letters', label: 'الخطابات الرسمية', icon: 'document-text', path: '/hr-letters', permissions: [], forAll: true },
