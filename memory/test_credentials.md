@@ -82,3 +82,5 @@
 - Username: EMP-200 / Password: EMP-200  (مدير تجريبي — يرى "طلبات فريقي" في /hr-my-leaves)
 - Note: must_change_password=true but not enforced on web.
 - EMP-300 / EMP-300 (موظف تجريبي ثالث — بلا دور إداري حالياً؛ يمكن إسناد دور من درج الموظف)
+
+> ⚠️ تنبيه للاختبار: إنشاء/تعديل موظف مرتبط بحساب admin عبر `PUT /hr/employees/{id}` يُزامن `full_name` إلى حساب المستخدم — لا تنشئ موظفاً باسم اختباري مرتبطاً بـ admin عبر API (أنشئه مباشرة في Mongo واحذفه). اسم admin الصحيح: «مدير النظام».

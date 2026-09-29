@@ -227,6 +227,7 @@ from routes.hr_profile_requests import router as hr_profile_requests_router
 from routes.hr_locations import router as hr_locations_router
 from routes.hr_presence import router as hr_presence_router, presence_check_loop
 from routes.hr_shifts import router as hr_shifts_router
+from routes.app_versions import router as app_versions_router
 from routes.hr_documents import router as hr_documents_router
 from routes.hr_reports import router as hr_reports_router
 from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
@@ -11059,28 +11060,6 @@ async def get_course_stats(course_id: str, current_user: dict = Depends(get_curr
 
 # ==================== Offline Sync Routes ====================
 
-APP_VERSIONS = {
-    "teacher": {"latest_version": "2.0.0", "min_supported_version": "1.0.0"},
-    "student": {"latest_version": "1.0.0", "min_supported_version": "1.0.0"},
-}
-
-
-@api_router.get("/app-version/{app_name}")
-async def get_app_version(app_name: str):
-    info = APP_VERSIONS.get(app_name)
-    if not info:
-        raise HTTPException(status_code=404, detail="تطبيق غير معروف")
-    return {
-        "app": app_name, **info,
-        "security": {
-            "offline_window_hours": OFFLINE_SYNC_MAX_HOURS,
-            "lecture_window_check": True,
-            "patch": "attendance-time-guard-v1",
-        },
-        "server_time": get_yemen_time().isoformat(),
-    }
-
-
 @api_router.post("/sync/attendance")
 async def sync_offline_attendance(
     data: OfflineSyncData,
@@ -17939,6 +17918,7 @@ app.include_router(hr_profile_requests_router, prefix="/api")
 app.include_router(hr_locations_router, prefix="/api")
 app.include_router(hr_presence_router, prefix="/api")
 app.include_router(hr_shifts_router, prefix="/api")
+app.include_router(app_versions_router, prefix="/api")
 app.include_router(hr_letters_router, prefix="/api")
 app.include_router(hr_letters_public_router, prefix="/api")
 app.include_router(hr_cards_router, prefix="/api")
