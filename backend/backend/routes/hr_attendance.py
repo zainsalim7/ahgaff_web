@@ -104,6 +104,38 @@ async def put_settings(data: SettingsIn, current_user: dict = Depends(get_curren
     return {"message": "تم حفظ إعدادات الدوام", "settings": await get_hr_settings(db)}
 
 
+
+def _minutes_since(hm: Optional[str]) -> Optional[int]:
+    if not hm:
+        return None
+    now = datetime.now(YEMEN_TZ)
+    return (now.hour * 60 + now.minute) - _hm(hm, "الوقت")
+
+
+def _correction_state(settings: dict, recs: list) -> dict:
+    """هل يمكن للموظف تصحيح آخر حضور/انصراف الآن؟ (ضمن فترة السماح من الإعدادات)"""
+    enabled = bool(settings.get("correction_enabled", True))
+    win = int(settings.get("correction_window_minutes", 10))
+    self_recs = [r for r in recs if r.get("source") == "self"]
+    open_rec = next((r for r in self_recs if not r.get("check_out")), None)
+    last_out = max((r for r in self_recs if r.get("check_out")), key=lambda r: r["check_out"], default=None)
+    m_in = _minutes_since(open_rec["check_in"]) if open_rec else None
+    m_out = _minutes_since(last_out["check_out"]) if last_out else None
+    can_in = enabled and m_in is not None and 0 <= m_in < win
+    can_out = enabled and m_out is not None and 0 <= m_out < win and not open_rec
+    return {"enabled": enabled, "window_minutes": win, "can_correct_check_in": can_in, "can_correct_check_out": can_out,
+            "check_in_seconds_left": max(0, (win - m_in) * 60) if can_in else 0, "check_out_seconds_left": max(0, (win - m_out) * 60) if can_out else 0,
+            "_open": open_rec, "_last_out": last_out}
+
+
+def _require_correction(settings: dict, minutes: Optional[int]):
+    if not settings.get("correction_enabled", True):
+        raise HTTPException(status_code=400, detail="خاصية التصحيح غير مفعّلة")
+    win = int(settings.get("correction_window_minutes", 10))
+    if minutes is None or minutes < 0 or minutes >= win:
+        raise HTTPException(status_code=400, detail=f"انتهت فترة التصحيح ({win} دقائق)")
+
+
 def _rec_shift(r: dict, shifts: list) -> str:
     """فترة السجل؛ السجلات القديمة بلا shift_id تُنسب للفترة الأولى للموظف"""
     return r.get("shift_id") or shifts[0]["id"]
@@ -361,6 +393,7 @@ async def my_attendance(month: Optional[str] = None, current_user: dict = Depend
             "shifts": shifts, "today_shifts": shift_rows, "next_shift": next_shift, "multi_shift": len(settings["shifts"]) > 1,
             "can_check_in": can_in, "can_check_out": can_out, "settings": {k: settings[k] for k in ("work_start", "work_end", "late_grace_minutes", "allow_self_checkin")},
             "geofence": {"required": bool(settings.get("geofence_required", True)), "exempt": bool(emp.get("geofence_exempt")), "locations_count": await db.hr_locations.count_documents({"is_active": True})},
+            "correction": {k: v for k, v in _correction_state(settings, today_recs).items() if not k.startswith("_")},
             "month": m, "records": recs, "counts": counts, "late_minutes": sum(int(r.get("late_minutes") or 0) for r in recs)}
 
 
@@ -381,6 +414,15 @@ async def check_in(geo: Optional[GeoIn] = None, current_user: dict = Depends(get
         raise HTTPException(status_code=400, detail="أنت في إجازة معتمدة اليوم")
     shifts = employee_shifts(emp, settings)
     today_recs = await db.hr_attendance.find({"employee_id": eid, "date": t}).to_list(10)
+    if geo is not None and geo.correction:
+        st = _correction_state(settings, today_recs)
+        open_rec = st["_open"]
+        if not open_rec:
+            raise HTTPException(status_code=400, detail="لا يوجد حضور حديث لتصحيحه")
+        _require_correction(settings, _minutes_since(open_rec["check_in"]))
+        await db.hr_attendance.delete_one({"_id": open_rec["_id"]})
+        await log_activity(current_user, "hr_att_correct_checkin", "hr_attendance", str(open_rec["_id"]), f"حذف حضور {open_rec['check_in']} لتصحيحه")
+        today_recs = [r for r in today_recs if r["_id"] != open_rec["_id"]]
     if any(not r.get("check_out") for r in today_recs):
         raise HTTPException(status_code=400, detail="لديك حضور مفتوح — سجّل الانصراف أولاً")
     done_ids = {_rec_shift(r, shifts) for r in today_recs}
@@ -406,12 +448,22 @@ async def check_out(geo: Optional[GeoIn] = None, current_user: dict = Depends(ge
     if not emp:
         raise HTTPException(status_code=404, detail="لا يوجد ملف إداري مرتبط بحسابك")
     t = _today()
+    settings = await get_hr_settings(db)
+    if geo is not None and geo.correction:
+        recs = await db.hr_attendance.find({"employee_id": str(emp["_id"]), "date": t}).to_list(10)
+        st = _correction_state(settings, recs)
+        last = st["_last_out"]
+        if st["_open"] or not last:
+            raise HTTPException(status_code=400, detail="لا يوجد انصراف حديث لتصحيحه")
+        _require_correction(settings, _minutes_since(last["check_out"]))
+        await db.hr_attendance.update_one({"_id": last["_id"]}, {"$set": {"check_out": None, "check_out_geo": None, "updated_at": _now()}})
+        await log_activity(current_user, "hr_att_correct_checkout", "hr_attendance", str(last["_id"]), f"إلغاء انصراف {last['check_out']} لتصحيحه")
     rec = await db.hr_attendance.find_one({"employee_id": str(emp["_id"]), "date": t, "check_out": None}, sort=[("check_in", -1)])
     if not rec:
         if await db.hr_attendance.find_one({"employee_id": str(emp["_id"]), "date": t}):
             raise HTTPException(status_code=400, detail="تم تسجيل الانصراف بالفعل")
         raise HTTPException(status_code=400, detail="لم يُسجَّل حضورك اليوم")
-    geo_rec = await evaluate_geo(db, emp, geo, await get_hr_settings(db))
+    geo_rec = await evaluate_geo(db, emp, geo, settings)
     now_hm = datetime.now(YEMEN_TZ).strftime("%H:%M")
     await db.hr_attendance.update_one({"_id": rec["_id"]}, {"$set": {"check_out": now_hm, "check_out_geo": geo_rec, "updated_at": _now()}})
     loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else ""

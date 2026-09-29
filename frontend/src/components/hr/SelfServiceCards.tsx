@@ -35,6 +35,8 @@ export const MyAttendanceCard: React.FC = () => {
           {d.today?.check_in_geo && <Badge color={({ in_range: '#16a34a', out_of_range: '#dc2626', no_location: '#f97316', exempt: '#7c3aed' } as any)[d.today.check_in_geo.status] || '#94a3b8'} testID="hr-me-today-geo">📍 {d.today.check_in_geo.location_name || d.today.check_in_geo.status_label}</Badge>}
           {d.can_check_in && <button onClick={() => act(hrAPI.checkIn)} disabled={busy} style={btn('#16a34a')} data-testid="hr-me-checkin-btn">{busy ? '📍 جاري تحديد موقعك…' : `🕐 تسجيل حضور${d.multi_shift && d.next_shift ? ` (${d.next_shift.name})` : ''}`}</button>}
           {d.can_check_out && <button onClick={() => act(hrAPI.checkOut)} disabled={busy} style={btn('#0f2440')} data-testid="hr-me-checkout-btn">🏁 تسجيل انصراف</button>}
+          {d.correction?.can_correct_check_in && <button onClick={() => window.confirm(`سيُحذف حضورك المسجَّل ويُسجَّل حضور جديد بالوقت الحالي. متابعة؟`) && act((g) => hrAPI.checkIn({ ...(g || {}), correction: true }))} disabled={busy} style={btn('#fff7ed', '#c2410c')} data-testid="hr-me-correct-checkin-btn">↩️ تصحيح الحضور ({Math.ceil(d.correction.check_in_seconds_left / 60)} د متبقية)</button>}
+          {d.correction?.can_correct_check_out && <button onClick={() => window.confirm(`سيُلغى انصرافك المسجَّل ويُسجَّل انصراف جديد بالوقت الحالي. متابعة؟`) && act((g) => hrAPI.checkOut({ ...(g || {}), correction: true }))} disabled={busy} style={btn('#fff7ed', '#c2410c')} data-testid="hr-me-correct-checkout-btn">↩️ تصحيح الانصراف ({Math.ceil(d.correction.check_out_seconds_left / 60)} د متبقية)</button>}
         </div>
       </div>
       <div style={{ display: 'flex', gap: 6, marginTop: 10, direction: 'rtl', flexWrap: 'wrap', fontSize: 11.5 }}>

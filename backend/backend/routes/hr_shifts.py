@@ -20,6 +20,8 @@ class GeneralIn(BaseModel):
     allow_self_checkin: bool = True
     geofence_required: bool = True
     annual_leave_days: int = 30
+    correction_enabled: bool = True
+    correction_window_minutes: int = 10
 
 
 class ShiftIn(BaseModel):
@@ -98,6 +100,8 @@ async def put_general(data: GeneralIn, current_user: dict = Depends(get_current_
         raise HTTPException(status_code=400, detail="أيام العمل غير صحيحة")
     if not (0 <= data.annual_leave_days <= 120):
         raise HTTPException(status_code=400, detail="أيام الإجازة السنوية بين 0 و120")
+    if not (1 <= data.correction_window_minutes <= 120):
+        raise HTTPException(status_code=400, detail="فترة التصحيح بين 1 و120 دقيقة")
     hol = []
     for h in data.holidays:
         if not h.get("date"):

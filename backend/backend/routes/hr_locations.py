@@ -28,6 +28,7 @@ class GeoIn(BaseModel):
     longitude: Optional[float] = None
     accuracy: Optional[float] = None
     location_id: Optional[str] = None
+    correction: bool = False
 
 
 class ExemptIn(BaseModel):

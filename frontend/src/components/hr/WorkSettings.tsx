@@ -15,7 +15,7 @@ export const WorkGeneralSettings: React.FC<{ data: any; onSaved: (s: any) => voi
   useEffect(() => setS(data), [data]);
   const set = (k: string, v: any) => setS((p: any) => ({ ...p, [k]: v }));
   const toggleDay = (d: string) => set('work_days', s.work_days.includes(d) ? s.work_days.filter((x: string) => x !== d) : [...s.work_days, d]);
-  const save = async () => { setBusy(true); try { const r = await hrAPI.saveWorkGeneral({ work_days: s.work_days, holidays: s.holidays || [], allow_self_checkin: !!s.allow_self_checkin, geofence_required: s.geofence_required !== false, annual_leave_days: Number(s.annual_leave_days) }); window.alert(r.data.message); onSaved(r.data.settings); } catch (e) { alertErr(e); } finally { setBusy(false); } };
+  const save = async () => { setBusy(true); try { const r = await hrAPI.saveWorkGeneral({ work_days: s.work_days, holidays: s.holidays || [], allow_self_checkin: !!s.allow_self_checkin, geofence_required: s.geofence_required !== false, annual_leave_days: Number(s.annual_leave_days), correction_enabled: s.correction_enabled !== false, correction_window_minutes: Number(s.correction_window_minutes) || 10 }); window.alert(r.data.message); onSaved(r.data.settings); } catch (e) { alertErr(e); } finally { setBusy(false); } };
   return (
     <View style={[reportPage.card, { marginBottom: 12 }]} testID="work-general">
       <div style={{ direction: 'rtl' }}>
@@ -26,6 +26,8 @@ export const WorkGeneralSettings: React.FC<{ data: any; onSaved: (s: any) => voi
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10 }}>
           <div><div style={lbl}>الإجازة السنوية الافتراضية (يوم)</div><input type="number" value={s.annual_leave_days} onChange={(e) => set('annual_leave_days', e.target.value)} style={inp} disabled={!s.can_edit} data-testid="att-set-annual" /></div>
+          <div><div style={lbl}>فترة السماح بتصحيح الحضور/الانصراف (دقيقة)</div><input type="number" min={1} max={120} value={s.correction_window_minutes ?? 10} onChange={(e) => set('correction_window_minutes', e.target.value)} style={inp} disabled={!s.can_edit || s.correction_enabled === false} data-testid="att-set-correction-window" /></div>
+          <div style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'flex-end' }}><label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, cursor: 'pointer', paddingBottom: 8 }}><input type="checkbox" checked={s.correction_enabled !== false} onChange={(e) => set('correction_enabled', e.target.checked)} disabled={!s.can_edit} data-testid="att-set-correction-enabled" /> ↩️ السماح للموظف بتصحيح تسجيل خاطئ خلال فترة السماح (يحذف الحضور الخاطئ أو يلغي الانصراف ويعيد التسجيل)</label></div>
         </div>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 12, fontSize: 13, cursor: 'pointer' }}><input type="checkbox" checked={!!s.allow_self_checkin} onChange={(e) => set('allow_self_checkin', e.target.checked)} disabled={!s.can_edit} data-testid="att-set-self" /> السماح للموظفين بتسجيل الحضور/الانصراف ذاتياً من التطبيق و«ملفي الإداري»</label>
         <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginTop: 10 }}>
