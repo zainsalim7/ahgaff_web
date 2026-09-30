@@ -26,7 +26,7 @@ export const MyAttendanceCard: React.FC = () => {
         <div>
           <div style={{ fontSize: 14, fontWeight: 800, color: '#0f2440' }}>حضوري اليوم — {d.day_name} {d.date}</div>
           <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>
-            {!d.is_work_day ? (d.holiday || 'عطلة أسبوعية') : d.on_leave ? `أنت في إجازة ${d.on_leave}` : d.today ? <>حضور <b>{d.today.check_in}</b>{d.today.check_out ? <> · انصراف <b>{d.today.check_out}</b></> : null}{d.today.late_minutes ? <span style={{ color: '#f97316' }}> · تأخير {d.today.late_minutes} د</span> : null}</> : `الدوام ${d.settings.work_start} – ${d.settings.work_end} (سماحية ${d.settings.late_grace_minutes} د)`}
+            {!d.is_work_day ? (d.holiday || 'عطلة أسبوعية') : d.on_leave ? `أنت في إجازة ${d.on_leave}` : d.today ? <>حضور <b>{d.today.check_in}</b>{d.today.check_out ? <> · انصراف <b>{d.today.check_out}</b>{d.today.auto_checkout ? <span style={{ color: '#7c3aed' }}> (تلقائي)</span> : null}</> : null}{d.today.late_minutes ? <span style={{ color: '#f97316' }}> · تأخير {d.today.late_minutes} د</span> : null}</> : `الدوام ${d.settings.work_start} – ${d.settings.work_end} (سماحية ${d.settings.late_grace_minutes} د)`}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

@@ -217,7 +217,7 @@ from routes.lectures_purge import router as lectures_purge_router
 from routes.day_shift import router as day_shift_router
 from routes.hr import router as hr_router
 from routes.hr_leaves import router as hr_leaves_router
-from routes.hr_attendance import router as hr_attendance_router
+from routes.hr_attendance import router as hr_attendance_router, auto_checkout_loop
 from routes.hr_correspondence import router as hr_corr_router
 from routes.hr_tasks import router as hr_tasks_router
 from routes.hr_appraisals import router as hr_appraisals_router, public_router as hr_verify_router
@@ -17984,6 +17984,7 @@ async def startup_event():
     # 🏢 تنبيهات شؤون الموظفين (يومي 08:00 + أسبوعي السبت)
     asyncio.create_task(hr_alerts_loop())
     asyncio.create_task(presence_check_loop())
+    asyncio.create_task(auto_checkout_loop())
     # تهيئة خدمة التخزين
     try:
         from services.storage_service import init_storage

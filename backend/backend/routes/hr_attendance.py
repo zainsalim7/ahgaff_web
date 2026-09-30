@@ -469,3 +469,67 @@ async def check_out(geo: Optional[GeoIn] = None, current_user: dict = Depends(ge
     loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else ""
     shift_txt = f" ({rec['shift_name']})" if rec.get("shift_name") else ""
     return {"check_out": now_hm, "location": geo_rec, "shift_id": rec.get("shift_id"), "message": f"تم تسجيل الانصراف {now_hm}{shift_txt}{loc}"}
+
+
+# ══════════════ 🤖 الانصراف التلقائي ══════════════
+
+def _geo_text(g: Optional[dict]) -> str:
+    if not g:
+        return "لا يوجد موقع مسجَّل"
+    parts = [g.get("location_name") or g.get("status_label") or ""]
+    if g.get("latitude") is not None and g.get("longitude") is not None:
+        parts.append(f"({g['latitude']:.5f}, {g['longitude']:.5f})")
+    return " ".join(p for p in parts if p).strip() or "غير معروف"
+
+
+async def auto_checkout_tick(db) -> int:
+    """يُصرِّف تلقائياً كل سجل حضور مفتوح تجاوزت مهلته نهاية فترته + المهلة المحددة في الإعدادات"""
+    settings = await get_hr_settings(db)
+    if not settings.get("auto_checkout_enabled"):
+        return 0
+    after = int(settings.get("auto_checkout_after_minutes") or 60)
+    now = datetime.now(YEMEN_TZ)
+    shifts = {sh["id"]: sh for sh in settings["shifts"]}
+    main = settings["shifts"][0]
+    done = 0
+    async for r in db.hr_attendance.find({"check_in": {"$ne": None}, "check_out": None, "date": {"$lte": now.strftime("%Y-%m-%d")}}):
+        sh = shifts.get(r.get("shift_id")) or main
+        try:
+            end_dt = datetime.strptime(f"{r['date']} {sh['work_end']}", "%Y-%m-%d %H:%M").replace(tzinfo=YEMEN_TZ)
+        except Exception:
+            continue
+        if now < end_dt + timedelta(minutes=after):
+            continue
+        stamp = now.strftime("%Y-%m-%d %H:%M")
+        geo_in = r.get("check_in_geo")
+        note = f"انصراف تلقائي بواسطة النظام في {stamp} (لم يُسجَّل انصراف خلال {after} د بعد نهاية الفترة {sh['work_end']}) — آخر موقع معروف عند الحضور: {_geo_text(geo_in)}"
+        prev = (r.get("note") or "").strip()
+        out_hm = sh["work_end"] if (r.get("check_in") or "") <= sh["work_end"] else r["check_in"]
+        await db.hr_attendance.update_one({"_id": r["_id"], "check_out": None}, {"$set": {
+            "check_out": out_hm, "check_out_source": "auto", "auto_checkout": True, "auto_checkout_at": stamp,
+            "check_out_geo": {"status": "auto", "status_label": "انصراف تلقائي", "in_range": False, "location_name": (geo_in or {}).get("location_name", ""),
+                              "latitude": (geo_in or {}).get("latitude"), "longitude": (geo_in or {}).get("longitude")},
+            "note": f"{prev} | {note}" if prev else note, "updated_at": _now()}})
+        done += 1
+    return done
+
+
+async def auto_checkout_loop():
+    import asyncio, logging
+    await asyncio.sleep(60)
+    while True:
+        try:
+            n = await auto_checkout_tick(get_db())
+            if n:
+                logging.info(f"HR auto check-out: {n} record(s)")
+        except Exception as e:
+            logging.error(f"auto checkout loop error: {e}")
+        await asyncio.sleep(300)
+
+
+@router.post("/auto-checkout/run")
+async def run_auto_checkout(current_user: dict = Depends(get_current_user)):
+    """تشغيل فوري للانصراف التلقائي (للمشرف)"""
+    _guard(current_user, P_ATTEND)
+    n = await auto_checkout_tick(get_db())
+    return {"count": n, "message": f"تم الانصراف التلقائي لـ {n} سجل" if n else "لا توجد سجلات مستحقة للانصراف التلقائي"}

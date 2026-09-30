@@ -22,6 +22,8 @@ class GeneralIn(BaseModel):
     annual_leave_days: int = 30
     correction_enabled: bool = True
     correction_window_minutes: int = 10
+    auto_checkout_enabled: bool = False
+    auto_checkout_after_minutes: int = 60
 
 
 class ShiftIn(BaseModel):
@@ -102,6 +104,8 @@ async def put_general(data: GeneralIn, current_user: dict = Depends(get_current_
         raise HTTPException(status_code=400, detail="أيام الإجازة السنوية بين 0 و120")
     if not (1 <= data.correction_window_minutes <= 120):
         raise HTTPException(status_code=400, detail="فترة التصحيح بين 1 و120 دقيقة")
+    if not (5 <= data.auto_checkout_after_minutes <= 720):
+        raise HTTPException(status_code=400, detail="مهلة الانصراف التلقائي بين 5 و720 دقيقة بعد نهاية الفترة")
     hol = []
     for h in data.holidays:
         if not h.get("date"):

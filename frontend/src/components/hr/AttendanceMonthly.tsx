@@ -58,7 +58,7 @@ export const AttendanceMonthly: React.FC<{ units: any[]; meta: any }> = ({ units
       <Modal title={`سجل ${detail.emp.employee_name} — ${detail.month}`} onClose={() => setDetail(null)} width={560} testID="att-emp-detail">
         {detail.records.length === 0 ? <div style={{ color: '#94a3b8', textAlign: 'center', padding: 16 }}>لا توجد سجلات مسجّلة هذا الشهر</div> : (
           <table style={table}><Th cols={['التاريخ', 'الحالة', 'حضور', 'انصراف', 'تأخير', 'ملاحظة', 'المصدر']} /><tbody>
-            {detail.records.map((r: any) => <tr key={r.id} style={{ borderBottom: '1px solid #eef2f7' }}><td style={{ ...td, direction: 'ltr', textAlign: 'right' }}>{r.date}</td><td style={td}><Badge color={ATT_COLOR[r.status]}>{r.status_label}</Badge></td><td style={td}>{r.check_in || '—'}</td><td style={td}>{r.check_out || '—'}</td><td style={td}>{r.late_minutes || '—'}</td><td style={td}>{r.note || '—'}</td><td style={{ ...td, fontSize: 11, color: '#94a3b8' }}>{{ self: 'ذاتي', manual: 'يدوي', bulk: 'جماعي' }[r.source as string] || r.source}</td></tr>)}
+            {detail.records.map((r: any) => <tr key={r.id} style={{ borderBottom: '1px solid #eef2f7' }}><td style={{ ...td, direction: 'ltr', textAlign: 'right' }}>{r.date}</td><td style={td}><Badge color={ATT_COLOR[r.status]}>{r.status_label}</Badge></td><td style={td}>{r.check_in || '—'}</td><td style={td}>{r.check_out || '—'}{r.auto_checkout ? <Badge color="#7c3aed"> 🤖 تلقائي</Badge> : null}</td><td style={td}>{r.late_minutes || '—'}</td><td style={td}>{r.note || '—'}</td><td style={{ ...td, fontSize: 11, color: '#94a3b8' }}>{{ self: 'ذاتي', manual: 'يدوي', bulk: 'جماعي' }[r.source as string] || r.source}</td></tr>)}
           </tbody></table>
         )}
       </Modal>
