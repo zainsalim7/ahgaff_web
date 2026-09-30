@@ -229,6 +229,7 @@ from routes.hr_presence import router as hr_presence_router, presence_check_loop
 from routes.hr_shifts import router as hr_shifts_router
 from routes.app_versions import router as app_versions_router
 from routes.hr_documents import router as hr_documents_router
+from routes.hr_home import router as hr_home_router
 from routes.hr_reports import router as hr_reports_router
 from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
 from routes.schedule_integrity import router as schedule_integrity_router
@@ -17931,6 +17932,7 @@ app.include_router(hr_tasks_router, prefix="/api")
 app.include_router(hr_appraisals_router, prefix="/api")
 app.include_router(hr_verify_router, prefix="/api")
 app.include_router(hr_documents_router, prefix="/api")
+app.include_router(hr_home_router, prefix="/api")
 app.include_router(hr_reports_router, prefix="/api")
 app.include_router(hr_alerts_router, prefix="/api")
 app.include_router(schedule_integrity_router, prefix="/api")

@@ -116,8 +116,8 @@ export default function BatchPrintScreen() {
     }
   };
 
-  const NumField = ({ label, k }: { label: string; k: string }) => (
-    <View style={{ flex: 1, minWidth: 100 }}>
+  const numField = (label: string, k: string) => (
+    <View key={k} style={{ flex: 1, minWidth: 100 }}>
       <Text style={styles.label}>{label}</Text>
       <TextInput
         value={String(st[k])}
@@ -211,20 +211,20 @@ export default function BatchPrintScreen() {
 
             <Text style={styles.sectionTitle}>مقاس البطاقة (ملم)</Text>
             <View style={styles.fieldsRow}>
-              <NumField label="العرض" k="card_w" />
-              <NumField label="الارتفاع" k="card_h" />
+              {numField("العرض", "card_w")}
+              {numField("الارتفاع", "card_h")}
             </View>
 
             <Text style={styles.sectionTitle}>موضع البطاقة الأولى (العلوية)</Text>
             <View style={styles.fieldsRow}>
-              <NumField label="من اليسار (X)" k="card1_x" />
-              <NumField label="من الأعلى (Y)" k="card1_y" />
+              {numField("من اليسار (X)", "card1_x")}
+              {numField("من الأعلى (Y)", "card1_y")}
             </View>
 
             <Text style={styles.sectionTitle}>موضع البطاقة الثانية (السفلية)</Text>
             <View style={styles.fieldsRow}>
-              <NumField label="من اليسار (X)" k="card2_x" />
-              <NumField label="من الأعلى (Y)" k="card2_y" />
+              {numField("من اليسار (X)", "card2_x")}
+              {numField("من الأعلى (Y)", "card2_y")}
             </View>
 
             {!!msg && <Text style={styles.msg} testID="print-msg">{msg}</Text>}
