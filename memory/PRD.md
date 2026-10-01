@@ -554,3 +554,10 @@
 - **ملخص الرئيسة للتطبيق**: `routes/hr_home.py` → `GET /hr/home/summary` (has_profile, profile, attendance today/counts, leaves balance/pending, tasks open/overdue, circulars unacknowledged, messages open/replied).
 - ⏳ **معلّق بانتظار المستخدم**: تصميم رئيسة تطبيق الموظف/الأستاذ (شبكة أيقونات: دوامي/إجازاتي/راتبي قريباً/مهامي/تعاميم الإدارة/مراسلاتي) — المستخدم أوضح أن التنفيذ لمطوّر التطبيق؛ سؤال ask_human (Handoff MD أم + Mockup؟ إبقاء Backend؟ نفس الشبكة للأستاذ؟) لم يُجب بعد. لم تُنفَّذ أي واجهة ويب لمراسلات الموظف/ردّ HR بعد.
 - **وثائق التسليم عبر رابط**: `routes/handoffs.py` → `GET /api/handoffs` (فهرس HTML) · `GET /api/handoffs/{NAME}` (Markdown→HTML بخط Tajawal) · `GET /api/handoffs/{NAME}.md` (خام). الملفات تُقرأ من `backend/backend/handoffs/*.md` (نسخة من `/app/memory/handoffs/` — **عند تعديل أي وثيقة انسخها للمجلدين**). مكتبة `markdown` أُضيفت لـ requirements.
+
+## 2026-10-01: 📸 صور البطاقات — إصلاح الرابط + قائمة المعتمدة ✅
+- **السبب الجذري** لعدم ظهور الصورة في تطبيق الموظف: `photo_url` كان يُبنى على `verify_base_url` (ahgaff.net = واجهة فقط تعيد HTML). الآن يُبنى على مضيف الطلب (`base_url`/host) مع كاسر كاش `?v=photo_approved_at`. `verify_url` ما زال على نطاق التحقق.
+- عند الاعتماد (فردي/جماعي/رفع HR) يُحفظ `photo_approved_at` و`photo_approved_by`؛ الحذف يمسحهما.
+- `GET /hr/photos/approved?search=&page=&per_page=` → قائمة المعتمدة (+`has_pending`, `photo_upload_allowed`).
+- UI `hr-photo-approvals.tsx`: تبويبان «بانتظار الاعتماد / المعتمدة» (`photo-tab-pending|approved`)، بحث، بطاقة معتمدة (`approved-card-{id}`) مع عرض البطاقة PNG، السماح برفع جديدة، حذف الصورة.
+- Handoff: قسم 7 في `EMPLOYEE_APP_HOME.md` (+ نسخة `backend/backend/handoffs`).

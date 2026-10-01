@@ -712,6 +712,7 @@ export const hrAPI = {
   card: (id: string) => api.get(`/hr/employees/${id}/card`),
   myCard: () => api.get('/hr/employees/me/card'),
   pendingPhotos: () => api.get('/hr/photos/pending'),
+  approvedPhotos: (params?: any) => api.get('/hr/photos/approved', { params }),
   photoAction: (id: string, action: 'approve' | 'reject' | 'allow-upload') => api.post(`/hr/employees/${id}/photo/${action}`),
   uploadPhoto: (id: string, file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`/hr/employees/${id}/photo`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); },
   deletePhoto: (id: string) => api.delete(`/hr/employees/${id}/photo`),

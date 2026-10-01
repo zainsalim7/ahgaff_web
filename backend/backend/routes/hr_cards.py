@@ -19,6 +19,10 @@ CARD_VALID_DAYS = 365
 UNIVERSITY = {"name_ar": "جامعة الأحقاف", "name_en": "Al-Ahgaff University"}
 
 
+def _now_iso() -> str:
+    return datetime.now(YEMEN_TZ).isoformat(timespec="seconds")
+
+
 def _today():
     return datetime.now(YEMEN_TZ).date()
 
@@ -82,7 +86,10 @@ async def card_payload(db, emp: dict, base_url: str = "") -> dict:
     tb = await _teacher_bits(db, emp)
     kind = "academic" if emp.get("category") == "academic" or tb else "administrative"
     base = (await get_verify_base(db)) or (base_url or "").rstrip("/")
-    photo_url = f"{base}/api/hr/public/employee-photo/{tok['token']}" if emp.get("photo_path") and base else None
+    # 📸 رابط الصورة يُبنى على مضيف الـ API (الطلب الحالي) لا على نطاق التحقق (واجهة فقط) — مع كاسر كاش عند تغيّر الصورة
+    api_base = (base_url or "").rstrip("/") or base
+    ver = (emp.get("photo_approved_at") or "")[:19].replace(":", "").replace("-", "").replace("T", "")
+    photo_url = f"{api_base}/api/hr/public/employee-photo/{tok['token']}{f'?v={ver}' if ver else ''}" if emp.get("photo_path") and api_base else None
     return {
         "kind": kind, "kind_label": "بطاقة أكاديمية" if kind == "academic" else "بطاقة وظيفية",
         "employee_id": str(emp["_id"]), "full_name": emp.get("full_name", ""), "number": emp.get("employee_no", ""), "academic_no": tb.get("academic_no", ""),
@@ -92,7 +99,7 @@ async def card_payload(db, emp: dict, base_url: str = "") -> dict:
         "faculty_name": tb.get("faculty_name") or chain["faculty_name"], "department_name": tb.get("department_name") or chain["department_name"], "org_unit_name": chain["org_unit_name"],
         "contract_type": emp.get("contract_type", ""), "contract_type_label": CONTRACT_TYPES.get(emp.get("contract_type"), ""), "hire_date": emp.get("hire_date"),
         "status": emp.get("status", "active"), "status_label": STATUSES.get(emp.get("status"), ""), "nationality": emp.get("nationality") or "",
-        "photo_url": photo_url, "has_photo": bool(emp.get("photo_path")), "pending_photo": bool(emp.get("pending_photo_path")),
+        "photo_url": photo_url, "has_photo": bool(emp.get("photo_path")), "pending_photo": bool(emp.get("pending_photo_path")), "photo_approved_at": emp.get("photo_approved_at"),
         "can_upload_photo": (not emp.get("photo_upload_used")) or bool(emp.get("photo_upload_allowed")),
         "card_token": tok["token"], "verify_url": f"{base}/verify-employee?token={tok['token']}" if base else tok["token"],
         "issued_at": tok["issued_at"], "valid_until": tok["valid_until"], "university": UNIVERSITY,
@@ -162,6 +169,25 @@ async def pending_photos(current_user: dict = Depends(get_current_user)):
     return {"items": items, "count": len(items)}
 
 
+@router.get("/photos/approved")
+async def approved_photos(search: Optional[str] = None, page: int = 1, per_page: int = 48, current_user: dict = Depends(get_current_user)):
+    """🖼️ قائمة الصور المعتمدة (تبقى هنا بعد الاعتماد)"""
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    q: dict = {"photo_path": {"$exists": True, "$ne": ""}}
+    if search:
+        import re
+        rx = {"$regex": re.escape(search.strip()), "$options": "i"}
+        q["$or"] = [{"full_name": rx}, {"employee_no": rx}, {"job_title": rx}]
+    per_page = max(1, min(per_page, 200))
+    total = await db.employees.count_documents(q)
+    items = [_ser(e) for e in await db.employees.find(q, {"full_name": 1, "employee_no": 1, "job_title": 1, "category": 1, "photo_approved_at": 1, "photo_approved_by": 1, "pending_photo_path": 1, "photo_upload_allowed": 1}).sort([("photo_approved_at", -1), ("full_name", 1)]).skip((page - 1) * per_page).limit(per_page).to_list(per_page)]
+    for e in items:
+        e["has_pending"] = bool(e.pop("pending_photo_path", None))
+    return {"items": items, "total": total, "page": page, "per_page": per_page}
+
+
 @router.get("/employees/{emp_id}/photo")
 async def employee_photo(emp_id: str, which: str = "approved", current_user: dict = Depends(get_current_user)):
     """صورة الموظف (المعتمدة أو المعلّقة) لشاشة الإدارة"""
@@ -193,7 +219,7 @@ async def hr_upload_photo(emp_id: str, file: UploadFile = File(...), current_use
     if not emp:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     path = await _store_photo(file)
-    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"photo_path": path}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"photo_path": path, "photo_approved_at": _now_iso(), "photo_approved_by": current_user.get("full_name", "")}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
     await log_activity(current_user, "hr_set_photo", "employee", emp_id, emp.get("full_name", ""), {})
     return {"message": "تم حفظ صورة الموظف"}
 
@@ -205,7 +231,7 @@ async def approve_photo(emp_id: str, current_user: dict = Depends(get_current_us
     emp = await db.employees.find_one({"_id": _oid(emp_id)})
     if not emp or not emp.get("pending_photo_path"):
         raise HTTPException(status_code=400, detail="لا توجد صورة معلّقة لهذا الموظف")
-    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"photo_path": emp["pending_photo_path"]}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"photo_path": emp["pending_photo_path"], "photo_approved_at": _now_iso(), "photo_approved_by": current_user.get("full_name", "")}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
     await log_activity(current_user, "hr_approve_photo", "employee", emp_id, emp.get("full_name", ""), {})
     await _notify_decision(db, emp, True)
     return {"message": "تم اعتماد الصورة"}
@@ -240,7 +266,7 @@ async def allow_upload(emp_id: str, current_user: dict = Depends(get_current_use
 async def remove_photo(emp_id: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_MANAGE)
     db = get_db()
-    r = await db.employees.update_one({"_id": _oid(emp_id)}, {"$unset": {"photo_path": ""}, "$set": {"photo_upload_allowed": True}})
+    r = await db.employees.update_one({"_id": _oid(emp_id)}, {"$unset": {"photo_path": "", "photo_approved_at": "", "photo_approved_by": ""}, "$set": {"photo_upload_allowed": True}})
     if not r.matched_count:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     return {"message": "تم حذف الصورة المعتمدة"}
@@ -258,7 +284,7 @@ async def bulk_photos(data: dict, current_user: dict = Depends(get_current_user)
     done = 0
     for e in await db.employees.find({"_id": {"$in": [ObjectId(i) for i in ids]}, "pending_photo_path": {"$exists": True, "$ne": ""}}).to_list(500):
         if action == "approve":
-            await db.employees.update_one({"_id": e["_id"]}, {"$set": {"photo_path": e["pending_photo_path"]}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
+            await db.employees.update_one({"_id": e["_id"]}, {"$set": {"photo_path": e["pending_photo_path"], "photo_approved_at": _now_iso(), "photo_approved_by": current_user.get("full_name", "")}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
         else:
             await db.employees.update_one({"_id": e["_id"]}, {"$set": {"photo_upload_allowed": True}, "$unset": {"pending_photo_path": "", "pending_photo_at": ""}})
         await _notify_decision(db, e, action == "approve")
