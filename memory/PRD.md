@@ -561,3 +561,4 @@
 - `GET /hr/photos/approved?search=&page=&per_page=` → قائمة المعتمدة (+`has_pending`, `photo_upload_allowed`).
 - UI `hr-photo-approvals.tsx`: تبويبان «بانتظار الاعتماد / المعتمدة» (`photo-tab-pending|approved`)، بحث، بطاقة معتمدة (`approved-card-{id}`) مع عرض البطاقة PNG، السماح برفع جديدة، حذف الصورة.
 - Handoff: قسم 7 في `EMPLOYEE_APP_HOME.md` (+ نسخة `backend/backend/handoffs`).
+- ⚠️ **النشر الإنتاجي = Google Cloud Run عبر Cloud Build من GitHub (zainsalim7/ahgaff_web، فرع main)** وليس Emergent. الـ Dockerfile يثبّت من `backend/backend/requirements.txt` (لا `backend/requirements.txt`). **أي مكتبة جديدة يجب إضافتها لكلا الملفين** وإلا يفشل إقلاع الحاوية (حدث مع `Markdown` في 2026-10-01 — أُصلح بإضافة `Markdown==3.11`).
