@@ -145,6 +145,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES] },
   { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-work-settings', label: 'إعدادات الدوام والفترات', icon: 'time', path: '/hr-work-settings', permissions: [PERMISSIONS.HR_MANAGE_WORK_SETTINGS] },
+  { id: 'hr-leave-settings', label: 'إعدادات الإجازات', icon: 'options', path: '/hr-leave-settings', permissions: [PERMISSIONS.HR_MANAGE_LEAVE_SETTINGS] },
   { id: 'hr-locations', label: 'مواقع العمل (Geofencing)', icon: 'location', path: '/hr-locations', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-presence-checks', label: 'تأكيد التواجد العشوائي', icon: 'notifications', path: '/hr-presence-checks', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-correspondence', label: 'المراسلات والتعاميم', icon: 'mail-open', path: '/hr-correspondence', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_CORRESPONDENCE] },

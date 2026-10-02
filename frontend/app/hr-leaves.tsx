@@ -23,6 +23,7 @@ export default function HrLeaves() {
   const [data, setData] = useState<any>({ items: [], total: 0, stats: {} });
   const [balances, setBalances] = useState<any>({ items: [], year: YEAR });
   const [balYear, setBalYear] = useState(YEAR);
+  const [balType, setBalType] = useState('annual');
   const [loading, setLoading] = useState(true);
   const [showNew, setShowNew] = useState(false);
   const [decision, setDecision] = useState<any>(null);
@@ -34,7 +35,7 @@ export default function HrLeaves() {
     try { setData((await hrAPI.leaves({ ...Object.fromEntries(Object.entries(q).filter(([, v]) => v)), per_page: 40 })).data); } catch { setData({ items: [], total: 0, stats: {} }); }
     finally { setLoading(false); }
   }, [q]);
-  const loadBal = useCallback(async () => { try { setBalances((await hrAPI.leaveBalances({ year: balYear })).data); } catch { } }, [balYear]);
+  const loadBal = useCallback(async () => { try { setBalances((await hrAPI.leaveBalances({ year: balYear, type: balType })).data); } catch { } }, [balYear, balType]);
 
   useEffect(() => { hrAPI.leavesMeta().then((r) => setMeta(r.data)).catch(() => {}); hrAPI.orgUnits().then((r) => setUnits(r.data.units || [])).catch(() => {}); }, []);
   useEffect(() => { load(); }, [load]);
@@ -47,7 +48,7 @@ export default function HrLeaves() {
   const done = (msg: string) => { window.alert(msg); load(); if (detail) openDetail(detail.id); };
   const openDetail = async (id: string) => { try { setDetail((await hrAPI.leave(id)).data); } catch (e) { alertErr(e); } };
   const cancel = async (l: any) => { if (!window.confirm(`إلغاء طلب إجازة ${l.employee_name}؟`)) return; try { const r = await hrAPI.cancelLeave(l.id); done(r.data.message); setDetail(null); } catch (e) { alertErr(e); } };
-  const saveBal = async () => { try { const r = await hrAPI.setLeaveBalance(editBal.employee_id, { year: balYear, entitlement: Number(editBal.entitlement), carried_over: Number(editBal.carried_over), note: editBal.note }); window.alert(r.data.message); setEditBal(null); loadBal(); } catch (e) { alertErr(e); } };
+  const saveBal = async () => { try { const r = await hrAPI.setLeaveBalance(editBal.employee_id, { year: balYear, type: balType, entitlement: Number(editBal.entitlement), carried_over: Number(editBal.carried_over), note: editBal.note }); window.alert(r.data.message); setEditBal(null); loadBal(); } catch (e) { alertErr(e); } };
 
   const st = data.stats || {};
   return (
@@ -118,8 +119,11 @@ export default function HrLeaves() {
         {tab === 'balances' && (
           <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, direction: 'rtl' }}>
-              <div style={{ fontSize: 12.5, color: '#475569' }}>الاستحقاق الافتراضي: <b>{balances.default_entitlement}</b> يوماً (يُعدَّل من إعدادات الدوام) — الرصيد = الاستحقاق + المرحَّل − المستخدم</div>
-              <select value={balYear} onChange={(e) => setBalYear(Number(e.target.value))} style={{ ...inp, width: 110 }} data-testid="hr-balances-year">{[YEAR + 1, YEAR, YEAR - 1].map((y) => <option key={y} value={y}>{y}</option>)}</select>
+              <div style={{ fontSize: 12.5, color: '#475569' }}>رصيد <b>{balances.type_label || 'السنوية'}</b> — الاستحقاق حسب الفئة: {Object.entries(balances.entitlements || {}).map(([c, v]: any) => `${({ academic: 'أكاديمي', administrative: 'إداري', technical: 'فني', service: 'خدمات' } as any)[c] || c}: ${v ?? '—'}`).join(' · ')} (يُعدَّل من «إعدادات الإجازات») — الرصيد = الاستحقاق + المرحَّل − المستخدم</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <HrSelect value={balType} onChange={(v) => setBalType(v || 'annual')} options={(balances.balance_types || [{ key: 'annual', name: 'سنوية' }]).map((t: any) => ({ value: t.key, label: t.name }))} allowClear={false} style={{ width: 160 }} testID="hr-balances-type" />
+                <HrSelect value={String(balYear)} onChange={(v) => setBalYear(Number(v) || YEAR)} options={[YEAR + 1, YEAR, YEAR - 1].map((y) => ({ value: String(y), label: String(y) }))} allowClear={false} style={{ width: 110 }} testID="hr-balances-year" />
+              </div>
             </div>
             <table style={table} data-testid="hr-balances-table">
               <Th cols={['الموظف', 'الوحدة', 'الاستحقاق', 'مرحَّل', 'مستخدم', 'معلّق', 'المتبقي', '']} />

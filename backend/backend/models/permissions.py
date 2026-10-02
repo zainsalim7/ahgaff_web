@@ -91,6 +91,7 @@ class Permission:
     HR_MANAGE_LEAVES = "hr_manage_leaves"
     HR_MANAGE_ATTENDANCE = "hr_manage_attendance"
     HR_MANAGE_WORK_SETTINGS = "hr_manage_work_settings"
+    HR_MANAGE_LEAVE_SETTINGS = "hr_manage_leave_settings"
     HR_MANAGE_CORRESPONDENCE = "hr_manage_correspondence"
     HR_MANAGE_TASKS = "hr_manage_tasks"
     HR_MANAGE_APPRAISALS = "hr_manage_appraisals"
@@ -344,6 +345,7 @@ ALL_PERMISSIONS = [
     {"key": Permission.HR_MANAGE_LEAVES, "label": "إدارة الإجازات (اعتماد/رفض/تسجيل/أرصدة)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_ATTENDANCE, "label": "إدارة الحضور الإداري (الكشف اليومي والتقارير ومواقع العمل وتأكيد التواجد)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_WORK_SETTINGS, "label": "إعدادات الدوام (فترات الدوام وأوقاتها، أيام العمل والعطل، تكليف الموظفين بالفترات)", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_LEAVE_SETTINGS, "label": "إعدادات الإجازات (أنواع الإجازات، الأرصدة حسب الفئة، الخصم من الرصيد)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_CORRESPONDENCE, "label": "إدارة المراسلات والتعاميم", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_TASKS, "label": "إسناد المهام لأي موظف ومتابعتها (المدير المباشر يسند لفريقه دون هذه الصلاحية)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_APPRAISALS, "label": "اعتماد التقييم السنوي وإدارته لكل الموظفين", "category": "شؤون الموظفين"},
@@ -410,7 +412,7 @@ DEFAULT_PERMISSIONS[UserRole.UNIVERSITY_PRESIDENT] = list(READ_ONLY_PERMISSIONS)
 
 # 🏢 أدوار شؤون الموظفين الجاهزة (تُنشأ بزر واحد من إدارة الأدوار)
 _HR_ALL = [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_EMPLOYEES, Permission.HR_MANAGE_ORG, Permission.HR_MANAGE_LEAVES, Permission.HR_MANAGE_ATTENDANCE, Permission.HR_MANAGE_WORK_SETTINGS,
-           Permission.HR_MANAGE_CORRESPONDENCE, Permission.HR_MANAGE_TASKS, Permission.HR_MANAGE_APPRAISALS]
+           Permission.HR_MANAGE_CORRESPONDENCE, Permission.HR_MANAGE_TASKS, Permission.HR_MANAGE_APPRAISALS, Permission.HR_MANAGE_LEAVE_SETTINGS]
 HR_ROLE_PRESETS = [
     {"key": "hr_manager", "name": "مدير شؤون الموظفين", "description": "كامل صلاحيات شؤون الموظفين: السجل والمستندات، الهيكل التنظيمي، اعتماد الإجازات والأرصدة، الحضور الإداري، المراسلات، إسناد المهام، اعتماد التقييم السنوي، التقرير السنوي وبطاقة HR في لوحة القيادة",
      "permissions": _HR_ALL + [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_HR]},
@@ -482,6 +484,7 @@ FULL_PERMISSION_MAPPING = {
     Permission.HR_MANAGE_LEAVES: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_ATTENDANCE: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_WORK_SETTINGS: [Permission.HR_VIEW_EMPLOYEES],
+    Permission.HR_MANAGE_LEAVE_SETTINGS: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_CORRESPONDENCE: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_TASKS: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_APPRAISALS: [Permission.HR_VIEW_EMPLOYEES],

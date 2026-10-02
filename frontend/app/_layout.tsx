@@ -188,6 +188,7 @@ export default function RootLayout() {
           <Stack.Screen name="hr-locations" options={{ title: 'مواقع العمل والتحقق الجغرافي' }} />
           <Stack.Screen name="hr-presence-checks" options={{ title: 'تأكيد التواجد العشوائي' }} />
           <Stack.Screen name="hr-work-settings" options={{ title: 'إعدادات الدوام والفترات' }} />
+          <Stack.Screen name="hr-leave-settings" options={{ title: 'إعدادات الإجازات' }} />
           <Stack.Screen name="app-versions" options={{ title: 'إعدادات تحديث التطبيقات' }} />
           <Stack.Screen name="hr-annual-report" options={{ title: 'التقرير السنوي لشؤون الموظفين' }} />
           <Stack.Screen name="report-teacher-summary" options={{ title: 'ملخص المعلم' }} />

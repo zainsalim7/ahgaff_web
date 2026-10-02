@@ -14,7 +14,8 @@ router = APIRouter(prefix="/hr/leaves", tags=["شؤون الموظفين - ال�
 
 LEAVE_TYPES = {"annual": "سنوية", "sick": "مرضية", "emergency": "اضطرارية", "unpaid": "بدون راتب", "maternity": "وضع / أمومة",
                "hajj": "حج", "study": "دراسية", "mission": "مهمة رسمية / انتداب", "other": "أخرى"}
-DEDUCT_BALANCE = {"annual"}
+DEDUCT_BALANCE = {"annual"}  # قديم — المصدر الآن إعدادات الإجازات (hr_leave_types)
+from .hr_leave_types import leave_types_map, entitlement_for  # noqa: E402
 STATUSES = {"pending": "بانتظار المدير المباشر", "hr_pending": "بانتظار شؤون الموظفين", "approved": "معتمدة", "rejected": "مرفوضة", "cancelled": "ملغاة"}
 OPEN = ("pending", "hr_pending")
 
@@ -36,23 +37,45 @@ class DecisionIn(BaseModel):
 
 class BalanceIn(BaseModel):
     year: int
+    type: str = "annual"
     entitlement: int
     carried_over: int = 0
     note: Optional[str] = ""
 
 
-async def _balance(db, employee_id: str, year: int, settings: dict = None) -> dict:
+async def _balance(db, employee_id: str, year: int, settings: dict = None, type_key: str = "annual", emp: dict = None, types: dict = None) -> dict:
+    """رصيد نوع إجازة واحد للموظف: الاستحقاق حسب فئته من إعدادات الإجازات (أو تجاوز يدوي في leave_balances) − المستخدم"""
     settings = settings or await get_hr_settings(db)
-    doc = await db.leave_balances.find_one({"employee_id": employee_id, "year": year}) or {}
-    ent = doc.get("entitlement", settings.get("annual_leave_days", 30))
+    types = types or await leave_types_map(db)
+    t = types.get(type_key) or {}
+    emp = emp or await db.employees.find_one({"_id": ObjectId(employee_id)}, {"category": 1}) or {}
+    tq = {"$in": [None, "annual"]} if type_key == "annual" else type_key
+    doc = await db.leave_balances.find_one({"employee_id": employee_id, "year": year, "type": tq}) or {}
+    default_ent = entitlement_for(t, emp)
+    if default_ent is None and type_key == "annual":
+        default_ent = settings.get("annual_leave_days", 30)
+    ent = doc.get("entitlement", default_ent)
     carried = doc.get("carried_over", 0)
     used = pending = 0
-    async for l in db.leave_requests.find({"employee_id": employee_id, "type": {"$in": list(DEDUCT_BALANCE)}, "status": {"$in": ["approved", *OPEN]}, "start_date": {"$regex": f"^{year}"}}, {"days": 1, "status": 1}):
+    async for l in db.leave_requests.find({"employee_id": employee_id, "type": type_key, "status": {"$in": ["approved", *OPEN]}, "start_date": {"$regex": f"^{year}"}}, {"days": 1, "status": 1}):
         if l["status"] == "approved":
             used += l.get("days", 0)
         else:
             pending += l.get("days", 0)
-    return {"year": year, "entitlement": ent, "carried_over": carried, "used": used, "pending": pending, "remaining": ent + carried - used, "overridden": bool(doc), "note": doc.get("note", "")}
+    return {"year": year, "type": type_key, "type_label": t.get("name") or LEAVE_TYPES.get(type_key, type_key), "color": t.get("color"), "entitlement": ent, "carried_over": carried, "used": used, "pending": pending,
+            "remaining": (ent + carried - used) if ent is not None else None, "unlimited": ent is None, "overridden": bool(doc), "note": doc.get("note", "")}
+
+
+async def _balances(db, emp: dict, year: int, settings: dict = None) -> list:
+    """أرصدة كل الأنواع التي لها رصيد محدد لفئة الموظف"""
+    settings = settings or await get_hr_settings(db)
+    types = await leave_types_map(db, active_only=True)
+    eid = str(emp["_id"])
+    out = []
+    for k, t in types.items():
+        if k == "annual" or entitlement_for(t, emp) is not None:
+            out.append(await _balance(db, eid, year, settings, k, emp, types))
+    return out
 
 
 async def _manager_user(db, emp: dict) -> Optional[str]:
@@ -63,8 +86,9 @@ async def _manager_user(db, emp: dict) -> Optional[str]:
 
 
 async def _create_request(db, emp: dict, data: LeaveIn, by: dict, auto_approve: bool = False) -> dict:
-    if data.type not in LEAVE_TYPES:
-        raise HTTPException(status_code=400, detail="نوع الإجازة غير صحيح")
+    types = await leave_types_map(db, active_only=True)
+    if data.type not in types:
+        raise HTTPException(status_code=400, detail="نوع الإجازة غير صحيح أو معطّل")
     s, e = parse_date(data.start_date, "تاريخ البداية"), parse_date(data.end_date, "تاريخ النهاية")
     if e < s:
         raise HTTPException(status_code=400, detail="تاريخ النهاية قبل تاريخ البداية")
@@ -78,9 +102,9 @@ async def _create_request(db, emp: dict, data: LeaveIn, by: dict, auto_approve: 
     overlap = await db.leave_requests.find_one({"employee_id": eid, "status": {"$in": ["approved", *OPEN]}, "start_date": {"$lte": data.end_date}, "end_date": {"$gte": data.start_date}})
     if overlap:
         raise HTTPException(status_code=400, detail=f"يوجد طلب إجازة متداخل مع هذه الفترة ({overlap['start_date']} → {overlap['end_date']})")
-    if data.type in DEDUCT_BALANCE:
-        bal = await _balance(db, eid, s.year, settings)
-        if days > bal["remaining"] - bal["pending"]:
+    if types[data.type].get("deducts_balance") and entitlement_for(types[data.type], emp) is not None or data.type == "annual":
+        bal = await _balance(db, eid, s.year, settings, data.type, emp, types)
+        if bal["remaining"] is not None and days > bal["remaining"] - bal["pending"]:
             raise HTTPException(status_code=400, detail=f"الرصيد غير كافٍ: المتبقي {bal['remaining']} يوماً (منها {bal['pending']} معلّقة) والمطلوب {days}")
     mgr_uid = await _manager_user(db, emp)
     status = "approved" if auto_approve else ("pending" if mgr_uid and mgr_uid != user_id_of(by) else "hr_pending")
@@ -92,7 +116,7 @@ async def _create_request(db, emp: dict, data: LeaveIn, by: dict, auto_approve: 
         doc["hr_decision"] = {"by_name": by.get("full_name", ""), "at": _now(), "note": "تسجيل مباشر من شؤون الموظفين"}
     r = await db.leave_requests.insert_one(doc)
     doc["_id"] = r.inserted_id
-    label = LEAVE_TYPES[data.type]
+    label = types[data.type]["name"]
     if status == "pending" and mgr_uid:
         await notify_users(db, [mgr_uid], "طلب إجازة جديد بانتظار موافقتك", f"{emp.get('full_name', '')} — إجازة {label} من {data.start_date} إلى {data.end_date} ({days} يوم عمل)", "hr_leave", {"leave_id": str(r.inserted_id)})
     elif status == "hr_pending":
@@ -123,15 +147,28 @@ async def sync_leave_statuses(db):
 
 def _view(l: dict) -> dict:
     d = _ser(l)
-    d["type_label"] = LEAVE_TYPES.get(d.get("type"), d.get("type"))
+    d["type_label"] = (_TYPE_NAMES.get(d.get("type")) or LEAVE_TYPES.get(d.get("type"), d.get("type")))
     d["status_label"] = STATUSES.get(d.get("status"), d.get("status"))
-    d["deducts_balance"] = d.get("type") in DEDUCT_BALANCE
+    d["deducts_balance"] = d.get("type") in _DEDUCT
     return d
+
+
+_TYPE_NAMES: dict = {}
+_DEDUCT: set = set()
+
+
+async def _refresh_type_cache(db):
+    types = await leave_types_map(db)
+    _TYPE_NAMES.clear(); _TYPE_NAMES.update({k: t["name"] for k, t in types.items()})
+    _DEDUCT.clear(); _DEDUCT.update({k for k, t in types.items() if t.get("deducts_balance")})
+    return types
 
 
 @router.get("/meta")
 async def leaves_meta(current_user: dict = Depends(get_current_user)):
-    return {"types": LEAVE_TYPES, "statuses": STATUSES, "deduct_balance": sorted(DEDUCT_BALANCE)}
+    types = await _refresh_type_cache(get_db())
+    active = {k: t["name"] for k, t in types.items() if t.get("is_active")}
+    return {"types": active, "statuses": STATUSES, "deduct_balance": sorted(_DEDUCT), "type_defs": list(types.values()), "categories": __import__('routes.hr_leave_types', fromlist=['CATEGORIES']).CATEGORIES}
 
 
 @router.get("/my")
@@ -148,7 +185,7 @@ async def my_leaves(year: Optional[int] = None, current_user: dict = Depends(get
     eid = str(emp["_id"])
     reqs = [_view(l) for l in await db.leave_requests.find({"employee_id": eid}).sort("created_at", -1).limit(100).to_list(100)]
     return {"profile": {"id": eid, "full_name": emp.get("full_name", ""), "employee_no": emp.get("employee_no", ""), "has_manager": bool(emp.get("manager_employee_id"))},
-            "balance": await _balance(db, eid, year), "requests": reqs, "team_pending": team}
+            "balance": await _balance(db, eid, year, None, "annual", emp), "balances": await _balances(db, emp, year), "requests": reqs, "team_pending": team}
 
 
 @router.post("/my")
@@ -175,7 +212,7 @@ async def on_leave_today(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/balances")
-async def all_balances(year: Optional[int] = None, org_unit_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def all_balances(year: Optional[int] = None, org_unit_id: Optional[str] = None, type: str = "annual", current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
@@ -185,11 +222,16 @@ async def all_balances(year: Optional[int] = None, org_unit_id: Optional[str] = 
     if org_unit_id:
         q["org_unit_id"] = org_unit_id
     out = []
-    async for e in db.employees.find(q, {"full_name": 1, "employee_no": 1, "org_unit_id": 1, "job_title": 1}).sort("full_name", 1):
+    types = await _refresh_type_cache(db)
+    if type not in types:
+        raise HTTPException(status_code=400, detail="نوع الإجازة غير معروف")
+    async for e in db.employees.find(q, {"full_name": 1, "employee_no": 1, "org_unit_id": 1, "job_title": 1, "category": 1}).sort("full_name", 1):
         eid = str(e["_id"])
-        out.append({"employee_id": eid, **(await _balance(db, eid, year, settings))})
+        out.append({"employee_id": eid, "category": e.get("category"), **(await _balance(db, eid, year, settings, type, e, types))})
     await enrich_employee_refs(db, out)
-    return {"year": year, "default_entitlement": settings.get("annual_leave_days", 30), "items": out}
+    t = types[type]
+    return {"year": year, "type": type, "type_label": t["name"], "entitlements": t.get("entitlements"), "default_entitlement": settings.get("annual_leave_days", 30), "items": out,
+            "balance_types": [{"key": k, "name": v["name"], "color": v.get("color")} for k, v in types.items() if v.get("is_active") and (k == "annual" or any(x is not None for x in (v.get("entitlements") or {}).values()))]}
 
 
 @router.put("/balances/{employee_id}")
@@ -200,9 +242,10 @@ async def set_balance(employee_id: str, data: BalanceIn, current_user: dict = De
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     if data.entitlement < 0 or data.carried_over < 0 or data.entitlement > 365:
         raise HTTPException(status_code=400, detail="قيم الرصيد غير منطقية")
-    await db.leave_balances.update_one({"employee_id": employee_id, "year": data.year}, {"$set": {"entitlement": data.entitlement, "carried_over": data.carried_over, "note": data.note or "", "updated_by_name": current_user.get("full_name", ""), "updated_at": _now()}}, upsert=True)
+    tq = {"$in": [None, "annual"]} if data.type == "annual" else data.type
+    await db.leave_balances.update_one({"employee_id": employee_id, "year": data.year, "type": tq}, {"$set": {"type": data.type, "entitlement": data.entitlement, "carried_over": data.carried_over, "note": data.note or "", "updated_by_name": current_user.get("full_name", ""), "updated_at": _now()}}, upsert=True)
     await log_activity(current_user, "hr_leave_balance", "employee", employee_id, "تعديل رصيد الإجازات", {"year": data.year, "entitlement": data.entitlement, "carried_over": data.carried_over})
-    return {"message": "تم تحديث الرصيد", "balance": await _balance(db, employee_id, data.year)}
+    return {"message": "تم تحديث الرصيد", "balance": await _balance(db, employee_id, data.year, None, data.type)}
 
 
 @router.get("")
@@ -256,7 +299,7 @@ async def register_leave(data: LeaveIn, current_user: dict = Depends(get_current
     doc = await _create_request(db, emp, data, current_user, auto_approve=True)
     uid = (await employee_user_ids(db, [str(emp["_id"])])).get(str(emp["_id"]))
     if uid:
-        await notify_users(db, [uid], "تم تسجيل إجازة لك", f"إجازة {LEAVE_TYPES[data.type]} من {data.start_date} إلى {data.end_date} ({doc['days']} يوم عمل) — معتمدة", "hr_leave", {"leave_id": str(doc["_id"])})
+        await notify_users(db, [uid], "تم تسجيل إجازة لك", f"إجازة {_TYPE_NAMES.get(data.type, data.type)} من {data.start_date} إلى {data.end_date} ({doc['days']} يوم عمل) — معتمدة", "hr_leave", {"leave_id": str(doc["_id"])})
     await log_activity(current_user, "hr_leave_register", "leave", str(doc["_id"]), emp.get("full_name", ""), {"days": doc["days"], "type": data.type})
     return {"id": str(doc["_id"]), "days": doc["days"], "message": f"تم تسجيل الإجازة واعتمادها ({doc['days']} يوم عمل)"}
 
@@ -303,9 +346,9 @@ async def decide_leave(leave_id: str, data: DecisionIn, current_user: dict = Dep
     decision = {"by_name": current_user.get("full_name", ""), "by_user_id": uid, "at": _now(), "note": (data.note or "").strip(), "action": data.action}
     step = "manager" if (l["status"] == "pending" and is_mgr) else "hr"
     new_status = "rejected" if data.action == "reject" else ("hr_pending" if step == "manager" else "approved")
-    if new_status == "approved" and l["type"] in DEDUCT_BALANCE:
-        bal = await _balance(db, l["employee_id"], parse_date(l["start_date"]).year)
-        if l["days"] > bal["remaining"]:
+    if new_status == "approved":
+        bal = await _balance(db, l["employee_id"], parse_date(l["start_date"]).year, None, l["type"], emp)
+        if bal["remaining"] is not None and l["days"] > bal["remaining"]:
             raise HTTPException(status_code=400, detail=f"الرصيد الحالي ({bal['remaining']}) لا يغطي الطلب ({l['days']})")
     upd = {"status": new_status, f"{step}_decision": decision, "updated_at": _now()}
     await db.leave_requests.update_one({"_id": l["_id"]}, {"$set": upd, "$push": {"history": {"action": f"{step}_{data.action}", "by_name": decision["by_name"], "at": decision["at"], "note": decision["note"]}}})
@@ -313,7 +356,7 @@ async def decide_leave(leave_id: str, data: DecisionIn, current_user: dict = Dep
     if emp:
         await _apply_status(db, emp, l)
     emp_uid = (await employee_user_ids(db, [l["employee_id"]])).get(l["employee_id"])
-    label, period = LEAVE_TYPES.get(l["type"], l["type"]), f"{l['start_date']} → {l['end_date']}"
+    label, period = (_TYPE_NAMES.get(l["type"]) or LEAVE_TYPES.get(l["type"], l["type"])), f"{l['start_date']} → {l['end_date']}"
     if new_status == "rejected" and emp_uid:
         await notify_users(db, [emp_uid], "تم رفض طلب الإجازة", f"إجازة {label} ({period}) — رُفضت من {decision['by_name']}{(': ' + decision['note']) if decision['note'] else ''}", "hr_leave", {"leave_id": leave_id})
     elif new_status == "approved" and emp_uid:

@@ -181,3 +181,8 @@
 - الرابط عام (لا يحتاج توكن) ويحمل معامل `?v=` يتغيّر مع كل اعتماد جديد → **استخدم `photo_url` كما هو** حرفياً (لا تبنِه يدوياً) حتى يتجاوز الكاش.
 - أعِد جلب `me/card` عند فتح شاشة البطاقة وعند وصول إشعار `type: "hr_photo"` (اعتماد/رفض).
 - الحقول: `has_photo` (معتمدة) · `pending_photo` (بانتظار الاعتماد — اعرض «قيد المراجعة») · `can_upload_photo` · `photo_approved_at`.
+
+## 8) 🏖️ أرصدة الإجازات لكل نوع (2026-10-02)
+- `GET /hr/leaves/my` أصبح يعيد إضافةً إلى `balance` (السنوية): `balances[]` = `[{type, type_label, color, entitlement, carried_over, used, pending, remaining, unlimited}]` لكل نوع له رصيد محدد لفئة الموظف (سنوية/مرضية/اضطرارية… حسب إعدادات الإدارة). اعرضها كشرائح تحت الرصيد السنوي.
+- `GET /hr/leaves/meta` → `types` (المفعّلة فقط) + `type_defs[]` (name, color, deducts_balance, requires_attachment, paid) — استخدم `requires_attachment` لإظهار حقل المرفق، و`deducts_balance` لعرض الرصيد المتبقي بجانب النوع في نموذج الطلب.
+- `GET /hr/home/summary` → `leaves.remaining` ما زال رصيد السنوية.

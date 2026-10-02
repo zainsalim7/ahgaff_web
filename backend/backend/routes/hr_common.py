@@ -13,6 +13,7 @@ P_VIEW, P_MANAGE, P_ORG = "hr_view_employees", "hr_manage_employees", "hr_manage
 P_LEAVES, P_ATTEND, P_CORR = "hr_manage_leaves", "hr_manage_attendance", "hr_manage_correspondence"
 P_TASKS, P_APPRAISE = "hr_manage_tasks", "hr_manage_appraisals"
 P_WORK_SETTINGS = "hr_manage_work_settings"
+P_LEAVE_SETTINGS = "hr_manage_leave_settings"
 
 AR_DAYS = {5: "السبت", 6: "الأحد", 0: "الاثنين", 1: "الثلاثاء", 2: "الأربعاء", 3: "الخميس", 4: "الجمعة"}
 DEFAULT_SETTINGS = {

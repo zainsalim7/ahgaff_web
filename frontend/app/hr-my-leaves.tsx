@@ -44,6 +44,7 @@ export default function HrMyLeaves() {
                   <div style={{ fontSize: 12, color: '#64748b' }}>رصيد الإجازة السنوية {b?.year}</div>
                   <div style={{ fontSize: 34, fontWeight: 900, color: b?.remaining > 0 ? '#16a34a' : '#dc2626' }} data-testid="hr-my-remaining">{b?.remaining} <span style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>يوم متبقٍ</span></div>
                   <div style={{ fontSize: 12, color: '#475569' }}>الاستحقاق {b?.entitlement}{b?.carried_over ? ` + مرحَّل ${b.carried_over}` : ''} · مستخدم {b?.used} · معلّق {b?.pending}</div>
+                  {(d?.balances || []).filter((x: any) => x.type !== 'annual').length > 0 && <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }} data-testid="hr-my-balances">{(d?.balances || []).filter((x: any) => x.type !== 'annual').map((x: any) => <span key={x.type} style={{ backgroundColor: `${x.color || '#64748b'}18`, color: x.color || '#334155', borderRadius: 12, padding: '3px 10px', fontSize: 11.5, fontWeight: 800 }}>{x.type_label}: {x.remaining} / {x.entitlement}</span>)}</div>}
                 </div>
                 <button onClick={() => setShowNew(true)} style={btn('#1565c0')} data-testid="hr-my-new-leave-btn">+ طلب إجازة</button>
               </div>
