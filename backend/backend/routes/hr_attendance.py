@@ -356,6 +356,126 @@ async def employee_records(employee_id: str, month: Optional[str] = None, curren
     return {"month": m, "records": recs}
 
 
+# ══════════════ 📋 التقرير التفصيلي (سجلات فردية/مشتركة مع الموقع) ══════════════
+
+def _geo_cols(g: Optional[dict]) -> dict:
+    g = g or {}
+    return {"status": g.get("status"), "status_label": g.get("status_label") or "", "location_name": g.get("location_name") or "", "distance_m": g.get("distance_m"),
+            "in_range": g.get("in_range"), "latitude": g.get("latitude"), "longitude": g.get("longitude"), "accuracy": g.get("accuracy")}
+
+
+async def _details_query(db, date_from: str, date_to: str, employee_ids: Optional[str], org_unit_id: Optional[str], status: Optional[str],
+                         late_only: bool, auto_only: bool, out_of_range_only: bool, search: Optional[str]):
+    q: dict = {"date": {"$gte": date_from, "$lte": date_to}}
+    emp_q: dict = {}
+    if org_unit_id:
+        emp_q["org_unit_id"] = org_unit_id
+    if search:
+        import re
+        rx = {"$regex": re.escape(search.strip()), "$options": "i"}
+        emp_q["$or"] = [{"full_name": rx}, {"employee_no": rx}]
+    ids = [i for i in (employee_ids or "").split(",") if i]
+    if emp_q:
+        scoped = [str(e["_id"]) for e in await db.employees.find(emp_q, {"_id": 1}).to_list(5000)]
+        ids = [i for i in ids if i in scoped] if ids else scoped
+        if not ids:
+            return None
+    if ids:
+        q["employee_id"] = {"$in": ids}
+    if status:
+        q["status"] = {"$in": [x for x in status.split(",") if x]}
+    if late_only:
+        q["$or"] = [{"status": "late"}, {"late_minutes": {"$gt": 0}}]
+    if auto_only:
+        q["auto_checkout"] = True
+    if out_of_range_only:
+        q["$or"] = [{"check_in_geo.status": "out_of_range"}, {"check_out_geo.status": "out_of_range"}, {"check_in_geo.in_range": False, "check_in_geo.status": {"$nin": ["auto", "exempt", None]}}]
+    return q
+
+
+async def _details_rows(db, q: dict, skip: int = 0, limit: int = 0) -> List[dict]:
+    cur = db.hr_attendance.find(q).sort([("date", -1), ("check_in", -1)]).skip(skip)
+    if limit:
+        cur = cur.limit(limit)
+    recs = await cur.to_list(limit or 20000)
+    emp_ids = {r["employee_id"] for r in recs if ObjectId.is_valid(r.get("employee_id", ""))}
+    emps = {str(e["_id"]): e for e in await db.employees.find({"_id": {"$in": [ObjectId(i) for i in emp_ids]}}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1}).to_list(5000)} if emp_ids else {}
+    units = {str(u["_id"]): u.get("name", "") for u in await db.org_units.find({}, {"name": 1}).to_list(2000)}
+    out = []
+    for r in recs:
+        e = emps.get(r["employee_id"], {})
+        gi, go = _geo_cols(r.get("check_in_geo")), _geo_cols(r.get("check_out_geo"))
+        out.append({"id": str(r["_id"]), "employee_id": r["employee_id"], "employee_name": e.get("full_name", ""), "employee_no": e.get("employee_no", ""), "job_title": e.get("job_title", ""),
+                    "org_unit_name": units.get(e.get("org_unit_id") or "", ""), "date": r["date"], "shift_name": r.get("shift_name") or "", "status": r.get("status"), "status_label": ATT_STATUS.get(r.get("status") or "", r.get("status") or ""),
+                    "check_in": r.get("check_in"), "check_out": r.get("check_out"), "late_minutes": r.get("late_minutes") or 0, "auto_checkout": bool(r.get("auto_checkout")), "auto_checkout_at": r.get("auto_checkout_at"),
+                    "source": r.get("source"), "note": r.get("note") or "", "check_in_geo": gi, "check_out_geo": go, "by_name": r.get("by_name", "")})
+    return out
+
+
+@router.get("/details")
+async def attendance_details(date_from: Optional[str] = None, date_to: Optional[str] = None, employee_ids: Optional[str] = None, org_unit_id: Optional[str] = None,
+                             status: Optional[str] = None, late_only: bool = False, auto_only: bool = False, out_of_range_only: bool = False, search: Optional[str] = None,
+                             page: int = 1, per_page: int = 50, current_user: dict = Depends(get_current_user)):
+    """📋 سجلات الحضور التفصيلية لفترة — فردية أو مشتركة — مع التأخير والانصراف التلقائي والموقع/المسافة"""
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    t = _today()
+    date_from, date_to = date_from or t[:8] + "01", date_to or t
+    q = await _details_query(db, date_from, date_to, employee_ids, org_unit_id, status, late_only, auto_only, out_of_range_only, search)
+    if q is None:
+        return {"items": [], "total": 0, "page": 1, "per_page": per_page, "summary": {}, "from": date_from, "to": date_to}
+    per_page = max(5, min(per_page, 500))
+    total = await db.hr_attendance.count_documents(q)
+    items = await _details_rows(db, q, (page - 1) * per_page, per_page)
+    pipeline = [{"$match": q}, {"$group": {"_id": None, "late": {"$sum": {"$cond": [{"$gt": ["$late_minutes", 0]}, 1, 0]}}, "late_minutes": {"$sum": {"$ifNull": ["$late_minutes", 0]}},
+                                             "auto": {"$sum": {"$cond": [{"$eq": ["$auto_checkout", True]}, 1, 0]}}, "out": {"$sum": {"$cond": [{"$eq": ["$check_in_geo.status", "out_of_range"]}, 1, 0]}},
+                                             "employees": {"$addToSet": "$employee_id"}}}]
+    agg = await db.hr_attendance.aggregate(pipeline).to_list(1)
+    a = agg[0] if agg else {}
+    return {"items": items, "total": total, "page": page, "per_page": per_page, "from": date_from, "to": date_to,
+            "summary": {"records": total, "employees": len(a.get("employees") or []), "late": a.get("late", 0), "late_minutes": a.get("late_minutes", 0), "auto": a.get("auto", 0), "out_of_range": a.get("out", 0)}}
+
+
+@router.get("/details/export")
+async def attendance_details_export(date_from: Optional[str] = None, date_to: Optional[str] = None, employee_ids: Optional[str] = None, org_unit_id: Optional[str] = None,
+                                    status: Optional[str] = None, late_only: bool = False, auto_only: bool = False, out_of_range_only: bool = False, search: Optional[str] = None,
+                                    record_ids: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📥 تصدير Excel للتقرير التفصيلي — كل النتائج المطابقة أو سجلات مختارة (record_ids)"""
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    t = _today()
+    date_from, date_to = date_from or t[:8] + "01", date_to or t
+    if record_ids:
+        q: Optional[dict] = {"_id": {"$in": [ObjectId(i) for i in record_ids.split(",") if ObjectId.is_valid(i)]}}
+    else:
+        q = await _details_query(db, date_from, date_to, employee_ids, org_unit_id, status, late_only, auto_only, out_of_range_only, search)
+    rows = await _details_rows(db, q) if q is not None else []
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    wb = Workbook(); ws = wb.active; ws.title = "التفصيلي"; ws.sheet_view.rightToLeft = True
+    heads = ["التاريخ", "الرقم الوظيفي", "الاسم", "الوحدة", "المسمى", "الفترة", "الحالة", "حضور", "انصراف", "دقائق التأخير", "انصراف تلقائي", "موقع الحضور", "المسافة (م)", "داخل النطاق", "إحداثيات الحضور", "موقع الانصراف", "مسافة الانصراف (م)", "إحداثيات الانصراف", "المصدر", "ملاحظة"]
+    ws.append([f"التقرير التفصيلي للحضور الإداري — من {date_from} إلى {date_to} ({len(rows)} سجل)"]); ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(heads))
+    ws["A1"].font = Font(bold=True, size=13); ws["A1"].alignment = Alignment(horizontal="center")
+    ws.append(heads)
+    for c in ws[2]:
+        c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="0F2440"); c.alignment = Alignment(horizontal="center")
+    src = {"self": "ذاتي", "manual": "يدوي", "bulk": "جماعي"}
+    coord = lambda g: f"{g['latitude']:.5f}, {g['longitude']:.5f}" if g.get("latitude") is not None and g.get("longitude") is not None else ""
+    for r in rows:
+        gi, go = r["check_in_geo"], r["check_out_geo"]
+        ws.append([r["date"], r["employee_no"], r["employee_name"], r["org_unit_name"], r["job_title"], r["shift_name"], r["status_label"], r["check_in"] or "", r["check_out"] or "", r["late_minutes"],
+                   "نعم" if r["auto_checkout"] else "", gi["location_name"] or gi["status_label"], gi["distance_m"] if gi["distance_m"] is not None else "", "" if gi["in_range"] is None else ("نعم" if gi["in_range"] else "لا"), coord(gi),
+                   go["location_name"] or go["status_label"], go["distance_m"] if go["distance_m"] is not None else "", coord(go), src.get(r["source"] or "", r["source"] or ""), r["note"]])
+    for ci in range(1, len(heads) + 1):
+        ws.column_dimensions[get_column_letter(ci)].width = 14
+    ws.column_dimensions["C"].width = 28; ws.column_dimensions["T"].width = 50; ws.column_dimensions["L"].width = 22; ws.column_dimensions["O"].width = 22; ws.column_dimensions["R"].width = 22
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(export_filename("الحضور التفصيلي", f"{date_from}_{date_to}", ext="xlsx")))
+
+
 # ══════════════ الخدمة الذاتية ══════════════
 
 @router.get("/my")

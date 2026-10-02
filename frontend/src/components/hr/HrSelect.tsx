@@ -142,3 +142,65 @@ export const ExportXlsxBtn: React.FC<{ rows: () => Record<string, any>[]; fileNa
   <button type="button" disabled={disabled} onClick={() => { const r = rows(); if (!r.length) { window.alert('لا توجد صفوف للتصدير'); return; } exportRowsXlsx(r, `${fileName}-${new Date().toISOString().slice(0, 10)}`); }}
     style={{ border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 800, cursor: disabled ? 'not-allowed' : 'pointer', backgroundColor: '#e8f5e9', color: '#2e7d32', opacity: disabled ? 0.6 : 1 }} data-testid={testID || 'export-xlsx-btn'} title="تصدير الصفوف المعروضة كما هي (بعد التصفية والفرز)">📥 تصدير المعروض Excel</button>
 );
+
+/** 🧰 أدوات القوائم: بحث + ترقيم صفحات + تحديد صفوف — تعمل على الصفوف المعروضة في العميل */
+export const useListTools = <T,>(rows: T[], keyOf: (r: T) => string, fields: (r: T) => (string | undefined | null)[], defaultPerPage = 25) => {
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [perPage, setPerPage] = useState(defaultPerPage);
+  const [sel, setSel] = useState<Record<string, boolean>>({});
+  const filtered = useMemo(() => rows.filter((r) => matches(search, ...(fields(r).map((f) => f ?? '')))), [rows, search, fields]);
+  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const safePage = Math.min(page, pages);
+  const pageRows = useMemo(() => filtered.slice((safePage - 1) * perPage, safePage * perPage), [filtered, safePage, perPage]);
+  useEffect(() => { setPage(1); }, [search, perPage, rows]);
+  const selected = filtered.filter((r) => sel[keyOf(r)]);
+  const toggle = (r: T) => setSel((p) => ({ ...p, [keyOf(r)]: !p[keyOf(r)] }));
+  const allPage = pageRows.length > 0 && pageRows.every((r) => sel[keyOf(r)]);
+  const togglePage = () => setSel((p) => { const n = { ...p }; pageRows.forEach((r) => { if (allPage) delete n[keyOf(r)]; else n[keyOf(r)] = true; }); return n; });
+  const clearSel = () => setSel({});
+  return { search, setSearch, page: safePage, setPage, perPage, setPerPage, pages, filtered, pageRows, sel, selected, toggle, allPage, togglePage, clearSel, isSel: (r: T) => !!sel[keyOf(r)] };
+};
+
+export const ListToolbar: React.FC<{ t: ReturnType<typeof useListTools<any>>; total: number; placeholder?: string; testID: string; exportRows?: (rows: any[]) => Record<string, any>[]; fileName?: string; extra?: React.ReactNode }> = ({ t, total, placeholder = 'بحث بالاسم أو الرقم…', testID, exportRows, fileName = 'تقرير', extra }) => (
+  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', direction: 'rtl', marginTop: 10 }} data-testid={`${testID}-toolbar`}>
+    <input value={t.search} onChange={(e) => t.setSearch(e.target.value)} placeholder={placeholder} style={{ ...inp, width: 260 }} data-testid={`${testID}-search`} />
+    <HrSelect value={String(t.perPage)} onChange={(v) => t.setPerPage(Number(v) || 25)} options={[10, 25, 50, 100, 200].map((n) => ({ value: String(n), label: `${n} / صفحة` }))} allowClear={false} style={{ width: 120 }} testID={`${testID}-perpage`} />
+    <Pager page={t.page} pages={t.pages} onChange={t.setPage} testID={testID} />
+    <span style={{ fontSize: 12, color: '#64748b' }} data-testid={`${testID}-count`}>المعروض {t.filtered.length} من {total}{t.selected.length ? ` · المحدد ${t.selected.length}` : ''}</span>
+    <span style={{ flex: 1 }} />
+    {extra}
+    {exportRows && <ExportXlsxBtn fileName={fileName} testID={`${testID}-export-shown`} rows={() => exportRows(t.filtered)} />}
+    {exportRows && t.selected.length > 0 && <button type="button" onClick={() => exportRowsXlsx(exportRows(t.selected), `${fileName}-المحدد-${new Date().toISOString().slice(0, 10)}`)} style={{ border: 'none', borderRadius: 10, padding: '8px 14px', fontSize: 12.5, fontWeight: 800, cursor: 'pointer', backgroundColor: '#fff3e0', color: '#e65100' }} data-testid={`${testID}-export-selected`}>📥 تصدير المحدد ({t.selected.length})</button>}
+    {t.selected.length > 0 && <button type="button" onClick={t.clearSel} style={{ border: 'none', background: 'transparent', color: '#64748b', cursor: 'pointer', fontSize: 12 }} data-testid={`${testID}-clear-sel`}>إلغاء التحديد</button>}
+  </div>
+);
+
+export const Pager: React.FC<{ page: number; pages: number; onChange: (p: number) => void; testID: string }> = ({ page, pages, onChange, testID }) => {
+  const [jump, setJump] = useState('');
+  const b = (label: string, p: number, dis: boolean, id: string) => <button type="button" disabled={dis} onClick={() => onChange(p)} style={{ border: '1px solid #e2e8f0', background: dis ? '#f8fafc' : '#fff', borderRadius: 8, padding: '5px 9px', cursor: dis ? 'default' : 'pointer', fontSize: 12, color: dis ? '#cbd5e1' : '#0f2440' }} data-testid={`${testID}-${id}`}>{label}</button>;
+  return (
+    <div style={{ display: 'flex', gap: 4, alignItems: 'center', direction: 'rtl' }} data-testid={`${testID}-pager`}>
+      {b('⏮', 1, page <= 1, 'first')}{b('السابق', page - 1, page <= 1, 'prev')}
+      <span style={{ fontSize: 12, color: '#475569', padding: '0 6px' }}>صفحة <b data-testid={`${testID}-page`}>{page}</b> من {pages}</span>
+      {b('التالي', page + 1, page >= pages, 'next')}{b('⏭', pages, page >= pages, 'last')}
+      <input value={jump} onChange={(e) => setJump(e.target.value.replace(/\D/g, ''))} onKeyDown={(e) => { if (e.key === 'Enter' && jump) { onChange(Math.min(pages, Math.max(1, Number(jump)))); setJump(''); } }} placeholder="رقم" style={{ ...inp, width: 60, padding: '5px 6px', textAlign: 'center' }} data-testid={`${testID}-jump`} title="اكتب رقم الصفحة واضغط Enter" />
+    </div>
+  );
+};
+
+export const SelBox: React.FC<{ checked: boolean; onChange: () => void; testID?: string }> = ({ checked, onChange, testID }) => <input type="checkbox" checked={checked} onChange={onChange} onClick={(e) => e.stopPropagation()} style={{ width: 16, height: 16, cursor: 'pointer' }} data-testid={testID} />;
+
+export const GEO_STATUS_COLOR: Record<string, string> = { in_range: '#16a34a', out_of_range: '#dc2626', no_location: '#f97316', exempt: '#7c3aed', not_required: '#94a3b8', auto: '#7c3aed' };
+export const geoText = (g: any) => !g || (!g.status && !g.location_name) ? '' : `${g.location_name || g.status_label || ''}${g.distance_m != null ? ` · ${g.distance_m} م` : ''}`;
+export const GeoCell: React.FC<{ g: any; testID?: string }> = ({ g, testID }) => {
+  if (!g || (!g.status && !g.location_name)) return <span style={{ color: '#cbd5e1' }}>—</span>;
+  const coords = g.latitude != null && g.longitude != null ? `${Number(g.latitude).toFixed(5)}, ${Number(g.longitude).toFixed(5)}` : '';
+  return (
+    <div style={{ fontSize: 11.5, lineHeight: 1.5 }} data-testid={testID}>
+      <div style={{ fontWeight: 800, color: GEO_STATUS_COLOR[g.status] || '#64748b' }}>📍 {g.status_label || g.location_name}</div>
+      {g.location_name && g.status !== 'auto' ? <div style={{ color: '#0f172a' }}>{g.location_name}{g.distance_m != null ? <span style={{ color: g.in_range === false ? '#dc2626' : '#16a34a', fontWeight: 700 }}> · يبعد {g.distance_m} م</span> : null}</div> : null}
+      {coords ? <a href={`https://www.google.com/maps?q=${g.latitude},${g.longitude}`} target="_blank" rel="noreferrer" style={{ color: '#1565c0', direction: 'ltr', display: 'inline-block', fontSize: 10.5 }}>{coords} ↗</a> : null}
+    </div>
+  );
+};
