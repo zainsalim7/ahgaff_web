@@ -755,6 +755,8 @@ export const hrAPI = {
   leave: (id: string) => api.get(`/hr/leaves/${id}`),
   myLeaves: (year?: number) => api.get('/hr/leaves/my', { params: year ? { year } : {} }),
   submitMyLeave: (data: any) => api.post('/hr/leaves/my', data),
+  uploadLeaveAttachment: (id: string, file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`/hr/leaves/${id}/attachment`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); },
+  leaveAttachment: (id: string) => api.get(`/hr/leaves/${id}/attachment`, { responseType: 'blob' }),
   registerLeave: (data: any) => api.post('/hr/leaves', data),
   decideLeave: (id: string, action: 'approve' | 'reject', note = '') => api.post(`/hr/leaves/${id}/decide`, { action, note }),
   cancelLeave: (id: string) => api.post(`/hr/leaves/${id}/cancel`),

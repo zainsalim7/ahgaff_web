@@ -2,7 +2,7 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
 from pydantic import BaseModel
 from bson import ObjectId
 
@@ -56,6 +56,19 @@ async def _balance(db, employee_id: str, year: int, settings: dict = None, type_
         default_ent = settings.get("annual_leave_days", 30)
     ent = doc.get("entitlement", default_ent)
     carried = doc.get("carried_over", 0)
+    # 🔁 ترحيل تلقائي: إن كان النوع يسمح بالترحيل ولم يُحدَّد المرحَّل لهذه السنة بعد → نحسب متبقي السنة السابقة (حتى الحد) ونثبّته
+    if t.get("carry_over_enabled") and "carried_over" not in doc and ent is not None and year <= datetime.now(YEMEN_TZ).year + 1:
+        prev_doc = await db.leave_balances.find_one({"employee_id": employee_id, "year": year - 1, "type": tq}) or {}
+        prev_ent = prev_doc.get("entitlement", default_ent)
+        if prev_ent is not None:
+            prev_used = sum([l.get("days", 0) async for l in db.leave_requests.find({"employee_id": employee_id, "type": type_key, "status": "approved", "start_date": {"$regex": f"^{year - 1}"}}, {"days": 1})])
+            had_any = prev_doc or prev_used > 0 or await db.employees.count_documents({"_id": ObjectId(employee_id), "hire_date": {"$lt": f"{year}-01-01"}}) > 0
+            if had_any:
+                carried = max(0, prev_ent + prev_doc.get("carried_over", 0) - prev_used)
+                if t.get("carry_over_max_days") is not None:
+                    carried = min(carried, int(t["carry_over_max_days"]))
+                await db.leave_balances.update_one({"employee_id": employee_id, "year": year, "type": type_key}, {"$set": {"carried_over": carried, "auto_carried": True, "carried_at": _now()}, "$setOnInsert": {"type": type_key}}, upsert=True)
+                doc = {**doc, "carried_over": carried, "auto_carried": True}
     used = pending = 0
     async for l in db.leave_requests.find({"employee_id": employee_id, "type": type_key, "status": {"$in": ["approved", *OPEN]}, "start_date": {"$regex": f"^{year}"}}, {"days": 1, "status": 1}):
         if l["status"] == "approved":
@@ -63,7 +76,7 @@ async def _balance(db, employee_id: str, year: int, settings: dict = None, type_
         else:
             pending += l.get("days", 0)
     return {"year": year, "type": type_key, "type_label": t.get("name") or LEAVE_TYPES.get(type_key, type_key), "color": t.get("color"), "entitlement": ent, "carried_over": carried, "used": used, "pending": pending,
-            "remaining": (ent + carried - used) if ent is not None else None, "unlimited": ent is None, "overridden": bool(doc), "note": doc.get("note", "")}
+            "remaining": (ent + carried - used) if ent is not None else None, "unlimited": ent is None, "overridden": bool(doc.get("entitlement") is not None or doc.get("note")), "auto_carried": bool(doc.get("auto_carried")), "note": doc.get("note", "")}
 
 
 async def _balances(db, emp: dict, year: int, settings: dict = None) -> list:
@@ -150,17 +163,22 @@ def _view(l: dict) -> dict:
     d["type_label"] = (_TYPE_NAMES.get(d.get("type")) or LEAVE_TYPES.get(d.get("type"), d.get("type")))
     d["status_label"] = STATUSES.get(d.get("status"), d.get("status"))
     d["deducts_balance"] = d.get("type") in _DEDUCT
+    d["has_attachment"] = bool(d.get("attachment_path"))
+    d["requires_attachment"] = d.get("type") in _REQ_ATTACH
+    d.pop("attachment_path", None)
     return d
 
 
 _TYPE_NAMES: dict = {}
 _DEDUCT: set = set()
+_REQ_ATTACH: set = set()
 
 
 async def _refresh_type_cache(db):
     types = await leave_types_map(db)
     _TYPE_NAMES.clear(); _TYPE_NAMES.update({k: t["name"] for k, t in types.items()})
     _DEDUCT.clear(); _DEDUCT.update({k for k, t in types.items() if t.get("deducts_balance")})
+    _REQ_ATTACH.clear(); _REQ_ATTACH.update({k for k, t in types.items() if t.get("requires_attachment")})
     return types
 
 
@@ -347,6 +365,9 @@ async def decide_leave(leave_id: str, data: DecisionIn, current_user: dict = Dep
     step = "manager" if (l["status"] == "pending" and is_mgr) else "hr"
     new_status = "rejected" if data.action == "reject" else ("hr_pending" if step == "manager" else "approved")
     if new_status == "approved":
+        _types_now = await _refresh_type_cache(db)
+        if (_types_now.get(l["type"]) or {}).get("requires_attachment") and not l.get("attachment_path"):
+            raise HTTPException(status_code=400, detail="هذا النوع يتطلب مرفقاً (تقرير/مستند) — لا يمكن الاعتماد قبل رفع المرفق")
         bal = await _balance(db, l["employee_id"], parse_date(l["start_date"]).year, None, l["type"], emp)
         if bal["remaining"] is not None and l["days"] > bal["remaining"]:
             raise HTTPException(status_code=400, detail=f"الرصيد الحالي ({bal['remaining']}) لا يغطي الطلب ({l['days']})")
@@ -391,3 +412,56 @@ async def cancel_leave(leave_id: str, current_user: dict = Depends(get_current_u
         await sync_leave_statuses(db)
     await log_activity(current_user, "hr_leave_cancel", "leave", leave_id, (e or {}).get("full_name", ""))
     return {"message": "تم إلغاء الطلب"}
+
+
+# ══════════════ 📎 مرفق طلب الإجازة ══════════════
+LEAVE_ATTACH_ALLOWED = {"application/pdf": "pdf", "image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+
+
+async def _leave_access(db, l: dict, current_user: dict) -> bool:
+    if _can_view(current_user) or has_permission(current_user, P_LEAVES) or l.get("manager_user_id") == user_id_of(current_user):
+        return True
+    emp = await find_my_employee(db, current_user)
+    return bool(emp and str(emp["_id"]) == l.get("employee_id"))
+
+
+@router.post("/{leave_id}/attachment")
+async def upload_leave_attachment(leave_id: str, file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """📎 رفع مرفق (تقرير طبي…) لطلب إجازة — صاحب الطلب أو شؤون الموظفين"""
+    db = get_db()
+    l = await db.leave_requests.find_one({"_id": _oid(leave_id, "الطلب")})
+    if not l:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    if not await _leave_access(db, l, current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if l.get("status") in ("rejected", "cancelled"):
+        raise HTTPException(status_code=400, detail="لا يمكن إرفاق ملف لطلب مرفوض/ملغى")
+    if file.content_type not in LEAVE_ATTACH_ALLOWED:
+        raise HTTPException(status_code=400, detail="صيغة المرفق غير مدعومة (PDF أو صورة)")
+    data = await file.read()
+    if not data or len(data) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="المرفق فارغ أو يتجاوز 8MB")
+    from services.storage_service import upload_file
+    stored = upload_file(data, file.filename or "attachment", file.content_type, f"hr_leaves/{l['employee_id']}")
+    await db.leave_requests.update_one({"_id": l["_id"]}, {"$set": {"attachment_path": stored["storage_path"], "attachment_name": stored["original_filename"], "attachment_type": file.content_type, "attachment_at": _now()},
+                                                           "$push": {"history": {"action": "attachment", "by_name": current_user.get("full_name", ""), "at": _now(), "note": stored["original_filename"]}}})
+    return {"message": "تم رفع المرفق", "attachment_name": stored["original_filename"]}
+
+
+@router.get("/{leave_id}/attachment")
+async def get_leave_attachment(leave_id: str, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    l = await db.leave_requests.find_one({"_id": _oid(leave_id, "الطلب")})
+    if not l or not l.get("attachment_path"):
+        raise HTTPException(status_code=404, detail="لا يوجد مرفق")
+    if not await _leave_access(db, l, current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    from services.storage_service import get_object
+    from urllib.parse import quote
+    import io
+    from fastapi.responses import StreamingResponse
+    try:
+        data, ct = get_object(l["attachment_path"])
+    except Exception:
+        raise HTTPException(status_code=404, detail="تعذّر جلب المرفق")
+    return StreamingResponse(io.BytesIO(data), media_type=l.get("attachment_type") or ct, headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(l.get('attachment_name') or 'attachment')}"})

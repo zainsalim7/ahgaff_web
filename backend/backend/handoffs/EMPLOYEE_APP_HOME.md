@@ -186,3 +186,8 @@
 - `GET /hr/leaves/my` أصبح يعيد إضافةً إلى `balance` (السنوية): `balances[]` = `[{type, type_label, color, entitlement, carried_over, used, pending, remaining, unlimited}]` لكل نوع له رصيد محدد لفئة الموظف (سنوية/مرضية/اضطرارية… حسب إعدادات الإدارة). اعرضها كشرائح تحت الرصيد السنوي.
 - `GET /hr/leaves/meta` → `types` (المفعّلة فقط) + `type_defs[]` (name, color, deducts_balance, requires_attachment, paid) — استخدم `requires_attachment` لإظهار حقل المرفق، و`deducts_balance` لعرض الرصيد المتبقي بجانب النوع في نموذج الطلب.
 - `GET /hr/home/summary` → `leaves.remaining` ما زال رصيد السنوية.
+
+## 9) 📎 مرفق الإجازة + 🔁 ترحيل الرصيد (2026-10-02)
+- بعد `POST /hr/leaves/my` (يعيد `id`) ارفع المرفق إن كان النوع يتطلبه: `POST /hr/leaves/{id}/attachment` **multipart** حقل `file` (PDF/JPG/PNG/WEBP ≤ 8MB). الاعتماد من HR **مرفوض** حتى يُرفع المرفق لهذا النوع.
+- في قائمة الطلبات: `has_attachment`, `attachment_name`, `requires_attachment` — إن `requires_attachment && !has_attachment && status ∈ (pending, hr_pending)` اعرض تنبيه «مطلوب مرفق» وزر رفع. فتح المرفق: `GET /hr/leaves/{id}/attachment` (نفس التوكن).
+- الرصيد: `balance.carried_over` قد يأتي من **ترحيل تلقائي** (`auto_carried: true`) للمتبقي من السنة السابقة بحد تحدده الإدارة لكل نوع.

@@ -10,6 +10,8 @@ export const LeaveRequestModal: React.FC<Props> = ({ onClose, onSaved, meta, for
   const [emps, setEmps] = useState<any[]>([]);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const typeDef = (meta?.type_defs || []).find((t: any) => t.key === f.type);
   useEffect(() => { if (forEmployee) hrAPI.employees({ per_page: 200 }).then((r) => setEmps(r.data.employees || [])).catch(() => {}); }, [forEmployee]);
   const set = (k: string) => (e: any) => setF((p: any) => ({ ...p, [k]: e.target.value }));
 
@@ -17,7 +19,9 @@ export const LeaveRequestModal: React.FC<Props> = ({ onClose, onSaved, meta, for
     setBusy(true); setErr('');
     try {
       const payload = { ...f, employee_id: f.employee_id || null };
+      if (typeDef?.requires_attachment && !file && !forEmployee) { setErr('هذا النوع يتطلب إرفاق مستند (تقرير طبي…)'); setBusy(false); return; }
       const r = forEmployee ? await hrAPI.registerLeave(payload) : await hrAPI.submitMyLeave(payload);
+      if (file && r.data.id) { try { await hrAPI.uploadLeaveAttachment(r.data.id, file); } catch (e) { window.alert(`تم تقديم الطلب لكن فشل رفع المرفق: ${errMsg(e)}`); } }
       onSaved(r.data.message); onClose();
     } catch (e) { setErr(errMsg(e, 'فشل الحفظ')); } finally { setBusy(false); }
   };
@@ -35,6 +39,9 @@ export const LeaveRequestModal: React.FC<Props> = ({ onClose, onSaved, meta, for
         <Field label="إلى تاريخ *"><input type="date" value={f.end_date} onChange={set('end_date')} style={{ ...inp, direction: 'ltr' }} data-testid="leave-end-date" /></Field>
         <Field label="السبب / ملاحظات" span={2}><textarea value={f.reason} onChange={set('reason')} rows={3} style={{ ...inp, resize: 'vertical' }} data-testid="leave-reason" /></Field>
         <Field label="وسيلة التواصل أثناء الإجازة" span={2}><input value={f.contact_during_leave} onChange={set('contact_during_leave')} style={inp} data-testid="leave-contact" /></Field>
+        <Field label={`المرفق (PDF أو صورة)${typeDef?.requires_attachment ? ' * مطلوب لهذا النوع' : ' — اختياري'}`} span={2}>
+          <input type="file" accept="application/pdf,image/*" onChange={(e) => setFile(e.target.files?.[0] || null)} style={{ ...inp, padding: 6, border: typeDef?.requires_attachment && !file ? '1px solid #f97316' : undefined }} data-testid="leave-attachment" />
+        </Field>
       </div>
       <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8, textAlign: 'right' }}>تُحتسب أيام العمل فقط (تُستثنى العطل الأسبوعية والرسمية). الإجازة السنوية تُخصم من الرصيد.</div>
       {err && <div style={{ color: '#c62828', backgroundColor: '#ffebee', padding: '8px 10px', borderRadius: 8, fontSize: 12.5, marginTop: 10, textAlign: 'right' }} data-testid="leave-form-error">{err}</div>}

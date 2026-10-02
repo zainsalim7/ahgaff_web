@@ -61,7 +61,9 @@ export default function HrMyLeaves() {
                   <tbody>
                     {d.requests.map((l: any) => (
                       <tr key={l.id} style={{ borderBottom: '1px solid #eef2f7' }} data-testid={`my-leave-${l.id}`}>
-                        <td style={{ ...td, fontWeight: 700 }}>{l.type_label}{l.reason ? <div style={{ fontSize: 10.5, color: '#94a3b8' }}>{l.reason}</div> : null}</td>
+                        <td style={{ ...td, fontWeight: 700 }}>{l.type_label}{l.reason ? <div style={{ fontSize: 10.5, color: '#94a3b8' }}>{l.reason}</div> : null}
+                          <div style={{ marginTop: 3 }}>{l.has_attachment ? <button onClick={async () => { try { const r = await hrAPI.leaveAttachment(l.id); window.open(URL.createObjectURL(r.data), '_blank'); } catch (e) { alertErr(e); } }} style={{ border: 'none', background: 'transparent', color: '#2e7d32', cursor: 'pointer', fontSize: 11, fontWeight: 700, padding: 0 }} data-testid={`my-leave-att-${l.id}`}>📎 المرفق</button>
+                            : l.requires_attachment && ['pending', 'hr_pending'].includes(l.status) ? <label style={{ color: '#dc2626', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>⚠️ مطلوب مرفق — اضغط للرفع<input type="file" accept="application/pdf,image/*" style={{ display: 'none' }} onChange={async (e) => { const fl = e.target.files?.[0]; if (!fl) return; try { const r = await hrAPI.uploadLeaveAttachment(l.id, fl); window.alert(r.data.message); load(); } catch (er) { alertErr(er); } }} data-testid={`my-leave-upload-${l.id}`} /></label> : null}</div></td>
                         <td style={{ ...td, direction: 'ltr', textAlign: 'right' }}>{l.start_date}</td>
                         <td style={{ ...td, direction: 'ltr', textAlign: 'right' }}>{l.end_date}</td>
                         <td style={{ ...td, fontWeight: 800 }}>{l.days}</td>

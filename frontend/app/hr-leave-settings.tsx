@@ -8,7 +8,7 @@ import { ReportHero, reportPage, ReportEmpty } from '../src/components/reports/R
 import { Badge, Th, td, table, inp, btn, alertErr, Modal, Field } from '../src/components/hr/ui';
 
 const CAT_LABEL: Record<string, string> = { academic: 'أكاديمي', administrative: 'إداري', technical: 'فني', service: 'خدمات مساندة' };
-const EMPTY = { key: '', name: '', color: '#1565c0', deducts_balance: true, entitlements: { academic: '', administrative: '', technical: '', service: '' }, requires_attachment: false, paid: true, is_active: true, order: 0, note: '' };
+const EMPTY = { key: '', name: '', color: '#1565c0', deducts_balance: true, carry_over_enabled: false, carry_over_max_days: '', entitlements: { academic: '', administrative: '', technical: '', service: '' }, requires_attachment: false, paid: true, is_active: true, order: 0, note: '' };
 
 const TypeForm: React.FC<{ item: any; cats: Record<string, string>; onClose: () => void; onSaved: () => void }> = ({ item, cats, onClose, onSaved }) => {
   const [f, setF] = useState<any>(item ? { ...item, entitlements: Object.fromEntries(Object.keys(cats).map((c) => [c, item.entitlements?.[c] ?? ''])) } : { ...EMPTY, entitlements: Object.fromEntries(Object.keys(cats).map((c) => [c, ''])) });
@@ -18,7 +18,7 @@ const TypeForm: React.FC<{ item: any; cats: Record<string, string>; onClose: () 
   const save = async () => {
     setBusy(true);
     try {
-      const payload = { ...f, order: Number(f.order) || 0, entitlements: Object.fromEntries(Object.entries(f.entitlements).map(([c, v]: any) => [c, v === '' || v == null ? null : Number(v)])) };
+      const payload = { ...f, order: Number(f.order) || 0, carry_over_max_days: f.carry_over_max_days === '' || f.carry_over_max_days == null ? null : Number(f.carry_over_max_days), entitlements: Object.fromEntries(Object.entries(f.entitlements).map(([c, v]: any) => [c, v === '' || v == null ? null : Number(v)])) };
       const r = item ? await hrAPI.updateLeaveType(item.key, payload) : await hrAPI.createLeaveType(payload);
       window.alert(r.data.message); onSaved(); onClose();
     } catch (e) { alertErr(e); } finally { setBusy(false); }
@@ -33,11 +33,16 @@ const TypeForm: React.FC<{ item: any; cats: Record<string, string>; onClose: () 
       <div style={{ marginTop: 12, padding: 12, borderRadius: 10, backgroundColor: f.deducts_balance ? '#eef4ff' : '#f8fafc', direction: 'rtl' }}>
         <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}><input type="checkbox" checked={!!f.deducts_balance} onChange={(e) => set('deducts_balance', e.target.checked)} data-testid="lt-deducts" /> يُخصم من رصيد الموظف (لهذا النوع رصيد سنوي محدد)</label>
         <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>{f.deducts_balance ? 'حدّد الاستحقاق السنوي بالأيام لكل فئة — اترك الحقل فارغاً للفئة التي لا رصيد لها (غير محدود). يمكن تجاوز الاستحقاق لموظف بعينه من تبويب «الأرصدة» في صفحة الإجازات.' : 'لن يُحسب أو يُخصم أي رصيد لهذا النوع — تُسجَّل الطلبات وتُعتمد دون حدّ.'}</div>
-        {f.deducts_balance && (
+        {f.deducts_balance && (<>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8, marginTop: 10 }}>
             {Object.entries(cats).map(([c, label]) => <Field key={c} label={`${label} (يوم/سنة)`}><input value={f.entitlements[c] ?? ''} onChange={(e) => setEnt(c, e.target.value)} placeholder="بلا رصيد" style={{ ...inp, textAlign: 'center' }} data-testid={`lt-ent-${c}`} /></Field>)}
           </div>
-        )}
+          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 10, flexWrap: 'wrap', borderTop: '1px dashed #cbd5e1', paddingTop: 10 }}>
+            <label style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}><input type="checkbox" checked={!!f.carry_over_enabled} onChange={(e) => set('carry_over_enabled', e.target.checked)} data-testid="lt-carry" /> 🔁 ترحيل المتبقي تلقائياً إلى السنة التالية</label>
+            {f.carry_over_enabled && <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}>بحد أقصى <input value={f.carry_over_max_days ?? ''} onChange={(e) => set('carry_over_max_days', e.target.value.replace(/\D/g, ''))} placeholder="بلا حد" style={{ ...inp, width: 90, textAlign: 'center' }} data-testid="lt-carry-max" /> يوماً</div>}
+          </div>
+          {f.carry_over_enabled && <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>يُحتسب الترحيل تلقائياً عند أول عرض لرصيد السنة الجديدة (المتبقي من السنة السابقة حتى الحد)، ويمكن تعديله يدوياً لأي موظف من تبويب الأرصدة.</div>}
+        </>)}
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: 10, marginTop: 12, direction: 'rtl', alignItems: 'end' }}>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5 }}><input type="checkbox" checked={!!f.paid} onChange={(e) => set('paid', e.target.checked)} data-testid="lt-paid" /> مدفوعة الراتب</label>
@@ -78,13 +83,14 @@ export default function HrLeaveSettings() {
           {!d ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text> : (
             <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
               <table style={table} data-testid="leave-types-table">
-                <Th cols={['النوع', 'يُخصم من الرصيد', ...Object.values(cats).map((c) => `${c} (يوم)`), 'مدفوعة', 'مرفق', 'الاستخدام', 'الحالة', '']} />
+                <Th cols={['النوع', 'يُخصم من الرصيد', ...Object.values(cats).map((c) => `${c} (يوم)`), 'ترحيل', 'مدفوعة', 'مرفق', 'الاستخدام', 'الحالة', '']} />
                 <tbody>
                   {d.items.map((t: any) => (
                     <tr key={t.key} style={{ borderBottom: '1px solid #eef2f7', opacity: t.is_active ? 1 : 0.55 }} data-testid={`lt-row-${t.key}`}>
                       <td style={{ ...td, fontWeight: 800, color: '#0f2440' }}><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: 5, backgroundColor: t.color, marginLeft: 6 }} />{t.name}<div style={{ fontSize: 10.5, color: '#94a3b8', direction: 'ltr', textAlign: 'right' }}>{t.key}{t.system ? ' · نظامي' : ''}</div></td>
                       <td style={td}>{t.deducts_balance ? <Badge color="#1565c0">نعم — له رصيد</Badge> : <Badge color="#94a3b8">لا يُخصم</Badge>}</td>
                       {Object.keys(cats).map((c) => <td key={c} style={{ ...td, textAlign: 'center', fontWeight: 800, color: t.deducts_balance && t.entitlements?.[c] != null ? '#0f2440' : '#cbd5e1' }}>{t.deducts_balance ? (t.entitlements?.[c] ?? 'بلا حد') : '—'}</td>)}
+                      <td style={td}>{t.deducts_balance && t.carry_over_enabled ? <Badge color="#0f766e">🔁 {t.carry_over_max_days != null ? `حتى ${t.carry_over_max_days}` : 'بلا حد'}</Badge> : '—'}</td>
                       <td style={td}>{t.paid ? '✓' : <Badge color="#64748b">بدون راتب</Badge>}</td>
                       <td style={td}>{t.requires_attachment ? '📎 مطلوب' : '—'}</td>
                       <td style={{ ...td, color: '#64748b' }}>{t.usage || 0} طلب</td>

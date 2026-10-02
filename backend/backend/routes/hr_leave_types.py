@@ -31,6 +31,8 @@ class LeaveTypeIn(BaseModel):
     is_active: bool = True
     order: int = 0
     note: Optional[str] = ""
+    carry_over_enabled: bool = False
+    carry_over_max_days: Optional[int] = None
 
 
 def _ser(t: dict) -> dict:
@@ -80,6 +82,8 @@ def _validate(data: LeaveTypeIn):
             raise HTTPException(status_code=400, detail=f"فئة غير معروفة: {c}")
         if v is not None and not (0 <= int(v) <= 365):
             raise HTTPException(status_code=400, detail="الاستحقاق بين 0 و365 يوماً")
+    if data.carry_over_max_days is not None and not (0 <= data.carry_over_max_days <= 365):
+        raise HTTPException(status_code=400, detail="حد الترحيل بين 0 و365 يوماً")
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", data.color or ""):
         data.color = "#1565c0"
 
