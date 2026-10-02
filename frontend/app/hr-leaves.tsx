@@ -6,7 +6,7 @@ import { hrAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { Tabs, Badge, Th, td, table, inp, btn, opt, alertErr, fmtDT, Modal, Field, LEAVE_STATUS_COLOR } from '../src/components/hr/ui';
-import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort } from '../src/components/hr/HrSelect';
+import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort, ExportXlsxBtn } from '../src/components/hr/HrSelect';
 import { LeaveRequestModal, DecisionModal } from '../src/components/hr/LeaveModals';
 
 const YEAR = new Date().getFullYear();
@@ -64,7 +64,10 @@ export default function HrLeaves() {
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', direction: 'rtl', flexWrap: 'wrap', gap: 8 }}>
           <Tabs tabs={[{ key: 'requests', label: 'الطلبات', count: data.total }, { key: 'balances', label: 'الأرصدة السنوية' }]} value={tab} onChange={setTab} testID="hr-leaves-tabs" />
-          {canManage && <button onClick={() => setShowNew(true)} style={btn('#1565c0', '#fff', { marginBottom: 12 })} data-testid="hr-leaves-register-btn">+ تسجيل إجازة لموظف</button>}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            {canManage && <button onClick={() => setShowNew(true)} style={btn('#1565c0')} data-testid="hr-leaves-register-btn">+ تسجيل إجازة لموظف</button>}
+            <ExportXlsxBtn fileName="الإجازات" testID="hr-leaves-export-btn" rows={() => sortedLeaves.map((l: any) => ({ 'الموظف': l.employee_name, 'الرقم الوظيفي': l.employee_no || '', 'الوحدة': l.org_unit_name || '', 'النوع': l.type_label, 'من': l.start_date, 'إلى': l.end_date, 'الأيام': l.days, 'الحالة': l.status_label, 'السبب': l.reason || '', 'قُدّم': fmtDT(l.created_at) }))} />
+          </div>
         </div>
 
         {tab === 'requests' && (<>

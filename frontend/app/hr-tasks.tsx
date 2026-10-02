@@ -6,7 +6,7 @@ import { hrAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { Tabs, Badge, Th, td, table, inp, btn, opt } from '../src/components/hr/ui';
-import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort } from '../src/components/hr/HrSelect';
+import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort, ExportXlsxBtn } from '../src/components/hr/HrSelect';
 import { TaskFormModal, TaskDetailModal, TASK_STATUS_COLOR, TASK_PRIORITY_COLOR } from '../src/components/hr/TaskModals';
 
 const TASK_SORTERS: Record<string, (t: any) => any> = { title: (t) => t.title, assignee: (t) => t.assignee_name || t.employee_name || '', assigner: (t) => t.assigner_name || '', priority: (t) => ['low', 'normal', 'high', 'urgent'].indexOf(t.priority), due: (t) => t.due_date || '', progress: (t) => Number(t.progress || 0), status: (t) => t.status_label };
@@ -50,7 +50,10 @@ export default function HrTasks() {
         ]} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', direction: 'rtl', flexWrap: 'wrap', gap: 8 }}>
           <Tabs tabs={tabs} value={view} onChange={setView} testID="hr-tasks-tabs" />
-          {canAssign && <button onClick={() => setForm({ open: true, task: null })} style={btn('#1565c0', '#fff', { marginBottom: 12 })} data-testid="task-new-btn">+ إسناد مهمة</button>}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+            {canAssign && <button onClick={() => setForm({ open: true, task: null })} style={btn('#1565c0')} data-testid="task-new-btn">+ إسناد مهمة</button>}
+            <ExportXlsxBtn fileName="المهام" testID="task-export-btn" rows={() => sortedTasks.map((t: any) => ({ 'المهمة': t.title, 'المكلَّف': t.employee_name, 'الوحدة': t.org_unit_name || '', 'أسندها': t.assigner_name || '', 'الأولوية': t.priority_label, 'الاستحقاق': t.due_date || '', 'التقدم %': t.progress || 0, 'الحالة': t.status_label, 'متأخرة': t.overdue ? 'نعم' : '' }))} />
+          </div>
         </div>
         <View style={reportPage.card}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, direction: 'rtl' }}>

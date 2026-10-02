@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
+import { ExportXlsxBtn, HrSelect } from '../src/components/hr/HrSelect';
 import { View, Text, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { goBack } from '../src/utils/navigation';
@@ -46,7 +47,10 @@ export default function HrAppraisals() {
         <ReportHero kicker="شؤون الموظفين" title="التقييم السنوي" subtitle="6 معايير بمقياس 1–5 مع مؤشرات الحضور والمهام التلقائية — المدير المباشر يقيّم، شؤون الموظفين تعتمد، والموظف يطّلع ويعلّق" onBack={() => goBack()} canExport={false} testID="hr-appraisals-hero" />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', direction: 'rtl', flexWrap: 'wrap', gap: 8 }}>
           <Tabs tabs={tabs} value={tab} onChange={setTab} testID="hr-appr-tabs" />
-          {tab !== 'my' && <select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ ...inp, width: 110, marginBottom: 12 }} data-testid="hr-appr-year">{[YEAR + 1, YEAR, YEAR - 1, YEAR - 2].map((y) => <option key={y} value={y}>{y}</option>)}</select>}
+          {tab !== 'my' && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12, direction: 'rtl', flexWrap: 'wrap' }}>
+            <HrSelect value={String(year)} onChange={(v) => setYear(Number(v) || YEAR)} options={[YEAR + 1, YEAR, YEAR - 1, YEAR - 2].map((y) => ({ value: String(y), label: String(y) }))} allowClear={false} style={{ width: 130 }} testID="hr-appr-year" />
+            <ExportXlsxBtn fileName={`التقييم-السنوي-${year}`} testID="hr-appr-export-btn" rows={() => visibleRows.map((r: any) => ({ 'الموظف': r.employee_name, 'الرقم الوظيفي': r.employee_no || '', 'المسمى': r.job_title || '', 'الوحدة': r.org_unit_name || '', 'المقيِّم': r.evaluator_name || '', 'الدرجة': r.total_score ?? '', 'التقدير': r.grade || '', 'الحالة': r.status_label }))} />
+          </div>}
         </div>
 
         {tab !== 'my' && ov && (

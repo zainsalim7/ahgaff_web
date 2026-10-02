@@ -7,7 +7,7 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { Badge, Th, td, table, inp, btn, opt, alertErr, fmtDT, Drawer, CORR_COLOR, CORR_STATUS_COLOR } from '../src/components/hr/ui';
 import { CorrFormModal } from '../src/components/hr/CorrFormModal';
-import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort } from '../src/components/hr/HrSelect';
+import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort, ExportXlsxBtn } from '../src/components/hr/HrSelect';
 
 const YEAR = new Date().getFullYear();
 const SORTERS: Record<string, (c: any) => any> = { ref_no: (c) => c.ref_no, direction: (c) => c.direction_label, subject: (c) => c.subject, party: (c) => c.to_unit_name || c.to_party || c.from_party || '', date: (c) => c.date, priority: (c) => c.priority_label, status: (c) => c.status_label };
@@ -58,7 +58,10 @@ export default function HrCorrespondence() {
             ]} />
           </div>
         </div>
-        {canManage && <div style={{ direction: 'rtl', marginBottom: 12 }}><button onClick={() => setForm({ open: true, item: null })} style={btn('#1565c0')} data-testid="corr-new-btn">+ مراسلة جديدة</button></div>}
+        <div style={{ direction: 'rtl', marginBottom: 12, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {canManage && <button onClick={() => setForm({ open: true, item: null })} style={btn('#1565c0')} data-testid="corr-new-btn">+ مراسلة جديدة</button>}
+          <ExportXlsxBtn fileName="المراسلات" testID="corr-export-btn" rows={() => sortedItems.map((c: any) => ({ 'الرقم المرجعي': c.ref_no, 'النوع': c.direction_label, 'الموضوع': c.subject, 'الجهة / المستهدفون': c.to_unit_name || c.to_party || c.from_party || (c.to_all_employees ? 'كل الموظفين' : (c.to_employee_names || []).join('، ')), 'التاريخ': c.date, 'الأولوية': c.priority_label, 'الحالة': c.status_label, 'الاستحقاق': c.due_date || '', 'التصنيف': c.category_label || '', 'المُرسِل': c.sender_employee_name || c.created_by_name || '' }))} />
+        </div>
         <View style={[reportPage.card, { zIndex: 20 }]}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.8fr', gap: 8, direction: 'rtl' }}>
             <input placeholder="بحث بالموضوع / الرقم المرجعي / الجهة" value={q.search} onChange={setQ1('search')} style={inp} data-testid="corr-search" />
