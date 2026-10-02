@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { hrAPI } from '../../services/api';
 import { Modal, Field, inp, btn, opt, errMsg } from './ui';
+import { EmployeeSelect } from './HrSelect';
 
 interface Props { onClose: () => void; onSaved: (msg: string) => void; meta: any; forEmployee?: boolean; }
 
@@ -26,10 +27,7 @@ export const LeaveRequestModal: React.FC<Props> = ({ onClose, onSaved, meta, for
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         {forEmployee && (
           <Field label="الموظف *" span={2}>
-            <select value={f.employee_id} onChange={set('employee_id')} style={inp} data-testid="leave-employee-select">
-              <option value="">— اختر الموظف —</option>
-              {emps.map((e) => <option key={e.id} value={e.id}>{e.full_name} ({e.employee_no})</option>)}
-            </select>
+            <EmployeeSelect value={f.employee_id} onChange={(v) => setF((p: any) => ({ ...p, employee_id: v }))} emps={emps} testID="leave-employee-select" />
           </Field>
         )}
         <Field label="نوع الإجازة" span={2}><select value={f.type} onChange={set('type')} style={inp} data-testid="leave-type-select">{opt(meta?.types)}</select></Field>

@@ -6,7 +6,10 @@ import { hrAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { Tabs, Badge, Th, td, table, inp, btn, opt } from '../src/components/hr/ui';
+import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort } from '../src/components/hr/HrSelect';
 import { TaskFormModal, TaskDetailModal, TASK_STATUS_COLOR, TASK_PRIORITY_COLOR } from '../src/components/hr/TaskModals';
+
+const TASK_SORTERS: Record<string, (t: any) => any> = { title: (t) => t.title, assignee: (t) => t.assignee_name || t.employee_name || '', assigner: (t) => t.assigner_name || '', priority: (t) => ['low', 'normal', 'high', 'urgent'].indexOf(t.priority), due: (t) => t.due_date || '', progress: (t) => Number(t.progress || 0), status: (t) => t.status_label };
 
 export default function HrTasks() {
   const { hasPermission, user } = useAuth();
@@ -15,6 +18,8 @@ export default function HrTasks() {
   const [meta, setMeta] = useState<any>(null);
   const [q, setQ] = useState({ status: 'open,in_progress', priority: '', search: '' });
   const [data, setData] = useState<any>({ items: [], total: 0, stats: {}, team_size: 0 });
+  const [sort, setSort] = useState<Sort>(null);
+  const sortedTasks = useSort<any>(data.items || [], sort, TASK_SORTERS);
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ open: boolean; task: any | null }>({ open: false, task: null });
   const [detailId, setDetailId] = useState<string | null>(null);
@@ -49,8 +54,8 @@ export default function HrTasks() {
         <View style={reportPage.card}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, direction: 'rtl' }}>
             <input placeholder="بحث بالعنوان" value={q.search} onChange={(e) => setQ((p) => ({ ...p, search: e.target.value }))} style={inp} data-testid="task-search" />
-            <select value={q.status} onChange={(e) => setQ((p) => ({ ...p, status: e.target.value }))} style={inp} data-testid="task-filter-status"><option value="open,in_progress">المفتوحة</option><option value="">كل الحالات</option>{opt(meta?.statuses)}</select>
-            <select value={q.priority} onChange={(e) => setQ((p) => ({ ...p, priority: e.target.value }))} style={inp} data-testid="task-filter-priority"><option value="">كل الأولويات</option>{opt(meta?.priorities)}</select>
+            <HrSelect value={q.status} onChange={(v) => setQ((p) => ({ ...p, status: v }))} options={[{ value: 'open,in_progress', label: 'المفتوحة' }, ...optsFromMap(meta?.statuses)]} placeholder="كل الحالات" testID="task-filter-status" />
+            <HrSelect value={q.priority} onChange={(v) => setQ((p) => ({ ...p, priority: v }))} options={optsFromMap(meta?.priorities)} placeholder="كل الأولويات" testID="task-filter-priority" />
           </div>
         </View>
         {loading ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text>
@@ -58,9 +63,9 @@ export default function HrTasks() {
           : (
             <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
               <table style={table} data-testid="hr-tasks-table">
-                <Th cols={['المهمة', 'المكلَّف', 'أسندها', 'الأولوية', 'الاستحقاق', 'التقدم', 'الحالة']} />
+                <SortTh cols={[{ label: 'المهمة', key: 'title' }, { label: 'المكلَّف', key: 'assignee' }, { label: 'أسندها', key: 'assigner' }, { label: 'الأولوية', key: 'priority' }, { label: 'الاستحقاق', key: 'due' }, { label: 'التقدم', key: 'progress' }, { label: 'الحالة', key: 'status' }]} sort={sort} onSort={(k) => setSort((s) => toggleSort(s, k))} />
                 <tbody>
-                  {data.items.map((t: any) => (
+                  {sortedTasks.map((t: any) => (
                     <tr key={t.id} style={{ borderBottom: '1px solid #eef2f7', cursor: 'pointer', backgroundColor: t.overdue ? '#fff5f5' : undefined }} onClick={() => setDetailId(t.id)} data-testid={`task-row-${t.id}`}>
                       <td style={{ ...td, fontWeight: 700, color: '#0f2440', maxWidth: 320 }}>{t.title}</td>
                       <td style={td}>{t.employee_name}<div style={{ fontSize: 10.5, color: '#94a3b8' }}>{t.org_unit_name}</div></td>

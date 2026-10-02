@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { hrAPI } from '../../services/api';
 import { Modal, Field, inp, btn, opt, alertErr, Badge } from './ui';
+import { EmployeeSelect } from './HrSelect';
 
 export const LETTER_STATUS_COLOR: Record<string, string> = { pending: '#f97316', approved: '#16a34a', rejected: '#dc2626', cancelled: '#64748b' };
 
@@ -75,7 +76,7 @@ export const LetterFormModal: React.FC<{ meta: any; direct: boolean; onClose: ()
   return (
     <Modal title={direct ? 'إصدار خطاب رسمي مباشر' : 'طلب خطاب رسمي'} onClose={onClose} width={560} testID="letter-form-modal" busy={busy}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-        {direct && <Field label="الموظف" span={2}><select value={f.employee_id} onChange={set('employee_id')} style={inp} data-testid="letter-employee"><option value="">— اختر —</option>{emps.map((e) => <option key={e.id} value={e.id}>{e.full_name} ({e.employee_no}){e.job_title ? ` — ${e.job_title}` : ''}</option>)}</select></Field>}
+        {direct && <Field label="الموظف" span={2}><EmployeeSelect value={f.employee_id} onChange={(v) => setF((p: any) => ({ ...p, employee_id: v }))} emps={emps} placeholder="— اختر —" testID="letter-employee" /></Field>}
         <Field label="نوع الخطاب"><select value={f.type} onChange={set('type')} style={inp} data-testid="letter-type">{opt(meta?.types)}</select></Field>
         <Field label="اللغة"><select value={f.language} onChange={set('language')} style={inp} data-testid="letter-language">{opt(meta?.languages)}</select></Field>
         <Field label={f.type === 'addressed' ? 'الجهة الموجّه إليها (إلزامي)' : 'الجهة الموجّه إليها (اختياري — وإلا: إلى من يهمه الأمر)'} span={2}><input value={f.addressed_to} onChange={set('addressed_to')} style={inp} placeholder="مثال: سفارة ماليزيا / بنك التضامن" data-testid="letter-addressed-to" /></Field>

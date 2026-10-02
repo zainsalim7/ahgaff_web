@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { EmployeeSelect } from './HrSelect';
 // @ts-ignore
 import { createPortal } from 'react-dom';
 
@@ -72,7 +73,7 @@ export const EmployeeFormModal: React.FC<Props> = ({ open, onClose, onSaved, emp
           <Field f={f} set={set} k="job_title" label="المسمى الوظيفي" />
           <Field f={f} set={set} k="grade" label="الدرجة" />
           <Field f={f} set={set} k="org_unit_id" label="الوحدة التنظيمية"><select value={f.org_unit_id || ''} onChange={set('org_unit_id')} style={inp} data-testid="emp-org_unit_id"><option value="">— غير محدد —</option>{units.map((u) => <option key={u.id} value={u.id}>{u.type_label} · {u.name}</option>)}</select></Field>
-          <Field f={f} set={set} k="manager_employee_id" label="المدير المباشر"><select value={f.manager_employee_id || ''} onChange={set('manager_employee_id')} style={inp} data-testid="emp-manager_employee_id"><option value="">— لا يوجد —</option>{managers.filter((m) => m.id !== employee?.id).map((m) => <option key={m.id} value={m.id}>{m.full_name}{m.job_title ? ` (${m.job_title})` : ''}</option>)}</select></Field>
+          <Field f={f} set={set} k="manager_employee_id" label="المدير المباشر"><EmployeeSelect value={f.manager_employee_id || ''} onChange={(v) => setF((p: any) => ({ ...p, manager_employee_id: v }))} emps={managers} exclude={employee?.id ? [employee.id] : []} placeholder="— لا يوجد —" testID="emp-manager_employee_id" /></Field>
           {shifts.length > 1 && <Field f={f} set={set} k="shift_ids" label="فترات الدوام" span={3}>
             <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 4 }} data-testid="emp-shifts">
               {shifts.map((sh: any) => { const on = (f.shift_ids || []).includes(sh.id); return (

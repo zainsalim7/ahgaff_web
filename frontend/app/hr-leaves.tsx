@@ -6,9 +6,11 @@ import { hrAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { Tabs, Badge, Th, td, table, inp, btn, opt, alertErr, fmtDT, Modal, Field, LEAVE_STATUS_COLOR } from '../src/components/hr/ui';
+import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort } from '../src/components/hr/HrSelect';
 import { LeaveRequestModal, DecisionModal } from '../src/components/hr/LeaveModals';
 
 const YEAR = new Date().getFullYear();
+const LEAVE_SORTERS: Record<string, (l: any) => any> = { employee_name: (l) => l.employee_name, org_unit_name: (l) => l.org_unit_name, type_label: (l) => l.type_label, start_date: (l) => l.start_date, end_date: (l) => l.end_date, days: (l) => Number(l.days || 0), status_label: (l) => l.status_label, created_at: (l) => l.created_at };
 
 export default function HrLeaves() {
   const { hasPermission, user } = useAuth();
@@ -38,6 +40,9 @@ export default function HrLeaves() {
   useEffect(() => { if (tab === 'balances') loadBal(); }, [tab, loadBal]);
 
   const setQ1 = (k: string) => (e: any) => setQ((p) => ({ ...p, [k]: e.target.value, page: 1 }));
+  const setQv = (k: string) => (v: string) => setQ((p) => ({ ...p, [k]: v, page: 1 }));
+  const [sort, setSort] = useState<Sort>(null);
+  const sortedLeaves = useSort<any>(data.items || [], sort, LEAVE_SORTERS);
   const done = (msg: string) => { window.alert(msg); load(); if (detail) openDetail(detail.id); };
   const openDetail = async (id: string) => { try { setDetail((await hrAPI.leave(id)).data); } catch (e) { alertErr(e); } };
   const cancel = async (l: any) => { if (!window.confirm(`إلغاء طلب إجازة ${l.employee_name}؟`)) return; try { const r = await hrAPI.cancelLeave(l.id); done(r.data.message); setDetail(null); } catch (e) { alertErr(e); } };
@@ -64,14 +69,10 @@ export default function HrLeaves() {
         {tab === 'requests' && (<>
           <View style={reportPage.card}>
             <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr 1.2fr 0.8fr', gap: 8, direction: 'rtl' }}>
-              <select value={q.status} onChange={setQ1('status')} style={inp} data-testid="hr-leaves-filter-status">
-                <option value="pending,hr_pending">المعلّقة (كل المراحل)</option>
-                <option value="">كل الحالات</option>
-                {opt(meta?.statuses)}
-              </select>
-              <select value={q.type} onChange={setQ1('type')} style={inp} data-testid="hr-leaves-filter-type"><option value="">كل الأنواع</option>{opt(meta?.types)}</select>
-              <select value={q.org_unit_id} onChange={setQ1('org_unit_id')} style={inp} data-testid="hr-leaves-filter-unit"><option value="">كل الوحدات</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
-              <select value={q.year} onChange={setQ1('year')} style={inp} data-testid="hr-leaves-filter-year"><option value="">كل السنوات</option>{[YEAR + 1, YEAR, YEAR - 1, YEAR - 2].map((y) => <option key={y} value={y}>{y}</option>)}</select>
+              <HrSelect value={q.status} onChange={setQv('status')} options={[{ value: 'pending,hr_pending', label: 'المعلّقة (كل المراحل)' }, ...optsFromMap(meta?.statuses)]} placeholder="كل الحالات" testID="hr-leaves-filter-status" />
+              <HrSelect value={q.type} onChange={setQv('type')} options={optsFromMap(meta?.types)} placeholder="كل الأنواع" testID="hr-leaves-filter-type" />
+              <HrSelect value={q.org_unit_id} onChange={setQv('org_unit_id')} options={units.map((u) => ({ value: u.id, label: u.name }))} placeholder="كل الوحدات" searchable testID="hr-leaves-filter-unit" />
+              <HrSelect value={String(q.year)} onChange={setQv('year')} options={[YEAR + 1, YEAR, YEAR - 1, YEAR - 2].map((y) => ({ value: String(y), label: String(y) }))} placeholder="كل السنوات" testID="hr-leaves-filter-year" />
             </div>
           </View>
           {loading ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text>
@@ -79,9 +80,9 @@ export default function HrLeaves() {
             : (
               <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
                 <table style={table} data-testid="hr-leaves-table">
-                  <Th cols={['الموظف', 'الوحدة', 'النوع', 'من', 'إلى', 'الأيام', 'الحالة', 'قُدّم', '']} />
+                  <SortTh cols={[{ label: 'الموظف', key: 'employee_name' }, { label: 'الوحدة', key: 'org_unit_name' }, { label: 'النوع', key: 'type_label' }, { label: 'من', key: 'start_date' }, { label: 'إلى', key: 'end_date' }, { label: 'الأيام', key: 'days' }, { label: 'الحالة', key: 'status_label' }, { label: 'قُدّم', key: 'created_at' }, { label: '' }]} sort={sort} onSort={(k) => setSort((s) => toggleSort(s, k))} />
                   <tbody>
-                    {data.items.map((l: any) => (
+                    {sortedLeaves.map((l: any) => (
                       <tr key={l.id} style={{ borderBottom: '1px solid #eef2f7', cursor: 'pointer' }} onClick={() => openDetail(l.id)} data-testid={`hr-leave-row-${l.id}`}>
                         <td style={{ ...td, fontWeight: 700, color: '#0f2440' }}>{l.employee_name}<div style={{ fontSize: 10.5, color: '#94a3b8' }}>{l.employee_no}</div></td>
                         <td style={td}>{l.org_unit_name || '—'}</td>

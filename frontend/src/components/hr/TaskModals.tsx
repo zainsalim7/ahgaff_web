@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { hrAPI } from '../../services/api';
 import { Modal, Field, inp, btn, opt, errMsg, Badge, fmtDT } from './ui';
+import { EmployeeSelect } from './HrSelect';
 
 export const TASK_STATUS_COLOR: Record<string, string> = { open: '#0284c7', in_progress: '#f97316', done: '#16a34a', cancelled: '#64748b' };
 export const TASK_PRIORITY_COLOR: Record<string, string> = { low: '#94a3b8', normal: '#0f2440', high: '#f97316', urgent: '#dc2626' };
@@ -32,7 +33,7 @@ export const TaskFormModal: React.FC<FormProps> = ({ onClose, onSaved, meta, tas
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label="العنوان *" span={2}><input value={f.title} onChange={set('title')} style={inp} data-testid="task-title" /></Field>
         <Field label={`الموظف المكلَّف * ${scope === 'team' ? '(فريقك)' : ''}`} span={2}>
-          <select value={f.assignee_employee_id} onChange={set('assignee_employee_id')} style={inp} data-testid="task-assignee"><option value="">— اختر —</option>{emps.map((e) => <option key={e.id} value={e.id}>{e.full_name} ({e.employee_no}){e.job_title ? ` — ${e.job_title}` : ''}</option>)}</select>
+          <EmployeeSelect value={f.assignee_employee_id} onChange={(v) => setF((p: any) => ({ ...p, assignee_employee_id: v }))} emps={emps} placeholder="— اختر —" testID="task-assignee" />
         </Field>
         <Field label="الأولوية"><select value={f.priority} onChange={set('priority')} style={inp} data-testid="task-priority">{opt(meta?.priorities)}</select></Field>
         <Field label="تاريخ الاستحقاق"><input type="date" value={f.due_date} onChange={set('due_date')} style={{ ...inp, direction: 'ltr' }} data-testid="task-due" /></Field>

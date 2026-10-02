@@ -7,8 +7,10 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/components/reports/ReportShell';
 import { Badge, Th, td, table, inp, btn, opt, alertErr, fmtDT, Drawer, CORR_COLOR, CORR_STATUS_COLOR } from '../src/components/hr/ui';
 import { CorrFormModal } from '../src/components/hr/CorrFormModal';
+import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort } from '../src/components/hr/HrSelect';
 
 const YEAR = new Date().getFullYear();
+const SORTERS: Record<string, (c: any) => any> = { ref_no: (c) => c.ref_no, direction: (c) => c.direction_label, subject: (c) => c.subject, party: (c) => c.to_unit_name || c.to_party || c.from_party || '', date: (c) => c.date, priority: (c) => c.priority_label, status: (c) => c.status_label };
 
 export default function HrCorrespondence() {
   const { hasPermission, user } = useAuth();
@@ -20,6 +22,8 @@ export default function HrCorrespondence() {
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ open: boolean; item: any | null }>({ open: false, item: null });
   const [detail, setDetail] = useState<any>(null);
+  const [sort, setSort] = useState<Sort>(null);
+  const sortedItems = useSort<any>(data.items || [], sort, SORTERS);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -30,6 +34,7 @@ export default function HrCorrespondence() {
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
   const setQ1 = (k: string) => (e: any) => setQ((p) => ({ ...p, [k]: e.target.value, page: 1 }));
+  const setQv = (k: string) => (v: string) => setQ((p) => ({ ...p, [k]: v, page: 1 }));
   const openDetail = async (id: string) => { try { setDetail((await hrAPI.corr(id)).data); } catch (e) { alertErr(e); } };
   const done = (msg: string) => { window.alert(msg); load(); if (detail) openDetail(detail.id); };
   const changeStatus = async (c: any, status: string) => { const note = window.prompt(`تغيير الحالة إلى «${meta.statuses[status]}» — ملاحظة (اختياري):`, '') ; if (note === null) return; try { const r = await hrAPI.setCorrStatus(c.id, status, note); done(r.data.message); } catch (e) { alertErr(e); } };
@@ -52,13 +57,13 @@ export default function HrCorrespondence() {
           </div>
         </div>
         {canManage && <div style={{ direction: 'rtl', marginBottom: 12 }}><button onClick={() => setForm({ open: true, item: null })} style={btn('#1565c0')} data-testid="corr-new-btn">+ مراسلة جديدة</button></div>}
-        <View style={reportPage.card}>
+        <View style={[reportPage.card, { zIndex: 20 }]}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr 1fr 0.8fr', gap: 8, direction: 'rtl' }}>
             <input placeholder="بحث بالموضوع / الرقم المرجعي / الجهة" value={q.search} onChange={setQ1('search')} style={inp} data-testid="corr-search" />
-            <select value={q.direction} onChange={setQ1('direction')} style={inp} data-testid="corr-filter-direction"><option value="">كل الأنواع</option>{opt(meta?.directions)}</select>
-            <select value={q.status} onChange={setQ1('status')} style={inp} data-testid="corr-filter-status"><option value="">كل الحالات</option>{opt(meta?.statuses)}</select>
-            <select value={q.priority} onChange={setQ1('priority')} style={inp} data-testid="corr-filter-priority"><option value="">كل الأولويات</option>{opt(meta?.priorities)}</select>
-            <select value={q.year} onChange={setQ1('year')} style={inp} data-testid="corr-filter-year"><option value="">كل السنوات</option>{[YEAR, YEAR - 1, YEAR - 2].map((y) => <option key={y} value={y}>{y}</option>)}</select>
+            <HrSelect value={q.direction} onChange={setQv('direction')} options={optsFromMap(meta?.directions)} placeholder="كل الأنواع" testID="corr-filter-direction" />
+            <HrSelect value={q.status} onChange={setQv('status')} options={optsFromMap(meta?.statuses)} placeholder="كل الحالات" testID="corr-filter-status" />
+            <HrSelect value={q.priority} onChange={setQv('priority')} options={optsFromMap(meta?.priorities)} placeholder="كل الأولويات" testID="corr-filter-priority" />
+            <HrSelect value={q.year} onChange={setQv('year')} options={[YEAR, YEAR - 1, YEAR - 2].map((y) => ({ value: String(y), label: String(y) }))} placeholder="كل السنوات" testID="corr-filter-year" />
           </div>
         </View>
         {loading ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text>
@@ -66,9 +71,9 @@ export default function HrCorrespondence() {
           : (
             <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
               <table style={table} data-testid="corr-table">
-                <Th cols={['الرقم المرجعي', 'النوع', 'الموضوع', 'الجهة / المستهدفون', 'التاريخ', 'الأولوية', 'الحالة', '']} />
+                <SortTh cols={[{ label: 'الرقم المرجعي', key: 'ref_no' }, { label: 'النوع', key: 'direction' }, { label: 'الموضوع', key: 'subject' }, { label: 'الجهة / المستهدفون', key: 'party' }, { label: 'التاريخ', key: 'date' }, { label: 'الأولوية', key: 'priority' }, { label: 'الحالة', key: 'status' }, { label: '' }]} sort={sort} onSort={(k) => setSort((s) => toggleSort(s, k))} />
                 <tbody>
-                  {data.items.map((c: any) => (
+                  {sortedItems.map((c: any) => (
                     <tr key={c.id} style={{ borderBottom: '1px solid #eef2f7', cursor: 'pointer', backgroundColor: c.overdue ? '#fff5f5' : undefined }} onClick={() => openDetail(c.id)} data-testid={`corr-row-${c.id}`}>
                       <td style={{ ...td, fontWeight: 800, color: '#0f2440', direction: 'ltr', textAlign: 'right', fontFamily: 'monospace' }}>{c.ref_no}</td>
                       <td style={td}><Badge color={CORR_COLOR[c.direction]}>{c.direction_label}</Badge></td>

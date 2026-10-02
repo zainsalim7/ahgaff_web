@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { hrAPI } from '../../services/api';
 import { Modal, Field, inp, btn, opt, errMsg } from './ui';
+import { EmployeeSelect, EmployeeMultiSelect, HrSelect, optsFromMap } from './HrSelect';
 
 const EMPTY = { direction: 'internal', subject: '', body: '', date: new Date().toISOString().slice(0, 10), priority: 'normal', status: 'registered', from_party: '', to_party: '', to_unit_id: '', to_employee_ids: [] as string[], to_all_employees: false, related_employee_id: '', external_ref: '', due_date: '', attachment_url: '', tags: [] as string[] };
 
@@ -12,7 +13,6 @@ export const CorrFormModal: React.FC<Props> = ({ onClose, onSaved, meta, units, 
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [tagText, setTagText] = useState('');
-  const [empSearch, setEmpSearch] = useState('');
 
   useEffect(() => {
     setF(item ? { ...EMPTY, ...Object.fromEntries(Object.entries(item).filter(([k]) => k in EMPTY).map(([k, v]) => [k, v ?? (Array.isArray((EMPTY as any)[k]) ? [] : '')])) } : EMPTY);
@@ -21,7 +21,6 @@ export const CorrFormModal: React.FC<Props> = ({ onClose, onSaved, meta, units, 
   }, [item]);
   const set = (k: string) => (e: any) => setF((p: any) => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }));
   const internal = ['internal', 'circular'].includes(f.direction);
-  const toggleEmp = (id: string) => setF((p: any) => ({ ...p, to_employee_ids: p.to_employee_ids.includes(id) ? p.to_employee_ids.filter((x: string) => x !== id) : [...p.to_employee_ids, id] }));
 
   const save = async () => {
     setBusy(true); setErr('');
@@ -32,11 +31,10 @@ export const CorrFormModal: React.FC<Props> = ({ onClose, onSaved, meta, units, 
     } catch (e) { setErr(errMsg(e, 'فشل الحفظ')); } finally { setBusy(false); }
   };
 
-  const filteredEmps = emps.filter((e) => !empSearch || e.full_name.includes(empSearch) || e.employee_no.includes(empSearch));
   return (
     <Modal title={item ? `تعديل مراسلة ${item.ref_no}` : 'مراسلة جديدة'} onClose={onClose} width={720} busy={busy} testID="corr-form-modal">
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
-        <Field label="النوع"><select value={f.direction} onChange={set('direction')} disabled={!!item} style={inp} data-testid="corr-direction">{opt(meta?.directions)}</select></Field>
+        <Field label="النوع"><HrSelect value={f.direction} onChange={(v) => setF((p: any) => ({ ...p, direction: v }))} options={optsFromMap(meta?.directions).filter((o) => o.value !== 'employee')} disabled={!!item} allowClear={false} testID="corr-direction" /></Field>
         <Field label="التاريخ"><input type="date" value={f.date} onChange={set('date')} style={{ ...inp, direction: 'ltr' }} data-testid="corr-date" /></Field>
         <Field label="الأولوية"><select value={f.priority} onChange={set('priority')} style={inp} data-testid="corr-priority">{opt(meta?.priorities)}</select></Field>
         <Field label="الموضوع *" span={3}><input value={f.subject} onChange={set('subject')} style={inp} data-testid="corr-subject" /></Field>
@@ -53,14 +51,11 @@ export const CorrFormModal: React.FC<Props> = ({ onClose, onSaved, meta, units, 
           </div>
           {!f.to_all_employees && (
             <Field label={`موظفون محددون (${f.to_employee_ids.length})`} span={3}>
-              <input value={empSearch} onChange={(e) => setEmpSearch(e.target.value)} placeholder="بحث بالاسم أو الرقم..." style={{ ...inp, marginBottom: 6 }} data-testid="corr-emp-search" />
-              <div style={{ maxHeight: 130, overflowY: 'auto', border: '1px solid #eee', borderRadius: 8, padding: 6, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {filteredEmps.slice(0, 60).map((e) => <button key={e.id} onClick={() => toggleEmp(e.id)} style={btn(f.to_employee_ids.includes(e.id) ? '#0f2440' : '#f1f5f9', f.to_employee_ids.includes(e.id) ? '#fff' : '#0f2440', { padding: '4px 10px', fontSize: 11.5, borderRadius: 14 })} data-testid={`corr-emp-${e.id}`}>{e.full_name}</button>)}
-              </div>
+              <EmployeeMultiSelect value={f.to_employee_ids} onChange={(ids) => setF((p: any) => ({ ...p, to_employee_ids: ids }))} emps={emps} testID="corr-emp" />
             </Field>
           )}
         </>)}
-        <Field label="موظف معنيّ بالمراسلة (اختياري)" span={1}><select value={f.related_employee_id} onChange={set('related_employee_id')} style={inp} data-testid="corr-related"><option value="">—</option>{emps.map((e) => <option key={e.id} value={e.id}>{e.full_name}</option>)}</select></Field>
+        <Field label="موظف معنيّ بالمراسلة (اختياري)" span={1}><EmployeeSelect value={f.related_employee_id} onChange={(v) => setF((p: any) => ({ ...p, related_employee_id: v }))} emps={emps} placeholder="—" testID="corr-related" /></Field>
         <Field label="تاريخ الاستحقاق / المتابعة"><input type="date" value={f.due_date} onChange={set('due_date')} style={{ ...inp, direction: 'ltr' }} data-testid="corr-due" /></Field>
         <Field label="الحالة"><select value={f.status} onChange={set('status')} style={inp} data-testid="corr-status">{opt(meta?.statuses)}</select></Field>
         <Field label="رابط المرفق (Drive أو غيره)" span={2}><input value={f.attachment_url} onChange={set('attachment_url')} style={{ ...inp, direction: 'ltr' }} data-testid="corr-attachment" /></Field>

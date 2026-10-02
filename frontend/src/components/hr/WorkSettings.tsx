@@ -115,8 +115,8 @@ const ShiftCard: React.FC<{ sh: any; canEdit: boolean; onEdit: () => void; onDel
           {canEdit && <button onClick={open} style={btn('#eef4ff', '#1565c0', { fontSize: 12, padding: '4px 10px' })} data-testid={`shift-assign-${sh.id}`}>تعديل التكليف</button>}
         </div>
         <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }} data-testid={`shift-emps-${sh.id}`}>
-          {sh.employees.slice(0, 40).map((e: any) => <span key={e.employee_id} title={e.explicit ? 'تكليف صريح' : 'ضمني (بلا تكليف)'} style={{ fontSize: 11.5, backgroundColor: e.explicit ? '#eef4ff' : '#f8fafc', color: e.explicit ? '#1565c0' : '#64748b', border: '1px solid #e2e8f0', borderRadius: 12, padding: '2px 8px' }}>{e.employee_name}</span>)}
-          {sh.employees.length > 40 && <span style={{ fontSize: 11.5, color: '#94a3b8' }}>+{sh.employees.length - 40} آخرين</span>}
+          {sh.employees.slice(0, 12).map((e: any) => <span key={e.employee_id} title={e.explicit ? 'تكليف صريح' : 'ضمني (بلا تكليف)'} style={{ fontSize: 11.5, backgroundColor: e.explicit ? '#eef4ff' : '#f8fafc', color: e.explicit ? '#1565c0' : '#64748b', border: '1px solid #e2e8f0', borderRadius: 12, padding: '2px 8px' }}>{e.employee_name}</span>)}
+          {sh.employees.length > 12 && <span style={{ fontSize: 11.5, color: "#94a3b8" }}>+{sh.employees.length - 12} آخرين — اضغط «تعديل التكليف» للبحث والاختيار</span>}
           {sh.employees.length === 0 && <span style={{ fontSize: 11.5, color: '#94a3b8' }}>لا أحد</span>}
         </div>
       </div>

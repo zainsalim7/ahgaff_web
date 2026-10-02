@@ -10,6 +10,7 @@ import { EmployeeFormModal, Portal, inp, btn } from '../src/components/hr/Employ
 import { EmployeeDocuments } from '../src/components/hr/EmployeeDocuments';
 import { AccountRoleModal } from '../src/components/hr/AccountRoleModal';
 import { BulkToolbar } from '../src/components/hr/BulkToolbar';
+import { HrSelect, optsFromMap } from '../src/components/hr/HrSelect';
 import { EmployeePhotoPanel } from '../src/components/hr/EmployeePhotoPanel';
 
 const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f97316', leave: '#0284c7', suspended: '#dc2626', ended: '#64748b' };
@@ -48,6 +49,7 @@ export default function HrEmployees() {
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
   const setQ1 = (k: string) => (e: any) => setQ((p) => ({ ...p, [k]: e.target.value, page: 1 }));
+  const setQv = (k: string) => (v: string) => setQ((p) => ({ ...p, [k]: v, page: 1 }));
   const opt = (m: Record<string, string>) => Object.entries(m || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>);
   const alertMsg = (e: any) => window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'حدث خطأ');
 
@@ -98,10 +100,10 @@ export default function HrEmployees() {
         <View style={reportPage.card}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1.4fr 1fr 1fr 1fr', gap: 8, direction: 'rtl' }}>
             <input placeholder="بحث بالاسم / الرقم الوظيفي / المسمى / الهاتف" value={q.search} onChange={setQ1('search')} style={inp} data-testid="hr-search-input" />
-            <select value={q.org_unit_id} onChange={setQ1('org_unit_id')} style={inp} data-testid="hr-filter-unit"><option value="">كل الوحدات</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
-            <select value={q.category} onChange={setQ1('category')} style={inp} data-testid="hr-filter-category"><option value="">كل الفئات</option>{opt(meta?.categories)}</select>
-            <select value={q.status} onChange={setQ1('status')} style={inp} data-testid="hr-filter-status"><option value="">كل الحالات</option>{opt(meta?.statuses)}</select>
-            <select value={q.contract_type} onChange={setQ1('contract_type')} style={inp} data-testid="hr-filter-contract"><option value="">كل أنواع التعاقد</option>{opt(meta?.contract_types)}</select>
+            <HrSelect value={q.org_unit_id} onChange={setQv('org_unit_id')} options={units.map((u) => ({ value: u.id, label: u.name }))} placeholder="كل الوحدات" searchable testID="hr-filter-unit" />
+            <HrSelect value={q.category} onChange={setQv('category')} options={optsFromMap(meta?.categories)} placeholder="كل الفئات" testID="hr-filter-category" />
+            <HrSelect value={q.status} onChange={setQv('status')} options={optsFromMap(meta?.statuses)} placeholder="كل الحالات" testID="hr-filter-status" />
+            <HrSelect value={q.contract_type} onChange={setQv('contract_type')} options={optsFromMap(meta?.contract_types)} placeholder="كل أنواع التعاقد" testID="hr-filter-contract" />
           </div>
         </View>
 
