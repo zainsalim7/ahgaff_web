@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only UI verification of unified HrSelect dropdown system + sortable table headers across all HR pages. Logged in as admin/admin123 and exhaustively exercised every page listed in the review request.\n\nRESULTS = ALL PASS:\n• /hr-correspondence: 4/4 filter dropdown buttons present (corr-filter-direction/status/priority/year) → each opens its menu, closes on Escape, closes on outside-click. Filtering by direction=employee reduced visible rows from 4→1 (corr-row-*). Clear option (opt-'' empty value) restores rows. Sort headers sort-subject / sort-date / sort-ref_no each cycle through asc(▲) → desc(▼) → reset(⇅) on repeated clicks. New-correspondence modal: corr-direction-btn menu lists ONLY ['incoming','outgoing','internal','circular'] — 'وارد من موظف' (employee) correctly OMITTED. With direction=internal, corr-emp-search appears; typing 'زين' returns 1 match (زين سالم 222222), typing 'EMP' returns 3 options; clicking an option adds a corr-emp-chip-*; chip ✕ removes it. corr-related-btn opens HrSelect with corr-related-search.\n• /hr-leaves: 4/4 filters (status/type/unit/year) open menus; 'كل الحالات' opt- empty-value is present. 3/3 sort headers present (sort-employee_name, sort-start_date, sort-days). Leave register modal: leave-employee-select-btn opens with leave-employee-select-search; typing 'EMP-100' filters to 2 options.\n• /hr-employees: 4/4 filters open (hr-filter-unit has search input). Add-employee modal: emp-manager_employee_id-btn opens with search; emp-full_name accepts full Arabic string 'اختبار الاسم الكامل' (19 chars) with NO focus loss on each keystroke.\n• /hr-tasks: 2/2 filters (status/priority) open. 3/3 sort headers present (title/due/priority). Assign-task modal: task-assignee-btn opens with task-assignee-search.\n• /hr-work-settings: 'تعديل التكليف' modal opens; shift-emp-search returns 1 result for 'زين' (زين سالم 222222 · عضو هيئة تدريس); clicking the result (testid shift-emp-pick-<id>) adds a shift-emp-chip-<id> (chips count went 5→6). NOTE: Review-request text mentions '[shift-emp-opt-*]' but the actual testids are 'shift-emp-pick-*' / 'shift-emp-results' / 'shift-emp-chip-*' because this picker is the legacy EmployeePicker from PresenceChecks.tsx (reused). Functionality is correct; just a doc/testid-naming inconsistency vs HrSelect's '-opt-' pattern.\n• /hr-letters: Issue-direct-letter modal: letter-employee-btn opens with letter-employee-search.\n• Regression: /hr-photo-approvals photo-tab-pending/approved tabs clickable; /hr-attendance hr-att-tabs-daily present and loads.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global (post-login + /hr-letters)", "issues": ["Pre-existing React console error 'Unexpected text node: . A text node cannot be a child of a <View>.' continues to fire (also noted in iterations 83/84). Fires ~6× on /hr-letters mount. Non-blocking."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(Optional / low-priority) Replace the legacy EmployeePicker testid scheme (shift-emp-pick-*, shift-emp-results, presence-emp-pick-*) with the unified HrSelect pattern (-opt-, -menu) OR update the review-request documentation so testing agents don't look for shift-emp-opt-*.",
+    "(Optional / low-priority) Resolve the new Metro require-cycle warning: 'EmployeeFormModal.tsx -> HrSelect.tsx -> EmployeeFormModal.tsx'. HrSelect.tsx should not import anything from EmployeeFormModal (or extract the shared types/components into a 3rd module).",
+    "(Carry-over) Investigate root cause of 'Unexpected text node' React warning (likely a stray string literal {' '} or similar inside a <View>) — unchanged since iter 83."
+  ],
+  "critical_code_review_comments": [
+    "src/components/hr/HrSelect.tsx & EmployeeFormModal.tsx form a require cycle at module-load — currently harmless (both re-export via named exports) but can cause undefined bindings if evaluation order changes. Break the cycle by moving the shared types/helpers out.",
+    "The /hr-work-settings 'تعديل التكليف' modal still uses the OLD EmployeePicker (PresenceChecks.tsx:10) instead of the new EmployeeMultiSelect from HrSelect.tsx. Behaviorally identical (search ≥2 chars, chips, ✕ removal) but the testid scheme (-pick-/-results/-chip-) diverges from the rest of HrSelect (-opt-/-menu/-chip-). Consider migrating for consistency.",
+    "HrSelect's clear-value option testid uses an empty string ('<id>-opt-') which is awkward to select in some test frameworks; consider '<id>-opt-__clear__' or similar sentinel.",
+    "Correspondence 'موظفون محددون' is only shown for internal/circular directions — not a bug (matches spec), but there's no visible hint to the user explaining why the picker appears/disappears when direction changes."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100% (7/7 pages, all documented data-testids and behaviors verified)"},
+  "test_credentials": "admin / admin123 (used). EMP-100 and EMP-200 not required for this run.",
+  "seed_data_creation": "None. All modals cancelled; no correspondence/task/leave/letter actually created. Shift assignment modal cancelled without clicking 'حفظ التكليف' so no DB write.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "HrSelect pattern = <id>-btn (trigger) → <id>-menu → <id>-search (optional) → <id>-opt-<value>. EmployeeMultiSelect adds <id>-chip-<id>. EXCEPTION: on /hr-work-settings the shift assignment picker and on /hr-presence-checks the recipient picker still use the LEGACY EmployeePicker (PresenceChecks.tsx) with testids: shift-emp-search / shift-emp-results / shift-emp-pick-<empId> / shift-emp-chip-<empId> (and presence-emp / presence-send-emp variants). Do NOT look for -opt- there. Correspondence 'direction' dropdown intentionally OMITS 'employee' in the new form. If you need the multi-employee picker in correspondence, select direction=internal (or circular)."
+}

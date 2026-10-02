@@ -562,3 +562,9 @@
 - UI `hr-photo-approvals.tsx`: تبويبان «بانتظار الاعتماد / المعتمدة» (`photo-tab-pending|approved`)، بحث، بطاقة معتمدة (`approved-card-{id}`) مع عرض البطاقة PNG، السماح برفع جديدة، حذف الصورة.
 - Handoff: قسم 7 في `EMPLOYEE_APP_HOME.md` (+ نسخة `backend/backend/handoffs`).
 - ⚠️ **النشر الإنتاجي = Google Cloud Run عبر Cloud Build من GitHub (zainsalim7/ahgaff_web، فرع main)** وليس Emergent. الـ Dockerfile يثبّت من `backend/backend/requirements.txt` (لا `backend/requirements.txt`). **أي مكتبة جديدة يجب إضافتها لكلا الملفين** وإلا يفشل إقلاع الحاوية (حدث مع `Markdown` في 2026-10-01 — أُصلح بإضافة `Markdown==3.11`).
+
+## 2026-10-02: 🔽 قوائم منسدلة موحّدة + فرز الأعمدة + اختيار موظفين ببحث (HR) ✅
+- `src/components/hr/HrSelect.tsx`: `HrSelect` (فردي، يفتح بالنقر، بحث داخلي تلقائي إذا > 8 خيارات أو `searchable`، إغلاق بالنقر خارجه/Esc، testids: `<id>-btn|-menu|-search|-opt-<value>`)، `EmployeeSelect` (موظف واحد ببحث بالاسم/الرقم؛ قائمة ممرَّرة أو تحميل 500 من الخادم)، `EmployeeMultiSelect` (متعدد + شرائح)، `SortTh/useSort/toggleSort` (فرز العميل asc→desc→بلا).
+- طُبّق في: فلاتر `hr-correspondence` (+فرز 7 أعمدة)، `hr-leaves` (+فرز)، `hr-employees`، `hr-tasks` (+فرز)؛ النماذج: CorrFormModal (النوع بدون `employee`، المستهدفون EmployeeMultiSelect، الموظف المعني)، TaskModals (المكلَّف)، LeaveModals (الموظف)، LetterModals (الموظف)، EmployeeFormModal (المدير المباشر). بطاقات الفترات تعرض 12 شريحة فقط + «+N آخرين».
+- ما زال `<select>` أصلي في حقول ثانوية داخل النماذج (الأولوية/الحالة/الوحدة) وخلايا حالة الحضور اليومي — مقصود.
+- اختبار: iteration_85 — كل الواجهات ✅
