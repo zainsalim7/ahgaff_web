@@ -12,6 +12,7 @@ export const AttendanceDaily: React.FC<{ canManage: boolean; units: any[]; meta:
   const [d, setD] = useState<any>(null);
   const [edits, setEdits] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
+  const [statusF, setStatusF] = useState('');
 
   const load = useCallback(async () => { try { setD((await hrAPI.attDaily({ date, org_unit_id: unit || undefined })).data); setEdits({}); } catch (e) { alertErr(e); } }, [date, unit]);
   useEffect(() => { load(); }, [load]);
@@ -43,8 +44,12 @@ export const AttendanceDaily: React.FC<{ canManage: boolean; units: any[]; meta:
       </div>
       {d && (
         <div style={{ display: 'flex', gap: 6, marginTop: 10, direction: 'rtl', flexWrap: 'wrap' }} data-testid="att-daily-summary">
-          {Object.entries(meta?.statuses || {}).map(([k, v]: any) => <Badge key={k} color={ATT_COLOR[k]}>{v}: {s[k] || 0}</Badge>)}
-          <Badge color="#64748b">لم يُسجَّل: {s.unmarked || 0}</Badge>
+          {[...Object.entries(meta?.statuses || {}), ['unmarked', 'لم يُسجَّل']].map(([k, v]: any) => (
+            <button key={k} type="button" onClick={() => setStatusF((p) => (p === k ? '' : k))} data-testid={`att-sum-${k}`}
+              style={{ border: statusF === k ? `2px solid ${ATT_COLOR[k] || '#64748b'}` : '2px solid transparent', borderRadius: 14, padding: 0, background: 'transparent', cursor: 'pointer', opacity: statusF && statusF !== k ? 0.5 : 1 }}>
+              <Badge color={ATT_COLOR[k] || '#64748b'}>{statusF === k ? '🔽 ' : ''}{v}: {s[k] || 0}</Badge>
+            </button>))}
+          {statusF && <span style={{ fontSize: 11.5, color: '#64748b', alignSelf: 'center' }}>يُعرض: {statusF === 'unmarked' ? 'لم يُسجَّل' : meta?.statuses?.[statusF]} — اضغط الشارة مجدداً للإلغاء</span>}
         </div>
       )}
     </View>
@@ -53,7 +58,7 @@ export const AttendanceDaily: React.FC<{ canManage: boolean; units: any[]; meta:
         <table style={table} data-testid="att-daily-table">
           <Th cols={['الموظف', 'الوحدة', ...(multi ? ['الفترة'] : []), 'الحالة', 'حضور', 'انصراف', 'تأخير', 'ملاحظة', '']} />
           <tbody>
-            {d.rows.map((r: any) => {
+            {d.rows.filter((r: any) => !statusF || (statusF === 'unmarked' ? !rowVal(r, 'status') : rowVal(r, 'status') === statusF)).map((r: any) => {
               const locked = !canManage;
               const st = rowVal(r, 'status');
               const id = rk(r);

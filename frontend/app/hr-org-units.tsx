@@ -46,7 +46,7 @@ export default function HrOrgUnits() {
   const roots = units.filter((u) => !u.parent_id || !units.some((x) => x.id === u.parent_id));
 
   const Node = ({ u, depth }: { u: any; depth: number }) => {
-    const kids = children(u.id);
+    const kids = u._flat ? [] : children(u.id);
     const color = TYPE_COLOR[u.type] || '#64748b';
     const academic = !!(u.faculty_id || u.department_id || u.type === 'presidency');
     return (
@@ -69,6 +69,9 @@ export default function HrOrgUnits() {
   };
 
   const byType = (t: string) => units.filter((u) => u.type === t).length;
+  const [typeF, setTypeF] = useState('');
+  const typeKpi = (t: string) => ({ testID: `kpi-${t}`, active: typeF === t, onPress: () => setTypeF((p) => (p === t ? '' : t)) });
+  const flat = units.filter((u) => u.type === typeF);
   return (
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={reportPage.content}>
@@ -80,14 +83,15 @@ export default function HrOrgUnits() {
           </div>
         )}
         <ReportKpis items={[
-          { label: 'كليات', value: byType('faculty'), color: '#1565c0', icon: 'school' },
-          { label: 'أقسام أكاديمية', value: byType('department'), color: '#7c3aed', icon: 'library' },
-          { label: 'إدارات', value: byType('administration'), color: '#0f766e', icon: 'business' },
-          { label: 'مكاتب / وحدات', value: byType('office'), color: '#b45309', icon: 'folder' },
+          { label: 'كليات', value: byType('faculty'), color: '#1565c0', icon: 'school', ...typeKpi('faculty') },
+          { label: 'أقسام أكاديمية', value: byType('department'), color: '#7c3aed', icon: 'library', ...typeKpi('department') },
+          { label: 'إدارات', value: byType('administration'), color: '#0f766e', icon: 'business', ...typeKpi('administration') },
+          { label: 'مكاتب / وحدات', value: byType('office'), color: '#b45309', icon: 'folder', ...typeKpi('office') },
         ]} />
         <View style={reportPage.card}>
           {loading ? <Text style={{ textAlign: 'center', color: '#94a3b8' }}>جاري التحميل...</Text>
             : units.length === 0 ? <ReportEmpty text="لا يوجد هيكل بعد — اضغط «مزامنة الكليات والأقسام» لتوليده تلقائياً" icon="git-network-outline" />
+            : typeF ? <div style={{ direction: 'rtl' }} data-testid="org-flat">{flat.length === 0 ? <ReportEmpty text="لا توجد وحدات من هذا النوع" icon="folder-open-outline" /> : flat.map((u) => <Node key={u.id} u={{ ...u, _flat: true }} depth={0} />)}</div>
             : <div style={{ direction: 'rtl' }} data-testid="org-tree">{roots.map((r) => <Node key={r.id} u={r} depth={0} />)}</div>}
         </View>
       </ScrollView>

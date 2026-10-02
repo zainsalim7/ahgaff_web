@@ -21,6 +21,9 @@ export default function HrAppraisals() {
   const [mine, setMine] = useState<any>(null);
   const [openId, setOpenId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [statusF, setStatusF] = useState('');
+  const togglePress = (k: string) => () => setStatusF((p) => (p === k ? '' : k));
+  const visibleRows = (ov?.rows || []).filter((r: any) => !statusF || (statusF === 'not_started' ? !r.status : r.status === statusF));
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,11 +51,11 @@ export default function HrAppraisals() {
 
         {tab !== 'my' && ov && (
           <ReportKpis items={[
-            { label: 'الموظفون', value: st.total || 0, color: '#0f2440', icon: 'people' },
-            { label: 'لم يبدأ', value: st.not_started || 0, color: '#94a3b8', icon: 'ellipse-outline' },
-            { label: 'مسودات', value: st.draft || 0, color: '#0284c7', icon: 'create' },
-            { label: 'بانتظار الاعتماد', value: st.submitted || 0, color: '#f97316', icon: 'hourglass' },
-            { label: 'معتمد', value: st.approved || 0, color: '#16a34a', icon: 'checkmark-done' },
+            { label: 'الموظفون', value: st.total || 0, color: '#0f2440', icon: 'people', testID: 'kpi-total', active: !statusF, onPress: () => setStatusF('') },
+            { label: 'لم يبدأ', value: st.not_started || 0, color: '#94a3b8', icon: 'ellipse-outline', testID: 'kpi-not_started', active: statusF === 'not_started', onPress: togglePress('not_started') },
+            { label: 'مسودات', value: st.draft || 0, color: '#0284c7', icon: 'create', testID: 'kpi-draft', active: statusF === 'draft', onPress: togglePress('draft') },
+            { label: 'بانتظار الاعتماد', value: st.submitted || 0, color: '#f97316', icon: 'hourglass', testID: 'kpi-submitted', active: statusF === 'submitted', onPress: togglePress('submitted') },
+            { label: 'معتمد', value: st.approved || 0, color: '#16a34a', icon: 'checkmark-done', testID: 'kpi-approved', active: statusF === 'approved', onPress: togglePress('approved') },
             { label: 'المتوسط', value: st.avg ?? '—', color: gradeColor(st.avg), icon: 'star' },
           ]} />
         )}
@@ -70,7 +73,7 @@ export default function HrAppraisals() {
             <table style={table} data-testid="hr-appraisals-table">
               <Th cols={['الموظف', 'الوحدة', 'المقيّم', 'النتيجة', 'التقدير', 'الحالة', '']} />
               <tbody>
-                {ov.rows.map((r: any) => (
+                {visibleRows.map((r: any) => (
                   <tr key={r.employee_id} style={{ borderBottom: '1px solid #eef2f7' }} data-testid={`appr-row-${r.employee_id}`}>
                     <td style={{ ...td, fontWeight: 700, color: '#0f2440' }}>{r.employee_name}<div style={{ fontSize: 10.5, color: '#94a3b8' }}>{r.employee_no}{r.job_title ? ` · ${r.job_title}` : ''}</div></td>
                     <td style={td}>{r.org_unit_name || '—'}</td>

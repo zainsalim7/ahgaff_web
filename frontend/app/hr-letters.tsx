@@ -42,10 +42,10 @@ export default function HrLetters() {
       <ScrollView contentContainerStyle={reportPage.content}>
         <ReportHero kicker="شؤون الموظفين" title="الخطابات الرسمية" subtitle="خطاب تعريف · شهادة خبرة · إفادة استمرارية · خطاب موجّه لجهة — تُصدر PDF على الكليشة الرسمية برقم مرجعي وQR للتحقق" onBack={() => goBack()} canExport={false} testID="hr-letters-hero" />
         {isHr && <ReportKpis items={[
-          { label: 'بانتظار الاعتماد', value: c.pending || 0, color: '#f97316', icon: 'hourglass' },
-          { label: 'صادرة', value: c.approved || 0, color: '#16a34a', icon: 'document-text' },
-          { label: 'مرفوضة', value: c.rejected || 0, color: '#dc2626', icon: 'close-circle' },
-          { label: 'ملغاة', value: c.cancelled || 0, color: '#64748b', icon: 'remove-circle' },
+          { label: 'بانتظار الاعتماد', value: c.pending || 0, color: '#f97316', icon: 'hourglass', testID: 'kpi-pending', active: tab === 'pending', onPress: () => setTab(tab === 'pending' ? 'all' : 'pending') },
+          { label: 'صادرة', value: c.approved || 0, color: '#16a34a', icon: 'document-text', testID: 'kpi-approved', active: tab === 'approved', onPress: () => setTab(tab === 'approved' ? 'all' : 'approved') },
+          { label: 'مرفوضة', value: c.rejected || 0, color: '#dc2626', icon: 'close-circle', testID: 'kpi-rejected', active: tab === 'rejected', onPress: () => setTab(tab === 'rejected' ? 'all' : 'rejected') },
+          { label: 'ملغاة', value: c.cancelled || 0, color: '#64748b', icon: 'remove-circle', testID: 'kpi-cancelled', active: tab === 'cancelled', onPress: () => setTab(tab === 'cancelled' ? 'all' : 'cancelled') },
         ]} />}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', direction: 'rtl', flexWrap: 'wrap', gap: 8 }}>
           <Tabs tabs={tabs} value={tab} onChange={setTab} testID="hr-letters-tabs" />

@@ -47,12 +47,12 @@ export default function HrAnnualReport() {
           extra={<div style={{ display: 'flex', gap: 8, direction: 'rtl' }}><select value={year} onChange={(e) => setYear(Number(e.target.value))} style={{ ...inp, width: 100 }} data-testid="annual-year">{[YEAR, YEAR - 1, YEAR - 2].map((y) => <option key={y} value={y}>{y}</option>)}</select><select value={unit} onChange={(e) => setUnit(e.target.value)} style={{ ...inp, width: 220 }} data-testid="annual-unit"><option value="">كل الجامعة</option>{units.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>} />
         {loading || !r ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري إعداد التقرير...</Text> : (<>
           <ReportKpis items={[
-            { label: 'الموظفون', value: w.total, color: '#0f2440', icon: 'people' },
-            { label: 'تعيينات السنة', value: w.hires, color: '#16a34a', icon: 'person-add' },
-            { label: 'متوسط الحضور', value: at.avg_rate != null ? `${at.avg_rate}%` : '—', color: '#0284c7', icon: 'finger-print' },
-            { label: 'أيام الإجازات', value: lv.total_days, color: '#7c3aed', icon: 'airplane' },
-            { label: 'متوسط التقييم', value: ap.avg ?? '—', color: gradeColor(ap.avg), icon: 'star' },
-            { label: 'مهام مُنجزة', value: `${tk.done}/${tk.total}`, color: '#0f766e', icon: 'checkbox' },
+            { label: 'الموظفون', value: w.total, color: '#0f2440', icon: 'people', sub: 'اضغط للتفاصيل', testID: 'kpi-workforce', onPress: () => document.querySelector('[data-testid="annual-category"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+            { label: 'تعيينات السنة', value: w.hires, color: '#16a34a', icon: 'person-add', sub: 'اضغط للتفاصيل', testID: 'kpi-hires', onPress: () => document.querySelector('[data-testid="annual-status"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+            { label: 'متوسط الحضور', value: at.avg_rate != null ? `${at.avg_rate}%` : '—', color: '#0284c7', icon: 'finger-print', sub: 'اضغط للتفاصيل', testID: 'kpi-attendance', onPress: () => document.querySelector('[data-testid="annual-attendance"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+            { label: 'أيام الإجازات', value: lv.total_days, color: '#7c3aed', icon: 'airplane', sub: 'اضغط للتفاصيل', testID: 'kpi-leaves', onPress: () => document.querySelector('[data-testid="annual-leave-types"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+            { label: 'متوسط التقييم', value: ap.avg ?? '—', color: gradeColor(ap.avg), icon: 'star', sub: 'اضغط للتفاصيل', testID: 'kpi-appraisal', onPress: () => document.querySelector('[data-testid="annual-appr-units"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
+            { label: 'مهام مُنجزة', value: `${tk.done}/${tk.total}`, color: '#0f766e', icon: 'checkbox', sub: 'اضغط للتفاصيل', testID: 'kpi-tasks', onPress: () => document.querySelector('[data-testid="annual-units"]')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) },
           ]} />
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(340px, 1fr))', gap: 12, direction: 'rtl' }}>
             <Section title="القوى العاملة حسب الفئة" testID="annual-category"><Bars items={w.by_category.map((c: any) => ({ label: c.label, value: c.count }))} color="#0f2440" /></Section>
