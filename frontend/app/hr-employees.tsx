@@ -26,7 +26,7 @@ export default function HrEmployees() {
   const [exporting, setExporting] = useState(false);
   const [units, setUnits] = useState<any[]>([]);
   const [data, setData] = useState<any>({ employees: [], total: 0, stats: {} });
-  const [q, setQ] = useState({ search: '', org_unit_id: String(sp.org_unit_id || ''), category: String(sp.category || ''), status: String(sp.status || ''), contract_type: '', page: 1 });
+  const [q, setQ] = useState<any>({ search: "", org_unit_id: String(sp.org_unit_id || ''), category: String(sp.category || ''), status: String(sp.status || ''), contract_type: '', page: 1 });
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ open: boolean; emp: any | null }>({ open: false, emp: null });
   const [detail, setDetail] = useState<any>(null);
@@ -48,8 +48,8 @@ export default function HrEmployees() {
   }, []);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
-  const setQ1 = (k: string) => (e: any) => setQ((p) => ({ ...p, [k]: e.target.value, page: 1 }));
-  const setQv = (k: string) => (v: string) => setQ((p) => ({ ...p, [k]: v, page: 1 }));
+  const setQ1 = (k: string) => (e: any) => setQ((p: any) => ({ ...p, [k]: e.target.value, page: 1 }));
+  const setQv = (k: string) => (v: string) => setQ((p: any) => ({ ...p, [k]: v, page: 1 }));
   const opt = (m: Record<string, string>) => Object.entries(m || {}).map(([k, v]) => <option key={k} value={k}>{v}</option>);
   const alertMsg = (e: any) => window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'حدث خطأ');
 
@@ -90,11 +90,11 @@ export default function HrEmployees() {
         {canManage && Object.keys(sel).length > 0 && <BulkToolbar ids={Object.keys(sel)} names={Object.values(sel)} meta={meta} units={units} onDone={load} onClear={() => setSel({})} />}
 
         <ReportKpis items={[
-          { label: 'إجمالي الموظفين', value: st.total || 0, color: '#1565c0', icon: 'people' },
-          { label: 'أكاديميون', value: st.by_category?.academic || 0, color: '#7c3aed', icon: 'school' },
-          { label: 'إداريون وفنيون', value: (st.by_category?.administrative || 0) + (st.by_category?.technical || 0) + (st.by_category?.service || 0), color: '#0f2440', icon: 'briefcase' },
-          { label: 'على رأس العمل', value: st.by_status?.active || 0, color: '#16a34a', icon: 'checkmark-circle' },
-          { label: 'في إجازة / موقوف', value: (st.by_status?.leave || 0) + (st.by_status?.suspended || 0), color: '#f97316', icon: 'pause-circle' },
+          { label: 'إجمالي الموظفين', value: st.total || 0, color: '#1565c0', icon: 'people', testID: 'kpi-total', active: !q.category && !q.status, onPress: () => setQ((p: any) => ({ ...p, category: '', status: '', page: 1 })) },
+          { label: 'أكاديميون', value: st.by_category?.academic || 0, color: '#7c3aed', icon: 'school', testID: 'kpi-academic', active: q.category === 'academic', onPress: () => setQ((p: any) => ({ ...p, category: p.category === 'academic' ? '' : 'academic', page: 1 })) },
+          { label: 'إداريون وفنيون', value: (st.by_category?.administrative || 0) + (st.by_category?.technical || 0) + (st.by_category?.service || 0), color: '#0f2440', icon: 'briefcase', testID: 'kpi-admin', active: q.category === 'administrative', onPress: () => setQ((p: any) => ({ ...p, category: p.category === 'administrative' ? '' : 'administrative', page: 1 })) },
+          { label: 'على رأس العمل', value: st.by_status?.active || 0, color: '#16a34a', icon: 'checkmark-circle', testID: 'kpi-active', active: q.status === 'active', onPress: () => setQ((p: any) => ({ ...p, status: p.status === 'active' ? '' : 'active', page: 1 })) },
+          { label: 'في إجازة / موقوف', value: (st.by_status?.leave || 0) + (st.by_status?.suspended || 0), color: '#f97316', icon: 'pause-circle', testID: 'kpi-leave', active: q.status === 'leave', onPress: () => setQ((p: any) => ({ ...p, status: p.status === 'leave' ? '' : 'leave', page: 1 })) },
         ]} />
 
         <View style={reportPage.card}>
@@ -136,9 +136,9 @@ export default function HrEmployees() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, direction: 'rtl', fontSize: 12, color: '#64748b' }}>
                 <span data-testid="hr-total">الإجمالي: {data.total}</span>
                 <span style={{ display: 'flex', gap: 6 }}>
-                  <button disabled={q.page <= 1} onClick={() => setQ((p) => ({ ...p, page: p.page - 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>السابق</button>
+                  <button disabled={q.page <= 1} onClick={() => setQ((p: any) => ({ ...p, page: p.page - 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>السابق</button>
                   <span style={{ padding: '5px 8px' }}>صفحة {q.page} من {Math.max(1, Math.ceil(data.total / 30))}</span>
-                  <button disabled={q.page >= Math.ceil(data.total / 30)} onClick={() => setQ((p) => ({ ...p, page: p.page + 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>التالي</button>
+                  <button disabled={q.page >= Math.ceil(data.total / 30)} onClick={() => setQ((p: any) => ({ ...p, page: p.page + 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>التالي</button>
                 </span>
               </div>
             </View>

@@ -1,5 +1,5 @@
 """✅ شؤون الموظفين — المهام: إسناد (المدير المباشر لفريقه / HR لأي موظف)، متابعة التقدم، إشعارات"""
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -74,7 +74,7 @@ async def assignable(current_user: dict = Depends(get_current_user)):
 
 @router.get("")
 async def list_tasks(view: str = "mine", status: Optional[str] = None, priority: Optional[str] = None, assignee_employee_id: Optional[str] = None,
-                     search: Optional[str] = None, page: int = 1, per_page: int = 40, current_user: dict = Depends(get_current_user)):
+                     search: Optional[str] = None, due: Optional[str] = None, page: int = 1, per_page: int = 40, current_user: dict = Depends(get_current_user)):
     """view: mine (المسندة إليّ) | team (فريقي) | assigned (التي أسندتها) | all (HR)"""
     db = get_db()
     me = await find_my_employee(db, current_user)
@@ -100,13 +100,16 @@ async def list_tasks(view: str = "mine", status: Optional[str] = None, priority:
     if search:
         import re
         q["title"] = {"$regex": re.escape(search.strip()), "$options": "i"}
+    if due in ("overdue", "week"):
+        t = _today()
+        q["status"] = {"$in": list(OPEN)}
+        q["due_date"] = {"$lt": t, "$ne": None} if due == "overdue" else {"$gte": t, "$lte": (datetime.strptime(t, "%Y-%m-%d") + timedelta(days=7)).strftime("%Y-%m-%d")}
     total = await db.hr_tasks.count_documents(q)
     per_page = max(1, min(per_page, 200))
     items = [_view(t) for t in await db.hr_tasks.find(q).sort([("status", 1), ("due_date", 1), ("created_at", -1)]).skip((page - 1) * per_page).limit(per_page).to_list(per_page)]
     await enrich_employee_refs(db, items, "assignee_employee_id")
     base = {k: v for k, v in q.items() if k not in ("status", "priority", "title")}
     t = _today()
-    from datetime import timedelta
     week = (datetime.now(YEMEN_TZ).date() + timedelta(days=7)).strftime("%Y-%m-%d")
     stats = {"open": await db.hr_tasks.count_documents({**base, "status": {"$in": list(OPEN)}}),
              "overdue": await db.hr_tasks.count_documents({**base, "status": {"$in": list(OPEN)}, "due_date": {"$lt": t, "$ne": None}}),

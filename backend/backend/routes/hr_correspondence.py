@@ -287,7 +287,7 @@ async def acknowledge(corr_id: str, current_user: dict = Depends(get_current_use
 
 @router.get("")
 async def list_corr(direction: Optional[str] = None, status: Optional[str] = None, priority: Optional[str] = None, search: Optional[str] = None,
-                    year: Optional[int] = None, page: int = 1, per_page: int = 40, current_user: dict = Depends(get_current_user)):
+                    year: Optional[int] = None, overdue: bool = False, page: int = 1, per_page: int = 40, current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user) and not has_permission(current_user, P_CORR):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
@@ -296,6 +296,9 @@ async def list_corr(direction: Optional[str] = None, status: Optional[str] = Non
     if status: q["status"] = {"$in": status.split(",")}
     if priority: q["priority"] = priority
     if year: q["date"] = {"$regex": f"^{year}"}
+    if overdue:
+        q["status"] = {"$in": ["registered", "in_progress"]}
+        q["due_date"] = {"$lt": _today(), "$ne": None}
     if search:
         import re
         rx = {"$regex": re.escape(search.strip()), "$options": "i"}

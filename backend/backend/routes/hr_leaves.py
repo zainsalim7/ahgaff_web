@@ -207,7 +207,7 @@ async def set_balance(employee_id: str, data: BalanceIn, current_user: dict = De
 
 @router.get("")
 async def list_leaves(status: Optional[str] = None, type: Optional[str] = None, employee_id: Optional[str] = None, year: Optional[int] = None,
-                      month: Optional[str] = None, org_unit_id: Optional[str] = None, page: int = 1, per_page: int = 40, current_user: dict = Depends(get_current_user)):
+                      month: Optional[str] = None, org_unit_id: Optional[str] = None, today: bool = False, page: int = 1, per_page: int = 40, current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
@@ -217,6 +217,11 @@ async def list_leaves(status: Optional[str] = None, type: Optional[str] = None, 
         q["status"] = {"$in": status.split(",")}
     if type:
         q["type"] = type
+    if today:
+        t = _today()
+        q["status"] = "approved"
+        q["start_date"] = {"$lte": t}
+        q["end_date"] = {"$gte": t}
     if employee_id:
         q["employee_id"] = employee_id
     if org_unit_id:

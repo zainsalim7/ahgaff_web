@@ -17,7 +17,7 @@ export default function HrCorrespondence() {
   const canManage = user?.role === 'admin' || hasPermission('hr_manage_correspondence');
   const [meta, setMeta] = useState<any>(null);
   const [units, setUnits] = useState<any[]>([]);
-  const [q, setQ] = useState({ search: '', direction: '', status: '', priority: '', year: String(YEAR), page: 1 });
+  const [q, setQ] = useState<any>({ search: '', direction: '', status: '', priority: '', year: String(YEAR), page: 1, overdue: false });
   const [data, setData] = useState<any>({ items: [], total: 0, stats: {} });
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ open: boolean; item: any | null }>({ open: false, item: null });
@@ -33,8 +33,9 @@ export default function HrCorrespondence() {
   useEffect(() => { hrAPI.corrMeta().then((r) => setMeta(r.data)).catch(() => {}); hrAPI.orgUnits().then((r) => setUnits(r.data.units || [])).catch(() => {}); }, []);
   useEffect(() => { const t = setTimeout(load, 250); return () => clearTimeout(t); }, [load]);
 
-  const setQ1 = (k: string) => (e: any) => setQ((p) => ({ ...p, [k]: e.target.value, page: 1 }));
-  const setQv = (k: string) => (v: string) => setQ((p) => ({ ...p, [k]: v, page: 1 }));
+  const setQ1 = (k: string) => (e: any) => setQ((p: any) => ({ ...p, [k]: e.target.value, page: 1 }));
+  const setQv = (k: string) => (v: string) => setQ((p: any) => ({ ...p, [k]: v, page: 1 }));
+  const kpi = (patch: any) => setQ((p: any) => ({ ...p, overdue: false, ...patch, page: 1 }));
   const openDetail = async (id: string) => { try { setDetail((await hrAPI.corr(id)).data); } catch (e) { alertErr(e); } };
   const done = (msg: string) => { window.alert(msg); load(); if (detail) openDetail(detail.id); };
   const changeStatus = async (c: any, status: string) => { const note = window.prompt(`تغيير الحالة إلى «${meta.statuses[status]}» — ملاحظة (اختياري):`, '') ; if (note === null) return; try { const r = await hrAPI.setCorrStatus(c.id, status, note); done(r.data.message); } catch (e) { alertErr(e); } };
@@ -48,11 +49,12 @@ export default function HrCorrespondence() {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', direction: 'rtl', gap: 8, flexWrap: 'wrap' }}>
           <div style={{ flex: 1, minWidth: 300 }}>
             <ReportKpis items={[
-              { label: `واردة ${YEAR}`, value: st.incoming || 0, color: CORR_COLOR.incoming, icon: 'mail' },
-              { label: `صادرة ${YEAR}`, value: st.outgoing || 0, color: CORR_COLOR.outgoing, icon: 'send' },
-              { label: `داخلية وتعاميم ${YEAR}`, value: st.internal || 0, color: CORR_COLOR.internal, icon: 'megaphone' },
-              { label: 'قيد المعالجة', value: st.open || 0, color: '#f97316', icon: 'time' },
-              { label: 'متأخرة عن الاستحقاق', value: st.overdue || 0, color: '#dc2626', icon: 'alert-circle' },
+              { label: `واردة ${YEAR}`, value: st.incoming || 0, color: CORR_COLOR.incoming, icon: 'mail', testID: 'kpi-incoming', active: q.direction === 'incoming' && !q.overdue, onPress: () => kpi({ direction: q.direction === 'incoming' ? '' : 'incoming', year: String(YEAR) }) },
+              { label: `صادرة ${YEAR}`, value: st.outgoing || 0, color: CORR_COLOR.outgoing, icon: 'send', testID: 'kpi-outgoing', active: q.direction === 'outgoing' && !q.overdue, onPress: () => kpi({ direction: q.direction === 'outgoing' ? '' : 'outgoing', year: String(YEAR) }) },
+              { label: `داخلية وتعاميم ${YEAR}`, value: st.internal || 0, color: CORR_COLOR.internal, icon: 'megaphone', testID: 'kpi-internal', active: q.direction === 'internal' && !q.overdue, onPress: () => kpi({ direction: q.direction === 'internal' ? '' : 'internal', year: String(YEAR) }) },
+              { label: `وارد من موظفين`, value: st.employee || 0, color: '#0284c7', icon: 'person', testID: 'kpi-employee', active: q.direction === 'employee' && !q.overdue, onPress: () => kpi({ direction: q.direction === 'employee' ? '' : 'employee', year: '' }) },
+              { label: 'قيد المعالجة', value: st.open || 0, color: '#f97316', icon: 'time', testID: 'kpi-open', active: q.status === 'registered,in_progress' && !q.overdue, onPress: () => kpi({ status: q.status === 'registered,in_progress' ? '' : 'registered,in_progress', direction: '', year: '' }) },
+              { label: 'متأخرة عن الاستحقاق', value: st.overdue || 0, color: '#dc2626', icon: 'alert-circle', testID: 'kpi-overdue', active: !!q.overdue, onPress: () => kpi({ overdue: !q.overdue, status: '', direction: '', year: '' }) },
             ]} />
           </div>
         </div>
@@ -90,9 +92,9 @@ export default function HrCorrespondence() {
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, direction: 'rtl', fontSize: 12, color: '#64748b' }}>
                 <span data-testid="corr-total">الإجمالي: {data.total}</span>
                 <span style={{ display: 'flex', gap: 6 }}>
-                  <button disabled={q.page <= 1} onClick={() => setQ((p) => ({ ...p, page: p.page - 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>السابق</button>
+                  <button disabled={q.page <= 1} onClick={() => setQ((p: any) => ({ ...p, page: p.page - 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>السابق</button>
                   <span style={{ padding: '5px 8px' }}>صفحة {q.page} من {Math.max(1, Math.ceil(data.total / 40))}</span>
-                  <button disabled={q.page >= Math.ceil(data.total / 40)} onClick={() => setQ((p) => ({ ...p, page: p.page + 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>التالي</button>
+                  <button disabled={q.page >= Math.ceil(data.total / 40)} onClick={() => setQ((p: any) => ({ ...p, page: p.page + 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>التالي</button>
                 </span>
               </div>
             </View>

@@ -18,7 +18,8 @@ export default function HrLeaves() {
   const [tab, setTab] = useState('requests');
   const [meta, setMeta] = useState<any>(null);
   const [units, setUnits] = useState<any[]>([]);
-  const [q, setQ] = useState({ status: 'pending,hr_pending', type: '', org_unit_id: '', year: String(YEAR), page: 1 });
+  const [q, setQ] = useState<any>({ status: 'pending,hr_pending', type: '', org_unit_id: '', year: String(YEAR), page: 1, today: false });
+  const kpi = (patch: any) => { setTab('requests'); setQ((p: any) => ({ ...p, today: false, ...patch, page: 1 })); };
   const [data, setData] = useState<any>({ items: [], total: 0, stats: {} });
   const [balances, setBalances] = useState<any>({ items: [], year: YEAR });
   const [balYear, setBalYear] = useState(YEAR);
@@ -39,8 +40,8 @@ export default function HrLeaves() {
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (tab === 'balances') loadBal(); }, [tab, loadBal]);
 
-  const setQ1 = (k: string) => (e: any) => setQ((p) => ({ ...p, [k]: e.target.value, page: 1 }));
-  const setQv = (k: string) => (v: string) => setQ((p) => ({ ...p, [k]: v, page: 1 }));
+  const setQ1 = (k: string) => (e: any) => setQ((p: any) => ({ ...p, [k]: e.target.value, page: 1 }));
+  const setQv = (k: string) => (v: string) => setQ((p: any) => ({ ...p, [k]: v, page: 1 }));
   const [sort, setSort] = useState<Sort>(null);
   const sortedLeaves = useSort<any>(data.items || [], sort, LEAVE_SORTERS);
   const done = (msg: string) => { window.alert(msg); load(); if (detail) openDetail(detail.id); };
@@ -55,10 +56,10 @@ export default function HrLeaves() {
         <ReportHero kicker="شؤون الموظفين" title="إدارة الإجازات" subtitle="طلبات الإجازات ودورة الاعتماد (المدير المباشر ← شؤون الموظفين) والأرصدة السنوية" onBack={() => goBack()} canExport={false} testID="hr-leaves-hero" />
 
         <ReportKpis items={[
-          { label: 'طلبات معلّقة', value: st.pending || 0, color: '#f97316', icon: 'hourglass' },
-          { label: 'في إجازة اليوم', value: st.on_leave_today || 0, color: '#0284c7', icon: 'airplane' },
-          { label: `معتمدة ${YEAR}`, value: st.approved_year || 0, color: '#16a34a', icon: 'checkmark-done' },
-          { label: `مرفوضة ${YEAR}`, value: st.rejected_year || 0, color: '#dc2626', icon: 'close-circle' },
+          { label: 'طلبات معلّقة', value: st.pending || 0, color: '#f97316', icon: 'hourglass', testID: 'kpi-pending', active: q.status === 'pending,hr_pending' && !q.today, onPress: () => kpi({ status: 'pending,hr_pending', year: '' }) },
+          { label: 'في إجازة اليوم', value: st.on_leave_today || 0, color: '#0284c7', icon: 'airplane', testID: 'kpi-today', active: !!q.today, onPress: () => kpi({ today: !q.today, status: '', year: '' }) },
+          { label: `معتمدة ${YEAR}`, value: st.approved_year || 0, color: '#16a34a', icon: 'checkmark-done', testID: 'kpi-approved', active: q.status === 'approved' && !q.today, onPress: () => kpi({ status: q.status === 'approved' ? '' : 'approved', year: String(YEAR) }) },
+          { label: `مرفوضة ${YEAR}`, value: st.rejected_year || 0, color: '#dc2626', icon: 'close-circle', testID: 'kpi-rejected', active: q.status === 'rejected' && !q.today, onPress: () => kpi({ status: q.status === 'rejected' ? '' : 'rejected', year: String(YEAR) }) },
         ]} />
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', direction: 'rtl', flexWrap: 'wrap', gap: 8 }}>
@@ -102,9 +103,9 @@ export default function HrLeaves() {
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 10, direction: 'rtl', fontSize: 12, color: '#64748b' }}>
                   <span data-testid="hr-leaves-total">الإجمالي: {data.total}</span>
                   <span style={{ display: 'flex', gap: 6 }}>
-                    <button disabled={q.page <= 1} onClick={() => setQ((p) => ({ ...p, page: p.page - 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>السابق</button>
+                    <button disabled={q.page <= 1} onClick={() => setQ((p: any) => ({ ...p, page: p.page - 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>السابق</button>
                     <span style={{ padding: '5px 8px' }}>صفحة {q.page} من {Math.max(1, Math.ceil(data.total / 40))}</span>
-                    <button disabled={q.page >= Math.ceil(data.total / 40)} onClick={() => setQ((p) => ({ ...p, page: p.page + 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>التالي</button>
+                    <button disabled={q.page >= Math.ceil(data.total / 40)} onClick={() => setQ((p: any) => ({ ...p, page: p.page + 1 }))} style={btn('#f1f5f9', '#0f2440', { padding: '5px 12px', fontSize: 12 })}>التالي</button>
                   </span>
                 </div>
               </View>

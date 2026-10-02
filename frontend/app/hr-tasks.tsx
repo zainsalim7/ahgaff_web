@@ -16,7 +16,8 @@ export default function HrTasks() {
   const isHr = user?.role === 'admin' || hasPermission('hr_manage_tasks') || hasPermission('hr_view_employees');
   const [view, setView] = useState(isHr ? 'all' : 'mine');
   const [meta, setMeta] = useState<any>(null);
-  const [q, setQ] = useState({ status: 'open,in_progress', priority: '', search: '' });
+  const [q, setQ] = useState<any>({ status: 'open,in_progress', priority: '', search: '', due: '' });
+  const kpi = (patch: any) => setQ((p: any) => ({ ...p, due: '', ...patch }));
   const [data, setData] = useState<any>({ items: [], total: 0, stats: {}, team_size: 0 });
   const [sort, setSort] = useState<Sort>(null);
   const sortedTasks = useSort<any>(data.items || [], sort, TASK_SORTERS);
@@ -42,10 +43,10 @@ export default function HrTasks() {
       <ScrollView contentContainerStyle={reportPage.content}>
         <ReportHero kicker="شؤون الموظفين" title="المهام" subtitle="إسناد المهام للموظفين بمواعيد استحقاق ومتابعة التقدم — المدير المباشر لفريقه وشؤون الموظفين للجميع" onBack={() => goBack()} canExport={false} testID="hr-tasks-hero" />
         <ReportKpis items={[
-          { label: 'مفتوحة', value: st.open || 0, color: '#0284c7', icon: 'list' },
-          { label: 'تستحق خلال أسبوع', value: st.due_week || 0, color: '#f97316', icon: 'time' },
-          { label: 'متأخرة', value: st.overdue || 0, color: '#dc2626', icon: 'alert-circle' },
-          { label: 'مُنجزة', value: st.done || 0, color: '#16a34a', icon: 'checkmark-done' },
+          { label: 'مفتوحة', value: st.open || 0, color: '#0284c7', icon: 'list', testID: 'kpi-open', active: q.status === 'open,in_progress' && !q.due, onPress: () => kpi({ status: 'open,in_progress' }) },
+          { label: 'تستحق خلال أسبوع', value: st.due_week || 0, color: '#f97316', icon: 'time', testID: 'kpi-week', active: q.due === 'week', onPress: () => kpi({ due: q.due === 'week' ? '' : 'week', status: '' }) },
+          { label: 'متأخرة', value: st.overdue || 0, color: '#dc2626', icon: 'alert-circle', testID: 'kpi-overdue', active: q.due === 'overdue', onPress: () => kpi({ due: q.due === 'overdue' ? '' : 'overdue', status: '' }) },
+          { label: 'مُنجزة', value: st.done || 0, color: '#16a34a', icon: 'checkmark-done', testID: 'kpi-done', active: q.status === 'done' && !q.due, onPress: () => kpi({ status: q.status === 'done' ? '' : 'done' }) },
         ]} />
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', direction: 'rtl', flexWrap: 'wrap', gap: 8 }}>
           <Tabs tabs={tabs} value={view} onChange={setView} testID="hr-tasks-tabs" />
@@ -53,9 +54,9 @@ export default function HrTasks() {
         </div>
         <View style={reportPage.card}>
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr', gap: 8, direction: 'rtl' }}>
-            <input placeholder="بحث بالعنوان" value={q.search} onChange={(e) => setQ((p) => ({ ...p, search: e.target.value }))} style={inp} data-testid="task-search" />
-            <HrSelect value={q.status} onChange={(v) => setQ((p) => ({ ...p, status: v }))} options={[{ value: 'open,in_progress', label: 'المفتوحة' }, ...optsFromMap(meta?.statuses)]} placeholder="كل الحالات" testID="task-filter-status" />
-            <HrSelect value={q.priority} onChange={(v) => setQ((p) => ({ ...p, priority: v }))} options={optsFromMap(meta?.priorities)} placeholder="كل الأولويات" testID="task-filter-priority" />
+            <input placeholder="بحث بالعنوان" value={q.search} onChange={(e) => setQ((p: any) => ({ ...p, search: e.target.value }))} style={inp} data-testid="task-search" />
+            <HrSelect value={q.status} onChange={(v) => setQ((p: any) => ({ ...p, status: v }))} options={[{ value: 'open,in_progress', label: 'المفتوحة' }, ...optsFromMap(meta?.statuses)]} placeholder="كل الحالات" testID="task-filter-status" />
+            <HrSelect value={q.priority} onChange={(v) => setQ((p: any) => ({ ...p, priority: v }))} options={optsFromMap(meta?.priorities)} placeholder="كل الأولويات" testID="task-filter-priority" />
           </div>
         </View>
         {loading ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text>

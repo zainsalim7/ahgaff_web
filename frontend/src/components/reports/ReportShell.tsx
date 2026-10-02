@@ -59,22 +59,28 @@ export const ReportHero = ({ title, subtitle, kicker = 'التقارير', onBac
   </View>
 );
 
-export interface Kpi { label: string; value: string | number; color?: string; sub?: string; icon?: keyof typeof Ionicons.glyphMap }
+export interface Kpi { label: string; value: string | number; color?: string; sub?: string; icon?: keyof typeof Ionicons.glyphMap; onPress?: () => void; active?: boolean; testID?: string }
 
 /** 🔢 بطاقات المؤشرات */
 export const ReportKpis = ({ items, testID }: { items: Kpi[]; testID?: string }) => (
   <View style={styles.kpis} testID={testID || 'report-kpis'}>
-    {items.map((k) => (
-      <View key={k.label} style={[dashStyles.card, styles.kpi]}>
-        <View style={[styles.kpiBar, { backgroundColor: k.color || DASH.blue }]} />
-        <View style={styles.kpiTop}>
-          {!!k.icon && <Ionicons name={k.icon} size={15} color={k.color || DASH.blue} />}
-          <Text style={styles.kpiLbl}>{k.label}</Text>
-        </View>
-        <Text style={[styles.kpiVal, NUM_FONT, { color: k.color || DASH.blue }]}>{k.value}</Text>
-        {!!k.sub && <Text style={styles.kpiSub} numberOfLines={1}>{k.sub}</Text>}
-      </View>
-    ))}
+    {items.map((k) => {
+      const Wrap: any = k.onPress ? TouchableOpacity : View;
+      return (
+        <Wrap key={k.label} onPress={k.onPress} activeOpacity={0.75} testID={k.testID} accessibilityRole={k.onPress ? 'button' : undefined}
+          style={[dashStyles.card, styles.kpi, k.onPress && { cursor: 'pointer' } as any, k.active && { borderWidth: 2, borderColor: k.color || DASH.blue, backgroundColor: `${k.color || DASH.blue}10` }]}>
+          <View style={[styles.kpiBar, { backgroundColor: k.color || DASH.blue }]} />
+          <View style={styles.kpiTop}>
+            {!!k.icon && <Ionicons name={k.icon} size={15} color={k.color || DASH.blue} />}
+            <Text style={styles.kpiLbl}>{k.label}</Text>
+            {k.active && <Ionicons name="funnel" size={12} color={k.color || DASH.blue} style={{ marginRight: 'auto' } as any} />}
+          </View>
+          <Text style={[styles.kpiVal, NUM_FONT, { color: k.color || DASH.blue }]}>{k.value}</Text>
+          {!!k.sub && <Text style={styles.kpiSub} numberOfLines={1}>{k.sub}</Text>}
+          {!!k.onPress && !k.sub && <Text style={styles.kpiSub} numberOfLines={1}>{k.active ? 'اضغط لإلغاء الفلتر' : 'اضغط للتصفية'}</Text>}
+        </Wrap>
+      );
+    })}
   </View>
 );
 
