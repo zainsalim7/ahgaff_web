@@ -1099,9 +1099,14 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
             return query
         # أنواع نطاق أخرى: تسقط لفروع الدور أدناه (سلوك الكلية الأولى) أو الـ fail-safe
     
-    # Dean (عميد) - يرى بيانات كليته
+    # Dean (عميد) - يرى بيانات كليته، وإن خُصِّص له قسم/أقسام محددة داخل الكلية فيرى تلك الأقسام فقط
     if role == "dean" and faculty_id:
-        if scope_type == "students":
+        if department_ids:
+            if scope_type in ["students", "courses", "teachers"]:
+                query["department_id"] = department_ids[0] if len(department_ids) == 1 else {"$in": department_ids}
+            elif scope_type == "departments":
+                query["_id"] = ObjectId(department_ids[0]) if len(department_ids) == 1 else {"$in": [ObjectId(did) for did in department_ids]}
+        elif scope_type == "students":
             # جلب أقسام الكلية أولاً
             dept_ids = await get_faculty_department_ids(faculty_id)
             if dept_ids:

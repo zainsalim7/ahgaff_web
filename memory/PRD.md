@@ -569,3 +569,4 @@
 - ما زال `<select>` أصلي في حقول ثانوية داخل النماذج (الأولوية/الحالة/الوحدة) وخلايا حالة الحضور اليومي — مقصود.
 - اختبار: iteration_85 — كل الواجهات ✅
 - **بطاقات KPI قابلة للنقر (2026-10-02)**: `Kpi` في `ReportShell.tsx` يدعم `onPress/active/testID` (إطار ملوّن + أيقونة قمع عند التفعيل، سطر «اضغط للتصفية/لإلغاء الفلتر»). مطبَّق في: المراسلات (`kpi-incoming/outgoing/internal/employee/open/overdue` — param جديد `overdue=true`)، الإجازات (`kpi-pending/today/approved/rejected` — param جديد `today=true`)، المهام (`kpi-open/week/overdue/done` — param جديد `due=overdue|week`)، سجل الموظفين (`kpi-total/academic/admin/active/leave`). النقر مرة أخرى يلغي الفلتر.
+- **نطاق العميد (2026-10-02)**: في `get_user_scope_filter` (server.py) إذا كان للعميد `department_ids` مخصّصة داخل كليته → يرى تلك الأقسام فقط (طلاب/مقررات/مدرسون/أقسام)؛ بلا أقسام → الكلية كاملة كما كان. لم يُنشأ دور جديد ولم تتغير الأدوار الموجودة. مُختبَر بحساب Salim (dean).
