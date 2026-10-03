@@ -333,6 +333,16 @@ const SECTIONS: Section[] = [
     tint: '#dc2626',
     items: [
       {
+        id: 'student-references',
+        label: 'الأرقام المرجعية للطلاب',
+        description: 'توليد الأرقام المرجعية + اعتماد الرقم المُدخل بدل المُولَّد وتقرير المقارنة',
+        icon: 'finger-print',
+        color: '#0f766e',
+        bg: '#ccfbf1',
+        route: '/student-references',
+        adminOnly: true,
+      },
+      {
         id: 'student-autofill',
         label: 'الإدخال التلقائي للطلاب',
         description: 'استيراد وملء بيانات الطلاب آلياً',
