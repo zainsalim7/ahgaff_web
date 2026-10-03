@@ -86,10 +86,25 @@ async def send_notification(token: str, title: str, body: str, data: dict = None
 
 
 async def send_notification_to_many(tokens: list, title: str, body: str, data: dict = None):
-    """Send push notification to multiple devices"""
+    """Send push notification to multiple devices.
+    🤖 أندرويد (FCM) بنفس المسار القديم دون تغيير · 🍎 iOS بتوكنات ExponentPushToken → Expo Push API"""
     if not tokens:
         return {"success": 0, "failure": 0}
-    
+
+    from services.expo_push_service import is_expo_token, send_expo_push_to_many
+    expo_tokens = [t for t in tokens if is_expo_token(t)]
+    tokens = [t for t in tokens if not is_expo_token(t)]
+
+    expo_result = {"success": 0, "failure": 0, "failed_details": []}
+    if expo_tokens:
+        try:
+            expo_result = await send_expo_push_to_many(expo_tokens, title, body, data)
+        except Exception as e:
+            logger.error(f"Expo push failed: {e}")
+            expo_result = {"success": 0, "failure": len(expo_tokens), "failed_details": [], "error": str(e)}
+    if not tokens:
+        return expo_result
+
     message = messaging.MulticastMessage(
         notification=messaging.Notification(
             title=title,
@@ -142,10 +157,10 @@ async def send_notification_to_many(tokens: list, title: str, body: str, data: d
                     })
         
         return {
-            "success": response.success_count,
-            "failure": response.failure_count,
-            "failed_details": failed_details,
+            "success": response.success_count + expo_result["success"],
+            "failure": response.failure_count + expo_result["failure"],
+            "failed_details": failed_details + expo_result.get("failed_details", []),
         }
     except Exception as e:
         logger.error(f"Failed to send notifications: {e}")
-        return {"success": 0, "failure": 0, "error": str(e)}
+        return {"success": expo_result["success"], "failure": expo_result["failure"], "failed_details": expo_result.get("failed_details", []), "error": str(e)}
