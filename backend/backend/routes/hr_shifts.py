@@ -22,8 +22,9 @@ class GeneralIn(BaseModel):
     annual_leave_days: int = 30
     correction_enabled: bool = True
     correction_window_minutes: int = 10
-    auto_checkout_enabled: bool = False
+    auto_checkout_enabled: bool = True
     auto_checkout_after_minutes: int = 60
+    auto_absent_enabled: bool = True
     device_binding_enabled: bool = True
 
 

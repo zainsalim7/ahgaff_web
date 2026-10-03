@@ -10,14 +10,15 @@ import { AttendanceDaily } from '../src/components/hr/AttendanceDaily';
 import { AttendanceMonthly } from '../src/components/hr/AttendanceMonthly';
 import { AttendanceDetails } from '../src/components/hr/AttendanceDetails';
 import { AttendanceDevices } from '../src/components/hr/AttendanceDevices';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { btn } from '../src/components/hr/ui';
 
 export default function HrAttendance() {
   const { hasPermission, user } = useAuth();
   const canManage = user?.role === 'admin' || hasPermission('hr_manage_attendance');
   const canWorkSettings = user?.role === 'admin' || hasPermission('hr_manage_work_settings');
-  const [tab, setTab] = useState('daily');
+  const params = useLocalSearchParams<{ tab?: string }>();
+  const [tab, setTab] = useState(typeof params.tab === 'string' && ['daily', 'monthly', 'details', 'devices'].includes(params.tab) ? params.tab : 'daily');
   const [meta, setMeta] = useState<any>(null);
   const [units, setUnits] = useState<any[]>([]);
   const [key] = useState(0);

@@ -10,7 +10,7 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user, log_activity, export_headers, export_filename
 from .hr_common import (P_ATTEND, P_WORK_SETTINGS, YEMEN_TZ, AR_DAYS, DEFAULT_SETTINGS, _now, _today, _oid, _ser, _can_view, _guard, parse_date, get_hr_settings,
-                        is_work_day, holiday_name, find_my_employee, enrich_employee_refs, employee_shifts, pick_shift, shift_late, employee_user_ids, notify_users)
+                        is_work_day, holiday_name, find_my_employee, enrich_employee_refs, employee_shifts, pick_shift, shift_late, employee_user_ids, notify_users, hr_manager_user_ids)
 from .hr_locations import GeoIn, evaluate_geo
 
 router = APIRouter(prefix="/hr/attendance", tags=["شؤون الموظفين - الحضور الإداري"])
@@ -141,6 +141,22 @@ def _rec_shift(r: dict, shifts: list) -> str:
     return r.get("shift_id") or shifts[0]["id"]
 
 
+def _warnings(r: dict) -> List[str]:
+    """⚠️ علامات تحذيرية تظهر في تقارير الإدارة"""
+    w = []
+    if r.get("auto_absent"):
+        w.append("غياب تلقائي — لم يحضر")
+    if r.get("was_auto_absent"):
+        w.append("حضر بعد تسجيله غائباً تلقائياً")
+    if (r.get("check_in_geo") or {}).get("status") == "out_of_range":
+        w.append("حضور خارج نطاق العمل")
+    if (r.get("check_out_geo") or {}).get("status") == "out_of_range":
+        w.append("انصراف خارج نطاق العمل")
+    if r.get("auto_checkout"):
+        w.append("انصراف تلقائي — لم يسجّل الانصراف")
+    return w
+
+
 async def _daily_rows(db, d: str, org_unit_id: Optional[str], category: Optional[str], settings: dict) -> List[dict]:
     q: dict = {"status": {"$nin": ["ended", "suspended"]}}
     if org_unit_id:
@@ -163,7 +179,7 @@ async def _daily_rows(db, d: str, org_unit_id: Optional[str], category: Optional
         for sh in shifts:
             r = next((x for x in mine if _rec_shift(x, shifts) == sh["id"]), None)
             if r:
-                row = {**_ser(r), "recorded": True}
+                row = {**_ser(r), "recorded": True, "warnings": _warnings(r)}
             elif eid in leaves:
                 row = {"employee_id": eid, "status": "leave", "note": leaves[eid], "recorded": False}
             elif not workday:
@@ -218,7 +234,7 @@ async def mark_attendance(data: MarkIn, current_user: dict = Depends(get_current
         flt = {"employee_id": en.employee_id, "date": data.date}
         flt.update({"$or": [{"shift_id": sh["id"]}, {"shift_id": {"$exists": False}}]} if sh["id"] == shifts[0]["id"] else {"shift_id": sh["id"]})
         await db.hr_attendance.update_one(flt, {"$set": {
-            "status": status, "check_in": ci, "check_out": co, "late_minutes": late, "note": (en.note or "").strip(), "source": "manual", "shift_id": sh["id"], "shift_name": sh["name"],
+            "status": status, "check_in": ci, "check_out": co, "late_minutes": late, "note": (en.note or "").strip(), "source": "manual", "shift_id": sh["id"], "shift_name": sh["name"], "auto_absent": False,
             "by_name": current_user.get("full_name", ""), "updated_at": _now()}, "$setOnInsert": {"created_at": _now()}}, upsert=True)
         saved += 1
     await log_activity(current_user, "hr_attendance_mark", "hr_attendance", data.date, "تسجيل حضور إداري", {"count": saved})
@@ -408,6 +424,7 @@ async def _details_rows(db, q: dict, skip: int = 0, limit: int = 0) -> List[dict
         out.append({"id": str(r["_id"]), "employee_id": r["employee_id"], "employee_name": e.get("full_name", ""), "employee_no": e.get("employee_no", ""), "job_title": e.get("job_title", ""),
                     "org_unit_name": units.get(e.get("org_unit_id") or "", ""), "date": r["date"], "shift_name": r.get("shift_name") or "", "status": r.get("status"), "status_label": ATT_STATUS.get(r.get("status") or "", r.get("status") or ""),
                     "check_in": r.get("check_in"), "check_out": r.get("check_out"), "late_minutes": r.get("late_minutes") or 0, "auto_checkout": bool(r.get("auto_checkout")), "auto_checkout_at": r.get("auto_checkout_at"),
+                    "auto_absent": bool(r.get("auto_absent")), "was_auto_absent": bool(r.get("was_auto_absent")), "warnings": _warnings(r),
                     "source": r.get("source"), "note": r.get("note") or "", "check_in_geo": gi, "check_out_geo": go, "by_name": r.get("by_name", "")})
     return out
 
@@ -429,12 +446,13 @@ async def attendance_details(date_from: Optional[str] = None, date_to: Optional[
     total = await db.hr_attendance.count_documents(q)
     items = await _details_rows(db, q, (page - 1) * per_page, per_page)
     pipeline = [{"$match": q}, {"$group": {"_id": None, "late": {"$sum": {"$cond": [{"$gt": ["$late_minutes", 0]}, 1, 0]}}, "late_minutes": {"$sum": {"$ifNull": ["$late_minutes", 0]}},
-                                             "auto": {"$sum": {"$cond": [{"$eq": ["$auto_checkout", True]}, 1, 0]}}, "out": {"$sum": {"$cond": [{"$eq": ["$check_in_geo.status", "out_of_range"]}, 1, 0]}},
+                                             "auto": {"$sum": {"$cond": [{"$eq": ["$auto_checkout", True]}, 1, 0]}}, "out": {"$sum": {"$cond": [{"$or": [{"$eq": ["$check_in_geo.status", "out_of_range"]}, {"$eq": ["$check_out_geo.status", "out_of_range"]}]}, 1, 0]}},
+                                             "auto_absent": {"$sum": {"$cond": [{"$eq": ["$auto_absent", True]}, 1, 0]}},
                                              "employees": {"$addToSet": "$employee_id"}}}]
     agg = await db.hr_attendance.aggregate(pipeline).to_list(1)
     a = agg[0] if agg else {}
     return {"items": items, "total": total, "page": page, "per_page": per_page, "from": date_from, "to": date_to,
-            "summary": {"records": total, "employees": len(a.get("employees") or []), "late": a.get("late", 0), "late_minutes": a.get("late_minutes", 0), "auto": a.get("auto", 0), "out_of_range": a.get("out", 0)}}
+            "summary": {"records": total, "employees": len(a.get("employees") or []), "late": a.get("late", 0), "late_minutes": a.get("late_minutes", 0), "auto": a.get("auto", 0), "out_of_range": a.get("out", 0), "auto_absent": a.get("auto_absent", 0)}}
 
 
 @router.get("/details/export")
@@ -456,7 +474,7 @@ async def attendance_details_export(date_from: Optional[str] = None, date_to: Op
     from openpyxl.styles import Font, PatternFill, Alignment
     from openpyxl.utils import get_column_letter
     wb = Workbook(); ws = wb.active; ws.title = "التفصيلي"; ws.sheet_view.rightToLeft = True
-    heads = ["التاريخ", "الرقم الوظيفي", "الاسم", "الوحدة", "المسمى", "الفترة", "الحالة", "حضور", "انصراف", "دقائق التأخير", "انصراف تلقائي", "موقع الحضور", "المسافة (م)", "داخل النطاق", "إحداثيات الحضور", "موقع الانصراف", "مسافة الانصراف (م)", "إحداثيات الانصراف", "المصدر", "ملاحظة"]
+    heads = ["التاريخ", "الرقم الوظيفي", "الاسم", "الوحدة", "المسمى", "الفترة", "الحالة", "حضور", "انصراف", "دقائق التأخير", "انصراف تلقائي", "تحذيرات", "موقع الحضور", "المسافة (م)", "داخل النطاق", "إحداثيات الحضور", "موقع الانصراف", "مسافة الانصراف (م)", "إحداثيات الانصراف", "المصدر", "ملاحظة"]
     ws.append([f"التقرير التفصيلي للحضور الإداري — من {date_from} إلى {date_to} ({len(rows)} سجل)"]); ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(heads))
     ws["A1"].font = Font(bold=True, size=13); ws["A1"].alignment = Alignment(horizontal="center")
     ws.append(heads)
@@ -467,11 +485,11 @@ async def attendance_details_export(date_from: Optional[str] = None, date_to: Op
     for r in rows:
         gi, go = r["check_in_geo"], r["check_out_geo"]
         ws.append([r["date"], r["employee_no"], r["employee_name"], r["org_unit_name"], r["job_title"], r["shift_name"], r["status_label"], r["check_in"] or "", r["check_out"] or "", r["late_minutes"],
-                   "نعم" if r["auto_checkout"] else "", gi["location_name"] or gi["status_label"], gi["distance_m"] if gi["distance_m"] is not None else "", "" if gi["in_range"] is None else ("نعم" if gi["in_range"] else "لا"), coord(gi),
+                   "نعم" if r["auto_checkout"] else "", " | ".join(r["warnings"]), gi["location_name"] or gi["status_label"], gi["distance_m"] if gi["distance_m"] is not None else "", "" if gi["in_range"] is None else ("نعم" if gi["in_range"] else "لا"), coord(gi),
                    go["location_name"] or go["status_label"], go["distance_m"] if go["distance_m"] is not None else "", coord(go), src.get(r["source"] or "", r["source"] or ""), r["note"]])
     for ci in range(1, len(heads) + 1):
         ws.column_dimensions[get_column_letter(ci)].width = 14
-    ws.column_dimensions["C"].width = 28; ws.column_dimensions["T"].width = 50; ws.column_dimensions["L"].width = 22; ws.column_dimensions["O"].width = 22; ws.column_dimensions["R"].width = 22
+    ws.column_dimensions["C"].width = 28; ws.column_dimensions["U"].width = 50; ws.column_dimensions["L"].width = 30; ws.column_dimensions["M"].width = 22; ws.column_dimensions["P"].width = 22; ws.column_dimensions["S"].width = 22
     buf = io.BytesIO(); wb.save(buf); buf.seek(0)
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(export_filename("الحضور التفصيلي", f"{date_from}_{date_to}", ext="xlsx")))
 
@@ -499,7 +517,7 @@ async def list_devices(search: Optional[str] = None, only_registered: bool = Fal
     for i in items:
         i["org_unit_name"] = units.get(i.pop("org_unit_id") or "", "")
     settings = await get_hr_settings(db)
-    return {"items": items, "device_binding_enabled": settings.get("device_binding_enabled", True),
+    return {"items": items, "device_binding_enabled": settings.get("device_binding_enabled", True), "pending_requests": await db.hr_device_requests.count_documents({"status": "pending"}),
             "stats": {"total": len(items), "registered": sum(1 for i in items if i["device_id"]), "with_rejections": sum(1 for i in items if i["device_rejections"])}}
 
 
@@ -519,6 +537,118 @@ async def reset_device(emp_id: str, current_user: dict = Depends(get_current_use
     if uid:
         await notify_users(db, [uid], "تمت إعادة تعيين جهاز التحضير", "سيُسجَّل جهازك الجديد تلقائياً عند أول تسجيل حضور", "hr")
     return {"message": f"تمت إعادة تعيين جهاز {emp.get('full_name', '')} — سيُسجَّل الجهاز الجديد عند أول تحضير"}
+
+
+# ══════════════ 📱 طلبات تغيير الجهاز ══════════════
+
+class DeviceChangeIn(BaseModel):
+    device_id: str
+    device_name: Optional[str] = ""
+    reason: Optional[str] = ""
+
+
+class RejectIn(BaseModel):
+    reason: Optional[str] = ""
+
+
+def _req_view(r: dict) -> dict:
+    d = _ser(r)
+    d["status_label"] = {"pending": "بانتظار الموافقة", "approved": "مقبول", "rejected": "مرفوض"}.get(r.get("status"), r.get("status"))
+    return d
+
+
+@router.get("/devices/my")
+async def my_device(current_user: dict = Depends(get_current_user)):
+    """📱 جهازي المسجّل + طلب التغيير المعلّق إن وُجد"""
+    db = get_db()
+    emp = await find_my_employee(db, current_user)
+    if not emp:
+        raise HTTPException(status_code=404, detail="لا يوجد ملف إداري مرتبط بحسابك")
+    settings = await get_hr_settings(db)
+    pending = await db.hr_device_requests.find_one({"employee_id": str(emp["_id"]), "status": "pending"})
+    last = await db.hr_device_requests.find_one({"employee_id": str(emp["_id"]), "status": {"$ne": "pending"}}, sort=[("created_at", -1)])
+    return {"device_binding_enabled": settings.get("device_binding_enabled", True), "device_id": emp.get("device_id"), "device_name": emp.get("device_name", ""),
+            "device_registered_at": emp.get("device_registered_at"), "pending_request": _req_view(pending) if pending else None, "last_request": _req_view(last) if last else None,
+            "can_request": bool(emp.get("device_id")) and not pending}
+
+
+@router.post("/devices/my/change-request")
+async def request_device_change(data: DeviceChangeIn, current_user: dict = Depends(get_current_user)):
+    """📱 الموظف يطلب تغيير جهاز التحضير (من جهازه الجديد) → شؤون الموظفين توافق بنقرة"""
+    db = get_db()
+    emp = await find_my_employee(db, current_user)
+    if not emp:
+        raise HTTPException(status_code=404, detail="لا يوجد ملف إداري مرتبط بحسابك")
+    did = (data.device_id or "").strip()
+    if not did:
+        raise HTTPException(status_code=400, detail="معرّف الجهاز مطلوب")
+    if not emp.get("device_id"):
+        raise HTTPException(status_code=400, detail="لا يوجد جهاز مسجّل لحسابك — سيُسجَّل جهازك تلقائياً عند أول تحضير")
+    if emp.get("device_id") == did:
+        raise HTTPException(status_code=400, detail="هذا هو جهازك المسجّل حالياً")
+    eid = str(emp["_id"])
+    if await db.hr_device_requests.find_one({"employee_id": eid, "status": "pending"}):
+        raise HTTPException(status_code=400, detail="لديك طلب تغيير جهاز بانتظار الموافقة")
+    doc = {"employee_id": eid, "employee_name": emp.get("full_name", ""), "employee_no": emp.get("employee_no", ""), "old_device_id": emp.get("device_id"), "old_device_name": emp.get("device_name", ""),
+           "new_device_id": did, "new_device_name": (data.device_name or "").strip()[:80], "reason": (data.reason or "").strip()[:500], "status": "pending", "created_at": _now()}
+    r = await db.hr_device_requests.insert_one(doc)
+    await log_activity(current_user, "hr_device_change_request", "employee", eid, emp.get("full_name", ""), {"new_device_id": did})
+    await notify_users(db, await hr_manager_user_ids(db, P_ATTEND), "📱 طلب تغيير جهاز التحضير",
+                       f"{emp.get('full_name', '')} ({emp.get('employee_no', '')}) يطلب تغيير جهازه إلى {doc['new_device_name'] or did[:12]}" + (f" — السبب: {doc['reason']}" if doc["reason"] else ""),
+                       "hr_device", {"request_id": str(r.inserted_id), "route": "/hr-attendance?tab=devices"})
+    return {"message": "أُرسل طلب تغيير الجهاز إلى شؤون الموظفين — سيُفعَّل جهازك الجديد فور الموافقة", "request": _req_view({**doc, "_id": r.inserted_id})}
+
+
+@router.get("/devices/requests")
+async def list_device_requests(status: Optional[str] = "pending", current_user: dict = Depends(get_current_user)):
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    q = {"status": status} if status else {}
+    items = [_req_view(r) for r in await db.hr_device_requests.find(q).sort("created_at", -1).to_list(500)]
+    return {"items": items, "pending": await db.hr_device_requests.count_documents({"status": "pending"})}
+
+
+async def _decide_device_request(db, req_id: str, current_user: dict) -> dict:
+    _guard(current_user, P_ATTEND)
+    r = await db.hr_device_requests.find_one({"_id": _oid(req_id, "الطلب")})
+    if not r:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    if r.get("status") != "pending":
+        raise HTTPException(status_code=400, detail="تم البت في هذا الطلب مسبقاً")
+    return r
+
+
+@router.post("/devices/requests/{req_id}/approve")
+async def approve_device_request(req_id: str, current_user: dict = Depends(get_current_user)):
+    """✅ الموافقة بنقرة: يُستبدل جهاز الموظف بالجهاز الجديد فوراً"""
+    db = get_db()
+    r = await _decide_device_request(db, req_id, current_user)
+    emp = await db.employees.find_one({"_id": _oid(r["employee_id"])})
+    if not emp:
+        raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    now = _now()
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_id": r["new_device_id"], "device_name": r.get("new_device_name", ""), "device_registered_at": now, "device_last_seen_at": None, "device_rejections": 0, "device_last_rejection": None},
+                                                        "$push": {"device_history": {"device_id": emp.get("device_id"), "registered_at": emp.get("device_registered_at"), "reset_at": now, "by_name": current_user.get("full_name", ""), "via": "change_request"}}})
+    await db.hr_device_requests.update_one({"_id": r["_id"]}, {"$set": {"status": "approved", "reviewed_at": now, "reviewed_by_name": current_user.get("full_name", "")}})
+    await log_activity(current_user, "hr_device_change_approve", "employee", r["employee_id"], emp.get("full_name", ""), {"new_device_id": r["new_device_id"]})
+    uid = (await employee_user_ids(db, [r["employee_id"]])).get(r["employee_id"])
+    if uid:
+        await notify_users(db, [uid], "✅ تمت الموافقة على تغيير جهازك", "يمكنك الآن تسجيل الحضور من جهازك الجديد", "hr")
+    return {"message": f"تمت الموافقة — جهاز {emp.get('full_name', '')} الجديد مفعّل الآن"}
+
+
+@router.post("/devices/requests/{req_id}/reject")
+async def reject_device_request(req_id: str, data: RejectIn = None, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    r = await _decide_device_request(db, req_id, current_user)
+    reason = ((data.reason if data else "") or "").strip()
+    await db.hr_device_requests.update_one({"_id": r["_id"]}, {"$set": {"status": "rejected", "reject_reason": reason, "reviewed_at": _now(), "reviewed_by_name": current_user.get("full_name", "")}})
+    await log_activity(current_user, "hr_device_change_reject", "employee", r["employee_id"], r.get("employee_name", ""), {"reason": reason})
+    uid = (await employee_user_ids(db, [r["employee_id"]])).get(r["employee_id"])
+    if uid:
+        await notify_users(db, [uid], "❌ رُفض طلب تغيير جهازك", reason or "راجع شؤون الموظفين", "hr")
+    return {"message": "تم رفض الطلب"}
 
 
 # ══════════════ الخدمة الذاتية ══════════════
@@ -562,7 +692,25 @@ async def my_attendance(month: Optional[str] = None, current_user: dict = Depend
             "month": m, "records": recs, "counts": counts, "late_minutes": sum(int(r.get("late_minutes") or 0) for r in recs)}
 
 
-DEVICE_REJECT_MSG = "هذا الجهاز غير مسجّل لحسابك. راجع شؤون الموظفين لتغيير الجهاز"
+DEVICE_REJECT_MSG = "هذا الجهاز غير مسجّل لحسابك. أرسل طلب تغيير الجهاز من التطبيق أو راجع شؤون الموظفين"
+DEVICE_ALERT_THROTTLE_MIN = 10
+
+
+async def _alert_hr_device_rejection(db, emp: dict, did: str, dname: str, action: str, now: str):
+    """🔔 تنبيه فوري لشؤون الموظفين عند رفض تحضير من جهاز غير مسجّل (بحد أقصى تنبيه كل 10 د لكل موظف)"""
+    last = emp.get("device_last_alert_at")
+    if last:
+        try:
+            if (datetime.fromisoformat(now) - datetime.fromisoformat(last)).total_seconds() < DEVICE_ALERT_THROTTLE_MIN * 60:
+                return
+        except Exception:
+            pass
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_last_alert_at": now}})
+    act = "تسجيل الحضور" if action == "check_in" else "تسجيل الانصراف"
+    dev = f"{dname} ({did[:12]}…)" if dname else did
+    await notify_users(db, await hr_manager_user_ids(db, P_ATTEND), "⚠️ محاولة تحضير من جهاز غير مسجّل",
+                       f"{emp.get('full_name', '')} ({emp.get('employee_no', '')}) حاول {act} الساعة {now[11:16]} من جهاز غير مسجّل: {dev} — راجع «أجهزة التحضير»",
+                       "hr_device", {"employee_id": str(emp["_id"]), "route": "/hr-attendance?tab=devices"})
 
 
 async def _device_check(db, emp: dict, geo: Optional[GeoIn], settings: dict, action: str) -> Optional[str]:
@@ -580,6 +728,7 @@ async def _device_check(db, emp: dict, geo: Optional[GeoIn], settings: dict, act
         return did
     if saved != did:
         await db.employees.update_one({"_id": emp["_id"]}, {"$inc": {"device_rejections": 1}, "$set": {"device_last_rejection": {"device_id": did, "device_name": (geo.device_name or "")[:80], "at": now, "action": action}}})
+        await _alert_hr_device_rejection(db, emp, did, (geo.device_name or "")[:80], action, now)
         raise HTTPException(status_code=403, detail=DEVICE_REJECT_MSG)
     await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_last_seen_at": now}})
     return did
@@ -612,9 +761,9 @@ async def check_in(geo: Optional[GeoIn] = None, current_user: dict = Depends(get
         await db.hr_attendance.delete_one({"_id": open_rec["_id"]})
         await log_activity(current_user, "hr_att_correct_checkin", "hr_attendance", str(open_rec["_id"]), f"حذف حضور {open_rec['check_in']} لتصحيحه")
         today_recs = [r for r in today_recs if r["_id"] != open_rec["_id"]]
-    if any(not r.get("check_out") for r in today_recs):
+    if any(not r.get("check_out") and not r.get("auto_absent") for r in today_recs):
         raise HTTPException(status_code=400, detail="لديك حضور مفتوح — سجّل الانصراف أولاً")
-    done_ids = {_rec_shift(r, shifts) for r in today_recs}
+    done_ids = {_rec_shift(r, shifts) for r in today_recs if not r.get("auto_absent")}
     remaining = [sh for sh in shifts if sh["id"] not in done_ids]
     if not remaining:
         raise HTTPException(status_code=400, detail="تم تسجيل حضورك اليوم بالفعل" if len(shifts) == 1 else "تم تسجيل حضورك لكل فتراتك اليوم")
@@ -624,10 +773,20 @@ async def check_in(geo: Optional[GeoIn] = None, current_user: dict = Depends(get
     late = shift_late(now_hm, sh)
     doc = {"employee_id": eid, "date": t, "device_id": device_id, "status": "late" if late else "present", "check_in": now_hm, "check_out": None, "late_minutes": late, "note": "", "source": "self", "by_name": current_user.get("full_name", ""),
            "shift_id": sh["id"], "shift_name": sh["name"], "check_in_geo": geo_rec, "created_at": _now(), "updated_at": _now()}
-    await db.hr_attendance.insert_one(doc)
+    absent_rec = next((r for r in today_recs if r.get("auto_absent") and _rec_shift(r, shifts) == sh["id"]), None)
+    converted = ""
+    if absent_rec:
+        # 🔁 سُجّل غائباً تلقائياً ثم حضر → يتحول السجل إلى «متأخر» مع ملاحظة
+        doc.update({"status": "late", "late_minutes": max(late, 1), "auto_absent": False, "was_auto_absent": True, "created_at": absent_rec.get("created_at") or _now(),
+                    "note": f"حضر متأخراً الساعة {now_hm} بعد تسجيله غائباً تلقائياً (لم يحضر خلال فترة السماح من بداية الدوام {sh['work_start']})"})
+        await db.hr_attendance.update_one({"_id": absent_rec["_id"]}, {"$set": doc})
+        converted = " — كان مسجَّلاً غائباً تلقائياً وتحوّل إلى متأخر"
+    else:
+        await db.hr_attendance.insert_one(doc)
     loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else (" — بدون موقع" if geo_rec["status"] == "no_location" else "")
     shift_txt = f" ({sh['name']})" if len(settings["shifts"]) > 1 else ""
-    return {"check_in": now_hm, "status": doc["status"], "late_minutes": late, "shift": sh, "location": geo_rec, "message": f"تم تسجيل الحضور {now_hm}{shift_txt}" + (f" — متأخر {late} دقيقة" if late else "") + loc}
+    return {"check_in": now_hm, "status": doc["status"], "late_minutes": doc["late_minutes"], "shift": sh, "location": geo_rec, "was_auto_absent": bool(absent_rec),
+            "message": f"تم تسجيل الحضور {now_hm}{shift_txt}" + (f" — متأخر {doc['late_minutes']} دقيقة" if doc["late_minutes"] else "") + loc + converted}
 
 
 @router.post("/check-out")
@@ -648,17 +807,25 @@ async def check_out(geo: Optional[GeoIn] = None, current_user: dict = Depends(ge
         _require_correction(settings, _minutes_since(last["check_out"]))
         await db.hr_attendance.update_one({"_id": last["_id"]}, {"$set": {"check_out": None, "check_out_geo": None, "updated_at": _now()}})
         await log_activity(current_user, "hr_att_correct_checkout", "hr_attendance", str(last["_id"]), f"إلغاء انصراف {last['check_out']} لتصحيحه")
-    rec = await db.hr_attendance.find_one({"employee_id": str(emp["_id"]), "date": t, "check_out": None}, sort=[("check_in", -1)])
+    rec = await db.hr_attendance.find_one({"employee_id": str(emp["_id"]), "date": t, "check_out": None, "check_in": {"$ne": None}}, sort=[("check_in", -1)])
     if not rec:
-        if await db.hr_attendance.find_one({"employee_id": str(emp["_id"]), "date": t}):
+        if await db.hr_attendance.find_one({"employee_id": str(emp["_id"]), "date": t, "check_in": {"$ne": None}}):
             raise HTTPException(status_code=400, detail="تم تسجيل الانصراف بالفعل")
         raise HTTPException(status_code=400, detail="لم يُسجَّل حضورك اليوم")
-    geo_rec = await evaluate_geo(db, emp, geo, settings)
+    # 📍 الانصراف خارج النطاق يُقبل لكن يُدوَّن تحذيراً في الملاحظة ويظهر في تقارير الإدارة
+    geo_rec = await evaluate_geo(db, emp, geo, settings, enforce=False)
     now_hm = datetime.now(YEMEN_TZ).strftime("%H:%M")
-    await db.hr_attendance.update_one({"_id": rec["_id"]}, {"$set": {"check_out": now_hm, "check_out_geo": geo_rec, "check_out_device_id": device_id, "updated_at": _now()}})
+    upd = {"check_out": now_hm, "check_out_geo": geo_rec, "check_out_device_id": device_id, "updated_at": _now()}
+    warn = ""
+    if geo_rec.get("status") == "out_of_range":
+        warn = f"انصراف خارج نطاق العمل — أقرب موقع: {geo_rec['location_name']} (يبعد {geo_rec['distance_m']} م، والمسموح {geo_rec.get('radius_meters')} م)"
+        prev = (rec.get("note") or "").strip()
+        upd.update({"note": f"{prev} | {warn}" if prev else warn, "check_out_out_of_range": True})
+    await db.hr_attendance.update_one({"_id": rec["_id"]}, {"$set": upd})
     loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else ""
     shift_txt = f" ({rec['shift_name']})" if rec.get("shift_name") else ""
-    return {"check_out": now_hm, "location": geo_rec, "shift_id": rec.get("shift_id"), "message": f"تم تسجيل الانصراف {now_hm}{shift_txt}{loc}"}
+    return {"check_out": now_hm, "location": geo_rec, "shift_id": rec.get("shift_id"), "out_of_range": bool(warn), "warning": warn or None,
+            "message": f"تم تسجيل الانصراف {now_hm}{shift_txt}{loc}" + (f" ⚠️ {warn}" if warn else "")}
 
 
 # ══════════════ 🤖 الانصراف التلقائي ══════════════
@@ -692,7 +859,7 @@ async def auto_checkout_tick(db) -> int:
             continue
         stamp = now.strftime("%Y-%m-%d %H:%M")
         geo_in = r.get("check_in_geo")
-        note = f"انصراف تلقائي بواسطة النظام في {stamp} (لم يُسجَّل انصراف خلال {after} د بعد نهاية الفترة {sh['work_end']}) — آخر موقع معروف عند الحضور: {_geo_text(geo_in)}"
+        note = f"انصراف تلقائي — لم يسجّل الموظف انصرافه (صُرِّف بواسطة النظام في {stamp} بعد {after} د من نهاية الفترة {sh['work_end']}) — آخر موقع معروف عند الحضور: {_geo_text(geo_in)}"
         prev = (r.get("note") or "").strip()
         out_hm = sh["work_end"] if (r.get("check_in") or "") <= sh["work_end"] else r["check_in"]
         await db.hr_attendance.update_one({"_id": r["_id"], "check_out": None}, {"$set": {
@@ -704,6 +871,43 @@ async def auto_checkout_tick(db) -> int:
     return done
 
 
+async def auto_absent_tick(db) -> int:
+    """🚫 الغياب التلقائي: من لم يسجّل حضوره بعد انقضاء مهلة التأخير من بداية فترته (يوم عمل، ليس في إجازة) يُسجَّل «غائب» تلقائياً"""
+    settings = await get_hr_settings(db)
+    if not settings.get("auto_absent_enabled"):
+        return 0
+    now = datetime.now(YEMEN_TZ)
+    t = now.strftime("%Y-%m-%d")
+    if not is_work_day(parse_date(t), settings):
+        return 0
+    now_min = now.hour * 60 + now.minute
+    leaves = await _leave_map(db, t)
+    recs: dict = {}
+    for r in await db.hr_attendance.find({"date": t}, {"employee_id": 1, "shift_id": 1}).to_list(10000):
+        recs.setdefault(r["employee_id"], []).append(r)
+    stamp = now.strftime("%Y-%m-%d %H:%M")
+    done = 0
+    async for e in db.employees.find({"status": {"$nin": ["ended", "suspended"]}}, {"shift_ids": 1}):
+        eid = str(e["_id"])
+        if eid in leaves:
+            continue
+        shifts = employee_shifts(e, settings)
+        mine = recs.get(eid, [])
+        for sh in shifts:
+            grace = int(sh.get("late_grace_minutes") or 0)
+            if now_min <= _hm(sh["work_start"]) + grace:
+                continue
+            if any(_rec_shift(r, shifts) == sh["id"] for r in mine):
+                continue
+            flt = {"employee_id": eid, "date": t, "shift_id": sh["id"]}
+            res = await db.hr_attendance.update_one(flt, {"$setOnInsert": {
+                **flt, "status": "absent", "check_in": None, "check_out": None, "late_minutes": 0, "source": "auto", "auto_absent": True, "auto_absent_at": stamp, "shift_name": sh["name"], "by_name": "النظام",
+                "note": f"لم يحضر / غائب تلقائياً — لم يُسجَّل حضور خلال فترة السماح ({grace} د) من بداية الدوام {sh['work_start']}", "created_at": _now(), "updated_at": _now()}}, upsert=True)
+            if res.upserted_id:
+                done += 1
+    return done
+
+
 async def auto_checkout_loop():
     import asyncio, logging
     await asyncio.sleep(60)
@@ -712,6 +916,9 @@ async def auto_checkout_loop():
             n = await auto_checkout_tick(get_db())
             if n:
                 logging.info(f"HR auto check-out: {n} record(s)")
+            a = await auto_absent_tick(get_db())
+            if a:
+                logging.info(f"HR auto absent: {a} record(s)")
         except Exception as e:
             logging.error(f"auto checkout loop error: {e}")
         await asyncio.sleep(300)
@@ -723,3 +930,11 @@ async def run_auto_checkout(current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_ATTEND)
     n = await auto_checkout_tick(get_db())
     return {"count": n, "message": f"تم الانصراف التلقائي لـ {n} سجل" if n else "لا توجد سجلات مستحقة للانصراف التلقائي"}
+
+
+@router.post("/auto-absent/run")
+async def run_auto_absent(current_user: dict = Depends(get_current_user)):
+    """تشغيل فوري للغياب التلقائي (للمشرف)"""
+    _guard(current_user, P_ATTEND)
+    n = await auto_absent_tick(get_db())
+    return {"count": n, "message": f"تم تسجيل {n} موظفاً غائباً تلقائياً" if n else "لا يوجد موظفون مستحقون للغياب التلقائي الآن"}

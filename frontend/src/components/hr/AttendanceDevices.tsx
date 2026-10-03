@@ -4,6 +4,7 @@ import { hrAPI } from '../../services/api';
 import { reportPage, ReportEmpty } from '../reports/ReportShell';
 import { Badge, td, table, btn, alertErr, fmtDT } from './ui';
 import { useListTools, ListToolbar, SortTh, useSort, toggleSort, Sort } from './HrSelect';
+import { DeviceRequests } from './DeviceRequests';
 
 const SORTERS: Record<string, (i: any) => any> = { name: (i) => i.full_name, unit: (i) => i.org_unit_name || '', device: (i) => i.device_id || '', registered: (i) => i.device_registered_at || '', seen: (i) => i.device_last_seen_at || '', rej: (i) => i.device_rejections || 0 };
 
@@ -24,13 +25,14 @@ export const AttendanceDevices: React.FC<{ canManage: boolean }> = ({ canManage 
   const exportRows = (rows: any[]) => rows.map((i: any) => ({ 'الموظف': i.full_name, 'الرقم الوظيفي': i.employee_no, 'الوحدة': i.org_unit_name || '', 'معرّف الجهاز': i.device_id || '', 'اسم الجهاز': i.device_name || '', 'تاريخ التسجيل': i.device_registered_at ? fmtDT(i.device_registered_at) : '', 'آخر استخدام': i.device_last_seen_at ? fmtDT(i.device_last_seen_at) : '', 'محاولات مرفوضة': i.device_rejections || 0, 'آخر محاولة مرفوضة': i.device_last_rejection ? `${i.device_last_rejection.device_id} — ${fmtDT(i.device_last_rejection.at)}` : '' }));
   const st = d?.stats || {};
   return (<>
+    <DeviceRequests canManage={canManage} onChanged={load} />
     <View style={reportPage.card}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap', direction: 'rtl' }}>
         {d && !d.device_binding_enabled && <Badge color="#dc2626">⚠️ ربط الأجهزة معطّل حالياً من إعدادات الدوام — يُقبل التحضير من أي جهاز</Badge>}
         <Badge color="#0f2440">الموظفون: {st.total || 0}</Badge><Badge color="#16a34a">مسجَّل لهم جهاز: {st.registered || 0}</Badge><Badge color="#dc2626">لديهم محاولات مرفوضة: {st.with_rejections || 0}</Badge>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}><input type="checkbox" checked={onlyReg} onChange={(e) => setOnlyReg(e.target.checked)} data-testid="dev-only-registered" /> المسجَّل لهم جهاز فقط</label>
       </div>
-      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8, direction: 'rtl' }}>الهدف: منع الموظف من إرسال بياناته لشخص آخر ليحضّر بدلاً عنه — أول تحضير يسجّل الجهاز تلقائياً، وبعده يُرفض أي جهاز مختلف برسالة «هذا الجهاز غير مسجّل لحسابك». عند تغيير الموظف هاتفه اضغط «إعادة تعيين الجهاز».</div>
+      <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8, direction: 'rtl' }}>الهدف: منع الموظف من إرسال بياناته لشخص آخر ليحضّر بدلاً عنه — أول تحضير يسجّل الجهاز تلقائياً، وبعده يُرفض أي جهاز مختلف برسالة «هذا الجهاز غير مسجّل لحسابك». عند تغيير الموظف هاتفه: إمّا يرسل «طلب تغيير الجهاز» من التطبيق فتوافق عليه بنقرة أعلاه، أو اضغط «إعادة تعيين الجهاز» هنا. 🔔 أي محاولة تحضير من جهاز غير مسجّل تصلك إشعاراً فورياً.</div>
       {d && <ListToolbar t={lt} total={d.items.length} testID="att-dev" fileName="أجهزة-التحضير" exportRows={exportRows} placeholder="بحث بالاسم / الرقم / معرّف الجهاز…" />}
     </View>
     {!d ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text> : lt.pageRows.length === 0 ? <ReportEmpty text="لا توجد نتائج" icon="phone-portrait-outline" /> : (

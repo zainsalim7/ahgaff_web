@@ -3,7 +3,7 @@ import { View, Text } from 'react-native';
 import { hrAPI } from '../../services/api';
 import { reportPage, ReportEmpty } from '../reports/ReportShell';
 import { Badge, Th, td, table, inp, btn, alertErr, ATT_COLOR } from './ui';
-import { HrSelect, useListTools, ListToolbar, SelBox, GeoCell, geoText } from './HrSelect';
+import { HrSelect, useListTools, ListToolbar, SelBox, GeoCell, geoText, WarnBadges } from './HrSelect';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -37,7 +37,7 @@ export const AttendanceDaily: React.FC<{ canManage: boolean; units: any[]; meta:
   const statusRows = useMemo(() => (d?.rows || []).filter((r: any) => !statusF || (statusF === 'unmarked' ? !rowVal(r, 'status') : rowVal(r, 'status') === statusF)), [d, statusF, edits]);
   const fields = useCallback((r: any) => [r.employee_name, r.employee_no, r.job_title, r.org_unit_name], []);
   const lt = useListTools<any>(statusRows, rk, fields, 25);
-  const exportRows = (rows: any[]) => rows.map((r: any) => ({ 'الموظف': r.employee_name, 'الرقم الوظيفي': r.employee_no, 'المسمى': r.job_title || '', 'الوحدة': r.org_unit_name || '', 'التاريخ': date, 'الفترة': r.shift_name || '', 'الحالة': rowVal(r, 'status') ? (meta?.statuses?.[rowVal(r, 'status')] || r.status_label) : 'لم يُسجَّل', 'حضور': rowVal(r, 'check_in') || '', 'انصراف': rowVal(r, 'check_out') || '', 'دقائق التأخير': r.late_minutes || 0, 'انصراف تلقائي': r.auto_checkout ? 'نعم' : '', 'موقع الحضور': geoText(r.check_in_geo), 'إحداثيات الحضور': r.check_in_geo?.latitude != null ? `${r.check_in_geo.latitude}, ${r.check_in_geo.longitude}` : '', 'موقع الانصراف': geoText(r.check_out_geo), 'المصدر': SRC[r.source] || '', 'ملاحظة': rowVal(r, 'note') || '' }));
+  const exportRows = (rows: any[]) => rows.map((r: any) => ({ 'الموظف': r.employee_name, 'الرقم الوظيفي': r.employee_no, 'المسمى': r.job_title || '', 'الوحدة': r.org_unit_name || '', 'التاريخ': date, 'الفترة': r.shift_name || '', 'الحالة': rowVal(r, 'status') ? (meta?.statuses?.[rowVal(r, 'status')] || r.status_label) : 'لم يُسجَّل', 'حضور': rowVal(r, 'check_in') || '', 'انصراف': rowVal(r, 'check_out') || '', 'دقائق التأخير': r.late_minutes || 0, 'انصراف تلقائي': r.auto_checkout ? 'نعم' : '', 'تحذيرات': (r.warnings || []).join(' | '), 'موقع الحضور': geoText(r.check_in_geo), 'إحداثيات الحضور': r.check_in_geo?.latitude != null ? `${r.check_in_geo.latitude}, ${r.check_in_geo.longitude}` : '', 'موقع الانصراف': geoText(r.check_out_geo), 'المصدر': SRC[r.source] || '', 'ملاحظة': rowVal(r, 'note') || '' }));
   return (<>
     <View style={reportPage.card}>
       <div style={{ display: 'flex', gap: 8, direction: 'rtl', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -84,7 +84,7 @@ export const AttendanceDaily: React.FC<{ canManage: boolean; units: any[]; meta:
                         </select>}
                   </td>
                   <td style={td}>{canManage && st && ['present', 'late', 'half_day', 'mission'].includes(st) ? <input type="time" value={rowVal(r, 'check_in')} onChange={(e) => edit(id, 'check_in', e.target.value)} style={{ ...inp, width: 105, padding: '5px 6px', direction: 'ltr' }} data-testid={`att-in-${id}`} /> : (r.check_in || '—')}</td>
-                  <td style={td}>{canManage && st && ['present', 'late', 'half_day', 'mission'].includes(st) ? <input type="time" value={rowVal(r, 'check_out')} onChange={(e) => edit(id, 'check_out', e.target.value)} style={{ ...inp, width: 105, padding: '5px 6px', direction: 'ltr' }} data-testid={`att-out-${id}`} /> : (r.check_out || '—')}{r.auto_checkout ? <div><Badge color="#7c3aed" testID={`att-auto-out-${id}`}>🤖 تلقائي</Badge></div> : null}</td>
+                  <td style={td}>{canManage && st && ['present', 'late', 'half_day', 'mission'].includes(st) ? <input type="time" value={rowVal(r, 'check_out')} onChange={(e) => edit(id, 'check_out', e.target.value)} style={{ ...inp, width: 105, padding: '5px 6px', direction: 'ltr' }} data-testid={`att-out-${id}`} /> : (r.check_out || '—')}{r.auto_checkout ? <div><Badge color="#7c3aed" testID={`att-auto-out-${id}`}>🤖 تلقائي</Badge></div> : null}<WarnBadges warnings={r.warnings} testID={`att-warn-${id}`} /></td>
                   <td style={{ ...td, color: r.late_minutes ? '#f97316' : '#94a3b8', fontWeight: 700 }}>{r.late_minutes ? `${r.late_minutes} د` : '—'}</td>
                   <td style={{ ...td, minWidth: 150 }}><GeoCell g={r.check_in_geo} testID={`att-geo-${id}`} />{r.check_out_geo && r.check_out_geo.status && r.check_out_geo.status !== 'auto' ? <div style={{ marginTop: 4, borderTop: '1px dashed #e2e8f0', paddingTop: 3 }}><span style={{ fontSize: 10, color: '#94a3b8' }}>انصراف: </span><GeoCell g={r.check_out_geo} /></div> : null}</td>
                   <td style={td}>{canManage && r.status !== 'holiday' ? <input value={rowVal(r, 'note')} onChange={(e) => edit(id, 'note', e.target.value)} placeholder="…" style={{ ...inp, padding: '5px 8px', minWidth: 120 }} /> : (r.note || '—')}</td>

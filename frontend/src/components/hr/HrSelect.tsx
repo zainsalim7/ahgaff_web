@@ -193,6 +193,15 @@ export const SelBox: React.FC<{ checked: boolean; onChange: () => void; testID?:
 
 export const GEO_STATUS_COLOR: Record<string, string> = { in_range: '#16a34a', out_of_range: '#dc2626', no_location: '#f97316', exempt: '#7c3aed', not_required: '#94a3b8', auto: '#7c3aed' };
 export const geoText = (g: any) => !g || (!g.status && !g.location_name) ? '' : `${g.location_name || g.status_label || ''}${g.distance_m != null ? ` · ${g.distance_m} م` : ''}`;
+export const WarnBadges: React.FC<{ warnings?: string[]; testID?: string }> = ({ warnings, testID }) => {
+  if (!warnings || !warnings.length) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginTop: 3 }} data-testid={testID}>
+      {warnings.map((w) => <span key={w} style={{ fontSize: 10.5, fontWeight: 800, color: w.includes('غياب') ? '#b91c1c' : w.includes('تلقائي') ? '#6d28d9' : '#c2410c', backgroundColor: w.includes('غياب') ? '#fee2e2' : w.includes('تلقائي') ? '#ede9fe' : '#ffedd5', borderRadius: 6, padding: '1px 6px', whiteSpace: 'nowrap' }}>⚠️ {w}</span>)}
+    </div>
+  );
+};
+
 export const GeoCell: React.FC<{ g: any; testID?: string }> = ({ g, testID }) => {
   if (!g || (!g.status && !g.location_name)) return <span style={{ color: '#cbd5e1' }}>—</span>;
   const coords = g.latitude != null && g.longitude != null ? `${Number(g.latitude).toFixed(5)}, ${Number(g.longitude).toFixed(5)}` : '';

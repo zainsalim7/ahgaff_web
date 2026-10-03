@@ -1,12 +1,14 @@
 """🏖️ شؤون الموظفين — الإجازات: طلب / اعتماد (مدير مباشر ← شؤون الموظفين) / رصيد سنوي"""
+import io
 from datetime import datetime, timedelta
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, has_permission, log_activity
+from .deps import get_db, get_current_user, has_permission, log_activity, export_headers, export_filename
 from .hr_common import (P_LEAVES, YEMEN_TZ, _now, _today, _oid, _ser, _can_view, _guard, parse_date, user_id_of, get_hr_settings,
                         work_days_between, find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids, enrich_employee_refs)
 
@@ -250,6 +252,81 @@ async def all_balances(year: Optional[int] = None, org_unit_id: Optional[str] = 
     t = types[type]
     return {"year": year, "type": type, "type_label": t["name"], "entitlements": t.get("entitlements"), "default_entitlement": settings.get("annual_leave_days", 30), "items": out,
             "balance_types": [{"key": k, "name": v["name"], "color": v.get("color")} for k, v in types.items() if v.get("is_active") and (k == "annual" or any(x is not None for x in (v.get("entitlements") or {}).values()))]}
+
+
+@router.get("/balances/export")
+async def balances_export(year: Optional[int] = None, org_unit_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """📥 تقرير الأرصدة السنوي Excel: لكل موظف ولكل نوع إجازة — الاستحقاق / المرحَّل / المستخدم / المعلّق / المتبقي"""
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    year = year or datetime.now(YEMEN_TZ).year
+    settings = await get_hr_settings(db)
+    types = await _refresh_type_cache(db)
+    keys = [k for k, v in types.items() if v.get("is_active") and (k == "annual" or any(x is not None for x in (v.get("entitlements") or {}).values()))]
+    q: dict = {"status": {"$ne": "ended"}}
+    if org_unit_id:
+        q["org_unit_id"] = org_unit_id
+    units = {str(u["_id"]): u.get("name", "") for u in await db.org_units.find({}, {"name": 1}).to_list(2000)}
+    cat_label = {"academic": "أكاديمي", "administrative": "إداري", "technical": "فني", "service": "خدمات"}
+    rows = []
+    async for e in db.employees.find(q, {"full_name": 1, "employee_no": 1, "org_unit_id": 1, "job_title": 1, "category": 1}).sort("full_name", 1):
+        eid = str(e["_id"])
+        bals = [await _balance(db, eid, year, settings, k, e, types) for k in keys]
+        rows.append((e, bals))
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    wb = Workbook(); ws = wb.active; ws.title = f"الأرصدة {year}"; ws.sheet_view.rightToLeft = True
+    base = ["الرقم الوظيفي", "الاسم", "الوحدة", "المسمى", "الفئة"]
+    sub = ["الاستحقاق", "مرحَّل", "مستخدم", "معلّق", "المتبقي"]
+    total_cols = len(base) + len(keys) * len(sub)
+    ws.append([f"تقرير أرصدة الإجازات السنوي — {year}" + (f" — {units.get(org_unit_id, '')}" if org_unit_id else "") + f" ({len(rows)} موظف)"])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=total_cols)
+    ws["A1"].font = Font(bold=True, size=13); ws["A1"].alignment = Alignment(horizontal="center")
+    ws.append(base + [x for k in keys for x in [types[k]["name"]] + [""] * (len(sub) - 1)])
+    ws.append([""] * len(base) + sub * len(keys))
+    thin = Side(style="thin", color="CBD5E1"); border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    palette = ["1565C0", "2E7D32", "C62828", "6A1B9A", "EF6C00", "00838F", "4E342E", "37474F"]
+    for ci in range(1, len(base) + 1):
+        ws.merge_cells(start_row=2, start_column=ci, end_row=3, end_column=ci)
+        c = ws.cell(row=2, column=ci); c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="0F2440"); c.alignment = Alignment(horizontal="center", vertical="center")
+    for ti, k in enumerate(keys):
+        start = len(base) + 1 + ti * len(sub)
+        ws.merge_cells(start_row=2, start_column=start, end_row=2, end_column=start + len(sub) - 1)
+        col = palette[ti % len(palette)]
+        h = ws.cell(row=2, column=start); h.font = Font(bold=True, color="FFFFFF"); h.fill = PatternFill("solid", fgColor=col); h.alignment = Alignment(horizontal="center")
+        for j in range(len(sub)):
+            c = ws.cell(row=3, column=start + j); c.font = Font(bold=True, color=col); c.fill = PatternFill("solid", fgColor="F1F5F9"); c.alignment = Alignment(horizontal="center"); c.border = border
+    for e, bals in rows:
+        line = [e.get("employee_no", ""), e.get("full_name", ""), units.get(e.get("org_unit_id") or "", ""), e.get("job_title", ""), cat_label.get(e.get("category"), e.get("category") or "")]
+        for b in bals:
+            line += ["غير محدود" if b["unlimited"] else b["entitlement"], b["carried_over"], b["used"], b["pending"], "—" if b["remaining"] is None else b["remaining"]]
+        ws.append(line)
+        r = ws.max_row
+        for ti, b in enumerate(bals):
+            rc = ws.cell(row=r, column=len(base) + ti * len(sub) + len(sub))
+            rc.font = Font(bold=True, color="C62828" if (b["remaining"] is not None and b["remaining"] <= 0) else "1B5E20")
+    for ci in range(1, total_cols + 1):
+        ws.column_dimensions[get_column_letter(ci)].width = 11
+    ws.column_dimensions["B"].width = 28; ws.column_dimensions["C"].width = 22; ws.column_dimensions["D"].width = 18
+    ws.freeze_panes = "F4"
+    # ورقة ثانية بصيغة طولية (سطر لكل موظف ونوع) للتحليل
+    ws2 = wb.create_sheet("تفصيلي"); ws2.sheet_view.rightToLeft = True
+    ws2.append(["الرقم الوظيفي", "الاسم", "الوحدة", "الفئة", "نوع الإجازة", "الاستحقاق", "مرحَّل", "مستخدم", "معلّق", "المتبقي", "رصيد مخصّص", "ملاحظة"])
+    for c in ws2[1]:
+        c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="0F2440"); c.alignment = Alignment(horizontal="center")
+    for e, bals in rows:
+        for b in bals:
+            ws2.append([e.get("employee_no", ""), e.get("full_name", ""), units.get(e.get("org_unit_id") or "", ""), cat_label.get(e.get("category"), e.get("category") or ""), b["type_label"],
+                        "غير محدود" if b["unlimited"] else b["entitlement"], b["carried_over"], b["used"], b["pending"], "—" if b["remaining"] is None else b["remaining"], "نعم" if b["overridden"] else "", b.get("note", "")])
+    for ci in range(1, 13):
+        ws2.column_dimensions[get_column_letter(ci)].width = 13
+    ws2.column_dimensions["B"].width = 28; ws2.column_dimensions["L"].width = 30
+    await log_activity(current_user, "hr_leave_balances_export", "hr_leaves", str(year), "تصدير تقرير الأرصدة السنوي", {"count": len(rows)})
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers=export_headers(export_filename("تقرير الأرصدة السنوي", str(year), units.get(org_unit_id, "") if org_unit_id else "كل الوحدات", f"{len(rows)} موظف", ext="xlsx")))
 
 
 @router.put("/balances/{employee_id}")

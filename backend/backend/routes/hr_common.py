@@ -21,7 +21,8 @@ DEFAULT_SETTINGS = {
     "work_start": "08:00", "work_end": "14:00", "late_grace_minutes": 15, "early_leave_grace_minutes": 0,
     "allow_self_checkin": True, "annual_leave_days": 30, "holidays": [], "geofence_required": True,
     "correction_enabled": True, "correction_window_minutes": 10,
-    "auto_checkout_enabled": False, "auto_checkout_after_minutes": 60,
+    "auto_checkout_enabled": True, "auto_checkout_after_minutes": 60,
+    "auto_absent_enabled": True,
     "device_binding_enabled": True,
 }
 

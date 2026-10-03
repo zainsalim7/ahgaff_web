@@ -3,12 +3,12 @@ import { View, Text } from 'react-native';
 import { hrAPI } from '../../services/api';
 import { reportPage, ReportEmpty } from '../reports/ReportShell';
 import { Badge, td, table, inp, btn, alertErr, ATT_COLOR } from './ui';
-import { HrSelect, EmployeeMultiSelect, Pager, SelBox, GeoCell, geoText, exportRowsXlsx, SortTh, useSort, toggleSort, Sort } from './HrSelect';
+import { HrSelect, EmployeeMultiSelect, Pager, SelBox, GeoCell, geoText, exportRowsXlsx, SortTh, useSort, toggleSort, Sort, WarnBadges } from './HrSelect';
 
 const today = () => new Date().toISOString().slice(0, 10);
 const monthStart = () => today().slice(0, 8) + '01';
 const SRC: Record<string, string> = { self: 'ذاتي', manual: 'يدوي', bulk: 'جماعي' };
-const toRow = (r: any) => ({ 'التاريخ': r.date, 'الموظف': r.employee_name, 'الرقم الوظيفي': r.employee_no, 'الوحدة': r.org_unit_name || '', 'الفترة': r.shift_name || '', 'الحالة': r.status_label, 'حضور': r.check_in || '', 'انصراف': r.check_out || '', 'دقائق التأخير': r.late_minutes || 0, 'انصراف تلقائي': r.auto_checkout ? 'نعم' : '', 'موقع الحضور': geoText(r.check_in_geo), 'داخل النطاق': r.check_in_geo?.in_range == null ? '' : r.check_in_geo.in_range ? 'نعم' : 'لا', 'إحداثيات الحضور': r.check_in_geo?.latitude != null ? `${r.check_in_geo.latitude}, ${r.check_in_geo.longitude}` : '', 'موقع الانصراف': geoText(r.check_out_geo), 'المصدر': SRC[r.source] || '', 'ملاحظة': r.note || '' });
+const toRow = (r: any) => ({ 'التاريخ': r.date, 'الموظف': r.employee_name, 'الرقم الوظيفي': r.employee_no, 'الوحدة': r.org_unit_name || '', 'الفترة': r.shift_name || '', 'الحالة': r.status_label, 'حضور': r.check_in || '', 'انصراف': r.check_out || '', 'دقائق التأخير': r.late_minutes || 0, 'انصراف تلقائي': r.auto_checkout ? 'نعم' : '', 'تحذيرات': (r.warnings || []).join(' | '), 'موقع الحضور': geoText(r.check_in_geo), 'داخل النطاق': r.check_in_geo?.in_range == null ? '' : r.check_in_geo.in_range ? 'نعم' : 'لا', 'إحداثيات الحضور': r.check_in_geo?.latitude != null ? `${r.check_in_geo.latitude}, ${r.check_in_geo.longitude}` : '', 'موقع الانصراف': geoText(r.check_out_geo), 'المصدر': SRC[r.source] || '', 'ملاحظة': r.note || '' });
 const SORTERS: Record<string, (r: any) => any> = { date: (r) => `${r.date} ${r.check_in || ''}`, name: (r) => r.employee_name, unit: (r) => r.org_unit_name || '', status: (r) => r.status_label, check_in: (r) => r.check_in || '', check_out: (r) => r.check_out || '', late: (r) => r.late_minutes || 0, geo: (r) => r.check_in_geo?.distance_m ?? -1 };
 
 /** 📋 التقرير التفصيلي: سجلات فردية/مشتركة لفترة مع التأخير والانصراف التلقائي والموقع — بحث، ترقيم، تحديد، تصدير */
@@ -57,7 +57,7 @@ export const AttendanceDetails: React.FC<{ units: any[]; meta: any }> = ({ units
         <button onClick={() => { if (!rows.length) return; exportRowsXlsx(rows.map(toRow), `الحضور-الصفحة-${page}`); }} disabled={!rows.length} style={btn('#e8f5e9', '#2e7d32')} data-testid="att-det-export-page">📥 تصدير المعروض</button>
       </div>
       {d && <div style={{ display: 'flex', gap: 6, marginTop: 10, direction: 'rtl', flexWrap: 'wrap' }} data-testid="att-det-summary">
-        <Badge color="#0f2440">السجلات: {sm.records || 0}</Badge><Badge color="#1565c0">الموظفون: {sm.employees || 0}</Badge><Badge color={ATT_COLOR.late}>تأخير: {sm.late || 0} ({sm.late_minutes || 0} د)</Badge><Badge color="#7c3aed">انصراف تلقائي: {sm.auto || 0}</Badge><Badge color="#dc2626">خارج النطاق: {sm.out_of_range || 0}</Badge>
+        <Badge color="#0f2440">السجلات: {sm.records || 0}</Badge><Badge color="#1565c0">الموظفون: {sm.employees || 0}</Badge><Badge color={ATT_COLOR.late}>تأخير: {sm.late || 0} ({sm.late_minutes || 0} د)</Badge><Badge color="#7c3aed">انصراف تلقائي: {sm.auto || 0}</Badge><Badge color="#dc2626">خارج النطاق: {sm.out_of_range || 0}</Badge><Badge color="#b91c1c">غياب تلقائي: {sm.auto_absent || 0}</Badge>
       </div>}
       {d && <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, direction: 'rtl', flexWrap: 'wrap' }}>
         <HrSelect value={String(perPage)} onChange={(v) => { setPerPage(Number(v) || 50); setPage(1); }} options={[25, 50, 100, 200, 500].map((n) => ({ value: String(n), label: `${n} / صفحة` }))} allowClear={false} style={{ width: 120 }} testID="att-det-perpage" />
@@ -82,7 +82,7 @@ export const AttendanceDetails: React.FC<{ units: any[]; meta: any }> = ({ units
                 <td style={td}>{r.org_unit_name || '—'}</td>
                 <td style={td}><Badge color={ATT_COLOR[r.status] || '#64748b'}>{r.status_label}</Badge></td>
                 <td style={td}>{r.check_in || '—'}</td>
-                <td style={td}>{r.check_out || '—'}{r.auto_checkout ? <div><Badge color="#7c3aed">🤖 تلقائي{r.auto_checkout_at ? ` ${r.auto_checkout_at.slice(11)}` : ''}</Badge></div> : null}</td>
+                <td style={td}>{r.check_out || '—'}{r.auto_checkout ? <div><Badge color="#7c3aed">🤖 تلقائي{r.auto_checkout_at ? ` ${r.auto_checkout_at.slice(11)}` : ''}</Badge></div> : null}<WarnBadges warnings={r.warnings} testID={`att-det-warn-${r.id}`} /></td>
                 <td style={{ ...td, color: r.late_minutes ? '#f97316' : '#94a3b8', fontWeight: 800 }}>{r.late_minutes ? `${r.late_minutes} د` : '—'}</td>
                 <td style={{ ...td, minWidth: 170 }}><GeoCell g={r.check_in_geo} />{r.check_out_geo?.status && r.check_out_geo.status !== 'auto' ? <div style={{ marginTop: 4, borderTop: '1px dashed #e2e8f0', paddingTop: 3 }}><span style={{ fontSize: 10, color: '#94a3b8' }}>انصراف: </span><GeoCell g={r.check_out_geo} /></div> : null}</td>
                 <td style={{ ...td, fontSize: 11.5, maxWidth: 260 }}>{r.note || '—'}<div style={{ fontSize: 10, color: '#94a3b8' }}>{SRC[r.source] || ''}{r.by_name ? ` · ${r.by_name}` : ''}</div></td>

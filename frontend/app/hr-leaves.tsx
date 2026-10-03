@@ -8,6 +8,7 @@ import { ReportHero, ReportKpis, ReportEmpty, reportPage } from '../src/componen
 import { Tabs, Badge, Th, td, table, inp, btn, opt, alertErr, fmtDT, Modal, Field, LEAVE_STATUS_COLOR } from '../src/components/hr/ui';
 import { HrSelect, optsFromMap, SortTh, useSort, toggleSort, Sort, ExportXlsxBtn } from '../src/components/hr/HrSelect';
 import { LeaveRequestModal, DecisionModal } from '../src/components/hr/LeaveModals';
+import { filenameFromResponse } from '../src/utils/exportName';
 
 const YEAR = new Date().getFullYear();
 const LEAVE_SORTERS: Record<string, (l: any) => any> = { employee_name: (l) => l.employee_name, org_unit_name: (l) => l.org_unit_name, type_label: (l) => l.type_label, start_date: (l) => l.start_date, end_date: (l) => l.end_date, days: (l) => Number(l.days || 0), status_label: (l) => l.status_label, created_at: (l) => l.created_at };
@@ -35,6 +36,8 @@ export default function HrLeaves() {
     try { setData((await hrAPI.leaves({ ...Object.fromEntries(Object.entries(q).filter(([, v]) => v)), per_page: 40 })).data); } catch { setData({ items: [], total: 0, stats: {} }); }
     finally { setLoading(false); }
   }, [q]);
+  const [balBusy, setBalBusy] = useState(false);
+  const exportBalances = async () => { setBalBusy(true); try { const res = await hrAPI.leaveBalancesExport({ year: balYear }); const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = filenameFromResponse(res, `تقرير الأرصدة السنوي - ${balYear}.xlsx`); a.click(); URL.revokeObjectURL(url); } catch (e) { alertErr(e); } finally { setBalBusy(false); } };
   const loadBal = useCallback(async () => { try { setBalances((await hrAPI.leaveBalances({ year: balYear, type: balType })).data); } catch { } }, [balYear, balType]);
 
   useEffect(() => { hrAPI.leavesMeta().then((r) => setMeta(r.data)).catch(() => {}); hrAPI.orgUnits().then((r) => setUnits(r.data.units || [])).catch(() => {}); }, []);
@@ -123,6 +126,7 @@ export default function HrLeaves() {
               <div style={{ display: 'flex', gap: 8 }}>
                 <HrSelect value={balType} onChange={(v) => setBalType(v || 'annual')} options={(balances.balance_types || [{ key: 'annual', name: 'سنوية' }]).map((t: any) => ({ value: t.key, label: t.name }))} allowClear={false} style={{ width: 160 }} testID="hr-balances-type" />
                 <HrSelect value={String(balYear)} onChange={(v) => setBalYear(Number(v) || YEAR)} options={[YEAR + 1, YEAR, YEAR - 1].map((y) => ({ value: String(y), label: String(y) }))} allowClear={false} style={{ width: 110 }} testID="hr-balances-year" />
+                <button onClick={exportBalances} disabled={balBusy} style={btn('#1b5e20', '#fff', { fontSize: 12, whiteSpace: 'nowrap' })} data-testid="hr-balances-export">📥 تقرير الأرصدة السنوي (كل الأنواع)</button>
               </div>
             </div>
             <table style={table} data-testid="hr-balances-table">

@@ -68,8 +68,8 @@ def rank_locations(locs: List[dict], lat: float, lng: float, accuracy: Optional[
     return sorted(out, key=lambda x: x["distance_m"])
 
 
-async def evaluate_geo(db, emp: dict, geo: Optional[GeoIn], settings: dict) -> dict:
-    """يرجع سجل الموقع للحفظ مع الحضور، ويرفع 403 إن كان الموظف خارج النطاق والتحقق إلزامياً"""
+async def evaluate_geo(db, emp: dict, geo: Optional[GeoIn], settings: dict, enforce: bool = True) -> dict:
+    """يرجع سجل الموقع للحفظ مع الحضور، ويرفع 403 إن كان الموظف خارج النطاق والتحقق إلزامياً (enforce=False للانصراف: يُقبل مع تحذير)"""
     required = bool(settings.get("geofence_required", True))
     exempt = bool(emp.get("geofence_exempt"))
     rec = {"latitude": None, "longitude": None, "accuracy": None, "location_id": None, "location_name": "", "distance_m": None, "in_range": None, "status": "no_location", "required": required}
@@ -93,7 +93,7 @@ async def evaluate_geo(db, emp: dict, geo: Optional[GeoIn], settings: dict) -> d
         rec["exempt"] = True
     elif not required:
         rec["status_note"] = "disabled"
-    elif rec["status"] == "out_of_range":
+    elif rec["status"] == "out_of_range" and enforce:
         raise HTTPException(status_code=403, detail=f"أنت خارج نطاق العمل — أقرب موقع: {rec['location_name']} (يبعد {rec['distance_m']} م، والمسموح {rec['radius_meters']} م)")
     rec["status_label"] = GEO_STATUS.get(rec["status"], rec["status"])
     return rec
