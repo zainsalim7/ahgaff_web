@@ -24,6 +24,7 @@ class GeneralIn(BaseModel):
     correction_window_minutes: int = 10
     auto_checkout_enabled: bool = False
     auto_checkout_after_minutes: int = 60
+    device_binding_enabled: bool = True
 
 
 class ShiftIn(BaseModel):

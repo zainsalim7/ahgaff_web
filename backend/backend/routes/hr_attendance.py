@@ -10,7 +10,7 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user, log_activity, export_headers, export_filename
 from .hr_common import (P_ATTEND, P_WORK_SETTINGS, YEMEN_TZ, AR_DAYS, DEFAULT_SETTINGS, _now, _today, _oid, _ser, _can_view, _guard, parse_date, get_hr_settings,
-                        is_work_day, holiday_name, find_my_employee, enrich_employee_refs, employee_shifts, pick_shift, shift_late)
+                        is_work_day, holiday_name, find_my_employee, enrich_employee_refs, employee_shifts, pick_shift, shift_late, employee_user_ids, notify_users)
 from .hr_locations import GeoIn, evaluate_geo
 
 router = APIRouter(prefix="/hr/attendance", tags=["شؤون الموظفين - الحضور الإداري"])
@@ -476,6 +476,51 @@ async def attendance_details_export(date_from: Optional[str] = None, date_to: Op
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(export_filename("الحضور التفصيلي", f"{date_from}_{date_to}", ext="xlsx")))
 
 
+# ══════════════ 📱 إدارة أجهزة التحضير ══════════════
+
+@router.get("/devices")
+async def list_devices(search: Optional[str] = None, only_registered: bool = False, current_user: dict = Depends(get_current_user)):
+    """📱 الجهاز المسجّل لكل موظف + محاولات مرفوضة"""
+    if not _can_view(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    q: dict = {"status": {"$nin": ["ended"]}}
+    if search:
+        import re
+        rx = {"$regex": re.escape(search.strip()), "$options": "i"}
+        q["$or"] = [{"full_name": rx}, {"employee_no": rx}, {"device_id": rx}]
+    if only_registered:
+        q["device_id"] = {"$exists": True, "$nin": [None, ""]}
+    items = [{"id": str(e["_id"]), "full_name": e.get("full_name", ""), "employee_no": e.get("employee_no", ""), "job_title": e.get("job_title", ""), "org_unit_id": e.get("org_unit_id"),
+              "device_id": e.get("device_id"), "device_name": e.get("device_name", ""), "device_registered_at": e.get("device_registered_at"), "device_last_seen_at": e.get("device_last_seen_at"),
+              "device_rejections": e.get("device_rejections", 0), "device_last_rejection": e.get("device_last_rejection")}
+             for e in await db.employees.find(q, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1, "device_id": 1, "device_name": 1, "device_registered_at": 1, "device_last_seen_at": 1, "device_rejections": 1, "device_last_rejection": 1}).sort("full_name", 1).to_list(5000)]
+    units = {str(u["_id"]): u.get("name", "") for u in await db.org_units.find({}, {"name": 1}).to_list(2000)}
+    for i in items:
+        i["org_unit_name"] = units.get(i.pop("org_unit_id") or "", "")
+    settings = await get_hr_settings(db)
+    return {"items": items, "device_binding_enabled": settings.get("device_binding_enabled", True),
+            "stats": {"total": len(items), "registered": sum(1 for i in items if i["device_id"]), "with_rejections": sum(1 for i in items if i["device_rejections"])}}
+
+
+@router.post("/devices/{emp_id}/reset")
+async def reset_device(emp_id: str, current_user: dict = Depends(get_current_user)):
+    """🔄 إعادة تعيين الجهاز — يُسمح للموظف بتسجيل جهاز جديد عند أول تحضير"""
+    _guard(current_user, P_ATTEND)
+    db = get_db()
+    emp = await db.employees.find_one({"_id": _oid(emp_id)})
+    if not emp:
+        raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    old = emp.get("device_id")
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_id": None, "device_name": "", "device_registered_at": None, "device_rejections": 0, "device_last_rejection": None, "device_reset_at": _now(), "device_reset_by": current_user.get("full_name", "")},
+                                                        "$push": {"device_history": {"device_id": old, "registered_at": emp.get("device_registered_at"), "reset_at": _now(), "by_name": current_user.get("full_name", "")}}})
+    await log_activity(current_user, "hr_device_reset", "employee", emp_id, emp.get("full_name", ""), {"old_device_id": old})
+    uid = (await employee_user_ids(db, [emp_id])).get(emp_id)
+    if uid:
+        await notify_users(db, [uid], "تمت إعادة تعيين جهاز التحضير", "سيُسجَّل جهازك الجديد تلقائياً عند أول تسجيل حضور", "hr")
+    return {"message": f"تمت إعادة تعيين جهاز {emp.get('full_name', '')} — سيُسجَّل الجهاز الجديد عند أول تحضير"}
+
+
 # ══════════════ الخدمة الذاتية ══════════════
 
 @router.get("/my")
@@ -517,6 +562,29 @@ async def my_attendance(month: Optional[str] = None, current_user: dict = Depend
             "month": m, "records": recs, "counts": counts, "late_minutes": sum(int(r.get("late_minutes") or 0) for r in recs)}
 
 
+DEVICE_REJECT_MSG = "هذا الجهاز غير مسجّل لحسابك. راجع شؤون الموظفين لتغيير الجهاز"
+
+
+async def _device_check(db, emp: dict, geo: Optional[GeoIn], settings: dict, action: str) -> Optional[str]:
+    """📱 ربط التحضير بجهاز واحد: أول device_id يُحفظ؛ بعده يُقبل المطابق فقط. null → يُقبل (توافق مع الإصدارات القديمة)"""
+    if not settings.get("device_binding_enabled", True):
+        return (geo.device_id if geo else None)
+    did = (geo.device_id or "").strip() if geo and geo.device_id else ""
+    if not did:
+        return None
+    saved = (emp.get("device_id") or "").strip()
+    now = _now()
+    if not saved:
+        await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_id": did, "device_name": (geo.device_name or "")[:80], "device_registered_at": now, "device_last_seen_at": now}})
+        emp["device_id"] = did
+        return did
+    if saved != did:
+        await db.employees.update_one({"_id": emp["_id"]}, {"$inc": {"device_rejections": 1}, "$set": {"device_last_rejection": {"device_id": did, "device_name": (geo.device_name or "")[:80], "at": now, "action": action}}})
+        raise HTTPException(status_code=403, detail=DEVICE_REJECT_MSG)
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_last_seen_at": now}})
+    return did
+
+
 @router.post("/check-in")
 async def check_in(geo: Optional[GeoIn] = None, current_user: dict = Depends(get_current_user)):
     db = get_db()
@@ -526,6 +594,7 @@ async def check_in(geo: Optional[GeoIn] = None, current_user: dict = Depends(get
     settings = await get_hr_settings(db)
     if not settings.get("allow_self_checkin", True):
         raise HTTPException(status_code=400, detail="التسجيل الذاتي غير مفعّل — يُسجَّل الحضور من شؤون الموظفين")
+    device_id = await _device_check(db, emp, geo, settings, "check_in")
     t = _today()
     if not is_work_day(parse_date(t), settings):
         raise HTTPException(status_code=400, detail="اليوم ليس يوم عمل")
@@ -553,7 +622,7 @@ async def check_in(geo: Optional[GeoIn] = None, current_user: dict = Depends(get
     sh = pick_shift(remaining, now_hm)
     geo_rec = await evaluate_geo(db, emp, geo, settings)
     late = shift_late(now_hm, sh)
-    doc = {"employee_id": eid, "date": t, "status": "late" if late else "present", "check_in": now_hm, "check_out": None, "late_minutes": late, "note": "", "source": "self", "by_name": current_user.get("full_name", ""),
+    doc = {"employee_id": eid, "date": t, "device_id": device_id, "status": "late" if late else "present", "check_in": now_hm, "check_out": None, "late_minutes": late, "note": "", "source": "self", "by_name": current_user.get("full_name", ""),
            "shift_id": sh["id"], "shift_name": sh["name"], "check_in_geo": geo_rec, "created_at": _now(), "updated_at": _now()}
     await db.hr_attendance.insert_one(doc)
     loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else (" — بدون موقع" if geo_rec["status"] == "no_location" else "")
@@ -569,6 +638,7 @@ async def check_out(geo: Optional[GeoIn] = None, current_user: dict = Depends(ge
         raise HTTPException(status_code=404, detail="لا يوجد ملف إداري مرتبط بحسابك")
     t = _today()
     settings = await get_hr_settings(db)
+    device_id = await _device_check(db, emp, geo, settings, "check_out")
     if geo is not None and geo.correction:
         recs = await db.hr_attendance.find({"employee_id": str(emp["_id"]), "date": t}).to_list(10)
         st = _correction_state(settings, recs)
@@ -585,7 +655,7 @@ async def check_out(geo: Optional[GeoIn] = None, current_user: dict = Depends(ge
         raise HTTPException(status_code=400, detail="لم يُسجَّل حضورك اليوم")
     geo_rec = await evaluate_geo(db, emp, geo, settings)
     now_hm = datetime.now(YEMEN_TZ).strftime("%H:%M")
-    await db.hr_attendance.update_one({"_id": rec["_id"]}, {"$set": {"check_out": now_hm, "check_out_geo": geo_rec, "updated_at": _now()}})
+    await db.hr_attendance.update_one({"_id": rec["_id"]}, {"$set": {"check_out": now_hm, "check_out_geo": geo_rec, "check_out_device_id": device_id, "updated_at": _now()}})
     loc = f" — {geo_rec['location_name']}" if geo_rec.get("in_range") else ""
     shift_txt = f" ({rec['shift_name']})" if rec.get("shift_name") else ""
     return {"check_out": now_hm, "location": geo_rec, "shift_id": rec.get("shift_id"), "message": f"تم تسجيل الانصراف {now_hm}{shift_txt}{loc}"}

@@ -29,6 +29,8 @@ class GeoIn(BaseModel):
     accuracy: Optional[float] = None
     location_id: Optional[str] = None
     correction: bool = False
+    device_id: Optional[str] = None
+    device_name: Optional[str] = None
 
 
 class ExemptIn(BaseModel):

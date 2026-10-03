@@ -22,6 +22,7 @@ DEFAULT_SETTINGS = {
     "allow_self_checkin": True, "annual_leave_days": 30, "holidays": [], "geofence_required": True,
     "correction_enabled": True, "correction_window_minutes": 10,
     "auto_checkout_enabled": False, "auto_checkout_after_minutes": 60,
+    "device_binding_enabled": True,
 }
 
 

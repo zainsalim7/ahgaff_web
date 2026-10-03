@@ -9,6 +9,7 @@ import { Tabs } from '../src/components/hr/ui';
 import { AttendanceDaily } from '../src/components/hr/AttendanceDaily';
 import { AttendanceMonthly } from '../src/components/hr/AttendanceMonthly';
 import { AttendanceDetails } from '../src/components/hr/AttendanceDetails';
+import { AttendanceDevices } from '../src/components/hr/AttendanceDevices';
 import { router } from 'expo-router';
 import { btn } from '../src/components/hr/ui';
 
@@ -23,7 +24,7 @@ export default function HrAttendance() {
 
   useEffect(() => { hrAPI.attMeta().then((r) => setMeta(r.data)).catch(() => {}); hrAPI.orgUnits().then((r) => setUnits(r.data.units || [])).catch(() => {}); }, []);
 
-  const tabs = [{ key: 'daily', label: 'الكشف اليومي' }, { key: 'monthly', label: 'التقرير الشهري' }, { key: 'details', label: 'التقرير التفصيلي' }];
+  const tabs = [{ key: 'daily', label: 'الكشف اليومي' }, { key: 'monthly', label: 'التقرير الشهري' }, { key: 'details', label: 'التقرير التفصيلي' }, { key: 'devices', label: '📱 الأجهزة' }];
   return (
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={reportPage.content}>
@@ -35,6 +36,7 @@ export default function HrAttendance() {
         {tab === 'daily' && <AttendanceDaily key={`d${key}`} canManage={canManage} units={units} meta={meta} />}
         {tab === 'monthly' && <AttendanceMonthly key={`m${key}`} units={units} meta={meta} />}
         {tab === 'details' && <AttendanceDetails key={`x${key}`} units={units} meta={meta} />}
+        {tab === 'devices' && <AttendanceDevices key={`d${key}`} canManage={canManage} />}
       </ScrollView>
     </SafeAreaView>
   );
