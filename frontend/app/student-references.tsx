@@ -13,6 +13,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import api from '../src/services/api';
+import { ReferenceReconcile } from '../src/components/admin/ReferenceReconcile';
 
 interface Preview {
   university_short_code?: string;
@@ -112,6 +113,8 @@ export default function StudentReferencesScreen() {
               الأرقام تُولَّد تلقائياً للطلاب الجدد إن اكتملت بياناتهم.
             </Text>
           </View>
+
+          {Platform.OS === 'web' && <ReferenceReconcile />}
 
           <TouchableOpacity
             style={[styles.btn, styles.previewBtn, loading && { opacity: 0.6 }]}

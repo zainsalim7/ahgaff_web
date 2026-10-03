@@ -4,13 +4,16 @@ Admin Tools Routes - أدوات إدارية لإصلاح بيانات قاعد�
 - توليد الأرقام المرجعية للطلاب
 - (مستقبلاً) أدوات تنظيف وإصلاح أخرى
 """
+import io
 import re
+from datetime import datetime, timezone
 from typing import Optional
 
 from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
-from .deps import get_current_user, get_db, has_permission
+from .deps import get_current_user, get_db, has_permission, log_activity, export_headers, export_filename
 from models.permissions import UserRole
 
 router = APIRouter(tags=["أدوات الأدمن"])
@@ -642,6 +645,149 @@ async def execute_student_refs(current_user: dict = Depends(get_current_user)):
         "message": f"تم توليد {updated} رقم مرجعي",
         "sample_details": details[:10],
     }
+
+
+# ==================== 🔁 مطابقة الرقم المرجعي المُولَّد بالرقم المُدخل (رقم القيد) ====================
+
+RECONCILE_STATUS_LABELS = {
+    "adopt": "سيُعتمد المُدخل",
+    "same": "متطابق أصلاً",
+    "reserved": "محجوز لطالب آخر",
+    "prefix_mismatch": "بصيغة مرجعية لكن بسنة/كلية/برنامج مختلف",
+    "not_ref_format": "رقم قيد عادي (ليس بصيغة مرجعية)",
+    "no_student_id": "بلا رقم قيد",
+}
+
+
+async def _reconcile_rows(db, faculty_id: Optional[str], department_id: Optional[str], level: Optional[int], include_prefix_mismatch: bool) -> dict:
+    uni = await db.university.find_one({})
+    uni_short = ((uni or {}).get("short_code") or "").upper()
+    if not uni_short:
+        raise HTTPException(status_code=400, detail="يجب تعيين short_code للجامعة في إعدادات الجامعة")
+    q: dict = {}
+    if department_id:
+        q["department_id"] = department_id
+    elif faculty_id:
+        dept_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        q["$or"] = [{"faculty_id": faculty_id}, {"department_id": {"$in": dept_ids}}]
+    if level is not None:
+        q["level"] = level
+    if not q:
+        raise HTTPException(status_code=400, detail="اختر الكلية أو القسم أو المستوى على الأقل")
+    faculties_by_id = {str(f["_id"]): f for f in await db.faculties.find({}).to_list(200)}
+    depts_by_id = {str(d["_id"]): d for d in await db.departments.find({}, {"name": 1, "faculty_id": 1}).to_list(2000)}
+    # مالكو الأرقام المرجعية الحالية (لكشف المحجوز)
+    owners: dict = {}
+    async for s in db.students.find({"reference_number": {"$nin": [None, ""]}}, {"reference_number": 1, "full_name": 1, "student_id": 1, "department_id": 1}):
+        owners[str(s["reference_number"]).strip().upper()] = s
+    generic = re.compile(rf"^{re.escape(uni_short)}[{''.join(VALID_PROGRAM_CODES)}]\d{{7}}$")
+    students = await db.students.find(q).sort([("department_id", 1), ("student_id", 1)]).to_list(10000)
+    rows, claimed = [], {}
+    for s in students:
+        sid = str(s.get("student_id") or "").strip().upper()
+        cur = str(s.get("reference_number") or "").strip()
+        dept = depts_by_id.get(str(s.get("department_id") or ""), {})
+        fac = faculties_by_id.get(str(s.get("faculty_id") or dept.get("faculty_id") or ""), {})
+        prog = (s.get("program_code") or "").strip().upper()
+        year = _format_year(s.get("enrollment_year"))
+        fac_code = _format_faculty_code(fac.get("numeric_code"))
+        prefix = f"{uni_short}{prog}{year}{fac_code}" if (prog in VALID_PROGRAM_CODES and year and fac_code) else ""
+        row = {"id": str(s["_id"]), "student_id": s.get("student_id") or "", "full_name": s.get("full_name", ""), "department_name": dept.get("name", ""), "faculty_name": fac.get("name", ""),
+               "level": s.get("level"), "current_ref": cur, "expected_prefix": prefix, "new_ref": cur, "status": "", "detail": "", "will_apply": False}
+        if not sid:
+            row["status"] = "no_student_id"
+        elif cur.upper() == sid:
+            row["status"] = "same"
+        elif not generic.match(sid):
+            row["status"] = "not_ref_format"
+            row["detail"] = f"يبقى الرقم المُولَّد {cur}" if cur else "لا رقم مرجعي حالياً"
+        else:
+            owner = owners.get(sid)
+            batch_owner = claimed.get(sid)
+            if owner and str(owner["_id"]) != str(s["_id"]):
+                row["status"] = "reserved"
+                row["detail"] = f"محجوز لدى: {owner.get('full_name', '')} (قيد {owner.get('student_id', '')} — {depts_by_id.get(str(owner.get('department_id') or ''), {}).get('name', '')})"
+            elif batch_owner:
+                row["status"] = "reserved"
+                row["detail"] = f"نفس الرقم مُدخل لطالب آخر ضمن هذه الدفعة: {batch_owner}"
+            elif prefix and sid.startswith(prefix):
+                row["status"] = "adopt"; row["new_ref"] = sid; row["will_apply"] = True
+                row["detail"] = f"{cur or '—'} ← {sid}"
+                claimed[sid] = f"{s.get('full_name', '')} ({s.get('student_id', '')})"
+            else:
+                row["status"] = "prefix_mismatch"
+                row["detail"] = f"المتوقع لهذا الطالب يبدأ بـ {prefix or 'غير محدد (بيانات ناقصة)'}"
+                if include_prefix_mismatch and sid not in claimed:
+                    row["new_ref"] = sid; row["will_apply"] = True
+                    claimed[sid] = f"{s.get('full_name', '')} ({s.get('student_id', '')})"
+        row["status_label"] = RECONCILE_STATUS_LABELS[row["status"]]
+        rows.append(row)
+    order = {"adopt": 0, "reserved": 1, "prefix_mismatch": 2, "not_ref_format": 3, "no_student_id": 4, "same": 5}
+    rows.sort(key=lambda r: (order[r["status"]], r["department_name"], r["student_id"]))
+    summary = {k: sum(1 for r in rows if r["status"] == k) for k in RECONCILE_STATUS_LABELS}
+    summary["total"] = len(rows)
+    summary["will_apply"] = sum(1 for r in rows if r["will_apply"])
+    return {"rows": rows, "summary": summary, "university_short_code": uni_short}
+
+
+@router.get("/admin/student-references/reconcile/preview")
+async def reconcile_preview(faculty_id: Optional[str] = None, department_id: Optional[str] = None, level: Optional[int] = None, include_prefix_mismatch: bool = False, current_user: dict = Depends(get_current_user)):
+    """معاينة: مقارنة الرقم المرجعي المُولَّد برقم القيد المُدخل لكل طالب ضمن الفلتر"""
+    _ensure_admin(current_user)
+    return await _reconcile_rows(get_db(), faculty_id, department_id, level, include_prefix_mismatch)
+
+
+@router.post("/admin/student-references/reconcile/execute")
+async def reconcile_execute(payload: dict, current_user: dict = Depends(get_current_user)):
+    """تنفيذ: اعتماد رقم القيد المُدخل كرقم مرجعي لكل طالب غير محجوز (مع حفظ الرقم القديم في reference_history)"""
+    _ensure_admin(current_user)
+    db = get_db()
+    level = payload.get("level")
+    res = await _reconcile_rows(db, payload.get("faculty_id") or None, payload.get("department_id") or None, int(level) if level not in (None, "") else None, bool(payload.get("include_prefix_mismatch")))
+    now = datetime.now(timezone.utc).isoformat()
+    applied = 0
+    for r in res["rows"]:
+        if not r["will_apply"]:
+            continue
+        await db.students.update_one({"_id": ObjectId(r["id"])}, {"$set": {"reference_number": r["new_ref"]},
+                                                                 "$push": {"reference_history": {"old": r["current_ref"] or None, "new": r["new_ref"], "at": now, "by_name": current_user.get("full_name", ""), "reason": "reconcile_entered"}}})
+        r["applied"] = True
+        applied += 1
+    await log_activity(current_user, "student_references_reconcile", "students", "", "اعتماد أرقام القيد المُدخلة كأرقام مرجعية", {"applied": applied, "filters": {k: payload.get(k) for k in ("faculty_id", "department_id", "level", "include_prefix_mismatch")}})
+    res["applied"] = applied
+    res["message"] = f"تم اعتماد {applied} رقم مُدخل كرقم مرجعي" + (f" — {res['summary']['reserved']} محجوز لطلاب آخرين لم يُغيَّر" if res["summary"]["reserved"] else "")
+    return res
+
+
+@router.get("/admin/student-references/reconcile/export")
+async def reconcile_export(faculty_id: Optional[str] = None, department_id: Optional[str] = None, level: Optional[int] = None, include_prefix_mismatch: bool = False, current_user: dict = Depends(get_current_user)):
+    """📥 تقرير Excel بالمقارنة (قبل أو بعد التنفيذ)"""
+    _ensure_admin(current_user)
+    db = get_db()
+    res = await _reconcile_rows(db, faculty_id, department_id, level, include_prefix_mismatch)
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    wb = Workbook(); ws = wb.active; ws.title = "المقارنة"; ws.sheet_view.rightToLeft = True
+    heads = ["#", "رقم القيد (المُدخل)", "الاسم", "الكلية", "القسم", "المستوى", "الرقم المرجعي الحالي (المُولَّد)", "الرقم المرجعي بعد الاعتماد", "الحالة", "التفاصيل"]
+    s = res["summary"]
+    ws.append([f"تقرير مطابقة الأرقام المرجعية بالمُدخلة — {s['total']} طالب: يُعتمد {s['adopt']} · محجوز {s['reserved']} · متطابق أصلاً {s['same']} · صيغة مختلفة {s['prefix_mismatch']} · رقم عادي {s['not_ref_format']}"])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(heads)); ws["A1"].font = Font(bold=True, size=12)
+    ws.append(heads)
+    for c in ws[2]:
+        c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="1565C0"); c.alignment = Alignment(horizontal="center")
+    colors = {"adopt": "E8F5E9", "reserved": "FFEBEE", "prefix_mismatch": "FFF8E1", "same": "F1F5F9", "not_ref_format": "FFFFFF", "no_student_id": "FFEBEE"}
+    for i, r in enumerate(res["rows"], 1):
+        ws.append([i, r["student_id"], r["full_name"], r["faculty_name"], r["department_name"], r["level"], r["current_ref"], r["new_ref"] if r["will_apply"] else r["current_ref"], r["status_label"], r["detail"]])
+        for c in ws[ws.max_row]:
+            c.fill = PatternFill("solid", fgColor=colors.get(r["status"], "FFFFFF"))
+    widths = [5, 18, 28, 24, 24, 8, 22, 22, 26, 60]
+    for i, w in enumerate(widths, 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "A3"
+    buf = io.BytesIO(); wb.save(buf); buf.seek(0)
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers=export_headers(export_filename("تقرير مطابقة الأرقام المرجعية", f"{s['total']} طالب", ext="xlsx")))
 
 
 
