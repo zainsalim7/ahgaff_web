@@ -595,7 +595,7 @@ async def request_device_change(data: DeviceChangeIn, current_user: dict = Depen
     await log_activity(current_user, "hr_device_change_request", "employee", eid, emp.get("full_name", ""), {"new_device_id": did})
     await notify_users(db, await hr_manager_user_ids(db, P_ATTEND), "📱 طلب تغيير جهاز التحضير",
                        f"{emp.get('full_name', '')} ({emp.get('employee_no', '')}) يطلب تغيير جهازه إلى {doc['new_device_name'] or did[:12]}" + (f" — السبب: {doc['reason']}" if doc["reason"] else ""),
-                       "hr_device", {"request_id": str(r.inserted_id), "route": "/hr-attendance?tab=devices"})
+                       "hr_device", {"request_id": str(r.inserted_id), "route": "/hr-attendance?tab=devices", "data": {"route": "/hr-attendance?tab=devices", "kind": "device_change_request"}})
     return {"message": "أُرسل طلب تغيير الجهاز إلى شؤون الموظفين — سيُفعَّل جهازك الجديد فور الموافقة", "request": _req_view({**doc, "_id": r.inserted_id})}
 
 
@@ -710,7 +710,7 @@ async def _alert_hr_device_rejection(db, emp: dict, did: str, dname: str, action
     dev = f"{dname} ({did[:12]}…)" if dname else did
     await notify_users(db, await hr_manager_user_ids(db, P_ATTEND), "⚠️ محاولة تحضير من جهاز غير مسجّل",
                        f"{emp.get('full_name', '')} ({emp.get('employee_no', '')}) حاول {act} الساعة {now[11:16]} من جهاز غير مسجّل: {dev} — راجع «أجهزة التحضير»",
-                       "hr_device", {"employee_id": str(emp["_id"]), "route": "/hr-attendance?tab=devices"})
+                       "hr_device", {"employee_id": str(emp["_id"]), "route": "/hr-attendance?tab=devices", "data": {"route": "/hr-attendance?tab=devices", "kind": "device_rejection"}})
 
 
 async def _device_check(db, emp: dict, geo: Optional[GeoIn], settings: dict, action: str) -> Optional[str]:
