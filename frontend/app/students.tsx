@@ -278,7 +278,7 @@ export default function StudentsScreen() {
         body.enrollment_year = ey.length === 4 ? ey.slice(-2) : ey;
       }
       const r = await api.post('/students', body);
-      const refMsg = r.data?.reference_number ? `\nالرقم المرجعي: ${r.data.reference_number}` : '';
+      const refMsg = (r.data?.reference_number ? `\nالرقم المرجعي: ${r.data.reference_number}` : '') + (r.data?.reference_note ? `\n${r.data.reference_note}` : '');
       showMessage('تم', `أُضيف الطالب: ${r.data.full_name}${refMsg}`);
       setShowAddModal(false);
       setNewStudent({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', nationality: '', password: '', program_code: '', enrollment_year: '' });
@@ -919,6 +919,9 @@ export default function StudentsScreen() {
         });
 
         let msg = res.data?.message || 'تم الاستيراد';
+        if (res.data?.reference_msg) {
+          msg += '\n' + res.data.reference_msg;
+        }
         if (res.data?.enrolled_courses_msg) {
           msg += '\n' + res.data.enrolled_courses_msg;
         }

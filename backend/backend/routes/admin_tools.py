@@ -4,6 +4,7 @@ Admin Tools Routes - أدوات إدارية لإصلاح بيانات قاعد�
 - توليد الأرقام المرجعية للطلاب
 - (مستقبلاً) أدوات تنظيف وإصلاح أخرى
 """
+import re
 from typing import Optional
 
 from bson import ObjectId
@@ -461,8 +462,10 @@ async def _build_student_reference(
     return f"{university_short_code}{program}{year}{fac_code}{seq:03d}"
 
 
-async def generate_reference_for_new_student(db_inst, student_doc: dict) -> Optional[str]:
-    """يولّد الرقم المرجعي عند إنشاء طالب جديد (يأخذ بالاعتبار آخر تسلسل في DB)."""
+async def generate_reference_for_new_student(db_inst, student_doc: dict, info: Optional[dict] = None) -> Optional[str]:
+    """يولّد الرقم المرجعي عند إنشاء طالب جديد (يأخذ بالاعتبار آخر تسلسل في DB).
+    ✅ إن كان رقم القيد المُدخل بنفس صيغة الرقم المرجعي المتوقع لهذا الطالب (البادئة + 3 خانات) وغير مستخدم → يُعتمد كما هو.
+    `info` (اختياري) يُملأ بـ adopted / conflict / expected_prefix لرسائل الواجهة."""
     program = (student_doc.get("program_code") or "").strip().upper()
     year = _format_year(student_doc.get("enrollment_year"))
     faculty_id = student_doc.get("faculty_id")
@@ -477,6 +480,17 @@ async def generate_reference_for_new_student(db_inst, student_doc: dict) -> Opti
         return None
 
     prefix = f"{uni_short}{program}{year}{fac_code}"
+    if info is not None:
+        info["expected_prefix"] = prefix
+    entered = str(student_doc.get("student_id") or "").strip().upper()
+    if re.fullmatch(rf"{re.escape(prefix.upper())}\d{{3}}", entered):
+        taken = await db_inst.students.find_one({"reference_number": {"$regex": f"^{re.escape(entered)}$", "$options": "i"}}, {"_id": 1})
+        if not taken:
+            if info is not None:
+                info["adopted"] = True
+            return entered
+        if info is not None:
+            info["conflict"] = entered
     # ابحث عن أعلى تسلسل سابق
     cursor = db_inst.students.find(
         {"reference_number": {"$regex": f"^{prefix}\\d{{3}}$"}},

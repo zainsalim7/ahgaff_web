@@ -28,6 +28,7 @@ class StudentResponse(StudentBase):
     created_at: datetime
     is_active: bool = True
     reference_number: Optional[str] = None
+    reference_note: Optional[str] = None  # رسالة عند الإنشاء: اعتُمد رقم القيد كمرجعي / تعارض
     # حقول حالة الطالب (active/repeat/graduated/expelled/frozen)
     status: Optional[str] = None
     status_label: Optional[str] = None

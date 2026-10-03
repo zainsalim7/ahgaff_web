@@ -3632,9 +3632,11 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
             pass
     
     # توليد الرقم المرجعي تلقائياً (قبل إنشاء الـ user حتى نستخدمه كـ fallback)
+    # ✅ إن كان رقم القيد المُدخل بصيغة الرقم المرجعي المتوقع يُعتمد كما هو (admin_tools.generate_reference_for_new_student)
+    ref_info: dict = {}
     try:
         from routes.admin_tools import generate_reference_for_new_student
-        ref = await generate_reference_for_new_student(db, student_dict)
+        ref = await generate_reference_for_new_student(db, student_dict, ref_info)
         if ref:
             student_dict["reference_number"] = ref
     except Exception:
@@ -3680,6 +3682,10 @@ async def create_student(student: StudentCreate, current_user: dict = Depends(ge
     except Exception as _e:
         logging.warning(f"auto-enroll new student failed: {_e}")
     student_dict["id"] = str(result.inserted_id)
+    if ref_info.get("adopted"):
+        student_dict["reference_note"] = "✅ اعتُمد رقم القيد المُدخل كرقم مرجعي لأنه بالصيغة الصحيحة"
+    elif ref_info.get("conflict"):
+        student_dict["reference_note"] = f"⚠️ الرقم المُدخل {ref_info['conflict']} مستخدم لطالب آخر — وُلِّد الرقم المرجعي التالي تلقائياً: {student_dict.get('reference_number')}"
 
     return student_dict
 
@@ -14262,6 +14268,8 @@ async def import_students_from_excel(
         
         imported = 0
         imported_ids = []
+        ref_adopted = 0
+        ref_conflicts: list = []
         errors = []
         
         for index, row in df.iterrows():
@@ -14331,12 +14339,17 @@ async def import_students_from_excel(
                     except Exception:
                         pass
 
-                # توليد الرقم المرجعي
+                # توليد الرقم المرجعي (أو اعتماد رقم القيد إن كان بصيغة الرقم المرجعي)
                 try:
                     from routes.admin_tools import generate_reference_for_new_student
-                    ref = await generate_reference_for_new_student(db, student_data)
+                    ref_info: dict = {}
+                    ref = await generate_reference_for_new_student(db, student_data, ref_info)
                     if ref:
                         student_data["reference_number"] = ref
+                    if ref_info.get("adopted"):
+                        ref_adopted += 1
+                    elif ref_info.get("conflict"):
+                        ref_conflicts.append(f"{ref_info['conflict']} → {ref}")
                 except Exception:
                     pass
 
@@ -14397,6 +14410,9 @@ async def import_students_from_excel(
             "imported_ids": imported_ids,
             "enrolled_courses": enrolled_courses,
             "enrolled_courses_msg": f"تم تسجيلهم تلقائياً في {enrolled_courses} مقرر" if enrolled_courses > 0 else "",
+            "reference_adopted": ref_adopted,
+            "reference_conflicts": ref_conflicts[:20],
+            "reference_msg": (f"اعتُمد رقم القيد كرقم مرجعي لـ {ref_adopted} طالب" if ref_adopted else "") + (f" · {len(ref_conflicts)} رقم مُدخل كان مستخدماً فوُلِّد التالي تلقائياً" if ref_conflicts else ""),
             "errors": errors[:10]  # Return first 10 errors only
         }
     except HTTPException:
