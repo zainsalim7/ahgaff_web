@@ -535,12 +535,84 @@ class BatchPrintRequest(BaseModel):
     base_url: Optional[str] = None
     orientation: Optional[str] = "auto"
     settings: Optional[dict] = None
+    # 🖨️ تتبّع الطباعة (دفعات): استبعاد المطبوعين سابقاً / فقط من له صورة معتمدة / استبعاد أفراد
+    exclude_printed: bool = True
+    only_with_photo: bool = True
+    exclude_ids: Optional[list] = None
+    reprint_batch_no: Optional[int] = None  # إعادة تنزيل دفعة سابقة كما هي (لا تُسجَّل كطباعة جديدة)
+
+
+def _print_flags(s: dict, exclude_printed: bool, only_with_photo: bool, excluded: set) -> dict:
+    """تصنيف الطالب ضمن دفعة الطباعة: مشمول أو مستبعد (مع السبب)"""
+    printed_at = s.get("card_printed_at")
+    has_photo = bool(s.get("photo_path"))
+    reason = ""
+    if str(s["_id"]) in excluded:
+        reason = "مستبعد يدوياً"
+    elif exclude_printed and printed_at:
+        reason = f"طُبعت سابقاً (دفعة #{s.get('card_print_batch_no', '')} — {str(printed_at)[:10]})"
+    elif only_with_photo and not has_photo:
+        reason = "بانتظار اعتماد الصورة"
+    return {"id": str(s["_id"]), "full_name": s.get("full_name", ""), "student_id": s.get("student_id", ""), "level": s.get("level"), "section": s.get("section", ""),
+            "has_photo": has_photo, "printed_at": printed_at, "batch_no": s.get("card_print_batch_no"), "print_count": s.get("card_print_count", 0), "included": not reason, "reason": reason}
+
+
+async def _batch_candidates(db, data: "BatchPrintRequest", current_user: dict):
+    """الطلاب المرشحون للدفعة (قسم/مستوى/شعبة أو IDs) مع بيانات الكلية/القسم"""
+    ids_mode = bool(data.student_ids)
+    dept = None
+    if ids_mode:
+        oids = []
+        for i in (data.student_ids or [])[:400]:
+            try:
+                oids.append(ObjectId(str(i)))
+            except Exception:
+                pass
+        students = [s async for s in db.students.find({"_id": {"$in": oids}}).sort("full_name", 1)]
+    else:
+        if not data.department_id:
+            raise HTTPException(status_code=400, detail="اختر القسم أو حدد طلاباً")
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(data.department_id)})
+        except Exception:
+            dept = None
+        if not dept:
+            raise HTTPException(status_code=404, detail="القسم غير موجود")
+        if not _can_manage(current_user, dept.get("faculty_id", "")):
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
+        q = {"department_id": data.department_id, "is_alumni": {"$ne": True}}
+        if data.level:
+            q["level"] = data.level
+        if data.section:
+            q["section"] = data.section
+        students = [s async for s in db.students.find(q).sort("full_name", 1)]
+    return ids_mode, dept, students
+
+
+@router.post("/cards/batch-preview")
+async def batch_preview(data: BatchPrintRequest, current_user: dict = Depends(get_current_user)):
+    """🔎 معاينة الدفعة قبل التوليد: من سيُطبع ومن سيُستبعد (طُبع سابقاً / بلا صورة) — لا يغيّر شيئاً"""
+    db = get_db()
+    _, _, students = await _batch_candidates(db, data, current_user)
+    excluded = {str(x) for x in (data.exclude_ids or [])}
+    rows = [_print_flags(s, data.exclude_printed, data.only_with_photo, excluded) for s in students]
+    inc = [r for r in rows if r["included"]]
+    return {"rows": rows, "summary": {"total": len(rows), "included": len(inc), "pages": (len(inc) + 1) // 2,
+                                      "printed_before": sum(1 for r in rows if r["printed_at"]), "no_photo": sum(1 for r in rows if not r["has_photo"]),
+                                      "excluded_printed": sum(1 for r in rows if not r["included"] and r["reason"].startswith("طُبعت")),
+                                      "excluded_no_photo": sum(1 for r in rows if not r["included"] and r["reason"].startswith("بانتظار")),
+                                      "excluded_manual": sum(1 for r in rows if r["reason"] == "مستبعد يدوياً")}}
 
 
 @router.post("/cards/batch-pdf")
 async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depends(get_current_user)):
     """PDF واحد: بطاقتان في كل ورقة A4 بمواضع قابلة للضبط (ملم) — حسب القسم أو طلاب محددين."""
     db = get_db()
+    if data.reprint_batch_no:
+        rb = await db.card_print_batches.find_one({"batch_no": int(data.reprint_batch_no)})
+        if not rb:
+            raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+        data.student_ids = rb.get("student_ids") or []
     ids_mode = bool(data.student_ids)
     dept = None
     if ids_mode:
@@ -599,6 +671,21 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
             raise HTTPException(status_code=404, detail="لا يوجد طلاب مطابقون")
         if len(students) > 400:
             raise HTTPException(status_code=400, detail="العدد يتجاوز 400 طالب — قسّم الطلبات حسب المستوى")
+
+    # 🖨️ تتبّع الدفعات: استبعاد المطبوعين سابقاً / بلا صورة / المستبعدين يدوياً (إلا في إعادة تنزيل دفعة سابقة)
+    reprint = None
+    if data.reprint_batch_no:
+        reprint = await db.card_print_batches.find_one({"batch_no": int(data.reprint_batch_no)})
+        if not reprint:
+            raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+    else:
+        excluded = {str(x) for x in (data.exclude_ids or [])}
+        flagged = [(s, _print_flags(s, data.exclude_printed, data.only_with_photo, excluded)) for s in students]
+        skipped = [f for _, f in flagged if not f["included"]]
+        students = [s for s, f in flagged if f["included"]]
+        if not students:
+            n_p = sum(1 for f in skipped if f["reason"].startswith("طُبعت")); n_ph = sum(1 for f in skipped if f["reason"].startswith("بانتظار"))
+            raise HTTPException(status_code=400, detail=f"لا توجد بطاقات جديدة للطباعة — {n_p} طُبعت سابقاً، {n_ph} بانتظار الصورة" + (f"، {len(skipped) - n_p - n_ph} مستبعد يدوياً" if len(skipped) - n_p - n_ph else ""))
 
     faculty = await db.faculties.find_one({"_id": ObjectId(fid)}) if fid and not ids_mode else None
     faculty_name = (faculty or {}).get("name", "")
@@ -678,8 +765,92 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
             c.drawImage(ImageReader(io.BytesIO(png)), x, H - y_top - ch, cw, ch)
         c.showPage()
     c.save()
+
+    if reprint:
+        return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
+                                 headers=export_headers(export_filename("بطاقات الطلاب", f"إعادة تنزيل دفعة {reprint['batch_no']}", f"{len(pngs)} بطاقة", ext="pdf")))
+
+    # 🖨️ تسجيل الدفعة ووسم الطلاب كمطبوعين (تنزيل PDF = طباعة)
+    last = await db.card_print_batches.find_one({}, sort=[("batch_no", -1)])
+    batch_no = int((last or {}).get("batch_no", 0)) + 1
+    now = datetime.now(timezone.utc).isoformat()
+    await db.card_print_batches.insert_one({
+        "batch_no": batch_no, "created_at": now, "by_user_id": str(current_user.get("_id") or current_user.get("id", "")), "by_name": current_user.get("full_name", ""),
+        "mode": "ids" if ids_mode else "department", "department_id": data.department_id if not ids_mode else None, "department_name": (dept or {}).get("name", "") if not ids_mode else "طلاب محددون",
+        "faculty_name": faculty_name if not ids_mode else (students[0].get("_fac_name", "") if students else ""), "level": data.level, "section": data.section,
+        "count": len(students), "pages": (len(students) + 1) // 2, "orientation": orientation, "settings": st,
+        "student_ids": [str(s["_id"]) for s in students], "students": [{"id": str(s["_id"]), "full_name": s.get("full_name", ""), "student_id": s.get("student_id", ""), "level": s.get("level"), "section": s.get("section", "")} for s in students],
+    })
+    await db.students.update_many({"_id": {"$in": [s["_id"] for s in students]}}, {"$set": {"card_printed_at": now, "card_print_batch_no": batch_no}, "$inc": {"card_print_count": 1}})
+    await log_activity(current_user, "cards_batch_print", "card_print_batches", str(batch_no), f"دفعة طباعة بطاقات #{batch_no}", {"count": len(students), "department": (dept or {}).get("name", "")})
     return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
-                             headers=export_headers(export_filename("بطاقات الطلاب", f"{len(pngs)} بطاقة", ext="pdf")))
+                             headers={**export_headers(export_filename("بطاقات الطلاب", f"دفعة {batch_no}", f"{len(pngs)} بطاقة", ext="pdf")), "X-Batch-No": str(batch_no), "X-Batch-Count": str(len(pngs))})
+
+
+@router.get("/cards/batches")
+async def list_print_batches(limit: int = 50, current_user: dict = Depends(get_current_user)):
+    """📚 الدفعات السابقة (لإعادة التنزيل والمراجعة)"""
+    db = get_db()
+    items = []
+    async for b in db.card_print_batches.find({}, {"students": 0, "settings": 0}).sort("batch_no", -1).limit(limit):
+        b["id"] = str(b.pop("_id"))
+        items.append(b)
+    return {"items": items}
+
+
+@router.get("/cards/batches/{batch_no}")
+async def get_print_batch(batch_no: int, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    b = await db.card_print_batches.find_one({"batch_no": batch_no})
+    if not b:
+        raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+    b["id"] = str(b.pop("_id"))
+    return b
+
+
+@router.get("/cards/print-report")
+async def cards_print_report(department_id: Optional[str] = None, faculty_id: Optional[str] = None, level: Optional[int] = None, current_user: dict = Depends(get_current_user)):
+    """📥 تقرير Excel: حالة طباعة البطاقات لكل طالب (مطبوع / بانتظار الصورة / لم يُطبع)"""
+    db = get_db()
+    q: dict = {"is_alumni": {"$ne": True}}
+    if department_id:
+        q["department_id"] = department_id
+    elif faculty_id:
+        dept_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        q["department_id"] = {"$in": dept_ids}
+    else:
+        raise HTTPException(status_code=400, detail="اختر الكلية أو القسم")
+    if level:
+        q["level"] = level
+    depts = {str(d["_id"]): d.get("name", "") for d in await db.departments.find({}, {"name": 1}).to_list(2000)}
+    rows = [s async for s in db.students.find(q, {"full_name": 1, "student_id": 1, "department_id": 1, "level": 1, "section": 1, "photo_path": 1, "card_printed_at": 1, "card_print_batch_no": 1, "card_print_count": 1}).sort([("department_id", 1), ("level", 1), ("full_name", 1)])]
+    def status(s):
+        if s.get("card_printed_at"):
+            return "مطبوعة"
+        return "بانتظار الصورة" if not s.get("photo_path") else "لم تُطبع بعد"
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment
+    from openpyxl.utils import get_column_letter
+    wb = Workbook(); ws = wb.active; ws.title = "حالة الطباعة"; ws.sheet_view.rightToLeft = True
+    n_p = sum(1 for s in rows if s.get("card_printed_at")); n_np = sum(1 for s in rows if not s.get("photo_path") and not s.get("card_printed_at"))
+    heads = ["#", "رقم القيد", "الاسم", "القسم", "المستوى", "الشعبة", "الصورة", "حالة البطاقة", "تاريخ الطباعة", "رقم الدفعة", "عدد مرات الطباعة"]
+    ws.append([f"تقرير طباعة البطاقات — {len(rows)} طالب: مطبوعة {n_p} · بانتظار الصورة {n_np} · لم تُطبع بعد {len(rows) - n_p - n_np}"])
+    ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=len(heads)); ws["A1"].font = Font(bold=True, size=12)
+    ws.append(heads)
+    for c in ws[2]:
+        c.font = Font(bold=True, color="FFFFFF"); c.fill = PatternFill("solid", fgColor="00838F"); c.alignment = Alignment(horizontal="center")
+    colors = {"مطبوعة": "E8F5E9", "بانتظار الصورة": "FFF8E1", "لم تُطبع بعد": "F1F5F9"}
+    for i, s in enumerate(rows, 1):
+        stt = status(s)
+        ws.append([i, s.get("student_id", ""), s.get("full_name", ""), depts.get(str(s.get("department_id") or ""), ""), s.get("level"), s.get("section", ""), "معتمدة" if s.get("photo_path") else "لا توجد", stt, str(s.get("card_printed_at") or "")[:16].replace("T", " "), s.get("card_print_batch_no") or "", s.get("card_print_count") or 0])
+        for c in ws[ws.max_row]:
+            c.fill = PatternFill("solid", fgColor=colors[stt])
+    for i, w in enumerate([5, 14, 28, 24, 8, 8, 10, 16, 18, 10, 14], 1):
+        ws.column_dimensions[get_column_letter(i)].width = w
+    ws.freeze_panes = "A3"
+    out = io.BytesIO(); wb.save(out); out.seek(0)
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                             headers=export_headers(export_filename("تقرير طباعة البطاقات", f"{len(rows)} طالب", ext="xlsx")))
 
 
 @router.get("/cards/batch-count")

@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams } from 'expo-router';
 import api from '../src/services/api';
+import { PrintBatchPreview, PrintBatchesHistory, PrintFilters } from '../src/components/cards/PrintBatches';
 
 // معاينة A4 مصغّرة: 210×297مم → مقياس
 const SCALE = 1.35;
@@ -33,6 +34,11 @@ export default function BatchPrintScreen() {
   const [loading, setLoading] = useState(true);
   const [downloading, setDownloading] = useState(false);
   const [msg, setMsg] = useState('');
+  // 🖨️ تتبّع الدفعات (إضافة فوق النموذج الأساسي دون تغييره)
+  const [pf, setPf] = useState<PrintFilters>({ excludePrinted: true, onlyWithPhoto: true, excludeIds: [] });
+  const [batchSummary, setBatchSummary] = useState<any>(null);
+  const [batchKey, setBatchKey] = useState(0);
+  const previewBody = idsMode ? { student_ids: selIds } : { department_id: departmentId, level: level ? parseInt(level, 10) : undefined };
 
   useEffect(() => {
     (async () => {
@@ -95,6 +101,9 @@ export default function BatchPrintScreen() {
         base_url: baseUrl,
         orientation,
         settings,
+        exclude_printed: pf.excludePrinted,
+        only_with_photo: pf.onlyWithPhoto,
+        exclude_ids: pf.excludeIds,
       }, { responseType: 'blob', timeout: 300000 });
       if (Platform.OS === 'web') {
         const url = window.URL.createObjectURL(new Blob([res.data]));
@@ -104,7 +113,10 @@ export default function BatchPrintScreen() {
         a.click();
         window.URL.revokeObjectURL(url);
       }
-      setMsg('✅ تم إنشاء الملف وحفظ إعدادات المواضع');
+      const bn = res.headers?.['x-batch-no']; const bc = res.headers?.['x-batch-count'];
+      setMsg(bn ? `✅ تم إنشاء الملف — سُجّلت الدفعة #${bn} (${bc} بطاقة) ووُسم الطلاب كمطبوعين، ولن يتكرروا في الدفعات القادمة` : '✅ تم إنشاء الملف وحفظ إعدادات المواضع');
+      setPf((p) => ({ ...p, excludeIds: [] }));
+      setBatchKey((k) => k + 1);
     } catch (e: any) {
       let detail = e?.response?.data?.detail;
       if (e?.response?.data instanceof Blob) {
@@ -182,9 +194,10 @@ export default function BatchPrintScreen() {
             {count && (
               <View style={styles.countBox} testID="print-count-box">
                 <Ionicons name="people" size={15} color="#00796b" />
-                <Text style={styles.countText}>{count.count} طالباً → {count.pages} ورقة A4</Text>
+                <Text style={styles.countText}>{count.count} طالباً{batchSummary ? ` — سيُطبع منهم ${batchSummary.included} → ${batchSummary.pages} ورقة A4` : ` → ${count.pages} ورقة A4`}</Text>
               </View>
             )}
+            {Platform.OS === 'web' && <PrintBatchPreview body={previewBody} filters={pf} onChange={setPf} refreshKey={batchKey} onSummary={setBatchSummary} />}
 
             <Text style={styles.sectionTitle}>اتجاه البطاقة في الورقة</Text>
             <View style={{ flexDirection: 'row-reverse', gap: 6 }}>
@@ -231,13 +244,14 @@ export default function BatchPrintScreen() {
 
             <TouchableOpacity
               onPress={download}
-              disabled={downloading || (!idsMode && !departmentId) || !count?.count}
-              style={[styles.dlBtn, (downloading || (!idsMode && !departmentId) || !count?.count) && { opacity: 0.6 }]}
+              disabled={downloading || (!idsMode && !departmentId) || !count?.count || (batchSummary ? batchSummary.included === 0 : false)}
+              style={[styles.dlBtn, (downloading || (!idsMode && !departmentId) || !count?.count || (batchSummary ? batchSummary.included === 0 : false)) && { opacity: 0.6 }]}
               testID="batch-print-download-btn"
             >
               {downloading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="print" size={17} color="#fff" />}
-              <Text style={styles.dlBtnText}>{downloading ? 'جارٍ إنشاء الملف...' : 'تنزيل PDF للطباعة'}</Text>
+              <Text style={styles.dlBtnText}>{downloading ? 'جارٍ إنشاء الملف...' : batchSummary ? `تنزيل PDF للطباعة (${batchSummary.included} بطاقة)` : 'تنزيل PDF للطباعة'}</Text>
             </TouchableOpacity>
+            {Platform.OS === 'web' && <PrintBatchesHistory refreshKey={batchKey} reportParams={idsMode ? {} : { department_id: departmentId, level: level ? parseInt(level, 10) : undefined }} />}
           </View>
 
           {/* ===== معاينة A4 ===== */}
