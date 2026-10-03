@@ -119,6 +119,7 @@ export default function HrCorrespondence() {
             ))}
           </div>
           {detail.attachment_url && <a href={detail.attachment_url} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 10, fontSize: 12.5, color: '#1565c0', fontWeight: 700 }} data-testid="corr-attachment-link">📎 فتح المرفق</a>}
+          {detail.direction === 'employee' && <CorrReplies detail={detail} canManage={canManage} onDone={(d: any) => { setDetail(d); load(); }} />}
           {canManage && (
             <div style={{ marginTop: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 6 }}>تغيير الحالة</div>
@@ -138,3 +139,33 @@ export default function HrCorrespondence() {
     </SafeAreaView>
   );
 }
+
+/** 📨 سلسلة الردود على مراسلة واردة من موظف + مربع الرد */
+const CorrReplies = ({ detail, canManage, onDone }: { detail: any; canManage: boolean; onDone: (d: any) => void }) => {
+  const [body, setBody] = useState('');
+  const [busy, setBusy] = useState(false);
+  const send = async (close: boolean) => {
+    if (!body.trim()) { window.alert('اكتب نص الرد أولاً'); return; }
+    setBusy(true);
+    try { const r = await hrAPI.replyCorr(detail.id, body.trim(), close); window.alert(r.data.message); setBody(''); onDone((await hrAPI.corr(detail.id)).data); } catch (e) { alertErr(e); } finally { setBusy(false); }
+  };
+  const replies: any[] = detail.replies || [];
+  return (
+    <div style={{ marginTop: 14 }} data-testid="corr-replies">
+      <div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 6 }}>📨 الردود ({replies.length}){detail.sender_employee_name ? <span style={{ fontWeight: 400, color: '#94a3b8' }}> — المُرسِل: {detail.sender_employee_name}</span> : null}</div>
+      {replies.length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>لا توجد ردود بعد</div> : replies.map((r, i) => (
+        <div key={i} style={{ backgroundColor: '#eff6ff', borderRadius: 10, padding: '8px 12px', marginBottom: 6, fontSize: 12.5, lineHeight: 1.8, color: '#1e3a5f', whiteSpace: 'pre-wrap' }} data-testid={`corr-reply-${i}`}>{r.body}<div style={{ fontSize: 10.5, color: '#64748b', marginTop: 2 }}>{r.by_name} · {fmtDT(r.at)}</div></div>
+      ))}
+      {canManage && detail.status !== 'closed' && (
+        <div style={{ marginTop: 8 }}>
+          <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={3} placeholder="اكتب ردّ شؤون الموظفين هنا… سيصل الموظف إشعاراً ويراه في بوابته" style={{ ...inp, width: '100%', resize: 'vertical', fontFamily: 'inherit', lineHeight: 1.7 }} data-testid="corr-reply-input" />
+          <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
+            <button onClick={() => send(false)} disabled={busy} style={btn('#1565c0')} data-testid="corr-reply-send">📨 إرسال الرد</button>
+            <button onClick={() => window.confirm('سيُرسل الرد وتُغلق المراسلة. متابعة؟') && send(true)} disabled={busy} style={btn('#e8f5e9', '#2e7d32')} data-testid="corr-reply-send-close">✅ إرسال وإغلاق</button>
+          </div>
+        </div>
+      )}
+      {detail.status === 'closed' && <div style={{ fontSize: 11.5, color: '#94a3b8', marginTop: 6 }}>المراسلة مغلقة — أعد فتحها من «تغيير الحالة» للرد مجدداً</div>}
+    </div>
+  );
+};

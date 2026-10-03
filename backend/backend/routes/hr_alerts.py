@@ -72,7 +72,25 @@ async def run_daily_alerts(db, force: bool = False) -> dict:
         out["tasks_overdue"] += 1
     from .hr_documents import documents_expiring_alerts
     out["documents_expiring"] = await documents_expiring_alerts(db, notify_users, employee_user_ids)
+    out["auto_summary"] = await auto_events_summary_alert(db, (t - timedelta(days=1)).strftime("%Y-%m-%d"))
     return out
+
+
+async def auto_events_summary_alert(db, d: str) -> int:
+    """🤖 إشعار يومي واحد لشؤون الموظفين بملخص أحداث النظام التلقائية ليوم d (انصراف تلقائي / غياب تلقائي / انصراف خارج النطاق)"""
+    from .hr_common import hr_manager_user_ids, P_ATTEND
+    recs = await db.hr_attendance.find({"date": d, "$or": [{"auto_checkout": True}, {"auto_absent": True}, {"was_auto_absent": True}, {"check_out_geo.status": "out_of_range"}]}, {"employee_id": 1, "auto_checkout": 1, "auto_absent": 1, "was_auto_absent": 1, "check_out_geo": 1}).to_list(2000)
+    if not recs:
+        return 0
+    n_out = sum(1 for r in recs if r.get("auto_checkout")); n_abs = sum(1 for r in recs if r.get("auto_absent")); n_late = sum(1 for r in recs if r.get("was_auto_absent")); n_geo = sum(1 for r in recs if (r.get("check_out_geo") or {}).get("status") == "out_of_range")
+    names = {}
+    async for e in db.employees.find({"_id": {"$in": [ObjectId(r["employee_id"]) for r in recs if ObjectId.is_valid(r["employee_id"])]}}, {"full_name": 1}):
+        names[str(e["_id"])] = e.get("full_name", "")
+    parts = [f"{n_out} انصراف تلقائي" if n_out else "", f"{n_abs} غياب تلقائي" if n_abs else "", f"{n_late} حضر بعد غياب تلقائي" if n_late else "", f"{n_geo} انصراف خارج النطاق" if n_geo else ""]
+    who = "، ".join(dict.fromkeys(names.get(r["employee_id"], "") for r in recs if names.get(r["employee_id"])))
+    msg = " · ".join(p for p in parts if p) + (f" — {who[:160]}" if who else "")
+    await notify_users(db, await hr_manager_user_ids(db, P_ATTEND), f"🤖 ملخص الحضور التلقائي ليوم {d}", msg, "hr_auto_summary", {"date": d, "data": {"route": "/hr-attendance?tab=details&warnings=1"}})
+    return len(recs)
 
 
 async def run_weekly_alerts(db, force: bool = False) -> dict:

@@ -28,6 +28,7 @@ const itemLine = (key: string, it: any) => {
   if (key === 'hr_pending_photos') return { main: it.employee_name, side: it.pending_photo_at || '', sub: `الرقم الوظيفي ${it.employee_no || ''}` };
   if (key === 'hr_pending_profile') return { main: it.employee_name, side: it.created_at || '', sub: it.fields || '' };
   if (key === 'hr_pending_letters') return { main: it.employee_name, side: it.type_label || '', sub: `${it.org_unit_name || ''} · طُلب ${it.created_at || ''}` };
+  if (key === 'hr_auto_today') return { main: it.employee_name, side: it.kind, sub: `${it.org_unit_name || ''}${it.shift_name ? ` · ${it.shift_name}` : ''}${it.check_in ? ` · حضور ${it.check_in}` : ''}${it.check_out ? ` · انصراف ${it.check_out}` : ''}` };
   if (key === 'hr_low_commitment') return { main: it.name, side: `${it.rate}%`, sub: `${it.unit || ''} · غائب ${it.absent} · متأخر ${it.late}` };
   return { main: String(it.name || ''), side: '', sub: '' };
 };

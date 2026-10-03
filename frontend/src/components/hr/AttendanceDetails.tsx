@@ -12,8 +12,8 @@ const toRow = (r: any) => ({ 'التاريخ': r.date, 'الموظف': r.employe
 const SORTERS: Record<string, (r: any) => any> = { date: (r) => `${r.date} ${r.check_in || ''}`, name: (r) => r.employee_name, unit: (r) => r.org_unit_name || '', status: (r) => r.status_label, check_in: (r) => r.check_in || '', check_out: (r) => r.check_out || '', late: (r) => r.late_minutes || 0, geo: (r) => r.check_in_geo?.distance_m ?? -1 };
 
 /** 📋 التقرير التفصيلي: سجلات فردية/مشتركة لفترة مع التأخير والانصراف التلقائي والموقع — بحث، ترقيم، تحديد، تصدير */
-export const AttendanceDetails: React.FC<{ units: any[]; meta: any }> = ({ units, meta }) => {
-  const [f, setF] = useState<any>({ date_from: monthStart(), date_to: today(), org_unit_id: '', status: '', employee_ids: [] as string[], late_only: false, auto_only: false, out_of_range_only: false, search: '' });
+export const AttendanceDetails: React.FC<{ units: any[]; meta: any; presetWarnings?: boolean }> = ({ units, meta, presetWarnings }) => {
+  const [f, setF] = useState<any>({ date_from: presetWarnings ? today() : monthStart(), date_to: today(), org_unit_id: '', status: '', employee_ids: [] as string[], late_only: false, auto_only: false, out_of_range_only: false, warnings_only: !!presetWarnings, search: '' });
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(50);
   const [d, setD] = useState<any>(null);
@@ -22,7 +22,7 @@ export const AttendanceDetails: React.FC<{ units: any[]; meta: any }> = ({ units
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<Sort>(null);
   const set = (k: string, v: any) => { setF((p: any) => ({ ...p, [k]: v })); setPage(1); };
-  const params = () => ({ date_from: f.date_from, date_to: f.date_to, org_unit_id: f.org_unit_id || undefined, status: f.status || undefined, employee_ids: f.employee_ids.length ? f.employee_ids.join(',') : undefined, late_only: f.late_only || undefined, auto_only: f.auto_only || undefined, out_of_range_only: f.out_of_range_only || undefined, search: f.search || undefined });
+  const params = () => ({ date_from: f.date_from, date_to: f.date_to, org_unit_id: f.org_unit_id || undefined, status: f.status || undefined, employee_ids: f.employee_ids.length ? f.employee_ids.join(',') : undefined, late_only: f.late_only || undefined, auto_only: f.auto_only || undefined, out_of_range_only: f.out_of_range_only || undefined, warnings_only: f.warnings_only || undefined, search: f.search || undefined });
 
   useEffect(() => { hrAPI.employees({ per_page: 500 }).then((r) => setEmps(r.data.employees || [])).catch(() => {}); }, []);
   const load = useCallback(async () => { try { setD((await hrAPI.attDetails({ ...params(), page, per_page: perPage })).data); } catch (e) { alertErr(e); } }, [f, page, perPage]);
@@ -50,7 +50,7 @@ export const AttendanceDetails: React.FC<{ units: any[]; meta: any }> = ({ units
         <div style={{ gridColumn: 'span 2' }}><div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 3 }}>بحث بالاسم أو الرقم</div><input value={f.search} onChange={(e) => set('search', e.target.value)} placeholder="اسم الموظف أو رقمه الوظيفي…" style={inp} data-testid="att-det-search" /></div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 10, direction: 'rtl', flexWrap: 'wrap', alignItems: 'center' }}>
-        <Toggle k="late_only" label="⏰ المتأخرون فقط" color="#f97316" /><Toggle k="auto_only" label="🤖 الانصراف التلقائي فقط" color="#7c3aed" /><Toggle k="out_of_range_only" label="📍 خارج النطاق فقط" color="#dc2626" />
+        <Toggle k="late_only" label="⏰ المتأخرون فقط" color="#f97316" /><Toggle k="auto_only" label="🤖 الانصراف التلقائي فقط" color="#7c3aed" /><Toggle k="out_of_range_only" label="📍 خارج النطاق فقط" color="#dc2626" /><Toggle k="warnings_only" label="⚠️ التحذيرات فقط (تلقائي/خارج النطاق)" color="#b45309" />
         <span style={{ flex: 1 }} />
         <button onClick={() => dl({ ...params() }, `الحضور-التفصيلي-${f.date_from}_${f.date_to}`)} disabled={busy || !d?.total} style={btn('#1b5e20')} data-testid="att-det-export-all">📥 تصدير كل النتائج ({d?.total || 0})</button>
         {selected.length > 0 && <button onClick={() => dl({ record_ids: selected.map((r) => r.id).join(','), date_from: f.date_from, date_to: f.date_to }, `الحضور-المحدد-${today()}`)} disabled={busy} style={btn('#fff3e0', '#e65100')} data-testid="att-det-export-selected">📥 تصدير المحدد ({selected.length})</button>}

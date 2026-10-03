@@ -806,7 +806,7 @@ export const hrAPI = {
   updateLocation: (id: string, data: any) => api.put(`/hr/locations/${id}`, data),
   deleteLocation: (id: string) => api.delete(`/hr/locations/${id}`),
   geoExemptions: () => api.get('/hr/locations/exemptions'),
-  setGeoExemption: (employeeId: string, exempt: boolean, reason = '') => api.put(`/hr/locations/exemptions/${employeeId}`, { exempt, reason }),
+  setGeoExemption: (employeeId: string, exempt: boolean, reason = '', from_date?: string, to_date?: string) => api.put(`/hr/locations/exemptions/${employeeId}`, { exempt, reason, from_date: from_date || null, to_date: to_date || null }),
   locationsReport: (date?: string) => api.get('/hr/locations/report', { params: date ? { date } : {} }),
   // تأكيد التواجد العشوائي
   presenceSettings: () => api.get('/hr/presence-check/settings'),
@@ -826,6 +826,7 @@ export const hrAPI = {
   deleteCorr: (id: string) => api.delete(`/hr/correspondence/${id}`),
   myCorr: () => api.get('/hr/correspondence/my'),
   ackCorr: (id: string) => api.post(`/hr/correspondence/${id}/ack`),
+  replyCorr: (id: string, body: string, close: boolean) => api.post(`/hr/correspondence/${id}/reply`, { body, close }),
   // المهام
   tasksMeta: () => api.get('/hr/tasks/meta'),
   tasksAssignable: () => api.get('/hr/tasks/assignable'),

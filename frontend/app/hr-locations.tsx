@@ -22,7 +22,7 @@ export default function HrLocations() {
         <Tabs tabs={tabs} value={tab} onChange={setTab} testID="geo-tabs" />
         {tab === 'locations' && <GeoLocations canManage={canManage} />}
         {tab === 'report' && <GeoReport />}
-        {tab === 'exemptions' && <GeoExemptions isAdmin={isAdmin} />}
+        {tab === 'exemptions' && <GeoExemptions isAdmin={canManage} />}
       </ScrollView>
     </SafeAreaView>
   );

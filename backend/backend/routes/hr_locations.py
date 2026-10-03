@@ -5,8 +5,8 @@ from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 
-from .deps import get_db, get_current_user, log_activity
-from .hr_common import P_ATTEND, _now, _oid, _ser, _guard, find_my_employee, get_hr_settings, enrich_employee_refs
+from .deps import get_db, get_current_user, log_activity, has_permission
+from .hr_common import P_ATTEND, _now, _today, _oid, _ser, _guard, parse_date, find_my_employee, get_hr_settings, enrich_employee_refs
 
 router = APIRouter(prefix="/hr/locations", tags=["شؤون الموظفين - مواقع العمل"])
 
@@ -36,6 +36,28 @@ class GeoIn(BaseModel):
 class ExemptIn(BaseModel):
     exempt: bool
     reason: Optional[str] = ""
+    from_date: Optional[str] = None
+    to_date: Optional[str] = None
+
+
+def geo_exempt_active(emp: dict, today: Optional[str] = None) -> bool:
+    """هل الموظف مستثنى من شرط الموقع الآن؟ دائم (بلا تواريخ) أو مؤقت ضمن المدة"""
+    if not emp or not emp.get("geofence_exempt"):
+        return False
+    t = today or _today()
+    f, to = emp.get("geofence_exempt_from"), emp.get("geofence_exempt_to")
+    return (not f or f <= t) and (not to or to >= t)
+
+
+def geo_exempt_state(emp: dict, today: Optional[str] = None) -> str:
+    if not emp.get("geofence_exempt"):
+        return "none"
+    t = today or _today()
+    if emp.get("geofence_exempt_from") and emp["geofence_exempt_from"] > t:
+        return "upcoming"
+    if emp.get("geofence_exempt_to") and emp["geofence_exempt_to"] < t:
+        return "expired"
+    return "active"
 
 
 def haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
@@ -71,7 +93,7 @@ def rank_locations(locs: List[dict], lat: float, lng: float, accuracy: Optional[
 async def evaluate_geo(db, emp: dict, geo: Optional[GeoIn], settings: dict, enforce: bool = True) -> dict:
     """يرجع سجل الموقع للحفظ مع الحضور، ويرفع 403 إن كان الموظف خارج النطاق والتحقق إلزامياً (enforce=False للانصراف: يُقبل مع تحذير)"""
     required = bool(settings.get("geofence_required", True))
-    exempt = bool(emp.get("geofence_exempt"))
+    exempt = geo_exempt_active(emp)
     rec = {"latitude": None, "longitude": None, "accuracy": None, "location_id": None, "location_name": "", "distance_m": None, "in_range": None, "status": "no_location", "required": required}
     has = geo is not None and geo.latitude is not None and geo.longitude is not None
     if has:
@@ -111,7 +133,7 @@ async def list_active(lat: Optional[float] = Query(None), lng: Optional[float] =
     nearest = items[0] if items and lat is not None else None
     return {"locations": [{k: l.get(k) for k in ("id", "name", "latitude", "longitude", "radius_meters", "description", "distance_m", "in_range")} for l in items],
             "nearest_id": nearest["id"] if nearest else None, "in_any_range": any(l.get("in_range") for l in items),
-            "geofence_required": bool(settings.get("geofence_required", True)), "is_exempt": bool((emp or {}).get("geofence_exempt")),
+            "geofence_required": bool(settings.get("geofence_required", True)), "is_exempt": geo_exempt_active(emp or {}),
             "accuracy_tolerance_m": ACCURACY_TOLERANCE_M}
 
 
@@ -171,26 +193,38 @@ def _admin(u: dict):
 async def list_exemptions(current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_ATTEND)
     db = get_db()
-    rows = [{"employee_id": str(e["_id"]), "reason": e.get("geofence_exempt_reason", ""), "since": e.get("geofence_exempt_at", "")} async for e in db.employees.find({"geofence_exempt": True}, {"geofence_exempt_reason": 1, "geofence_exempt_at": 1})]
+    labels = {"active": "ساري", "expired": "منتهٍ", "upcoming": "قادم"}
+    rows = [{"employee_id": str(e["_id"]), "reason": e.get("geofence_exempt_reason", ""), "since": e.get("geofence_exempt_at", ""), "by_name": e.get("geofence_exempt_by_name", ""),
+             "from_date": e.get("geofence_exempt_from"), "to_date": e.get("geofence_exempt_to"), "permanent": not (e.get("geofence_exempt_from") or e.get("geofence_exempt_to")),
+             "state": geo_exempt_state(e), "state_label": labels.get(geo_exempt_state(e), "")}
+            async for e in db.employees.find({"geofence_exempt": True}, {"geofence_exempt": 1, "geofence_exempt_reason": 1, "geofence_exempt_at": 1, "geofence_exempt_by_name": 1, "geofence_exempt_from": 1, "geofence_exempt_to": 1})]
     await enrich_employee_refs(db, rows)
-    return {"items": rows, "can_manage": current_user.get("role") == "admin"}
+    return {"items": rows, "can_manage": has_permission(current_user, P_ATTEND)}
 
 
 @router.put("/exemptions/{employee_id}")
 async def set_exemption(employee_id: str, data: ExemptIn, current_user: dict = Depends(get_current_user)):
-    _admin(current_user)
+    _guard(current_user, P_ATTEND)
     db = get_db()
     oid = _oid(employee_id, "معرّف الموظف")
     emp = await db.employees.find_one({"_id": oid}, {"full_name": 1})
     if not emp:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    f, to = (data.from_date or "").strip()[:10] or None, (data.to_date or "").strip()[:10] or None
     if data.exempt:
-        upd = {"$set": {"geofence_exempt": True, "geofence_exempt_reason": (data.reason or "").strip(), "geofence_exempt_at": _now(), "geofence_exempt_by_name": current_user.get("full_name", "")}}
+        if f: parse_date(f, "تاريخ البداية")
+        if to: parse_date(to, "تاريخ النهاية")
+        if f and to and f > to:
+            raise HTTPException(status_code=400, detail="تاريخ النهاية قبل تاريخ البداية")
+        if to and to < _today():
+            raise HTTPException(status_code=400, detail="تاريخ نهاية الاستثناء في الماضي")
+        upd = {"$set": {"geofence_exempt": True, "geofence_exempt_reason": (data.reason or "").strip(), "geofence_exempt_at": _now(), "geofence_exempt_by_name": current_user.get("full_name", ""), "geofence_exempt_from": f, "geofence_exempt_to": to}}
     else:
-        upd = {"$unset": {"geofence_exempt": "", "geofence_exempt_reason": "", "geofence_exempt_at": "", "geofence_exempt_by_name": ""}}
+        upd = {"$unset": {"geofence_exempt": "", "geofence_exempt_reason": "", "geofence_exempt_at": "", "geofence_exempt_by_name": "", "geofence_exempt_from": "", "geofence_exempt_to": ""}}
     await db.employees.update_one({"_id": oid}, upd)
-    await log_activity(current_user, "hr_geofence_exempt" if data.exempt else "hr_geofence_unexempt", "employee", employee_id, emp.get("full_name", ""), {"reason": data.reason})
-    return {"message": f"{'تم استثناء' if data.exempt else 'أُلغي استثناء'} {emp.get('full_name', '')} من شرط الموقع"}
+    await log_activity(current_user, "hr_geofence_exempt" if data.exempt else "hr_geofence_unexempt", "employee", employee_id, emp.get("full_name", ""), {"reason": data.reason, "from": f, "to": to})
+    period = f" من {f} إلى {to}" if f and to else (f" حتى {to}" if to else (f" ابتداءً من {f}" if f else " (دائم)"))
+    return {"message": f"{'تم استثناء' if data.exempt else 'أُلغي استثناء'} {emp.get('full_name', '')} من شرط الموقع" + (period if data.exempt else "")}
 
 
 # ══════════════ تقرير مواقع التسجيل ══════════════

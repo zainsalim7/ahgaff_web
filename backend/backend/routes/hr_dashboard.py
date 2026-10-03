@@ -211,6 +211,7 @@ def _hr_alerts(t: dict, hc, p) -> list:
         low = [e for e in p["bottom_employees"] if e["rate"] is not None and e["rate"] < 75]
         if low:
             out.append({"key": "hr_low_commitment", "level": "danger", "count": len(low), "title": "موظفون التزامهم أقل من 75%", "hint": "خلال الفترة المختارة", "items": low, "route": "/hr-attendance"})
+    out.append({"key": "hr_auto_today", "level": "warning" if t.get("auto_today") else "ok", "count": len(t.get("auto_today") or []), "title": "🤖 تلقائي اليوم: غياب / انصراف تلقائي / خارج النطاق", "hint": "سجّلها النظام دون تدخل الموظف — راجعها في التقرير التفصيلي", "items": t.get("auto_today") or [], "route": "/hr-attendance?tab=details&warnings=1"})
     out.append({"key": "hr_pending_photos", "level": "warning" if t.get("pending_photos") else "ok", "count": len(t.get("pending_photos") or []), "title": "صور بطاقات بانتظار الاعتماد", "hint": "اعتماد فردي أو جماعي", "items": t.get("pending_photos") or [], "route": "/hr-photo-approvals"})
     out.append({"key": "hr_pending_profile", "level": "warning" if t.get("pending_profile") else "ok", "count": len(t.get("pending_profile") or []), "title": "طلبات تعديل بيانات معلّقة", "hint": "هاتف / عنوان / مؤهل…", "items": t.get("pending_profile") or [], "route": "/hr-profile-requests"})
     out.append({"key": "hr_pending_letters", "level": "warning" if t.get("pending_letters") else "ok", "count": len(t.get("pending_letters") or []), "title": "طلبات خطابات رسمية معلّقة", "hint": "تعريف / خبرة / استمرارية", "items": t.get("pending_letters") or [], "route": "/hr-letters"})
@@ -250,6 +251,16 @@ async def hr_dashboard_section(db, period: str, d_from: date, d_to: date, org_un
     today["pending_profile"] = [{"request_id": str(r["_id"]), "employee_id": r["employee_id"], "fields": "، ".join(EDITABLE_FIELDS.get(k, k) for k in (r.get("changes") or {})), "created_at": (r.get("created_at") or "")[:10]}
                                 for r in await db.hr_profile_requests.find(pq, {"employee_id": 1, "changes": 1, "created_at": 1}).sort("created_at", 1).limit(50).to_list(50)]
     await enrich_employee_refs(db, today["pending_profile"])
+    aq: dict = {"date": today["date"], "$or": [{"auto_checkout": True}, {"auto_absent": True}, {"was_auto_absent": True}, {"check_out_geo.status": "out_of_range"}]}
+    if root:
+        aq["employee_id"] = {"$in": [str(e["_id"]) for e in emps]}
+    kinds = []
+    for r in await db.hr_attendance.find(aq, {"employee_id": 1, "auto_checkout": 1, "auto_absent": 1, "was_auto_absent": 1, "check_out_geo": 1, "check_in": 1, "check_out": 1, "shift_name": 1}).limit(100).to_list(100):
+        k = "غياب تلقائي" if r.get("auto_absent") else ("حضر بعد غياب تلقائي" if r.get("was_auto_absent") else ("انصراف تلقائي" if r.get("auto_checkout") else "انصراف خارج النطاق"))
+        extra = " · انصراف خارج النطاق" if (r.get("check_out_geo") or {}).get("status") == "out_of_range" and k != "انصراف خارج النطاق" else ""
+        kinds.append({"employee_id": r["employee_id"], "kind": k + extra, "check_in": r.get("check_in"), "check_out": r.get("check_out"), "shift_name": r.get("shift_name") or ""})
+    await enrich_employee_refs(db, kinds)
+    today["auto_today"] = kinds
     try:
         headcount = await _headcount(db, emps, units, root)
     except Exception as e:

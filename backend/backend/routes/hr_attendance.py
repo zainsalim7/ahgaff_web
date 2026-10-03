@@ -11,7 +11,7 @@ from bson import ObjectId
 from .deps import get_db, get_current_user, log_activity, export_headers, export_filename
 from .hr_common import (P_ATTEND, P_WORK_SETTINGS, YEMEN_TZ, AR_DAYS, DEFAULT_SETTINGS, _now, _today, _oid, _ser, _can_view, _guard, parse_date, get_hr_settings,
                         is_work_day, holiday_name, find_my_employee, enrich_employee_refs, employee_shifts, pick_shift, shift_late, employee_user_ids, notify_users, hr_manager_user_ids)
-from .hr_locations import GeoIn, evaluate_geo
+from .hr_locations import GeoIn, evaluate_geo, geo_exempt_active
 
 router = APIRouter(prefix="/hr/attendance", tags=["شؤون الموظفين - الحضور الإداري"])
 
@@ -381,7 +381,7 @@ def _geo_cols(g: Optional[dict]) -> dict:
 
 
 async def _details_query(db, date_from: str, date_to: str, employee_ids: Optional[str], org_unit_id: Optional[str], status: Optional[str],
-                         late_only: bool, auto_only: bool, out_of_range_only: bool, search: Optional[str]):
+                         late_only: bool, auto_only: bool, out_of_range_only: bool, search: Optional[str], warnings_only: bool = False):
     q: dict = {"date": {"$gte": date_from, "$lte": date_to}}
     emp_q: dict = {}
     if org_unit_id:
@@ -406,7 +406,12 @@ async def _details_query(db, date_from: str, date_to: str, employee_ids: Optiona
         q["auto_checkout"] = True
     if out_of_range_only:
         q["$or"] = [{"check_in_geo.status": "out_of_range"}, {"check_out_geo.status": "out_of_range"}, {"check_in_geo.in_range": False, "check_in_geo.status": {"$nin": ["auto", "exempt", None]}}]
+    if warnings_only:
+        q["$or"] = WARN_OR
     return q
+
+
+WARN_OR = [{"auto_checkout": True}, {"auto_absent": True}, {"was_auto_absent": True}, {"check_in_geo.status": "out_of_range"}, {"check_out_geo.status": "out_of_range"}]
 
 
 async def _details_rows(db, q: dict, skip: int = 0, limit: int = 0) -> List[dict]:
@@ -431,7 +436,7 @@ async def _details_rows(db, q: dict, skip: int = 0, limit: int = 0) -> List[dict
 
 @router.get("/details")
 async def attendance_details(date_from: Optional[str] = None, date_to: Optional[str] = None, employee_ids: Optional[str] = None, org_unit_id: Optional[str] = None,
-                             status: Optional[str] = None, late_only: bool = False, auto_only: bool = False, out_of_range_only: bool = False, search: Optional[str] = None,
+                             status: Optional[str] = None, late_only: bool = False, auto_only: bool = False, out_of_range_only: bool = False, search: Optional[str] = None, warnings_only: bool = False,
                              page: int = 1, per_page: int = 50, current_user: dict = Depends(get_current_user)):
     """📋 سجلات الحضور التفصيلية لفترة — فردية أو مشتركة — مع التأخير والانصراف التلقائي والموقع/المسافة"""
     if not _can_view(current_user):
@@ -439,7 +444,7 @@ async def attendance_details(date_from: Optional[str] = None, date_to: Optional[
     db = get_db()
     t = _today()
     date_from, date_to = date_from or t[:8] + "01", date_to or t
-    q = await _details_query(db, date_from, date_to, employee_ids, org_unit_id, status, late_only, auto_only, out_of_range_only, search)
+    q = await _details_query(db, date_from, date_to, employee_ids, org_unit_id, status, late_only, auto_only, out_of_range_only, search, warnings_only)
     if q is None:
         return {"items": [], "total": 0, "page": 1, "per_page": per_page, "summary": {}, "from": date_from, "to": date_to}
     per_page = max(5, min(per_page, 500))
@@ -457,7 +462,7 @@ async def attendance_details(date_from: Optional[str] = None, date_to: Optional[
 
 @router.get("/details/export")
 async def attendance_details_export(date_from: Optional[str] = None, date_to: Optional[str] = None, employee_ids: Optional[str] = None, org_unit_id: Optional[str] = None,
-                                    status: Optional[str] = None, late_only: bool = False, auto_only: bool = False, out_of_range_only: bool = False, search: Optional[str] = None,
+                                    status: Optional[str] = None, late_only: bool = False, auto_only: bool = False, out_of_range_only: bool = False, search: Optional[str] = None, warnings_only: bool = False,
                                     record_ids: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """📥 تصدير Excel للتقرير التفصيلي — كل النتائج المطابقة أو سجلات مختارة (record_ids)"""
     if not _can_view(current_user):
@@ -468,7 +473,7 @@ async def attendance_details_export(date_from: Optional[str] = None, date_to: Op
     if record_ids:
         q: Optional[dict] = {"_id": {"$in": [ObjectId(i) for i in record_ids.split(",") if ObjectId.is_valid(i)]}}
     else:
-        q = await _details_query(db, date_from, date_to, employee_ids, org_unit_id, status, late_only, auto_only, out_of_range_only, search)
+        q = await _details_query(db, date_from, date_to, employee_ids, org_unit_id, status, late_only, auto_only, out_of_range_only, search, warnings_only)
     rows = await _details_rows(db, q) if q is not None else []
     from openpyxl import Workbook
     from openpyxl.styles import Font, PatternFill, Alignment
@@ -579,12 +584,10 @@ async def request_device_change(data: DeviceChangeIn, current_user: dict = Depen
     emp = await find_my_employee(db, current_user)
     if not emp:
         raise HTTPException(status_code=404, detail="لا يوجد ملف إداري مرتبط بحسابك")
-    did = (data.device_id or "").strip()
-    if not did:
-        raise HTTPException(status_code=400, detail="معرّف الجهاز مطلوب")
+    did = (data.device_id or "").strip() or None  # فارغ (من الويب) = «أي جهاز جديد — يُسجَّل عند أول تحضير بعد الموافقة»
     if not emp.get("device_id"):
         raise HTTPException(status_code=400, detail="لا يوجد جهاز مسجّل لحسابك — سيُسجَّل جهازك تلقائياً عند أول تحضير")
-    if emp.get("device_id") == did:
+    if did and emp.get("device_id") == did:
         raise HTTPException(status_code=400, detail="هذا هو جهازك المسجّل حالياً")
     eid = str(emp["_id"])
     if await db.hr_device_requests.find_one({"employee_id": eid, "status": "pending"}):
@@ -594,7 +597,7 @@ async def request_device_change(data: DeviceChangeIn, current_user: dict = Depen
     r = await db.hr_device_requests.insert_one(doc)
     await log_activity(current_user, "hr_device_change_request", "employee", eid, emp.get("full_name", ""), {"new_device_id": did})
     await notify_users(db, await hr_manager_user_ids(db, P_ATTEND), "📱 طلب تغيير جهاز التحضير",
-                       f"{emp.get('full_name', '')} ({emp.get('employee_no', '')}) يطلب تغيير جهازه إلى {doc['new_device_name'] or did[:12]}" + (f" — السبب: {doc['reason']}" if doc["reason"] else ""),
+                       f"{emp.get('full_name', '')} ({emp.get('employee_no', '')}) يطلب تغيير جهازه إلى {doc['new_device_name'] or (did[:12] if did else 'جهاز جديد (يُسجَّل عند أول تحضير)')}" + (f" — السبب: {doc['reason']}" if doc["reason"] else ""),
                        "hr_device", {"request_id": str(r.inserted_id), "route": "/hr-attendance?tab=devices", "data": {"route": "/hr-attendance?tab=devices", "kind": "device_change_request"}})
     return {"message": "أُرسل طلب تغيير الجهاز إلى شؤون الموظفين — سيُفعَّل جهازك الجديد فور الموافقة", "request": _req_view({**doc, "_id": r.inserted_id})}
 
@@ -628,14 +631,15 @@ async def approve_device_request(req_id: str, current_user: dict = Depends(get_c
     if not emp:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     now = _now()
-    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_id": r["new_device_id"], "device_name": r.get("new_device_name", ""), "device_registered_at": now, "device_last_seen_at": None, "device_rejections": 0, "device_last_rejection": None},
+    new_id = r.get("new_device_id") or None
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_id": new_id, "device_name": r.get("new_device_name", "") if new_id else "", "device_registered_at": now if new_id else None, "device_last_seen_at": None, "device_rejections": 0, "device_last_rejection": None},
                                                         "$push": {"device_history": {"device_id": emp.get("device_id"), "registered_at": emp.get("device_registered_at"), "reset_at": now, "by_name": current_user.get("full_name", ""), "via": "change_request"}}})
     await db.hr_device_requests.update_one({"_id": r["_id"]}, {"$set": {"status": "approved", "reviewed_at": now, "reviewed_by_name": current_user.get("full_name", "")}})
     await log_activity(current_user, "hr_device_change_approve", "employee", r["employee_id"], emp.get("full_name", ""), {"new_device_id": r["new_device_id"]})
     uid = (await employee_user_ids(db, [r["employee_id"]])).get(r["employee_id"])
     if uid:
-        await notify_users(db, [uid], "✅ تمت الموافقة على تغيير جهازك", "يمكنك الآن تسجيل الحضور من جهازك الجديد", "hr")
-    return {"message": f"تمت الموافقة — جهاز {emp.get('full_name', '')} الجديد مفعّل الآن"}
+        await notify_users(db, [uid], "✅ تمت الموافقة على تغيير جهازك", "يمكنك الآن تسجيل الحضور من جهازك الجديد" if new_id else "سيُسجَّل جهازك الجديد تلقائياً عند أول تسجيل حضور", "hr")
+    return {"message": f"تمت الموافقة — جهاز {emp.get('full_name', '')} الجديد مفعّل الآن" if new_id else f"تمت الموافقة — سيُسجَّل جهاز {emp.get('full_name', '')} الجديد عند أول تحضير"}
 
 
 @router.post("/devices/requests/{req_id}/reject")
@@ -687,7 +691,7 @@ async def my_attendance(month: Optional[str] = None, current_user: dict = Depend
             "holiday": holiday_name(day, settings), "on_leave": leaves.get(eid), "today": ({**_ser(today_rec), "status_label": ATT_STATUS.get(today_rec["status"], "")} if today_rec else None),
             "shifts": shifts, "today_shifts": shift_rows, "next_shift": next_shift, "multi_shift": len(settings["shifts"]) > 1,
             "can_check_in": can_in, "can_check_out": can_out, "settings": {k: settings[k] for k in ("work_start", "work_end", "late_grace_minutes", "allow_self_checkin")},
-            "geofence": {"required": bool(settings.get("geofence_required", True)), "exempt": bool(emp.get("geofence_exempt")), "locations_count": await db.hr_locations.count_documents({"is_active": True})},
+            "geofence": {"required": bool(settings.get("geofence_required", True)), "exempt": geo_exempt_active(emp), "locations_count": await db.hr_locations.count_documents({"is_active": True})},
             "correction": {k: v for k, v in _correction_state(settings, today_recs).items() if not k.startswith("_")},
             "month": m, "records": recs, "counts": counts, "late_minutes": sum(int(r.get("late_minutes") or 0) for r in recs)}
 

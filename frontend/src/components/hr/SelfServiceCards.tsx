@@ -96,3 +96,34 @@ export const MyDocumentsCard: React.FC = () => {
     </View>
   );
 };
+
+/** 📱 جهازي: الجهاز المسجّل للتحضير + طلب تغييره بنقرة (يُسجَّل الجهاز الجديد عند أول تحضير بعد الموافقة) */
+export const MyDeviceCard: React.FC = () => {
+  const [d, setD] = useState<any>(null);
+  const [busy, setBusy] = useState(false);
+  const load = useCallback(async () => { try { setD((await hrAPI.myDevice()).data); } catch { setD(null); } }, []);
+  useEffect(() => { load(); }, [load]);
+  if (!d || !d.device_binding_enabled) return null;
+  const request = async () => {
+    const reason = window.prompt('سبب تغيير الجهاز (اختياري) — مثال: اشتريت هاتفاً جديداً', '');
+    if (reason === null) return;
+    setBusy(true);
+    try { const r = await hrAPI.requestDeviceChange({ device_id: '', device_name: '', reason }); window.alert(r.data.message); load(); } catch (e) { alertErr(e); } finally { setBusy(false); }
+  };
+  const p = d.pending_request, l = d.last_request;
+  return (
+    <View style={[reportPage.card, { marginBottom: 12 }]} testID="hr-me-device">
+      <div style={{ direction: 'rtl' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: '#0f2440' }}>📱 جهاز التحضير</div>
+          {d.device_id ? <Badge color="#16a34a" testID="hr-me-device-status">مسجّل</Badge> : <Badge color="#94a3b8" testID="hr-me-device-status">لم يُسجَّل بعد — سيُسجَّل جهازك عند أول تحضير من التطبيق</Badge>}
+        </div>
+        {d.device_id && <div style={{ marginTop: 8, fontSize: 12.5, color: '#334155' }}>الجهاز: <b>{d.device_name || 'جهاز الجوال'}</b> <code style={{ fontSize: 11, direction: 'ltr', display: 'inline-block', backgroundColor: '#f1f5f9', padding: '2px 6px', borderRadius: 6 }} data-testid="hr-me-device-id">{d.device_id}</code>{d.device_registered_at ? <span style={{ color: '#94a3b8' }}> · منذ {fmtDT(d.device_registered_at)}</span> : null}</div>}
+        {p ? <div style={{ marginTop: 8, fontSize: 12.5, color: '#b45309', backgroundColor: '#fffbeb', borderRadius: 8, padding: '6px 10px' }} data-testid="hr-me-device-pending">⏳ لديك طلب تغيير جهاز {p.status_label} منذ {fmtDT(p.created_at)}{p.reason ? ` — ${p.reason}` : ''}</div>
+          : l ? <div style={{ marginTop: 8, fontSize: 11.5, color: l.status === 'approved' ? '#16a34a' : '#dc2626' }} data-testid="hr-me-device-last">آخر طلب: {l.status_label}{l.reviewed_at ? ` · ${fmtDT(l.reviewed_at)}` : ''}{l.reject_reason ? ` — ${l.reject_reason}` : ''}</div> : null}
+        <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 8 }}>يُقبل تسجيل الحضور من جهاز واحد فقط. عند تغيير هاتفك اطلب تغيير الجهاز؛ بعد موافقة شؤون الموظفين يُسجَّل هاتفك الجديد تلقائياً عند أول تحضير منه.</div>
+        {d.can_request && <button onClick={request} disabled={busy} style={btn('#fff7ed', '#c2410c', { marginTop: 8 })} data-testid="hr-me-device-request-btn">🔄 طلب تغيير الجهاز</button>}
+      </div>
+    </View>
+  );
+};

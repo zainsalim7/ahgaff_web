@@ -13,14 +13,17 @@ export const GeoExemptions: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   const [q, setQ] = useState('');
   const [found, setFound] = useState<any[]>([]);
   const [reason, setReason] = useState('');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
   const load = useCallback(async () => { try { setItems((await hrAPI.geoExemptions()).data.items || []); } catch (e) { alertErr(e); } }, []);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { if (q.trim().length < 2) { setFound([]); return; } const t = setTimeout(() => hrAPI.employees({ search: q, per_page: 8 }).then((r) => setFound(r.data.employees || [])).catch(() => {}), 300); return () => clearTimeout(t); }, [q]);
-  const setEx = async (id: string, exempt: boolean) => { try { const r = await hrAPI.setGeoExemption(id, exempt, reason); window.alert(r.data.message); setQ(''); setReason(''); load(); } catch (e) { alertErr(e); } };
+  const setEx = async (id: string, exempt: boolean) => { try { const r = await hrAPI.setGeoExemption(id, exempt, reason, fromDate, toDate); window.alert(r.data.message); setQ(''); setReason(''); setFromDate(''); setToDate(''); load(); } catch (e) { alertErr(e); } };
+  const STATE_COLOR: Record<string, string> = { active: '#16a34a', expired: '#94a3b8', upcoming: '#1565c0' };
   return (
     <View testID="geo-exemptions">
       <View style={[reportPage.card, { marginBottom: 12 }]}>
-        <div style={{ direction: 'rtl', fontSize: 12.5, color: '#475569', marginBottom: 10 }}>الموظف المستثنى يستطيع تسجيل الحضور من أي مكان (مهمات خارجية، عمل ميداني). الاستثناء دائم حتى يُلغى، ويُوسم سجله بـ «مستثنى».</div>
+        <div style={{ direction: 'rtl', fontSize: 12.5, color: '#475569', marginBottom: 10 }}>الموظف المستثنى يستطيع تسجيل الحضور من أي مكان (مهمات خارجية، عمل ميداني). الاستثناء دائم حتى يُلغى، أو <b>مؤقت</b> بتحديد «من تاريخ / إلى تاريخ» (ينتهي تلقائياً بانقضاء المدة)، ويُوسم سجله بـ «مستثنى».</div>
         {isAdmin ? (
           <div style={{ display: 'grid', gridTemplateColumns: '2fr 2fr', gap: 10, direction: 'rtl' }}>
             <div style={{ position: 'relative' }}>
@@ -31,18 +34,27 @@ export const GeoExemptions: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
                 </div>
               )}
             </div>
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="سبب الاستثناء (اختياري) — مثال: مهمة خارجية دائمة" style={inp} data-testid="geo-exempt-reason" />
+            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="سبب الاستثناء (اختياري) — مثال: مهمة خارجية" style={inp} data-testid="geo-exempt-reason" />
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', gridColumn: 'span 2', fontSize: 12.5, color: '#475569' }}>
+              <span>⏳ استثناء مؤقت (اختياري):</span>
+              <span>من</span><input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} style={{ ...inp, width: 160, direction: 'ltr' }} data-testid="geo-exempt-from" />
+              <span>إلى</span><input type="date" value={toDate} min={fromDate || undefined} onChange={(e) => setToDate(e.target.value)} style={{ ...inp, width: 160, direction: 'ltr' }} data-testid="geo-exempt-to" />
+              <span style={{ color: '#94a3b8' }}>{fromDate || toDate ? `سيُطبَّق ${fromDate ? `من ${fromDate}` : ''} ${toDate ? `حتى ${toDate}` : ''}` : 'فارغان = استثناء دائم'}</span>
+            </div>
           </div>
-        ) : <Badge color="#f97316">إضافة/إلغاء الاستثناءات متاحة لمدير النظام فقط</Badge>}
+        ) : <Badge color="#f97316">إضافة/إلغاء الاستثناءات متاحة لمدير النظام ومن يملك صلاحية إدارة الحضور</Badge>}
       </View>
       <View style={reportPage.card}>
         {items.length === 0 ? <ReportEmpty text="لا يوجد موظفون مستثنون من شرط الموقع" icon="shield-checkmark-outline" />
           : <table style={table} data-testid="geo-exempt-table">
-            <Th cols={['الموظف', 'الوحدة', 'السبب', 'منذ', '']} />
+            <Th cols={['الموظف', 'الوحدة', 'السبب', 'المدة', 'الحالة', 'منذ', '']} />
             <tbody>{items.map((i) => (
               <tr key={i.employee_id} style={{ borderBottom: '1px solid #eef2f7' }} data-testid={`geo-exempt-row-${i.employee_id}`}>
                 <td style={{ ...td, fontWeight: 700, color: '#0f2440' }}>{i.employee_name}<div style={{ fontSize: 10.5, color: '#94a3b8' }}>{i.employee_no}{i.job_title ? ` · ${i.job_title}` : ''}</div></td>
-                <td style={td}>{i.org_unit_name || '—'}</td><td style={td}>{i.reason || '—'}</td><td style={td}>{(i.since || '').slice(0, 10) || '—'}</td>
+                <td style={td}>{i.org_unit_name || '—'}</td><td style={td}>{i.reason || '—'}</td>
+                <td style={{ ...td, fontSize: 12 }} data-testid={`geo-exempt-period-${i.employee_id}`}>{i.permanent ? <Badge color="#7c3aed">دائم</Badge> : <span style={{ direction: 'ltr', display: 'inline-block' }}>{i.from_date || '…'} → {i.to_date || '…'}</span>}</td>
+                <td style={td}><Badge color={STATE_COLOR[i.state] || '#64748b'} testID={`geo-exempt-state-${i.employee_id}`}>{i.state_label}</Badge></td>
+                <td style={td}>{(i.since || '').slice(0, 10) || '—'}{i.by_name ? <div style={{ fontSize: 10.5, color: '#94a3b8' }}>{i.by_name}</div> : null}</td>
                 <td style={td}>{isAdmin && <button onClick={() => window.confirm(`إلغاء استثناء ${i.employee_name}؟`) && setEx(i.employee_id, false)} style={btn('#ffebee', '#c62828', { padding: '4px 10px', fontSize: 12 })} data-testid={`geo-unexempt-${i.employee_id}`}>إلغاء الاستثناء</button>}</td>
               </tr>))}</tbody>
           </table>}
