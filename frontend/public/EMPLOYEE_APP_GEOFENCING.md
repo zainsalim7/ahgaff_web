@@ -110,3 +110,6 @@
 - **`GET /hr/attendance/devices/my`** → `{device_binding_enabled, device_id, device_name, device_registered_at, pending_request|null, last_request|null, can_request}`. قارن `device_id` بمعرّف الجهاز الحالي: إن اختلفا و`can_request` → اعرض زر «طلب تغيير الجهاز».
 - **`POST /hr/attendance/devices/my/change-request`** body: `{device_id (الجديد — إلزامي), device_name, reason}` → 200 `{message, request{id,status:"pending",...}}`. أخطاء 400: لا جهاز مسجّل أصلاً / نفس الجهاز الحالي / يوجد طلب معلّق.
 - بعد موافقة HR يصل الموظف إشعار «✅ تمت الموافقة على تغيير جهازك» ويصبح التحضير من الجهاز الجديد مقبولاً فوراً؛ عند الرفض إشعار «❌ رُفض طلب تغيير جهازك» مع السبب. `pending_request.status_label` للعرض: بانتظار الموافقة / مقبول / مرفوض.
+
+- **تحديث 2026-10-04 (ب)**: `device_id` في `POST /devices/my/change-request` صار **اختيارياً** — إن أُرسل فارغاً فالطلب يعني «أي جهاز جديد»: بعد الموافقة يُمسح الجهاز المسجّل ويُسجَّل أول جهاز يحضّر منه الموظف تلقائياً. من التطبيق يُفضَّل إرسال معرّف الجهاز الجديد (تفعيل فوري عند الموافقة).
+- **الاستثناء الجغرافي صار مؤقتاً أيضاً**: `GET /hr/locations/active.is_exempt` و`GET /hr/attendance/my.geofence.exempt` يرجعان `true` فقط خلال مدة الاستثناء (أو دائماً للاستثناء الدائم) — لا تغيير مطلوب في التطبيق.

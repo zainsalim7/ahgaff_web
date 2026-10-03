@@ -145,14 +145,14 @@ async def find_my_employee(db, current_user: dict) -> Optional[dict]:
         if (u or {}).get("employee_record_id") and ObjectId.is_valid(u["employee_record_id"]):
             e = await db.employees.find_one({"_id": ObjectId(u["employee_record_id"])})
         if e:
-            return e
+            return dict(e)  # وثيقة داخلية — المستهلكون يسلسلونها بـ _ser قبل الإرجاع
         tid = (u or {}).get("teacher_record_id")
         if not tid:
             t = await db.teachers.find_one({"$or": [{"user_id": uid}, {"teacher_id": (u or {}).get("username", "")}]}, {"_id": 1})
             tid = str(t["_id"]) if t else None
         if tid:
             e = await db.employees.find_one({"teacher_id": tid})
-    return e
+    return dict(e) if e else None
 
 
 async def employee_user_ids(db, employee_ids: Iterable[str]) -> dict:
