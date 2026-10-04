@@ -18,7 +18,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
 import * as DocumentPicker from 'expo-document-picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import api, { coursesAPI, studentsAPI, enrollmentAPI, lecturesAPI, attendanceAPI, API_URL } from '../src/services/api';
+import api, { coursesAPI, studentsAPI, enrollmentAPI, lecturesAPI, attendanceAPI, courseGroupsAPI, API_URL } from '../src/services/api';
+import { CourseGroupsModal, groupColor } from '../src/components/CourseGroupsModal';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { AddStudentForm, emptyStudentForm, type StudentFormValues } from '../src/components/AddStudentForm';
@@ -36,6 +37,7 @@ interface EnrolledStudent {
   enrolled_at: string;
   cross_department?: boolean;
   department_name?: string;
+  group?: string;
 }
 
 interface Student {
@@ -156,6 +158,9 @@ export default function CourseStudentsScreen() {
   const [editingRecord, setEditingRecord] = useState<{recordId: string; studentName: string; currentStatus: string} | null>(null);
   const [editReason, setEditReason] = useState('');
   const [editLoading, setEditLoading] = useState(false);
+  const [showGroupsModal, setShowGroupsModal] = useState(false);
+  const [groupDefs, setGroupDefs] = useState<Array<{ key: string; name: string }>>([]);
+  const [groupFilter, setGroupFilter] = useState<string>('');
 
   const fetchData = useCallback(async () => {
     if (!courseId) return;
@@ -171,6 +176,7 @@ export default function CourseStudentsScreen() {
       // الباك إند يرجع استجابة مقسمة صفحات { lectures: [...] } — ندعم الشكلين
       const lecturesArr = lecturesRes.data?.lectures || (Array.isArray(lecturesRes.data) ? lecturesRes.data : []);
       setCourse(courseRes.data);
+      setGroupDefs((courseRes.data?.groups || []).map((g: any) => ({ key: g.key, name: g.name || `مجموعة ${g.key}` })));
       setEnrolledStudents(enrolledRes.data);
       setAllStudents(studentsRes.data);
       setLectures(lecturesArr);
@@ -579,6 +585,7 @@ export default function CourseStudentsScreen() {
   };
 
   const filteredEnrolled = enrolledStudents.filter(s => {
+    if (groupFilter === '__none__' ? !!s.group : (groupFilter && s.group !== groupFilter)) return false;
     if (!enrolledSearchText) return true;
     return s.full_name.includes(enrolledSearchText) || s.student_number?.includes(enrolledSearchText);
   });
@@ -589,6 +596,20 @@ export default function CourseStudentsScreen() {
     );
   };
   
+  const assignSelectedToGroup = async (group: string | null) => {
+    if (selectedEnrolled.length === 0) return;
+    setActionLoading(true);
+    try {
+      const r = await courseGroupsAPI.assign(courseId!, selectedEnrolled, group);
+      Alert.alert('تم', r.data?.message || 'تم التحديث');
+      setSelectedEnrolled([]);
+      setEnrollSelectionMode(false);
+      fetchData();
+    } catch (e: any) {
+      Alert.alert('خطأ', e?.response?.data?.detail || 'فشل التعيين');
+    } finally { setActionLoading(false); }
+  };
+
   const handleBulkUnenroll = async () => {
     if (selectedEnrolled.length === 0) return;
     if (!confirm(`هل تريد إلغاء تسجيل ${selectedEnrolled.length} طالب من المقرر؟`)) return;
@@ -674,6 +695,11 @@ export default function CourseStudentsScreen() {
         <View style={styles.studentMainInfo}>
           <Text style={styles.studentName}>{item.full_name}</Text>
           <Text style={styles.studentDetail}>{item.student_number} | م{item.level}</Text>
+          {item.group ? (
+            <View style={{ backgroundColor: groupColor(item.group, groupDefs), borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginTop: 3 }} testID={`group-badge-${item.student_id}`}>
+              <Text style={{ fontSize: 10, color: '#fff', fontWeight: '800' }}>👥 {groupDefs.find(g => g.key === item.group)?.name || `مجموعة ${item.group}`}</Text>
+            </View>
+          ) : null}
           {item.cross_department && (
             <View style={{ backgroundColor: '#fff3e0', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2, alignSelf: 'flex-start', marginTop: 3 }} testID={`cross-dept-badge-${item.student_id}`}>
               <Text style={{ fontSize: 10, color: '#e65100', fontWeight: '800' }}>🔓 من قسم آخر{item.department_name ? ` — ${item.department_name}` : ''}</Text>
@@ -983,6 +1009,16 @@ export default function CourseStudentsScreen() {
             </Pressable>
 
             <TouchableOpacity
+              data-testid="course-groups-btn"
+              testID="course-groups-btn"
+              style={[styles.actionBtn, { backgroundColor: '#00838f' }]}
+              onPress={() => setShowGroupsModal(true)}
+            >
+              <Ionicons name="people-circle" size={20} color="#fff" />
+              <Text style={styles.actionBtnText}>المجموعات{groupDefs.length ? ` (${groupDefs.length})` : ''}</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
               data-testid="send-final-results-nav-btn"
               testID="send-final-results-nav-btn"
               style={[styles.actionBtn, { backgroundColor: '#7b1fa2' }]}
@@ -1024,6 +1060,28 @@ export default function CourseStudentsScreen() {
             )}
           </View>
           
+          {groupDefs.length > 0 && (
+            <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 8 }} testID="group-filter-row">
+              <TouchableOpacity onPress={() => setGroupFilter('')} style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, backgroundColor: groupFilter === '' ? '#1a2540' : '#eceff1' }} testID="group-filter-all">
+                <Text style={{ fontSize: 11, fontWeight: '700', color: groupFilter === '' ? '#fff' : '#334155' }}>الكل ({enrolledStudents.length})</Text>
+              </TouchableOpacity>
+              {groupDefs.map(g => {
+                const n = enrolledStudents.filter(s => s.group === g.key).length;
+                const on = groupFilter === g.key;
+                return (
+                  <TouchableOpacity key={g.key} onPress={() => setGroupFilter(on ? '' : g.key)} style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, backgroundColor: on ? groupColor(g.key, groupDefs) : '#eceff1' }} testID={`group-filter-${g.key}`}>
+                    <Text style={{ fontSize: 11, fontWeight: '700', color: on ? '#fff' : '#334155' }}>{g.name} ({n})</Text>
+                  </TouchableOpacity>
+                );
+              })}
+              {enrolledStudents.some(s => !s.group) && (
+                <TouchableOpacity onPress={() => setGroupFilter(groupFilter === '__none__' ? '' : '__none__')} style={{ paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12, backgroundColor: groupFilter === '__none__' ? '#ef6c00' : '#fff3e0' }} testID="group-filter-none">
+                  <Text style={{ fontSize: 11, fontWeight: '700', color: groupFilter === '__none__' ? '#fff' : '#ef6c00' }}>بلا مجموعة ({enrolledStudents.filter(s => !s.group).length})</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+
           {enrollSelectionMode && (
             <View style={{ marginTop: 8, backgroundColor: '#fff3e0', padding: 10, borderRadius: 8 }}>
               <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -1070,6 +1128,29 @@ export default function CourseStudentsScreen() {
                   <Ionicons name="swap-horizontal" size={16} color="#fff" />
                   <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>نقل إلى مقرر</Text>
                 </TouchableOpacity>
+                {groupDefs.map(g => (
+                  <TouchableOpacity
+                    key={g.key}
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: groupColor(g.key, groupDefs), paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, gap: 4, opacity: selectedEnrolled.length === 0 ? 0.5 : 1 }}
+                    onPress={() => assignSelectedToGroup(g.key)}
+                    disabled={selectedEnrolled.length === 0}
+                    data-testid={`bulk-assign-group-${g.key}`}
+                  >
+                    <Ionicons name="people" size={16} color="#fff" />
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>→ {g.name}</Text>
+                  </TouchableOpacity>
+                ))}
+                {groupDefs.length > 0 && (
+                  <TouchableOpacity
+                    style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#78909c', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, gap: 4, opacity: selectedEnrolled.length === 0 ? 0.5 : 1 }}
+                    onPress={() => assignSelectedToGroup(null)}
+                    disabled={selectedEnrolled.length === 0}
+                    data-testid="bulk-assign-group-none"
+                  >
+                    <Ionicons name="people-outline" size={16} color="#fff" />
+                    <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>إزالة من المجموعة</Text>
+                  </TouchableOpacity>
+                )}
                 <TouchableOpacity
                   style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f44336', paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, gap: 4, opacity: selectedEnrolled.length === 0 ? 0.5 : 1 }}
                   onPress={handleBulkUnenroll}
@@ -1128,6 +1209,10 @@ export default function CourseStudentsScreen() {
           />
         )}
         </ScrollView>
+
+        {showGroupsModal && (
+          <CourseGroupsModal visible={showGroupsModal} courseId={courseId!} onClose={() => setShowGroupsModal(false)} onChanged={fetchData} />
+        )}
 
         {/* Add Students Modal — تبويبان: موجود / جديد */}
         {canManageStudents && showAddModal && (

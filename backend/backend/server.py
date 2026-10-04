@@ -220,6 +220,7 @@ from routes.hr_leaves import router as hr_leaves_router
 from routes.hr_attendance import router as hr_attendance_router, auto_checkout_loop
 from routes.hr_correspondence import router as hr_corr_router
 from routes.hr_tasks import router as hr_tasks_router
+from routes.course_groups import router as course_groups_router
 from routes.hr_appraisals import router as hr_appraisals_router, public_router as hr_verify_router
 from routes.hr_cards import router as hr_cards_router, public_router as hr_cards_public_router
 from routes.hr_letters import router as hr_letters_router, public_router as hr_letters_public_router
@@ -6322,10 +6323,11 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
         "department_name": department_name,
         "faculty_id": course_faculty_id,
         "faculty_name": faculty_name,
-        "teacher_id": course["teacher_id"],
+        "teacher_id": course.get("teacher_id"),
         "teacher_name": teacher_name,
         "level": course["level"],
         "section": course.get("section", ""),
+        "groups": course.get("groups") or [],
         "credit_hours": course.get("credit_hours", 3),
         "students_count": students_count,
         "semester": course.get("semester", "الفصل الأول"),
@@ -6809,6 +6811,7 @@ async def get_course_enrollments(course_id: str, current_user: dict = Depends(ge
                 "enrolled_at": enrollment["enrolled_at"],
                 "cross_department": bool(enrollment.get("cross_department")),
                 "manual": bool(enrollment.get("manual")),
+                "group": enrollment.get("group") or "",
                 "department_name": dep_names.get(student.get("department_id", ""), "") if enrollment.get("cross_department") else "",
             })
     
@@ -8153,6 +8156,8 @@ async def get_today_lectures(
             "day_shift_cancelled": bool(lecture.get("day_shift_cancelled")),
             "credited_minutes": lecture.get("credited_minutes") or 0,
             "room": lecture.get("room", ""),
+            "group": lecture.get("group") or "",
+            "group_name": lecture.get("group_name") or "",
             "status": lecture.get("status", LectureStatus.SCHEDULED),
             "notes": lecture.get("notes", ""),
             "attendance_count": attendance_count,
@@ -8268,6 +8273,8 @@ async def get_all_schedule_lectures(
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
             "room": lecture.get("room", ""),
+            "group": lecture.get("group") or "",
+            "group_name": lecture.get("group_name") or "",
             "status": lecture.get("status", LectureStatus.SCHEDULED),
             "day_shifted": bool(lecture.get("day_shift_id")),
             "day_shift_offset": lecture.get("day_shift_offset") or 0,
@@ -8397,6 +8404,8 @@ async def get_month_lectures(
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
             "room": lecture.get("room", ""),
+            "group": lecture.get("group") or "",
+            "group_name": lecture.get("group_name") or "",
             "status": lecture.get("status", LectureStatus.SCHEDULED),
         }
 
@@ -8538,6 +8547,8 @@ async def get_course_lectures(
             "start_time": lecture["start_time"],
             "end_time": lecture["end_time"],
             "room": lecture.get("room", ""),
+            "group": lecture.get("group") or "",
+            "group_name": lecture.get("group_name") or "",
             "status": lecture.get("status", LectureStatus.SCHEDULED),
             "notes": lecture.get("notes", ""),
             "created_at": lecture.get("created_at"),
@@ -8562,25 +8573,29 @@ async def get_course_lectures(
         "stats": stats
     }
 
-async def notify_lecture_created(course: dict, date: str, start_time: str, end_time: str):
-    """إرسال تنبيه تلقائي عند إنشاء محاضرة جديدة - للمعلم وطلاب المقرر"""
+async def notify_lecture_created(course: dict, date: str, start_time: str, end_time: str, group: Optional[str] = None, group_teacher_id: Optional[str] = None):
+    """إرسال تنبيه تلقائي عند إنشاء محاضرة جديدة - للمعلم وطلاب المقرر (أو طلاب المجموعة فقط)"""
     try:
         course_name = course.get("name", "")
         course_id = str(course["_id"])
         title = f"محاضرة جديدة - {course_name}"
-        message = f"تم إنشاء محاضرة جديدة لمقرر {course_name} بتاريخ {date} من {start_time} إلى {end_time}. يرجى مراجعة التطبيق للاطلاع على التحديثات."
+        grp_txt = f" (مجموعة {group})" if group else ""
+        message = f"تم إنشاء محاضرة جديدة لمقرر {course_name}{grp_txt} بتاريخ {date} من {start_time} إلى {end_time}. يرجى مراجعة التطبيق للاطلاع على التحديثات."
         
         target_user_ids = []
         
-        # 1. تنبيه المعلم
-        teacher_id = course.get("teacher_id")
+        # 1. تنبيه المعلم (مدرّس المجموعة إن وُجد وإلا مدرّس المقرر)
+        teacher_id = group_teacher_id or course.get("teacher_id")
         if teacher_id:
             teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
             if teacher and teacher.get("user_id"):
                 target_user_ids.append(teacher["user_id"])
         
-        # 2. تنبيه طلاب المقرر
-        enrollments = await db.enrollments.find({"course_id": course_id}).to_list(5000)
+        # 2. تنبيه طلاب المقرر / المجموعة
+        enr_q = {"course_id": course_id}
+        if group:
+            enr_q["group"] = group
+        enrollments = await db.enrollments.find(enr_q).to_list(5000)
         student_ids = [e["student_id"] for e in enrollments]
         if student_ids:
             students = await db.students.find(
@@ -8619,9 +8634,11 @@ async def notify_lecture_created(course: dict, date: str, start_time: str, end_t
         logging.error(f"خطأ في إرسال تنبيه المحاضرة: {str(e)}")
 
 
-async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None, allow_same_course: bool = False):
+async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None, allow_same_course: bool = False, group: str = None, teacher_override: str = None):
     """فحص تعارض محاضرات الأستاذ - هل لديه محاضرة أخرى في نفس الوقت؟
     allow_same_course: إذا True يرجع تحذير بدل خطأ للمقررات التي لها نفس الاسم الأساسي (شعب مختلفة)
+    group: 👥 مجموعة المحاضرة — محاضرات المجموعات المختلفة لنفس المقرر لا تتعارض
+    teacher_override: مدرّس المجموعة (يُستخدم بدل مدرّس المقرر)
     """
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
@@ -8641,6 +8658,8 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
     if exclude_lecture_id:
         same_course_query["_id"] = {"$ne": ObjectId(exclude_lecture_id)}
     for lec in await db.lectures.find(same_course_query).to_list(1000):
+        if group and lec.get("group") and lec.get("group") != group:
+            continue  # مجموعتان مختلفتان — يُسمح بالتوازي
         ex_start = lec.get("start_time", "")
         ex_end = lec.get("end_time", "")
         if ex_start and ex_end and start_time and end_time:
@@ -8650,18 +8669,17 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
                     "message": f"يوجد تعارض: المقرر \"{course_name}\" لديه محاضرة أخرى بنفس التوقيت يوم {date} من {ex_start} إلى {ex_end} — لا يمكن إنشاء محاضرتين متداخلتين لنفس المقرر"
                 }
 
-    if not course.get("teacher_id"):
+    teacher_id = teacher_override or course.get("teacher_id")
+    if not teacher_id:
         return None  # لا يوجد أستاذ مرتبط — اكتفينا بفحص المقرر نفسه
-
-    teacher_id = course["teacher_id"]
     
     # جلب جميع مقررات هذا الأستاذ
     teacher_courses = await db.courses.find({"teacher_id": teacher_id}).to_list(1000)
     course_ids = [str(c["_id"]) for c in teacher_courses]
     
-    # البحث عن محاضرات في نفس التاريخ (غير ملغاة)
+    # البحث عن محاضرات في نفس التاريخ (غير ملغاة) — مقرراته أو محاضرات مجموعات مُسندة إليه
     query = {
-        "course_id": {"$in": course_ids},
+        "$or": [{"course_id": {"$in": course_ids}}, {"teacher_id": teacher_id}],
         "date": date,
         "status": {"$ne": LectureStatus.CANCELLED},
     }
@@ -8671,13 +8689,21 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
     existing_lectures = await db.lectures.find(query).to_list(1000)
     
     for lec in existing_lectures:
+        # المدرّس الفعلي للمحاضرة: مدرّس المجموعة إن وُجد وإلا مدرّس المقرر
+        eff_teacher = lec.get("teacher_id") or teacher_id if lec.get("course_id") in course_ids else lec.get("teacher_id")
+        if eff_teacher != teacher_id:
+            continue
         ex_start = lec.get("start_time", "")
         ex_end = lec.get("end_time", "")
         if ex_start and ex_end and start_time and end_time:
             # فحص التداخل الزمني
             if start_time < ex_end and end_time > ex_start:
                 conflict_course = next((c for c in teacher_courses if str(c["_id"]) == lec["course_id"]), None)
-                conflict_name = conflict_course.get("name", "") if conflict_course else ""
+                if conflict_course is None:
+                    conflict_course = await db.courses.find_one({"_id": ObjectId(lec["course_id"])}) if ObjectId.is_valid(lec.get("course_id", "")) else None
+                conflict_name = (conflict_course or {}).get("name", "")
+                if lec.get("group"):
+                    conflict_name += f" — مجموعة {lec['group']}"
                 conflict_base = re.sub(r'\s*\([أ-ي]\)\s*$', '', conflict_name).strip()
                 
                 # إذا كان التعارض من نفس المقرر (شعب مختلفة)
@@ -8689,10 +8715,11 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
     return None
 
 
-async def check_room_lecture_conflict(course_id: str, room: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None):
+async def check_room_lecture_conflict(course_id: str, room: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None, group: str = None):
     """🏛️ فحص تعارض القاعة - هل القاعة محجوزة لمحاضرة أخرى في نفس الوقت؟
     - معلم مختلف أو مقرر مختلف → خطأ صارم (لا يمكن تجاوزه)
     - نفس المعلم وشعبة أخرى من نفس المقرر الأساسي → تحذير قابل للتجاوز (دمج شعبتين في قاعة واحدة)
+    - 👥 مجموعتان مختلفتان من نفس المقرر في نفس القاعة → خطأ
     """
     room = (room or "").strip()
     if not room:
@@ -8710,8 +8737,12 @@ async def check_room_lecture_conflict(course_id: str, room: str, date: str, star
     if exclude_lecture_id:
         query["_id"] = {"$ne": ObjectId(exclude_lecture_id)}
     for lec in await db.lectures.find(query).to_list(1000):
-        # نفس المقرر: يُغطى بفحص تعارض المقرر نفسه (رسالة أوضح هناك)
+        # نفس المقرر: يُغطى بفحص تعارض المقرر نفسه (رسالة أوضح هناك) — إلا إذا كانت مجموعة أخرى
         if lec.get("course_id") == course_id:
+            if group and lec.get("group") and lec.get("group") != group:
+                ex_s, ex_e = lec.get("start_time", ""), lec.get("end_time", "")
+                if ex_s and ex_e and start_time < ex_e and end_time > ex_s:
+                    return {"type": "error", "message": f"القاعة {room} محجوزة لمجموعة {lec['group']} من نفس المقرر يوم {date} من {ex_s} إلى {ex_e}"}
             continue
         ex_start = lec.get("start_time", "")
         ex_end = lec.get("end_time", "")
@@ -8829,6 +8860,15 @@ async def create_lecture(
     course = await db.courses.find_one({"_id": ObjectId(data.course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    # 👥 مجموعة دراسية داخل المقرر
+    group_key = (data.group or "").strip()
+    group_def = None
+    if group_key:
+        group_def = next((g for g in (course.get("groups") or []) if g.get("key") == group_key), None)
+        if not group_def:
+            raise HTTPException(status_code=400, detail="المجموعة غير معرّفة في هذا المقرر")
+    group_teacher_id = (group_def or {}).get("teacher_id") or None
     
     # منع إنشاء محاضرة بتاريخ ماضي
     from datetime import datetime
@@ -8845,7 +8885,7 @@ async def create_lecture(
         raise HTTPException(status_code=400, detail="صيغة التاريخ غير صحيحة")
     
     # فحص تعارض المحاضرات مع نفس الأستاذ
-    conflict = await check_teacher_lecture_conflict(data.course_id, data.date, data.start_time, data.end_time, allow_same_course=True)
+    conflict = await check_teacher_lecture_conflict(data.course_id, data.date, data.start_time, data.end_time, allow_same_course=True, group=group_key, teacher_override=group_teacher_id)
     if conflict:
         if conflict["type"] == "error":
             raise HTTPException(status_code=400, detail=conflict["message"])
@@ -8853,7 +8893,7 @@ async def create_lecture(
             raise HTTPException(status_code=409, detail=conflict["message"])
     
     # 🏛️ فحص تعارض القاعة
-    room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", data.date, data.start_time, data.end_time)
+    room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", data.date, data.start_time, data.end_time, group=group_key)
     if room_conflict:
         if room_conflict["type"] == "error":
             raise HTTPException(status_code=400, detail=room_conflict["message"])
@@ -8876,6 +8916,11 @@ async def create_lecture(
         "created_at": get_yemen_time(),
         "created_by": current_user["id"]
     }
+    if group_key:
+        lecture["group"] = group_key
+        lecture["group_name"] = (group_def or {}).get("name") or f"مجموعة {group_key}"
+        if group_teacher_id:
+            lecture["teacher_id"] = group_teacher_id
 
     # ربط المحاضرة الجديدة بالفصل الدراسي المُفعَّل
     active_sem_for_lec = await get_active_semester_with_dates(db)
@@ -8888,8 +8933,8 @@ async def create_lecture(
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail="يوجد محاضرة مطابقة لنفس المقرر في نفس التاريخ ووقت البداية — تم رفض الإنشاء (حماية قاعدة البيانات)")
     
-    # إرسال تنبيه تلقائي للمعلم وطلاب المقرر
-    await notify_lecture_created(course, data.date, data.start_time, data.end_time)
+    # إرسال تنبيه تلقائي للمعلم وطلاب المقرر (أو طلاب المجموعة فقط)
+    await notify_lecture_created(course, data.date, data.start_time, data.end_time, group=group_key or None, group_teacher_id=group_teacher_id)
     
     return {
         "id": str(result.inserted_id),
@@ -10114,8 +10159,11 @@ async def get_lecture_details(
     
     course = await db.courses.find_one({"_id": ObjectId(lecture["course_id"])})
     
-    # الطلاب المسجلين في المقرر
-    enrollments = await db.enrollments.find({"course_id": lecture["course_id"]}).to_list(10000)
+    # الطلاب المسجلين في المقرر (أو في مجموعة المحاضرة فقط 👥)
+    enr_q = {"course_id": lecture["course_id"]}
+    if lecture.get("group"):
+        enr_q["group"] = lecture["group"]
+    enrollments = await db.enrollments.find(enr_q).to_list(10000)
     valid_student_ids = []
     for e in enrollments:
         try:
@@ -10149,6 +10197,8 @@ async def get_lecture_details(
             "lesson_title": lecture.get("lesson_title", ""),
             "plan_topic_id": lecture.get("plan_topic_id", ""),
             "attendance_started_at": lecture.get("attendance_started_at", ""),
+            "group": lecture.get("group") or "",
+            "group_name": lecture.get("group_name") or "",
         },
         "course": {
             "id": str(course["_id"]),
@@ -10619,8 +10669,10 @@ async def record_attendance_session(
         # البحث عن teacher_record_id من حساب المستخدم
         user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
         teacher_record_id = user_doc.get("teacher_record_id") if user_doc else None
-        # المقارنة بكلا المعرفين: user_id و teacher_record_id
-        if course["teacher_id"] != current_user["id"] and course["teacher_id"] != teacher_record_id:
+        # المقارنة بكلا المعرفين: user_id و teacher_record_id — أو مدرّس المجموعة المُسند للمحاضرة 👥
+        _lec_teacher = lecture.get("teacher_id")
+        if course["teacher_id"] != current_user["id"] and course["teacher_id"] != teacher_record_id \
+                and _lec_teacher not in (current_user["id"], teacher_record_id):
             raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")
     
     # === التحقق من قواعد التحضير ===
@@ -17998,6 +18050,7 @@ app.include_router(hr_leaves_router, prefix="/api")
 app.include_router(hr_attendance_router, prefix="/api")
 app.include_router(hr_corr_router, prefix="/api")
 app.include_router(hr_tasks_router, prefix="/api")
+app.include_router(course_groups_router, prefix="/api")
 app.include_router(hr_appraisals_router, prefix="/api")
 app.include_router(hr_verify_router, prefix="/api")
 app.include_router(hr_documents_router, prefix="/api")
@@ -18686,9 +18739,17 @@ async def _ensure_lectures_unique_index(db):
             logging.warning(f"[lectures dedupe] TOTAL cancelled duplicates: {cancelled_total}")
 
         # فهرس فريد جزئي: يشمل الحالات النشطة فقط (الملغاة مستثناة ليمكن إعادة الإنشاء بعد الإلغاء)
+        # 👥 يتضمن المجموعة حتى يمكن لمجموعتين مختلفتين من نفس المقرر أن تكونا في نفس الوقت
+        try:
+            _existing_idx = await db.lectures.index_information()
+            _old = _existing_idx.get("uniq_course_date_start")
+            if _old and [k for k, _ in _old.get("key", [])] != ["course_id", "date", "start_time", "group"]:
+                await db.lectures.drop_index("uniq_course_date_start")
+        except Exception as _e:
+            logging.warning(f"[lectures unique index] drop old failed: {_e}")
         try:
             await db.lectures.create_index(
-                [("course_id", 1), ("date", 1), ("start_time", 1)],
+                [("course_id", 1), ("date", 1), ("start_time", 1), ("group", 1)],
                 unique=True,
                 partialFilterExpression={"status": {"$in": active_statuses}},
                 name="uniq_course_date_start",
@@ -18697,7 +18758,7 @@ async def _ensure_lectures_unique_index(db):
             # نسخ MongoDB الأقدم من 6.0 لا تدعم $in في partialFilterExpression — نستخدم scheduled فقط
             logging.warning(f"[lectures unique index] $in filter failed ({idx_err}) — fallback to scheduled-only")
             await db.lectures.create_index(
-                [("course_id", 1), ("date", 1), ("start_time", 1)],
+                [("course_id", 1), ("date", 1), ("start_time", 1), ("group", 1)],
                 unique=True,
                 partialFilterExpression={"status": LectureStatus.SCHEDULED},
                 name="uniq_course_date_start",

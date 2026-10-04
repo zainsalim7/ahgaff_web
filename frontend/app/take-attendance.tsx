@@ -42,6 +42,8 @@ interface LectureDetails {
   end_time: string;
   room: string;
   status: string;
+  group?: string;
+  group_name?: string;
 }
 
 interface CourseDetails {
@@ -679,6 +681,12 @@ export default function TakeAttendanceScreen() {
                       <View style={styles.lectureMetaChip}>
                         <Ionicons name="location" size={11} color="#ef6c00" />
                         <Text style={styles.lectureMetaText}>{lecture.room}</Text>
+                      </View>
+                    ) : null}
+                    {lecture.group ? (
+                      <View style={[styles.lectureMetaChip, { backgroundColor: '#e0f2f1' }]} testID="attendance-group-badge">
+                        <Ionicons name="people" size={11} color="#00838f" />
+                        <Text style={[styles.lectureMetaText, { color: '#00695c', fontWeight: '800' }]}>{lecture.group_name || `مجموعة ${lecture.group}`}</Text>
                       </View>
                     ) : null}
                   </View>

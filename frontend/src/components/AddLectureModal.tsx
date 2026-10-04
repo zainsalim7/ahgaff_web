@@ -18,6 +18,8 @@ import { WEEKDAYS_AR } from '../utils/dateUtils';
 import { formatTimeArabic, suggestEndTime } from '../utils/timeFormat';
 import { TimeRangeSummary } from './TimeRangeSummary';
 import RoomPicker from './RoomPicker';
+import { courseGroupsAPI } from '../services/api';
+import { groupColor } from './CourseGroupsModal';
 
 interface Course {
   id: string;
@@ -43,6 +45,7 @@ export interface LectureFormData {
   end_time: string;
   room: string;
   notes?: string;
+  group?: string;
 }
 
 // أوقات المحاضرات: من 01:00 إلى 00:00 (منتصف الليل) بفواصل ربع ساعة
@@ -65,6 +68,7 @@ export default function AddLectureModal({
 }: AddLectureModalProps) {
   const [saving, setSaving] = useState(false);
   const [semesterDates, setSemesterDates] = useState<{ start: string; end: string } | null>(null);
+  const [groups, setGroups] = useState<Array<{ key: string; name: string; count: number; teacher_name?: string }>>([]);
   
   const [formData, setFormData] = useState<LectureFormData>({
     course_id: selectedCourseId || '',
@@ -74,6 +78,12 @@ export default function AddLectureModal({
     room: '',
     notes: '',
   });
+
+  // 👥 مجموعات المقرر المختار
+  useEffect(() => {
+    if (!visible || !formData.course_id) { setGroups([]); return; }
+    courseGroupsAPI.get(formData.course_id).then(r => setGroups(r.data?.groups || [])).catch(() => setGroups([]));
+  }, [visible, formData.course_id]);
 
   // تحميل تواريخ الفصل
   useEffect(() => {
@@ -110,6 +120,7 @@ export default function AddLectureModal({
         end_time: '09:30',
         room: '',
         notes: '',
+        group: '',
       });
     }
   }, [visible]);
@@ -384,6 +395,42 @@ export default function AddLectureModal({
             <TimeRangeSummary start={formData.start_time} end={formData.end_time} />
           </View>
 
+          {/* 👥 المجموعة الدراسية */}
+          {groups.length > 0 && (
+            <View style={styles.section} testID="lecture-group-section">
+              <Text style={styles.sectionTitle}>
+                <Ionicons name="people" size={18} color="#00838f" /> المجموعة
+              </Text>
+              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+                <TouchableOpacity
+                  onPress={() => setFormData({ ...formData, group: '' })}
+                  style={[styles.groupChip, !formData.group && { backgroundColor: '#1a2540', borderColor: '#1a2540' }]}
+                  testID="lecture-group-all"
+                >
+                  <Text style={[styles.groupChipText, !formData.group && { color: '#fff' }]}>كل الطلاب</Text>
+                </TouchableOpacity>
+                {groups.map(g => {
+                  const on = formData.group === g.key;
+                  const c = groupColor(g.key, groups);
+                  return (
+                    <TouchableOpacity
+                      key={g.key}
+                      onPress={() => setFormData({ ...formData, group: g.key })}
+                      style={[styles.groupChip, { borderColor: c }, on && { backgroundColor: c }]}
+                      testID={`lecture-group-${g.key}`}
+                    >
+                      <Text style={[styles.groupChipText, { color: on ? '#fff' : c }]}>{g.name} · {g.count}</Text>
+                      {g.teacher_name ? <Text style={{ fontSize: 10, color: on ? '#fff' : '#5b6678' }}>{g.teacher_name}</Text> : null}
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={{ fontSize: 11, color: '#78909c', textAlign: 'right', marginTop: 6 }}>
+                محاضرة المجموعة تظهر لطلابها فقط ويُحضَّر لهم وحدهم، ويمكن أن تتزامن مع مجموعة أخرى بقاعة مختلفة.
+              </Text>
+            </View>
+          )}
+
           {/* Room - قائمة منسدلة من القاعات المسجلة */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>
@@ -449,6 +496,8 @@ export default function AddLectureModal({
 }
 
 const styles = StyleSheet.create({
+  groupChip: { borderWidth: 1.5, borderColor: '#dfe5ee', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12, alignItems: 'center', backgroundColor: '#fff' },
+  groupChipText: { fontSize: 13, fontWeight: '700', color: '#334155' },
   container: {
     flex: 1,
     backgroundColor: '#f5f5f5',

@@ -22,6 +22,7 @@ class LectureCreate(BaseModel):
     room: Optional[str] = ""
     notes: Optional[str] = ""
     force: Optional[bool] = False  # تجاوز تحذير تعارض الشعب
+    group: Optional[str] = None  # 👥 مجموعة دراسية داخل المقرر (فارغ = لكل الطلاب)
 
 class LectureUpdate(BaseModel):
     date: Optional[str] = None

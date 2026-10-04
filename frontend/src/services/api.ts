@@ -867,6 +867,17 @@ export const hrAPI = {
   annualExport: (params?: any) => api.get('/hr/reports/annual/export', { params, responseType: 'blob' }),
 };
 
+export const courseGroupsAPI = {
+  get: (courseId: string) => api.get(`/courses/${courseId}/groups`),
+  save: (courseId: string, groups: Array<{ key: string; name?: string; teacher_id?: string | null }>) =>
+    api.put(`/courses/${courseId}/groups`, { groups }),
+  assign: (courseId: string, studentIds: string[], group: string | null) =>
+    api.post(`/courses/${courseId}/groups/assign`, { student_ids: studentIds, group }),
+  autoDistribute: (courseId: string, data: { count: number; method: 'name' | 'number' | 'random'; only_unassigned?: boolean }) =>
+    api.post(`/courses/${courseId}/groups/auto-distribute`, data),
+  ofStudent: (studentId: string) => api.get(`/students/${studentId}/groups`),
+};
+
 export const lecturesAPI = {
   getToday: () => api.get('/lectures/today'),
   
@@ -882,7 +893,7 @@ export const lecturesAPI = {
   getDetails: (lectureId: string) => 
     api.get(`/lectures/${lectureId}/details`),
   
-  create: (courseId: string, data: { date: string; start_time: string; end_time: string; room?: string; notes?: string; force?: boolean }) =>
+  create: (courseId: string, data: { date: string; start_time: string; end_time: string; room?: string; notes?: string; force?: boolean; group?: string }) =>
     api.post('/lectures', { course_id: courseId, ...data }),
   
   generate: (data: { course_id: string; start_date: string; end_date: string; day_of_week: number; start_time: string; end_time: string; room?: string }) =>

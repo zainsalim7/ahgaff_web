@@ -31,6 +31,8 @@ import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR } from '..
 import { goBack, goHome } from '../src/utils/navigation';
 
 interface Lecture {
+  group?: string;
+  group_name?: string;
   id: string;
   course_id: string;
   date: string;
@@ -374,6 +376,7 @@ export default function CourseLecturesScreen() {
         room: data.room,
         notes: data.notes || '',
         force,
+        group: data.group || undefined,
       });
       Alert.alert('نجاح', 'تم إضافة المحاضرة');
       showNotification('success', 'تم إضافة المحاضرة بنجاح');
@@ -887,6 +890,12 @@ export default function CourseLecturesScreen() {
               <View style={styles.lectureMetaItem}>
                 <Ionicons name="location-outline" size={13} color="#5b6678" />
                 <Text style={styles.lectureMetaText}>{item.room}</Text>
+              </View>
+            ) : null}
+            {item.group ? (
+              <View style={[styles.lectureMetaItem, { backgroundColor: '#e0f2f1', borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }]} testID={`lecture-group-badge-${item.id}`}>
+                <Ionicons name="people" size={13} color="#00838f" />
+                <Text style={[styles.lectureMetaText, { color: '#00695c', fontWeight: '800' }]}>{item.group_name || `مجموعة ${item.group}`}</Text>
               </View>
             ) : null}
           </View>

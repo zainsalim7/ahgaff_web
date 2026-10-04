@@ -29,6 +29,7 @@ import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { formatGregorianDate } from '../src/utils/dateUtils';
 import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
+import { AssignGroupModal } from '../src/components/AssignGroupModal';
 
 const LEVELS = ['1', '2', '3', '4', '5'];
 
@@ -130,6 +131,7 @@ export default function StudentsScreen() {
   // تعديل الطالب
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
+  const [showAssignGroupModal, setShowAssignGroupModal] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editFormData, setEditFormData] = useState<StudentEditValues>(emptyStudentEdit);
   // أصل بيانات الطالب قبل التعديل (للكشف عن تغيير المستوى)
@@ -1664,6 +1666,10 @@ export default function StudentsScreen() {
                   <Ionicons name="male" size={14} color="#fff" />
                   <Text style={styles.selActionText}>تعيين: ذكر</Text>
                 </TouchableOpacity>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#6a1b9a' }]} onPress={() => setShowAssignGroupModal(true)} testID="bulk-assign-group-btn">
+                  <Ionicons name="people" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تعيين مجموعة</Text>
+                </TouchableOpacity>
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#00838f' }]} onPress={() => router.push(`/batch-print?ids=${Array.from(selectedIds).join(',')}`)} testID="bulk-cards-btn">
                   <Ionicons name="card" size={14} color="#fff" />
                   <Text style={styles.selActionText}>طباعة بطاقات</Text>
@@ -1678,6 +1684,10 @@ export default function StudentsScreen() {
               <Text style={styles.selCancelText}>إلغاء</Text>
             </TouchableOpacity>
           </View>
+        )}
+
+        {showAssignGroupModal && (
+          <AssignGroupModal visible={showAssignGroupModal} studentIds={Array.from(selectedIds)} onClose={() => setShowAssignGroupModal(false)} onDone={() => { setSelectionMode(false); setSelectedIds(new Set()); }} />
         )}
 
         {/* === بطاقة الجدول === */}
