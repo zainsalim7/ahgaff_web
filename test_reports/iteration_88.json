@@ -1,0 +1,33 @@
+{
+  "summary": "Comprehensive E2E testing of «Course Study Groups» feature (Phase A). Backend: 15/15 pytest cases passed covering GET/PUT/POST groups endpoints, auto-distribute (equality + validation 400 for count<2/>20), duplicate-key rejection, group deletion → unassigned, assign/unassign flow, invalid group → 400, student→groups aggregation, enrollments contain `group` field, course payload contains `groups`, group lecture creation (POST /api/lectures with group), parallel groups at same time OK (when teachers differ), same-group overlap → 400 conflict, invalid group → 400, GET /api/lectures/{id}/details returns ONLY group's students (count == group.count) with lecture.group/group_name. Frontend (Playwright, admin/admin123): on /course-students?courseId=698f0000d803b27aab0120af — course-groups-btn opens course-groups-modal with full controls (groups-auto-count, groups-auto-method-name/number/random, groups-auto-only-unassigned, groups-auto-run, groups-add, group-row-1/2, group-name-1, group-teacher-1, group-remove-1, group-toggle-1); toggling group-1 shows 36 move-{sid}-to-{key} and 36 unassign-{sid} buttons. group-filter-row with group-filter-all/1/2 present; group-filter-none appears only when there are unassigned students (none exist here — expected). 72 group-badge-{student_id} rendered. Selection mode via «تحديد» → «تحديد الكل» → bulk-assign-group-1/2/none visible AFTER adding testID (fixed). On /students: filter «اختبار» → تطبيق الفلتر → تحديد → تحديد الكل → bulk-assign-group-btn opens assign-group-modal listing 9 courses (assign-group-course-{id}). On /course-lectures (add lecture modal): lecture-group-section + lecture-group-all/1/2 all present; teacher info shown under each group chip. On /take-attendance?lectureId=6ac234164b7f763cfb72eff6: attendance-group-badge visible with 36 students (= group 1 count). All feature requirements verified.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AddLectureModal", "issues": ["Date field uses browser's native HTML5 date input (mm/dd/yyyy format) instead of a styled calendar component — inconsistent with the Arabic RTL design (minor, pre-existing)."]},
+      {"screen": "global", "issues": ["Pre-existing non-blocking warnings: shadow* style props deprecated, React 'Unexpected text node' warning, HrSelect require cycle."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_course_groups.py", "/app/test_reports/pytest/course_groups.xml"],
+  "action_items": [
+    "Many existing testids in /app/frontend/app/course-students.tsx use ONLY `data-testid={...}` on TouchableOpacity without a matching `testID` prop. In React-Native-Web, only `testID` propagates to DOM as `data-testid`. Affected (pre-existing): edit-attendance-*, import-excel-btn, select-all-btn, bulk-copy-btn, bulk-move-btn, bulk-unenroll-btn, copy-modal-search-input, select-course-*, confirm-copy-move-btn. The buttons work visually but automated tests can't find them by selector. Consider adding `testID` next to every `data-testid`. (I patched the two NEW group bulk-assign buttons during testing.)"
+  ],
+  "critical_code_review_comments": [
+    "course_groups.py handles duplicate keys, invalid groups, teacher resolution, and cleanup properly (removed groups unset `group` on enrollments). _view aggregates students via a single query. Good shape.",
+    "Minor: auto-distribute reuses existing group definitions and tops them up; when only_unassigned=true it correctly starts from min-count group for balance. OK.",
+    "Minor: assign endpoint requires student_ids non-empty (400) — good. Could add validation on count limit if abuse is a concern.",
+    "course-students.tsx is now 1929 lines — exceeds the 700-line recommendation. Consider splitting (student list, modals, groups) into focused modules."
+  ],
+  "updated_files": [
+    "/app/frontend/app/course-students.tsx (added `testID` alongside `data-testid` on bulk-assign-group-{key} and bulk-assign-group-none so they're discoverable in automated tests)",
+    "/app/backend/tests/test_course_groups.py (new pytest file with 15 tests)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of required testids verified"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "Auto-distributed course 698f0000d803b27aab0120af into 2 groups (36+36). Group 1 teacher set to teachers[0], group 2 teacher set to teachers[1]. Created 2 test lectures (groups 1 & 2 on future date) during pytest run — all cleaned up in test_cleanup.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "COURSE_ID 698f0000d803b27aab0120af is seeded with 2 groups (keys '1','2', 36 students each). Admin login flow: fill 2 inputs (user/pass) then click text 'تسجيل الدخول'. On /students use filter 'اختبار' + 'تطبيق الفلتر' to reveal test rows. The pattern `data-testid=` alone on `TouchableOpacity` is NOT propagated to DOM by react-native-web — always pair with `testID=`. Existing lectures 6ac234164b7f763cfb72eff6 and 6ac234164b7f763cfb72f01a dated 2026-10-07 are OUTSIDE semester window (2025-12-20 → 2026-05-07) so lecture-group-badge-{id} will be filtered out of the UI list — verify via GET /api/lectures/{id}/details instead.",
+  "rca of the issue": "N/A — feature behaves as specified. One minor testability fix applied (missing testID on two new buttons)."
+}

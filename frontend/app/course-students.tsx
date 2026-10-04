@@ -1135,6 +1135,7 @@ export default function CourseStudentsScreen() {
                     onPress={() => assignSelectedToGroup(g.key)}
                     disabled={selectedEnrolled.length === 0}
                     data-testid={`bulk-assign-group-${g.key}`}
+                    testID={`bulk-assign-group-${g.key}`}
                   >
                     <Ionicons name="people" size={16} color="#fff" />
                     <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>→ {g.name}</Text>
@@ -1146,6 +1147,7 @@ export default function CourseStudentsScreen() {
                     onPress={() => assignSelectedToGroup(null)}
                     disabled={selectedEnrolled.length === 0}
                     data-testid="bulk-assign-group-none"
+                    testID="bulk-assign-group-none"
                   >
                     <Ionicons name="people-outline" size={16} color="#fff" />
                     <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>إزالة من المجموعة</Text>
