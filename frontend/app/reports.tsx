@@ -718,7 +718,20 @@ export default function ReportsScreen() {
                 <Ionicons name="print" size={28} color="#3949ab" />
               </View>
               <Text style={styles.reportTypeTitle}>طباعة البطاقات</Text>
-              <Text style={styles.reportTypeDesc}>PDF دفعة واحدة — بطاقتان بكل ورقة</Text>
+              <Text style={styles.reportTypeDesc}>PDF دفعة واحدة — بطاقتان بكل ورقة + الخلفيات</Text>
+            </TouchableOpacity>
+            )}
+            {!['teacher', 'student'].includes(userRole) && (
+            <TouchableOpacity
+              style={styles.reportTypeCard}
+              onPress={() => router.push('/card-settings')}
+              data-testid="card-design-btn"
+            >
+              <View style={[styles.reportTypeIcon, { backgroundColor: '#e0f2f1' }]}>
+                <Ionicons name="color-palette" size={28} color="#00796b" />
+              </View>
+              <Text style={styles.reportTypeTitle}>تصميم البطاقة وخلفيتها</Text>
+              <Text style={styles.reportTypeDesc}>قالب كل كلية + تعليمات الوجه الخلفي</Text>
             </TouchableOpacity>
             )}
           </View>
