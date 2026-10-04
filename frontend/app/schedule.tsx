@@ -272,301 +272,299 @@ export default function ScheduleScreen() {
     return Object.values(map).sort((a, b) => (a.start || 'zz').localeCompare(b.start || 'zz'));
   }, [filteredLectures]);
 
+  const [openMenuId, setOpenMenuId] = useState('');
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [weekOffset, setWeekOffset] = useState(0);
+
+  const hijriDate = useMemo(() => {
+    try { return new Intl.DateTimeFormat('ar-SA-u-ca-islamic-umalqura', { day: 'numeric', month: 'long', year: 'numeric' }).format(new Date(selectedDate + 'T00:00:00')); } catch { return ''; }
+  }, [selectedDate]);
+
+  // 📅 أيام الأسبوع (السبت → الخميس) حول اليوم المختار
+  const weekDays = useMemo(() => {
+    const d = new Date(selectedDate + 'T00:00:00');
+    const back = (d.getDay() + 1) % 7; // السبت = 0
+    const sat = new Date(d); sat.setDate(d.getDate() - back + weekOffset * 7);
+    return Array.from({ length: 6 }, (_, i) => {
+      const x = new Date(sat); x.setDate(sat.getDate() + i);
+      const iso = `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+      return { iso, day: DAYS_AR[x.getDay()], label: `${x.getDate()} ${x.toLocaleDateString('ar', { month: 'long' })}` };
+    });
+  }, [selectedDate, weekOffset]);
+  useEffect(() => { setWeekOffset(0); }, [selectedDate]);
+
+  const todayIso = getToday();
+  const canManage = user?.role === 'admin' || user?.permissions?.includes('manage_lectures') || user?.permissions?.includes('edit_lectures');
+  const COURSE_ICONS: any[] = ['book', 'library', 'school', 'document-text', 'globe', 'flask', 'calculator', 'language'];
+  const courseIcon = (id: string) => { let h = 0; for (let i = 0; i < (id || '').length; i++) h = id.charCodeAt(i) + ((h << 5) - h); return COURSE_ICONS[Math.abs(h) % COURSE_ICONS.length]; };
+
   const renderSmallCard = (item: any) => {
     const st = STATUS_CONFIG[item.status] || STATUS_CONFIG.scheduled;
     const courseColor = getCourseColor(item.course_id);
-    const canManage = user?.role === 'admin' || user?.permissions?.includes('manage_lectures') || user?.permissions?.includes('edit_lectures');
+    const isCancelled = item.status === 'cancelled' || item.status === 'absent';
+    const menuOpen = openMenuId === item.id;
     return (
-      <View key={item.id} style={[s.gCard, { borderTopColor: courseColor }]} testID={`lecture-card-${item.id}`}>
-        <View style={s.gCardHead}>
-          <Text style={s.gCardName} numberOfLines={1}>{item.course_name}</Text>
+      <View key={item.id} style={[n.card, { borderRightColor: st.color }, isCancelled && { backgroundColor: '#fff5f5' }]} testID={`lecture-card-${item.id}`}>
+        <View style={n.cardTop}>
+          <View style={[n.statusPill, { backgroundColor: st.color }]}>
+            <Text style={n.statusPillText}>{st.label}</Text>
+          </View>
           {canManage && (
-            <View style={s.gCardIcons}>
-              <TouchableOpacity
-                style={[s.gIconBtn, { backgroundColor: '#e3f2fd' }]}
-                onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id, courseName: item.course_name } })}
-                testID={`view-attendance-${item.id}`}
-              >
-                <Ionicons name="eye-outline" size={13} color="#1565c0" />
-              </TouchableOpacity>
-              {item.status !== 'cancelled' && (
-                <TouchableOpacity
-                  style={[s.gIconBtn, { backgroundColor: '#fff3e0' }]}
-                  onPress={() => handleCancelLecture(item.id)}
-                  testID={`cancel-lecture-${item.id}`}
-                >
-                  <Ionicons name="close-circle-outline" size={13} color="#e65100" />
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity
-                style={[s.gIconBtn, { backgroundColor: '#ffebee' }]}
-                onPress={() => handleDeleteLecture(item.id)}
-                testID={`delete-lecture-${item.id}`}
-              >
-                <Ionicons name="trash-outline" size={13} color="#c62828" />
-              </TouchableOpacity>
-            </View>
+            <TouchableOpacity onPress={() => setOpenMenuId(menuOpen ? '' : item.id)} style={n.kebab} testID={`lecture-menu-${item.id}`}>
+              <Ionicons name="ellipsis-vertical" size={16} color="#5b6678" />
+            </TouchableOpacity>
           )}
         </View>
-        {item.course_code ? <Text style={s.gCardCode}>{item.course_code}</Text> : null}
-        {item.teacher_name ? (
-          <View style={s.gCardRow}>
-            <Ionicons name="person-outline" size={12} color="#5b6678" />
-            <Text style={s.gCardRowText} numberOfLines={1}>{item.teacher_name}</Text>
+        {menuOpen && (
+          <View style={n.menuRow} testID={`lecture-menu-items-${item.id}`}>
+            <TouchableOpacity style={[n.menuBtn, { backgroundColor: '#e3f2fd' }]} onPress={() => { setOpenMenuId(''); router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id, courseName: item.course_name } }); }} testID={`view-attendance-${item.id}`}>
+              <Ionicons name="eye-outline" size={13} color="#1565c0" /><Text style={[n.menuBtnText, { color: '#1565c0' }]}>الحضور</Text>
+            </TouchableOpacity>
+            {item.status !== 'cancelled' && (
+              <TouchableOpacity style={[n.menuBtn, { backgroundColor: '#fff3e0' }]} onPress={() => { setOpenMenuId(''); handleCancelLecture(item.id); }} testID={`cancel-lecture-${item.id}`}>
+                <Ionicons name="close-circle-outline" size={13} color="#e65100" /><Text style={[n.menuBtnText, { color: '#e65100' }]}>إلغاء</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity style={[n.menuBtn, { backgroundColor: '#ffebee' }]} onPress={() => { setOpenMenuId(''); handleDeleteLecture(item.id); }} testID={`delete-lecture-${item.id}`}>
+              <Ionicons name="trash-outline" size={13} color="#c62828" /><Text style={[n.menuBtnText, { color: '#c62828' }]}>حذف</Text>
+            </TouchableOpacity>
           </View>
+        )}
+        <View style={n.cardBody}>
+          <View style={[n.courseIcon, { backgroundColor: courseColor + '1a' }]}>
+            <Ionicons name={courseIcon(item.course_id)} size={20} color={courseColor} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={n.courseName} numberOfLines={1}>{item.course_name}</Text>
+            <Text style={n.courseSub} numberOfLines={1}>{item.faculty_name || item.department_name || item.course_code || ''}</Text>
+          </View>
+        </View>
+        {(item.teacher_name || item.section || item.room || item.level) ? (
+        <View style={n.metaRow}>
+          {item.teacher_name ? <View style={n.meta}><Ionicons name="person-outline" size={12} color="#8a95a8" /><Text style={n.metaText} numberOfLines={1}>{item.teacher_name}</Text></View> : null}
+          {item.level ? <View style={n.meta} testID={`lecture-level-${item.id}`}><Ionicons name="layers-outline" size={12} color="#8a95a8" /><Text style={n.metaText}>المستوى {item.level}</Text></View> : null}
+          {item.section ? <View style={n.meta}><Ionicons name="people-outline" size={12} color="#8a95a8" /><Text style={n.metaText}>شعبة {item.section}</Text></View> : null}
+          {item.room ? <View style={n.meta}><Ionicons name="location-outline" size={12} color="#8a95a8" /><Text style={n.metaText}>قاعة {item.room}</Text></View> : null}
+        </View>
         ) : null}
-        <View style={s.gChips}>
-          {item.room ? (
-            <View style={[s.gChip, { backgroundColor: '#fff3e0' }]}>
-              <Text style={[s.gChipText, { color: '#e65100' }]}>🚪 {item.room}</Text>
-            </View>
-          ) : null}
-          {item.group ? (
-            <View style={[s.gChip, { backgroundColor: '#e0f2f1' }]} testID={`schedule-group-${item.id}`}>
-              <Text style={[s.gChipText, { color: '#00695c' }]}>👥 {item.group_name || `مجموعة ${item.group}`}</Text>
-            </View>
-          ) : null}
-          {item.department_name ? (
-            <View style={[s.gChip, { backgroundColor: '#ede7f6' }]}>
-              <Text style={[s.gChipText, { color: '#5e35b1' }]} numberOfLines={1}>{item.department_name}</Text>
-            </View>
-          ) : null}
-          {item.section ? (
-            <View style={[s.gChip, { backgroundColor: '#e0f2f1' }]}>
-              <Text style={[s.gChipText, { color: '#00695c' }]}>شعبة {item.section}</Text>
-            </View>
-          ) : null}
-        </View>
-        <View style={s.gCardFoot}>
-          <View style={[s.cardStatusBadge, { backgroundColor: st.bg }]}>
-            <Ionicons name={st.icon} size={10} color={st.color} />
-            <Text style={[s.cardStatusText, { color: st.color }]}>{st.label}</Text>
+        {(item.group || item.day_shift_cancelled || item.day_shifted || typeof item.attendance_count !== 'undefined') && (
+          <View style={n.chipRow}>
+            {item.group ? <View style={[n.chip, { backgroundColor: '#e0f2f1' }]} testID={`schedule-group-${item.id}`}><Text style={[n.chipText, { color: '#00695c' }]}>👥 {item.group_name || `مجموعة ${item.group}`}</Text></View> : null}
+            {item.day_shift_cancelled ? <View style={[n.chip, { backgroundColor: '#fce4ec' }]} testID={`shift-cancelled-badge-${item.id}`}><Text style={[n.chipText, { color: '#ad1457' }]}>ملغاة بالإزاحة</Text></View>
+              : item.day_shifted ? <View style={[n.chip, { backgroundColor: '#ede7f6' }]} testID={`shift-badge-${item.id}`}><Text style={[n.chipText, { color: '#5e35b1' }]}>{item.credited_minutes ? `إزاحة (تُحسب ${item.credited_minutes} د)` : 'إزاحة'}</Text></View> : null}
+            {typeof item.attendance_count !== 'undefined' && (
+              <Text style={n.attText}>{item.status === 'completed' ? `حضور ${item.attendance_count || 0}/${item.total_enrolled || 0}` : `مسجل ${item.total_enrolled || 0}`}</Text>
+            )}
           </View>
-          {item.day_shift_cancelled ? (
-            <View style={[s.cardStatusBadge, { backgroundColor: '#fce4ec' }]} testID={`shift-cancelled-badge-${item.id}`}>
-              <Ionicons name="swap-horizontal" size={10} color="#ad1457" />
-              <Text style={[s.cardStatusText, { color: '#ad1457' }]}>ملغاة بالإزاحة</Text>
-            </View>
-          ) : item.day_shifted ? (
-            <View style={[s.cardStatusBadge, { backgroundColor: '#ede7f6' }]} testID={`shift-badge-${item.id}`}>
-              <Ionicons name="swap-horizontal" size={10} color="#5e35b1" />
-              <Text style={[s.cardStatusText, { color: '#5e35b1' }]}>{item.credited_minutes ? `60 د — إزاحة (تُحسب ${item.credited_minutes} د)` : 'إزاحة'}</Text>
-            </View>
-          ) : null}
-          {typeof item.attendance_count !== 'undefined' && (
-            <Text style={s.gAttText}>
-              {item.status === 'completed' ? `حضور ${item.attendance_count || 0}/${item.total_enrolled || 0}` : `مسجل ${item.total_enrolled || 0}`}
-            </Text>
-          )}
-        </View>
+        )}
         {isTeacher && (
-          <TouchableOpacity
-            style={s.gTakeBtn}
-            onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id } })}
-            testID={`teacher-lecture-${item.id}`}
-          >
+          <TouchableOpacity style={n.takeBtn} onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id, courseId: item.course_id } })} testID={`teacher-lecture-${item.id}`}>
             <Ionicons name="clipboard-outline" size={13} color="#fff" />
-            <Text style={s.takeAttendanceBtnText}>تسجيل الحضور</Text>
+            <Text style={n.takeBtnText}>تسجيل الحضور</Text>
           </TouchableOpacity>
         )}
       </View>
     );
   };
 
+  const statCards = [
+    { key: '', id: 'total', label: 'إجمالي المحاضرات', value: statsCounts.total, sub: filterFaculty || filterDept || filterTime ? 'ضمن الفلتر الحالي' : `من أصل ${lectures.length} محاضرة`, color: '#1565c0', soft: '#e3f2fd', icon: 'calendar' as const, pct: lectures.length ? Math.round(statsCounts.total * 100 / lectures.length) : 0 },
+    { key: 'completed', id: 'completed', label: 'منعقدة', value: statsCounts.completed, sub: 'محاضرة مكتملة', color: '#2e7d32', soft: '#e8f5e9', icon: 'checkmark-done' as const, pct: statsCounts.total ? Math.round(statsCounts.completed * 100 / statsCounts.total) : 0 },
+    { key: 'scheduled', id: 'scheduled', label: 'مجدولة', value: statsCounts.scheduled, sub: 'في الانتظار', color: '#1565c0', soft: '#e3f2fd', icon: 'time' as const, pct: statsCounts.total ? Math.round(statsCounts.scheduled * 100 / statsCounts.total) : 0 },
+    { key: 'cancelled', id: 'cancelled', label: 'ملغاة / غياب', value: statsCounts.cancelled + statsCounts.absent, sub: `ملغاة ${statsCounts.cancelled} · غياب ${statsCounts.absent}`, color: '#c62828', soft: '#ffebee', icon: 'close' as const, pct: statsCounts.total ? Math.round((statsCounts.cancelled + statsCounts.absent) * 100 / statsCounts.total) : 0 },
+  ] as const;
+
+  const dayName = DAYS_AR[new Date(selectedDate + 'T00:00:00').getDay()];
+  const dayNum = new Date(selectedDate + 'T00:00:00').getDate();
+  const monthYear = new Date(selectedDate + 'T00:00:00').toLocaleDateString('ar', { month: 'long', year: 'numeric' });
+
   return (
     <SafeAreaView style={s.container} edges={['bottom']}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <ScrollView style={{ flex: 1 }} contentContainerStyle={[s.pageScroll, { flexGrow: 1 }]} showsVerticalScrollIndicator={true}>
 
-          {/* Page header */}
-          <View style={s.pageHeader}>
-            <View style={s.pageHeaderRight}>
-              <Text style={s.pageTitle}>{isTeacher ? 'جدول المحاضرات' : 'الجدول اليومي'}</Text>
+          {/* 🏛️ Hero header */}
+          <View style={n.hero} testID="schedule-hero">
+            <View style={n.heroDeco} />
+            <View style={n.heroDeco2} />
+            <View style={n.heroDate}>
+              <View style={n.heroDateIcon}><Ionicons name="calendar" size={30} color="#1565c0" /></View>
+              <View style={{ alignItems: 'flex-end' }}>
+                <Text style={n.heroDay} testID="hero-day">{dayName}</Text>
+                <Text style={n.heroGreg}>{dayNum} {monthYear} م</Text>
+                {hijriDate ? <Text style={n.heroHijri}>{hijriDate}</Text> : null}
+                {Platform.OS === 'web' && (
+                  <input type="date" value={selectedDate} onChange={(e: any) => setSelectedDate(e.target.value)} style={{ position: 'absolute', opacity: 0, inset: 0, width: '100%', height: '100%', cursor: 'pointer' }} data-testid="date-picker-input" title="اختر تاريخاً" />
+                )}
+              </View>
+            </View>
+            <View style={n.heroTitleWrap}>
+              <View style={n.heroTitleRow}>
+                <Text style={n.heroTitle}>{isTeacher ? 'جدول المحاضرات' : 'الجدول اليومي'}</Text>
+                <Ionicons name="calendar-outline" size={26} color="#1565c0" />
+              </View>
+              <Text style={n.heroSubtitle}>إدارة ومتابعة محاضرات جميع كليات اليوم الدراسي</Text>
               <View style={s.breadcrumb}>
-                <TouchableOpacity onPress={() => router.replace('/')}>
-                  <Text style={s.breadcrumbLink}>الرئيسية</Text>
-                </TouchableOpacity>
+                <TouchableOpacity onPress={() => router.replace('/')}><Text style={s.breadcrumbLink}>الرئيسية</Text></TouchableOpacity>
                 <Ionicons name="chevron-back" size={12} color="#8a95a8" />
                 <Text style={s.breadcrumbCurrent}>الجدول</Text>
               </View>
             </View>
-            <View style={s.pageHeaderActions}>
-              {!isToday && (
-                <TouchableOpacity style={[s.headerBtn, s.btnGhost]} onPress={() => setSelectedDate(getToday())} data-testid="go-today-btn">
-                  <Ionicons name="today-outline" size={15} color="#1565c0" />
-                  <Text style={s.btnGhostText}>اليوم</Text>
+            <View style={n.quickBox} testID="quick-actions">
+              <View style={n.quickHead}><Ionicons name="flash-outline" size={14} color="#5b6678" /><Text style={n.quickTitle}>إجراءات سريعة</Text></View>
+              <View style={n.quickRow}>
+                {canPurge && Platform.OS === 'web' && (
+                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#ffebee' }]} onPress={openPurgeModal} data-testid="purge-lectures-btn">
+                    <Ionicons name="trash-outline" size={14} color="#c62828" /><Text style={[n.qBtnText, { color: '#c62828' }]}>مسح المحاضرات</Text>
+                  </TouchableOpacity>
+                )}
+                {canShiftDay && Platform.OS === 'web' && (
+                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#1565c0' }]} onPress={() => setShiftModal(true)} testID="day-shift-open-btn">
+                    <Ionicons name="time-outline" size={14} color="#fff" /><Text style={[n.qBtnText, { color: '#fff' }]}>إزاحة اليوم الدراسي</Text>
+                  </TouchableOpacity>
+                )}
+                <TouchableOpacity style={[n.qBtn, { backgroundColor: '#f1f5f9' }]} onPress={() => fetchLectures(selectedDate)} testID="refresh-btn">
+                  <Ionicons name="refresh" size={14} color="#1a2540" /><Text style={n.qBtnText}>تحديث</Text>
                 </TouchableOpacity>
-              )}
-              <TouchableOpacity style={[s.headerBtn, s.btnGhost]} onPress={() => fetchLectures(selectedDate)}>
-                <Ionicons name="refresh" size={15} color="#1a2540" />
-                <Text style={s.btnGhostText}>تحديث</Text>
-              </TouchableOpacity>
-              {canShiftDay && Platform.OS === 'web' && (
-                <TouchableOpacity
-                  style={[s.headerBtn, { backgroundColor: '#e3f2fd', borderWidth: 1, borderColor: '#90caf9' }]}
-                  onPress={() => setShiftModal(true)}
-                  testID="day-shift-open-btn"
-                >
-                  <Ionicons name="time-outline" size={15} color="#1565c0" />
-                  <Text style={{ color: '#1565c0', fontSize: 13, fontWeight: '700' }}>إزاحة اليوم الدراسي</Text>
-                </TouchableOpacity>
-              )}
-              {canPurge && Platform.OS === 'web' && (
-                <TouchableOpacity
-                  style={[s.headerBtn, { backgroundColor: '#ffebee', borderWidth: 1, borderColor: '#ef9a9a' }]}
-                  onPress={openPurgeModal}
-                  data-testid="purge-lectures-btn"
-                >
-                  <Ionicons name="trash-outline" size={15} color="#c62828" />
-                  <Text style={{ color: '#c62828', fontSize: 13, fontWeight: '700' }}>مسح المحاضرات</Text>
-                </TouchableOpacity>
-              )}
+                {!isToday && (
+                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#e3f2fd' }]} onPress={() => setSelectedDate(getToday())} data-testid="go-today-btn">
+                    <Ionicons name="today-outline" size={14} color="#1565c0" /><Text style={[n.qBtnText, { color: '#1565c0' }]}>اليوم</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </View>
 
-          {/* Stats grid — قابلة للضغط لفلترة القائمة حسب الحالة */}
-          <View style={s.statsGrid}>
-            {([
-              { key: '', label: 'إجمالي المحاضرات', value: statsCounts.total, sub: filterFaculty || filterDept || filterTime ? 'ضمن الفلتر الحالي' : 'محاضرة', color: '#1a237e', icon: 'calendar' as const, id: 'total' },
-              { key: 'completed', label: 'منعقدة', value: statsCounts.completed, sub: 'محاضرة مكتملة', color: '#2e7d32', icon: 'checkmark-circle' as const, id: 'completed' },
-              { key: 'scheduled', label: 'مجدولة', value: statsCounts.scheduled, sub: 'قيد الانتظار', color: '#1565c0', icon: 'time' as const, id: 'scheduled' },
-              { key: 'cancelled', label: 'ملغاة/غياب', value: statsCounts.cancelled + statsCounts.absent, sub: `ملغاة ${statsCounts.cancelled} · غياب ${statsCounts.absent}`, color: '#c62828', icon: 'close-circle' as const, id: 'cancelled' },
-            ] as const).map((c) => {
+          {/* 📊 Stats */}
+          <View style={n.statsGrid}>
+            {statCards.map((c) => {
               const on = c.key ? filterStatus === c.key : !filterStatus;
               return (
-                <TouchableOpacity key={c.id} style={[s.statCard, on && c.key ? { borderWidth: 2, borderColor: c.color } : null]} onPress={() => (c.key ? toggleStatus(c.key) : setFilterStatus(''))} activeOpacity={0.8} testID={`stat-card-${c.id}`}>
-                  <View style={[s.statIconWrap, { backgroundColor: c.color }]}><Ionicons name={c.icon} size={22} color="#fff" /></View>
-                  <View style={s.statTextCol}>
-                    <Text style={s.statLabel}>{c.label}</Text>
-                    <Text style={[s.statValue, on && c.key ? { color: c.color } : null]} testID={`stat-value-${c.id}`}>{c.value}</Text>
-                    <Text style={s.statSubLabel}>{on && c.key ? 'مفلترة — اضغط للإلغاء' : c.sub}</Text>
+                <TouchableOpacity key={c.id} style={[n.stat, on && c.key ? { borderColor: c.color, borderWidth: 2 } : null]} onPress={() => (c.key ? toggleStatus(c.key) : setFilterStatus(''))} activeOpacity={0.85} testID={`stat-card-${c.id}`}>
+                  <View style={n.statTop}>
+                    <View style={{ alignItems: 'flex-end', flex: 1 }}>
+                      <Text style={n.statLabel}>{c.label}</Text>
+                      <Text style={[n.statValue, { color: c.color }]} testID={`stat-value-${c.id}`}>{c.value}</Text>
+                      <Text style={n.statSub}>{on && c.key ? 'مفلترة — اضغط للإلغاء' : c.sub}</Text>
+                    </View>
+                    <View style={[n.statIcon, { backgroundColor: c.soft }]}><Ionicons name={c.icon} size={24} color={c.color} /></View>
+                  </View>
+                  <View style={n.barRow}>
+                    <Text style={[n.barPct, { color: c.color }]}>{c.pct}%</Text>
+                    <View style={n.barTrack}><View style={[n.barFill, { width: `${c.pct}%`, backgroundColor: c.color }]} /></View>
                   </View>
                 </TouchableOpacity>
               );
             })}
           </View>
 
-          {/* Date picker card */}
-          <View style={s.dateCard}>
-            <View style={s.dateCardHeader}>
-              <Text style={s.dateCardTitle}>اختر اليوم</Text>
-              {semesterSettings?.current_semester && (
-                <View style={s.semesterChip}>
-                  <Ionicons name="school" size={12} color="#1565c0" />
-                  <Text style={s.semesterChipText}>{semesterSettings.current_semester}</Text>
-                </View>
-              )}
+          {/* 📅 Week strip */}
+          <View style={n.weekRow} data-testid="date-navigation">
+            <TouchableOpacity onPress={() => setWeekOffset((w) => w + 1)} style={n.weekArrow} data-testid="next-day-btn"><Ionicons name="chevron-forward" size={20} color="#1a2540" /></TouchableOpacity>
+            <View style={n.weekDays}>
+              {weekDays.map((d) => {
+                const active = d.iso === selectedDate;
+                return (
+                  <TouchableOpacity key={d.iso} onPress={() => setSelectedDate(d.iso)} style={[n.weekDay, active && n.weekDayOn]} testID={`week-day-${d.iso}`}>
+                    <Text style={[n.weekDayName, active && { color: '#fff' }]}>{d.day}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+                      <Text style={[n.weekDayDate, active && { color: 'rgba(255,255,255,0.9)' }]}>{d.label}</Text>
+                      {d.iso === todayIso && <View style={[n.todayDot, active && { backgroundColor: '#fff' }]} />}
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            <View style={s.dateNav} data-testid="date-navigation">
-              <TouchableOpacity onPress={() => setSelectedDate(shiftDate(selectedDate, 1))} style={s.dateNavArrow} data-testid="next-day-btn">
-                <Ionicons name="chevron-forward" size={20} color="#1a237e" />
-              </TouchableOpacity>
-              <View style={s.dateNavCenter}>
-                <Text style={s.dateNavDay}>{DAYS_AR[new Date(selectedDate + 'T00:00:00').getDay()]}</Text>
-                <Text style={s.dateNavDate}>{formatDateArabic(selectedDate)}</Text>
-                {Platform.OS === 'web' && (
-                  <input
-                    type="date"
-                    value={selectedDate}
-                    onChange={(e: any) => setSelectedDate(e.target.value)}
-                    style={{ position: 'absolute', opacity: 0, width: '100%', height: '100%', cursor: 'pointer' }}
-                    data-testid="date-picker-input"
-                  />
-                )}
+            <TouchableOpacity onPress={() => setWeekOffset((w) => w - 1)} style={n.weekArrow} data-testid="prev-day-btn"><Ionicons name="chevron-back" size={20} color="#1a2540" /></TouchableOpacity>
+          </View>
+
+          {/* ℹ️ Notices */}
+          <View style={n.noticeRow}>
+            {semesterSettings?.semester_start_date && semesterSettings?.semester_end_date ? (
+              <View style={n.semChip}>
+                <Ionicons name="calendar-outline" size={14} color="#1565c0" />
+                <Text style={n.semChipText}>الفصل النشط: {semesterSettings.semester_start_date} ← {semesterSettings.semester_end_date}{semesterSettings.current_semester ? ` · ${semesterSettings.current_semester}` : ''}</Text>
               </View>
-              <TouchableOpacity onPress={() => setSelectedDate(shiftDate(selectedDate, -1))} style={s.dateNavArrow} data-testid="prev-day-btn">
-                <Ionicons name="chevron-back" size={20} color="#1a237e" />
-              </TouchableOpacity>
-            </View>
+            ) : semesterSettings?.current_semester ? (
+              <View style={n.semChip}><Ionicons name="school" size={14} color="#1565c0" /><Text style={n.semChipText}>{semesterSettings.current_semester}</Text></View>
+            ) : null}
             {dayShifts.map((sh) => {
               const d = (sh.days || []).find((x: any) => x.date === selectedDate);
               if (!d || !d.lectures) return null;
               return (
-                <View key={sh.id} style={s.shiftStrip} testID={`day-shift-badge-${sh.id}`}>
-                  <Ionicons name="time" size={14} color="#e65100" />
-                  <Text style={s.shiftStripText}>
-                    بداية مؤخَّرة: {d.old_first} ← {d.new_first} ({d.offset_minutes > 0 ? '+' : ''}{d.offset_minutes} د · {d.lectures} محاضرة){sh.reason ? ` — ${sh.reason}` : ''}{sh.created_by_name ? ` · ${sh.created_by_name}` : ''}
+                <View key={sh.id} style={n.shiftStrip} testID={`day-shift-badge-${sh.id}`}>
+                  <Text style={n.shiftText} numberOfLines={2}>
+                    {d.old_first} ← {d.new_first} ({d.offset_minutes > 0 ? '+' : ''}{d.offset_minutes} د · {d.lectures} محاضرة){sh.reason ? ` — ${sh.reason}` : ''}{sh.created_by_name ? ` · ${sh.created_by_name}` : ''}
                   </Text>
-                  {canShiftDay && (
-                    <TouchableOpacity onPress={() => revertShift(sh.id)} disabled={reverting === sh.id} style={s.shiftRevertBtn} testID={`day-shift-revert-${sh.id}`}>
-                      <Ionicons name="arrow-undo" size={12} color="#fff" />
-                      <Text style={s.shiftRevertText}>{reverting === sh.id ? '...' : 'تراجع'}</Text>
-                    </TouchableOpacity>
-                  )}
+                  <TouchableOpacity onPress={() => canShiftDay && revertShift(sh.id)} disabled={!canShiftDay || reverting === sh.id} style={n.shiftBtn} testID={`day-shift-revert-${sh.id}`}>
+                    <Ionicons name={canShiftDay ? 'arrow-undo' : 'time'} size={13} color="#fff" />
+                    <Text style={n.shiftBtnText}>{reverting === sh.id ? '...' : canShiftDay ? 'بداية مؤخَّرة · تراجع' : 'بداية مؤخَّرة'}</Text>
+                  </TouchableOpacity>
                 </View>
               );
             })}
-            {semesterSettings?.semester_start_date && semesterSettings?.semester_end_date && (
-              <View style={s.semesterStrip}>
-                <Ionicons name="information-circle" size={13} color="#1565c0" />
-                <Text style={s.semesterStripText}>
-                  الفصل النشط: {semesterSettings.semester_start_date} ← {semesterSettings.semester_end_date}
-                </Text>
-              </View>
-            )}
           </View>
 
-          {/* Lectures list */}
-          <View style={s.listCard}>
-            <View style={s.listCardHeader}>
-              <Text style={s.listCardTitle}>محاضرات {DAYS_AR[new Date(selectedDate + 'T00:00:00').getDay()]}</Text>
-              <Text style={s.listCardCount} data-testid="lecture-count">
-                {loading ? '...' : <>عرض <Text style={s.listCardCountAccent}>{filteredLectures.length}</Text> من {lectures.length} محاضرة</>}
-              </Text>
-            </View>
-
-            {/* Search bar */}
-            <View style={s.searchWrap}>
-              <View style={s.searchBox}>
-                <Ionicons name="search" size={16} color="#8a95a8" />
-                <TextInput
-                  style={s.searchInput}
-                  placeholder="بحث بالمقرر أو المدرّس أو الكلية أو القاعة..."
-                  placeholderTextColor="#a8b1c2"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  data-testid="schedule-search-input"
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={() => setSearchQuery('')} data-testid="schedule-search-clear">
-                    <Ionicons name="close-circle" size={16} color="#8a95a8" />
-                  </TouchableOpacity>
+          {/* 📚 Lectures */}
+          <View style={n.listCard}>
+            <View style={n.listHead}>
+              <View style={n.listTitleWrap}>
+                <View style={n.listTitleIcon}><Ionicons name="book" size={20} color="#1565c0" /></View>
+                <View style={{ alignItems: 'flex-end' }}>
+                  <Text style={n.listTitle}>محاضرات {dayName}</Text>
+                  <Text style={n.listCount} data-testid="lecture-count">
+                    {loading ? '...' : <>عرض <Text style={{ color: '#1565c0', fontWeight: '800' }}>{filteredLectures.length}</Text> من {lectures.length} محاضرة</>}
+                  </Text>
+                </View>
+              </View>
+              <View style={n.filtersWrap} testID="schedule-filter-bar">
+                <View style={n.searchBox}>
+                  <TextInput style={n.searchInput} placeholder="ابحث في اسم المقرر أو المدرس أو القاعة..." placeholderTextColor="#a8b1c2" value={searchQuery} onChangeText={setSearchQuery} data-testid="schedule-search-input" />
+                  {searchQuery.length > 0 ? (
+                    <TouchableOpacity onPress={() => setSearchQuery('')} data-testid="schedule-search-clear"><Ionicons name="close-circle" size={16} color="#8a95a8" /></TouchableOpacity>
+                  ) : <Ionicons name="search" size={16} color="#8a95a8" />}
+                </View>
+                {Platform.OS === 'web' && lectures.length > 0 && (
+                  <>
+                    <View style={n.filterField}>
+                      <Ionicons name="business-outline" size={14} color="#1565c0" />
+                      <select value={filterFaculty} onChange={(e: any) => setFilterFaculty(e.target.value)} style={filterSelectStyle} data-testid="filter-faculty-select">
+                        <option value="">كل الكليات ({filterOptions.faculties.length})</option>
+                        {filterOptions.faculties.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+                      </select>
+                    </View>
+                    <View style={n.filterField}>
+                      <Ionicons name="git-branch-outline" size={14} color="#1565c0" />
+                      <select value={filterDept} onChange={(e: any) => setFilterDept(e.target.value)} style={filterSelectStyle} data-testid="filter-department-select">
+                        <option value="">كل الأقسام ({filterOptions.departments.length})</option>
+                        {filterOptions.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                      </select>
+                    </View>
+                    <View style={n.filterField}>
+                      <Ionicons name="time-outline" size={14} color="#1565c0" />
+                      <select value={filterTime} onChange={(e: any) => setFilterTime(e.target.value)} style={filterSelectStyle} data-testid="filter-time-select">
+                        <option value="">كل الفترات ({filterOptions.times.length})</option>
+                        {filterOptions.times.map((t) => <option key={t.start} value={t.start}>{t.start}{t.end ? ` – ${t.end}` : ''}</option>)}
+                      </select>
+                    </View>
+                    <View style={n.filterField}>
+                      <Ionicons name="funnel-outline" size={14} color="#1565c0" />
+                      <select value={filterStatus} onChange={(e: any) => setFilterStatus(e.target.value)} style={filterSelectStyle} data-testid="filter-status-select">
+                        <option value="">كل الحالات</option>
+                        <option value="completed">منعقدة</option>
+                        <option value="scheduled">مجدولة</option>
+                        <option value="cancelled">ملغاة / غياب</option>
+                      </select>
+                    </View>
+                    {activeFiltersCount > 0 && (
+                      <TouchableOpacity onPress={clearFilters} style={n.clearBtn} testID="filter-clear-btn">
+                        <Ionicons name="close-circle" size={14} color="#c62828" /><Text style={n.clearBtnText}>مسح الفلاتر ({activeFiltersCount})</Text>
+                      </TouchableOpacity>
+                    )}
+                  </>
                 )}
               </View>
             </View>
-
-            {/* 🎛️ فلاتر: الكلية / القسم / الوقت */}
-            {Platform.OS === 'web' && lectures.length > 0 && (
-              <View style={s.filterBar} testID="schedule-filter-bar">
-                <View style={s.filterField}>
-                  <Ionicons name="business-outline" size={14} color="#1565c0" />
-                  <select value={filterFaculty} onChange={(e: any) => setFilterFaculty(e.target.value)} style={filterSelectStyle} data-testid="filter-faculty-select">
-                    <option value="">كل الكليات ({filterOptions.faculties.length})</option>
-                    {filterOptions.faculties.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-                  </select>
-                </View>
-                <View style={s.filterField}>
-                  <Ionicons name="git-branch-outline" size={14} color="#1565c0" />
-                  <select value={filterDept} onChange={(e: any) => setFilterDept(e.target.value)} style={filterSelectStyle} data-testid="filter-department-select">
-                    <option value="">كل الأقسام ({filterOptions.departments.length})</option>
-                    {filterOptions.departments.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </View>
-                <View style={s.filterField}>
-                  <Ionicons name="time-outline" size={14} color="#1565c0" />
-                  <select value={filterTime} onChange={(e: any) => setFilterTime(e.target.value)} style={filterSelectStyle} data-testid="filter-time-select">
-                    <option value="">كل الأوقات ({filterOptions.times.length})</option>
-                    {filterOptions.times.map((t) => <option key={t.start} value={t.start}>{t.start}{t.end ? ` – ${t.end}` : ''}</option>)}
-                  </select>
-                </View>
-                {activeFiltersCount > 0 && (
-                  <TouchableOpacity onPress={clearFilters} style={s.filterClearBtn} testID="filter-clear-btn">
-                    <Ionicons name="close-circle" size={14} color="#c62828" />
-                    <Text style={s.filterClearText}>مسح الفلاتر ({activeFiltersCount})</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            )}
 
             {loading ? (
               <View style={s.center}><LoadingScreen /></View>
@@ -579,29 +577,27 @@ export default function ScheduleScreen() {
                 </Text>
               </View>
             ) : (
-              <View style={{ padding: 14 }} testID="time-groups-container">
-                {timeGroups.map((g, gi) => (
-                  <View key={`${g.start}-${g.end}-${gi}`} style={{ marginBottom: 18 }} testID={`time-group-${g.start || 'na'}`}>
-                    <View style={s.gGroupHead}>
-                      <View style={s.gTimePill}>
-                        <Ionicons name="time" size={13} color="#fff" />
-                        <Text style={s.gTimePillText}>
-                          {g.start && g.end ? `${g.start} – ${g.end}` : 'بدون وقت محدد'}
-                        </Text>
-                      </View>
-                      <View style={s.gCountPill}>
-                        <Text style={s.gCountPillText}>{g.items.length} {g.items.length === 1 ? 'محاضرة' : 'محاضرات'}</Text>
-                      </View>
-                      <View style={s.gGroupLine} />
+              <View style={{ padding: 14, paddingTop: 4 }} testID="time-groups-container">
+                {timeGroups.map((g, gi) => {
+                  const key = `${g.start}-${g.end}`;
+                  const isCollapsed = !!collapsed[key];
+                  return (
+                    <View key={`${key}-${gi}`} style={{ marginBottom: 14 }} testID={`time-group-${g.start || 'na'}`}>
+                      <TouchableOpacity style={n.groupHead} onPress={() => setCollapsed((c) => ({ ...c, [key]: !c[key] }))} activeOpacity={0.8} testID={`time-group-toggle-${g.start || 'na'}`}>
+                        <Ionicons name={isCollapsed ? 'chevron-down' : 'chevron-up'} size={18} color="#1565c0" />
+                        <View style={{ flex: 1 }} />
+                        <View style={n.countPill}><Text style={n.countPillText}>{g.items.length} {g.items.length === 1 ? 'محاضرة' : 'محاضرات'}</Text></View>
+                        <Text style={n.groupTime}>{g.start && g.end ? `${g.start} – ${g.end}` : 'بدون وقت محدد'}</Text>
+                        <Ionicons name="time-outline" size={16} color="#1565c0" />
+                      </TouchableOpacity>
+                      {!isCollapsed && <View style={n.grid}>{g.items.map(renderSmallCard)}</View>}
                     </View>
-                    <View style={s.gGrid}>
-                      {g.items.map(renderSmallCard)}
-                    </View>
-                  </View>
-                ))}
+                  );
+                })}
               </View>
             )}
           </View>
+
         </ScrollView>
       </KeyboardAvoidingView>
       {Platform.OS === 'web' && (
@@ -699,6 +695,91 @@ export default function ScheduleScreen() {
 }
 
 const filterSelectStyle: any = { flex: 1, border: 'none', background: 'transparent', fontSize: 13, color: '#1a2540', padding: '9px 0', fontFamily: 'inherit', direction: 'rtl', outline: 'none', cursor: 'pointer', minWidth: 0 };
+
+const n = StyleSheet.create({
+  hero: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: '#eef3fb', borderRadius: 18, padding: 18, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: '#dde6f3' },
+  heroDeco: { position: 'absolute', left: -40, top: -60, width: 220, height: 220, borderRadius: 110, backgroundColor: '#dbe7f7' },
+  heroDeco2: { position: 'absolute', left: 90, bottom: -90, width: 180, height: 180, borderRadius: 90, backgroundColor: '#e4edf9' },
+  heroDate: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: '#fff', borderRadius: 14, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: '#e3e9f2', minWidth: 230 },
+  heroDateIcon: { width: 54, height: 54, borderRadius: 12, backgroundColor: '#e3f2fd', alignItems: 'center', justifyContent: 'center' },
+  heroDay: { fontSize: 22, fontWeight: '900', color: '#1a2540' },
+  heroGreg: { fontSize: 14, fontWeight: '700', color: '#334155', marginTop: 2 },
+  heroHijri: { fontSize: 12, color: '#8a95a8', marginTop: 2 },
+  heroTitleWrap: { flex: 1, alignItems: 'flex-end' },
+  heroTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  heroTitle: { fontSize: 26, fontWeight: '900', color: '#1a2540' },
+  heroSubtitle: { fontSize: 13, color: '#5b6678', marginTop: 4, marginBottom: 6 },
+  quickBox: { backgroundColor: '#fff', borderRadius: 14, padding: 12, borderWidth: 1, borderColor: '#e3e9f2', minWidth: 260 },
+  quickHead: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginBottom: 8 },
+  quickTitle: { fontSize: 12, fontWeight: '800', color: '#5b6678' },
+  quickRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 },
+  qBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 10 },
+  qBtnText: { fontSize: 12.5, fontWeight: '800', color: '#1a2540' },
+  statsGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 14, marginBottom: 16 },
+  stat: { flex: 1, minWidth: 220, backgroundColor: '#fff', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#e8edf5' },
+  statTop: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  statIcon: { width: 54, height: 54, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  statLabel: { fontSize: 13, color: '#5b6678', fontWeight: '600' },
+  statValue: { fontSize: 30, fontWeight: '900', marginTop: 2, lineHeight: 36 },
+  statSub: { fontSize: 11, color: '#8a95a8', marginTop: 2 },
+  barRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12 },
+  barTrack: { flex: 1, height: 6, borderRadius: 3, backgroundColor: '#eef1f6', overflow: 'hidden' },
+  barFill: { height: 6, borderRadius: 3 },
+  barPct: { fontSize: 11, fontWeight: '800', minWidth: 32 },
+  weekRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
+  weekArrow: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#fff', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e9f2' },
+  weekDays: { flex: 1, flexDirection: 'row-reverse', gap: 10 },
+  weekDay: { flex: 1, backgroundColor: '#fff', borderRadius: 12, paddingVertical: 10, alignItems: 'center', borderWidth: 1, borderColor: '#e3e9f2' },
+  weekDayOn: { backgroundColor: '#1565c0', borderColor: '#1565c0' },
+  weekDayName: { fontSize: 15, fontWeight: '800', color: '#1a2540' },
+  weekDayDate: { fontSize: 12, color: '#5b6678', marginTop: 2 },
+  todayDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#1565c0' },
+  noticeRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, marginBottom: 16, alignItems: 'center' },
+  semChip: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, backgroundColor: '#e3f2fd', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, borderWidth: 1, borderColor: '#bbdefb' },
+  semChipText: { fontSize: 12.5, color: '#0d47a1', fontWeight: '700' },
+  shiftStrip: { flex: 1, minWidth: 300, flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: '#fff3e0', borderRadius: 12, paddingVertical: 8, paddingHorizontal: 14, borderWidth: 1, borderColor: '#ffe0b2' },
+  shiftText: { flex: 1, fontSize: 12.5, color: '#7a4a00', fontWeight: '700', textAlign: 'right' },
+  shiftBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: '#e65100', borderRadius: 8, paddingVertical: 7, paddingHorizontal: 12 },
+  shiftBtnText: { color: '#fff', fontSize: 12, fontWeight: '800' },
+  listCard: { backgroundColor: '#fff', borderRadius: 16, borderWidth: 1, borderColor: '#e8edf5', overflow: 'hidden' },
+  listHead: { flexDirection: 'row-reverse', alignItems: 'center', flexWrap: 'wrap', gap: 12, padding: 16, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
+  listTitleWrap: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  listTitleIcon: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#e3f2fd', alignItems: 'center', justifyContent: 'center' },
+  listTitle: { fontSize: 20, fontWeight: '900', color: '#1a2540' },
+  listCount: { fontSize: 12, color: '#5b6678', marginTop: 2 },
+  filtersWrap: { flex: 1, flexDirection: 'row-reverse', alignItems: 'center', flexWrap: 'wrap', gap: 8, justifyContent: 'flex-start' },
+  searchBox: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e3e9f2', paddingHorizontal: 12, minWidth: 240, flex: 1, height: 42 },
+  searchInput: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right' },
+  filterField: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#f8fafc', borderRadius: 10, borderWidth: 1, borderColor: '#e3e9f2', paddingHorizontal: 10, minWidth: 150, height: 42 },
+  clearBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#ffebee', borderRadius: 10, paddingHorizontal: 10, height: 42 },
+  clearBtnText: { fontSize: 12, fontWeight: '800', color: '#c62828' },
+  groupHead: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#eef4fb', borderRadius: 12, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 12 },
+  groupTime: { fontSize: 15, fontWeight: '900', color: '#1a2540' },
+  countPill: { backgroundColor: '#dbe7f7', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 3 },
+  countPillText: { fontSize: 12, fontWeight: '700', color: '#1565c0' },
+  grid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 12 },
+  card: { width: 212, backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#e8edf5', borderRightWidth: 4, padding: 10, gap: 7 },
+  cardTop: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center' },
+  statusPill: { borderRadius: 6, paddingHorizontal: 9, paddingVertical: 3 },
+  statusPillText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  kebab: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center', borderRadius: 14 },
+  menuRow: { flexDirection: 'row-reverse', gap: 6, flexWrap: 'wrap' },
+  menuBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 5, paddingHorizontal: 9, borderRadius: 8 },
+  menuBtnText: { fontSize: 11.5, fontWeight: '800' },
+  cardBody: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10 },
+  courseIcon: { width: 40, height: 40, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
+  courseName: { fontSize: 14, fontWeight: '800', color: '#1a2540', textAlign: 'right' },
+  courseSub: { fontSize: 11.5, color: '#8a95a8', textAlign: 'right', marginTop: 2 },
+  metaRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 10, borderTopWidth: 1, borderTopColor: '#f1f4f8', paddingTop: 8 },
+  meta: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, maxWidth: '100%' },
+  metaText: { fontSize: 11, color: '#5b6678', fontWeight: '600' },
+  chipRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, alignItems: 'center' },
+  chip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  chipText: { fontSize: 11, fontWeight: '700' },
+  attText: { fontSize: 11, color: '#5b6678', fontWeight: '700' },
+  takeBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#1565c0', borderRadius: 10, paddingVertical: 9 },
+  takeBtnText: { color: '#fff', fontSize: 12.5, fontWeight: '800' },
+});
 
 const s = StyleSheet.create({
   gGroupHead: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, marginBottom: 10 },
