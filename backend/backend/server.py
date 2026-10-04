@@ -9279,7 +9279,6 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                 if group:
                     doc["group"] = group
                     doc["group_name"] = group_name
-                    doc["slot_type"] = "practical"
                 await db.weekly_schedule.insert_one(doc)
                 created += 1
             except DuplicateKeyError:
@@ -18249,6 +18248,21 @@ async def migrate_teacher_prefs_defaults_v2():
         logging.warning(f"Migration teacher_prefs_defaults_v2 failed: {e}")
 
 
+async def migrate_group_slots_default_theory_v1():
+    """مرة واحدة: خلايا المجموعات المولّدة من صفحة المقرر كانت توسم 'عملي' تلقائياً → إزالة الوسم (الافتراضي نظري)"""
+    try:
+        if await db.migrations.find_one({"_id": "group_slots_default_theory_v1"}):
+            return
+        r = await db.weekly_schedule.update_many(
+            {"created_from_lectures": True, "group": {"$nin": [None, ""]}, "slot_type": "practical"},
+            {"$unset": {"slot_type": ""}},
+        )
+        await db.migrations.insert_one({"_id": "group_slots_default_theory_v1", "applied_at": datetime.now(timezone.utc), "modified": r.modified_count})
+        logging.info(f"Migration group_slots_default_theory_v1: modified={r.modified_count}")
+    except Exception as e:
+        logging.warning(f"Migration group_slots_default_theory_v1 failed: {e}")
+
+
 @app.on_event("startup")
 async def startup_event():
     from services.firebase_service import init_firebase
@@ -18273,6 +18287,7 @@ async def startup_event():
     await create_indexes()
     # 🔧 Migration لمرة واحدة: تحديث تفضيلات المعلمين الافتراضية (أقصى يومي 3 + السماح بالمتتالية)
     await migrate_teacher_prefs_defaults_v2()
+    await migrate_group_slots_default_theory_v1()
     # 🔗 مزامنة روابط المشاركة للمقررات من واقع خانات الجدول (المحاضرات المشتركة تظهر في مقررات كل قسم مشارك)
     try:
         # 🔄 ترحيل: المعيدون القدامى يصبحون غير نشطين (خارج قوائم التحضير) — idempotent
