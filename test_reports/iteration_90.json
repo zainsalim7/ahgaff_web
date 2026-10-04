@@ -1,0 +1,49 @@
+{
+  "summary": "Phase D (course study groups × weekly schedule) end-to-end verified. BACKEND pytest 16/16 passed (test_weekly_schedule_groups.py). Validated POST /api/weekly-schedule: practical w/o group → 400, invalid group → 400, group='1' stored with group_name, two different groups (1 & 2) at same day/slot coexist with different rooms+teachers (no auto time shift), duplicate same group → 409, theory (no group) collision with existing grouped cell → 409 section conflict, same-room-two-groups → 409, same-teacher-two-groups → 409. PUT /api/weekly-schedule/{id}: {group:'2'} swaps group, {group:''} rejected on practical grouped course (400), switching slot_type → practical without group → 400. GET /api/weekly-schedule and /weekly-schedule/master-view: every slot exposes group + group_name. POST /api/weekly-schedule/generate-lectures: dry_run reports two candidates per date (one per group), real run stamps lectures with group, group_name, teacher_id (per group) and room; re-generate skips each group independently (to_create=0, already_exist≥2); cleaned up afterwards. Backend restart via supervisorctl: both group cells survive the startup dedupe (uniq_section_day_slot now includes group). FRONTEND: weekly-schedule page grid view (بالشعبة, كلية البنات → الدراسات الإسلامية → م3) renders the two seeded Thursday-5 cells with group-badge-{id} showing 'مجموعة 1 معدلة' / 'مجموعة 2'. Testids verified in source: add-slot-group-picker (weekly-schedule.tsx:1106), group-badge-{id} (1266), master-group-badge-{id} (MasterScheduleView.tsx:1083), add-slot-group-toggle + add-slot-group-all (MasterScheduleView.tsx:1183-1184).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/weekly-schedule/conflicts",
+        "issue": "يُبلّغ عن تعارض شعبة (section) زائف بين خليتين من نفس المقرر ومجموعتين مختلفتين في نفس (dept, level, section, day, slot). _slots_conflict ومنطق POST يستثنيان هذه الحالة بشكل صحيح، لكن تجميع تعارض الشعبة في /conflicts (routes/weekly_schedule.py ~1068-1086) يجمع بـ (department_id, level, section) فقط ولا يأخذ group+course_id في الحسبان، فتظهر لافتة 'تم اكتشاف 1 تعارض' وتُلوَّن الخليتان بالأحمر في الواجهة رغم أن الإنشاء مسموح — الحالة الراهنة بالخميس فترة 5 لمقرر 'دراسات حضرموت' (slot_ids 6ac24944e09e1fc7283ccd8f + 6ac24a14a29c091135a16a7c). الحل المقترح: في bucket (dept,lv,sec) اعتبر مجموعة الخلايا متعارضة فقط إذا لم تكن كلّها 'نفس المقرر بمجموعات مختلفة غير فارغة'.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "WeeklyScheduleGrid",
+        "issue": "خليتا المجموعتين المختلفتين تُعرَضان بإطار أحمر و'!' باعتبارهما تعارض شعبة — ناتج عن الـ Bug أعلاه في /api/weekly-schedule/conflicts (conflicts.conflicting_slot_ids يحتوي معرفَي الخليتين).",
+        "selector": "conflicts-banner / group-badge-{id}",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global", "issues": ["تحذير 'Unexpected text node: . A text node cannot be a child of a <View>' مستمر على عدة شاشات (قائم من تكرار سابق)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_weekly_schedule_groups.py",
+    "/app/test_reports/pytest/weekly_schedule_groups.xml"
+  ],
+  "action_items": [
+    "إصلاح /api/weekly-schedule/conflicts: في routes/weekly_schedule.py حول السطر 1068-1086، لا تَعُدّ خليتين من نفس course_id ومجموعتين مختلفتين (كلتاهما group != '') تعارضاً. اقتراح: فرز section_groups[k] إلى شُعب فرعية — إن كانت كل أزواج الخلايا تحقق same course_id + different group → لا تضف تعارض."
+  ],
+  "critical_code_review_comments": [
+    "ازدواجية في منطق تعارض الشعبة: _slots_conflict (المستخدَم عند POST/PUT) يحترم المجموعات بينما مجمِّع /conflicts لا يفعل — ينبغي اشتقاق كليهما من نفس الدالة لتجنّب الانحراف.",
+    "server.py لا يزال 18,959 سطراً — ملاحظة متكررة من التكرارات السابقة.",
+    "generate-lectures يختم teacher_id من الخلية (مدرّس المجموعة) فقط عندما يوجد group في الخلية — جيد؛ ولكن GET /api/lectures/{course_id} يُسقط teacher_id من الاستجابة الظاهرة للعميل (يظهر None رغم وجوده في Mongo)، تم تجاوز ذلك في الاختبار بالتحقق المباشر من Mongo — ننصح بتضمين teacher_id/room في serializer للمحاضرات لعرض سليم بالواجهة."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_weekly_schedule_groups.py (جديد — 16 حالة pytest لـ Phase D)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% من testids المطلوبة محققّة"},
+  "test_credentials": "admin / admin123",
+  "seed_data_creation": "تم إنشاء وحذف خلايا اختبار على يوم الأربعاء فترة 4 لنفس المقرر 698f0000d803b27aab0120af (مجموعات 1 و 2) خلال كل اختبار، ونظّفها autouse fixture. اختبار generate-lectures أنتج محاضرات داخل نافذة 2026-04-01 → 2026-04-08 ثم حذفها عبر Mongo. اختبار restart يستخدم supervisorctl restart backend. الخليتان الموجودتان مسبقاً على الخميس فترة 5 والمقرر وطلابه لم تُمَس.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend endpoint /api/weekly-schedule/conflicts flags same-course-different-group cells as section conflict (routes/weekly_schedule.py ~1068). Fix without changing _slots_conflict. After fix, re-run tests/test_weekly_schedule_groups.py and verify conflicts.total_conflicts == 0 for the Thursday-5 pair; also verify UI banner 'تم اكتشاف تعارض' disappears and red borders removed from the two group cells. GET /api/lectures/{course_id} apparently strips lecture-level teacher_id in serialization — tests use Mongo direct read; main agent may want to expose teacher_id in payload for group-aware UIs.",
+  "rca of the issue": "تعارض شعبة زائف: المجمِّع في GET /weekly-schedule/conflicts يبني مفتاح (department_id, level, section) فقط دون النظر إلى (course_id, group). مجموعتان من نفس المقرر لا يتشاركان الطلاب، لكنهما تدخلان نفس bucket فتُحتسبان تعارضاً. المصدر الموحد لمنطق التعارض (_slots_conflict في نفس الملف ~189) يتعامل بشكل صحيح لكنه غير مُستخدَم من هذا الـ aggregator. الحل: استثناء البوكِت إذا كانت جميع خلاياه من نفس course_id ولها قيم group مميزة غير فارغة، أو إعادة بناء المجمِّع فوق _slots_conflict للمقارنة الزوجية."
+}

@@ -629,3 +629,11 @@
 - **قوالب التوزيع** (`group_templates`): `POST /courses/{id}/groups/save-template {name}` (مجموعات + assignments{student_id: group} + القسم/المستوى/الشعبة) · `GET /courses/{id}/groups/templates` (نفس القسم+المستوى، مع match_count/same_section/is_source) · `POST /courses/{id}/groups/apply-template {template_id, include_teachers, only_unassigned}` (دمج المجموعات + تعيين المتطابقين) · `DELETE /group-templates/{id}`. UI: صندوق «قوالب التوزيع» في CourseGroupsModal (`tpl-*`).
 - اختبار: iteration_89 — 15/15 backend + الواجهات ✅
 - متبقٍ (اختياري): تعديل مجموعة محاضرة قائمة؛ ظهور مقرر المجموعة في «مقرراتي» للمدرّس المُسند.
+
+## 2026-10-04: 👥 المجموعات × الجدول الأسبوعي/العرض الشامل (المرحلة د) ✅
+- **خلية الجدول** (`weekly_schedule`): حقلا `group`/`group_name`. `ScheduleSlotCreate.group` و`ScheduleSlotUpdate.group` ("" للإزالة). `_validate_slot_group()`: المجموعة يجب أن تكون معرّفة في المقرر؛ **العملي لمقرر له مجموعات يُلزم اختيار مجموعة**؛ الافتراضي «كل الطلاب»؛ لا دمج شعب مع فترة مجموعة. المدرّس يُختار يدوياً (قرار المستخدم).
+- **التوازي**: مجموعتان مختلفتان لنفس المقرر في نفس اليوم/الفترة مسموح (قاعتان ومدرّسان مختلفان) — تعارض الشعبة يُستثنى بينهما، `_slots_conflict` لا يُزيح أوقاتهما، الفهرس `uniq_section_day_slot` صار يشمل `group`، وdedupe الإقلاع يميّز بالمجموعة (كان يحذف الخلية الثانية — أُصلح). فترة نظرية للشعبة في فترة فيها مجموعة → 409.
+- **المخرجات**: `GET /weekly-schedule` و`/weekly-schedule/master-view` يعيدان `group/group_name`. UI: شارة 👥 في الشبكة الأسبوعية (`group-badge-{id}`) والعرض الشامل (`master-group-badge-{id}`)، منتقي المجموعة في نموذج الإضافة بالشبكة (`add-slot-group-picker`) وفي العرض الشامل (`add-slot-group-toggle`, `add-slot-group-{key}`).
+- **التوليد من الجدول** (`/weekly-schedule/generate-lectures`): مرشح لكل مجموعة، المحاضرة تُختم بـ group/group_name وteacher_id = مدرّس الخلية وقاعتها؛ التخطي للموجود لكل مجموعة على حدة.
+- تحصين: فحص تعارض القاعة في إنشاء الخلية يتجاهل room_id الفارغ/غير الصالح (كان يسبب 500).
+- اختبار: iteration_90 — 16/16 backend + الشبكة/العرض الشامل ✅
