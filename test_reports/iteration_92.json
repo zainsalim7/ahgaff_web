@@ -1,0 +1,49 @@
+{
+  "summary": "اختبار واجهة الأمامية فقط لصفحة /schedule المعاد تصميمها بحساب admin/admin123. تحميل الصفحة ناجح، الترويسة والإحصائيات وشريط الأسبوع والفلاتر وبطاقات المحاضرات تعمل. يوم 2026-10-07 يعرض بطاقتين لمقرر 'دراسات حضرموت' (مجموعة 1 مجدولة، مجموعة 2 ملغاة) في time-group-10:00 مع time-group-toggle-10:00 وشارات الحالة و lecture-level-* ('المستوى 3') و schedule-group-*. قائمة ⋮ (lecture-menu-*) تفتح lecture-menu-items-* وتحوي view-attendance و cancel-lecture و delete-lecture. شريحة الفصل النشط ظاهرة. فلاتر select و filter-clear-btn و time-group يعملون. أهم المشاكل: عدة أزرار/حقول تستخدم خاصية `data-testid` بدلاً من `testID` على مكونات React Native (TouchableOpacity/TextInput/View/Text)، لذا السمة لا تُمرَّر إلى DOM وتعذر الاستعلام عنها بالـ selector المطلوب.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "schedule.tsx TouchableOpacity/TextInput/View/Text", "issue": "استخدام خاصية data-testid بدلاً من testID على مكونات React Native يمنع ظهور السمة في DOM. العناصر التالية غير قابلة للاستعلام بـ [data-testid=...]: purge-lectures-btn (L417), next-day-btn (L463), prev-day-btn (L478), date-navigation (L462 View), go-today-btn (L430), schedule-search-input (L522 TextInput), schedule-search-clear (L524), lecture-count (L515 Text). ملاحظة: فلاتر <select> (filter-*-select) HTML خام فتعمل بشكل صحيح؛ وعناصر testID الصحيحة (stat-card-*, week-day-*, lecture-*, time-group-*, schedule-hero, hero-day, quick-actions, refresh-btn, day-shift-open-btn, filter-clear-btn, schedule-filter-bar) تظهر بشكل صحيح.", "selector": "data-testid", "priority": "HIGH"},
+      {"component": "schedule page root", "issue": "خطأ console متكرر: 'Unexpected text node: . A text node cannot be a child of a <View>.' — مسافة/نص عابر داخل View في RN Web.", "selector": "console", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/schedule", "issues": ["الترويسة والبطاقات تظهر بشكل أنيق ومتسق مع RTL، لا توجد مشاكل بصرية ملاحظة."]}
+    ]
+  },
+  "verified_working": [
+    "schedule-hero + hero-day (يعرض اسم اليوم + تاريخ ميلادي 'X أكتوبر 2026 م' + التاريخ الهجري 'ربيع الآخر ١٤٤٨ هـ')",
+    "quick-actions يحوي day-shift-open-btn + refresh-btn + مسح المحاضرات (لكن testid مفقود) + اليوم (go-today-btn testid مفقود) عند تحديد يوم غير اليوم",
+    "stat-card-total/completed/scheduled/cancelled + stat-value-* (تعرض 2/0/1/1 ليوم 10-07)",
+    "النقر على بطاقة حالة يفلتر القائمة ويظهر نص 'مفلترة' والنقر مجدداً يلغيه",
+    "week-day-{iso} الستة (السبت→الخميس) + تغيير اليوم بالضغط يحدّث hero-day والعنوان 'محاضرات {اليوم}'",
+    "date-picker-input موجود في DOM (input date مخفي)",
+    "لـ 2026-10-07: 2 بطاقتان lecture-card-* داخل time-group-10:00 + time-group-toggle-10:00 (قابل للطي)",
+    "lecture-level-* = 'المستوى 3' و schedule-group-* ('مجموعة 1'، 'مجموعة 2')",
+    "lecture-menu-* يفتح lecture-menu-items-* يحوي view-attendance-* + cancel-lecture-* (للمجدولة) + delete-lecture-*",
+    "schedule-filter-bar + filter-faculty-select + filter-department-select + filter-time-select + filter-status-select (كلها HTML <select> ولها data-testid في DOM)",
+    "filter-clear-btn يعمل، شريط lecture-count يعرض 'عرض N من M محاضرة'",
+    "شريحة 'الفصل النشط: 2025-12-20 ← 2026-05-07 · الفصل الصيفي 2024-2025' تظهر في صف الإشعارات"
+  ],
+  "testids_missing_in_dom_due_to_wrong_prop": [
+    "purge-lectures-btn", "next-day-btn", "prev-day-btn", "date-navigation",
+    "go-today-btn", "schedule-search-input", "schedule-search-clear", "lecture-count"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "استبدل خاصية data-testid بـ testID على جميع مكونات React Native (TouchableOpacity/TextInput/View/Text) الواردة أعلاه في /app/frontend/app/schedule.tsx حتى تظهر السمة في DOM. العناصر HTML الخام (<select>, <input type=date>, <button>) يمكنها الاحتفاظ بـ data-testid.",
+    "ابحث عن مصدر خطأ console 'Unexpected text node: .' في مكون View داخل schedule.tsx (غالباً تعبير شرطي يُرجع نصاً فارغاً أو مسافة بين وسوم)."
+  ],
+  "critical_code_review_comments": [
+    "ملف schedule.tsx 929 سطراً — يُفضَّل تقسيمه إلى مكونات أصغر (Hero, StatsStrip, WeekBar, FilterBar, LectureCard, TimeGroup) للاختبار والصيانة.",
+    "خلط استخدام testID و data-testid في نفس الملف غير متناسق ويؤدي إلى سمات لا تظهر في DOM لمكونات RN."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped)", "frontend": "~85% (الوظائف تعمل، لكن ~8 testIDs غير متاحة في DOM)"},
+  "test_credentials": "admin / admin123",
+  "seed_data_creation": "لم يتم إنشاء أي بيانات؛ تم رفض نوافذ confirm عند لمس حذف/إلغاء.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "بعد إصلاح الـ testIDs المذكورة، أعِد اختبار الاستعلامات: [data-testid=purge-lectures-btn], [data-testid=next-day-btn], [data-testid=prev-day-btn], [data-testid=schedule-search-input], [data-testid=lecture-count], [data-testid=go-today-btn] (بعد تحديد يوم غير اليوم). أيضاً اختبر البحث بكلمة 'حضرموت' (ينبغي أن يُعيد 2) وبـ 'xyz' (حالة فارغة 'لا توجد نتائج مطابقة').",
+  "rca": "خاصية data-testid في React Native Web تُمرَّر إلى DOM فقط للعناصر HTML الخام؛ أما مكونات RN مثل TouchableOpacity و TextInput و View و Text فتستخدم testID (CamelCase) الذي يُترجم داخلياً إلى data-testid. وضع data-testid مباشرة على هذه المكونات يسبب تجاهله."
+}

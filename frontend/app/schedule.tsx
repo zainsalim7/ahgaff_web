@@ -414,7 +414,7 @@ export default function ScheduleScreen() {
               <View style={n.quickHead}><Ionicons name="flash-outline" size={14} color="#5b6678" /><Text style={n.quickTitle}>إجراءات سريعة</Text></View>
               <View style={n.quickRow}>
                 {canPurge && Platform.OS === 'web' && (
-                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#ffebee' }]} onPress={openPurgeModal} data-testid="purge-lectures-btn">
+                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#ffebee' }]} onPress={openPurgeModal} testID="purge-lectures-btn">
                     <Ionicons name="trash-outline" size={14} color="#c62828" /><Text style={[n.qBtnText, { color: '#c62828' }]}>مسح المحاضرات</Text>
                   </TouchableOpacity>
                 )}
@@ -427,7 +427,7 @@ export default function ScheduleScreen() {
                   <Ionicons name="refresh" size={14} color="#1a2540" /><Text style={n.qBtnText}>تحديث</Text>
                 </TouchableOpacity>
                 {!isToday && (
-                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#e3f2fd' }]} onPress={() => setSelectedDate(getToday())} data-testid="go-today-btn">
+                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#e3f2fd' }]} onPress={() => setSelectedDate(getToday())} testID="go-today-btn">
                     <Ionicons name="today-outline" size={14} color="#1565c0" /><Text style={[n.qBtnText, { color: '#1565c0' }]}>اليوم</Text>
                   </TouchableOpacity>
                 )}
@@ -459,8 +459,8 @@ export default function ScheduleScreen() {
           </View>
 
           {/* 📅 Week strip */}
-          <View style={n.weekRow} data-testid="date-navigation">
-            <TouchableOpacity onPress={() => setWeekOffset((w) => w + 1)} style={n.weekArrow} data-testid="next-day-btn"><Ionicons name="chevron-forward" size={20} color="#1a2540" /></TouchableOpacity>
+          <View style={n.weekRow} testID="date-navigation">
+            <TouchableOpacity onPress={() => setWeekOffset((w) => w + 1)} style={n.weekArrow} testID="next-day-btn"><Ionicons name="chevron-forward" size={20} color="#1a2540" /></TouchableOpacity>
             <View style={n.weekDays}>
               {weekDays.map((d) => {
                 const active = d.iso === selectedDate;
@@ -475,7 +475,7 @@ export default function ScheduleScreen() {
                 );
               })}
             </View>
-            <TouchableOpacity onPress={() => setWeekOffset((w) => w - 1)} style={n.weekArrow} data-testid="prev-day-btn"><Ionicons name="chevron-back" size={20} color="#1a2540" /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setWeekOffset((w) => w - 1)} style={n.weekArrow} testID="prev-day-btn"><Ionicons name="chevron-back" size={20} color="#1a2540" /></TouchableOpacity>
           </View>
 
           {/* ℹ️ Notices */}
@@ -512,16 +512,16 @@ export default function ScheduleScreen() {
                 <View style={n.listTitleIcon}><Ionicons name="book" size={20} color="#1565c0" /></View>
                 <View style={{ alignItems: 'flex-end' }}>
                   <Text style={n.listTitle}>محاضرات {dayName}</Text>
-                  <Text style={n.listCount} data-testid="lecture-count">
+                  <Text style={n.listCount} testID="lecture-count">
                     {loading ? '...' : <>عرض <Text style={{ color: '#1565c0', fontWeight: '800' }}>{filteredLectures.length}</Text> من {lectures.length} محاضرة</>}
                   </Text>
                 </View>
               </View>
               <View style={n.filtersWrap} testID="schedule-filter-bar">
                 <View style={n.searchBox}>
-                  <TextInput style={n.searchInput} placeholder="ابحث في اسم المقرر أو المدرس أو القاعة..." placeholderTextColor="#a8b1c2" value={searchQuery} onChangeText={setSearchQuery} data-testid="schedule-search-input" />
+                  <TextInput style={n.searchInput} placeholder="ابحث في اسم المقرر أو المدرس أو القاعة..." placeholderTextColor="#a8b1c2" value={searchQuery} onChangeText={setSearchQuery} testID="schedule-search-input" />
                   {searchQuery.length > 0 ? (
-                    <TouchableOpacity onPress={() => setSearchQuery('')} data-testid="schedule-search-clear"><Ionicons name="close-circle" size={16} color="#8a95a8" /></TouchableOpacity>
+                    <TouchableOpacity onPress={() => setSearchQuery('')} testID="schedule-search-clear"><Ionicons name="close-circle" size={16} color="#8a95a8" /></TouchableOpacity>
                   ) : <Ionicons name="search" size={16} color="#8a95a8" />}
                 </View>
                 {Platform.OS === 'web' && lectures.length > 0 && (
