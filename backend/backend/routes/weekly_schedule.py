@@ -2973,24 +2973,26 @@ async def export_visual_pdf(
         col_widths = [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1) + [3*cm]
         inner_w = col_widths[0] - 8
         cell_style = ParagraphStyle("Cell", fontName=font_name, fontSize=9, leading=12, alignment=1)
+        cell_style_sm = ParagraphStyle("CellSm", fontName=font_name, fontSize=7.5, leading=10, alignment=1)
 
-        def _para(lines):
+        def _para(lines, small=False):
             # lines: [(text, color|None)] → فقرة متعددة الأسطر مع تلوين سطر المجموعة
             html = "<br/>".join(
                 (f'<font color="{c}">{_xml_escape(ar(t))}</font>' if c else _xml_escape(ar(t))) for t, c in lines
             )
-            return Paragraph(html, cell_style)
+            return Paragraph(html, cell_style_sm if small else cell_style)
 
         def _entries_table(paras):
-            # 👥 جدول داخلي: صف لكل عنصر + خط فاصل رفيع بين العناصر
-            t = Table([[p] for p in paras], colWidths=[inner_w])
+            # 👥 المجموعات جنباً إلى جنب (أعمدة) داخل الخلية — الأولى في أقصى اليمين — مع خط فاصل رأسي رفيع
+            n = len(paras)
+            t = Table([paras[::-1]], colWidths=[inner_w / n] * n)
             st = [
-                ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
-                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("LEFTPADDING", (0, 0), (-1, -1), 2), ("RIGHTPADDING", (0, 0), (-1, -1), 2),
+                ("TOPPADDING", (0, 0), (-1, -1), 2), ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
                 ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
             ]
-            for i in range(len(paras) - 1):
-                st.append(("LINEBELOW", (0, i), (-1, i), 0.6, colors.HexColor("#b39ddb")))
+            for i in range(n - 1):
+                st.append(("LINEAFTER", (i, 0), (i, 0), 0.6, colors.HexColor("#b39ddb")))
             t.setStyle(TableStyle(st))
             return t
 
@@ -3003,6 +3005,7 @@ async def export_visual_pdf(
                     cells.append("")
                 else:
                     paras = []
+                    _multi = len(cell_slots) > 1
                     for s in sorted(cell_slots, key=lambda x: (x.get("group") or "")):
                         course = courses_map.get(s.get("course_id", ""), {})
                         teacher = teachers_map.get(s.get("teacher_id", ""), {})
@@ -3022,7 +3025,7 @@ async def export_visual_pdf(
                         _est, _een, _ch = _effective_times(s, ts.get("start_time", ""), ts.get("end_time", ""))
                         if _ch:
                             lines.append((f"({_est} - {_een})", "#e65100"))
-                        paras.append(_para(lines))
+                        paras.append(_para(lines, small=_multi))
                     cells.append(paras[0] if len(paras) == 1 else _entries_table(paras))
             # 🕐 تمدد الخلايا: المقرر الممتد وقته يندمج مع الفترات التالية الفارغة
             reversed_cells = cells[::-1]
