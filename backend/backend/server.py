@@ -9185,7 +9185,7 @@ _EN_TO_AR_DAY = {
 }
 
 
-async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequest", current_user: dict):
+async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequest", current_user: dict, group: str = "", group_def: dict = None):
     """🔄 (نظام ← جدول) انعكاس المواعيد المتكررة على الجدول الأسبوعي:
     كل (يوم، وقت) يطابق فترة معرفة في إعدادات الكلية → خلية في الجدول، مع فحص التعارضات."""
     created, existing, notes = 0, 0, []
@@ -9205,7 +9205,9 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
 
     level = course.get("level") or 1
     section = course.get("section") or ""
-    teacher_id = course.get("teacher_id") or ""
+    # 👥 مدرّس المجموعة إن وُجد وإلا مدرّس المقرر
+    teacher_id = ((group_def or {}).get("teacher_id") if group else None) or course.get("teacher_id") or ""
+    group_name = ((group_def or {}).get("name") or f"مجموعة {group}") if group else ""
 
     room_id = ""
     if (data.room or "").strip():
@@ -9231,15 +9233,27 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                 continue
             sn = ts.get("slot_number")
 
-            cell = await db.weekly_schedule.find_one({
+            cells = await db.weekly_schedule.find({
                 "department_id": dept_id, "level": level, "section": section, "day": ar_day, "slot_number": sn,
-            })
-            if cell:
-                if cell.get("course_id") == cid:
+            }).to_list(20)
+            blocked = False
+            for cell in cells:
+                if cell.get("course_id") == cid and (cell.get("group") or "") == group:
                     existing += 1
-                else:
-                    other = await db.courses.find_one({"_id": ObjectId(cell["course_id"])}) if cell.get("course_id") else None
-                    notes.append(f"{loc} الخلية مشغولة بمقرر '{(other or {}).get('name', 'آخر')}' في الجدول الأسبوعي — لم تُدرج")
+                    blocked = True
+                    break
+                if group and cell.get("group"):
+                    # 👥 خلية مجموعة أخرى: نفس المقرر → متوازية؛ مقرر آخر → مسموحة إن لم يشترك الطلاب
+                    if cell.get("course_id") == cid:
+                        continue
+                    from routes.weekly_schedule import _grouped_cells_overlap as _gco
+                    if await _gco(db, cid, group, cell) is None:
+                        continue
+                other = await db.courses.find_one({"_id": ObjectId(cell["course_id"])}) if cell.get("course_id") else None
+                notes.append(f"{loc} الخلية مشغولة بمقرر '{(other or {}).get('name', 'آخر')}'{(' (مجموعة ' + str(cell.get('group')) + ')') if cell.get('group') else ''} في الجدول الأسبوعي — لم تُدرج")
+                blocked = True
+                break
+            if blocked:
                 continue
             if teacher_id:
                 busy = await db.weekly_schedule.find_one({"teacher_id": teacher_id, "day": ar_day, "slot_number": sn})
@@ -9262,6 +9276,10 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                 }
                 if teacher_id:
                     doc["teacher_id"] = teacher_id
+                if group:
+                    doc["group"] = group
+                    doc["group_name"] = group_name
+                    doc["slot_type"] = "practical"
                 await db.weekly_schedule.insert_one(doc)
                 created += 1
             except DuplicateKeyError:
@@ -9470,13 +9488,12 @@ async def generate_semester_lectures_advanced(
 
     # 🔄 (نظام ← جدول) انعكاس المواعيد المتكررة على الجدول الأسبوعي
     # (يعمل حتى لو كانت كل المحاضرات موجودة مسبقاً — الانعكاس idempotent وبفحوصاته الخاصة)
-    # 👥 محاضرات المجموعة لا تُدرج في الجدول الأسبوعي للشعبة كاملة
+    # 👥 محاضرات المجموعة تُدرج كخلايا مجموعة (عملي) بمدرّس المجموعة
     ws_created, ws_existing, ws_notes = 0, 0, []
-    if not gen_group:
-        try:
-            ws_created, ws_existing, ws_notes = await _reflect_recurring_to_weekly(course, data, current_user)
-        except Exception as e:
-            logging.warning(f"[reflect_recurring_to_weekly] failed: {e}")
+    try:
+        ws_created, ws_existing, ws_notes = await _reflect_recurring_to_weekly(course, data, current_user, group=gen_group, group_def=gen_group_def)
+    except Exception as e:
+        logging.warning(f"[reflect_recurring_to_weekly] failed: {e}")
 
     message = f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي" + (f" (تم تخطي {conflicts_skipped} بسبب تعارض)" if conflicts_skipped > 0 else "")
     if holiday_dates_skipped:
