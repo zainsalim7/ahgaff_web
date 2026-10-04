@@ -1,0 +1,33 @@
+{
+  "summary": "Phase B+C of Course Study Groups verified end-to-end. BACKEND (pytest 15/15 passed): (1) Student scope — GET /api/lectures/{course_id} with a group-1 student returns only the no-group section lectures + own group's lectures; group-2 lecture is correctly hidden; admin sees both. (2) Teacher scope — teacher-role user whose teacher_record_id = group-1 teacher sees group-1 lecture via /api/lectures/today (empty list OK, no crash), /api/lectures/all-schedule?date=... and /api/lectures/month/{y}/{m}, but NOT group-2's lecture (assigned to a different teacher) — _teacher_lecture_scope and _attach_group_courses behave correctly. (3) generate-semester with group='1' and group='2' at same slot runs in parallel (different teachers), stamps lectures with group/group_name/teacher_id, invalid group -> 400, re-run same group -> 0 new + already_exist>=1, no reflection to weekly schedule for group runs (gen_group bypasses _reflect_recurring_to_weekly). (4) Templates — POST /courses/{id}/groups/save-template returns {id,students_count=72,groups:[2]}; empty name -> 400; GET /templates lists with match_count+same_section+is_source+enrolled_count and template appears as is_source=true; apply-template on sibling course (same dept/level/section) copies groups+teachers; DELETE /group-templates/{id} works; delete nonexistent -> 404. FRONTEND (admin Playwright): group-templates-box visible on course-groups modal; tpl-save-toggle shows tpl-name-input + tpl-save-btn and saves a template; new tpl-row-{id} appears with tpl-apply-{id} + tpl-delete-{id}. On /course-lectures (auto-generate modal) generate-group-section + generate-group-all + generate-group-1 + generate-group-2 all visible and clickable. On /schedule a seeded group-1 lecture renders schedule-group-{lectureId} badge. my-lecture-group-{id} testID present in source (my-lectures.tsx line 83) but /lectures/today is not the actual route — the tab lives under /(tabs)/my-lectures.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global", "issues": ["Pre-existing non-blocking console warning: 'Unexpected text node: . A text node cannot be a child of a <View>' recurs on multiple screens."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_course_groups_phaseBC.py",
+    "/app/test_reports/pytest/course_groups_bc.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py has become 18,950 lines — way beyond the 700-line guideline. The lecture-scope + group logic now lives mid-file; recommend splitting lectures routes into /routes/lectures_*.py modules.",
+    "Active-semester handling is subtle: course view (/lectures/{course_id}) filters by the course's own semester window, while /today, /all-schedule, /month filter by the globally-active semester (via _alas). The two can diverge (seen here: course semester 'الفصل الثاني' is closed while active semester is 'الفصل الصيفي 2024-2025' with no dates). Group lectures must be stamped with the appropriate semester_id or they vanish from one view. Consider documenting this in a one-liner near _teacher_lecture_scope.",
+    "course_groups.py apply-template adds groups+optionally teachers but does NOT remove groups that exist in the course but are absent from the template. That is a conscious choice (idempotent merge) — document it in the endpoint docstring to avoid confusion.",
+    "deleteTemplate in CourseGroupsModal uses window.confirm — Playwright/automation requires a dialog handler; consider swapping for an in-app confirmation modal for better testability and consistent UX across native/web.",
+    "my-lectures.tsx uses `shadow*` style props which emit deprecation warnings on web (pre-existing)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_course_groups_phaseBC.py (new — 15 pytest cases for Phase B+C)"
+  ],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of required testids verified"},
+  "test_credentials": "admin/admin123; teacher 222222/test1234 (role flipped to teacher + password reset in test for scope verification; teacher_record_id already = group1's teacher 698ad3da31ab437a06176e2a).",
+  "seed_data_creation": "During pytest: (a) two group lectures stamped with course semester (student test) + two group lectures stamped with active semester (teacher test) — ALL cleaned up in fixture teardown. (b) generate-semester produced ~5 lectures per group in semester window — cleaned up by test_cleanup_generated. (c) a transient TEST_sibling course was created and deleted to verify apply-template. (d) UI run created one lecture tagged TEST_UI_schedule_badge — removed. Pre-existing data (course 698f0000d803b27aab0120af, its 72 students, 2 groups, and existing template «توزيع م3 عملي») is untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Active semester in DB is 'الفصل الصيفي 2024-2025' (id 6a21bee0ddb8d04530cf65f4) with NO start/end dates — it filters only by exact semester_id match. The course 698f0000d803b27aab0120af belongs to a CLOSED semester 'الفصل الثاني' (id 698e5cc524745fb79482e099, 20-12-2025 → 7-5-2026). When seeding group lectures for /today, /all-schedule, /month tests, stamp them with semester_id=6a21bee0ddb8d04530cf65f4; when seeding for GET /lectures/{course_id} tests, stamp with the course's own semester (698e5cc5…). POST /api/lectures rejects past dates with 400 'لا يمكن إنشاء محاضرة بتاريخ ماضي' — use direct Mongo insert or /generate-semester (which does accept past dates). User 222222 has teacher_record_id=698ad3da31ab437a06176e2a (group-1 teacher) but default role=teacher; /api/auth/me doesn't expose teacher_record_id in response. Group-2 teacher 698bc0593a8982391e9ba188 has no login user. Group-template deletion in UI uses window.confirm — register `page.on('dialog', ...)` before clicking tpl-delete-{id}. my-lectures route lives under /(tabs)/my-lectures, not /lectures/today.",
+  "rca of the issue": "N/A — all Phase B+C requirements verified working as specified."
+}

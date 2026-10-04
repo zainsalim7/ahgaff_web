@@ -154,3 +154,9 @@ GET /api/reports/student/me/detailed/export?fmt=excel&view=detailed
 - [ ] الحساب بلا سجل طالب → رسالة ودّية (404).
 
 حساب اختبار: `1001 / test1234` على بيئة المعاينة (`https://schedule-hub-272.preview.emergentagent.com`) — وعلى الإنتاج بعد نشر الباك إند.
+
+---
+## 👥 تحديث 2026-10-04 — المجموعات الدراسية داخل المقرر (للتطبيقين)
+- المحاضرة قد تحمل `group` (رمز) و`group_name` (مثل «مجموعة 1») في كل مخرجات `/lectures/*`. فارغ = لكل طلاب المقرر.
+- **تطبيق الطالب**: `GET /api/lectures/{course_id}` يُفلتر من الخادم تلقائياً (محاضرات الشعبة + مجموعة الطالب فقط) — لا حاجة لمنطق إضافي؛ يُستحسن عرض `group_name` كشارة. مجموعات الطالب: `GET /api/students/{student_id}/groups`.
+- **تطبيق المعلم**: `GET /api/lectures/today` و`/lectures/month/{y}/{m}` تشمل محاضرات المجموعات المُسندة للمعلم حتى في مقررات ليست له؛ تفاصيل المحاضرة `GET /api/lectures/{id}/details` تعيد طلاب المجموعة فقط، و`POST /api/attendance/session` مسموح لمدرّس المجموعة.
