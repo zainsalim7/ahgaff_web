@@ -9265,13 +9265,19 @@ async def _weekly_occupancy_conflicts(course: dict, data: "GenerateSemesterReque
             ts = slot_by_start.get(slot.start_time)
             if not ts:
                 continue
-            cell = await db.weekly_schedule.find_one({
+            _gen_grp = (getattr(data, "group", None) or "").strip()
+            for cell in await db.weekly_schedule.find({
                 "department_id": dept_id, "level": level, "section": section,
                 "day": ar_day, "slot_number": ts.get("slot_number"),
-            })
-            if cell and cell.get("course_id") != cid:
+            }).to_list(20):
+                if cell.get("course_id") == cid:
+                    continue
+                # 👥 خلية مجموعة لمقرر آخر لا تشغل الفترة إذا كان التوليد لمجموعة أيضاً
+                if _gen_grp and cell.get("group"):
+                    continue
                 other = await db.courses.find_one({"_id": ObjectId(cell["course_id"])}) if cell.get("course_id") else None
                 conflicts.append(f"{ar_day} {slot.start_time}: مشغول بمقرر '{(other or {}).get('name', 'آخر')}'")
+                break
     return conflicts
 
 

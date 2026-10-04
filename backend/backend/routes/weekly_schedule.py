@@ -140,6 +140,23 @@ class ScheduleSlotUpdate(BaseModel):
     group: Optional[str] = None  # 👥 "" لإزالة المجموعة
 
 
+async def _group_students(db, course_id: str, group: str) -> set:
+    return {e["student_id"] async for e in db.enrollments.find({"course_id": course_id, "group": group}, {"student_id": 1})}
+
+
+async def _grouped_cells_overlap(db, course_id: str, group: str, other: dict) -> Optional[str]:
+    """👥 خليتان بمجموعتين لمقررين مختلفين في نفس الفترة: مسموح فقط إذا لم يشترك أي طالب بين المجموعتين.
+    يعيد None إن لم يوجد تداخل، أو رسالة التعارض."""
+    if not group or not other.get("group") or other.get("course_id") == course_id:
+        return "conflict"
+    a = await _group_students(db, course_id, group)
+    b = await _group_students(db, other["course_id"], other["group"])
+    shared = a & b
+    if not shared:
+        return None
+    return f"{len(shared)} طالب مشترك بين المجموعتين"
+
+
 async def _validate_slot_group(db, course_id: str, group: Optional[str], slot_type: Optional[str]) -> tuple:
     """👥 يتحقق من المجموعة ويعيد (group_key, group_name). العملي لمقرر له مجموعات يُلزم اختيار مجموعة."""
     course = await db.courses.find_one({"_id": ObjectId(course_id)}, {"groups": 1}) if course_id and ObjectId.is_valid(course_id) else None
@@ -186,8 +203,8 @@ def _slots_conflict(a: dict, b: dict) -> bool:
     if (a.get("department_id"), a.get("level"), a.get("section") or "") == \
        (b.get("department_id"), b.get("level"), b.get("section") or ""):
         # 👥 مجموعتان مختلفتان من نفس المقرر لا تتشاركان الطلاب
-        if a.get("group") and b.get("group") and a.get("group") != b.get("group") and a.get("course_id") == b.get("course_id"):
-            pass
+        if a.get("group") and b.get("group") and (a.get("course_id") != b.get("course_id") or a.get("group") != b.get("group")):
+            pass  # مجموعتان (من نفس المقرر أو مقررين مختلفين) — تم التحقق من عدم تشارك الطلاب عند الإنشاء
         else:
             return True
     if a.get("teacher_id") and a.get("teacher_id") == b.get("teacher_id"):
@@ -1217,11 +1234,16 @@ async def create_schedule_slot(
         }
         if slot_group:
             _sec_q["$or"] = [{"group": {"$in": [None, ""]}}, {"group": slot_group}, {"course_id": {"$ne": data.course_id}}]
-        existing_section = await db.weekly_schedule.find_one(_sec_q)
-        if existing_section:
+        for existing_section in await db.weekly_schedule.find(_sec_q).to_list(20):
+            # 👥 مقرر آخر بمجموعة في نفس الفترة: مسموح إذا لم يشترك طلاب المجموعتين
+            if slot_group and existing_section.get("course_id") != data.course_id and existing_section.get("group"):
+                _ov = await _grouped_cells_overlap(db, data.course_id, slot_group, existing_section)
+                if _ov is None:
+                    continue
             c = await db.courses.find_one({"_id": ObjectId(existing_section["course_id"])})
             _g = existing_section.get("group")
             conflicts.append(f"تعارض شعبة: يوجد مقرر '{c.get('name', '')}'{f' (مجموعة {_g})' if _g else ''} للمستوى {lvl}{f' شعبة {sec}' if sec else ''} في هذه الفترة")
+            break
 
     # 2. تعارض المعلم
     teacher_busy = await db.weekly_schedule.find_one({
@@ -1379,7 +1401,8 @@ async def update_schedule_slot(
     _chk_group = update.get("group", existing.get("group")) or ""
     _grp_excl = ({"$or": [{"group": {"$in": [None, ""]}}, {"group": _chk_group}, {"course_id": {"$ne": update.get("course_id", existing.get("course_id"))}}]} if _chk_group else {})
     if any(k in update for k in ("day", "slot_number", "department_id", "level", "section", "group")):
-        section_busy = await db.weekly_schedule.find_one({
+        _chk_course = update.get("course_id", existing.get("course_id"))
+        for section_busy in await db.weekly_schedule.find({
             "_id": {"$ne": ObjectId(slot_id)},
             **_mg_excl,
             **_grp_excl,
@@ -1388,8 +1411,10 @@ async def update_schedule_slot(
             "section": check_section,
             "day": check_day,
             "slot_number": check_slot,
-        })
-        if section_busy:
+        }).to_list(20):
+            if _chk_group and section_busy.get("course_id") != _chk_course and section_busy.get("group"):
+                if await _grouped_cells_overlap(db, _chk_course, _chk_group, section_busy) is None:
+                    continue
             raise HTTPException(status_code=409, detail="تعارض: يوجد محاضرة أخرى لنفس الشعبة في هذه الفترة")
 
     if check_teacher and any(k in update for k in ("teacher_id", "day", "slot_number")):
@@ -5260,7 +5285,7 @@ async def _check_slot_placement(db, slot: dict, target_day: str, target_slot: in
     _mg = slot.get("merge_group_id")
     _mg_excl = {"merge_group_id": {"$ne": _mg}} if _mg else {}
 
-    section_busy = await db.weekly_schedule.find_one({
+    for section_busy in await db.weekly_schedule.find({
         "_id": exclude,
         **_mg_excl,
         "department_id": slot.get("department_id"),
@@ -5268,10 +5293,13 @@ async def _check_slot_placement(db, slot: dict, target_day: str, target_slot: in
         "section": slot.get("section", ""),
         "day": target_day,
         "slot_number": target_slot,
-    })
-    if section_busy:
+    }).to_list(20):
+        if slot.get("group") and section_busy.get("group") and (section_busy.get("course_id") != slot.get("course_id") or section_busy.get("group") != slot.get("group")):
+            if section_busy.get("course_id") == slot.get("course_id") or await _grouped_cells_overlap(db, slot.get("course_id"), slot.get("group"), section_busy) is None:
+                continue
         c = await db.courses.find_one({"_id": ObjectId(section_busy["course_id"])}) if section_busy.get("course_id") else None
         conflicts.append(f"تعارض شعبة: يوجد مقرر '{(c or {}).get('name', '')}' لنفس الشعبة في هذه الفترة")
+        break
 
     if slot.get("teacher_id"):
         teacher_busy = await db.weekly_schedule.find_one({
