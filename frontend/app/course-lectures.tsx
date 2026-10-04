@@ -142,6 +142,20 @@ export default function CourseLecturesScreen() {
   
   // إعادة جدولة
   const [rescheduleModal, setRescheduleModal] = useState<{lectureId: string; courseName: string; oldDate: string} | null>(null);
+  const [groupModal, setGroupModal] = useState<{ lectureId: string; current: string } | null>(null);
+  const canEditGroup = user?.role === 'admin' || hasPermission(PERMISSIONS.MANAGE_LECTURES);
+
+  const changeLectureGroup = async (group: string) => {
+    if (!groupModal) return;
+    try {
+      await lecturesAPI.update(groupModal.lectureId, { group } as any);
+      showNotification('success', group ? 'تم تغيير مجموعة المحاضرة' : 'أصبحت المحاضرة لكل الطلاب');
+      setGroupModal(null);
+      fetchData(1);
+    } catch (e: any) {
+      showNotification('error', e?.response?.data?.detail || 'فشل تغيير المجموعة');
+    }
+  };
   const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '08:00', end_time: '09:00', room: '' });
   const [siblings, setSiblings] = useState<any[]>([]);
   const [applyToShared, setApplyToShared] = useState(true);
@@ -945,6 +959,16 @@ export default function CourseLecturesScreen() {
               <Text style={styles.actBtnRescheduleText}>إعادة الجدولة</Text>
             </TouchableOpacity>
           )}
+          {canEditGroup && (course?.groups || []).length > 0 && item.status === 'scheduled' && (
+            <TouchableOpacity
+              style={[styles.actBtnReschedule, { borderColor: '#00838f' }]}
+              onPress={() => setGroupModal({ lectureId: item.id, current: item.group || '' })}
+              testID={`change-group-${item.id}`}
+            >
+              <Ionicons name="people-outline" size={14} color="#00838f" />
+              <Text style={[styles.actBtnRescheduleText, { color: '#00838f' }]}>{item.group ? 'تغيير المجموعة' : 'تعيين مجموعة'}</Text>
+            </TouchableOpacity>
+          )}
           {item.status === 'scheduled' && (
             <TouchableOpacity style={styles.actBtnAttend} onPress={() => router.push({ pathname: '/take-attendance', params: { lectureId: item.id } })}>
               <Ionicons name="checkmark-circle-outline" size={14} color="#22a35a" />
@@ -1722,6 +1746,34 @@ export default function CourseLecturesScreen() {
       </SafeAreaView>
       
       {/* Modal إعادة الجدولة */}
+      {groupModal && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setGroupModal(null)}>
+          <View style={{ flex: 1, backgroundColor: 'rgba(20,30,55,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 }}>
+            <View style={{ backgroundColor: '#fff', borderRadius: 14, width: '100%', maxWidth: 420, padding: 18 }} testID="lecture-group-modal">
+              <Text style={{ fontSize: 16, fontWeight: '800', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>👥 مجموعة المحاضرة</Text>
+              <Text style={{ fontSize: 12, color: '#5b6678', textAlign: 'right', marginBottom: 12 }}>تظهر المحاضرة لطلاب المجموعة المختارة فقط ويُحضَّر لهم وحدهم. لا يمكن التغيير بعد تسجيل الحضور.</Text>
+              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+                <TouchableOpacity onPress={() => changeLectureGroup('')} style={{ borderWidth: 1.5, borderColor: '#1a2540', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, backgroundColor: groupModal.current === '' ? '#1a2540' : '#fff' }} testID="lecture-group-opt-all">
+                  <Text style={{ fontSize: 13, fontWeight: '700', color: groupModal.current === '' ? '#fff' : '#1a2540' }}>كل الطلاب</Text>
+                </TouchableOpacity>
+                {(course?.groups || []).map((g: any, i: number) => {
+                  const c = ['#1565c0', '#2e7d32', '#ad1457', '#ef6c00', '#6a1b9a', '#00838f', '#5d4037', '#c62828'][i % 8];
+                  const on = groupModal.current === g.key;
+                  return (
+                    <TouchableOpacity key={g.key} onPress={() => changeLectureGroup(g.key)} style={{ borderWidth: 1.5, borderColor: c, borderRadius: 10, paddingVertical: 8, paddingHorizontal: 14, backgroundColor: on ? c : '#fff' }} testID={`lecture-group-opt-${g.key}`}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: on ? '#fff' : c }}>{g.name || `مجموعة ${g.key}`}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <TouchableOpacity onPress={() => setGroupModal(null)} style={{ alignSelf: 'flex-start', marginTop: 14, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: '#eceff1' }} testID="lecture-group-cancel">
+                <Text style={{ fontWeight: '700', color: '#334155' }}>إغلاق</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </Modal>
+      )}
+
       {rescheduleModal && (
         <Modal visible={true} transparent animationType="fade">
           <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}>

@@ -35,6 +35,7 @@ class LectureUpdate(BaseModel):
     apply_to_shared: Optional[bool] = None  # 🔗 تطبيق الإلغاء/التفعيل على الشعب المشتركة (افتراضياً نعم)
     reschedule_note: Optional[str] = None  # ملاحظة عند إعادة الجدولة (اختياري)
     lesson_title: Optional[str] = None  # عنوان الدرس المُنجز (لربط الخطة الدراسية)
+    group: Optional[str] = None  # 👥 تغيير مجموعة المحاضرة ("" = لكل الطلاب)
     plan_topic_id: Optional[str] = None  # معرف موضوع من الخطة الدراسية
     time_locked: Optional[bool] = None  # 🔒 قفل/فك قفل الوقت يدوياً (تجاوز مزامنة الأوقات)
 

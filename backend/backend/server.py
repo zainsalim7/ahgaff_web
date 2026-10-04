@@ -6057,6 +6057,20 @@ async def get_courses(
         _lv = query.pop("level")
         query["$or"] = [{"level": _lv}, {"shared_links": {"$elemMatch": {"level": _lv}}}]
     courses = await db.courses.find(query).to_list(None)
+
+    # 👥 المدرّس يرى أيضاً المقررات التي يقود فيها مجموعة فقط (بشارة المجموعة)
+    group_roles: dict = {}
+    if current_user["role"] == UserRole.TEACHER and "teacher_id" in query and isinstance(query["teacher_id"], str):
+        _tid = query["teacher_id"]
+        _gq = {k: v for k, v in query.items() if k != "teacher_id"}
+        _gq["groups"] = {"$elemMatch": {"teacher_id": _tid}}
+        _have = {str(c["_id"]) for c in courses}
+        for gc in await db.courses.find(_gq).to_list(None):
+            if str(gc["_id"]) in _have:
+                continue
+            _gs = [g for g in (gc.get("groups") or []) if g.get("teacher_id") == _tid]
+            group_roles[str(gc["_id"])] = [{"key": g["key"], "name": g.get("name") or f"مجموعة {g['key']}"} for g in _gs]
+            courses.append(gc)
     
     # جلب عدد الطلاب لكل مقرر دفعة واحدة (فقط إذا مطلوب)
     course_ids = [str(c["_id"]) for c in courses]
@@ -6210,6 +6224,8 @@ async def get_courses(
                 for k in sorted(merge_partners.get(str(c["_id"]), set()), key=lambda x: (str(x[0]), str(x[1]), x[2]))
             ],
             "shared_here": bool(department_id and c.get("department_id") and c.get("department_id") != department_id),
+            "group_roles": group_roles.get(str(c["_id"]), []),
+            "groups": c.get("groups") or [],
         })
     
     return apply_fields(result, allowed)
@@ -9461,6 +9477,30 @@ async def update_lecture(
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None and k != "apply_to_shared"}
+
+    # 👥 تغيير/إزالة مجموعة المحاضرة (للمدير أو من يملك صلاحية إدارة المحاضرات)
+    _eff_group = lecture.get("group") or ""
+    _eff_group_teacher = None
+    if "group" in update_data:
+        if current_user["role"] not in (UserRole.ADMIN,) and not has_permission(current_user, "manage_lectures"):
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتغيير مجموعة المحاضرة")
+        if lecture.get("status") == LectureStatus.COMPLETED or await db.attendance.find_one({"lecture_id": lecture_id}, {"_id": 1}):
+            raise HTTPException(status_code=400, detail="لا يمكن تغيير المجموعة بعد تسجيل الحضور للمحاضرة")
+        _g = (update_data.pop("group") or "").strip()
+        _crs = await db.courses.find_one({"_id": ObjectId(lecture["course_id"])}, {"groups": 1, "teacher_id": 1}) if ObjectId.is_valid(lecture.get("course_id", "")) else None
+        if _g:
+            _gd = next((x for x in ((_crs or {}).get("groups") or []) if x.get("key") == _g), None)
+            if not _gd:
+                raise HTTPException(status_code=400, detail="المجموعة غير معرّفة في هذا المقرر")
+            update_data["group"] = _g
+            update_data["group_name"] = _gd.get("name") or f"مجموعة {_g}"
+            _eff_group_teacher = _gd.get("teacher_id") or None
+            update_data["teacher_id"] = _eff_group_teacher or (_crs or {}).get("teacher_id")
+        else:
+            update_data["group"] = None
+            update_data["group_name"] = None
+            update_data["teacher_id"] = (_crs or {}).get("teacher_id")
+        _eff_group = _g
     
     # التحقق من أن وقت النهاية بعد وقت البداية
     new_start = update_data.get("start_time", lecture.get("start_time", ""))
@@ -9468,19 +9508,20 @@ async def update_lecture(
     if new_start and new_end and new_end <= new_start:
         raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
 
-    # 🔒 فحص التعارض عند تغيير التاريخ أو الوقت أو القاعة (نفس المقرر أو نفس الأستاذ أو القاعة)
-    if any(k in update_data for k in ("date", "start_time", "end_time", "room")):
+    # 🔒 فحص التعارض عند تغيير التاريخ أو الوقت أو القاعة أو المجموعة (نفس المقرر أو نفس الأستاذ أو القاعة)
+    if any(k in update_data for k in ("date", "start_time", "end_time", "room", "group")):
         eff_date = update_data.get("date") or lecture.get("date", "")
         conflict = await check_teacher_lecture_conflict(
             lecture.get("course_id", ""), eff_date, new_start, new_end,
-            exclude_lecture_id=lecture_id, allow_same_course=True
+            exclude_lecture_id=lecture_id, allow_same_course=True,
+            group=_eff_group or None, teacher_override=_eff_group_teacher
         )
         if conflict and conflict["type"] == "error":
             raise HTTPException(status_code=400, detail=conflict["message"])
         eff_room = update_data.get("room") if "room" in update_data else lecture.get("room", "")
         room_conflict = await check_room_lecture_conflict(
             lecture.get("course_id", ""), eff_room or "", eff_date, new_start, new_end,
-            exclude_lecture_id=lecture_id
+            exclude_lecture_id=lecture_id, group=_eff_group or None
         )
         if room_conflict and room_conflict["type"] == "error":
             raise HTTPException(status_code=400, detail=room_conflict["message"])

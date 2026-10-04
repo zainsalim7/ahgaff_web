@@ -18,6 +18,7 @@ import { coursesAPI, lecturesAPI } from '../src/services/api';
 
 interface Course {
   id: string;
+  group_roles?: Array<{ key: string; name: string }>;
   name: string;
   code: string;
   department_name?: string;
@@ -203,6 +204,12 @@ export default function TeacherCoursesScreen() {
           <View style={styles.statItem}>
             <Ionicons name="people-outline" size={16} color="#666" />
             <Text style={styles.statText}>شعبة {item.section}</Text>
+          </View>
+        )}
+        {(item.group_roles || []).length > 0 && (
+          <View style={[styles.statItem, { backgroundColor: '#e0f2f1', borderRadius: 6, paddingHorizontal: 6 }]} testID={`course-group-role-${item.id}`}>
+            <Ionicons name="people" size={16} color="#00838f" />
+            <Text style={[styles.statText, { color: '#00695c', fontWeight: '800' }]}>تقود {item.group_roles.map((g: any) => g.name).join('، ')} فقط</Text>
           </View>
         )}
         <View style={styles.statItem}>

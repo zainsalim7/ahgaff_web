@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { attendanceAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { GroupAttendanceCompare } from '../src/components/GroupAttendanceCompare';
 
 interface StudentStat {
   student_id: string;
@@ -123,7 +124,10 @@ export default function CourseStatsScreen() {
             <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
           }
           ListHeaderComponent={
-            <Text style={styles.listHeader}>إحصائيات الطلاب</Text>
+            <>
+              <GroupAttendanceCompare courseId={courseId as string} />
+              <Text style={styles.listHeader}>إحصائيات الطلاب</Text>
+            </>
           }
         />
       )}

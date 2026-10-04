@@ -881,6 +881,7 @@ export const courseGroupsAPI = {
   applyTemplate: (courseId: string, templateId: string, opts?: { include_teachers?: boolean; only_unassigned?: boolean }) =>
     api.post(`/courses/${courseId}/groups/apply-template`, { template_id: templateId, include_teachers: true, only_unassigned: false, ...(opts || {}) }),
   deleteTemplate: (templateId: string) => api.delete(`/group-templates/${templateId}`),
+  attendance: (courseId: string) => api.get(`/courses/${courseId}/groups/attendance`),
 };
 
 export const lecturesAPI = {

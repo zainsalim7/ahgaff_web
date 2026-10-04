@@ -338,3 +338,42 @@ async def delete_group_template(template_id: str, current_user: dict = Depends(g
     if not r.deleted_count:
         raise HTTPException(status_code=404, detail="القالب غير موجود")
     return {"message": "تم حذف القالب"}
+
+
+@router.get("/courses/{course_id}/groups/attendance")
+async def groups_attendance(course_id: str, current_user: dict = Depends(get_current_user)):
+    """📊 مقارنة الحضور بين مجموعات المقرر (حسب سجلات الحضور)"""
+    db = get_db()
+    course = await _course(db, course_id)
+    groups = course.get("groups") or []
+    enr = {e["student_id"]: (e.get("group") or "") async for e in db.enrollments.find({"course_id": course_id}, {"student_id": 1, "group": 1})}
+    stats = {g["key"]: {"present": 0, "late": 0, "absent": 0, "excused": 0, "students": 0} for g in groups}
+    stats[""] = {"present": 0, "late": 0, "absent": 0, "excused": 0, "students": 0}
+    for sid, g in enr.items():
+        stats.setdefault(g, {"present": 0, "late": 0, "absent": 0, "excused": 0, "students": 0})["students"] += 1
+    async for row in db.attendance.aggregate([{"$match": {"course_id": course_id}}, {"$group": {"_id": {"s": "$student_id", "st": "$status"}, "n": {"$sum": 1}}}]):
+        g = enr.get(row["_id"]["s"])
+        if g is None:
+            continue
+        st = row["_id"]["st"]
+        if st in stats[g]:
+            stats[g][st] += row["n"]
+    lec_counts = {"": 0}
+    async for row in db.lectures.aggregate([{"$match": {"course_id": course_id, "status": {"$in": ["completed", "absent"]}}}, {"$group": {"_id": {"$ifNull": ["$group", ""]}, "n": {"$sum": 1}}}]):
+        lec_counts[row["_id"]] = row["n"]
+
+    def _pack(key, name, color_idx):
+        s = stats.get(key) or {"present": 0, "late": 0, "absent": 0, "excused": 0, "students": 0}
+        total = s["present"] + s["late"] + s["absent"] + s["excused"]
+        attended = s["present"] + s["late"]
+        return {"key": key, "name": name, **s, "total_records": total,
+                "attendance_rate": round(attended * 100 / total, 1) if total else 0,
+                "lectures_count": lec_counts.get("", 0) + (lec_counts.get(key, 0) if key else 0)}
+
+    out = [_pack(g["key"], g.get("name") or f"مجموعة {g['key']}", i) for i, g in enumerate(groups)]
+    if stats[""]["students"]:
+        out.append(_pack("", "بلا مجموعة", len(groups)))
+    rates = [x["attendance_rate"] for x in out if x["total_records"]]
+    return {"course_id": course_id, "course_name": course.get("name", ""), "groups": out,
+            "best": max(out, key=lambda x: x["attendance_rate"])["key"] if rates else None,
+            "spread": round(max(rates) - min(rates), 1) if len(rates) > 1 else 0}
