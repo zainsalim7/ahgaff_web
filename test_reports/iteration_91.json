@@ -1,0 +1,43 @@
+{
+  "summary": "Phase E (course study groups × courses/attendance/lectures) tested end-to-end. BACKEND pytest 9 passed + 1 passed (10/10) in test_course_groups_phaseE.py: (1) GET /api/courses?all_semesters=true as teacher 222222 returns course 698f0000d803b27aab0120af with group_roles=[{key:'1',name:'مجموعة 1 معدلة'}] and own courses have group_roles=[]; admin never gets populated group_roles. (2) GET /api/courses/{id}/groups/attendance returns groups[1,2] with correct students sum (36+36=72 enrolled), math attendance_rate=(present+late)/total_records, plus best/spread keys. (3) PUT /api/lectures/{id} {group:'2'} → updates group/group_name/teacher_id (lecture details reflect group-2 students only). {group:''} → clears group. {group:'99'} → 400 'المجموعة غير معرّفة'. Conflict path: creating two lectures same date/time with different groups succeeds, then changing lecture1 → group 2 yields 400 conflict. Attendance-recorded block: creating attendance via /api/attendance/single then PUT {group:'2'} → 400 'لا يمكن تغيير المجموعة بعد تسجيل الحضور'. Target lecture 6ac234164b7f763cfb72eff6 restored to group 1 (teacher_id=698ad3da31ab437a06176e2a) at module teardown — confirmed via Mongo. FRONTEND (admin): /course-stats?courseId=…120af shows group-attendance-compare with group-attendance-row-1 (50%, 36 طالب · 9 محاضرة · مجموعة 1 معدلة) and group-attendance-row-2 (50%, 36 طالب · 9 محاضرة · مجموعة 2). /course-lectures: change-group-{id} button present on scheduled lecture 6ac249c74da8a8a415f7fb1a, click opens lecture-group-modal exposing lecture-group-opt-all, lecture-group-opt-1, lecture-group-opt-2; lecture-group-badge-{id} rendered. Teacher UI (my-courses-teacher as 222222) could not be verified via browser because /api/auth/login returned 403 due to IP-based login rate limit (RATE_LIMIT_WINDOW counter in server.py:454-472) triggered by prior repeated test logins — curl POST to same endpoint with identical body returns 200; feature itself is proven via API test test_teacher_sees_group_only_course_with_group_roles. All testids verified in source (GroupAttendanceCompare.tsx:34, course-stats.tsx uses it, course-lectures.tsx:913/966/1752/1756/1763, my-courses-teacher.tsx:210).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/lectures/{id} (group change permission)", "issue": "المواصفة تطلب 403 لمدرّس بلا صلاحية. دور teacher يحمل manage_lectures افتراضياً (مؤكّد عبر /api/auth/me للمستخدم 222222)، فلن يُفعَّل مسار 403 إلا بدور مخصّص يُجرّد الصلاحية. الاختبار يوثّق هذا السلوك ويتحقّق أن المدرّس 222222 يمر (200). لا يوجد عطل برمجي؛ تنبيه توثيقي فقط."},
+      {"endpoint": "GET /api/lectures/{id}/details", "issue": "lecture.teacher_id يصل كـ None في الاستجابة رغم أنه مُخزَّن صحيحاً في Mongo (698ad3da31ab437a06176e2a بعد ضبط المجموعة إلى '1'). هذا مُلاحَظ في iteration_90 أيضاً — يُستحسن تضمين teacher_id ضمن الـ serializer لعرض واجهات واعية بالمجموعة."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "UI login for teacher 222222", "issue": "تعذّر إكمال سيناريو الواجهة لصفحة my-courses-teacher لأن POST /api/auth/login عاد 403 داخل المتصفح بسبب حد المحاولات IP-based (server.py:454-472)؛ cURL من نفس المضيف يعطي 200. لا علاقة مباشرة بالميزة المختبرة، لكن قد يُعيق الـ E2E؛ يُقترح استثناء مسارات التست أو تخفيف العتبة أثناء التطوير.", "affected_selectors": ["course-group-role-{id}"]}
+    ],
+    "design_issues": [
+      {"screen": "global", "issues": ["تحذير مستمر 'Unexpected text node: . A text node cannot be a child of a <View>.' يتكرر على عدة شاشات (ملاحظة قائمة من iteration_90)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_course_groups_phaseE.py",
+    "/app/test_reports/pytest/course_groups_phaseE.xml"
+  ],
+  "action_items": [
+    "اعتبار تضمين teacher_id في serializer للمحاضرات لمسار GET /api/lectures/{id}/details حتى تعرض الواجهات مدرّس المجموعة الفعلي.",
+    "(اختياري) السماح بتخفيف أو تجاوز حد محاولات تسجيل الدخول عند الاختبار الآلي حتى يمكن اختبار واجهات الأدوار غير الأدمن."
+  ],
+  "critical_code_review_comments": [
+    "update_lecture (server.py:9479) يبني update_data بـ `v is not None`؛ هذا جيد للحقل group (يحتفظ بالقيمة '' لإزالة المجموعة). لا توجد ثغرة.",
+    "groups_attendance (routes/course_groups.py:343-379) حسابات slim ودقيقة؛ ملاحظة: صف 'بلا مجموعة' يُحتسب فقط إذا students>0 — سلوك جيد.",
+    "get_courses teacher branch (server.py:6061-6073) يُطبّق فلتر الفصل النشط من query الأصلي، وبما أن المقرر 120af في فصل غير نشط فإنه يظهر فقط مع all_semesters=true — هذا مُوثّق في المواصفة والواجهة قد تحتاج تمرير العلم عندما يُراد عرض شارة group_roles خارج الفصل النشط.",
+    "server.py لا يزال كبير (~19,000 سطر) — ملاحظة متكررة."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_course_groups_phaseE.py (جديد — 10 حالات pytest لـ Phase E)"
+  ],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "66% (admin flows PASS؛ teacher flow blocked by login rate limit)"},
+  "test_credentials": "admin / admin123; 222222 / test1234",
+  "seed_data_creation": "أُنشئت محاضرتان مؤقتتان بتاريخ ~400 يوم في المستقبل في المقرر 120af لاختبار التعارض وحجب تغيير المجموعة بعد سجل حضور، ثم حُذفتا داخل teardown. سجل حضور تجريبي أُنشئ ثم تنظيفه عبر DELETE /api/lectures/{id}/attendance (موجود). المحاضرة 6ac234164b7f763cfb72eff6 أُعيدت إلى group '1' (teacher_id=698ad3da31ab437a06176e2a) — مؤكد عبر Mongo.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "تم ضبط حد محاولات تسجيل الدخول IP-based في server.py:454-472 — إذا احتجت لاختبار واجهة بحساب غير الأدمن، أعِد تشغيل الخادم أو انتظر نافذة RATE_LIMIT_WINDOW قبل البدء بالتسجيل. اختبار Phase E الحالي يحتاج فقط credentials admin + 222222؛ MongoDB فحوصات مباشرة متاحة عبر backend/.env (MONGO_URL, DB_NAME).",
+  "rca of the issue": "لا توجد مشكلة حرجة. أهم ملاحظة: GET /api/lectures/{id}/details يُفرِغ lecture.teacher_id في الـ serializer رغم وجوده في Mongo — موروث من iteration_90، يفضل تضمينه."
+}

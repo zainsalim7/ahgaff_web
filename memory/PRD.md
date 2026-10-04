@@ -637,3 +637,9 @@
 - **التوليد من الجدول** (`/weekly-schedule/generate-lectures`): مرشح لكل مجموعة، المحاضرة تُختم بـ group/group_name وteacher_id = مدرّس الخلية وقاعتها؛ التخطي للموجود لكل مجموعة على حدة.
 - تحصين: فحص تعارض القاعة في إنشاء الخلية يتجاهل room_id الفارغ/غير الصالح (كان يسبب 500).
 - اختبار: iteration_90 — 16/16 backend + الشبكة/العرض الشامل ✅
+
+## 2026-10-04: 👥 المجموعات — مقرراتي / مقارنة الحضور / تعديل مجموعة محاضرة (المرحلة هـ) ✅
+- **مقرراتي للمدرّس**: `GET /courses` بحساب teacher يضيف المقررات التي يقود فيها مجموعة فقط (`groups.teacher_id`) مع `group_roles=[{key,name}]` و`groups`؛ شارة «تقود مجموعة X فقط» في `my-courses-teacher.tsx` (`course-group-role-{id}`). (فلتر الفصل النشط يبقى — `all_semesters=true` لعرض الكل).
+- **مقارنة الحضور**: `GET /courses/{id}/groups/attendance` (لكل مجموعة: طلاب، حضور/تأخر/عذر/غياب، نسبة، عدد المحاضرات المكتملة للشعبة+المجموعة، + صف «بلا مجموعة»، best، spread). مكوّن `GroupAttendanceCompare.tsx` أعلى قائمة الطلاب في `course-stats.tsx` (`group-attendance-compare`, `group-attendance-row-{key}`)؛ يُخفى لمقرر بلا مجموعات.
+- **تعديل مجموعة محاضرة**: `LectureUpdate.group` ("" = كل الطلاب) في `PUT /lectures/{id}` — admin أو manage_lectures؛ ممنوع بعد تسجيل الحضور/الاكتمال؛ يحدّث group/group_name/teacher_id (مدرّس المجموعة أو المقرر) ويفحص التعارض بالمجموعة. UI: زر `change-group-{id}` على بطاقة المحاضرة المجدولة → `lecture-group-modal` (`lecture-group-opt-all|{key}`).
+- اختبار: iteration_91 — 10/10 backend + الواجهات ✅
