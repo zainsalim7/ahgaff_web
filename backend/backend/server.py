@@ -18699,6 +18699,7 @@ async def _ensure_weekly_schedule_unique_indexes(db):
                 "_id": {
                     "dept": "$department_id", "lvl": "$level",
                     "sec": {"$ifNull": ["$section", ""]},
+                    "g": {"$ifNull": ["$group", ""]},
                     "d": "$day", "s": "$slot_number",
                 },
                 "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
@@ -18743,8 +18744,16 @@ async def _ensure_weekly_schedule_unique_indexes(db):
             partialFilterExpression={"room_id": {"$exists": True, "$type": "string"}},
             name="uniq_room_day_slot",
         )
+        # 👥 يتضمن المجموعة ليمكن لمجموعتين من نفس المقرر مشاركة نفس الفترة
+        try:
+            _ws_idx = await db.weekly_schedule.index_information()
+            _ws_old = _ws_idx.get("uniq_section_day_slot")
+            if _ws_old and [k for k, _ in _ws_old.get("key", [])] != ["department_id", "level", "section", "day", "slot_number", "group"]:
+                await db.weekly_schedule.drop_index("uniq_section_day_slot")
+        except Exception as _e:
+            logging.warning(f"[weekly_schedule index] drop old failed: {_e}")
         await db.weekly_schedule.create_index(
-            [("department_id", 1), ("level", 1), ("section", 1), ("day", 1), ("slot_number", 1)],
+            [("department_id", 1), ("level", 1), ("section", 1), ("day", 1), ("slot_number", 1), ("group", 1)],
             unique=True,
             partialFilterExpression={"department_id": {"$exists": True, "$type": "string"}},
             name="uniq_section_day_slot",

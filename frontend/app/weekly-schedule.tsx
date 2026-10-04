@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { scheduleAPI, departmentsAPI, teachersAPI, coursesAPI } from '../src/services/api';
-import api from '../src/services/api';
+import api, { courseGroupsAPI } from '../src/services/api';
 import { MasterScheduleView } from '../src/components/MasterScheduleView';
 
 const DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
@@ -113,7 +113,13 @@ export default function WeeklySchedulePage() {
   const [prefsListOpen, setPrefsListOpen] = useState(false);
   // Add slot modal
   const [showAddSlot, setShowAddSlot] = useState(false);
-  const [addSlotData, setAddSlotData] = useState({ day: '', slot_number: '', course_id: '', teacher_id: '', room_id: '', slot_type: 'theory' });
+  const [addSlotData, setAddSlotData] = useState({ day: '', slot_number: '', course_id: '', teacher_id: '', room_id: '', slot_type: 'theory', group: '' });
+  const [addSlotGroups, setAddSlotGroups] = useState<any[]>([]);
+  useEffect(() => {
+    setAddSlotData(p => ({ ...p, group: '' }));
+    if (!addSlotData.course_id) { setAddSlotGroups([]); return; }
+    courseGroupsAPI.get(addSlotData.course_id).then(r => setAddSlotGroups(r.data?.groups || [])).catch(() => setAddSlotGroups([]));
+  }, [addSlotData.course_id]);
   const [mergeLevels, setMergeLevels] = useState<number[]>([]);
   const [mergeSections, setMergeSections] = useState('');
   const [mergeDept, setMergeDept] = useState(''); // 🆕 قسم آخر من نفس الكلية للمحاضرة المشتركة
@@ -685,10 +691,11 @@ export default function WeeklySchedulePage() {
         teacher_id: addSlotData.teacher_id || course?.teacher_id || '',
         room_id: addSlotData.room_id,
         slot_type: addSlotData.slot_type || 'theory',
+        group: addSlotData.group || null,
         ...(merge_with.length ? { merge_with } : {}),
       });
       setShowAddSlot(false);
-      setAddSlotData({ day: '', slot_number: '', course_id: '', teacher_id: '', room_id: '', slot_type: 'theory' });
+      setAddSlotData({ day: '', slot_number: '', course_id: '', teacher_id: '', room_id: '', slot_type: 'theory', group: '' });
       setMergeLevels([]);
       setMergeSections('');
       setMergeDept('');
@@ -1093,6 +1100,15 @@ export default function WeeklySchedulePage() {
                       <Picker.Item label="🧪 عملي (نصف الساعة في النصاب)" value="practical" />
                     </Picker></View>
                   </View>
+                  {addSlotGroups.length > 0 && (
+                    <View style={{ flex: 1, minWidth: 160 }}>
+                      <Text style={st.miniLabel}>👥 المجموعة{addSlotData.slot_type === 'practical' ? ' (إلزامية للعملي)' : ''}</Text>
+                      <View style={st.pickerWrap}><Picker selectedValue={addSlotData.group || ''} onValueChange={v => setAddSlotData(p => ({ ...p, group: String(v) }))} style={{ height: 38 }} testID="add-slot-group-picker">
+                        <Picker.Item label="كل الطلاب" value="" />
+                        {addSlotGroups.map((g: any) => <Picker.Item key={g.key} label={`${g.name} (${g.count})${g.teacher_name ? ` · ${g.teacher_name}` : ''}`} value={g.key} />)}
+                      </Picker></View>
+                    </View>
+                  )}
                 </View>
                 <View style={{ marginTop: 10, backgroundColor: '#e8f5e9', borderRadius: 8, padding: 10 }} data-testid="merge-lecture-box">
                   <Text style={{ fontSize: 12, fontWeight: '700', color: '#2e7d32', textAlign: 'right', marginBottom: 6 }}>🔗 محاضرة مشتركة (اختياري) — تُنشأ في جدول كل مستوى/شعبة بنفس المدرس والقاعة والوقت</Text>
@@ -1246,6 +1262,9 @@ export default function WeeklySchedulePage() {
                                   )}
                                   <div style={{ fontSize: 12, fontWeight: 600, color: '#333', textAlign: 'right' }}>
                                     {item.course_name}
+                                    {item.group ? (
+                                      <span data-testid={`group-badge-${item.id}`} style={{ fontSize: 9, color: '#fff', fontWeight: 800, backgroundColor: '#6a1b9a', borderRadius: 4, padding: '1px 4px', marginRight: 4 }}>👥 {item.group_name || `مجموعة ${item.group}`}</span>
+                                    ) : null}
                                     {(item.slot_type === 'practical') && (
                                       <span data-testid={`practical-badge-${item.id}`} style={{ fontSize: 9, color: '#fff', fontWeight: 800, backgroundColor: '#00695c', borderRadius: 4, padding: '1px 4px', marginRight: 4 }}>🧪 عملي</span>
                                     )}

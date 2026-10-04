@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ActivityIndicator, TouchableOpacity, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import api from '../services/api';
+import api, { courseGroupsAPI } from '../services/api';
 
 // لوحة ألوان ثابتة عالية التمييز (بأسلوب aSc Timetables)
 const PALETTE = [
@@ -56,6 +56,8 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
   const [newDuration, setNewDuration] = useState('');
   const [newDurationCustom, setNewDurationCustom] = useState('');
   const [addType, setAddType] = useState('theory'); // 🧪 نوع المحاضرة عند الإضافة (افتراضي: نظري)
+  const [addGroup, setAddGroup] = useState(''); // 👥 مجموعة المقرر (فارغ = كل الطلاب)
+  const [addGroups, setAddGroups] = useState<any[]>([]);
   const [impactPreview, setImpactPreview] = useState<any>(null); // 🔍 معاينة أثر التغيير قبل التنفيذ
   const [logModal, setLogModal] = useState(false); // 📜 سجل تغييرات الجدول
   const [logEntries, setLogEntries] = useState<any[] | null>(null);
@@ -612,6 +614,13 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
     );
   };
 
+  // 👥 تحميل مجموعات المقرر المختار عند الإضافة
+  useEffect(() => {
+    setAddGroup('');
+    if (!addModal || !addCourseId) { setAddGroups([]); return; }
+    courseGroupsAPI.get(addCourseId).then(r => setAddGroups(r.data?.groups || [])).catch(() => setAddGroups([]));
+  }, [addModal, addCourseId]);
+
   // تأكيد إضافة محاضرة غير مدرجة في الخلية الفارغة
   const confirmAdd = async () => {
     if (!addModal || !addCourseId) return;
@@ -636,10 +645,12 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
         room_id: addRoomId,
         duration_minutes: _addDur || null,
         slot_type: addType,
+        group: addGroup || null,
       });
       showMsg('success', `✅ ${res.data.message}`);
       setAddModal(null);
       setAddType('theory');
+      setAddGroup('');
       setPlacing(null);
       setValidMap(null);
       await load();
@@ -1068,6 +1079,11 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                                   🧪 عملي
                                 </div>
                               )}
+                              {item.group && (
+                                <div data-testid={`master-group-badge-${item.id}`} style={{ fontSize: 8, fontWeight: 800, whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 110, background: '#6a1b9a', color: '#fff', borderRadius: 3, padding: '0 3px', marginTop: 1 }}>
+                                  👥 {item.group_name || `مجموعة ${item.group}`}
+                                </div>
+                              )}
                               {item.merged_with?.length > 0 && (
                                 <div style={{ fontSize: 8, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110, opacity: 0.95 }}>
                                   مع: {item.merged_with.join('، ')}
@@ -1159,6 +1175,21 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                 }} data-testid={`add-slot-type-${o.v}`}>{o.l}</div>
               ))}
             </div>
+            {addGroups.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginTop: 12, marginBottom: 6, textAlign: 'right' }}>
+                  👥 المجموعة:{addType === 'practical' ? <span style={{ color: '#c62828' }}> (إلزامية للعملي)</span> : null}
+                </div>
+                <div style={{ display: 'flex', gap: 6, flexDirection: 'row-reverse', flexWrap: 'wrap' }} data-testid="add-slot-group-toggle">
+                  <div onClick={() => setAddGroup('')} style={{ padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: addGroup === '' ? '2px solid #1a2540' : '1px solid #e3e9f2', backgroundColor: addGroup === '' ? '#1a2540' : '#fafbfd', color: addGroup === '' ? '#fff' : '#555' }} data-testid="add-slot-group-all">كل الطلاب</div>
+                  {addGroups.map((g: any) => (
+                    <div key={g.key} onClick={() => setAddGroup(g.key)} style={{ padding: '6px 10px', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700, border: addGroup === g.key ? '2px solid #00695c' : '1px solid #e3e9f2', backgroundColor: addGroup === g.key ? '#00695c' : '#fafbfd', color: addGroup === g.key ? '#fff' : '#555' }} data-testid={`add-slot-group-${g.key}`}>
+                      {g.name} · {g.count}{g.teacher_name ? ` · ${g.teacher_name}` : ''}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
             <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginTop: 12, marginBottom: 6, textAlign: 'right' }}>
               ⏱ مدة المحاضرة عند التوليد:
             </div>

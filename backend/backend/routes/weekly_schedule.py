@@ -127,6 +127,7 @@ class ScheduleSlotCreate(BaseModel):
     duration_minutes: Optional[int] = None  # ⏱ مدة مخصصة (افتراضي: مدة الفترة)
     slot_type: str = "theory"  # 📖 نظري (افتراضي) | 🧪 practical عملي
     merge_with: Optional[List[MergeTarget]] = None  # 🆕 محاضرة مشتركة: مستويات/شعب إضافية
+    group: Optional[str] = None  # 👥 مجموعة دراسية داخل المقرر (فارغ = كل الطلاب)
 
 
 class ScheduleSlotUpdate(BaseModel):
@@ -136,6 +137,22 @@ class ScheduleSlotUpdate(BaseModel):
     duration_minutes: Optional[int] = None
     pinned_start_time: Optional[str] = None  # ⏰ بداية مخصصة "HH:MM" — "" لمسحها والعودة لوقت الفترة
     slot_type: Optional[str] = None  # theory | practical
+    group: Optional[str] = None  # 👥 "" لإزالة المجموعة
+
+
+async def _validate_slot_group(db, course_id: str, group: Optional[str], slot_type: Optional[str]) -> tuple:
+    """👥 يتحقق من المجموعة ويعيد (group_key, group_name). العملي لمقرر له مجموعات يُلزم اختيار مجموعة."""
+    course = await db.courses.find_one({"_id": ObjectId(course_id)}, {"groups": 1}) if course_id and ObjectId.is_valid(course_id) else None
+    groups = (course or {}).get("groups") or []
+    g = (group or "").strip()
+    if g:
+        gd = next((x for x in groups if x.get("key") == g), None)
+        if not gd:
+            raise HTTPException(status_code=400, detail="المجموعة غير معرّفة في هذا المقرر")
+        return g, gd.get("name") or f"مجموعة {g}"
+    if (slot_type or "theory") == "practical" and groups:
+        raise HTTPException(status_code=400, detail="هذا المقرر له مجموعات — اختر المجموعة للفترة العملية")
+    return "", ""
 
 
 def _add_minutes(hhmm: str, minutes: int) -> str:
@@ -168,7 +185,11 @@ def _slots_conflict(a: dict, b: dict) -> bool:
         return False
     if (a.get("department_id"), a.get("level"), a.get("section") or "") == \
        (b.get("department_id"), b.get("level"), b.get("section") or ""):
-        return True
+        # 👥 مجموعتان مختلفتان من نفس المقرر لا تتشاركان الطلاب
+        if a.get("group") and b.get("group") and a.get("group") != b.get("group") and a.get("course_id") == b.get("course_id"):
+            pass
+        else:
+            return True
     if a.get("teacher_id") and a.get("teacher_id") == b.get("teacher_id"):
         return True
     if a.get("room_id") and a.get("room_id") == b.get("room_id"):
@@ -983,6 +1004,8 @@ async def get_weekly_schedule(
             "computed_end_time": s.get("computed_end_time"),
             "merge_group_id": s.get("merge_group_id", ""),
             "merged_with": _merge_labels(s),
+            "group": s.get("group") or "",
+            "group_name": s.get("group_name") or "",
             "shared_here": _is_shared_here,
             "shared_origin": ({
                 "department_id": _prim_dept,
@@ -1178,18 +1201,27 @@ async def create_schedule_slot(
         if t not in targets:
             targets.append(t)
 
-    # 1. تعارض الشعبة (لكل هدف)
+    # 👥 المجموعة
+    slot_group, slot_group_name = await _validate_slot_group(db, data.course_id, data.group, data.slot_type)
+    if slot_group and data.merge_with:
+        raise HTTPException(status_code=400, detail="لا يمكن دمج شعب مع فترة مجموعة")
+
+    # 1. تعارض الشعبة (لكل هدف) — مجموعتان مختلفتان لنفس المقرر يمكن أن تتوازيا
     for dep, lvl, sec in targets:
-        existing_section = await db.weekly_schedule.find_one({
+        _sec_q = {
             "department_id": dep,
             "level": lvl,
             "section": sec,
             "day": data.day,
             "slot_number": data.slot_number,
-        })
+        }
+        if slot_group:
+            _sec_q["$or"] = [{"group": {"$in": [None, ""]}}, {"group": slot_group}, {"course_id": {"$ne": data.course_id}}]
+        existing_section = await db.weekly_schedule.find_one(_sec_q)
         if existing_section:
             c = await db.courses.find_one({"_id": ObjectId(existing_section["course_id"])})
-            conflicts.append(f"تعارض شعبة: يوجد مقرر '{c.get('name', '')}' للمستوى {lvl}{f' شعبة {sec}' if sec else ''} في هذه الفترة")
+            _g = existing_section.get("group")
+            conflicts.append(f"تعارض شعبة: يوجد مقرر '{c.get('name', '')}'{f' (مجموعة {_g})' if _g else ''} للمستوى {lvl}{f' شعبة {sec}' if sec else ''} في هذه الفترة")
 
     # 2. تعارض المعلم
     teacher_busy = await db.weekly_schedule.find_one({
@@ -1207,7 +1239,7 @@ async def create_schedule_slot(
         "room_id": data.room_id,
         "day": data.day,
         "slot_number": data.slot_number,
-    })
+    }) if data.room_id and ObjectId.is_valid(data.room_id) else None
     if room_busy:
         r = await db.rooms.find_one({"_id": ObjectId(data.room_id)})
         c = await db.courses.find_one({"_id": ObjectId(room_busy["course_id"])})
@@ -1233,6 +1265,8 @@ async def create_schedule_slot(
 
     base = data.dict()
     base.pop("merge_with", None)
+    base["group"] = slot_group or None
+    base["group_name"] = slot_group_name or None
     base["created_at"] = datetime.now(timezone.utc)
     base["created_by"] = current_user["id"]
 
@@ -1318,6 +1352,14 @@ async def update_schedule_slot(
         import re as _re
         if not _re.match(r"^\d{1,2}:\d{2}$", update["pinned_start_time"]):
             raise HTTPException(status_code=400, detail="صيغة البداية المخصصة يجب أن تكون HH:MM")
+    # 👥 المجموعة: "" تعني إزالة
+    if "group" in update or "slot_type" in update or "course_id" in update:
+        _g_in = update.get("group", existing.get("group") or "")
+        _gk, _gn = await _validate_slot_group(db, update.get("course_id", existing.get("course_id")), _g_in, update.get("slot_type", existing.get("slot_type")))
+        update["group"] = _gk or None
+        update["group_name"] = _gn or None
+        if _gk and existing.get("merge_group_id"):
+            raise HTTPException(status_code=400, detail="لا يمكن تعيين مجموعة لفترة مشتركة بين شعب")
     if not update and not clear_duration and not clear_pin:
         raise HTTPException(status_code=400, detail="لا توجد بيانات")
 
@@ -1334,10 +1376,13 @@ async def update_schedule_slot(
     # تعارض الشعبة إن تغيّر أي حقل مؤثر
     _mg = existing.get("merge_group_id")
     _mg_excl = {"merge_group_id": {"$ne": _mg}} if _mg else {}
-    if any(k in update for k in ("day", "slot_number", "department_id", "level", "section")):
+    _chk_group = update.get("group", existing.get("group")) or ""
+    _grp_excl = ({"$or": [{"group": {"$in": [None, ""]}}, {"group": _chk_group}, {"course_id": {"$ne": update.get("course_id", existing.get("course_id"))}}]} if _chk_group else {})
+    if any(k in update for k in ("day", "slot_number", "department_id", "level", "section", "group")):
         section_busy = await db.weekly_schedule.find_one({
             "_id": {"$ne": ObjectId(slot_id)},
             **_mg_excl,
+            **_grp_excl,
             "department_id": check_dept,
             "level": check_level,
             "section": check_section,
@@ -4597,6 +4642,9 @@ async def generate_lectures_from_schedule(
                     "start_time": st_time,
                     "end_time": en_time,
                     "room": room_names.get(s.get("room_id", ""), ""),
+                    "group": s.get("group") or "",
+                    "group_name": s.get("group_name") or "",
+                    "teacher_id": s.get("teacher_id") or "",
                 })
         d += _td(days=1)
 
@@ -4610,10 +4658,10 @@ async def generate_lectures_from_schedule(
         "course_id": {"$in": course_ids},
         "date": {"$gte": data.start_date, "$lte": data.end_date},
         "status": {"$ne": "cancelled"},
-    }, {"course_id": 1, "date": 1, "start_time": 1}):
-        existing.add((lec.get("course_id"), lec.get("date"), lec.get("start_time")))
+    }, {"course_id": 1, "date": 1, "start_time": 1, "group": 1}):
+        existing.add((lec.get("course_id"), lec.get("date"), lec.get("start_time"), lec.get("group") or ""))
 
-    to_create = [c for c in candidates if (c["course_id"], c["date"], c["start_time"]) not in existing]
+    to_create = [c for c in candidates if (c["course_id"], c["date"], c["start_time"], c.get("group") or "") not in existing]
     already = len(candidates) - len(to_create)
 
     if data.dry_run:
@@ -4656,6 +4704,7 @@ async def generate_lectures_from_schedule(
                 "created_at": now,
                 "created_by": current_user.get("id", ""),
                 "generated_from_schedule": True,
+                **({"group": c["group"], "group_name": c["group_name"], **({"teacher_id": c["teacher_id"]} if c.get("teacher_id") else {})} if c.get("group") else {}),
             })
             created += 1
         except DuplicateKeyError:
@@ -5133,6 +5182,8 @@ async def _build_master_data(db, faculty_id: str, department_id: Optional[str] =
             "merge_group_id": _gid or "",
             "merged_with": _labels,
             "slot_type": s.get("slot_type", "theory"),
+            "group": s.get("group") or "",
+            "group_name": s.get("group_name") or "",
         })
         ck = (s.get("course_id", ""), s.get("department_id", ""), s.get("level") or 1, s.get("section", "") or "")
         scheduled_counts[ck] = scheduled_counts.get(ck, 0) + 1
