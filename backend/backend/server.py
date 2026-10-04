@@ -8037,6 +8037,32 @@ async def backfill_sections(current_user: dict = Depends(get_current_user)):
     }
 
 
+def _teacher_lecture_scope(course_ids: list, teacher_id: Optional[str]) -> dict:
+    """👥 نطاق محاضرات المدرّس: مقرراته + محاضرات المجموعات المُسندة إليه في مقررات أخرى"""
+    if teacher_id:
+        return {"$or": [{"course_id": {"$in": course_ids}}, {"teacher_id": teacher_id}]}
+    return {"course_id": {"$in": course_ids}}
+
+
+async def _attach_group_courses(lectures: list, course_map: dict, teacher_id: Optional[str]) -> list:
+    """يستبعد محاضرات مجموعات مقرراته المُسندة لمدرّس آخر، ويُحمّل مقررات محاضرات المجموعات الخارجية في course_map"""
+    if not teacher_id:
+        return lectures
+    out = []
+    missing = set()
+    for lec in lectures:
+        lt = lec.get("teacher_id")
+        if lec.get("course_id") in course_map and lt and lt != teacher_id and lec.get("group"):
+            continue
+        out.append(lec)
+        if lec.get("course_id") not in course_map:
+            missing.add(lec.get("course_id"))
+    if missing:
+        oids = [ObjectId(c) for c in missing if ObjectId.is_valid(c)]
+        for c in await db.courses.find({"_id": {"$in": oids}}).to_list(200):
+            course_map[str(c["_id"])] = c
+    return out
+
 # ==================== Lecture Routes (المحاضرات/الحصص) ====================
 
 @api_router.get("/lectures/today")
@@ -8064,15 +8090,17 @@ async def get_today_lectures(
     courses = await db.courses.find(course_query).to_list(100)
     course_ids = [str(c["_id"]) for c in courses]
     course_map = {str(c["_id"]): c for c in courses}
+    _my_tid = course_query.get("teacher_id") if current_user["role"] == UserRole.TEACHER else None
     
-    if not course_ids:
+    if not course_ids and not _my_tid:
         return []
     
-    # جلب محاضرات اليوم لهذه المقررات (ضمن الفصل النشط فقط)
+    # جلب محاضرات اليوم لهذه المقررات (ضمن الفصل النشط فقط) — 👥 + محاضرات المجموعات المُسندة للمدرّس
     from routes._active_semester import get_active_semester as _gas, apply_lecture_active_sem as _alas
-    _today_q = {"course_id": {"$in": course_ids}, "date": today}
+    _today_q = {"date": today, **_teacher_lecture_scope(course_ids, _my_tid)}
     _alas(_today_q, await _gas(db))
     lectures = await db.lectures.find(_today_q).sort("start_time", 1).to_list(100)
+    lectures = await _attach_group_courses(lectures, course_map, _my_tid)
     
     # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
     now = get_yemen_time()
@@ -8195,15 +8223,17 @@ async def get_all_schedule_lectures(
     courses = await db.courses.find(course_query).to_list(500)
     course_ids = [str(c["_id"]) for c in courses]
     course_map = {str(c["_id"]): c for c in courses}
+    _my_tid = course_query.get("teacher_id") if current_user["role"] == UserRole.TEACHER else None
     
-    if not course_ids:
+    if not course_ids and not _my_tid:
         return {"lectures": [], "date": date}
     
-    # جلب محاضرات اليوم المحدد فقط (ضمن الفصل النشط)
+    # جلب محاضرات اليوم المحدد فقط (ضمن الفصل النشط) — 👥 + محاضرات المجموعات المُسندة للمدرّس
     from routes._active_semester import get_active_semester as _gas, apply_lecture_active_sem as _alas
-    _day_q = {"course_id": {"$in": course_ids}, "date": date}
+    _day_q = {"date": date, **_teacher_lecture_scope(course_ids, _my_tid)}
     _alas(_day_q, await _gas(db))
     lectures = await db.lectures.find(_day_q).sort("start_time", 1).to_list(200)
+    lectures = await _attach_group_courses(lectures, course_map, _my_tid)
 
     # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب (تحديث فعلي في القاعدة)
     now = get_yemen_time()
@@ -8316,8 +8346,9 @@ async def get_month_lectures(
     courses = await db.courses.find(course_query).to_list(100)
     course_ids = [str(c["_id"]) for c in courses]
     course_map = {str(c["_id"]): c for c in courses}
+    _my_tid = course_query.get("teacher_id") if current_user["role"] == UserRole.TEACHER else None
     
-    if not course_ids:
+    if not course_ids and not _my_tid:
         return {"dates": [], "lectures": []}
     
     # حساب بداية ونهاية الشهر
@@ -8327,11 +8358,12 @@ async def get_month_lectures(
     else:
         end_date = f"{year:04d}-{month+1:02d}-01"
     
-    # جلب محاضرات الشهر (ضمن الفصل النشط فقط)
+    # جلب محاضرات الشهر (ضمن الفصل النشط فقط) — 👥 + محاضرات المجموعات المُسندة للمدرّس
     from routes._active_semester import get_active_semester as _gas, apply_lecture_active_sem as _alas
-    _month_q = {"course_id": {"$in": course_ids}, "date": {"$gte": start_date, "$lt": end_date}}
+    _month_q = {"date": {"$gte": start_date, "$lt": end_date}, **_teacher_lecture_scope(course_ids, _my_tid)}
     _alas(_month_q, await _gas(db))
     lectures = await db.lectures.find(_month_q).sort("date", 1).to_list(500)
+    lectures = await _attach_group_courses(lectures, course_map, _my_tid)
     
     # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
     now = get_yemen_time()
@@ -8515,6 +8547,15 @@ async def get_course_lectures(
         {"$set": {"status": LectureStatus.ABSENT}}
     )
     
+    # 👥 الطالب يرى محاضرات الشعبة كاملة + محاضرات مجموعته فقط
+    if current_user.get("role") == UserRole.STUDENT:
+        _st = await db.students.find_one({"user_id": current_user["id"]}, {"_id": 1})
+        _enr = await db.enrollments.find_one({"course_id": course_id, "student_id": str(_st["_id"])}, {"group": 1}) if _st else None
+        _my_group = (_enr or {}).get("group") or ""
+        _grp_clause = {"$or": [{"group": {"$exists": False}}, {"group": None}, {"group": ""}] + ([{"group": _my_group}] if _my_group else [])}
+        query.setdefault("$and", []).append(_grp_clause)
+        total = await db.lectures.count_documents(query)
+
     # تقسيم الصفحات
     skip = (page - 1) * per_page
     lectures = await db.lectures.find(query).sort("date", 1).skip(skip).limit(per_page).to_list(per_page)
@@ -9090,6 +9131,7 @@ class GenerateSemesterRequest(BaseModel):
     end_date: str
     holidays: List[str] = []
     dry_run: bool = False
+    group: Optional[str] = None  # 👥 توليد لمجموعة محددة داخل المقرر
 
 _EN_TO_AR_DAY = {
     "saturday": "السبت", "sunday": "الأحد", "monday": "الاثنين",
@@ -9227,6 +9269,15 @@ async def generate_semester_lectures_advanced(
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
 
+    # 👥 مجموعة دراسية
+    gen_group = (data.group or "").strip()
+    gen_group_def = None
+    if gen_group:
+        gen_group_def = next((g for g in (course.get("groups") or []) if g.get("key") == gen_group), None)
+        if not gen_group_def:
+            raise HTTPException(status_code=400, detail="المجموعة غير معرّفة في هذا المقرر")
+    gen_group_teacher = (gen_group_def or {}).get("teacher_id") or None
+
     # 🛑 حظر التوليد في وقت مشغول بالجدول الأسبوعي (العرض الشامل) لنفس الشعبة
     occupied = await _weekly_occupancy_conflicts(course, data)
     if occupied:
@@ -9292,16 +9343,17 @@ async def generate_semester_lectures_advanced(
                         "course_id": data.course_id,
                         "date": date_str,
                         "start_time": slot.start_time,
+                        **({"group": gen_group} if gen_group else {"group": {"$in": [None, ""]}}),
                     }, {"_id": 1})
                     if exists:
                         already_exist += 1
                         continue
                 # فحص تعارض المحاضرات مع نفس الأستاذ
-                conflict = await check_teacher_lecture_conflict(data.course_id, date_str, slot.start_time, slot.end_time, allow_same_course=True)
+                conflict = await check_teacher_lecture_conflict(data.course_id, date_str, slot.start_time, slot.end_time, allow_same_course=True, group=gen_group or None, teacher_override=gen_group_teacher)
                 if conflict and conflict["type"] == "error":
                     conflicts_skipped += 1
                     continue
-                room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", date_str, slot.start_time, slot.end_time)
+                room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", date_str, slot.start_time, slot.end_time, group=gen_group or None)
                 if room_conflict and room_conflict["type"] == "error":
                     conflicts_skipped += 1
                     continue
@@ -9338,6 +9390,11 @@ async def generate_semester_lectures_advanced(
                     "created_at": get_yemen_time(),
                     "created_by": current_user["id"]
                 }
+                if gen_group:
+                    lecture["group"] = gen_group
+                    lecture["group_name"] = (gen_group_def or {}).get("name") or f"مجموعة {gen_group}"
+                    if gen_group_teacher:
+                        lecture["teacher_id"] = gen_group_teacher
                 try:
                     await db.lectures.insert_one(lecture)
                     lectures_created += 1
@@ -9357,15 +9414,17 @@ async def generate_semester_lectures_advanced(
 
     # إرسال تنبيه عند إنشاء محاضرات الفصل
     if lectures_created > 0:
-        await notify_lecture_created(course, data.start_date if hasattr(data, 'start_date') else "", "", "")
+        await notify_lecture_created(course, data.start_date if hasattr(data, 'start_date') else "", "", "", group=gen_group or None, group_teacher_id=gen_group_teacher)
 
     # 🔄 (نظام ← جدول) انعكاس المواعيد المتكررة على الجدول الأسبوعي
     # (يعمل حتى لو كانت كل المحاضرات موجودة مسبقاً — الانعكاس idempotent وبفحوصاته الخاصة)
+    # 👥 محاضرات المجموعة لا تُدرج في الجدول الأسبوعي للشعبة كاملة
     ws_created, ws_existing, ws_notes = 0, 0, []
-    try:
-        ws_created, ws_existing, ws_notes = await _reflect_recurring_to_weekly(course, data, current_user)
-    except Exception as e:
-        logging.warning(f"[reflect_recurring_to_weekly] failed: {e}")
+    if not gen_group:
+        try:
+            ws_created, ws_existing, ws_notes = await _reflect_recurring_to_weekly(course, data, current_user)
+        except Exception as e:
+            logging.warning(f"[reflect_recurring_to_weekly] failed: {e}")
 
     message = f"تم إنشاء {lectures_created} محاضرة للفصل الدراسي" + (f" (تم تخطي {conflicts_skipped} بسبب تعارض)" if conflicts_skipped > 0 else "")
     if holiday_dates_skipped:

@@ -321,6 +321,11 @@ export default function ScheduleScreen() {
               <Text style={[s.gChipText, { color: '#e65100' }]}>🚪 {item.room}</Text>
             </View>
           ) : null}
+          {item.group ? (
+            <View style={[s.gChip, { backgroundColor: '#e0f2f1' }]} testID={`schedule-group-${item.id}`}>
+              <Text style={[s.gChipText, { color: '#00695c' }]}>👥 {item.group_name || `مجموعة ${item.group}`}</Text>
+            </View>
+          ) : null}
           {item.department_name ? (
             <View style={[s.gChip, { backgroundColor: '#ede7f6' }]}>
               <Text style={[s.gChipText, { color: '#5e35b1' }]} numberOfLines={1}>{item.department_name}</Text>

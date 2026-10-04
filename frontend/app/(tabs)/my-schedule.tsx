@@ -330,6 +330,12 @@ export default function MyScheduleScreen() {
                           <Text style={styles.lectureDetailText}>قاعة {lecture.room}</Text>
                         </View>
                       )}
+                      {(lecture as any).group ? (
+                        <View style={styles.lectureDetailRow} testID={`my-schedule-group-${lecture.id}`}>
+                          <Ionicons name="people" size={13} color="rgba(255,255,255,0.8)" />
+                          <Text style={styles.lectureDetailText}>{(lecture as any).group_name || `مجموعة ${(lecture as any).group}`}</Text>
+                        </View>
+                      ) : null}
                     </View>
                   </View>
                 </View>

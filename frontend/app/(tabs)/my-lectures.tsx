@@ -11,6 +11,8 @@ import api from '../../src/services/api';
 
 interface Lecture {
   id: string;
+  group?: string;
+  group_name?: string;
   course_name: string;
   course_code: string;
   course_id: string;
@@ -78,6 +80,7 @@ export default function MyLecturesTab() {
           <Text style={styles.courseName}>{item.course_name}</Text>
           <Text style={styles.courseCode}>{item.course_code}</Text>
           {item.room ? <Text style={styles.room}><Ionicons name="location" size={12} color="#666" /> {item.room}</Text> : null}
+          {item.group ? <Text style={[styles.room, { color: '#00695c', fontWeight: '800' }]} testID={`my-lecture-group-${item.id}`}><Ionicons name="people" size={12} color="#00838f" /> {item.group_name || `مجموعة ${item.group}`}</Text> : null}
           <View style={[styles.statusBadge, { backgroundColor: statusInfo.color + '20' }]}>
             <Ionicons name={statusInfo.icon as any} size={14} color={statusInfo.color} />
             <Text style={[styles.statusText, { color: statusInfo.color }]}> {statusInfo.label}</Text>

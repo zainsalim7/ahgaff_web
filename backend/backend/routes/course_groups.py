@@ -1,5 +1,6 @@
 """👥 المجموعات الدراسية داخل المقرر — توزيع طلاب المقرر إلى مجموعات (عملي/مختبر) بمدرّس اختياري لكل مجموعة"""
 import random
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, HTTPException, Depends
@@ -219,3 +220,121 @@ async def student_groups(student_id: str, current_user: dict = Depends(get_curre
         out.append({"course_id": e["course_id"], "course_name": c.get("name", ""), "course_code": c.get("code", ""),
                     "group": e["group"], "group_name": (g or {}).get("name") or f"مجموعة {e['group']}"})
     return out
+
+
+# ==================== 📋 قوالب التوزيع (إعادة استخدام توزيع مقرر في مقررات أخرى) ====================
+
+class TemplateSaveIn(BaseModel):
+    name: str
+
+
+class TemplateApplyIn(BaseModel):
+    template_id: str
+    include_teachers: bool = True
+    only_unassigned: bool = False
+
+
+def _tpl_view(t: dict) -> dict:
+    return {
+        "id": str(t["_id"]), "name": t.get("name", ""), "department_id": t.get("department_id"), "level": t.get("level"),
+        "section": t.get("section") or "", "groups": t.get("groups") or [], "students_count": len(t.get("assignments") or {}),
+        "source_course_name": t.get("source_course_name", ""), "created_by_name": t.get("created_by_name", ""),
+        "created_at": t.get("created_at"),
+    }
+
+
+@router.post("/courses/{course_id}/groups/save-template")
+async def save_group_template(course_id: str, data: TemplateSaveIn, current_user: dict = Depends(get_current_user)):
+    """حفظ توزيع المقرر الحالي (المجموعات + الطلاب) كقالب لنفس القسم/المستوى"""
+    if not _can(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="اسم القالب مطلوب")
+    db = get_db()
+    course = await _course(db, course_id)
+    groups = course.get("groups") or []
+    if not groups:
+        raise HTTPException(status_code=400, detail="لا توجد مجموعات في هذا المقرر لحفظها")
+    assignments = {e["student_id"]: e["group"] async for e in db.enrollments.find({"course_id": course_id, "group": {"$nin": [None, ""]}}, {"student_id": 1, "group": 1})}
+    if not assignments:
+        raise HTTPException(status_code=400, detail="لا يوجد طلاب موزّعون على المجموعات")
+    doc = {
+        "name": name, "department_id": course.get("department_id"), "level": course.get("level"),
+        "section": (course.get("section") or "").strip(), "faculty_id": course.get("faculty_id"),
+        "groups": groups, "assignments": assignments,
+        "source_course_id": course_id, "source_course_name": course.get("name", ""),
+        "created_by": current_user.get("id"), "created_by_name": current_user.get("full_name") or current_user.get("username", ""),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    r = await db.group_templates.insert_one(doc)
+    doc["_id"] = r.inserted_id
+    await log_activity(current_user, "save_group_template", "course", course_id, course.get("name", ""),
+                       {"summary": f"حفظ قالب توزيع «{name}» من «{course.get('name', '')}» ({len(assignments)} طالب)"})
+    return _tpl_view(doc)
+
+
+@router.get("/courses/{course_id}/groups/templates")
+async def list_group_templates(course_id: str, current_user: dict = Depends(get_current_user)):
+    """القوالب المناسبة للمقرر (نفس القسم والمستوى) مع عدد الطلاب المتطابقين"""
+    db = get_db()
+    course = await _course(db, course_id)
+    enrolled = {e["student_id"] async for e in db.enrollments.find({"course_id": course_id}, {"student_id": 1})}
+    out = []
+    async for t in db.group_templates.find({"department_id": course.get("department_id"), "level": course.get("level")}).sort("created_at", -1):
+        v = _tpl_view(t)
+        v["match_count"] = len(enrolled & set((t.get("assignments") or {}).keys()))
+        v["same_section"] = (t.get("section") or "") == (course.get("section") or "").strip()
+        v["is_source"] = t.get("source_course_id") == course_id
+        out.append(v)
+    out.sort(key=lambda x: (-int(x["same_section"]), -x["match_count"]))
+    return {"templates": out, "enrolled_count": len(enrolled)}
+
+
+@router.post("/courses/{course_id}/groups/apply-template")
+async def apply_group_template(course_id: str, data: TemplateApplyIn, current_user: dict = Depends(get_current_user)):
+    """تطبيق قالب: إنشاء مجموعات القالب في المقرر وتعيين الطلاب المتطابقين بضغطة واحدة"""
+    if not _can(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    course = await _course(db, course_id)
+    t = await db.group_templates.find_one({"_id": _oid(data.template_id)})
+    if not t:
+        raise HTTPException(status_code=404, detail="القالب غير موجود")
+    existing = {g["key"]: g for g in (course.get("groups") or [])}
+    for g in t.get("groups") or []:
+        cur = existing.get(g["key"])
+        if cur:
+            if data.include_teachers and g.get("teacher_id"):
+                cur["teacher_id"] = g["teacher_id"]
+        else:
+            existing[g["key"]] = {"key": g["key"], "name": g.get("name") or f"مجموعة {g['key']}", "teacher_id": g.get("teacher_id") if data.include_teachers else None}
+    groups = list(existing.values())
+    await db.courses.update_one({"_id": course["_id"]}, {"$set": {"groups": groups}})
+
+    q = {"course_id": course_id, "student_id": {"$in": list((t.get("assignments") or {}).keys())}}
+    if data.only_unassigned:
+        q["$or"] = [{"group": {"$exists": False}}, {"group": None}, {"group": ""}]
+    from pymongo import UpdateOne
+    ops = [UpdateOne({"_id": e["_id"]}, {"$set": {"group": t["assignments"][e["student_id"]]}})
+           async for e in db.enrollments.find(q, {"student_id": 1})]
+    if ops:
+        await db.enrollments.bulk_write(ops)
+    await log_activity(current_user, "apply_group_template", "course", course_id, course.get("name", ""),
+                       {"summary": f"تطبيق قالب «{t.get('name', '')}» على «{course.get('name', '')}» — {len(ops)} طالب", "template_id": data.template_id})
+    course["groups"] = groups
+    out = await _view(db, course)
+    out["message"] = f"طُبّق القالب «{t.get('name', '')}»: {len(ops)} طالب وُزّعوا على {len(groups)} مجموعة"
+    out["applied"] = len(ops)
+    return out
+
+
+@router.delete("/group-templates/{template_id}")
+async def delete_group_template(template_id: str, current_user: dict = Depends(get_current_user)):
+    if not _can(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    r = await db.group_templates.delete_one({"_id": _oid(template_id)})
+    if not r.deleted_count:
+        raise HTTPException(status_code=404, detail="القالب غير موجود")
+    return {"message": "تم حذف القالب"}

@@ -263,6 +263,7 @@ export default function CourseLecturesScreen() {
   
   // توليد المحاضرات
   const [generateRoom, setGenerateRoom] = useState('');
+  const [generateGroup, setGenerateGroup] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
   const [genHolidays, setGenHolidays] = useState<string[]>([]);
@@ -416,6 +417,7 @@ export default function CourseLecturesScreen() {
     setGenHolidayInput('');
     setGenPreview(null);
     setGenerateRoom('');
+    setGenerateGroup('');
     setGenerateError('');
     setDayConfigs(DAYS.map(d => ({
       day: d.id,
@@ -649,6 +651,7 @@ export default function CourseLecturesScreen() {
       const response = await lecturesAPI.generateBulk({
         course_id: courseId!,
         room: generateRoom.trim(),
+        group: generateGroup || undefined,
         schedule: scheduleConfig,
         start_date: tempStartDate,
         end_date: tempEndDate,
@@ -1423,6 +1426,31 @@ export default function CourseLecturesScreen() {
                   <Text style={styles.courseInfoCode}>{course?.code}</Text>
                 </View>
               </View>
+
+              {/* 👥 المجموعة الدراسية */}
+              {(course?.groups || []).length > 0 && (
+                <View style={styles.generateSection} testID="generate-group-section">
+                  <View style={styles.generateSectionHeader}>
+                    <Ionicons name="people" size={20} color="#00838f" />
+                    <Text style={styles.generateSectionTitle}>المجموعة</Text>
+                  </View>
+                  <Text style={styles.generateHint}>اختر مجموعة لتوليد محاضراتها الأسبوعية بقاعتها ووقتها الخاص — أو «كل الطلاب» للشعبة كاملة</Text>
+                  <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+                    <TouchableOpacity onPress={() => { setGenerateGroup(''); setGenPreview(null); }} style={{ borderWidth: 1.5, borderColor: '#1a2540', borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12, backgroundColor: generateGroup === '' ? '#1a2540' : '#fff' }} testID="generate-group-all">
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: generateGroup === '' ? '#fff' : '#1a2540' }}>كل الطلاب</Text>
+                    </TouchableOpacity>
+                    {(course?.groups || []).map((g: any, i: number) => {
+                      const c = ['#1565c0', '#2e7d32', '#ad1457', '#ef6c00', '#6a1b9a', '#00838f', '#5d4037', '#c62828'][i % 8];
+                      const on = generateGroup === g.key;
+                      return (
+                        <TouchableOpacity key={g.key} onPress={() => { setGenerateGroup(g.key); setGenPreview(null); }} style={{ borderWidth: 1.5, borderColor: c, borderRadius: 10, paddingVertical: 7, paddingHorizontal: 12, backgroundColor: on ? c : '#fff' }} testID={`generate-group-${g.key}`}>
+                          <Text style={{ fontSize: 13, fontWeight: '700', color: on ? '#fff' : c }}>{g.name || `مجموعة ${g.key}`}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
 
               {/* Room - قائمة منسدلة من القاعات المسجلة */}
               <View style={styles.generateSection}>

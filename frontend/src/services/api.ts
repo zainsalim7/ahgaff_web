@@ -876,6 +876,11 @@ export const courseGroupsAPI = {
   autoDistribute: (courseId: string, data: { count: number; method: 'name' | 'number' | 'random'; only_unassigned?: boolean }) =>
     api.post(`/courses/${courseId}/groups/auto-distribute`, data),
   ofStudent: (studentId: string) => api.get(`/students/${studentId}/groups`),
+  saveTemplate: (courseId: string, name: string) => api.post(`/courses/${courseId}/groups/save-template`, { name }),
+  templates: (courseId: string) => api.get(`/courses/${courseId}/groups/templates`),
+  applyTemplate: (courseId: string, templateId: string, opts?: { include_teachers?: boolean; only_unassigned?: boolean }) =>
+    api.post(`/courses/${courseId}/groups/apply-template`, { template_id: templateId, include_teachers: true, only_unassigned: false, ...(opts || {}) }),
+  deleteTemplate: (templateId: string) => api.delete(`/group-templates/${templateId}`),
 };
 
 export const lecturesAPI = {
@@ -907,6 +912,7 @@ export const lecturesAPI = {
     end_date: string | null;
     holidays?: string[];
     dry_run?: boolean;
+    group?: string;
   }) =>
     api.post('/lectures/generate-semester', data),
   

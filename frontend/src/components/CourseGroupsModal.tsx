@@ -49,6 +49,41 @@ export const CourseGroupsModal: React.FC<Props> = ({ visible, courseId, onClose,
   const [openGroup, setOpenGroup] = useState<string | null>(null);
   const [teacherPickFor, setTeacherPickFor] = useState<string | null>(null);
   const [teacherQuery, setTeacherQuery] = useState('');
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [tplName, setTplName] = useState('');
+  const [showTplSave, setShowTplSave] = useState(false);
+
+  const loadTemplates = () => courseGroupsAPI.templates(courseId).then(r => setTemplates(r.data?.templates || [])).catch(() => setTemplates([]));
+
+  const saveTemplate = async () => {
+    if (!tplName.trim()) { notify('تنبيه', 'اكتب اسم القالب'); return; }
+    setBusy(true);
+    try {
+      await courseGroupsAPI.saveTemplate(courseId, tplName.trim());
+      setTplName(''); setShowTplSave(false);
+      await loadTemplates();
+      notify('تم', 'حُفظ التوزيع كقالب — يمكن تطبيقه على مقررات نفس القسم والمستوى');
+    } catch (e: any) { notify('خطأ', e?.response?.data?.detail || 'فشل الحفظ'); }
+    finally { setBusy(false); }
+  };
+
+  const applyTemplate = async (t: any) => {
+    if (!confirmAsk(`تطبيق قالب «${t.name}» على هذا المقرر؟ سيُنشئ مجموعاته ويوزّع ${t.match_count} طالباً متطابقاً.`)) return;
+    setBusy(true);
+    try {
+      const r = await courseGroupsAPI.applyTemplate(courseId, t.id);
+      setData(r.data);
+      setDraft((r.data.groups || []).map((g: CourseGroup) => ({ key: g.key, name: g.name, teacher_id: g.teacher_id || '' })));
+      onChanged?.();
+      notify('تم', r.data.message || 'طُبّق القالب');
+    } catch (e: any) { notify('خطأ', e?.response?.data?.detail || 'فشل التطبيق'); }
+    finally { setBusy(false); }
+  };
+
+  const deleteTemplate = async (t: any) => {
+    if (!confirmAsk(`حذف القالب «${t.name}»؟`)) return;
+    try { await courseGroupsAPI.deleteTemplate(t.id); await loadTemplates(); } catch { notify('خطأ', 'فشل الحذف'); }
+  };
 
   const load = async () => {
     setLoading(true);
@@ -63,6 +98,7 @@ export const CourseGroupsModal: React.FC<Props> = ({ visible, courseId, onClose,
   useEffect(() => {
     if (!visible || !courseId) return;
     load();
+    loadTemplates();
     teachersAPI.getAll().then(r => setTeachers((r.data || []).map((t: any) => ({ id: t.id, full_name: t.full_name })))).catch(() => {});
   }, [visible, courseId]);
 
@@ -204,6 +240,43 @@ export const CourseGroupsModal: React.FC<Props> = ({ visible, courseId, onClose,
                 )}
               </View>
 
+              {/* 📋 قوالب التوزيع */}
+              <View style={st.box} testID="group-templates-box">
+                <View style={st.rowR}>
+                  <TouchableOpacity onPress={() => setShowTplSave(!showTplSave)} disabled={!data || data.groups.length === 0} style={[st.ghostBtn, (!data || data.groups.length === 0) && { opacity: 0.5 }]} testID="tpl-save-toggle">
+                    <Ionicons name="bookmark-outline" size={16} color="#1565c0" />
+                    <Text style={st.ghostTxt}>حفظ التوزيع الحالي كقالب</Text>
+                  </TouchableOpacity>
+                  <Text style={st.boxTitle}>📋 قوالب التوزيع</Text>
+                </View>
+                {showTplSave && (
+                  <View style={[st.rowR, { marginBottom: 6 }]}>
+                    <TouchableOpacity onPress={saveTemplate} disabled={busy} style={[st.primaryBtn, { marginTop: 0, paddingHorizontal: 14 }]} testID="tpl-save-btn">
+                      <Text style={st.primaryTxt}>حفظ</Text>
+                    </TouchableOpacity>
+                    <TextInput value={tplName} onChangeText={setTplName} placeholder="اسم القالب (مثال: توزيع م3 عملي)" style={[st.nameInput, { flex: 1 }]} testID="tpl-name-input" />
+                  </View>
+                )}
+                {templates.length === 0 ? (
+                  <Text style={st.empty}>لا توجد قوالب لهذا القسم/المستوى بعد. وزّع الطلاب هنا ثم احفظ التوزيع كقالب لتطبيقه على المقررات الأخرى بضغطة.</Text>
+                ) : templates.map(t => (
+                  <View key={t.id} style={st.tplRow} testID={`tpl-row-${t.id}`}>
+                    <View style={{ flexDirection: 'row', gap: 6 }}>
+                      <TouchableOpacity onPress={() => applyTemplate(t)} disabled={busy || t.match_count === 0} style={[st.miniChip, { borderColor: '#2e7d32', backgroundColor: '#e8f5e9' }, (busy || t.match_count === 0) && { opacity: 0.5 }]} testID={`tpl-apply-${t.id}`}>
+                        <Text style={{ fontSize: 11, color: '#2e7d32', fontWeight: '800' }}>تطبيق ({t.match_count})</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity onPress={() => deleteTemplate(t)} style={[st.miniChip, { borderColor: '#ef9a9a' }]} testID={`tpl-delete-${t.id}`}>
+                        <Ionicons name="trash-outline" size={13} color="#c62828" />
+                      </TouchableOpacity>
+                    </View>
+                    <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: '#1a2540' }}>{t.name} {t.is_source ? '· (هذا المقرر)' : ''}</Text>
+                      <Text style={{ fontSize: 11, color: '#5b6678' }}>{t.groups.length} مجموعات · {t.students_count} طالب · من «{t.source_course_name}»{t.same_section ? '' : ' · شعبة أخرى'}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+
               {/* طلاب المجموعة المفتوحة */}
               {openGroup && data && (() => {
                 const g = data.groups.find(x => x.key === openGroup);
@@ -288,5 +361,6 @@ const st = StyleSheet.create({
   pickTxt: { fontSize: 13, color: '#1a2540', textAlign: 'right' },
   stuRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#eef1f6', gap: 8 },
   stuTxt: { flex: 1, fontSize: 13, color: '#1a2540', textAlign: 'right' },
+  tplRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8, backgroundColor: '#fff', borderRadius: 10, padding: 8, marginBottom: 6, borderWidth: 1, borderColor: '#eef1f6' },
   miniChip: { borderWidth: 1, borderRadius: 6, paddingVertical: 3, paddingHorizontal: 7, backgroundColor: '#fff' },
 });
