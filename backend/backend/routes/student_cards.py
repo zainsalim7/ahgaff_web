@@ -17,7 +17,7 @@ from .statements import _can_issue as _can_manage, get_verify_base
 router = APIRouter()
 
 TEMPLATES = ("green", "dark", "horizontal", "official", "custom")
-CARD_SCALE = 2  # دقة مضاعفة للطباعة (1280×2020)
+CARD_SCALE = 3  # دقة ثلاثية للطباعة (1920×3030 ≈ 570 DPI على 85.6 مم)
 
 # 🔤 خطوط البطاقة: (ملف الخط، محاور الخط المتغير [slnt, wght] أو [wght]) — كلها عريضة للطباعة
 CARD_FONTS = {
@@ -107,6 +107,7 @@ class CardSettings(BaseModel):
     font: Optional[str] = None
     custom_bg_base64: Optional[str] = None
     custom_layout: Optional[dict] = None
+    show_section: Optional[bool] = True  # بعض الكليات لا تطبع الشعبة
 
 
 @router.get("/cards/settings/{faculty_id}")
@@ -122,6 +123,7 @@ async def get_card_settings(faculty_id: str, current_user: dict = Depends(get_cu
         "custom_bg_base64": doc.get("custom_bg_base64", ""),
         "custom_layout": doc.get("custom_layout") or DEFAULT_CUSTOM_LAYOUT,
         "custom_orientation": doc.get("custom_orientation", "portrait"),
+        "show_section": doc.get("show_section", True),
     }
 
 
@@ -134,7 +136,7 @@ async def update_card_settings(faculty_id: str, data: CardSettings, current_user
     db = get_db()
     if data.font and data.font not in CARD_FONTS:
         raise HTTPException(status_code=400, detail="خط غير معروف")
-    update = {"template": data.template, "font": data.font or DEFAULT_CARD_FONT}
+    update = {"template": data.template, "font": data.font or DEFAULT_CARD_FONT, "show_section": data.show_section is not False}
     if data.custom_layout is not None:
         update["custom_layout"] = data.custom_layout
     if data.custom_bg_base64:
@@ -192,6 +194,7 @@ async def _card_payload(db, student: dict, base_url: str) -> dict:
         "custom_bg_base64": settings.get("custom_bg_base64", ""),
         "custom_layout": settings.get("custom_layout") or {},
         "custom_orientation": settings.get("custom_orientation", "portrait"),
+        "show_section": settings.get("show_section", True),
         "photo_path": student.get("photo_path", ""),
         "pending_photo_path": student.get("pending_photo_path", ""),
         "card_token": card["token"],
@@ -563,7 +566,7 @@ async def _batch_candidates(db, data: "BatchPrintRequest", current_user: dict):
     dept = None
     if ids_mode:
         oids = []
-        for i in (data.student_ids or [])[:400]:
+        for i in (data.student_ids or [])[:250]:
             try:
                 oids.append(ObjectId(str(i)))
             except Exception:
@@ -617,7 +620,7 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
     dept = None
     if ids_mode:
         oids = []
-        for i in (data.student_ids or [])[:400]:
+        for i in (data.student_ids or [])[:250]:
             try:
                 oids.append(ObjectId(str(i)))
             except Exception:
@@ -669,8 +672,8 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
         students = [s async for s in db.students.find(q).sort("full_name", 1)]
         if not students:
             raise HTTPException(status_code=404, detail="لا يوجد طلاب مطابقون")
-        if len(students) > 400:
-            raise HTTPException(status_code=400, detail="العدد يتجاوز 400 طالب — قسّم الطلبات حسب المستوى")
+        if len(students) > 250:
+            raise HTTPException(status_code=400, detail="العدد يتجاوز 250 طالباً — قسّم الطلبات حسب المستوى (الدقة العالية تجعل الملف كبيراً)")
 
     # 🖨️ تتبّع الدفعات: استبعاد المطبوعين سابقاً / بلا صورة / المستبعدين يدوياً (إلا في إعادة تنزيل دفعة سابقة)
     reprint = None
@@ -715,6 +718,7 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
             "custom_bg_base64": s_settings.get("custom_bg_base64", ""),
             "custom_layout": s_settings.get("custom_layout") or {},
             "custom_orientation": s_settings.get("custom_orientation", "portrait"),
+            "show_section": s_settings.get("show_section", True),
         }
 
     pngs = []
@@ -759,10 +763,14 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
     positions = [(st["card1_x"] * mm, st["card1_y"] * mm), (st["card2_x"] * mm, st["card2_y"] * mm)]
     buf = io.BytesIO()
     c = pdfcanvas.Canvas(buf, pagesize=A4)
+    def _jpg(png):
+        # JPEG بجودة عالية داخل PDF: يحافظ على الدقة الثلاثية مع حجم ملف معقول
+        im = PILImage.open(io.BytesIO(png)).convert("RGB")
+        b = io.BytesIO(); im.save(b, format="JPEG", quality=88); return b.getvalue()
     for i in range(0, len(pngs), 2):
         for j, png in enumerate(pngs[i:i + 2]):
             x, y_top = positions[j]
-            c.drawImage(ImageReader(io.BytesIO(png)), x, H - y_top - ch, cw, ch)
+            c.drawImage(ImageReader(io.BytesIO(_jpg(png))), x, H - y_top - ch, cw, ch)
         c.showPage()
     c.save()
 
@@ -961,13 +969,13 @@ def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bo
         wm.putalpha(a)
         img.paste(wm, ((W // 2 - wm_s // 2) * S, (H // 2 - wm_s // 2) * S), wm)
     y = band_h + (34 if portrait else 22)
-    d.text(((W // 2) * S, y * S), ar(back.get("title") or DEFAULT_BACK_SETTINGS["title"]), font=F(30 if portrait else 28), fill=theme["accent"], anchor="mm", **_dir)
-    y += 26
+    d.text(((W // 2) * S, y * S), ar(back.get("title") or DEFAULT_BACK_SETTINGS["title"]), font=F(36 if portrait else 32), fill=theme["accent"], anchor="mm", **_dir)
+    y += 30
     d.line([(60 * S, y * S), ((W - 60) * S, y * S)], fill=theme["accent"], width=2 * S)
     y += 22
     # التعليمات مع التفاف النص + ملاءمة تلقائية لحجم الخط حسب المساحة المتاحة
-    max_w = (W - 90)
-    right = W - 44
+    max_w = (W - 76)
+    right = W - 38
     text_col = theme["text"]
     foot_h = 118 if portrait else 96
     lines = back.get("lines") or DEFAULT_BACK_LINES
@@ -985,7 +993,7 @@ def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bo
             out.append(cur)
         return out
     body_size = 18
-    for size in range(28 if portrait else 24, 17, -1):
+    for size in range(36 if portrait else 30, 19, -1):
         f = F(size)
         total = sum(len(wrap(ln, f)) * (size + 11) + 8 for ln in lines)
         if total <= avail:
@@ -1004,7 +1012,7 @@ def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bo
     # التذييل: بيانات التواصل
     d.rectangle([0, (H - foot_h) * S, W * S, H * S], fill=theme["strip"])
     fy = H - foot_h + 16
-    f_small = F(17 if portrait else 16)
+    f_small = F(21 if portrait else 19)
     if back.get("show_contact", True):
         contact = [str(x) for x in [(uni or {}).get("address")] if x] + [f"\u202a{x}\u202c" for x in [(uni or {}).get("phone"), (uni or {}).get("website")] if x]
         # بيانات التواصل في سطر أفقي واحد مفصولة بنقطة (وتلتفّ لسطر ثانٍ إن طالت)
@@ -1294,7 +1302,7 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
             ("التخصص", p.get("department_name", "")),
             ("المستوى", f"المستوى {level_ar}"),
         ]
-        if (p.get("section") or "").strip():
+        if (p.get("section") or "").strip() and p.get("show_section", True):
             rows.append(("الشعبة", str(p["section"]).strip()))
         rows.append(("الجنسية", p.get("nationality", "")))
     rows = [(k, v) for k, v in rows if str(v or "").strip()]
@@ -1522,7 +1530,7 @@ async def download_student_card(
 
 
 @router.get("/cards/preview/{faculty_id}")
-async def card_preview(faculty_id: str, template: str = "green", font: str = DEFAULT_CARD_FONT, current_user: dict = Depends(get_current_user)):
+async def card_preview(faculty_id: str, template: str = "green", font: str = DEFAULT_CARD_FONT, show_section: Optional[bool] = None, current_user: dict = Depends(get_current_user)):
     """🖼️ معاينة فورية للقالب والخط ببيانات تجريبية (بلا حفظ)"""
     if not _can_manage(current_user, faculty_id):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -1535,7 +1543,7 @@ async def card_preview(faculty_id: str, template: str = "green", font: str = DEF
     except Exception:
         pass
     saved = await db.card_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
-    p = {"template": template, "font": font, "student_name": "محمد عبدالله سالم باعباد", "enrollment_no": "20231045", "department_name": "التخصص التجريبي",
+    p = {"template": template, "font": font, "show_section": saved.get("show_section", True) if show_section is None else show_section, "student_name": "محمد عبدالله سالم باعباد", "enrollment_no": "20231045", "department_name": "التخصص التجريبي",
          "faculty_name": (fac or {}).get("name") or "الكلية", "level": 2, "section": "أ", "nationality": "يمني", "academic_year": "2025-2026",
          "custom_bg_base64": saved.get("custom_bg_base64", ""), "custom_layout": saved.get("custom_layout") or {}}
     png = _render_card_png(p, None, "https://ahgaff.net/verify-card?token=preview")

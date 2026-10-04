@@ -39,6 +39,7 @@ export default function CardSettingsScreen() {
   const [facultyId, setFacultyId] = useState<string>((params.facultyId as string) || '');
   const [template, setTemplate] = useState('green');
   const [font, setFont] = useState('kufi');
+  const [showSection, setShowSection] = useState(true);
   const [fonts, setFonts] = useState<{ key: string; label: string }[]>([]);
   const [previewUrl, setPreviewUrl] = useState('');
   const [previewBusy, setPreviewBusy] = useState(false);
@@ -46,13 +47,13 @@ export default function CardSettingsScreen() {
     if (!facultyId || Platform.OS !== 'web') return;
     setPreviewBusy(true);
     const t = setTimeout(() => {
-      api.get(`/cards/preview/${facultyId}`, { params: { template, font }, responseType: 'blob' })
+      api.get(`/cards/preview/${facultyId}`, { params: { template, font, show_section: showSection }, responseType: 'blob' })
         .then((r) => setPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return URL.createObjectURL(r.data); }))
         .catch(() => setPreviewUrl(''))
         .finally(() => setPreviewBusy(false));
     }, 350);
     return () => clearTimeout(t);
-  }, [facultyId, template, font]);
+  }, [facultyId, template, font, showSection]);
   const [customBg, setCustomBg] = useState('');
   const [layout, setLayout] = useState<Record<string, any>>(DEFAULT_LAYOUT);
   const [selectedEl, setSelectedEl] = useState('name');
@@ -80,6 +81,7 @@ export default function CardSettingsScreen() {
     api.get(`/cards/settings/${facultyId}`).then((r) => {
       setTemplate(r.data?.template || 'green');
       setFont(r.data?.font || 'kufi');
+      setShowSection(r.data?.show_section !== false);
       setFonts(r.data?.fonts || []);
       setCustomBg(r.data?.custom_bg_base64 || '');
       setLayout({ ...DEFAULT_LAYOUT, ...(r.data?.custom_layout || {}) });
@@ -130,7 +132,7 @@ export default function CardSettingsScreen() {
     setSaving(true);
     setMsg('');
     try {
-      const body: any = { template, font, custom_layout: layout };
+      const body: any = { template, font, custom_layout: layout, show_section: showSection };
       if (template === 'custom' && customBg && customBg.startsWith('data:')) body.custom_bg_base64 = customBg;
       await api.put(`/cards/settings/${facultyId}`, body);
       setMsg('✅ تم حفظ تصميم البطاقة — يسري على كل بطاقات هذه الكلية');
@@ -191,7 +193,14 @@ export default function CardSettingsScreen() {
               </TouchableOpacity>
             ))}
           </View>
-          <Text style={{ fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 6 }}>تُطبَّق على جميع القوالب وتُولَّد البطاقة بدقة مضاعفة (1280×2020) لطباعة أوضح.</Text>
+          <Text style={{ fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 6 }}>تُطبَّق على جميع القوالب وتُولَّد البطاقة بدقة ثلاثية (1920×3030 ≈ 570 DPI) لطباعة واضحة.</Text>
+
+          <Text style={[styles.label, { marginTop: 18 }]}>بيانات البطاقة</Text>
+          <TouchableOpacity onPress={() => setShowSection(!showSection)} style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 8, paddingVertical: 6 }} testID="card-show-section-toggle">
+            <Ionicons name={showSection ? 'checkbox' : 'square-outline'} size={22} color={showSection ? '#00796b' : '#94a3b8'} />
+            <Text style={{ fontSize: 13, color: '#1a2540', fontWeight: '700' }}>طباعة الشعبة على البطاقة</Text>
+            <Text style={{ fontSize: 11.5, color: '#5b6678' }}>— خاص بهذه الكلية ({showSection ? 'تُطبع' : 'لا تُطبع'})</Text>
+          </TouchableOpacity>
 
           {Platform.OS === 'web' && (
             <View style={{ marginTop: 14, alignItems: 'center' }} testID="card-live-preview">
