@@ -2839,6 +2839,7 @@ async def export_visual_pdf(
         from reportlab.pdfbase.ttfonts import TTFont
         import arabic_reshaper
         from bidi.algorithm import get_display
+        from xml.sax.saxutils import escape as _xml_escape
     except ImportError as e:
         raise HTTPException(status_code=500, detail=f"مكتبة PDF غير مثبتة: {e}")
 
@@ -2949,6 +2950,31 @@ async def export_visual_pdf(
         span_cmds = []
         grey_skip = set()
         n_slots = len(time_slots_cfg)
+        num_cols = len(header_row)
+        col_widths = [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1) + [3*cm]
+        inner_w = col_widths[0] - 8
+        cell_style = ParagraphStyle("Cell", fontName=font_name, fontSize=9, leading=12, alignment=1)
+
+        def _para(lines):
+            # lines: [(text, color|None)] → فقرة متعددة الأسطر مع تلوين سطر المجموعة
+            html = "<br/>".join(
+                (f'<font color="{c}">{_xml_escape(ar(t))}</font>' if c else _xml_escape(ar(t))) for t, c in lines
+            )
+            return Paragraph(html, cell_style)
+
+        def _entries_table(paras):
+            # 👥 جدول داخلي: صف لكل عنصر + خط فاصل رفيع بين العناصر
+            t = Table([[p] for p in paras], colWidths=[inner_w])
+            st = [
+                ("LEFTPADDING", (0, 0), (-1, -1), 0), ("RIGHTPADDING", (0, 0), (-1, -1), 0),
+                ("TOPPADDING", (0, 0), (-1, -1), 3), ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+                ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+            ]
+            for i in range(len(paras) - 1):
+                st.append(("LINEBELOW", (0, i), (-1, i), 0.6, colors.HexColor("#b39ddb")))
+            t.setStyle(TableStyle(st))
+            return t
+
         for r_i, day in enumerate(working_days, start=1):
             cells = []
             for ts in time_slots_cfg:
@@ -2957,24 +2983,28 @@ async def export_visual_pdf(
                 if not cell_slots:
                     cells.append("")
                 else:
-                    parts = []
-                    for s in cell_slots:
+                    paras = []
+                    for s in sorted(cell_slots, key=lambda x: (x.get("group") or "")):
                         course = courses_map.get(s.get("course_id", ""), {})
                         teacher = teachers_map.get(s.get("teacher_id", ""), {})
                         room = rooms_map.get(s.get("room_id", ""), {})
-                        line = course.get("name", "") or course.get("code", "")
-                        if teacher.get("full_name") and not teacher_id and not suppress_teacher:
-                            line += f"\n{teacher.get('full_name','')}"
-                        if room.get("name") and not room_id:
-                            line += f"\n[{room.get('name','')}]"
-                        _est, _een, _ch = _effective_times(s, ts.get("start_time", ""), ts.get("end_time", ""))
-                        if _ch:
-                            line += f"\n({_est} - {_een})"
+                        lines = []
+                        if s.get("group"):
+                            lines.append((s.get("group_name") or f"مجموعة {s.get('group')}", "#6a1b9a"))
+                        name = course.get("name", "") or course.get("code", "")
                         sec = s.get("section")
                         if sec and not section and not hide_section:
-                            line += f" - شعبة {sec}"
-                        parts.append(ar(line))
-                    cells.append("\n\n".join(parts))
+                            name += f" - شعبة {sec}"
+                        lines.append((name, "#0d47a1" if s.get("group") else None))
+                        if teacher.get("full_name") and not teacher_id and not suppress_teacher:
+                            lines.append((teacher.get("full_name", ""), None))
+                        if room.get("name") and not room_id:
+                            lines.append((f"[{room.get('name','')}]", "#546e7a"))
+                        _est, _een, _ch = _effective_times(s, ts.get("start_time", ""), ts.get("end_time", ""))
+                        if _ch:
+                            lines.append((f"({_est} - {_een})", "#e65100"))
+                        paras.append(_para(lines))
+                    cells.append(paras[0] if len(paras) == 1 else _entries_table(paras))
             # 🕐 تمدد الخلايا: المقرر الممتد وقته يندمج مع الفترات التالية الفارغة
             reversed_cells = cells[::-1]
             for i in range(n_slots):
@@ -2990,8 +3020,6 @@ async def export_visual_pdf(
                         grey_skip.add((cc, r_i))
             table_data.append(reversed_cells + [ar(day)])
 
-        num_cols = len(header_row)
-        col_widths = [(27 - 3) / (num_cols - 1) * cm] * (num_cols - 1) + [3*cm]
         tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
         base_style = [
             ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1565c0")),
@@ -3200,11 +3228,13 @@ async def export_visual_excel(
                 cell_val = ""
                 if cell_slots:
                     parts = []
-                    for s in cell_slots:
+                    for s in sorted(cell_slots, key=lambda x: (x.get("group") or "")):
                         course = courses_map.get(s.get("course_id", ""), {})
                         teacher = teachers_map.get(s.get("teacher_id", ""), {})
                         room = rooms_map.get(s.get("room_id", ""), {})
-                        line = course.get("name", "") or course.get("code", "")
+                        gl = (s.get("group_name") or f"مجموعة {s.get('group')}") if s.get("group") else ""
+                        line = f"👥 {gl}\n" if gl else ""
+                        line += course.get("name", "") or course.get("code", "")
                         if teacher.get("full_name") and not teacher_id and not suppress_teacher:
                             line += f"\n{teacher.get('full_name','')}"
                         if room.get("name") and not room_id:
@@ -3216,7 +3246,7 @@ async def export_visual_excel(
                         if sec and not section and not hide_section:
                             line += f" - ش/{sec}"
                         parts.append(line)
-                    cell_val = "\n\n".join(parts)
+                    cell_val = "\n──────────\n".join(parts) if len(parts) > 1 else parts[0]
                     max_lines = max(max_lines, cell_val.count("\n") + 1)
                 c = ws.cell(row=r_idx, column=d_idx, value=cell_val)
                 c.fill = empty_fill if not cell_val else cell_fill
