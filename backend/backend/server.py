@@ -6072,6 +6072,30 @@ async def get_courses(
             group_roles[str(gc["_id"])] = [{"key": g["key"], "name": g.get("name") or f"مجموعة {g['key']}"} for g in _gs]
             courses.append(gc)
     
+    # 👥 إثراء مجموعات المقررات: اسم مدرّس المجموعة + عدد طلابها + عدد محاضراتها
+    _grp_course_ids = [str(c["_id"]) for c in courses if c.get("groups")]
+    _grp_teacher_names: dict = {}
+    _grp_students: dict = {}
+    _grp_lectures: dict = {}
+    if _grp_course_ids:
+        _gt_ids = {g.get("teacher_id") for c in courses for g in (c.get("groups") or []) if g.get("teacher_id") and ObjectId.is_valid(g.get("teacher_id"))}
+        if _gt_ids:
+            async for t in db.teachers.find({"_id": {"$in": [ObjectId(x) for x in _gt_ids]}}, {"full_name": 1}):
+                _grp_teacher_names[str(t["_id"])] = t.get("full_name", "")
+        async for r in db.enrollments.aggregate([{"$match": {"course_id": {"$in": _grp_course_ids}, "group": {"$nin": [None, ""]}}}, {"$group": {"_id": {"c": "$course_id", "g": "$group"}, "n": {"$sum": 1}}}]):
+            _grp_students[(r["_id"]["c"], r["_id"]["g"])] = r["n"]
+        async for r in db.lectures.aggregate([{"$match": {"course_id": {"$in": _grp_course_ids}, "group": {"$nin": [None, ""]}, "status": {"$ne": "cancelled"}}}, {"$group": {"_id": {"c": "$course_id", "g": "$group"}, "n": {"$sum": 1}}}]):
+            _grp_lectures[(r["_id"]["c"], r["_id"]["g"])] = r["n"]
+
+    def _enrich_groups(c):
+        cid_ = str(c["_id"])
+        return [{
+            "key": g.get("key"), "name": g.get("name") or f"مجموعة {g.get('key')}", "teacher_id": g.get("teacher_id"),
+            "teacher_name": _grp_teacher_names.get(g.get("teacher_id") or "", ""),
+            "students_count": _grp_students.get((cid_, g.get("key")), 0),
+            "lectures_count": _grp_lectures.get((cid_, g.get("key")), 0),
+        } for g in (c.get("groups") or [])]
+
     # جلب عدد الطلاب لكل مقرر دفعة واحدة (فقط إذا مطلوب)
     course_ids = [str(c["_id"]) for c in courses]
     enrollment_counts: dict = {}
@@ -6225,7 +6249,7 @@ async def get_courses(
             ],
             "shared_here": bool(department_id and c.get("department_id") and c.get("department_id") != department_id),
             "group_roles": group_roles.get(str(c["_id"]), []),
-            "groups": c.get("groups") or [],
+            "groups": _enrich_groups(c),
         })
     
     return apply_fields(result, allowed)
@@ -8474,6 +8498,7 @@ async def get_month_lectures(
 async def get_course_lectures(
     course_id: str,
     status: Optional[str] = None,
+    group: Optional[str] = None,
     page: int = 1,
     per_page: int = 50,
     current_user: dict = Depends(get_current_user)
@@ -8486,6 +8511,8 @@ async def get_course_lectures(
     query = {"course_id": course_id}
     if status:
         query["status"] = status
+    if group:  # 👥 "all" = للشعبة كاملة فقط (بلا مجموعة) · أو رمز مجموعة
+        query["group"] = {"$in": [None, ""]} if group == "all" else group
     
     # عدد المحاضرات الإجمالي (مع الفلتر)
     total = await db.lectures.count_documents(query)

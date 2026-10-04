@@ -880,6 +880,21 @@ export default function AddCourseScreen() {
           ) : (
             <Text style={styles.tCell} numberOfLines={1}>{teacherName || '—'}</Text>
           )}
+          {((item as any).groups || []).length > 0 && (
+            <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 4, marginTop: 4 }} testID={`course-groups-${item.id}`}>
+              {((item as any).groups as any[]).map((g, gi) => (
+                <TouchableOpacity
+                  key={g.key}
+                  onPress={() => router.push({ pathname: '/course-lectures', params: { courseId: item.id, group: g.key } })}
+                  style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 3, backgroundColor: ['#e3f2fd', '#e8f5e9', '#fce4ec', '#fff3e0', '#ede7f6', '#e0f2f1'][gi % 6], borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2 }}
+                  testID={`course-group-chip-${item.id}-${g.key}`}
+                >
+                  <Text style={{ fontSize: 10, fontWeight: '800', color: '#1a2540' }}>👥 {g.name}</Text>
+                  <Text style={{ fontSize: 9.5, color: '#5b6678' }} numberOfLines={1}>{g.teacher_name || 'مدرّس المقرر'} · {g.students_count} ط · {g.lectures_count} مح</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
         </View>
         <View style={[styles.cCol5, styles.cellPad]}>
           <View style={[styles.statChip, { backgroundColor: '#e7f0fe' }]}>

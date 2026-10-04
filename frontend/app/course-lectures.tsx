@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter, Stack } from 'expo-router';
-import api, { coursesAPI, lecturesAPI, settingsAPI } from '../src/services/api';
+import api, { courseGroupsAPI, coursesAPI, lecturesAPI, settingsAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import AddLectureModal, { LectureFormData } from '../src/components/AddLectureModal';
 import RoomPicker from '../src/components/RoomPicker';
@@ -85,7 +85,7 @@ interface DayScheduleConfig {
 }
 
 export default function CourseLecturesScreen() {
-  const { courseId } = useLocalSearchParams<{ courseId: string }>();
+  const { courseId, group: groupParam } = useLocalSearchParams<{ courseId: string; group?: string }>();
   const router = useRouter();
   
   // استخدام Zustand store للمصادقة
@@ -171,6 +171,8 @@ export default function CourseLecturesScreen() {
   const [viewMode, setViewMode] = useState<'month' | 'list' | 'week'>('month');
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState<string | null>(null);
+  const [selectedGroup, setSelectedGroup] = useState<string>((groupParam as string) || '');
+  const [groupInfo, setGroupInfo] = useState<any[]>([]);
   const [expandedMonths, setExpandedMonths] = useState<Set<string>>(new Set());
   // التصميم الجديد
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -322,7 +324,7 @@ export default function CourseLecturesScreen() {
       
       const [courseRes, lecturesRes, settingsRes] = await Promise.all([
         ...(page === 1 ? [coursesAPI.getById(courseId)] : [Promise.resolve({ data: course })]),
-        lecturesAPI.getByCourse(courseId, page, PER_PAGE, selectedStatus || undefined),
+        lecturesAPI.getByCourse(courseId, page, PER_PAGE, selectedStatus || undefined, selectedGroup || undefined),
         ...(page === 1 ? [settingsAPI.get()] : [Promise.resolve({ data: {} })]),
       ]);
       
@@ -375,11 +377,22 @@ export default function CourseLecturesScreen() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [courseId, selectedStatus, course]);
+  }, [courseId, selectedStatus, selectedGroup, course]);
 
   useEffect(() => {
     fetchData(1);
-  }, [courseId, selectedStatus]);
+  }, [courseId, selectedStatus, selectedGroup]);
+
+  // 👥 تفاصيل المجموعات (مدرّس، طلاب، محاضرات)
+  useEffect(() => {
+    if (!courseId || !(course?.groups || []).length) { setGroupInfo([]); return; }
+    Promise.all([courseGroupsAPI.get(courseId), api.get(`/courses/${courseId}/groups/attendance`).catch(() => ({ data: { groups: [] } }))])
+      .then(([g, a]) => {
+        const att = new Map<string, any>((a.data?.groups || []).map((x: any) => [x.key, x]));
+        setGroupInfo((g.data?.groups || []).map((x: any) => ({ ...x, lectures_count: att.get(x.key)?.lectures_count ?? 0, attendance_rate: att.get(x.key)?.attendance_rate ?? null })));
+      })
+      .catch(() => setGroupInfo([]));
+  }, [courseId, course?.groups?.length]);
 
   // حفظ محاضرة جديدة باستخدام المكون الموحد
   const handleSaveLecture = async (data: LectureFormData, force: boolean = false) => {
@@ -1112,6 +1125,38 @@ export default function CourseLecturesScreen() {
               );
             })()}
           </View>
+
+          {/* 👥 لوحة المجموعات */}
+          {groupInfo.length > 0 && (
+            <View style={[styles.filterCard, { marginBottom: 10 }]} testID="course-groups-panel">
+              <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                <Text style={{ fontSize: 14, fontWeight: '800', color: '#1a2540' }}>👥 مجموعات المقرر ({groupInfo.length})</Text>
+                <TouchableOpacity onPress={() => router.push({ pathname: '/course-students', params: { courseId } })} testID="manage-groups-link">
+                  <Text style={{ fontSize: 12, color: '#1565c0', fontWeight: '700' }}>إدارة المجموعات ←</Text>
+                </TouchableOpacity>
+              </View>
+              <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8 }}>
+                <TouchableOpacity onPress={() => setSelectedGroup('')} style={{ borderWidth: 1.5, borderColor: '#1a2540', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: selectedGroup === '' ? '#1a2540' : '#fff' }} testID="group-filter-chip-">
+                  <Text style={{ fontSize: 12.5, fontWeight: '800', color: selectedGroup === '' ? '#fff' : '#1a2540' }}>كل المحاضرات</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => setSelectedGroup('all')} style={{ borderWidth: 1.5, borderColor: '#78909c', borderRadius: 10, paddingVertical: 8, paddingHorizontal: 12, backgroundColor: selectedGroup === 'all' ? '#78909c' : '#fff' }} testID="group-filter-chip-all">
+                  <Text style={{ fontSize: 12.5, fontWeight: '800', color: selectedGroup === 'all' ? '#fff' : '#546e7a' }}>للشعبة كاملة</Text>
+                </TouchableOpacity>
+                {groupInfo.map((g: any, i: number) => {
+                  const c = ['#1565c0', '#2e7d32', '#ad1457', '#ef6c00', '#6a1b9a', '#00838f', '#5d4037', '#c62828'][i % 8];
+                  const on = selectedGroup === g.key;
+                  return (
+                    <TouchableOpacity key={g.key} onPress={() => setSelectedGroup(on ? '' : g.key)} style={{ borderWidth: 1.5, borderColor: c, borderRadius: 10, paddingVertical: 6, paddingHorizontal: 12, backgroundColor: on ? c : '#fff', minWidth: 150 }} testID={`group-filter-chip-${g.key}`}>
+                      <Text style={{ fontSize: 13, fontWeight: '800', color: on ? '#fff' : c, textAlign: 'right' }}>{g.name}</Text>
+                      <Text style={{ fontSize: 11, color: on ? 'rgba(255,255,255,0.9)' : '#5b6678', textAlign: 'right' }}>
+                        👤 {g.teacher_name || 'مدرّس المقرر'} · {g.count} طالب · {g.lectures_count} محاضرة منفذة{g.attendance_rate !== null && g.lectures_count ? ` · حضور ${g.attendance_rate}%` : ''}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+          )}
 
           {/* بطاقة الفلاتر */}
           <View style={styles.filterCard}>
