@@ -18,6 +18,31 @@ LEVEL_AR = {1: "الأول", 2: "الثاني", 3: "الثالث", 4: "الرا�
 STATUS_PHRASE = {"active": "ومستمراً في الدراسة", "frozen": "وقد جمّد قيده حالياً", "suspended": "وموقوف عن الدراسة حالياً"}
 STATUS_WORD = {"active": "مستمر في الدراسة", "frozen": "مجمّد القيد حالياً", "suspended": "موقوف عن الدراسة حالياً", "graduated": "متخرج"}
 
+# ♀ صيغ المؤنث
+STATUS_PHRASE_F = {"active": "ومستمرةً في الدراسة", "frozen": "وقد جمّدت قيدها حالياً", "suspended": "وموقوفة عن الدراسة حالياً"}
+STATUS_WORD_F = {"active": "مستمرة في الدراسة", "frozen": "مجمّدة القيد حالياً", "suspended": "موقوفة عن الدراسة حالياً", "graduated": "متخرجة"}
+GENDER_VARS = {  # متغيرات القوالب التي تتبدل حسب الجنس: (مذكر، مؤنث)
+    "الطالب": ("الطالب", "الطالبة"), "هو": ("هو", "هي"), "له": ("له", "لها"), "طلبه": ("طلبه", "طلبها"), "ـه": ("ه", "ها"),
+    "يدرس": ("يدرس", "تدرس"), "يحمل": ("يحمل", "تحمل"), "مستمر": ("مستمر", "مستمرة"), "مقيد": ("مقيد", "مقيدة"), "منتظم": ("منتظم", "منتظمة"),
+    "المذكور": ("المذكور", "المذكورة"), "حصل": ("حصل", "حصلت"), "اجتاز": ("اجتاز", "اجتازت"), "تخرج": ("تخرج", "تخرجت"), "خريج": ("خريج", "خريجة"),
+}
+
+
+def student_gender(student: dict, faculty: Optional[dict] = None) -> str:
+    """الجنس الفعلي: المحدد للطالب، وإلا افتراضي الكلية (كلية البنات = female)، وإلا مذكر"""
+    g = (student.get("gender") or "").strip().lower()
+    if g in ("male", "female"):
+        return g
+    fg = ((faculty or {}).get("default_gender") or "").strip().lower()
+    return fg if fg in ("male", "female") else "male"
+
+
+def feminize_nationality(n: str) -> str:
+    n = (n or "").strip()
+    if not n or n.endswith("ة") or n.endswith("ية"):
+        return n
+    return n + "ة" if n.endswith("ي") else n
+
 
 def _apply_vars(text: str, ctx: dict) -> str:
     for k, v in ctx.items():
@@ -39,6 +64,13 @@ def _var_ctx(student: dict, dept, faculty, academic_year_display: str, nationali
         "الحالة": STATUS_WORD.get(student.get("status", "active"), "مستمر في الدراسة"),
         "التاريخ": datetime.now(timezone.utc).strftime("%Y/%m/%d") + "م",
     }
+    # ♀♂ تذكير/تأنيث حسب جنس الطالب (أو افتراضي الكلية)
+    is_f = student_gender(student, faculty if isinstance(faculty, dict) else None) == "female"
+    if is_f:
+        ctx["الجنسية"] = feminize_nationality(ctx["الجنسية"])
+        ctx["الحالة"] = STATUS_WORD_F.get(student.get("status", "active"), "مستمرة في الدراسة")
+    for k, (m, f) in GENDER_VARS.items():
+        ctx[k] = f if is_f else m
     # تُدرج فقط عند توفر قيمة — وإلا يبقى المتغير ظاهراً ليعبّأ لاحقاً
     if (term_name or "").strip():
         ctx["الفصل"] = term_name.strip()
@@ -256,6 +288,7 @@ async def _issue_core(db, student: dict, current_user: dict, nationality, purpos
         "faculty_name": (faculty or {}).get("name", ""),
         "academic_year": academic_year_display,
         "student_status": student.get("status", "active"),
+        "gender": student_gender(student, faculty),
         "purpose": (purpose or "").strip(),
         "body": rendered_body,
         "template_name": (template_name or "").strip(),
@@ -652,7 +685,9 @@ def _build_pdf(s: dict, settings: dict) -> bytes:
 
     # ===== نص الإفادة =====
     level_ar = LEVEL_AR.get(s.get("level") or 1, str(s.get("level")))
-    status_phrase = STATUS_PHRASE.get(s.get("student_status", "active"), "ومستمراً في الدراسة")
+    is_f = (s.get("gender") or "male") == "female"
+    status_phrase = (STATUS_PHRASE_F if is_f else STATUS_PHRASE).get(s.get("student_status", "active"), "ومستمرةً في الدراسة" if is_f else "ومستمراً في الدراسة")
+    who = "بأن الطالبة:" if is_f else "بأن الطالب:"
     c.setFont("Amiri", 14)
     yy = H - 96 * mm
     if (s.get("body") or "").strip():
@@ -660,7 +695,7 @@ def _build_pdf(s: dict, settings: dict) -> bytes:
         import textwrap as _tw
         c.drawCentredString(W / 2, yy, ar(f"تفيد {s.get('faculty_name', '')} بجامعة الأحقاف"))
         yy -= 9 * mm
-        c.drawCentredString(W / 2, yy, ar("بأن الطالب:"))
+        c.drawCentredString(W / 2, yy, ar(who))
         yy -= 10 * mm
         c.setFont("Amiri", 17)
         c.drawCentredString(W / 2, yy, ar(s.get("student_name", "")))
@@ -674,17 +709,18 @@ def _build_pdf(s: dict, settings: dict) -> bytes:
     else:
         c.drawCentredString(W / 2, yy, ar(f"تفيد {s.get('faculty_name', '')} بجامعة الأحقاف"))
         yy -= 9 * mm
-        c.drawCentredString(W / 2, yy, ar("بأن الطالب:"))
+        c.drawCentredString(W / 2, yy, ar(who))
         yy -= 10 * mm
         c.setFont("Amiri", 17)
         c.drawCentredString(W / 2, yy, ar(s.get("student_name", "")))
         yy -= 11 * mm
         c.setFont("Amiri", 14)
-        c.drawCentredString(W / 2, yy, ar(f"{s.get('nationality', '')} الجنسية، يدرس بالمستوى {level_ar} تخصص ({s.get('department_name', '')})"))
+        nat = feminize_nationality(s.get("nationality", "")) if is_f else s.get("nationality", "")
+        c.drawCentredString(W / 2, yy, ar(f"{nat} الجنسية، {'تدرس' if is_f else 'يدرس'} بالمستوى {level_ar} تخصص ({s.get('department_name', '')})"))
         yy -= 9 * mm
-        c.drawCentredString(W / 2, yy, ar(f"للعام الجامعي {s.get('academic_year', '')}، يحمل رقم قيد ({s.get('enrollment_no', '')}) {status_phrase}."))
+        c.drawCentredString(W / 2, yy, ar(f"للعام الجامعي {s.get('academic_year', '')}، {'تحمل' if is_f else 'يحمل'} رقم قيد ({s.get('enrollment_no', '')}) {status_phrase}."))
         yy -= 12 * mm
-        c.drawCentredString(W / 2, yy, ar("أعطيت له هذه الإفادة بناءً على طلبه."))
+        c.drawCentredString(W / 2, yy, ar("أعطيت لها هذه الإفادة بناءً على طلبها." if is_f else "أعطيت له هذه الإفادة بناءً على طلبه."))
     if s.get("purpose"):
         yy -= 9 * mm
         c.drawCentredString(W / 2, yy, ar(f"وذلك لغرض: {s['purpose']}"))

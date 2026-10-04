@@ -46,6 +46,7 @@ class FacultyBase(BaseModel):
     sections: Optional[List[str]] = None
     attendance_late_minutes: Optional[int] = 15
     max_absence_percent: Optional[float] = 25
+    default_gender: Optional[str] = None  # female لكلية البنات: كل طلابها إناث ما لم يُحدد خلاف ذلك
 
 class FacultyCreate(FacultyBase):
     pass
@@ -60,6 +61,7 @@ class FacultyUpdate(BaseModel):
     sections: Optional[List[str]] = None
     attendance_late_minutes: Optional[int] = None
     max_absence_percent: Optional[float] = None
+    default_gender: Optional[str] = None
 
 class FacultyResponse(FacultyBase):
     id: str

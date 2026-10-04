@@ -15,6 +15,7 @@ class StudentBase(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     nationality: Optional[str] = None
+    gender: Optional[str] = None  # male / female (فارغ = يُستنتج من الكلية ثم مذكر)
     program_code: Optional[str] = None  # B/M/D/E/P
     enrollment_year: Optional[str] = None  # 25, 26, 27...
 

@@ -132,6 +132,7 @@ export default function GeneralSettingsScreen() {
     code: '',
     numeric_code: '',
     description: '',
+    default_gender: '',
   });
   
   // Semester states
@@ -356,7 +357,7 @@ export default function GeneralSettingsScreen() {
       }
       setShowFacultyForm(false);
       setEditingFaculty(null);
-      setFacultyForm({ name: '', code: '', numeric_code: '', description: '' });
+      setFacultyForm({ name: '', code: '', numeric_code: '', description: '', default_gender: '' });
       fetchData();
     } catch (error: any) {
       showMessage('خطأ', error.response?.data?.detail || 'حدث خطأ');
@@ -384,6 +385,7 @@ export default function GeneralSettingsScreen() {
       code: faculty.code,
       numeric_code: (faculty as any).numeric_code || '',
       description: faculty.description || '',
+      default_gender: (faculty as any).default_gender || '',
     });
     setShowFacultyForm(true);
   };
@@ -786,7 +788,7 @@ export default function GeneralSettingsScreen() {
             style={styles.addBtn}
             onPress={() => {
               setEditingFaculty(null);
-              setFacultyForm({ name: '', code: '', numeric_code: '', description: '' });
+              setFacultyForm({ name: '', code: '', numeric_code: '', description: '', default_gender: '' });
               setShowFacultyForm(true);
             }}
           >
@@ -831,6 +833,18 @@ export default function GeneralSettingsScreen() {
             />
             <Text style={styles.helpText}>
               يُستخدم لتمييز الكلية داخل الرقم المرجعي للطالب (حرف أو رقم أو اثنان كحد أقصى)
+            </Text>
+
+            <Text style={styles.label}>جنس طلاب الكلية الافتراضي</Text>
+            <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+              {[['', 'مختلط (ذكر ما لم يُحدد)'], ['female', 'إناث — كلية بنات'], ['male', 'ذكور']].map(([v, l]) => (
+                <TouchableOpacity key={v} onPress={() => setFacultyForm({ ...facultyForm, default_gender: v })} style={{ paddingVertical: 8, paddingHorizontal: 12, borderRadius: 8, backgroundColor: facultyForm.default_gender === v ? (v === 'female' ? '#ad1457' : v === 'male' ? '#1565c0' : '#455a64') : '#f1f5f9' }} testID={`faculty-gender-${v || 'mixed'}`}>
+                  <Text style={{ fontSize: 12.5, fontWeight: '700', color: facultyForm.default_gender === v ? '#fff' : '#334155' }}>{l}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.helpText}>
+              يحدد صيغة الإفادات (الطالب/الطالبة) لكل طلاب الكلية ما لم يُحدد الجنس للطالب نفسه. اختر «إناث» لكلية البنات.
             </Text>
 
             <Text style={styles.label}>الوصف</Text>

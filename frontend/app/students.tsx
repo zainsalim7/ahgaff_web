@@ -136,6 +136,7 @@ export default function StudentsScreen() {
     phone: '',
     email: '',
     nationality: '',
+    gender: '',
     level: '1',
     section: '',
     program_code: '',
@@ -248,6 +249,7 @@ export default function StudentsScreen() {
     phone: '',
     email: '',
     nationality: '',
+    gender: '',
     password: '',
     program_code: '',
     enrollment_year: '',
@@ -270,6 +272,7 @@ export default function StudentsScreen() {
       if (newStudent.phone.trim()) body.phone = newStudent.phone.trim();
       if (newStudent.email.trim()) body.email = newStudent.email.trim();
       if (newStudent.nationality.trim()) body.nationality = newStudent.nationality.trim();
+      if (newStudent.gender) body.gender = newStudent.gender;
       if (newStudent.password.trim()) body.password = newStudent.password.trim();
       if (newStudent.program_code.trim()) body.program_code = newStudent.program_code.trim().toUpperCase();
       if (newStudent.enrollment_year.trim()) {
@@ -281,7 +284,7 @@ export default function StudentsScreen() {
       const refMsg = (r.data?.reference_number ? `\nالرقم المرجعي: ${r.data.reference_number}` : '') + (r.data?.reference_note ? `\n${r.data.reference_note}` : '');
       showMessage('تم', `أُضيف الطالب: ${r.data.full_name}${refMsg}`);
       setShowAddModal(false);
-      setNewStudent({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', nationality: '', password: '', program_code: '', enrollment_year: '' });
+      setNewStudent({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', nationality: '', gender: '', password: '', program_code: '', enrollment_year: '' });
       fetchData();
     } catch (e: any) {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل في إضافة الطالب');
@@ -444,6 +447,18 @@ export default function StudentsScreen() {
 
   // حذف المحدد
   // 🆕 إصدار إفادات جماعي لكل الطلاب المحددين — PDF واحد
+  const bulkSetGender = async (gender: 'male' | 'female') => {
+    if (selectedIds.size === 0) return;
+    const label = gender === 'female' ? 'أنثى' : 'ذكر';
+    if (Platform.OS === 'web' && !window.confirm(`تعيين الجنس «${label}» لـ ${selectedIds.size} طالب؟ (يحدد صيغة الإفادات: الطالب/الطالبة)`)) return;
+    try {
+      const r = await api.post('/students/bulk-set-gender', { student_ids: Array.from(selectedIds), gender });
+      showMessage('تم', r.data.message);
+      setSelectedIds(new Set());
+      fetchData();
+    } catch (e: any) { showMessage('خطأ', e?.response?.data?.detail || 'فشل التعيين'); }
+  };
+
   const handleBulkIssueStatements = async () => {
     if (selectedIds.size === 0) return;
     setStBulkIssuing(true);
@@ -1082,6 +1097,7 @@ export default function StudentsScreen() {
       phone: student.phone || '',
       email: student.email || '',
       nationality: (student as any).nationality || '',
+      gender: (student as any).gender || '',
       level: student.level || '1',
       section: student.section || '',
       program_code: (student as any).program_code || '',
@@ -1653,6 +1669,14 @@ export default function StudentsScreen() {
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#00695c' }]} onPress={() => { setStBulkPurpose(''); setStBulkValidDays('90'); setShowStatementBulkModal(true); }} testID="bulk-statements-btn">
                   <Ionicons name="document-text" size={14} color="#fff" />
                   <Text style={styles.selActionText}>إصدار إفادات</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#ad1457' }]} onPress={() => bulkSetGender('female')} testID="bulk-gender-female-btn">
+                  <Ionicons name="female" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تعيين: أنثى</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#1565c0' }]} onPress={() => bulkSetGender('male')} testID="bulk-gender-male-btn">
+                  <Ionicons name="male" size={14} color="#fff" />
+                  <Text style={styles.selActionText}>تعيين: ذكر</Text>
                 </TouchableOpacity>
                 <TouchableOpacity style={[styles.selActionBtn, { backgroundColor: '#00838f' }]} onPress={() => router.push(`/batch-print?ids=${Array.from(selectedIds).join(',')}`)} testID="bulk-cards-btn">
                   <Ionicons name="card" size={14} color="#fff" />
@@ -2260,6 +2284,17 @@ export default function StudentsScreen() {
                   placeholderTextColor="#999"
                   testID="edit-student-nationality-input"
                 />
+              </View>
+
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>الجنس (لصيغة الإفادات)</Text>
+                <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
+                  {[['', 'حسب الكلية'], ['male', 'ذكر'], ['female', 'أنثى']].map(([v, l]) => (
+                    <TouchableOpacity key={v} onPress={() => setEditFormData(prev => ({ ...prev, gender: v }))} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: editFormData.gender === v ? (v === 'female' ? '#ad1457' : v === 'male' ? '#1565c0' : '#455a64') : '#f1f5f9' }} testID={`edit-student-gender-${v || 'auto'}`}>
+                      <Text style={{ fontSize: 13, fontWeight: '700', color: editFormData.gender === v ? '#fff' : '#334155' }}>{l}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
               </View>
               
               <View style={styles.inputGroup}>

@@ -3774,6 +3774,7 @@ async def get_students(
         "phone": s.get("phone"),
         "email": s.get("email"),
         "nationality": s.get("nationality"),
+        "gender": s.get("gender"),
         "user_id": s.get("user_id"),
         "qr_code": s["qr_code"],
         "created_at": s["created_at"],
@@ -3816,6 +3817,7 @@ async def get_my_student_record(current_user: dict = Depends(get_current_user)):
         "phone": student.get("phone"),
         "email": student.get("email"),
         "nationality": student.get("nationality"),
+        "gender": student.get("gender"),
         "user_id": student.get("user_id"),
         "qr_code": student["qr_code"],
         "created_at": student["created_at"],
@@ -4078,6 +4080,7 @@ async def get_student(student_id: str, current_user: dict = Depends(get_current_
         "phone": student.get("phone"),
         "email": student.get("email"),
         "nationality": student.get("nationality"),
+        "gender": student.get("gender"),
         "program_code": student.get("program_code"),
         "enrollment_year": student.get("enrollment_year"),
         "reference_number": student.get("reference_number"),
@@ -4105,6 +4108,7 @@ async def get_student_by_qr(qr_code: str, current_user: dict = Depends(get_curre
         "phone": student.get("phone"),
         "email": student.get("email"),
         "nationality": student.get("nationality"),
+        "gender": student.get("gender"),
         "user_id": student.get("user_id"),
         "qr_code": student["qr_code"],
         "created_at": student["created_at"],
@@ -4328,6 +4332,7 @@ class StudentUpdate(BaseModel):
     nationality: Optional[str] = None
     program_code: Optional[str] = None
     enrollment_year: Optional[str] = None
+    gender: Optional[str] = None
 
 @api_router.put("/students/{student_id}", response_model=StudentResponse)
 async def update_student(student_id: str, data: StudentUpdate, current_user: dict = Depends(get_current_user)):
@@ -4422,6 +4427,7 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
         "phone": updated.get("phone"),
         "email": updated.get("email"),
         "nationality": updated.get("nationality"),
+        "gender": updated.get("gender"),
         "user_id": updated.get("user_id"),
         "qr_code": updated["qr_code"],
         "created_at": updated["created_at"],
@@ -4511,6 +4517,41 @@ async def deactivate_student_account(student_id: str, current_user: dict = Depen
     )
     
     return {"message": "تم إلغاء تفعيل حساب الطالب"}
+
+class BulkGenderIn(BaseModel):
+    student_ids: Optional[List[str]] = None
+    faculty_id: Optional[str] = None
+    department_id: Optional[str] = None
+    gender: str  # male / female / "" لمسح التحديد
+    only_unset: bool = False
+
+
+@api_router.post("/students/bulk-set-gender")
+async def bulk_set_gender(data: BulkGenderIn, current_user: dict = Depends(get_current_user)):
+    """♀♂ تعيين الجنس لمجموعة طلاب (محددين، أو قسم/كلية كاملة) — لتمييز صيغة الإفادات"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    g = (data.gender or "").strip().lower()
+    if g not in ("male", "female", ""):
+        raise HTTPException(status_code=400, detail="قيمة الجنس غير صحيحة")
+    q: dict = {}
+    if data.student_ids:
+        q["_id"] = {"$in": [ObjectId(i) for i in data.student_ids if ObjectId.is_valid(i)]}
+    elif data.department_id:
+        q["department_id"] = data.department_id
+    elif data.faculty_id:
+        dept_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": data.faculty_id}, {"_id": 1})]
+        q["$or"] = [{"faculty_id": data.faculty_id}, {"department_id": {"$in": dept_ids}}]
+    else:
+        raise HTTPException(status_code=400, detail="حدد طلاباً أو قسماً أو كلية")
+    if data.only_unset:
+        q["$and"] = [{"$or": [{"gender": {"$exists": False}}, {"gender": None}, {"gender": ""}]}]
+    upd = {"$set": {"gender": g}} if g else {"$unset": {"gender": ""}}
+    r = await db.students.update_many(q, upd)
+    label = {"male": "ذكر", "female": "أنثى", "": "غير محدد"}[g]
+    await log_activity(current_user, "students_bulk_set_gender", "students", "", f"تعيين الجنس «{label}» لـ {r.modified_count} طالب", {"gender": g, "faculty_id": data.faculty_id, "department_id": data.department_id, "count": r.modified_count})
+    return {"updated": r.modified_count, "message": f"تم تعيين الجنس «{label}» لـ {r.modified_count} طالب"}
+
 
 @api_router.post("/students/bulk-activate")
 async def bulk_activate_students(current_user: dict = Depends(get_current_user)):
@@ -14244,6 +14285,8 @@ async def import_students_from_excel(
             'البريد الإلكتروني': 'email',
             'الإيميل': 'email',
             'الجنسية': 'nationality',
+            'الجنس': 'gender',
+            'النوع': 'gender',
             'جنسية الطالب': 'nationality',
             # حقول الرقم المرجعي
             'البرنامج': 'program_code',
@@ -14303,6 +14346,7 @@ async def import_students_from_excel(
                     "phone": _xl_str(row.get('phone', '')) if pd.notna(row.get('phone')) else None,
                     "email": str(row.get('email', '')).strip() if pd.notna(row.get('email')) else None,
                     "nationality": str(row.get('nationality', '')).strip() if pd.notna(row.get('nationality')) else None,
+                    "gender": {"ذكر": "male", "م": "male", "male": "male", "m": "male", "أنثى": "female", "انثى": "female", "أ": "female", "female": "female", "f": "female"}.get(str(row.get('gender', '')).strip().lower(), None) if pd.notna(row.get('gender')) else None,
                     "qr_code": generate_qr_code(_xl_str(row['student_id'])),
                     "created_at": get_yemen_time(),
                     "is_active": True,
@@ -17211,6 +17255,7 @@ async def get_faculties(current_user: dict = Depends(get_current_user)):
             "name": faculty["name"],
             "code": faculty["code"],
             "numeric_code": faculty.get("numeric_code"),
+            "default_gender": faculty.get("default_gender"),
             "description": faculty.get("description", ""),
             "dean_id": faculty.get("dean_id"),
             "dean_name": dean_name,
@@ -17244,6 +17289,7 @@ async def get_faculty(faculty_id: str, current_user: dict = Depends(get_current_
         "created_at": faculty.get("created_at", get_yemen_time()),
         # إعدادات الكلية
         "levels_count": faculty.get("levels_count", 5),
+        "default_gender": faculty.get("default_gender"),
         "sections": faculty.get("sections", ["أ", "ب", "ج"]),
         "attendance_late_minutes": faculty.get("attendance_late_minutes", 15),
         "max_absence_percent": faculty.get("max_absence_percent", 25),
