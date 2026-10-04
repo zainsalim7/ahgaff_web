@@ -1006,10 +1006,20 @@ def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bo
     fy = H - foot_h + 16
     f_small = F(17 if portrait else 16)
     if back.get("show_contact", True):
-        contact = [x for x in [(uni or {}).get("address"), (uni or {}).get("phone"), (uni or {}).get("website")] if x]
+        contact = [str(x) for x in [(uni or {}).get("address")] if x] + [f"\u202a{x}\u202c" for x in [(uni or {}).get("phone"), (uni or {}).get("website")] if x]
+        # بيانات التواصل في سطر أفقي واحد مفصولة بنقطة (وتلتفّ لسطر ثانٍ إن طالت)
+        line, rows_ = "", []
         for c in contact[:3]:
-            d.text(((W // 2) * S, fy * S), ar(str(c)), font=f_small, fill=theme["strip_text"], anchor="ma", **_dir)
-            fy += 24
+            t = f"{line}  ·  {c}" if line else c
+            if d.textlength(ar(t), font=f_small) / S <= W - 60 or not line:
+                line = t
+            else:
+                rows_.append(line); line = c
+        if line:
+            rows_.append(line)
+        for r_ in rows_[:2]:
+            d.text(((W // 2) * S, fy * S), ar(r_), font=f_small, fill=theme["strip_text"], anchor="ma", **_dir)
+            fy += 26
     if back.get("footer_note"):
         d.text(((W // 2) * S, fy * S), ar(back["footer_note"]), font=f_small, fill=theme["strip_text"], anchor="ma", **_dir)
     buf = io.BytesIO()
