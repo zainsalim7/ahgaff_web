@@ -1087,7 +1087,26 @@ async def get_schedule_conflicts(
         for s in group:
             key = (s.get("department_id", ""), s.get("level"), s.get("section", ""))
             section_groups.setdefault(key, []).append(s)
-        for (dept_id, lv, sec), conflicts in section_groups.items():
+        for (dept_id, lv, sec), members in section_groups.items():
+            if len(members) < 2:
+                continue
+            # 👥 المجموعات: مجموعات مختلفة من نفس المقرر لا تتعارض؛ مجموعات مقررين مختلفين تتعارض فقط إن تشاركتا طلاباً
+            whole = [m for m in members if not m.get("group")]
+            grouped = [m for m in members if m.get("group")]
+            conflicts = list(whole) if len(whole) > 1 or (whole and grouped) else []
+            if whole and grouped:
+                conflicts.extend(grouped)
+            elif len(grouped) > 1:
+                bad: set = set()
+                for i in range(len(grouped)):
+                    for j in range(i + 1, len(grouped)):
+                        a, b = grouped[i], grouped[j]
+                        if a.get("course_id") == b.get("course_id"):
+                            if a.get("group") == b.get("group"):
+                                bad.update({i, j})
+                        elif await _grouped_cells_overlap(db, a.get("course_id"), a.get("group"), b):
+                            bad.update({i, j})
+                conflicts = [grouped[k] for k in sorted(bad)]
             if len(conflicts) > 1:
                 ids = [str(c["_id"]) for c in conflicts]
                 conflicting_slot_ids.update(ids)
