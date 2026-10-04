@@ -28,6 +28,7 @@ import { Department, Student } from '../src/types';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { formatGregorianDate } from '../src/utils/dateUtils';
+import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
 
 const LEVELS = ['1', '2', '3', '4', '5'];
 
@@ -130,18 +131,7 @@ export default function StudentsScreen() {
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [editFormData, setEditFormData] = useState({
-    student_id: '',
-    full_name: '',
-    phone: '',
-    email: '',
-    nationality: '',
-    gender: '',
-    level: '1',
-    section: '',
-    program_code: '',
-    enrollment_year: '',
-  });
+  const [editFormData, setEditFormData] = useState<StudentEditValues>(emptyStudentEdit);
   // أصل بيانات الطالب قبل التعديل (للكشف عن تغيير المستوى)
   const [editOriginalLevel, setEditOriginalLevel] = useState<string>('');
   const [editOriginalSection, setEditOriginalSection] = useState<string>('');
@@ -284,7 +274,7 @@ export default function StudentsScreen() {
       const refMsg = (r.data?.reference_number ? `\nالرقم المرجعي: ${r.data.reference_number}` : '') + (r.data?.reference_note ? `\n${r.data.reference_note}` : '');
       showMessage('تم', `أُضيف الطالب: ${r.data.full_name}${refMsg}`);
       setShowAddModal(false);
-      setNewStudent({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', nationality: '', gender: '', password: '', program_code: '', enrollment_year: '' });
+      setNewStudent({ ...emptyStudentForm });
       fetchData();
     } catch (e: any) {
       showMessage('خطأ', e?.response?.data?.detail || 'فشل في إضافة الطالب');
@@ -1091,18 +1081,7 @@ export default function StudentsScreen() {
   // فتح نموذج التعديل
   const handleEdit = (student: Student) => {
     setEditingStudent(student);
-    setEditFormData({
-      student_id: student.student_id || '',
-      full_name: student.full_name,
-      phone: student.phone || '',
-      email: student.email || '',
-      nationality: (student as any).nationality || '',
-      gender: (student as any).gender || '',
-      level: student.level || '1',
-      section: student.section || '',
-      program_code: (student as any).program_code || '',
-      enrollment_year: (student as any).enrollment_year || '',
-    });
+    setEditFormData(studentToEditValues(student));
     setEditOriginalLevel(String(student.level || '1'));
     setEditOriginalSection(student.section || '');
     setShowEditModal(true);
@@ -1119,7 +1098,14 @@ export default function StudentsScreen() {
     
     setSaving(true);
     try {
-      await studentsAPI.update(editingStudent.id, editFormData);
+      await studentsAPI.update(editingStudent.id, {
+        ...editFormData,
+        full_name: editFormData.full_name.trim(),
+        phone: editFormData.phone.trim(),
+        email: editFormData.email.trim(),
+        nationality: editFormData.nationality.trim(),
+        section: editFormData.section.trim(),
+      } as any);
       showMessage('تم', 'تم تحديث بيانات الطالب');
       setShowEditModal(false);
       setEditingStudent(null);
@@ -1412,7 +1398,7 @@ export default function StudentsScreen() {
             <View dataSet={{ responsive: "page-header-actions" }} style={styles.pageHeaderActions}>
               <TouchableOpacity
                 style={[styles.headerBtn, styles.btnPrimary]}
-                onPress={() => { setNewStudent({ student_id: '', full_name: '', department_id: selectedDeptFilter || '', level: selectedLevelFilter || '1', section: selectedSectionFilter || '', phone: '', email: '', password: '', program_code: '', enrollment_year: '' }); setShowAddModal(true); }}
+                onPress={() => { setNewStudent({ ...emptyStudentForm, department_id: selectedDeptFilter || '', level: selectedLevelFilter || '1', section: selectedSectionFilter || '' }); setShowAddModal(true); }}
                 data-testid="add-student-btn"
               >
                 <Ionicons name="add" size={16} color="#fff" />
@@ -2088,239 +2074,15 @@ export default function StudentsScreen() {
             </View>
             
             <ScrollView style={styles.modalBody}>
-              {user?.role === 'admin' && (
-                <View style={styles.inputGroup}>
-                  <Text style={styles.inputLabel}>رقم القيد *</Text>
-                  <TextInput
-                    style={[styles.input, { fontFamily: 'monospace', fontSize: 15, backgroundColor: '#fff9c4' }]}
-                    value={editFormData.student_id}
-                    onChangeText={(text) => setEditFormData(prev => ({ ...prev, student_id: text.trim() }))}
-                    placeholder="رقم القيد (مثال: 1025037)"
-                    placeholderTextColor="#999"
-                    autoCapitalize="none"
-                    testID="edit-student-id-input"
-                  />
-                  <Text style={{ fontSize: 11, color: '#f57f17', marginTop: 4, textAlign: 'right' }}>
-                    ⚠️ تغيير رقم القيد سيؤثر على تسجيل الدخول (اسم المستخدم سيتحدّث تلقائياً) - متاح للمدير العام فقط
-                  </Text>
-                </View>
-              )}
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>اسم الطالب *</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editFormData.full_name}
-                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, full_name: text }))}
-                  placeholder="اسم الطالب"
-                  placeholderTextColor="#999"
-                />
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>المستوى</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={editFormData.level}
-                    onValueChange={(value) => setEditFormData(prev => ({ ...prev, level: value }))}
-                    style={styles.picker}
-                  >
-                    {LEVELS.map(level => (
-                      <Picker.Item key={level} label={`م${level}`} value={level} />
-                    ))}
-                  </Picker>
-                </View>
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>الشعبة</Text>
-                {/* تنبيه عند تغيير المستوى مع وجود شعبة سابقة */}
-                {editingStudent && editFormData.level !== editOriginalLevel && editOriginalSection ? (
-                  <View
-                    data-testid="section-reassign-notice"
-                    style={{
-                      backgroundColor: '#fff8e1',
-                      borderWidth: 1,
-                      borderColor: '#ffe082',
-                      borderRadius: 8,
-                      padding: 10,
-                      marginBottom: 8,
-                    }}
-                  >
-                    <Text style={{ fontSize: 12, color: '#795548', textAlign: 'right', marginBottom: 6, fontWeight: '600' }}>
-                      ⚠️ تم تغيير المستوى من م{editOriginalLevel} إلى م{editFormData.level}.{'\n'}
-                      الشعبة الحالية: <Text style={{ fontWeight: '800' }}>{editOriginalSection}</Text>
-                    </Text>
-                    <View style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
-                      <TouchableOpacity
-                        data-testid="section-keep-btn"
-                        style={{
-                          flex: 1,
-                          backgroundColor: editFormData.section === editOriginalSection ? '#2e7d32' : '#e8f5e9',
-                          padding: 8,
-                          borderRadius: 6,
-                          alignItems: 'center',
-                          minWidth: 90,
-                        }}
-                        onPress={() => setEditFormData(prev => ({ ...prev, section: editOriginalSection }))}
-                      >
-                        <Text style={{
-                          fontSize: 11,
-                          fontWeight: '700',
-                          color: editFormData.section === editOriginalSection ? '#fff' : '#2e7d32',
-                        }}>
-                          احتفظ بـ {editOriginalSection}
-                        </Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity
-                        data-testid="section-clear-btn"
-                        style={{
-                          flex: 1,
-                          backgroundColor: editFormData.section === '' ? '#c62828' : '#ffebee',
-                          padding: 8,
-                          borderRadius: 6,
-                          alignItems: 'center',
-                          minWidth: 90,
-                        }}
-                        onPress={() => setEditFormData(prev => ({ ...prev, section: '' }))}
-                      >
-                        <Text style={{
-                          fontSize: 11,
-                          fontWeight: '700',
-                          color: editFormData.section === '' ? '#fff' : '#c62828',
-                        }}>
-                          بلا شعبة
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                ) : null}
-                {/* اقتراحات الشعب الموجودة في المستوى المختار */}
-                {(() => {
-                  const suggestions = getSectionsAtLevel(
-                    editingStudent?.department_id,
-                    editFormData.level
-                  );
-                  if (!suggestions.length) return null;
-                  return (
-                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 }}>
-                      <Text style={{ fontSize: 11, color: '#666', width: '100%', textAlign: 'right' }}>
-                        الشعب الموجودة في م{editFormData.level}:
-                      </Text>
-                      {suggestions.map(sec => (
-                        <TouchableOpacity
-                          key={sec}
-                          data-testid={`section-suggest-${sec}`}
-                          onPress={() => setEditFormData(prev => ({ ...prev, section: sec }))}
-                          style={{
-                            paddingHorizontal: 10,
-                            paddingVertical: 5,
-                            borderRadius: 12,
-                            borderWidth: 1,
-                            borderColor: editFormData.section === sec ? '#1976d2' : '#bbdefb',
-                            backgroundColor: editFormData.section === sec ? '#1976d2' : '#e3f2fd',
-                          }}
-                        >
-                          <Text style={{
-                            fontSize: 12,
-                            fontWeight: '700',
-                            color: editFormData.section === sec ? '#fff' : '#1976d2',
-                          }}>
-                            {sec}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                  );
-                })()}
-                <TextInput
-                  style={styles.input}
-                  value={editFormData.section}
-                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, section: text }))}
-                  placeholder="الشعبة (اختياري) - أو إدخال يدوي"
-                  placeholderTextColor="#999"
-                  data-testid="edit-section-input"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>البرنامج</Text>
-                <View style={styles.pickerContainer}>
-                  <Picker
-                    selectedValue={editFormData.program_code}
-                    onValueChange={(v) => setEditFormData(prev => ({ ...prev, program_code: v }))}
-                    style={styles.picker}
-                  >
-                    <Picker.Item label="(غير محدد)" value="" />
-                    <Picker.Item label="بكالوريوس (B)" value="B" />
-                    <Picker.Item label="ماجستير (M)" value="M" />
-                    <Picker.Item label="دكتوراه (D)" value="D" />
-                    <Picker.Item label="دبلوم (P)" value="P" />
-                    <Picker.Item label="عن بُعد (E)" value="E" />
-                  </Picker>
-                </View>
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>سنة الالتحاق (مثال: 25)</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editFormData.enrollment_year}
-                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, enrollment_year: text.replace(/[^0-9]/g, '').slice(0, 2) }))}
-                  placeholder="25 / 26 / 27"
-                  placeholderTextColor="#999"
-                  keyboardType="number-pad"
-                  maxLength={2}
-                />
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>الجنسية</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editFormData.nationality}
-                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, nationality: text }))}
-                  placeholder="يمني (اختياري)"
-                  placeholderTextColor="#999"
-                  testID="edit-student-nationality-input"
-                />
-              </View>
-
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>الجنس (لصيغة الإفادات)</Text>
-                <View style={{ flexDirection: 'row-reverse', gap: 8 }}>
-                  {[['', 'حسب الكلية'], ['male', 'ذكر'], ['female', 'أنثى']].map(([v, l]) => (
-                    <TouchableOpacity key={v} onPress={() => setEditFormData(prev => ({ ...prev, gender: v }))} style={{ paddingVertical: 8, paddingHorizontal: 14, borderRadius: 8, backgroundColor: editFormData.gender === v ? (v === 'female' ? '#ad1457' : v === 'male' ? '#1565c0' : '#455a64') : '#f1f5f9' }} testID={`edit-student-gender-${v || 'auto'}`}>
-                      <Text style={{ fontSize: 13, fontWeight: '700', color: editFormData.gender === v ? '#fff' : '#334155' }}>{l}</Text>
-                    </TouchableOpacity>
-                  ))}
-                </View>
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>الهاتف</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editFormData.phone}
-                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, phone: text }))}
-                  placeholder="رقم الهاتف (اختياري)"
-                  placeholderTextColor="#999"
-                  keyboardType="phone-pad"
-                />
-              </View>
-              
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>البريد الإلكتروني</Text>
-                <TextInput
-                  style={styles.input}
-                  value={editFormData.email}
-                  onChangeText={(text) => setEditFormData(prev => ({ ...prev, email: text }))}
-                  placeholder="البريد الإلكتروني (اختياري)"
-                  placeholderTextColor="#999"
-                  keyboardType="email-address"
-                />
-              </View>
-              
+              <StudentEditFields
+                values={editFormData}
+                onChange={setEditFormData}
+                isAdmin={user?.role === 'admin'}
+                originalLevel={editOriginalLevel}
+                originalSection={editOriginalSection}
+                sectionsAtLevel={(lvl) => getSectionsAtLevel(editingStudent?.department_id, lvl)}
+              />
+              <View style={{ height: 14 }} />
               <TouchableOpacity
                 style={[styles.saveBtn, saving && styles.saveBtnDisabled]}
                 onPress={handleSaveEdit}

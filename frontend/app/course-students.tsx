@@ -21,7 +21,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api, { coursesAPI, studentsAPI, enrollmentAPI, lecturesAPI, attendanceAPI, API_URL } from '../src/services/api';
 import { CourseTabBar } from '../src/components/CourseTabBar';
 import { LoadingScreen } from '../src/components/LoadingScreen';
-import { AddStudentForm, type StudentFormValues } from '../src/components/AddStudentForm';
+import { AddStudentForm, emptyStudentForm, type StudentFormValues } from '../src/components/AddStudentForm';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { useAuthStore } from '../src/store/authStore';
 import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR_SHORT } from '../src/utils/dateUtils';
@@ -124,6 +124,7 @@ export default function CourseStudentsScreen() {
     phone: '',
     email: '',
     nationality: '',
+    gender: '',
     password: '',
     program_code: '',
     enrollment_year: '',
@@ -339,6 +340,7 @@ export default function CourseStudentsScreen() {
         phone: newStudentForm.phone.trim() || null,
         email: newStudentForm.email.trim() || null,
         nationality: newStudentForm.nationality.trim() || null,
+        gender: newStudentForm.gender || null,
       };
       if (newStudentForm.program_code.trim()) {
         studentData.program_code = newStudentForm.program_code.trim().toUpperCase();
@@ -361,7 +363,7 @@ export default function CourseStudentsScreen() {
         Alert.alert('نجاح', 'تم إنشاء الطالب');
       }
       
-      setNewStudentForm({ student_id: '', full_name: '', department_id: '', level: '1', section: '', phone: '', email: '', nationality: '', password: '', program_code: '', enrollment_year: '' });
+      setNewStudentForm({ ...emptyStudentForm });
       setShowAddModal(false);
       fetchData();
     } catch (error: any) {

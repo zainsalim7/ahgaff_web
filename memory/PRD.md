@@ -606,3 +606,9 @@
 ## 2026-10-03: 📱 ربط التحضير بجهاز الموظف (Device Binding) ✅
 - `GeoIn` (+`device_id`, `device_name`). `_device_check()` في hr_attendance (check-in/out): إعداد `device_binding_enabled` (افتراضي True، UI في WorkSettings `att-set-device-binding`); أول device_id يُحفظ في `employees.device_id/device_name/device_registered_at`; مختلف → 403 بالرسالة المطلوبة + `device_rejections`/`device_last_rejection`; null → يُقبل. يُحفظ `device_id` في سجل الحضور و`check_out_device_id`.
 - `GET /hr/attendance/devices?search=&only_registered=` + `POST /hr/attendance/devices/{emp_id}/reset` (P_ATTEND، يحفظ `device_history`، يُشعر الموظف). تبويب «📱 الأجهزة» في hr-attendance (`AttendanceDevices.tsx`, testids `dev-*`, `att-dev-*`). Handoff في EMPLOYEE_APP_GEOFENCING.md.
+
+## 2026-10-04: 🧩 توحيد نماذج إدخال/تعديل الطالب ✅
+- `src/components/StudentEditFields.tsx` (جديد): مكوّن مشترك لحقول تعديل الطالب (رقم القيد للأدمن، الاسم، المستوى كأزرار، الشعبة + اقتراحات + تنبيه تغيير المستوى، البرنامج، سنة الالتحاق، الجنسية، **الجنس**، الهاتف، البريد) + `studentToEditValues`, `emptyStudentEdit`, `GenderPicker`, `PROGRAM_OPTIONS`.
+- يُستخدم الآن في نموذج التعديل من **القائمة الجانبية (⋮) في صفحة الطلاب** وفي نموذج **زر تعديل في صفحة تفاصيل الطالب** — نفس الحقول والترتيب ومنطق الحفظ (كان حقل الجنس مفقوداً في صفحة الطالب).
+- `AddStudentForm.tsx`: أُضيف حقل الجنس (`add-student-gender-*`) ويرسل `gender` عند الإضافة (صفحة الطلاب + طلاب المقرر).
+- اختبار ذاتي: screenshot للنموذجين + تحقق حفظ gender عبر API ✅

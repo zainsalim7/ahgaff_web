@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import { Picker } from '@react-native-picker/picker';
 import { Ionicons } from '@expo/vector-icons';
+import { GenderPicker, PROGRAM_OPTIONS } from './StudentEditFields';
 
 export interface StudentFormValues {
   student_id: string;
@@ -12,6 +13,7 @@ export interface StudentFormValues {
   phone: string;
   email: string;
   nationality: string;
+  gender: string;
   password: string;
   program_code: string;
   enrollment_year: string;
@@ -26,6 +28,7 @@ export const emptyStudentForm: StudentFormValues = {
   phone: '',
   email: '',
   nationality: '',
+  gender: '',
   password: '',
   program_code: '',
   enrollment_year: '',
@@ -171,12 +174,9 @@ export const AddStudentForm: React.FC<Props> = ({
               style={styles.picker}
               testID="add-student-program-picker"
             >
-              <Picker.Item label="(افتراضي من القسم)" value="" />
-              <Picker.Item label="بكالوريوس (B)" value="B" />
-              <Picker.Item label="ماجستير (M)" value="M" />
-              <Picker.Item label="دكتوراه (D)" value="D" />
-              <Picker.Item label="دبلوم (P)" value="P" />
-              <Picker.Item label="عن بُعد (E)" value="E" />
+              {PROGRAM_OPTIONS.map(([v, l]) => (
+                <Picker.Item key={v} label={v ? l : '(افتراضي من القسم)'} value={v} />
+              ))}
             </Picker>
           </View>
         </View>
@@ -209,6 +209,9 @@ export const AddStudentForm: React.FC<Props> = ({
         style={styles.input}
         testID="add-student-nationality-input"
       />
+
+      <Text style={[styles.label, styles.mt10]}>الجنس (لصيغة الإفادات: الطالب/الطالبة)</Text>
+      <GenderPicker value={values.gender} onChange={(v) => set({ gender: v })} testPrefix="add-student" />
 
       <Text style={[styles.label, styles.mt10]}>الجوال (اختياري)</Text>
       <TextInput
