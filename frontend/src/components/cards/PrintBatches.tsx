@@ -66,6 +66,7 @@ export const PrintBatchesHistory: React.FC<{ refreshKey: number; reportParams: a
   useEffect(() => { api.get('/cards/batches').then((r) => setItems(r.data.items || [])).catch(() => setItems([])); }, [refreshKey]);
   const dl = async (res: any, fallback: string) => { const url = URL.createObjectURL(new Blob([res.data])); const a = document.createElement('a'); a.href = url; a.download = filenameFromResponse(res, fallback); a.click(); URL.revokeObjectURL(url); };
   const redownload = async (b: any) => { setBusy(b.batch_no); try { await dl(await api.post('/cards/batch-pdf', { reprint_batch_no: b.batch_no, orientation: b.orientation || 'auto', base_url: window.location.origin }, { responseType: 'blob', timeout: 300000 }), `بطاقات الطلاب - دفعة ${b.batch_no}.pdf`); } catch (e) { alertErr(e); } finally { setBusy(null); } };
+  const backs = async (b: any) => { setBusy(`b${b.batch_no}`); try { await dl(await api.post('/cards/batch-back-pdf', { batch_no: b.batch_no, orientation: b.orientation || 'auto' }, { responseType: 'blob', timeout: 300000 }), `خلفيات دفعة ${b.batch_no}.pdf`); } catch (e) { alertErr(e); } finally { setBusy(null); } };
   const report = async () => { setBusy('report'); try { await dl(await api.get('/cards/print-report', { params: reportParams, responseType: 'blob' }), 'تقرير طباعة البطاقات.xlsx'); } catch (e) { alertErr(e); } finally { setBusy(null); } };
   return (
     <div style={{ direction: 'rtl', marginTop: 14, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, backgroundColor: '#fff' }} data-testid="print-batches-history">
@@ -86,7 +87,7 @@ export const PrintBatchesHistory: React.FC<{ refreshKey: number; reportParams: a
                   <td style={{ ...td, padding: '5px 6px', fontSize: 12 }}>{b.level ?? 'الكل'}</td>
                   <td style={{ ...td, padding: '5px 6px', fontSize: 12 }}>{b.count} ({b.pages} ورقة)</td>
                   <td style={{ ...td, padding: '5px 6px', fontSize: 11.5 }}>{b.by_name}</td>
-                  <td style={{ ...td, padding: '5px 6px' }}><button onClick={() => redownload(b)} disabled={busy === b.batch_no} style={btn('#e3f2fd', '#1565c0', { padding: '4px 10px', fontSize: 11.5 })} data-testid={`print-batch-redl-${b.batch_no}`}>{busy === b.batch_no ? '...' : '⬇️ إعادة تنزيل'}</button></td>
+                  <td style={{ ...td, padding: '5px 6px' }}><button onClick={() => redownload(b)} disabled={busy === b.batch_no} style={btn('#e3f2fd', '#1565c0', { padding: '4px 10px', fontSize: 11.5 })} data-testid={`print-batch-redl-${b.batch_no}`}>{busy === b.batch_no ? '...' : '⬇️ إعادة تنزيل'}</button> <button onClick={() => backs(b)} disabled={busy === `b${b.batch_no}`} style={btn('#fff3e0', '#e65100', { padding: '4px 10px', fontSize: 11.5 })} data-testid={`print-batch-back-${b.batch_no}`}>{busy === `b${b.batch_no}` ? '...' : '🔄 خلفيات'}</button></td>
                 </tr>))}
             </tbody>
           </table>

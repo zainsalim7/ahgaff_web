@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import api from '../src/services/api';
+import { CardBackEditor } from '../src/components/cards/CardBack';
 
 const TEMPLATES = [
   { key: 'green', name: 'الرسمي الأخضر', desc: 'ألوان الجامعة — بطاقة عمودية تقليدية', colors: ['#1b5e20', '#fff', '#e8f5e9'] },
@@ -283,6 +284,7 @@ export default function CardSettingsScreen() {
           <TouchableOpacity onPress={save} disabled={saving || !facultyId} style={[styles.saveBtn, (saving || !facultyId) && { opacity: 0.6 }]} testID="card-settings-save-btn">
             {saving ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.saveBtnText}>حفظ التصميم</Text>}
           </TouchableOpacity>
+          {Platform.OS === 'web' && <CardBackEditor facultyId={facultyId} template={template} />}
         </View>
       </ScrollView>
     </SafeAreaView>

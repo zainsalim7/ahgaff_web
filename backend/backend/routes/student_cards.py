@@ -853,6 +853,266 @@ async def cards_print_report(department_id: Optional[str] = None, faculty_id: Op
                              headers=export_headers(export_filename("تقرير طباعة البطاقات", f"{len(rows)} طالب", ext="xlsx")))
 
 
+# ==================== 🔄 خلفية البطاقة (موحّدة على مستوى الجامعة) ====================
+DEFAULT_BACK_LINES = [
+    "هذه البطاقة ملك للجامعة وتُسلَّم عند الطلب أو عند انتهاء العلاقة بالجامعة.",
+    "البطاقة شخصية ولا يجوز إعارتها أو استخدامها من قبل الغير.",
+    "يجب إبرازها عند الدخول إلى الحرم الجامعي وفي الامتحانات والمكتبة.",
+    "في حال فقدانها يُبلَّغ شؤون الطلاب فوراً، ويُصدَر بدل فاقد وفق اللوائح.",
+    "البطاقة صالحة للعام الدراسي المدوَّن عليها فقط.",
+    "من يعثر عليها يرجى تسليمها لأقرب مكتب في الجامعة أو الاتصال بالرقم أدناه.",
+]
+DEFAULT_BACK_SETTINGS = {"enabled": True, "title": "تعليمات استخدام البطاقة", "lines": DEFAULT_BACK_LINES, "footer_note": "", "show_contact": True,
+                         "back1_x": 62.0, "back1_y": 40.0, "back2_x": 62.0, "back2_y": 180.0}
+
+
+class BackSettingsIn(BaseModel):
+    enabled: Optional[bool] = True
+    title: Optional[str] = None
+    lines: Optional[list] = None
+    footer_note: Optional[str] = ""
+    show_contact: Optional[bool] = True
+    back1_x: Optional[float] = None
+    back1_y: Optional[float] = None
+    back2_x: Optional[float] = None
+    back2_y: Optional[float] = None
+
+
+async def _back_settings(db) -> dict:
+    doc = await db.card_settings.find_one({"_id": "back_global"}) or {}
+    return {**DEFAULT_BACK_SETTINGS, **{k: v for k, v in doc.items() if k != "_id"}}
+
+
+@router.get("/cards/back-settings")
+async def get_back_settings(current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") in ("teacher", "student"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    return {**await _back_settings(get_db()), "defaults": DEFAULT_BACK_SETTINGS, "can_edit": current_user.get("role") == "admin"}
+
+
+@router.put("/cards/back-settings")
+async def put_back_settings(data: BackSettingsIn, current_user: dict = Depends(get_current_user)):
+    """تحرير التعليمات الموحدة لخلفية البطاقة (مدير النظام)"""
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="تحرير خلفية البطاقة متاح لمدير النظام فقط")
+    db = get_db()
+    lines = [str(x).strip() for x in (data.lines or []) if str(x).strip()][:10]
+    if not lines:
+        raise HTTPException(status_code=400, detail="أضف بنداً واحداً على الأقل")
+    upd = {"enabled": bool(data.enabled), "title": (data.title or "").strip() or DEFAULT_BACK_SETTINGS["title"], "lines": lines, "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact)}
+    for k in ("back1_x", "back1_y", "back2_x", "back2_y"):
+        v = getattr(data, k)
+        if v is not None:
+            upd[k] = float(v)
+    await db.card_settings.update_one({"_id": "back_global"}, {"$set": upd}, upsert=True)
+    await log_activity(current_user, "card_back_settings_update", "card_settings", "back_global", "تحديث خلفية البطاقة", {"lines": len(lines)})
+    return {"message": "تم حفظ إعدادات خلفية البطاقة", **await _back_settings(db)}
+
+
+def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bool, uni: dict) -> bytes:
+    """🔄 خلفية البطاقة: شريط بلون القالب + شعار + عنوان + تعليمات مرقّمة + بيانات التواصل — بنفس مقاس الوجه الأمامي"""
+    from pathlib import Path
+    from PIL import Image, ImageDraw, ImageFont, features
+    HAS_RAQM = features.check("raqm")
+    if not HAS_RAQM:
+        import arabic_reshaper
+        from bidi.algorithm import get_display
+
+    def ar(t):
+        t = str(t or "")
+        return t if HAS_RAQM else get_display(arabic_reshaper.reshape(t))
+    _dir = {"direction": "rtl"} if HAS_RAQM else {}
+    S = CARD_SCALE
+    theme = THEMES.get(template if template in THEMES else "green", THEMES["green"])
+    if template == "custom":
+        theme = THEMES["green"]
+    font_file, font_axes = CARD_FONTS.get(font_key or DEFAULT_CARD_FONT, CARD_FONTS[DEFAULT_CARD_FONT])
+    font_path = str(Path(__file__).parent.parent / "fonts" / font_file)
+    cache: dict = {}
+
+    def F(size):
+        if size not in cache:
+            f = ImageFont.truetype(font_path, int(size * S))
+            if font_axes:
+                try:
+                    f.set_variation_by_axes(font_axes)
+                except Exception:
+                    pass
+            cache[size] = f
+        return cache[size]
+
+    W, H = (640, 1010) if portrait else (1010, 640)
+    img = Image.new("RGB", (W * S, H * S), theme["bg"])
+    d = ImageDraw.Draw(img)
+    band_h = 120 if portrait else 96
+    d.rectangle([0, 0, W * S, band_h * S], fill=theme["band"])
+    logo_path = Path(__file__).parent.parent / "assets" / "university_logo.jpeg"
+    logo = Image.open(logo_path).convert("RGBA") if logo_path.exists() else None
+    uni_name = (uni or {}).get("name") or "جامعة الأحقاف"
+    if logo:
+        ls = band_h - 28
+        img.paste(logo.resize((ls * S, ls * S), Image.LANCZOS), (14 * S, 14 * S), logo.resize((ls * S, ls * S), Image.LANCZOS))
+    d.text(((W - 24) * S, (band_h // 2) * S), ar(uni_name), font=F(34 if portrait else 32), fill=theme["band_text"], anchor="rm", **_dir)
+    # علامة مائية
+    if logo:
+        wm_s = 300 if portrait else 260
+        wm = logo.resize((wm_s * S, wm_s * S), Image.LANCZOS).convert("RGBA")
+        a = wm.split()[3].point(lambda v: int(v * 0.07))
+        wm.putalpha(a)
+        img.paste(wm, ((W // 2 - wm_s // 2) * S, (H // 2 - wm_s // 2) * S), wm)
+    y = band_h + (34 if portrait else 22)
+    d.text(((W // 2) * S, y * S), ar(back.get("title") or DEFAULT_BACK_SETTINGS["title"]), font=F(30 if portrait else 28), fill=theme["accent"], anchor="mm", **_dir)
+    y += 26
+    d.line([(60 * S, y * S), ((W - 60) * S, y * S)], fill=theme["accent"], width=2 * S)
+    y += 22
+    # التعليمات مع التفاف النص + ملاءمة تلقائية لحجم الخط حسب المساحة المتاحة
+    max_w = (W - 90)
+    right = W - 44
+    text_col = theme["text"]
+    foot_h = 118 if portrait else 96
+    lines = back.get("lines") or DEFAULT_BACK_LINES
+    avail = H - foot_h - 10 - y
+
+    def wrap(txt, f):
+        words, out, cur = txt.split(), [], ""
+        for w in words:
+            t = (cur + " " + w).strip()
+            if d.textlength(ar(t), font=f) / S <= max_w:
+                cur = t
+            else:
+                out.append(cur); cur = w
+        if cur:
+            out.append(cur)
+        return out
+    body_size = 18
+    for size in range(28 if portrait else 24, 17, -1):
+        f = F(size)
+        total = sum(len(wrap(ln, f)) * (size + 11) + 8 for ln in lines)
+        if total <= avail:
+            body_size = size
+            break
+    f_body = F(body_size)
+    lh = body_size + 11
+    for i, ln in enumerate(lines, 1):
+        for j, part in enumerate(wrap(ln, f_body)):
+            if y + lh > H - foot_h - 10:
+                break
+            prefix = f"{i}. " if j == 0 else "    "
+            d.text((right * S, y * S), ar(prefix + part), font=f_body, fill=text_col, anchor="ra", **_dir)
+            y += lh
+        y += 8
+    # التذييل: بيانات التواصل
+    d.rectangle([0, (H - foot_h) * S, W * S, H * S], fill=theme["strip"])
+    fy = H - foot_h + 16
+    f_small = F(17 if portrait else 16)
+    if back.get("show_contact", True):
+        contact = [x for x in [(uni or {}).get("address"), (uni or {}).get("phone"), (uni or {}).get("website")] if x]
+        for c in contact[:3]:
+            d.text(((W // 2) * S, fy * S), ar(str(c)), font=f_small, fill=theme["strip_text"], anchor="ma", **_dir)
+            fy += 24
+    if back.get("footer_note"):
+        d.text(((W // 2) * S, fy * S), ar(back["footer_note"]), font=f_small, fill=theme["strip_text"], anchor="ma", **_dir)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    return buf.getvalue()
+
+
+@router.get("/cards/back-preview/{faculty_id}")
+async def back_preview(faculty_id: str, current_user: dict = Depends(get_current_user)):
+    """معاينة PNG لخلفية البطاقة بقالب الكلية المختار"""
+    if not _can_manage(current_user, faculty_id):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    tpl_settings = await db.card_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
+    back = await _back_settings(db)
+    uni = await db.university.find_one({}) or {}
+    portrait = _payload_portrait({"template": tpl_settings.get("template", "green"), "custom_orientation": tpl_settings.get("custom_orientation", "portrait")})
+    png = _render_card_back_png(back, tpl_settings.get("template", "green"), tpl_settings.get("font") or DEFAULT_CARD_FONT, portrait, uni)
+    return Response(content=png, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+class BackBatchRequest(BaseModel):
+    batch_no: Optional[int] = None
+    department_id: Optional[str] = None
+    count: Optional[int] = None
+    orientation: Optional[str] = "auto"
+    settings: Optional[dict] = None  # card_w/card_h + back1_x/back1_y/back2_x/back2_y
+
+
+@router.post("/cards/batch-back-pdf")
+async def batch_back_pdf(data: BackBatchRequest, current_user: dict = Depends(get_current_user)):
+    """🔄 PDF خلفيات الدفعة: بطاقتان في كل ورقة A4 بمواضع مستقلة (تُحفظ) — نفس عدد وترتيب الوجه الأمامي للدفعة"""
+    db = get_db()
+    if current_user.get("role") in ("teacher", "student"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    back = await _back_settings(db)
+    if not back.get("enabled"):
+        raise HTTPException(status_code=400, detail="خلفية البطاقة معطّلة من الإعدادات")
+    if data.batch_no:
+        b = await db.card_print_batches.find_one({"batch_no": int(data.batch_no)})
+        if not b:
+            raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+        n = int(b.get("count") or 0)
+        dept_id = b.get("department_id")
+        if not dept_id and b.get("student_ids"):
+            first = await db.students.find_one({"_id": ObjectId(b["student_ids"][0])})
+            dept_id = (first or {}).get("department_id")
+        label = f"خلفيات دفعة {b['batch_no']}"
+    else:
+        n = int(data.count or 0)
+        dept_id = data.department_id
+        label = "خلفيات البطاقات"
+    if n <= 0:
+        raise HTTPException(status_code=400, detail="عدد البطاقات غير محدد")
+    fid = ""
+    if dept_id:
+        dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
+        fid = (dept or {}).get("faculty_id", "")
+    tpl_settings = (await db.card_settings.find_one({"_id": f"faculty_{fid}"}) if fid else None) or {}
+    tpl = tpl_settings.get("template", "green")
+    template_portrait = _payload_portrait({"template": tpl, "custom_orientation": tpl_settings.get("custom_orientation", "portrait")})
+    orientation = data.orientation if data.orientation in ORIENTATIONS else "auto"
+    out_portrait = template_portrait if orientation == "auto" else orientation == "portrait"
+    uni = await db.university.find_one({}) or {}
+    png = _render_card_back_png(back, tpl, tpl_settings.get("font") or DEFAULT_CARD_FONT, template_portrait, uni)
+    if template_portrait != out_portrait:
+        from PIL import Image as PILImage
+        im = PILImage.open(io.BytesIO(png)).rotate(90, expand=True)
+        bb = io.BytesIO(); im.save(bb, format="PNG"); png = bb.getvalue()
+    pst = {**DEFAULT_PRINT_SETTINGS, **{k: v for k, v in ((await db.card_print_settings.find_one({"_id": "global"})) or {}).items() if k in DEFAULT_PRINT_SETTINGS}}
+    bst = {k: float(back.get(k, DEFAULT_BACK_SETTINGS[k])) for k in ("back1_x", "back1_y", "back2_x", "back2_y")}
+    if data.settings:
+        for k in ("card_w", "card_h"):
+            if k in data.settings:
+                try: pst[k] = float(data.settings[k])
+                except (TypeError, ValueError): pass
+        changed = {}
+        for k in bst:
+            if k in data.settings:
+                try: bst[k] = float(data.settings[k]); changed[k] = bst[k]
+                except (TypeError, ValueError): pass
+        if changed:
+            await db.card_settings.update_one({"_id": "back_global"}, {"$set": changed}, upsert=True)
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdfcanvas
+    from reportlab.lib.utils import ImageReader
+    W, H = A4
+    cw, ch = (pst["card_h"] * mm, pst["card_w"] * mm) if out_portrait else (pst["card_w"] * mm, pst["card_h"] * mm)
+    positions = [(bst["back1_x"] * mm, bst["back1_y"] * mm), (bst["back2_x"] * mm, bst["back2_y"] * mm)]
+    buf = io.BytesIO()
+    c = pdfcanvas.Canvas(buf, pagesize=A4)
+    reader = ImageReader(io.BytesIO(png))
+    for i in range(0, n, 2):
+        for j in range(min(2, n - i)):
+            x, y_top = positions[j]
+            c.drawImage(reader, x, H - y_top - ch, cw, ch)
+        c.showPage()
+    c.save()
+    return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
+                             headers=export_headers(export_filename("بطاقات الطلاب", label, f"{n} خلفية", ext="pdf")))
+
+
 @router.get("/cards/batch-count")
 async def batch_count(department_id: str, level: Optional[int] = None, section: Optional[str] = None,
                       current_user: dict = Depends(get_current_user)):

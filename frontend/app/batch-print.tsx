@@ -10,6 +10,7 @@ import { Picker } from '@react-native-picker/picker';
 import { useLocalSearchParams } from 'expo-router';
 import api from '../src/services/api';
 import { PrintBatchPreview, PrintBatchesHistory, PrintFilters } from '../src/components/cards/PrintBatches';
+import { BackPrintControls } from '../src/components/cards/CardBack';
 
 // معاينة A4 مصغّرة: 210×297مم → مقياس
 const SCALE = 1.35;
@@ -38,6 +39,7 @@ export default function BatchPrintScreen() {
   const [pf, setPf] = useState<PrintFilters>({ excludePrinted: true, onlyWithPhoto: true, excludeIds: [] });
   const [batchSummary, setBatchSummary] = useState<any>(null);
   const [batchKey, setBatchKey] = useState(0);
+  const [lastBatchNo, setLastBatchNo] = useState<number | null>(null);
   const previewBody = idsMode ? { student_ids: selIds } : { department_id: departmentId, level: level ? parseInt(level, 10) : undefined };
 
   useEffect(() => {
@@ -116,6 +118,7 @@ export default function BatchPrintScreen() {
       const bn = res.headers?.['x-batch-no']; const bc = res.headers?.['x-batch-count'];
       setMsg(bn ? `✅ تم إنشاء الملف — سُجّلت الدفعة #${bn} (${bc} بطاقة) ووُسم الطلاب كمطبوعين، ولن يتكرروا في الدفعات القادمة` : '✅ تم إنشاء الملف وحفظ إعدادات المواضع');
       setPf((p) => ({ ...p, excludeIds: [] }));
+      if (bn) setLastBatchNo(Number(bn));
       setBatchKey((k) => k + 1);
     } catch (e: any) {
       let detail = e?.response?.data?.detail;
@@ -251,6 +254,7 @@ export default function BatchPrintScreen() {
               {downloading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="print" size={17} color="#fff" />}
               <Text style={styles.dlBtnText}>{downloading ? 'جارٍ إنشاء الملف...' : batchSummary ? `تنزيل PDF للطباعة (${batchSummary.included} بطاقة)` : 'تنزيل PDF للطباعة'}</Text>
             </TouchableOpacity>
+            {Platform.OS === 'web' && <BackPrintControls st={st} departmentId={idsMode ? '' : departmentId} orientation={orientation} lastBatchNo={lastBatchNo} count={batchSummary ? batchSummary.included : (count?.count || 0)} />}
             {Platform.OS === 'web' && <PrintBatchesHistory refreshKey={batchKey} reportParams={idsMode ? {} : { department_id: departmentId, level: level ? parseInt(level, 10) : undefined }} />}
           </View>
 
