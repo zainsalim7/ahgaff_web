@@ -64,16 +64,25 @@ ALL_CORR_PERMISSIONS = [
     {"key": P["audit"], "label": "عرض سجل التدقيق"},
 ]
 PERMISSION_KEYS = {p["key"] for p in ALL_CORR_PERMISSIONS}
+# المرحلة 2: صلاحيات الترويسات/القوالب/الكيانات/العناصر النائبة
+_P2 = [("letterhead.read", "عرض الترويسات"), ("letterhead.create", "إنشاء ترويسة"), ("letterhead.update", "تعديل ترويسة"), ("letterhead.activate", "تفعيل/إيقاف ترويسة"), ("letterhead.set_default", "تعيين الترويسة الافتراضية"), ("letterhead.manage_organization", "إدارة ترويسات المنظمة"),
+       ("template.read", "عرض القوالب"), ("template.create", "إنشاء قالب"), ("template.update_draft", "تعديل مسودة قالب"), ("template.publish", "نشر إصدار قالب"), ("template.deactivate", "إيقاف قالب"), ("template.clone", "استنساخ قالب"), ("template.manage_global", "إدارة القوالب العامة"), ("template.manage_organization", "إدارة قوالب المنظمة"), ("template.use", "استخدام القوالب في المراسلات"),
+       ("entity.student.read", "اختيار الطلاب وقراءة بياناتهم الأساسية"), ("entity.employee.read", "اختيار الموظفين وقراءة بياناتهم الأساسية"), ("entity.faculty.read", "اختيار أعضاء هيئة التدريس"),
+       ("placeholder.contact.read", "عناصر نائبة: بيانات التواصل"), ("placeholder.academic.read", "عناصر نائبة: بيانات أكاديمية موسّعة")]
+ALL_CORR_PERMISSIONS += [{"key": k, "label": v} for k, v in _P2]
+PERMISSION_KEYS = {p["key"] for p in ALL_CORR_PERMISSIONS}
+_P2_USE = ["template.read", "template.use", "letterhead.read", "entity.student.read", "entity.employee.read", "entity.faculty.read"]
+_P2_ORG_ADMIN = _P2_USE + ["letterhead.create", "letterhead.update", "letterhead.activate", "letterhead.set_default", "letterhead.manage_organization", "template.create", "template.update_draft", "template.publish", "template.deactivate", "template.clone", "template.manage_organization", "placeholder.contact.read", "placeholder.academic.read"]
 
 _WORKFLOW = [P["create"], P["read"], P["update_draft"], P["delete_draft"], P["submit"], P["review"], P["approve"], P["reject"],
              P["sign"], P["issue"], P["archive"], P["cancel"], P["view_archive"], P["view_all_organization"], P["view_child_organizations"]]
 ROLE_PRESETS = [
     {"code": "SUPER_ADMIN", "name_ar": "مدير النظام الأعلى", "permissions": sorted(PERMISSION_KEYS)},
     {"code": "UNIVERSITY_ADMIN", "name_ar": "مدير مراسلات الجامعة", "permissions": sorted(PERMISSION_KEYS - {P["permissions"]})},
-    {"code": "ORGANIZATION_ADMIN", "name_ar": "مدير مراسلات المنظمة", "permissions": _WORKFLOW + [P["read_confidential"], P["templates"], P["numbering"], P["memberships"], P["audit"]]},
-    {"code": "CORRESPONDENCE_MANAGER", "name_ar": "مدير المراسلات", "permissions": _WORKFLOW + [P["read_confidential"], P["audit"]]},
-    {"code": "CORRESPONDENCE_OFFICER", "name_ar": "موظف مراسلات", "permissions": [P["create"], P["read"], P["update_draft"], P["delete_draft"], P["submit"], P["issue"], P["archive"], P["view_archive"], P["view_all_organization"]]},
-    {"code": "DRAFTER", "name_ar": "مُعِدّ", "permissions": [P["create"], P["read"], P["update_draft"], P["delete_draft"], P["submit"]]},
+    {"code": "ORGANIZATION_ADMIN", "name_ar": "مدير مراسلات المنظمة", "permissions": _WORKFLOW + [P["read_confidential"], P["templates"], P["numbering"], P["memberships"], P["audit"]] + _P2_ORG_ADMIN},
+    {"code": "CORRESPONDENCE_MANAGER", "name_ar": "مدير المراسلات", "permissions": _WORKFLOW + [P["read_confidential"], P["audit"]] + _P2_USE + ["placeholder.contact.read"]},
+    {"code": "CORRESPONDENCE_OFFICER", "name_ar": "موظف مراسلات", "permissions": [P["create"], P["read"], P["update_draft"], P["delete_draft"], P["submit"], P["issue"], P["archive"], P["view_archive"], P["view_all_organization"]] + _P2_USE},
+    {"code": "DRAFTER", "name_ar": "مُعِدّ", "permissions": [P["create"], P["read"], P["update_draft"], P["delete_draft"], P["submit"]] + _P2_USE},
     {"code": "REVIEWER", "name_ar": "مراجع", "permissions": [P["read"], P["review"], P["view_all_organization"]]},
     {"code": "APPROVER", "name_ar": "معتمِد", "permissions": [P["read"], P["approve"], P["reject"], P["view_all_organization"], P["read_confidential"]]},
     {"code": "SIGNER", "name_ar": "موقِّع", "permissions": [P["read"], P["sign"], P["view_all_organization"], P["read_confidential"]]},

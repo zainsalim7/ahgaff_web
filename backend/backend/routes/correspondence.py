@@ -153,6 +153,7 @@ async def correspondence_startup(db):
         # بذور الأدوار (إدراج فقط — لا تُستبدل تعديلات المدير)
         for r in ROLE_PRESETS:
             await db.corr_roles.update_one({"code": r["code"]}, {"$setOnInsert": {**r, "is_system": True, "is_active": True, "created_at": _now()}}, upsert=True)
+            await db.corr_roles.update_one({"code": r["code"], "is_system": True}, {"$addToSet": {"permissions": {"$each": r["permissions"]}}})
         for code, ar, en in DEFAULT_DOC_TYPES:
             await db.document_types.update_one({"code": code, "organization_id": None}, {"$setOnInsert": {
                 "code": code, "name_ar": ar, "name_en": en, "description": "", "organization_id": None, "is_global": True, "is_active": True, "created_at": _now(), "updated_at": _now()}}, upsert=True)
@@ -228,6 +229,7 @@ class RecipientIn(BaseModel):
     external_name: Optional[str] = None
     external_organization: Optional[str] = None
     external_contact: Optional[str] = None
+    recipient_title: Optional[str] = None
     recipient_role: str = "TO"
     is_primary: bool = False
 
@@ -958,6 +960,13 @@ async def transition_correspondence(db, ctx: CorrContext, corr_id: str, action: 
         raise HTTPException(status_code=400, detail="السبب مطلوب لهذا الإجراء")
     if action == "submit" and not await db.correspondence_recipients.find_one({"correspondence_id": cid}):
         raise HTTPException(status_code=400, detail="أضف مستلماً واحداً على الأقل قبل التقديم")
+    # 📜 المرحلة 2: تحقق المحتوى قبل التقديم (إن كانت المراسلة مرتبطة بقالب)
+    if action == "submit" and await db.correspondence_contents.find_one({"correspondence_id": cid}):
+        from .correspondence_content import validate_before_submit
+        _errs = await validate_before_submit(db, ctx, c)
+        if _errs:
+            await audit(db, ctx, "TEMPLATE_VALIDATION_FAILED", "correspondence", cid, request, meta={"errors": _errs}, organization_id=c["organization_id"])
+            raise HTTPException(status_code=422, detail={"message": "لا يمكن التقديم — أكمل المتطلبات", "errors": _errs})
     now = _now()
     upd = {"status": to, "updated_at": now}
     meta = {}
@@ -990,6 +999,14 @@ async def transition_correspondence(db, ctx: CorrContext, corr_id: str, action: 
     await audit(db, ctx, f"STATUS_{to}", "correspondence", cid, request, old={"status": frm}, new={"status": to, **meta}, meta={"reason": reason or "", "action": action}, organization_id=c["organization_id"])
     if meta.get("official_number"):
         await audit(db, ctx, "NUMBER_GENERATED", "correspondence", cid, request, new=meta, organization_id=c["organization_id"])
+    # 📜 المرحلة 2: لقطة البيانات المجمَّدة عند مرحلة التجميد (ISSUED افتراضياً)
+    try:
+        from .correspondence_content import create_snapshot_if_due
+        await create_snapshot_if_due(db, ctx, await db.correspondences.find_one({"_id": c["_id"]}), to, request)
+    except HTTPException:
+        raise
+    except Exception as _e:
+        log.error(f"snapshot failed for {cid}: {_e}")
     return await _enrich(db, await db.correspondences.find_one({"_id": c["_id"]}))
 
 

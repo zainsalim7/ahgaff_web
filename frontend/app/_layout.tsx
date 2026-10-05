@@ -187,6 +187,9 @@ export default function RootLayout() {
           <Stack.Screen name="corr-document-types" options={{ title: 'أنواع الوثائق' }} />
           <Stack.Screen name="corr-numbering" options={{ title: 'مخططات الترقيم' }} />
           <Stack.Screen name="corr-roles" options={{ title: 'الأدوار والعضويات' }} />
+          <Stack.Screen name="corr-templates" options={{ title: 'قوالب الخطابات' }} />
+          <Stack.Screen name="corr-letterheads" options={{ title: 'الترويسات' }} />
+          <Stack.Screen name="corr-compose" options={{ title: 'محرر الخطاب' }} />
           <Stack.Screen name="hr-tasks" options={{ title: 'المهام' }} />
           <Stack.Screen name="hr-appraisals" options={{ title: 'التقييم السنوي' }} />
           <Stack.Screen name="hr-letters" options={{ title: 'الخطابات الرسمية' }} />

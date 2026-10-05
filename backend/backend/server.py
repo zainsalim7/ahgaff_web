@@ -204,6 +204,7 @@ from routes.auth import router as auth_router
 from routes.users import router as users_router
 from routes.roles import router as roles_router
 from routes.correspondence import router as correspondence_router, correspondence_startup
+from routes.correspondence_content import router as correspondence_content_router, correspondence_content_startup
 from routes.departments import router as departments_router
 from routes.students import router as students_router
 from routes.teachers import router as teachers_router
@@ -18181,6 +18182,7 @@ app.include_router(api_router)
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(roles_router, prefix="/api")
+app.include_router(correspondence_content_router, prefix="/api")
 app.include_router(correspondence_router, prefix="/api")
 app.include_router(departments_router, prefix="/api")
 app.include_router(students_router, prefix="/api")
@@ -18301,6 +18303,7 @@ async def startup_event():
     await migrate_teacher_prefs_defaults_v2()
     await migrate_group_slots_default_theory_v1()
     await correspondence_startup(db)
+    await correspondence_content_startup(db)
     # 🔗 مزامنة روابط المشاركة للمقررات من واقع خانات الجدول (المحاضرات المشتركة تظهر في مقررات كل قسم مشارك)
     try:
         # 🔄 ترحيل: المعيدون القدامى يصبحون غير نشطين (خارج قوائم التحضير) — idempotent

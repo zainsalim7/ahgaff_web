@@ -18,6 +18,8 @@ export const NAV = [
   { path: '/corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer' },
   { path: '/corr-list', label: 'سجل المراسلات', icon: 'documents' },
   { path: '/corr-list?mine=1', label: 'مسوداتي', icon: 'create' },
+  { path: '/corr-templates', label: 'القوالب', icon: 'copy', perm: 'template.read' },
+  { path: '/corr-letterheads', label: 'الترويسات', icon: 'image', perm: 'letterhead.read' },
   { path: '/corr-organizations', label: 'الهيكل التنظيمي', icon: 'git-network', perm: 'organizations.manage' },
   { path: '/corr-document-types', label: 'أنواع الوثائق', icon: 'pricetags', perm: 'templates.manage' },
   { path: '/corr-numbering', label: 'مخططات الترقيم', icon: 'barcode', perm: 'numbering.manage' },

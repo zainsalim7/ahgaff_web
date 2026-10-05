@@ -35,7 +35,46 @@ export const corrAPI = {
   transition: (id: string, action: string, reason = '') => api.post(`${base}/${id}/${action}`, { reason }),
   history: (id: string) => api.get(`${base}/${id}/history`),
   audit: (id: string) => api.get(`${base}/${id}/audit`),
+  // المرحلة 2
+  letterheads: (params: any = {}) => api.get(`${base}/letterheads`, { params }),
+  resolveLetterhead: (organization_id: string) => api.get(`${base}/letterheads/resolve`, { params: { organization_id } }),
+  createLetterhead: (d: any) => api.post(`${base}/letterheads`, d),
+  updateLetterhead: (id: string, d: any) => api.patch(`${base}/letterheads/${id}`, d),
+  setDefaultLetterhead: (id: string) => api.post(`${base}/letterheads/${id}/set-default`),
+  uploadLetterheadAsset: (id: string, slot: string, file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`${base}/letterheads/${id}/assets/${slot}`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); },
+  templates: (params: any = {}) => api.get(`${base}/templates`, { params }),
+  template: (id: string) => api.get(`${base}/templates/${id}`),
+  createTemplate: (d: any) => api.post(`${base}/templates`, d),
+  updateTemplateDraft: (id: string, d: any) => api.put(`${base}/templates/${id}/draft`, d),
+  newTemplateVersion: (id: string, d: any) => api.post(`${base}/templates/${id}/versions`, d),
+  validateTemplate: (id: string) => api.post(`${base}/templates/${id}/validate`),
+  publishTemplate: (id: string) => api.post(`${base}/templates/${id}/publish`),
+  deactivateTemplate: (id: string) => api.post(`${base}/templates/${id}/deactivate`),
+  cloneTemplate: (id: string, target_organization_id?: string) => api.post(`${base}/templates/${id}/clone`, null, { params: target_organization_id ? { target_organization_id } : {} }),
+  placeholders: () => api.get(`${base}/placeholders`),
+  entities: (kind: string, q: string, page = 1) => api.get(`${base}/entities/${kind}`, { params: { q, page, page_size: 20 } }),
+  applyTemplate: (id: string, template_id: string) => api.post(`${base}/${id}/apply-template`, { template_id }),
+  content: (id: string) => api.get(`${base}/${id}/content`),
+  patchContent: (id: string, d: any) => api.patch(`${base}/${id}/content`, d),
+  preview: (id: string, mode: 'preview' | 'edit' = 'preview') => api.post(`${base}/${id}/preview`, null, { params: { mode } }),
 };
+
+export const SECTION_TYPE_AR: Record<string, string> = {
+  HEADER: 'ترويسة', REFERENCE: 'الرقم والتاريخ', DATE: 'التاريخ', RECIPIENT: 'المستلم', SALUTATION: 'التحية', SUBJECT: 'الموضوع', INTRODUCTION: 'مقدمة', BODY: 'المتن',
+  STRUCTURED_DATA: 'بيانات منظمة', CLOSING: 'الخاتمة', SIGNATURE_BLOCK: 'التوقيع', CC: 'نسخة إلى', ATTACHMENTS: 'المرفقات', FOOTER: 'تذييل', CUSTOM: 'مخصص',
+};
+export const EDITABILITY_AR: Record<string, { label: string; color: string; hint: string }> = {
+  LOCKED: { label: 'مقفل', color: '#991b1b', hint: 'لا يمكن تغييره في الخطاب' }, SYSTEM: { label: 'نظامي', color: '#475569', hint: 'يُملأ من النظام تلقائياً' },
+  STRUCTURED: { label: 'منظّم', color: '#7c3aed', hint: 'يُملأ من البيانات مع تعديل محدود' }, EDITABLE: { label: 'قابل للتحرير', color: '#16a34a', hint: 'حر للكاتب' },
+  DEFAULT_EDITABLE: { label: 'افتراضي قابل للتحرير', color: '#0ea5e9', hint: 'نص افتراضي يمكن تعديله' },
+};
+export const INPUT_TYPE_AR: Record<string, string> = { TEXT: 'نص قصير', TEXTAREA: 'نص طويل', DATE: 'تاريخ', NUMBER: 'رقم', SELECT: 'قائمة' };
+export const TPL_STATUS_AR: Record<string, { label: string; color: string }> = { DRAFT: { label: 'مسودة', color: '#64748b' }, PUBLISHED: { label: 'منشور', color: '#16a34a' }, INACTIVE: { label: 'موقوف', color: '#991b1b' } };
+export const ENTITY_KIND: Record<string, { kind: string; label: string; perm: string }> = {
+  STUDENT: { kind: 'students', label: 'طالب', perm: 'entity.student.read' }, EMPLOYEE: { kind: 'employees', label: 'موظف', perm: 'entity.employee.read' }, FACULTY: { kind: 'faculty', label: 'عضو هيئة تدريس', perm: 'entity.faculty.read' },
+};
+export const errList = (e: any): string[] => { const d = e?.response?.data?.detail; return d && typeof d === 'object' && Array.isArray(d.errors) ? d.errors : []; };
+export const errMsgFull = (e: any, fallback = 'حدث خطأ') => { const d = e?.response?.data?.detail; if (typeof d === 'string') return d; if (d && typeof d === 'object' && d.message) return d.message; return fallback; };
 
 export const STATUS_AR: Record<string, string> = {
   DRAFT: 'مسودة', SUBMITTED: 'مُقدَّمة', UNDER_REVIEW: 'قيد المراجعة', CHANGES_REQUESTED: 'مطلوب تعديلات', APPROVED: 'معتمدة',

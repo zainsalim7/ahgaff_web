@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { corrAPI, errMsg, STATUS_AR, STATUS_COLOR, PRIORITY_AR, CLASS_AR, ACTION_AR, RECIPIENT_TYPE_AR } from '../src/services/corrAPI';
+import { corrAPI, errMsg, STATUS_AR, STATUS_COLOR, PRIORITY_AR, CLASS_AR, ACTION_AR, RECIPIENT_TYPE_AR, ENTITY_KIND } from '../src/services/corrAPI';
+import { EntityPicker } from '../src/components/corr/EntityPicker';
 import { CorrPage, card, btn, inp, lbl, th, td, Badge, Modal, Field, Empty, useCorrMe } from '../src/components/corr/CorrUI';
 
 const Row = ({ k, v, testID }: { k: string; v: any; testID?: string }) => (
@@ -23,6 +24,7 @@ export default function CorrDetails() {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [recForm, setRecForm] = useState<any | null>(null);
   const [entForm, setEntForm] = useState<any | null>(null);
+  const [entPicker, setEntPicker] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -56,7 +58,7 @@ export default function CorrDetails() {
   };
   const saveEnt = async () => {
     setBusy(true); setErr('');
-    try { await corrAPI.addEntity(id!, entForm); setEntForm(null); await load(); } catch (e) { setErr(errMsg(e, 'فشل الربط')); } finally { setBusy(false); }
+    try { const { entity_label, ...payload } = entForm; await corrAPI.addEntity(id!, payload); setEntForm(null); await load(); } catch (e) { setErr(errMsg(e, 'فشل الربط')); } finally { setBusy(false); }
   };
   const loadAudit = async () => { try { setAuditRows((await corrAPI.audit(id!)).data); } catch (e) { setErr(errMsg(e)); } };
 
@@ -70,6 +72,7 @@ export default function CorrDetails() {
           <Badge text={STATUS_AR[c.status] || c.status} color={color} testID="corr-status-badge" />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} data-testid="corr-actions">
             {c.can_edit && <button onClick={() => setEdit({ subject: c.subject, summary: c.summary, priority: c.priority, security_classification: c.security_classification, document_type_id: c.document_type_id })} style={btn('#1565c0')} data-testid="corr-edit-btn">تعديل</button>}
+            <button onClick={() => router.push({ pathname: '/corr-compose', params: { id } } as any)} style={btn('#7c3aed')} data-testid="corr-compose-btn">{c.can_edit && ['DRAFT', 'CHANGES_REQUESTED'].includes(c.status) ? '✎ محرر الخطاب' : '📄 عرض الخطاب'}</button>
             {c.status === 'DRAFT' && c.can_edit && <button onClick={delDraft} style={btn('#64748b')} data-testid="corr-delete-btn">حذف المسودة</button>}
             {(c.allowed_actions || []).map((a: string) => (
               <button key={a} disabled={busy} onClick={() => onAction(a)} style={btn(ACTION_AR[a]?.color || '#0f2440')} data-testid={`corr-action-${a}`}>{ACTION_AR[a]?.label || a}</button>
@@ -97,7 +100,7 @@ export default function CorrDetails() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><b style={{ color: '#0f2440' }}>المستلمون ({c.recipients.length})</b>
-            {c.can_edit && <button onClick={() => setRecForm({ recipient_type: 'INTERNAL_ORGANIZATION', organization_id: '', external_organization: '', external_name: '', external_contact: '', recipient_role: 'TO' })} style={btn('#0ea5e9', { padding: '4px 10px' })} data-testid="corr-add-recipient">+ مستلم</button>}
+            {c.can_edit && <button onClick={() => setRecForm({ recipient_type: 'INTERNAL_ORGANIZATION', organization_id: '', external_organization: '', external_name: '', external_contact: '', recipient_title: '', recipient_role: 'TO' })} style={btn('#0ea5e9', { padding: '4px 10px' })} data-testid="corr-add-recipient">+ مستلم</button>}
           </div>
           {c.recipients.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8' }}>لا يوجد مستلمون — مطلوب مستلم واحد على الأقل قبل التقديم</div>}
           {c.recipients.map((r: any) => (
@@ -171,6 +174,7 @@ export default function CorrDetails() {
             <Field label="اسم الشخص"><input style={inp} value={recForm.external_name} onChange={(e) => setRecForm({ ...recForm, external_name: e.target.value })} /></Field>
             <Field label="وسيلة التواصل"><input style={inp} value={recForm.external_contact} onChange={(e) => setRecForm({ ...recForm, external_contact: e.target.value })} /></Field>
           </>)}
+          <Field label="صفة المستلم (مثل: سعادة / الأستاذ الدكتور / المحترم)"><input style={inp} value={recForm.recipient_title} onChange={(e) => setRecForm({ ...recForm, recipient_title: e.target.value })} data-testid="corr-rec-title" /></Field>
           <div style={{ display: 'flex', gap: 8 }}><button onClick={saveRec} disabled={busy} style={btn('#0ea5e9')} data-testid="corr-rec-save">إضافة</button><button onClick={() => setRecForm(null)} style={btn('#94a3b8')}>إلغاء</button></div>
         </Modal>
       )}
@@ -178,12 +182,19 @@ export default function CorrDetails() {
         <Modal title="ربط كيان جامعي" onClose={() => setEntForm(null)} testID="corr-entity-modal">
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10 }}>
             <Field label="نوع الكيان"><select style={inp} value={entForm.entity_type} onChange={(e) => setEntForm({ ...entForm, entity_type: e.target.value })}>{['STUDENT', 'EMPLOYEE', 'TEACHER', 'COURSE', 'DEPARTMENT', 'FACULTY', 'SEMESTER', 'OTHER'].map((t) => <option key={t} value={t}>{t}</option>)}</select></Field>
-            <Field label="معرّف الكيان"><input style={inp} value={entForm.entity_id} onChange={(e) => setEntForm({ ...entForm, entity_id: e.target.value })} data-testid="corr-ent-id" /></Field>
+            <Field label="معرّف الكيان">
+              <div style={{ display: 'flex', gap: 6 }}>
+                <input style={inp} value={entForm.entity_id} onChange={(e) => setEntForm({ ...entForm, entity_id: e.target.value })} data-testid="corr-ent-id" />
+                {ENTITY_KIND[entForm.entity_type === 'TEACHER' ? 'FACULTY' : entForm.entity_type] && <button onClick={() => setEntPicker(entForm.entity_type === 'TEACHER' ? 'FACULTY' : entForm.entity_type)} style={btn('#7c3aed', { whiteSpace: 'nowrap' })} data-testid="corr-ent-pick">بحث</button>}
+              </div>
+              {!!entForm.entity_label && <div style={{ fontSize: 12, color: '#166534', marginTop: 4 }}>{entForm.entity_label}</div>}
+            </Field>
             <Field label="نوع العلاقة"><select style={inp} value={entForm.relationship_type} onChange={(e) => setEntForm({ ...entForm, relationship_type: e.target.value })}>{['SUBJECT', 'RELATED_PERSON', 'REFERENCE', 'ATTACHMENT_OF'].map((t) => <option key={t} value={t}>{t}</option>)}</select></Field>
           </div>
           <div style={{ display: 'flex', gap: 8 }}><button onClick={saveEnt} disabled={busy || !entForm.entity_id} style={btn('#7c3aed')} data-testid="corr-ent-save">ربط</button><button onClick={() => setEntForm(null)} style={btn('#94a3b8')}>إلغاء</button></div>
         </Modal>
       )}
+      {entPicker && <EntityPicker kind={ENTITY_KIND[entPicker].kind as any} title={`اختيار ${ENTITY_KIND[entPicker].label}`} onClose={() => setEntPicker(null)} onPick={(item) => { setEntForm({ ...entForm, entity_id: item.id, entity_label: `${item.label} (${item.code})` }); setEntPicker(null); }} />}
     </CorrPage>
   );
 }
