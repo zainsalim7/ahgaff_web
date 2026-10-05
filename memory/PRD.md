@@ -688,3 +688,15 @@
 - PDF: بطاقة "المحاضرات (منعقدة/الكل)" + بطاقة "نسبة الإنجاز" وعمود جديد في الجدول + شرح المعادلة في التذييل؛ إخفاء الهاتف في الرأس إذا طابق الرقم الوظيفي.
 - Excel: أعمدة "المحاضرات المنعقدة" و"نسبة الإنجاز %" في الملخص والمقررات.
 - الويب `report-teacher-summary.tsx`: بطاقة KPI "نسبة الإنجاز" + مؤشر إنجاز في كل بطاقة مقرر (`course-completion-{idx}`).
+
+## 2026-10-05: 📜 نظام المراسلات الرسمية — المرحلة 1 ✅ (مكتمل ومختبر — بانتظار اعتماد المستخدم قبل المرحلة 2)
+- التقرير الكامل: `/app/memory/CORRESPONDENCE_PHASE1_REPORT.md`
+- Backend: `routes/correspondence.py` (prefix `/api/correspondence`) + `services/corr_policy.py` (تفويض مركزي User+Membership+Role+Permission+Scope+Resource).
+- إعادة استخدام `org_units` كهيكل تنظيمي موحد (name→name_ar, type→organization_type) + حقل `name_en` + فهرس فريد على `code` مشروط بتدقيق نظيف عند الإقلاع.
+- مجموعات جديدة: org_memberships, org_membership_roles, corr_roles(11 دوراً نظامياً), document_types(7 عامة), numbering_schemes, document_sequences, correspondences, correspondence_recipients, correspondence_entities, correspondence_status_history, audit_logs.
+- ترقيم ذري (find_one_and_update $inc + فهارس فريدة) يُولَّد عند مرحلة قابلة للتهيئة (ISSUED افتراضياً)، نمط قابل للتهيئة، لا إعادة استخدام بعد الإلغاء.
+- آلة حالات صريحة (10 حالات/10 انتقالات) عبر خدمة واحدة + تاريخ دائم + تدقيق شامل (ACCESS_DENIED/SENSITIVE_READ).
+- الواجهة (RTL): /corr-dashboard, /corr-list(?mine=1), /corr-details, /corr-organizations, /corr-document-types, /corr-numbering, /corr-roles + قسم في القائمة الجانبية.
+- الاختبارات: pytest 17/17 (`tests/test_correspondence_phase1.py`) + وكيل اختبار الواجهة 10/10 (iteration_93).
+- وحدة HR القديمة `hr_correspondence` بقيت دون مساس (قرار المستخدم).
+- P1 التالي (المرحلة 2 — بعد الاعتماد): محرر الخطاب/القوالب، PDF+QR، التوقيع، المرفقات، الوارد، الإشعارات.

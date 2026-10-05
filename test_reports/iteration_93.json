@@ -1,0 +1,33 @@
+{
+  "summary": "Frontend-only E2E testing of Correspondence Phase 1 (Arabic RTL, RN-web + Expo Router). Covered all 10 requested flows: login→dashboard KPIs/nav, /corr-numbering scheme creation + preview, /corr-dashboard new correspondence modal, full /corr-details lifecycle (DRAFT→SUBMITTED→REVIEW→APPROVED→SIGNED→ISSUED→CANCELLED) with official number generation (UI-2026-000001) + 7-row history, edit draft subject, add EXTERNAL_ORGANIZATION recipient, delete draft→redirect to /corr-list?mine=1, /corr-list table/filters/pagination/row-nav, /corr-organizations tree + audit banner ('نظيف') + unique-code dup error, /corr-document-types (7 global types + create), /corr-roles memberships + 11 roles tab + duplicate membership error. All critical flows PASS.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "corr-reason-modal", "issue": "Confirm button is NOT actually disabled before a reason is typed — Playwright found no `disabled`/`aria-disabled` attribute on corr-reason-confirm when reason input is empty. Requirement said 'confirm disabled until reason typed'. Backend presumably still enforces non-empty reason, but UI guard is missing.", "selector": "[data-testid='corr-reason-confirm']", "priority": "LOW"},
+      {"component": "corr-mem-role-* chips", "issue": "Role chips (Pressable rendered as role=button) report visible=false to Playwright even though they are visually visible; required force=True or JS click. This is a minor accessibility/testability concern — adding real DOM visibility (e.g., ensuring the parent View isn't ARIA-hidden) would help both e2e and screen-readers.", "selector": "[data-testid^='corr-mem-role-']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global (all corr-* pages)", "issues": ["Repeated console warning: 'Unexpected text node: . A text node cannot be a child of a <View>.' — stray whitespace/text node inside a <View> somewhere in CorrUI.tsx or a corr-* page. Not user-visible but pollutes console on every render."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/backend/tests/test_correspondence_phase1.py (existing 17 pytest cases)"],
+  "action_items": [
+    "(LOW) Disable corr-reason-confirm until reason text has length>0 (match stated requirement).",
+    "(LOW) Fix 'Unexpected text node' RN-web warning in CorrUI.tsx / corr-details.tsx (look for stray strings like ' ' or '.' between JSX children of a View).",
+    "(LOW) Make role chips Playwright-visible (ensure the chip's React-Native-Web Pressable renders with pointer-events + visible bounding box; currently bounding_box()=None)."
+  ],
+  "critical_code_review_comments": [
+    "data-testids are consistent and comprehensive across all pages — excellent testability.",
+    "Status Arabic badges match spec exactly (مسودة/مُقدَّمة/قيد المراجعة/معتمدة/موقَّعة/صادرة/ملغاة).",
+    "Official number generation integrates with scheme correctly: PREFIX-YYYY-NNNNNN produced UI-2026-000001 on first issue.",
+    "409 duplicate handling surfaces proper Arabic error text via dedicated error testids (corr-org-error, corr-mem-error)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request; 17/17 pytest already passing)", "frontend": "100% of 10 requested flows"},
+  "test_credentials": "admin / admin123 (SUPER_ADMIN).",
+  "seed_data_creation": "Created during test: 1 numbering scheme (UI prefix) on PRES org; 2 correspondences (1 cancelled after full lifecycle UI-2026-000001, 1 draft then deleted); 1 org_unit with code UITST<rand>; 1 document type UI_TYPE_<rand>; 1 membership (Salim @ PRES, role DRAFTER). No cleanup performed — org_units lack delete endpoint per request; others left intact as regression fixtures.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 1 correspondence frontend is production-ready. If re-running, note (1) login button has no role=button; use get_by_text('تسجيل الدخول', exact=True).click(force=True); (2) role chips need force=True or JS click (not actually broken, just RN-web quirk); (3) /corr-list ISSUED filter may legitimately show empty state if the only ISSUED correspondence was later cancelled."
+}

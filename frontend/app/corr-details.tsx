@@ -143,7 +143,7 @@ export default function CorrDetails() {
       {reasonFor && (
         <Modal title={`${ACTION_AR[reasonFor].label} — السبب مطلوب`} onClose={() => setReasonFor(null)} testID="corr-reason-modal">
           <textarea style={{ ...inp, minHeight: 80 }} value={reason} onChange={(e) => setReason(e.target.value)} data-testid="corr-reason-input" />
-          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}><button disabled={!reason.trim() || busy} onClick={() => doAction(reasonFor, reason)} style={btn(ACTION_AR[reasonFor].color)} data-testid="corr-reason-confirm">تأكيد</button><button onClick={() => setReasonFor(null)} style={btn('#94a3b8')}>إلغاء</button></div>
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}><button disabled={!reason.trim() || busy} aria-disabled={!reason.trim() || busy} onClick={() => reason.trim() && doAction(reasonFor, reason)} style={btn(ACTION_AR[reasonFor].color)} data-testid="corr-reason-confirm">تأكيد</button><button onClick={() => setReasonFor(null)} style={btn('#94a3b8')}>إلغاء</button></div>
         </Modal>
       )}
       {edit && (
