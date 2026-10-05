@@ -50,7 +50,7 @@ export default function CorrCompose() {
   }, [id, mode]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { corrAPI.placeholders().then((r) => setPhs(r.data.items.map((p: any) => ({ key: p.key, label_ar: `${p.namespace_ar} › ${p.label_ar}` })))).catch(() => {}); }, []);
-  useEffect(() => { if (id && bundle && !bundle.content) corrAPI.suggestions(id).then((r) => setSugg(r.data)).catch(() => setSugg(null)); }, [id, bundle?.content?.template_id]);
+  useEffect(() => { if (id && bundle && !bundle.content) corrAPI.suggestions(id).then((r) => setSugg(r.data)).catch(() => setSugg(null)); }, [id, !!bundle, bundle?.content?.template_id]);
   useEffect(() => {
     if (!bundle?.correspondence?.organization_id) return;
     corrAPI.templates({ for_use: true, organization_id: bundle.correspondence.organization_id, page_size: 200 }).then((r) => setTemplates(r.data.items)).catch(() => {});

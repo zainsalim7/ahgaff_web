@@ -55,8 +55,8 @@ type Sec = { id: string; type: string; title?: string; html: string; style_confi
 type Props = { letterhead: any; sections: Sec[]; orgName?: string; scale?: number; highlight?: string | null; onSectionClick?: (id: string) => void; frozen?: boolean; watermark?: string };
 
 export const A4Preview: React.FC<Props> = ({ letterhead, sections, orgName, scale = 1, highlight, onSectionClick, frozen, watermark }) => {
-  const [tok, setTok] = useState('');
-  useEffect(() => { AsyncStorage.getItem('token').then((t) => setTok(t || '')); }, []);
+  const [tok, setTok] = useState(() => (typeof localStorage !== 'undefined' ? localStorage.getItem('token') || '' : ''));
+  useEffect(() => { if (!tok) AsyncStorage.getItem('token').then((t) => setTok(t || '')); }, []);
   const fixSrc = (html: string) => (html || '').replace(/src="(\/api\/files\/[^"]+)"/g, (_m, u) => `src="${API_URL}${u}${u.includes('?') ? '&' : '?'}auth=${tok}"`);
   const pc = letterhead?.page_config || {};
   const m = pc.margins_mm || { top: 15, right: 20, bottom: 15, left: 20 };

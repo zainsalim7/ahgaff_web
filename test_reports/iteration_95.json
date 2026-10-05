@@ -1,0 +1,53 @@
+{
+  "summary": "Frontend-only E2E of Correspondence Phase 3 (Arabic RTL): signature upload card on /corr-dashboard (upload/delete/sha prefix), letterhead seal upload slot (lh-upload-seal_asset_id with label 'ختم الجهة'), public /verify-correspondence valid + invalid token flows (both tokens working with all required rows), PDF buttons on issued and draft correspondences (text 'PDF الرسمي'/'PDF مسودة'; window.open popup fires), placeholder insert menu starred (★) suggestions on STUDENT-linked compose (14 starred including input.destination & student.*), full signature lifecycle on NEW draft (PRES-2026-000002 issued) with A4 s8 showing .sig-block + img.sig-img + img.seal-img + 'وُقّع إلكترونياً مدير النظام', new verify_token valid on public page. ONE NEW CRITICAL frontend bug: smart template suggestions UI never renders (compose-suggested-title missing, 0 compose-sugg-* cards) because /correspondence/suggestions API is never called from the compose page — useEffect dependency bug in corr-compose.tsx.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "corr-compose (Smart suggestions)",
+        "issue": "compose-suggested-title header and compose-sugg-<CODE> cards NEVER render. Backend GET /api/correspondence/suggestions?correspondence_id=... returns 200 with proper {templates:[{score:3.17, reasons:['نفس نوع الوثيقة', ...]}, ...]} but frontend never fires the request (verified via page.on('request')). RCA: in /app/frontend/app/corr-compose.tsx the useEffect that calls corrAPI.suggestions(id) has dependency array [id, bundle?.content?.template_id]. On first mount bundle is null → condition `id && bundle && !bundle.content` is false → skipped. After bundle loads, template_id is still undefined so the array doesn't change → effect never re-fires. Fix: change deps to [id, bundle, bundle?.content?.template_id] (or [id, !!bundle, bundle?.content?.template_id]).",
+        "selector": "[data-testid='compose-suggested-title'], [data-testid^='compose-sugg-']",
+        "priority": "HIGH"
+      },
+      {
+        "component": "A4Preview (signature images)",
+        "issue": "img.sig-img and img.seal-img are injected inside a section via dangerouslySetInnerHTML, but their src attrs are the plain '/api/files/...png' URLs WITHOUT any ?auth=<token>. /api/files/* requires Bearer auth and returned 401 (seen in console). fixSrc in A4Preview is supposed to rewrite /api/files src with ?auth=token, but these two images were not rewritten (naturalWidth=0 when queried). On screenshot they DID eventually render (likely retried); investigate whether fixSrc only targets explicit <img src=\"/api/files...\"> patterns or misses whitespace / class attributes. Check A4Preview.tsx fixSrc regex.",
+        "selector": "img.sig-img, img.seal-img",
+        "priority": "MEDIUM"
+      },
+      {
+        "component": "CorrCreateModal (EXTERNAL recipient) — CARRY-OVER from iter_94",
+        "issue": "Creating a new correspondence with corr-create-ext-org filled does NOT persist the recipient (recipients list is empty afterwards). Workaround required: POST /api/correspondence/{id}/recipients afterward. Blocks the UI-only submit flow for external-only drafts.",
+        "selector": "[data-testid='corr-create-ext-org']",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {"flow": "compose → smart suggestions", "issue": "No network request to /suggestions is made; feature completely invisible to users", "affected_selectors": ["[data-testid='compose-suggested-title']", "[data-testid^='compose-sugg-']"]}
+    ],
+    "design_issues": [
+      {"screen": "all RN-web", "issues": ["Carry-over console error 'Unexpected text node: . A text node cannot be a child of a <View>.'"]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "(HIGH) Fix smart-suggestions useEffect dep array in /app/frontend/app/corr-compose.tsx — currently [id, bundle?.content?.template_id]; change so it refires once bundle loads (e.g. [id, bundle]). Backend is 100% functional; only wiring is broken.",
+    "(MEDIUM) Verify A4Preview fixSrc covers <img class='sig-img' src='/api/files/...'> and <img class='seal-img' ...>; naturalWidth=0 means 401 at load time though rendering eventually succeeded.",
+    "(MEDIUM, carry-over) Fix CorrCreateModal to persist corr-create-ext-org as a recipient (role=TO) during create.",
+    "(LOW, carry-over) Resolve 'Unexpected text node' RN-web warning."
+  ],
+  "critical_code_review_comments": [
+    "signature_html correctly conditionals on status in {SIGNED, ISSUED, ARCHIVED} and appends to the SIGNATURE_BLOCK html post-render — this works even for frozen snapshots because sig HTML is applied AFTER snapshot resolution (correspondence_content.py:719-724). Good design.",
+    "Public verify endpoint intentionally exposes only non-PII fields (official_number, status, dates, sha256) — correct privacy posture; hint text makes that explicit on the page.",
+    "Suggestions endpoint scoring (correspondence_signature.py:118-137) is well-structured: doc-type match +3, entity match +2, org-template +1, usage decay by 90d — exposed as 'reasons' chips. Backend design is solid; only frontend wiring is bugged.",
+    "corrAPI.suggestions call pattern GET /correspondence/suggestions?correspondence_id= is unusual (vs REST /correspondence/{id}/suggestions). Works but inconsistent with transition endpoints (/correspondence/{id}/{action}). Consider aligning routes."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (not tested per request; APIs exercised ad-hoc were all 200)", "frontend": "~85% — 7/8 flows pass; smart-suggestions UI broken (backend fine)"},
+  "test_credentials": "admin / admin123 (SUPER_ADMIN).",
+  "seed_data_creation": "Signature uploaded for admin (sha 28da86c391ab...). Seal uploaded to UNIVERSITY_GENERAL letterhead (branding_config.seal_asset_url set). New correspondence 6ac3d762dcf32e950fa22c57 on PRES, lifecycle completed through ISSUED → PRES-2026-000002 (verify_token 3h9k8uYGuLNlWGhbixmzNtig8DRPPmaJ). Preserved PRES-2026-000001 untouched.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 3 backend is solid. Priority bug: compose-suggested-title/compose-sugg-* missing due to useEffect dep bug in corr-compose.tsx (line ~87 in source: `useEffect(() => { ... suggestions ... }, [id, bundle?.content?.template_id])`). After fix, re-test by (a) creating a NEW draft on PRES with doc_type STUDENT_CERTIFICATE, (b) opening compose, (c) asserting [data-testid='compose-suggested-title'] + [data-testid='compose-sugg-STUDENT_ENROLLMENT_CERTIFICATE'] visible with chip 'نفس نوع الوثيقة'. Also re-test image auth on signed correspondence (img.sig-img.src should include ?auth= or come from a token-aware endpoint).",
+  "rca of the issue": "Smart suggestions silent failure: useEffect in corr-compose.tsx with deps [id, bundle?.content?.template_id] — initial run has bundle=null so skipped; subsequent bundle updates leave template_id=undefined (new drafts have no content), so the shallow-equal check in React treats the dep tuple as unchanged and the effect never re-fires. Add `bundle` (object identity changes on each load) or `!!bundle` to the dep array to trigger the fetch once bundle hydrates. Direct curl of GET /api/correspondence/suggestions?correspondence_id=<new_id> returned 200 with templates:[{code:'STUDENT_ENROLLMENT_CERTIFICATE',score:3.17,reasons:['نفس نوع الوثيقة','استُخدم 2× في جهتك مؤخراً','استخدمته مؤخراً']}, ...] — confirming backend works."
+}
