@@ -55,6 +55,9 @@ type Sec = { id: string; type: string; title?: string; html: string; style_confi
 type Props = { letterhead: any; sections: Sec[]; orgName?: string; scale?: number; highlight?: string | null; onSectionClick?: (id: string) => void; frozen?: boolean; watermark?: string };
 
 export const A4Preview: React.FC<Props> = ({ letterhead, sections, orgName, scale = 1, highlight, onSectionClick, frozen, watermark }) => {
+  const [tok, setTok] = useState('');
+  useEffect(() => { AsyncStorage.getItem('token').then((t) => setTok(t || '')); }, []);
+  const fixSrc = (html: string) => (html || '').replace(/src="(\/api\/files\/[^"]+)"/g, (_m, u) => `src="${API_URL}${u}${u.includes('?') ? '&' : '?'}auth=${tok}"`);
   const pc = letterhead?.page_config || {};
   const m = pc.margins_mm || { top: 15, right: 20, bottom: 15, left: 20 };
   const mm = 3.78 * scale;
@@ -67,7 +70,7 @@ export const A4Preview: React.FC<Props> = ({ letterhead, sections, orgName, scal
         {sections.map((s) => (
           <div key={s.id} data-testid={`a4-section-${s.id}`} onClick={onSectionClick ? () => onSectionClick(s.id) : undefined}
             style={{ padding: `${3 * scale}px ${4 * scale}px`, margin: `${2 * scale}px -${4 * scale}px`, borderRadius: 4, cursor: onSectionClick ? 'pointer' : 'default', outline: highlight === s.id ? '2px solid #0ea5e9' : 'none', backgroundColor: highlight === s.id ? 'rgba(14,165,233,0.06)' : 'transparent', transition: 'background-color .15s', textAlign: (s.style_config?.align as any) || (s.type === 'SIGNATURE_BLOCK' ? 'left' : 'right'), ...(s.type === 'SIGNATURE_BLOCK' ? { marginTop: 24 * scale, paddingLeft: 10 * scale } : {}) }}
-            className="a4-sec" dangerouslySetInnerHTML={{ __html: s.html || '<p></p>' }} />
+            className="a4-sec" dangerouslySetInnerHTML={{ __html: fixSrc(s.html) || '<p></p>' }} />
         ))}
       </div>
       {letterhead && <LetterheadFooter lh={letterhead} scale={scale} />}

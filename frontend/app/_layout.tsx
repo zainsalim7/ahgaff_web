@@ -106,7 +106,7 @@ export default function RootLayout() {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const host = window.location.hostname;
-    const VERIFY_PATHS = ['/verify-portal', '/verify-statement', '/verify-card', '/verify-certificate', '/verify-appraisal', '/verify-employee', '/verify-letter'];
+    const VERIFY_PATHS = ['/verify-portal', '/verify-statement', '/verify-card', '/verify-certificate', '/verify-appraisal', '/verify-employee', '/verify-letter', '/verify-correspondence'];
     if ((host === 'ahgaff.net' || host === 'www.ahgaff.net' || host === 'verify.ahgaff.edu') && !VERIFY_PATHS.includes(pathname)) {
       router.replace('/verify-portal');
     }
@@ -134,6 +134,7 @@ export default function RootLayout() {
           <Stack.Screen name="verify-statement" options={{ headerShown: false }} />
           <Stack.Screen name="verify-card" options={{ headerShown: false }} />
           <Stack.Screen name="verify-certificate" options={{ headerShown: false }} />
+          <Stack.Screen name="verify-correspondence" options={{ headerShown: false }} />
           <Stack.Screen name="verify-appraisal" options={{ headerShown: false }} />
           <Stack.Screen name="verify-employee" options={{ headerShown: false }} />
           <Stack.Screen name="verify-letter" options={{ headerShown: false }} />

@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useWindowDimensions } from 'react-native';
-import { corrAPI, errMsgFull, errList, STATUS_AR, STATUS_COLOR, EDITABILITY_AR, SECTION_TYPE_AR, ENTITY_KIND } from '../src/services/corrAPI';
+import { corrAPI, errMsgFull, errList, openPdf, STATUS_AR, STATUS_COLOR, EDITABILITY_AR, SECTION_TYPE_AR, ENTITY_KIND } from '../src/services/corrAPI';
 import { CorrPage, card, btn, inp, lbl, Badge, Modal, Field, Empty, useCorrMe } from '../src/components/corr/CorrUI';
 import { TipTapEditor } from '../src/components/corr/TipTapEditor';
 import { A4Preview } from '../src/components/corr/A4Preview';
@@ -21,6 +21,7 @@ export default function CorrCompose() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [lhs, setLhs] = useState<any[]>([]);
   const [phs, setPhs] = useState<any[]>([]);
+  const [sugg, setSugg] = useState<any | null>(null);
   const [values, setValues] = useState<Record<string, string>>({});
   const [inputs, setInputs] = useState<Record<string, any>>({});
   const [dirty, setDirty] = useState(false);
@@ -49,6 +50,7 @@ export default function CorrCompose() {
   }, [id, mode]);
   useEffect(() => { load(); }, [load]);
   useEffect(() => { corrAPI.placeholders().then((r) => setPhs(r.data.items.map((p: any) => ({ key: p.key, label_ar: `${p.namespace_ar} › ${p.label_ar}` })))).catch(() => {}); }, []);
+  useEffect(() => { if (id && bundle && !bundle.content) corrAPI.suggestions(id).then((r) => setSugg(r.data)).catch(() => setSugg(null)); }, [id, bundle?.content?.template_id]);
   useEffect(() => {
     if (!bundle?.correspondence?.organization_id) return;
     corrAPI.templates({ for_use: true, organization_id: bundle.correspondence.organization_id, page_size: 200 }).then((r) => setTemplates(r.data.items)).catch(() => {});
@@ -60,6 +62,8 @@ export default function CorrCompose() {
   const version = bundle?.template_version;
   const canEdit = !!c && ['DRAFT', 'CHANGES_REQUESTED'].includes(c.status) && c.can_edit !== false && !bundle?.frozen;
   const inputDefs: any[] = version?.input_fields || [];
+  const linkedNs = new Set((bundle?.entities || []).map((e: any) => ({ STUDENT: 'student', EMPLOYEE: 'employee', TEACHER: 'faculty', FACULTY: 'faculty' } as any)[e.entity_type]).filter(Boolean));
+  const suggKeys = new Set(phs.filter((p) => linkedNs.has(p.key.split('.')[0]) || p.key.startsWith('correspondence.')).map((p) => p.key));
   const sections: any[] = [...(version?.sections || [])].sort((a, b) => a.order - b.order);
 
   const save = useCallback(async (sv: Record<string, string>, iv: Record<string, any>, silent = false) => {
@@ -114,6 +118,7 @@ export default function CorrCompose() {
         <button onClick={() => setMode(mode === 'preview' ? 'edit' : 'preview')} style={btn('#475569')} data-testid="compose-mode">{mode === 'preview' ? 'عرض التسميات' : 'عرض القيم'}</button>
         {canEdit && content && <button onClick={() => { if (timer.current) clearTimeout(timer.current); save(values, inputs); }} disabled={saving || !dirty} style={btn('#1565c0')} data-testid="compose-save">حفظ</button>}
         {canEdit && content && (c.allowed_actions || []).includes('submit') && <button onClick={submit} disabled={saving} style={btn('#0ea5e9')} data-testid="compose-submit">تقديم للمراجعة</button>}
+        <button onClick={() => openPdf(id!, setErr)} style={btn('#b45309')} data-testid="compose-pdf">{['ISSUED', 'ARCHIVED'].includes(c.status) ? 'PDF الرسمي' : 'PDF مسودة'}</button>
         <button onClick={() => router.push({ pathname: '/corr-details', params: { id } } as any)} style={btn('#94a3b8')} data-testid="compose-back-details">التفاصيل</button>
       </div>
     </div>
@@ -128,6 +133,14 @@ export default function CorrCompose() {
           <div style={{ fontSize: 12, color: '#64748b', margin: '4px 0 10px' }}>القوالب المنشورة المتاحة لجهتك (العامة + الموروثة). الكتابة من الصفر تستخدم قالب «مراسلة عامة».</div>
           {!hasAnywhere('template.use') ? <div style={{ color: '#b91c1c', fontSize: 12.5 }}>ليس لديك صلاحية استخدام القوالب</div> : (
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 8 }}>
+              {sugg && sugg.templates.filter((t: any) => t.score > 0).length > 0 && <div style={{ gridColumn: '1 / -1', fontSize: 12, fontWeight: 800, color: '#7c3aed' }} data-testid="compose-suggested-title">✦ مقترحة لك</div>}
+              {sugg && sugg.templates.filter((t: any) => t.score > 0).slice(0, 4).map((t: any) => (
+                <div key={`s-${t.id}`} onClick={() => canEdit && applyTemplate(t.id)} data-testid={`compose-sugg-${t.code}`} style={{ border: '1.5px solid #c4b5fd', backgroundColor: '#faf5ff', borderRadius: 10, padding: 10, cursor: canEdit ? 'pointer' : 'default' }}>
+                  <div style={{ fontWeight: 800, fontSize: 13 }}>{t.name_ar}</div>
+                  <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>{t.reasons.map((r: string) => <span key={r} style={{ fontSize: 10, padding: '1px 6px', borderRadius: 999, backgroundColor: '#ede9fe', color: '#5b21b6' }}>{r}</span>)}</div>
+                </div>
+              ))}
+              {sugg && sugg.templates.filter((t: any) => t.score > 0).length > 0 && <div style={{ gridColumn: '1 / -1', fontSize: 12, fontWeight: 800, color: '#475569', marginTop: 4 }}>كل القوالب</div>}
               {templates.filter((t) => !c.document_type_id || t.document_type_id === c.document_type_id || t.code === 'GENERAL_CORRESPONDENCE').map((t) => (
                 <div key={t.id} onClick={() => canEdit && applyTemplate(t.id)} data-testid={`compose-tpl-${t.code}`} style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, cursor: canEdit ? 'pointer' : 'default', backgroundColor: '#fff' }}>
                   <div style={{ fontWeight: 800, fontSize: 13 }}>{t.name_ar}</div><div style={{ fontSize: 11, color: '#64748b' }}>{t.description}</div>
@@ -190,7 +203,7 @@ export default function CorrCompose() {
                   {s.required && <Badge text="إلزامي" color="#dc2626" />}
                   {rendered === undefined && prev && <Badge text="مخفي بشرط" color="#94a3b8" />}
                 </div>
-                {ed ? <TipTapEditor value={values[s.id] ?? s.content ?? ''} onChange={(h) => setSection(s.id, h)} placeholders={[...phs, ...inputDefs.map((d) => ({ key: `input.${d.key}`, label_ar: `مدخلات › ${d.label_ar}` }))]} minHeight={s.type === 'BODY' ? 180 : 60} testID={`compose-editor-${s.id}`} />
+                {ed ? <TipTapEditor value={values[s.id] ?? s.content ?? ''} onChange={(h) => setSection(s.id, h)} placeholders={[...inputDefs.map((d) => ({ key: `input.${d.key}`, label_ar: `★ مدخلات › ${d.label_ar}` })), ...phs.filter((p) => suggKeys.has(p.key)).map((p) => ({ ...p, label_ar: `★ ${p.label_ar}` })), ...phs.filter((p) => !suggKeys.has(p.key))]} minHeight={s.type === 'BODY' ? 180 : 60} testID={`compose-editor-${s.id}`} />
                   : <div style={{ fontSize: 13, color: '#334155', backgroundColor: '#f8fafc', padding: '6px 10px', borderRadius: 8, lineHeight: 1.7 }} className="a4-sec" dangerouslySetInnerHTML={{ __html: rendered ?? values[s.id] ?? s.content ?? '' }} />}
               </div>
             );

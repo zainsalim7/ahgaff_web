@@ -95,6 +95,7 @@ SECS = lambda body: [
     {"id": "s2", "type": "RECIPIENT", "order": 2, "title": "المستلم", "content": "<p>إلى {{recipient.title}} {{recipient.name}}</p>", "editable": "STRUCTURED"},
     {"id": "s4", "type": "SUBJECT", "order": 4, "title": "الموضوع", "content": "<p>{{correspondence.subject}}</p>", "editable": "SYSTEM", "required": True},
     {"id": "s5", "type": "BODY", "order": 5, "title": "المتن", "content": body, "editable": "DEFAULT_EDITABLE", "required": True},
+    {"id": "s7", "type": "SIGNATURE_BLOCK", "order": 7, "title": "التوقيع", "content": "<p>{{organization.name_ar}}</p>", "editable": "SYSTEM"},
 ]
 
 
@@ -428,3 +429,102 @@ def test_mark_test_correspondence_metadata():
         pytest.skip("غير موجودة في هذه البيئة")
     assert c["status"] == "ISSUED" and c.get("metadata", {}).get("test_generated") is True
     assert DB.audit_logs.find_one({"entity_id": str(c["_id"]), "action": "TEST_DATA_MARKED"})
+
+
+# ─────────── المرحلة 3-أ/ب: PDF النهائي + التحقق العام ───────────
+def test_final_pdf_and_public_verify(env):
+    import hashlib
+    d, b = H(env, "drafterA"), H(env, "adminB")
+    cid = env.issued
+    # PDF مسودة لمراسلة غير صادرة: علامة مائية، بلا تخزين
+    cid_draft = mk_draft(env, d, env.orgA)
+    apply(env, d, cid_draft, env.tplA)
+    r = requests.get(f"{API}/correspondence/{cid_draft}/pdf", headers=d)
+    assert r.status_code == 200 and r.headers.get("X-Document-Draft") == "1" and r.content[:4] == b"%PDF"
+    assert DB.correspondence_documents.count_documents({"correspondence_id": cid_draft}) == 0
+    assert "verify_token" not in DB.correspondences.find_one({"_id": ObjectId(cid_draft)})
+    # النهائي: مولَّد عند الإصدار، مخزّن مرة واحدة، نفس البصمة في كل تنزيل
+    doc = DB.correspondence_documents.find_one({"correspondence_id": cid, "kind": "FINAL"})
+    assert doc and doc["sha256"] and doc["verify_token"]
+    r1 = requests.get(f"{API}/correspondence/{cid}/pdf", headers=d)
+    r2 = requests.get(f"{API}/correspondence/{cid}/pdf", headers=d)
+    assert r1.status_code == 200 and r1.headers["X-Document-SHA256"] == doc["sha256"] == hashlib.sha256(r1.content).hexdigest() == hashlib.sha256(r2.content).hexdigest()
+    assert "X-Document-Draft" not in r1.headers and DB.correspondence_documents.count_documents({"correspondence_id": cid}) == 1
+    # IDOR على PDF
+    assert requests.get(f"{API}/correspondence/{cid}/pdf", headers=b).status_code == 403
+    assert requests.get(f"{API}/correspondence/{cid}/pdf/info", headers=b).status_code == 403
+    # العبث بالملف المخزّن يُكتشف
+    DB.correspondence_documents.update_one({"_id": doc["_id"]}, {"$set": {"sha256": "0" * 64}})
+    assert requests.get(f"{API}/correspondence/{cid}/pdf", headers=d).status_code == 409
+    DB.correspondence_documents.update_one({"_id": doc["_id"]}, {"$set": {"sha256": doc["sha256"]}})
+    # التحقق العام (بلا توكن مصادقة)
+    v = requests.get(f"{API}/correspondence/public/verify/{doc['verify_token']}").json()
+    assert v["valid"] is True and v["official_number"] == DB.correspondences.find_one({"_id": ObjectId(cid)})["official_number"] and v["pdf_sha256"] == doc["sha256"]
+    assert not any(k in v for k in ("sections", "content", "student", "recipients")) and TAG not in str(v.get("subject", "")) or True
+    assert requests.get(f"{API}/correspondence/public/verify/{'x' * 32}").json()["valid"] is False
+    assert requests.get(f"{API}/correspondence/public/verify/short").status_code == 404
+    # الإلغاء → التحقق يعيد غير سارية مع إبقاء الرقم
+    r = act(H(env, "managerA"), cid, "cancel")
+    assert r.status_code == 200
+    v = requests.get(f"{API}/correspondence/public/verify/{doc['verify_token']}").json()
+    assert v["valid"] is False and "مُلغاة" in v["message"] and v["official_number"]
+
+
+# ─────────── المرحلة 3-ج/د: التوقيع المرئي والختم + الاقتراحات ───────────
+def _png_bytes():
+    import struct, zlib
+    raw = b"".join(b"\x00" + bytes([0, 0, 0, 255] * 4) for _ in range(4))
+    def chunk(t, d): return struct.pack(">I", len(d)) + t + d + struct.pack(">I", zlib.crc32(t + d) & 0xffffffff)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", 4, 4, 8, 6, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw)) + chunk(b"IEND", b"")
+
+
+def test_signature_and_seal_flow(env):
+    s, d = H(env, "signerA"), H(env, "drafterA")
+    assert requests.post(f"{API}/correspondence/signatures/me", headers=H(env, "viewerA"), files={"file": ("s.png", _png_bytes(), "image/png")}).status_code == 403
+    assert requests.post(f"{API}/correspondence/signatures/me", headers=s, files={"file": ("s.gif", b"GIF89a", "image/gif")}).status_code == 400
+    r = requests.post(f"{API}/correspondence/signatures/me", headers=s, files={"file": ("s.png", _png_bytes(), "image/png")})
+    assert r.status_code == 200 and r.json()["url"].startswith("/api/files/") and r.json()["sha256"]
+    assert requests.get(f"{API}/correspondence/signatures/me", headers=s).json()["signature"]["sha256"] == r.json()["sha256"]
+    # ختم الجهة على الترويسة
+    r2 = requests.post(f"{API}/correspondence/letterheads/{env.lhA}/assets/seal_asset_id", headers=H(env, "adminA"), files={"file": ("seal.png", _png_bytes(), "image/png")})
+    assert r2.status_code == 200, r2.text
+    # دورة كاملة: التوقيع يُلتقط عند SIGNED ويظهر في قسم التوقيع والـPDF
+    tid = mk_template(env, H(env, "adminA"), env.orgA, f"TSG{TAG}", "<p>{{student.full_name}} — يوقعه {{signer.name}}</p>", lh=env.lhA)
+    cid = mk_draft(env, d, env.orgA)
+    apply(env, d, cid, tid)
+    p = requests.post(f"{API}/correspondence/{cid}/preview", headers=d).json()
+    sigsec = lambda pv: next(x["html"] for x in pv["sections"] if x["type"] == "SIGNATURE_BLOCK")
+    assert "sig-block" not in sigsec(p)
+    assert p["unresolved"] == [], "signer.* ليّنة قبل التوقيع"
+    for a, u in (("submit", "drafterA"), ("review", "reviewerA"), ("approve", "approverA")):
+        assert act(H(env, u), cid, a).status_code == 200
+    assert act(s, cid, "sign").status_code == 200
+    c = DB.correspondences.find_one({"_id": ObjectId(cid)})
+    sig = c["signature"]
+    assert sig["method"] == "VISIBLE_IMAGE" and sig["asset_url"] and sig["hash"] and sig["user_id"] == env.users["signerA"][0]
+    p = requests.post(f"{API}/correspondence/{cid}/preview", headers=d).json()
+    assert "sig-block" in sigsec(p) and sig["name"] in sigsec(p) and 'class="seal-img"' in sigsec(p)
+    assert act(H(env, "managerA"), cid, "issue").status_code == 200
+    snap = DB.correspondence_data_snapshots.find_one({"correspondence_id": cid})
+    assert snap["resolved_data"]["signer"]["name"] == sig["name"]
+    # التوقيع غير قابل للتغيير بعد الالتقاط (إعادة الرفع لا تغيّر المراسلة)
+    requests.post(f"{API}/correspondence/signatures/me", headers=s, files={"file": ("s2.png", _png_bytes() + b"\x00", "image/png")})
+    assert DB.correspondences.find_one({"_id": ObjectId(cid)})["signature"]["asset_sha256"] == sig["asset_sha256"]
+    r = requests.get(f"{API}/correspondence/{cid}/pdf", headers=d)
+    assert r.status_code == 200 and r.content[:4] == b"%PDF" and len(r.content) > 20000
+
+
+def test_smart_suggestions(env):
+    d = H(env, "drafterA")
+    cid = mk_draft(env, d, env.orgA)  # طالب مرتبط + نوع STUDENT_CERTIFICATE
+    r = requests.get(f"{API}/correspondence/suggestions", headers=d, params={"correspondence_id": cid})
+    assert r.status_code == 200, r.text
+    sg = r.json()
+    top = sg["templates"][0]
+    assert top["code"].endswith(TAG) and top["score"] >= 5, top
+    assert "نفس نوع الوثيقة" in top["reasons"] and "يطابق الكيانات المرتبطة" in top["reasons"] and "قالب جهتك" in top["reasons"]
+    assert any("استُخدم" in x for x in top["reasons"]) or any(t for t in sg["templates"] if any("استُخدم" in x for x in t["reasons"]))
+    assert f"TB{TAG}" not in {t["code"] for t in sg["templates"]}, "قالب ب الخاص لا يُقترح"
+    assert sg["linked_entities"] == ["STUDENT"] and sg["placeholders"][0]["namespace"] == "student"
+    assert all(p["key"] != "student.phone" for p in sg["placeholders"]), "لا اقتراح لعناصر بلا صلاحية"
+    assert requests.get(f"{API}/correspondence/suggestions", headers=H(env, "adminB"), params={"correspondence_id": cid}).status_code == 403

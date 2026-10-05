@@ -1024,6 +1024,15 @@ async def transition_correspondence(db, ctx: CorrContext, corr_id: str, action: 
         raise
     except Exception as _e:
         log.error(f"snapshot failed for {cid}: {_e}")
+    if to == "SIGNED":
+        from .correspondence_signature import capture_signature
+        try:
+            await capture_signature(db, ctx, await db.correspondences.find_one({"_id": c["_id"]}), request)
+        except Exception as _e:
+            log.error(f"signature capture failed for {cid}: {_e}")
+    if to == "ISSUED":
+        from .correspondence_pdf import on_issued
+        await on_issued(db, ctx, await db.correspondences.find_one({"_id": c["_id"]}), request)
     return await _enrich(db, await db.correspondences.find_one({"_id": c["_id"]}))
 
 

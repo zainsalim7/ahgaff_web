@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
-import { corrAPI, errMsg, STATUS_AR, STATUS_COLOR, PRIORITY_AR, CLASS_AR, ACTION_AR, RECIPIENT_TYPE_AR, ENTITY_KIND } from '../src/services/corrAPI';
+import { corrAPI, errMsg, openPdf, STATUS_AR, STATUS_COLOR, PRIORITY_AR, CLASS_AR, ACTION_AR, RECIPIENT_TYPE_AR, ENTITY_KIND } from '../src/services/corrAPI';
 import { EntityPicker } from '../src/components/corr/EntityPicker';
 import { CorrPage, card, btn, inp, lbl, th, td, Badge, Modal, Field, Empty, useCorrMe } from '../src/components/corr/CorrUI';
 
@@ -72,6 +72,7 @@ export default function CorrDetails() {
           <Badge text={STATUS_AR[c.status] || c.status} color={color} testID="corr-status-badge" />
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }} data-testid="corr-actions">
             {c.can_edit && <button onClick={() => setEdit({ subject: c.subject, summary: c.summary, priority: c.priority, security_classification: c.security_classification, document_type_id: c.document_type_id })} style={btn('#1565c0')} data-testid="corr-edit-btn">تعديل</button>}
+            <button onClick={() => openPdf(id!, setErr)} style={btn('#b45309')} data-testid="corr-pdf-btn">{['ISSUED', 'ARCHIVED'].includes(c.status) ? 'PDF الرسمي' : 'PDF مسودة'}</button>
             <button onClick={() => router.push({ pathname: '/corr-compose', params: { id } } as any)} style={btn('#7c3aed')} data-testid="corr-compose-btn">{c.can_edit && ['DRAFT', 'CHANGES_REQUESTED'].includes(c.status) ? '✎ محرر الخطاب' : '📄 عرض الخطاب'}</button>
             {c.status === 'DRAFT' && c.can_edit && <button onClick={delDraft} style={btn('#64748b')} data-testid="corr-delete-btn">حذف المسودة</button>}
             {(c.allowed_actions || []).map((a: string) => (

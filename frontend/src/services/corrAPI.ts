@@ -56,6 +56,12 @@ export const corrAPI = {
   applyTemplate: (id: string, template_id: string) => api.post(`${base}/${id}/apply-template`, { template_id }),
   content: (id: string) => api.get(`${base}/${id}/content`),
   patchContent: (id: string, d: any) => api.patch(`${base}/${id}/content`, d),
+  mySignature: () => api.get(`${base}/signatures/me`),
+  uploadSignature: (file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`${base}/signatures/me`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); },
+  deleteSignature: () => api.delete(`${base}/signatures/me`),
+  suggestions: (correspondence_id: string) => api.get(`${base}/suggestions`, { params: { correspondence_id } }),
+  pdf: (id: string) => api.get(`${base}/${id}/pdf`, { responseType: 'blob' }),
+  pdfInfo: (id: string) => api.get(`${base}/${id}/pdf/info`),
   preview: (id: string, mode: 'preview' | 'edit' = 'preview') => api.post(`${base}/${id}/preview`, null, { params: { mode } }),
 };
 
@@ -72,6 +78,10 @@ export const INPUT_TYPE_AR: Record<string, string> = { TEXT: 'نص قصير', TE
 export const TPL_STATUS_AR: Record<string, { label: string; color: string }> = { DRAFT: { label: 'مسودة', color: '#64748b' }, PUBLISHED: { label: 'منشور', color: '#16a34a' }, INACTIVE: { label: 'موقوف', color: '#991b1b' } };
 export const ENTITY_KIND: Record<string, { kind: string; label: string; perm: string }> = {
   STUDENT: { kind: 'students', label: 'طالب', perm: 'entity.student.read' }, EMPLOYEE: { kind: 'employees', label: 'موظف', perm: 'entity.employee.read' }, FACULTY: { kind: 'faculty', label: 'عضو هيئة تدريس', perm: 'entity.faculty.read' },
+};
+export const openPdf = async (id: string, onError: (m: string) => void) => {
+  try { const r = await corrAPI.pdf(id); const url = URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' })); window.open(url, '_blank'); setTimeout(() => URL.revokeObjectURL(url), 60000); }
+  catch (e: any) { let m = 'تعذر توليد PDF'; try { m = JSON.parse(await e?.response?.data?.text())?.detail || m; } catch {} onError(typeof m === 'string' ? m : 'تعذر توليد PDF'); }
 };
 export const errList = (e: any): string[] => { const d = e?.response?.data?.detail; return d && typeof d === 'object' && Array.isArray(d.errors) ? d.errors : []; };
 export const errMsgFull = (e: any, fallback = 'حدث خطأ') => { const d = e?.response?.data?.detail; if (typeof d === 'string') return d; if (d && typeof d === 'object' && d.message) return d.message; return fallback; };

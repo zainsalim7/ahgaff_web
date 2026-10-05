@@ -10,7 +10,7 @@ const EMPTY = {
   branding_config: { primary_color: '#0f2440', logo_asset_url: '' },
   page_config: { size: 'A4', orientation: 'portrait', margins_mm: { top: 15, right: 20, bottom: 15, left: 20 }, direction: 'rtl', font_size_pt: 12, line_height: 1.7 },
 };
-const SLOTS: [string, string][] = [['logo_asset_id', 'الشعار الرئيسي'], ['secondary_logo_asset_id', 'شعار ثانوي'], ['header_background_asset_id', 'خلفية الرأس'], ['accreditation_asset_id', 'شعار اعتماد']];
+const SLOTS: [string, string][] = [['logo_asset_id', 'الشعار الرئيسي'], ['secondary_logo_asset_id', 'شعار ثانوي'], ['header_background_asset_id', 'خلفية الرأس'], ['accreditation_asset_id', 'شعار اعتماد'], ['seal_asset_id', 'ختم الجهة (يُطبع مع التوقيع)']];
 
 export default function CorrLetterheads() {
   const { me, hasAnywhere } = useCorrMe();

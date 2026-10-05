@@ -214,7 +214,7 @@ async def set_default_letterhead(lh_id: str, request: Request, ctx: CorrContext 
 async def upload_letterhead_asset(lh_id: str, slot: str, request: Request, file: UploadFile = File(...), ctx: CorrContext = Depends(ctx_dep)):
     """رفع شعار/خلفية عبر تخزين Emergent الحالي (files) — PNG/JPG/SVG/WebP ≤ 2MB"""
     db = get_db()
-    if slot not in ("logo_asset_id", "secondary_logo_asset_id", "header_background_asset_id", "footer_background_asset_id", "accreditation_asset_id"):
+    if slot not in ("logo_asset_id", "secondary_logo_asset_id", "header_background_asset_id", "footer_background_asset_id", "accreditation_asset_id", "seal_asset_id"):
         raise HTTPException(status_code=400, detail="موضع الأصل غير صالح")
     cur = await db.correspondence_letterheads.find_one({"_id": _oid(lh_id), "deleted_at": None})
     if not cur:
@@ -693,6 +693,10 @@ async def preview(corr_id: str, request: Request, mode: str = "preview", ctx: Co
     """المعاينة الخادمية: بعد التجميد من اللقطة؛ قبله من البيانات الحيّة المصرّح بها. لا تستهلك رقماً ولا تعدّل القالب."""
     db = get_db()
     c = await _corr_editable(db, ctx, corr_id, request)
+    return await build_preview(db, ctx, c, request, mode)
+
+
+async def build_preview(db, ctx: CorrContext, c: dict, request: Request, mode: str = "preview") -> dict:
     content, version, letterhead, entities, recipients = await _load_bundle(db, ctx, c)
     if not content or not version:
         raise HTTPException(status_code=400, detail="لا يوجد قالب مرتبط بهذه المراسلة")
@@ -712,13 +716,19 @@ async def preview(corr_id: str, request: Request, mode: str = "preview", ctx: Co
         if any(e.get("entity_type") in ("STUDENT", "EMPLOYEE", "FACULTY", "TEACHER") for e in entities):
             await audit(db, ctx, "PLACEHOLDER_RESOLVED", "correspondence", str(c["_id"]), request, meta={"entities": [e.get("entity_type") for e in entities]}, organization_id=c["organization_id"])
     sections, unresolved, missing_required = _render_sections(version, content, data, allowed, mode if mode in ("edit", "preview") else "preview")
+    from .correspondence_signature import signature_html
+    sig_html = signature_html(c, letterhead)
+    if sig_html:
+        for s_ in sections:
+            if s_.get("type") == "SIGNATURE_BLOCK":
+                s_["html"] = (s_.get("html") or "") + sig_html
     required_entities = version.get("required_entities") or []
     have = {("FACULTY" if e.get("entity_type") == "TEACHER" else e.get("entity_type")) for e in entities}
     missing_entities = [e for e in required_entities if e not in have]
     missing_inputs = [f["key"] for f in version.get("input_fields", []) if f.get("required") and not str((content.get("input_values") or {}).get(f["key"], "")).strip()]
     return {"source": source, "sections": sections, "letterhead": _ser(letterhead) if letterhead else None, "unresolved": unresolved, "missing_entities": missing_entities,
             "missing_inputs": missing_inputs, "missing_required_sections": missing_required, "data_preview": {k: v for k, v in data.items() if k != "input"} if mode == "preview" else {},
-            "content_version": content.get("content_version"), "frozen": bool(snap)}
+            "content_version": content.get("content_version"), "frozen": bool(snap), "template_version_id": content.get("template_version_id")}
 
 
 # ───────────────────────── Hooks (تُستدعى من آلة الحالات في المرحلة 1) ─────────────────────────

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { corrAPI, errMsg } from '../src/services/corrAPI';
 import { CorrPage, card, btn, useCorrMe } from '../src/components/corr/CorrUI';
 import CorrCreateModal from '../src/components/corr/CorrCreateModal';
+import { SignatureCard } from '../src/components/corr/SignatureCard';
 
 const KPIS: [string, string, string, string][] = [
   ['my_drafts', 'مسوداتي', '#64748b', '/corr-list?mine=1'],
@@ -38,6 +39,7 @@ export default function CorrDashboard() {
         </div>
       )}
       {data && <div style={{ ...card, marginTop: 12, color: '#475569', fontSize: 12.5 }}>إجمالي المراسلات المرئية لك: <b>{data.total_visible}</b></div>}
+      <SignatureCard />
       {create && <CorrCreateModal onClose={() => setCreate(false)} onCreated={(id) => { setCreate(false); router.push(`/corr-details?id=${id}` as any); }} />}
     </CorrPage>
   );

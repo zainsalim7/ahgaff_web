@@ -63,16 +63,19 @@ REGISTRY: Dict[str, tuple] = {
     "correspondence.date_hijri": ("تاريخ الخطاب (هجري)", "Date (Hijri)", "DATE", "CORRESPONDENCE", None),
     "correspondence.organization_name": ("الجهة المُصدِرة", "Issuing organization", "STRING", "CORRESPONDENCE", None),
     "correspondence.priority": ("الأولوية", "Priority", "STRING", "CORRESPONDENCE", None),
+    "signer.name": ("اسم الموقّع", "Signer name", "STRING", "SIGNER", None),
+    "signer.job_title": ("صفة الموقّع", "Signer title", "STRING", "SIGNER", None),
+    "signer.signed_at": ("تاريخ التوقيع", "Signed at", "DATE", "SIGNER", None),
     "system.university_name_ar": ("اسم الجامعة (عربي)", "University (AR)", "STRING", "SYSTEM", None),
     "system.university_name_en": ("اسم الجامعة (إنجليزي)", "University (EN)", "STRING", "SYSTEM", None),
     "system.today": ("تاريخ اليوم", "Today", "DATE", "SYSTEM", None),
     "system.today_hijri": ("تاريخ اليوم (هجري)", "Today (Hijri)", "DATE", "SYSTEM", None),
 }
 NAMESPACE_AR = {"student": "بيانات الطالب", "employee": "بيانات الموظف", "faculty": "بيانات عضو هيئة التدريس", "organization": "بيانات الإدارة",
-                "recipient": "بيانات المستلم", "correspondence": "بيانات الخطاب", "input": "مدخلات يدوية", "system": "بيانات النظام"}
+                "recipient": "بيانات المستلم", "correspondence": "بيانات الخطاب", "input": "مدخلات يدوية", "system": "بيانات النظام", "signer": "بيانات الموقّع"}
 ENTITY_FOR_NS = {"student": "STUDENT", "employee": "EMPLOYEE", "faculty": "FACULTY", "organization": "ORGANIZATION"}
 UNISSUED_NUMBER = "[سيتم إنشاء الرقم عند الإصدار]"
-SOFT_NS = {"recipient"}
+SOFT_NS = {"recipient", "signer"}
 
 
 def registry_list(ctx) -> List[dict]:
@@ -246,6 +249,8 @@ async def build_data(db, ctx, corr: dict, entities: List[dict], recipients: List
                               "date_hijri": hijri_str(doc_date), "organization_name": data["organization"].get("name_ar", ""), "priority": corr.get("priority", "")}
     uni = await db.university.find_one({}) or {}
     now = datetime.now(timezone.utc)
+    sg = corr.get("signature") or {}
+    data["signer"] = {"name": sg.get("name", ""), "job_title": sg.get("job_title", ""), "signed_at": greg_str(sg.get("signed_at")) if sg.get("signed_at") else ""}
     data["system"] = {"university_name_ar": uni.get("name_ar") or uni.get("name") or "", "university_name_en": uni.get("name_en", ""), "today": greg_str(now), "today_hijri": hijri_str(now)}
     return data
 
