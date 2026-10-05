@@ -12121,6 +12121,7 @@ async def get_teacher_summary_report(
     courses_summary = []
     total_students = 0
     total_lectures_count = 0
+    total_held_count = 0
     total_present = 0
     total_absent = 0
     total_late = 0
@@ -12162,6 +12163,8 @@ async def get_teacher_summary_report(
         total_records += course_total
         
         attendance_rate = round((present + late * 0.5) / course_total * 100, 1) if course_total > 0 else 0
+        completion_rate = round(held_lectures / lectures_count * 100, 1) if lectures_count > 0 else 0
+        total_held_count += held_lectures
         
         # جلب اسم القسم
         dept_name = ""
@@ -12183,13 +12186,15 @@ async def get_teacher_summary_report(
             "present_count": present,
             "absent_count": absent,
             "late_count": late,
-            "attendance_rate": attendance_rate
+            "attendance_rate": attendance_rate,
+            "completion_rate": completion_rate
         })
     
     # ترتيب حسب نسبة الحضور
     courses_summary.sort(key=lambda x: x["attendance_rate"], reverse=True)
     
     overall_rate = round((total_present + total_late * 0.5) / total_records * 100, 1) if total_records > 0 else 0
+    overall_completion = round(total_held_count / total_lectures_count * 100, 1) if total_lectures_count > 0 else 0
     
     return {
         "teacher": {
@@ -12204,6 +12209,8 @@ async def get_teacher_summary_report(
             "total_courses": len(courses_summary),
             "total_students": total_students,
             "total_lectures": total_lectures_count,
+            "total_held_lectures": total_held_count,
+            "overall_completion_rate": overall_completion,
             "total_present": total_present,
             "total_absent": total_absent,
             "total_late": total_late,
@@ -12231,6 +12238,8 @@ async def export_teacher_summary_excel(
             "عدد المقررات": report["summary"]["total_courses"],
             "إجمالي الطلاب": report["summary"]["total_students"],
             "إجمالي المحاضرات": report["summary"]["total_lectures"],
+            "المحاضرات المنعقدة": report["summary"]["total_held_lectures"],
+            "نسبة الإنجاز %": report["summary"]["overall_completion_rate"],
             "نسبة الحضور العامة %": report["summary"]["overall_attendance_rate"]
         }]
         pd.DataFrame(summary_data).to_excel(writer, sheet_name="الملخص", index=False)
@@ -12248,6 +12257,7 @@ async def export_teacher_summary_excel(
                 "الطلاب": c["students_count"],
                 "المحاضرات": c["total_lectures"],
                 "المنعقدة": c["held_lectures"],
+                "نسبة الإنجاز %": c["completion_rate"],
                 "حاضر": c["present_count"],
                 "غائب": c["absent_count"],
                 "متأخر": c["late_count"],
@@ -12554,16 +12564,16 @@ async def export_teacher_summary_pdf(teacher_id: Optional[str] = None, current_u
     from routes.report_pdf import build_report_pdf
     report = await get_teacher_summary_report(teacher_id, current_user)
     t, s = report["teacher"], report["summary"]
-    rows = [["#", "المقرر", "الرمز", "القسم", "المستوى / الشعبة", "الطلاب", "المحاضرات (منعقدة/الكل)", "حاضر", "متأخر", "غائب", "نسبة الحضور"]]
+    rows = [["#", "المقرر", "الرمز", "القسم", "المستوى / الشعبة", "الطلاب", "المحاضرات (منعقدة/الكل)", "نسبة الإنجاز", "حاضر", "متأخر", "غائب", "نسبة الحضور"]]
     for i, c in enumerate(report["courses"], 1):
         lvl = " / ".join([p for p in [f"م{c['level']}" if c.get("level") else "", c.get("section") or ""] if p])
-        rows.append([i, c["course_name"], c["course_code"], c.get("department_name", ""), lvl, c["students_count"], f"{c['held_lectures']} / {c['total_lectures']}", c["present_count"], c["late_count"], c["absent_count"], f"{c['attendance_rate']}%"])
-    sub = " | ".join([p for p in [f"الرقم الوظيفي: {t['teacher_id']}" if t.get("teacher_id") else "", t.get("phone") or ""] if p])
+        rows.append([i, c["course_name"], c["course_code"], c.get("department_name", ""), lvl, c["students_count"], f"{c['held_lectures']} / {c['total_lectures']}", f"{c['completion_rate']}%", c["present_count"], c["late_count"], c["absent_count"], f"{c['attendance_rate']}%"])
+    sub = " | ".join([p for p in [f"الرقم الوظيفي: {t['teacher_id']}" if t.get("teacher_id") else "", (t.get("phone") or "") if (t.get("phone") or "") != (t.get("teacher_id") or "") else ""] if p])
     buf = build_report_pdf(
         f"ملخص المعلم: {t['full_name']}", sub,
-        kpis=[("المقررات", s["total_courses"]), ("الطلاب", s["total_students"]), ("المحاضرات", s["total_lectures"]), ("حاضر", s["total_present"]), ("متأخر", s["total_late"]), ("غائب", s["total_absent"]), ("نسبة الحضور", f"{s['overall_attendance_rate']}%")],
-        sections=[{"title": "مقررات المعلم (مرتبة تنازلياً حسب نسبة الحضور)", "rows": rows, "widths_mm": [8, 56, 22, 40, 26, 16, 34, 16, 16, 16, 24], "fs": 8.5, "show_empty": True}],
-        footer="نسبة الحضور = (الحاضر + المتأخر × 0.5) ÷ إجمالي سجلات الحضور في المقرر.", generated_by=current_user.get("full_name", ""))
+        kpis=[("المقررات", s["total_courses"]), ("الطلاب", s["total_students"]), ("المحاضرات (منعقدة/الكل)", f"{s['total_held_lectures']} / {s['total_lectures']}"), ("نسبة الإنجاز", f"{s['overall_completion_rate']}%"), ("حاضر", s["total_present"]), ("متأخر", s["total_late"]), ("غائب", s["total_absent"]), ("نسبة الحضور", f"{s['overall_attendance_rate']}%")],
+        sections=[{"title": "مقررات المعلم (مرتبة تنازلياً حسب نسبة الحضور)", "rows": rows, "widths_mm": [8, 50, 22, 36, 24, 14, 32, 20, 14, 14, 14, 22], "fs": 8.5, "show_empty": True}],
+        footer="نسبة الحضور = (الحاضر + المتأخر × 0.5) ÷ إجمالي سجلات الحضور في المقرر.  |  نسبة الإنجاز = المحاضرات المنعقدة ÷ إجمالي المحاضرات المجدولة للفصل.", generated_by=current_user.get("full_name", ""))
     return _pdf_stream(buf, "ملخص المعلم", t["full_name"])
 
 

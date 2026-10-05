@@ -10,13 +10,13 @@ import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, rep
 
 interface CourseSummary {
   course_id: string; course_name: string; course_code: string; department_name: string; level: string; section: string;
-  students_count: number; total_lectures: number; held_lectures: number; present_count: number; absent_count: number; late_count: number; attendance_rate: number;
+  students_count: number; total_lectures: number; held_lectures: number; present_count: number; absent_count: number; late_count: number; attendance_rate: number; completion_rate: number;
 }
 
 interface TeacherSummaryReport {
   teacher: { id: string; full_name: string; teacher_id: string; phone: string; email: string };
   courses: CourseSummary[];
-  summary: { total_courses: number; total_students: number; total_lectures: number; total_present: number; total_absent: number; total_late: number; overall_attendance_rate: number };
+  summary: { total_courses: number; total_students: number; total_lectures: number; total_held_lectures: number; overall_completion_rate: number; total_present: number; total_absent: number; total_late: number; overall_attendance_rate: number };
 }
 
 export default function ReportTeacherSummary() {
@@ -178,7 +178,8 @@ export default function ReportTeacherSummary() {
           <ReportKpis testID="summary-stats" items={[
             { label: 'المقررات', value: report.summary.total_courses, color: '#1565c0', icon: 'book' },
             { label: 'الطلاب', value: report.summary.total_students, color: '#0f2440', icon: 'people' },
-            { label: 'المحاضرات', value: report.summary.total_lectures, color: '#7c3aed', icon: 'calendar' },
+            { label: 'المحاضرات', value: `${report.summary.total_held_lectures}/${report.summary.total_lectures}`, color: '#7c3aed', icon: 'calendar', sub: 'منعقدة / الكل' },
+            { label: 'نسبة الإنجاز', value: `${report.summary.overall_completion_rate}%`, color: '#0e7490', icon: 'speedometer', sub: 'المنعقدة ÷ المجدولة للفصل' },
             { label: 'نسبة الحضور', value: `${report.summary.overall_attendance_rate}%`, color: rateColor(report.summary.overall_attendance_rate), icon: 'stats-chart', sub: `${report.summary.total_present} حاضر · ${report.summary.total_late} متأخر · ${report.summary.total_absent} غائب` },
           ]} />
 
@@ -221,6 +222,7 @@ export default function ReportTeacherSummary() {
               <View style={styles.courseStats}>
                 <View style={styles.courseStat}><Ionicons name="people-outline" size={14} color="#666" /><Text style={styles.courseStatText}>{course.students_count} طالب</Text></View>
                 <View style={styles.courseStat}><Ionicons name="calendar-outline" size={14} color="#666" /><Text style={styles.courseStatText}>{course.held_lectures}/{course.total_lectures} محاضرة</Text></View>
+                <View style={styles.courseStat} testID={`course-completion-${idx}`}><Ionicons name="speedometer-outline" size={14} color="#0e7490" /><Text style={[styles.courseStatText, { color: '#0e7490', fontWeight: '700' }]}>إنجاز {course.completion_rate}%</Text></View>
                 <View style={styles.courseStat}><Ionicons name="checkmark-circle-outline" size={14} color="#16a34a" /><Text style={styles.courseStatText}>{course.present_count}</Text></View>
                 <View style={styles.courseStat}><Ionicons name="time-outline" size={14} color="#f97316" /><Text style={styles.courseStatText}>{course.late_count}</Text></View>
                 <View style={styles.courseStat}><Ionicons name="close-circle-outline" size={14} color="#dc2626" /><Text style={styles.courseStatText}>{course.absent_count}</Text></View>
