@@ -18303,50 +18303,50 @@ async def startup_event():
     except Exception as e:
         logging.warning(f"Object storage init failed (non-critical): {e}")
     # إنشاء فهارس MongoDB لتسريع الاستعلامات
-    await create_indexes()
-    # 🔧 Migration لمرة واحدة: تحديث تفضيلات المعلمين الافتراضية (أقصى يومي 3 + السماح بالمتتالية)
-    await migrate_teacher_prefs_defaults_v2()
-    await migrate_group_slots_default_theory_v1()
-    await correspondence_startup(db)
-    await correspondence_content_startup(db)
-    await correspondence_pdf_startup(db)
-    await correspondence_signature_startup(db)
-    # 🔗 مزامنة روابط المشاركة للمقررات من واقع خانات الجدول (المحاضرات المشتركة تظهر في مقررات كل قسم مشارك)
-    try:
-        # 🔄 ترحيل: المعيدون القدامى يصبحون غير نشطين (خارج قوائم التحضير) — idempotent
-        await db.students.update_many({"status": "repeat", "is_active": True}, {"$set": {"is_active": False}})
-        from routes.weekly_schedule import _sync_course_shared_links
-        _cids_to_sync = set()
-        async for _ws in db.weekly_schedule.find({}, {"course_id": 1, "department_id": 1, "level": 1, "merge_group_id": 1}):
-            if _ws.get("course_id"):
-                _cids_to_sync.add(_ws["course_id"])
-        for _cid0 in _cids_to_sync:
-            await _sync_course_shared_links(db, _cid0)
-        logging.info(f"Shared-links sync done for {len(_cids_to_sync)} courses")
-    except Exception as e:
-        logging.warning(f"Shared-links startup sync failed (non-critical): {e}")
-    # تحديث صلاحيات الأدوار الافتراضية تلقائياً
-    await sync_default_roles()
-    # 🔧 Migration لمرة واحدة: استعادة صلاحيات المحاضرات للأدوار التي فقدتها بالخطأ
-    await restore_lecture_permissions_v1()
-    # 🔧 تنظيف الصلاحيات اليتيمة (التي أُلغيت من النظام) من الأدوار والمستخدمين
-    await cleanup_orphan_permissions()
-    # 🔧 دمج الأدوار المكررة (مثل عدة "رئيس قسم") قبل مزامنة role
-    await cleanup_duplicate_roles_internal()
-    # 🔧 Migration دائمة: إصلاح المستخدمين ذوي الأدوار الشاذة تلقائياً
-    await migrate_broken_user_roles()
-    # 🔧 Migration دائمة: تعبئة semester_id لسجلات teaching_loads المعطّلة
-    # يحلّ مشكلة عدم ظهور الإسنادات في صفحة العبء التدريسي
-    await backfill_teaching_loads_semester_internal()
-    # 🧹 تنظيف تلقائي: حذف teaching_loads اليتيمة (مقرر محذوف أو is_active=False)
-    # يحلّ مشكلة الصفوف الفارغة بلا اسم في PDF/Excel
-    await cleanup_orphan_teaching_loads_internal()
-    # 🧹 إزالة تلقائية للمكررات: نفس (teacher, course, semester) لها سجلات متعددة
-    # نتيجة لإصلاحات سابقة دمجت loads بـ semester_id=null مع loads بـ semester_id=active
-    await dedup_teaching_loads_internal()
-    # 🎓 تعبئة snapshot القسم/الكلية للخريجين الحاليين (يعمل مرة واحدة عملياً)
-    await backfill_alumni_department_snapshot_internal()
+    # ⚡ Cloud Run: ربط المنفذ فوراً — الفهارس والترحيلات تعمل في الخلفية ولا تؤخّر الإقلاع ولا تُسقط الحاوية عند فشل خطوة
+    asyncio.create_task(_startup_db_tasks())
 
+
+async def _startup_db_tasks():
+    steps = [
+        ("create_indexes", create_indexes),
+        ("migrate_teacher_prefs_defaults_v2", migrate_teacher_prefs_defaults_v2),
+        ("migrate_group_slots_default_theory_v1", migrate_group_slots_default_theory_v1),
+        ("correspondence_startup", lambda: correspondence_startup(db)),
+        ("correspondence_content_startup", lambda: correspondence_content_startup(db)),
+        ("correspondence_pdf_startup", lambda: correspondence_pdf_startup(db)),
+        ("correspondence_signature_startup", lambda: correspondence_signature_startup(db)),
+        ("shared_links_sync", _startup_shared_links_sync),
+        ("sync_default_roles", sync_default_roles),
+        ("restore_lecture_permissions_v1", restore_lecture_permissions_v1),
+        ("cleanup_orphan_permissions", cleanup_orphan_permissions),
+        ("cleanup_duplicate_roles_internal", cleanup_duplicate_roles_internal),
+        ("migrate_broken_user_roles", migrate_broken_user_roles),
+        ("backfill_teaching_loads_semester_internal", backfill_teaching_loads_semester_internal),
+        ("cleanup_orphan_teaching_loads_internal", cleanup_orphan_teaching_loads_internal),
+        ("dedup_teaching_loads_internal", dedup_teaching_loads_internal),
+        ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
+    ]
+    t0 = asyncio.get_event_loop().time()
+    for name, fn in steps:
+        try:
+            await fn()
+        except Exception as e:
+            logging.error(f"startup step {name} failed (non-fatal): {e}")
+    logging.info(f"Startup DB tasks finished in {asyncio.get_event_loop().time() - t0:.1f}s")
+
+
+async def _startup_shared_links_sync():
+    # 🔄 ترحيل: المعيدون القدامى يصبحون غير نشطين (خارج قوائم التحضير) — idempotent
+    await db.students.update_many({"status": "repeat", "is_active": True}, {"$set": {"is_active": False}})
+    from routes.weekly_schedule import _sync_course_shared_links
+    _cids_to_sync = set()
+    async for _ws in db.weekly_schedule.find({}, {"course_id": 1}):
+        if _ws.get("course_id"):
+            _cids_to_sync.add(_ws["course_id"])
+    for _cid0 in _cids_to_sync:
+        await _sync_course_shared_links(db, _cid0)
+    logging.info(f"Shared-links sync done for {len(_cids_to_sync)} courses")
 
 async def backfill_alumni_department_snapshot_internal():
     """يحفظ snapshot اسم القسم/الكلية داخل graduation_data.department_snapshot
