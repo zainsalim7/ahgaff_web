@@ -30,7 +30,7 @@ router = APIRouter(prefix="/correspondence", tags=["المراسلات — PDF"]
 public_router = APIRouter(prefix="/correspondence/public", tags=["المراسلات — تحقق عام"])
 
 FONTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fonts")
-CHROMIUM = next((p for p in ("/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome") if os.path.exists(p)), None)
+CHROMIUM = next((p for p in (os.environ.get("CHROMIUM_PATH", ""), "/usr/bin/chromium", "/usr/bin/chromium-browser", "/usr/bin/google-chrome") if p and os.path.exists(p)), None)
 VALID_STATUSES = ("ISSUED", "ARCHIVED")
 _pdf_locks: dict = {}
 
@@ -146,7 +146,7 @@ body{{font-family:"Amiri","Cairo",serif;font-size:{fs}pt;line-height:{lhgt};colo
 
 async def html_to_pdf(html: str) -> bytes:
     if not CHROMIUM:
-        raise HTTPException(status_code=503, detail="محرك PDF غير متاح على الخادم")
+        raise HTTPException(status_code=503, detail="محرك PDF (Chromium) غير مثبت على هذا الخادم — أعد نشر الخادم بصورة تتضمن Chromium (Dockerfile المحدّث)")
     with tempfile.TemporaryDirectory() as d:
         src, out = os.path.join(d, "letter.html"), os.path.join(d, "letter.pdf")
         with open(src, "w", encoding="utf-8") as fh:
