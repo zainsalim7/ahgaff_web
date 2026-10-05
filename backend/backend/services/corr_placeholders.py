@@ -63,6 +63,15 @@ REGISTRY: Dict[str, tuple] = {
     "correspondence.date_hijri": ("تاريخ الخطاب (هجري)", "Date (Hijri)", "DATE", "CORRESPONDENCE", None),
     "correspondence.organization_name": ("الجهة المُصدِرة", "Issuing organization", "STRING", "CORRESPONDENCE", None),
     "correspondence.priority": ("الأولوية", "Priority", "STRING", "CORRESPONDENCE", None),
+    "students.table": ("جدول الطلاب المرتبطين", "Students table", "HTML", "STUDENT", P_STUDENT),
+    "students.list": ("قائمة أسماء الطلاب", "Students list", "STRING", "STUDENT", P_STUDENT),
+    "students.count": ("عدد الطلاب", "Students count", "NUMBER", "STUDENT", P_STUDENT),
+    "employees.table": ("جدول الموظفين المرتبطين", "Employees table", "HTML", "EMPLOYEE", P_EMPLOYEE),
+    "employees.list": ("قائمة أسماء الموظفين", "Employees list", "STRING", "EMPLOYEE", P_EMPLOYEE),
+    "employees.count": ("عدد الموظفين", "Employees count", "NUMBER", "EMPLOYEE", P_EMPLOYEE),
+    "faculty_members.table": ("جدول أعضاء هيئة التدريس", "Faculty table", "HTML", "FACULTY", P_FACULTY),
+    "faculty_members.list": ("قائمة أسماء أعضاء هيئة التدريس", "Faculty list", "STRING", "FACULTY", P_FACULTY),
+    "faculty_members.count": ("عدد أعضاء هيئة التدريس", "Faculty count", "NUMBER", "FACULTY", P_FACULTY),
     "signer.name": ("اسم الموقّع", "Signer name", "STRING", "SIGNER", None),
     "signer.job_title": ("صفة الموقّع", "Signer title", "STRING", "SIGNER", None),
     "signer.signed_at": ("تاريخ التوقيع", "Signed at", "DATE", "SIGNER", None),
@@ -72,8 +81,21 @@ REGISTRY: Dict[str, tuple] = {
     "system.today_hijri": ("تاريخ اليوم (هجري)", "Today (Hijri)", "DATE", "SYSTEM", None),
 }
 NAMESPACE_AR = {"student": "بيانات الطالب", "employee": "بيانات الموظف", "faculty": "بيانات عضو هيئة التدريس", "organization": "بيانات الإدارة",
-                "recipient": "بيانات المستلم", "correspondence": "بيانات الخطاب", "input": "مدخلات يدوية", "system": "بيانات النظام", "signer": "بيانات الموقّع"}
-ENTITY_FOR_NS = {"student": "STUDENT", "employee": "EMPLOYEE", "faculty": "FACULTY", "organization": "ORGANIZATION"}
+                "recipient": "بيانات المستلم", "correspondence": "بيانات الخطاب", "input": "مدخلات يدوية", "system": "بيانات النظام", "signer": "بيانات الموقّع",
+                "students": "قوائم الطلاب (متعدد)", "employees": "قوائم الموظفين (متعدد)", "faculty_members": "قوائم هيئة التدريس (متعدد)"}
+ENTITY_FOR_NS = {"student": "STUDENT", "employee": "EMPLOYEE", "faculty": "FACULTY", "organization": "ORGANIZATION", "students": "STUDENT", "employees": "EMPLOYEE", "faculty_members": "FACULTY"}
+LIST_COLUMNS = {"students": [("full_name", "الاسم"), ("student_id", "الرقم الجامعي"), ("college_name", "الكلية"), ("department_name", "القسم"), ("level_name", "المستوى")],
+                "employees": [("full_name", "الاسم"), ("employee_number", "الرقم الوظيفي"), ("job_title", "المسمى الوظيفي"), ("organization_name", "الوحدة")],
+                "faculty_members": [("full_name", "الاسم"), ("academic_title", "اللقب"), ("specialization", "التخصص"), ("college_name", "الكلية")]}
+
+
+def _list_ns(ns: str, rows: List[dict]) -> dict:
+    import html as _h
+    cols = LIST_COLUMNS[ns]
+    head = "".join(f"<th>{c[1]}</th>" for c in cols)
+    body = "".join("<tr><td>" + str(i + 1) + "</td>" + "".join(f"<td>{_h.escape(str(r.get(k) or ''))}</td>" for k, _ in cols) + "</tr>" for i, r in enumerate(rows))
+    table = f'<table class="ph-table" style="width:100%;border-collapse:collapse"><thead><tr><th>م</th>{head}</tr></thead><tbody>{body}</tbody></table>' if rows else ""
+    return {"table": table, "list": "، ".join(_h.escape(str(r.get("full_name") or "")) for r in rows), "count": str(len(rows)) if rows else ""}
 UNISSUED_NUMBER = "[سيتم إنشاء الرقم عند الإصدار]"
 SOFT_NS = {"recipient", "signer"}
 
@@ -237,9 +259,15 @@ async def build_data(db, ctx, corr: dict, entities: List[dict], recipients: List
             data["organization"] = await resolve_organization(db, eid) or {}
     if "organization" not in data:
         data["organization"] = await resolve_organization(db, corr["organization_id"]) or {}
+    # قوائم متعددة: كل الكيانات المرتبطة من كل نوع (بنفس الصلاحيات)
+    for ns, et_set, perm, resolver in (("students", {"STUDENT"}, P_STUDENT, resolve_student), ("employees", {"EMPLOYEE"}, P_EMPLOYEE, resolve_employee), ("faculty_members", {"FACULTY", "TEACHER"}, P_FACULTY, resolve_faculty)):
+        ids = [e.get("entity_id") for e in entities if e.get("entity_type") in et_set]
+        if ids and perm in allowed_perms:
+            rows = [r for r in [await resolver(db, i, allowed_perms) for i in ids] if r]
+            data[ns] = _list_ns(ns, rows)
     prim = next((r for r in recipients if r.get("is_primary")), recipients[0] if recipients else {})
-    rname = prim.get("external_name") or prim.get("user_name") or ""
-    rorg = prim.get("organization_name") or prim.get("external_organization") or ""
+    rname = prim.get("external_name") or prim.get("user_name") or prim.get("person_name") or ""
+    rorg = prim.get("organization_name") or prim.get("external_organization") or prim.get("person_organization") or ""
     if not rname:
         rname, rorg = rorg, ""
     data["recipient"] = {"name": rname, "organization": rorg, "title": prim.get("recipient_title") or ""}

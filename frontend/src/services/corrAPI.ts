@@ -104,5 +104,5 @@ export const ACTION_AR: Record<string, { label: string; color: string; needsReas
   sign: { label: 'توقيع', color: '#7c3aed' }, issue: { label: 'إصدار (توليد الرقم)', color: '#0f766e' },
   archive: { label: 'أرشفة', color: '#475569' }, cancel: { label: 'إلغاء', color: '#991b1b', needsReason: true },
 };
-export const RECIPIENT_TYPE_AR: Record<string, string> = { INTERNAL_ORGANIZATION: 'جهة داخلية', INTERNAL_USER: 'مستخدم داخلي', EXTERNAL_ORGANIZATION: 'جهة خارجية', EXTERNAL_PERSON: 'شخص خارجي' };
+export const RECIPIENT_TYPE_AR: Record<string, string> = { INTERNAL_ORGANIZATION: 'جهة داخلية', INTERNAL_PERSON: 'شخص داخلي (موظف/مدرس)', INTERNAL_USER: 'مستخدم داخلي', EXTERNAL_ORGANIZATION: 'جهة خارجية', EXTERNAL_PERSON: 'شخص خارجي' };
 export const errMsg = (e: any, fallback = 'حدث خطأ') => (typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : fallback);

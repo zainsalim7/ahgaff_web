@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { corrAPI, errMsg, PRIORITY_AR, CLASS_AR, RECIPIENT_TYPE_AR } from '../../services/corrAPI';
 import { Modal, Field, inp, btn, useCorrMe } from './CorrUI';
+import { PersonRecipientFields } from './PersonRecipientFields';
 
 type Props = { onClose: () => void; onCreated: (id: string) => void };
 
@@ -9,7 +10,7 @@ export default function CorrCreateModal({ onClose, onCreated }: Props) {
   const [orgs, setOrgs] = useState<any[]>([]);
   const [types, setTypes] = useState<any[]>([]);
   const [f, setF] = useState({ organization_id: '', document_type_id: '', subject: '', summary: '', priority: 'NORMAL', security_classification: 'INTERNAL' });
-  const [rec, setRec] = useState({ recipient_type: 'INTERNAL_ORGANIZATION', organization_id: '', external_organization: '', external_name: '', recipient_title: '', recipient_role: 'TO' });
+  const [rec, setRec] = useState<any>({ recipient_type: 'INTERNAL_ORGANIZATION', organization_id: '', external_organization: '', external_name: '', recipient_title: '', recipient_role: 'TO', person_type: 'EMPLOYEE', person_id: '', person_label: '' });
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
   useEffect(() => { corrAPI.organizations().then((r) => setOrgs(r.data)).catch(() => {}); }, []);
@@ -21,7 +22,8 @@ export default function CorrCreateModal({ onClose, onCreated }: Props) {
     setErr(''); setBusy(true);
     try {
       const recipients: any[] = [];
-      if (rec.recipient_type === 'INTERNAL_ORGANIZATION' && rec.organization_id) recipients.push({ recipient_type: rec.recipient_type, organization_id: rec.organization_id, recipient_title: rec.recipient_title, recipient_role: rec.recipient_role, is_primary: true });
+      if (rec.recipient_type === 'INTERNAL_PERSON' && rec.person_id) recipients.push({ recipient_type: rec.recipient_type, person_type: rec.person_type, person_id: rec.person_id, recipient_title: rec.recipient_title, recipient_role: rec.recipient_role, is_primary: true });
+      else if (rec.recipient_type === 'INTERNAL_ORGANIZATION' && rec.organization_id) recipients.push({ recipient_type: rec.recipient_type, organization_id: rec.organization_id, recipient_title: rec.recipient_title, recipient_role: rec.recipient_role, is_primary: true });
       else if (rec.recipient_type !== 'INTERNAL_ORGANIZATION' && (rec.external_organization || rec.external_name)) recipients.push({ recipient_type: rec.recipient_type, external_organization: rec.external_organization, external_name: rec.external_name, recipient_title: rec.recipient_title, recipient_role: rec.recipient_role, is_primary: true });
       const r = await corrAPI.create({ ...f, recipients });
       onCreated(r.data.id);
@@ -56,19 +58,21 @@ export default function CorrCreateModal({ onClose, onCreated }: Props) {
       <div style={{ fontSize: 12.5, fontWeight: 800, color: '#0f2440', marginBottom: 6 }}>المستلم الرئيسي (يمكن إضافة المزيد لاحقاً)</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
         <Field label="نوع المستلم">
-          <select style={inp} value={rec.recipient_type} onChange={(e) => setRec((p) => ({ ...p, recipient_type: e.target.value }))} data-testid="corr-create-rec-type">{Object.entries(RECIPIENT_TYPE_AR).filter(([k]) => k !== 'INTERNAL_USER').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+          <select style={inp} value={rec.recipient_type} onChange={(e) => setRec((p: any) => ({ ...p, recipient_type: e.target.value }))} data-testid="corr-create-rec-type">{Object.entries(RECIPIENT_TYPE_AR).filter(([k]) => k !== 'INTERNAL_USER').map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         </Field>
-        <Field label="الدور"><select style={inp} value={rec.recipient_role} onChange={(e) => setRec((p) => ({ ...p, recipient_role: e.target.value }))}><option value="TO">إلى</option><option value="CC">نسخة</option><option value="BCC">نسخة مخفية</option></select></Field>
+        <Field label="الدور"><select style={inp} value={rec.recipient_role} onChange={(e) => setRec((p: any) => ({ ...p, recipient_role: e.target.value }))}><option value="TO">إلى</option><option value="CC">نسخة</option><option value="BCC">نسخة مخفية</option></select></Field>
       </div>
-      {rec.recipient_type === 'INTERNAL_ORGANIZATION' ? (
-        <Field label="الجهة المستلمة"><select style={inp} value={rec.organization_id} onChange={(e) => setRec((p) => ({ ...p, organization_id: e.target.value }))} data-testid="corr-create-rec-org"><option value="">— اختر —</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name_ar}</option>)}</select></Field>
+      {rec.recipient_type === 'INTERNAL_PERSON' ? (
+        <PersonRecipientFields rec={rec} onChange={(patch) => setRec((p: any) => ({ ...p, ...patch }))} testPrefix="corr-create" />
+      ) : rec.recipient_type === 'INTERNAL_ORGANIZATION' ? (
+        <Field label="الجهة المستلمة"><select style={inp} value={rec.organization_id} onChange={(e) => setRec((p: any) => ({ ...p, organization_id: e.target.value }))} data-testid="corr-create-rec-org"><option value="">— اختر —</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name_ar}</option>)}</select></Field>
       ) : (
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-          <Field label="الجهة الخارجية"><input style={inp} value={rec.external_organization} onChange={(e) => setRec((p) => ({ ...p, external_organization: e.target.value }))} data-testid="corr-create-ext-org" /></Field>
-          <Field label="اسم الشخص"><input style={inp} value={rec.external_name} onChange={(e) => setRec((p) => ({ ...p, external_name: e.target.value }))} data-testid="corr-create-ext-name" /></Field>
+          <Field label="الجهة الخارجية"><input style={inp} value={rec.external_organization} onChange={(e) => setRec((p: any) => ({ ...p, external_organization: e.target.value }))} data-testid="corr-create-ext-org" /></Field>
+          <Field label="اسم الشخص"><input style={inp} value={rec.external_name} onChange={(e) => setRec((p: any) => ({ ...p, external_name: e.target.value }))} data-testid="corr-create-ext-name" /></Field>
         </div>
       )}
-      <Field label="صفة المستلم (اختياري: سعادة / المحترم …)"><input style={inp} value={rec.recipient_title} onChange={(e) => setRec((p) => ({ ...p, recipient_title: e.target.value }))} data-testid="corr-create-rec-title" /></Field>
+      <Field label="صفة المستلم (اختياري: سعادة / المحترم …)"><input style={inp} value={rec.recipient_title} onChange={(e) => setRec((p: any) => ({ ...p, recipient_title: e.target.value }))} data-testid="corr-create-rec-title" /></Field>
       {!!err && <div style={{ color: '#b91c1c', fontSize: 12.5, marginBottom: 8 }} data-testid="corr-create-error">{err}</div>}
       <div style={{ display: 'flex', gap: 8 }}>
         <button onClick={save} disabled={busy || !f.organization_id || !f.document_type_id || !f.subject.trim()} style={btn('#16a34a', { opacity: busy ? 0.6 : 1 })} data-testid="corr-create-save">حفظ المسودة</button>

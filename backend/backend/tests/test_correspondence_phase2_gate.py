@@ -528,3 +528,50 @@ def test_smart_suggestions(env):
     assert sg["linked_entities"] == ["STUDENT"] and sg["placeholders"][0]["namespace"] == "student"
     assert all(p["key"] != "student.phone" for p in sg["placeholders"]), "لا اقتراح لعناصر بلا صلاحية"
     assert requests.get(f"{API}/correspondence/suggestions", headers=H(env, "adminB"), params={"correspondence_id": cid}).status_code == 403
+
+
+# ─────────── مستلم داخلي بالاسم + قوائم متعددة الأسماء ───────────
+def test_internal_person_recipient(env):
+    d = H(env, "drafterA")
+    emp = DB.employees.find_one({"full_name": {"$exists": True}}) or DB.employees.find_one({})
+    if not emp:
+        pytest.skip("لا موظفين")
+    body = {"organization_id": env.orgA, "document_type_id": env.dt, "subject": f"خطاب لشخص {TAG}", "recipients": [{"recipient_type": "INTERNAL_PERSON", "person_type": "EMPLOYEE", "person_id": str(emp["_id"]), "recipient_role": "TO", "is_primary": True}],
+            "entities": [{"entity_type": "STUDENT", "entity_id": env.student_id, "relationship_type": "SUBJECT"}]}
+    r = requests.post(f"{API}/correspondence", headers=d, json=body)
+    assert r.status_code == 200, r.text
+    cid = r.json()["id"]
+    rec = DB.correspondence_recipients.find_one({"correspondence_id": cid})
+    assert rec["person_name"] == emp.get("full_name") and rec["recipient_title"] == (emp.get("job_title") or "")
+    # قيم العميل لا تُؤخذ: الاسم من بيانات الموظف
+    r = requests.post(f"{API}/correspondence/{cid}/recipients", headers=d, json={"recipient_type": "INTERNAL_PERSON", "person_type": "EMPLOYEE", "person_id": str(emp["_id"]), "recipient_role": "CC", "person_name": "FAKE", "recipient_title": "المحترم"})
+    assert r.status_code == 200, r.text
+    assert DB.correspondence_recipients.find_one({"correspondence_id": cid, "recipient_role": "CC"})["person_name"] == emp.get("full_name")
+    assert requests.post(f"{API}/correspondence/{cid}/recipients", headers=d, json={"recipient_type": "INTERNAL_PERSON", "person_type": "EMPLOYEE", "person_id": str(ObjectId()), "recipient_role": "TO"}).status_code == 404
+    assert requests.post(f"{API}/correspondence/{cid}/recipients", headers=d, json={"recipient_type": "INTERNAL_PERSON", "person_type": "STUDENT", "person_id": env.student_id, "recipient_role": "TO"}).status_code == 400
+    apply(env, d, cid, env.tplA)
+    rec_html = next(s["html"] for s in requests.post(f"{API}/correspondence/{cid}/preview", headers=d).json()["sections"] if s["type"] == "RECIPIENT")
+    assert emp.get("full_name") in rec_html
+
+
+def test_multi_entity_lists(env):
+    a, d = H(env, "adminA"), H(env, "drafterA")
+    s2 = str(DB.students.insert_one({"full_name": f"طالب ثانٍ {TAG}", "student_id": f"G2{TAG}", "faculty_id": DB.students.find_one({"_id": ObjectId(env.student_id)})["faculty_id"], "level": 2, "status": "active", "is_active": True}).inserted_id)
+    try:
+        tid = mk_template(env, a, env.orgA, f"TL{TAG}", "<p>الطلاب ({{students.count}}): {{students.list}}</p>{{students.table}}")
+        cid = mk_draft(env, d, env.orgA)
+        assert requests.post(f"{API}/correspondence/{cid}/entities", headers=d, json={"entity_type": "STUDENT", "entity_id": s2, "relationship_type": "SUBJECT"}).status_code == 200
+        assert requests.post(f"{API}/correspondence/{cid}/entities", headers=d, json={"entity_type": "STUDENT", "entity_id": s2, "relationship_type": "SUBJECT"}).status_code == 409, "لا تكرار"
+        apply(env, d, cid, tid)
+        p = requests.post(f"{API}/correspondence/{cid}/preview", headers=d).json()
+        h = body_html(p)
+        assert "(2)" in h and f"طالب ثانٍ {TAG}" in h and 'class="ph-table"' in h and h.count("<tr>") == 3 and p["unresolved"] == []
+        # قالب بقائمة بلا إعلان كيان → النشر يفشل
+        tid2 = mk_template(env, a, env.orgA, f"TL2{TAG}", "<p>{{employees.table}}</p>", req=(), publish=False)
+        r = requests.post(f"{API}/correspondence/templates/{tid2}/publish", headers=a)
+        assert r.status_code == 422 and any("EMPLOYEE" in x for x in r.json()["detail"]["errors"])
+        # الواجهة: الكيانات تعود بأسمائها
+        ents = requests.get(f"{API}/correspondence/{cid}/content", headers=d).json()["entities"]
+        assert len(ents) == 2 and all(e.get("label") for e in ents)
+    finally:
+        DB.students.delete_one({"_id": ObjectId(s2)})

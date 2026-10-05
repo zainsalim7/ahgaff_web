@@ -589,6 +589,13 @@ async def get_content(corr_id: str, request: Request, ctx: CorrContext = Depends
     cv = await _enrich(db, c)
     cv["allowed_actions"] = [a for a, (frm, _to, perm) in TRANSITIONS.items() if c["status"] == frm and ctx.can(perm, c["organization_id"], c) and (a not in ("submit", "reopen") or ctx.owns(c) or ctx.can(P1["update_draft"], c["organization_id"], c))]
     cv["can_edit"] = c["status"] in ("DRAFT", "CHANGES_REQUESTED") and (ctx.owns(c) and ctx.can(P1["update_draft"], c["organization_id"], c) or ctx.is_super)
+    _cols = {"STUDENT": "students", "EMPLOYEE": "employees", "TEACHER": "teachers", "FACULTY": "teachers"}
+    for e in entities:
+        col = _cols.get(e.get("entity_type"))
+        if col and ObjectId.is_valid(str(e.get("entity_id") or "")):
+            d_ = await db[col].find_one({"_id": ObjectId(e["entity_id"])}, {"full_name": 1, "name": 1, "student_id": 1, "employee_no": 1})
+            e["label"] = (d_ or {}).get("full_name") or (d_ or {}).get("name") or e["entity_id"]
+            e["code"] = (d_ or {}).get("student_id") or (d_ or {}).get("employee_no") or ""
     return {"correspondence": cv, "content": _ser(content) if content else None, "template_version": _ser(version) if version else None,
             "letterhead": _ser(letterhead) if letterhead else None, "entities": [_ser(e) for e in entities], "recipients": [_ser(r) for r in recipients],
             "snapshot": {"id": str(snap["_id"]), "stage": snap["snapshot_stage"], "created_at": str(snap["created_at"]), "checksum": snap["checksum"]} if snap else None,

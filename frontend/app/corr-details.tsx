@@ -2,6 +2,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { corrAPI, errMsg, openPdf, STATUS_AR, STATUS_COLOR, PRIORITY_AR, CLASS_AR, ACTION_AR, RECIPIENT_TYPE_AR, ENTITY_KIND } from '../src/services/corrAPI';
 import { EntityPicker } from '../src/components/corr/EntityPicker';
+import { PersonRecipientFields } from '../src/components/corr/PersonRecipientFields';
 import { CorrPage, card, btn, inp, lbl, th, td, Badge, Modal, Field, Empty, useCorrMe } from '../src/components/corr/CorrUI';
 
 const Row = ({ k, v, testID }: { k: string; v: any; testID?: string }) => (
@@ -54,7 +55,7 @@ export default function CorrDetails() {
   };
   const saveRec = async () => {
     setBusy(true); setErr('');
-    try { await corrAPI.addRecipient(id!, recForm); setRecForm(null); await load(); } catch (e) { setErr(errMsg(e, 'فشل إضافة المستلم')); } finally { setBusy(false); }
+    try { const { person_label, ...payload } = recForm; await corrAPI.addRecipient(id!, payload); setRecForm(null); await load(); } catch (e) { setErr(errMsg(e, 'فشل إضافة المستلم')); } finally { setBusy(false); }
   };
   const saveEnt = async () => {
     setBusy(true); setErr('');
@@ -101,12 +102,12 @@ export default function CorrDetails() {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 12 }}>
         <div style={card}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><b style={{ color: '#0f2440' }}>المستلمون ({c.recipients.length})</b>
-            {c.can_edit && <button onClick={() => setRecForm({ recipient_type: 'INTERNAL_ORGANIZATION', organization_id: '', external_organization: '', external_name: '', external_contact: '', recipient_title: '', recipient_role: 'TO' })} style={btn('#0ea5e9', { padding: '4px 10px' })} data-testid="corr-add-recipient">+ مستلم</button>}
+            {c.can_edit && <button onClick={() => setRecForm({ recipient_type: 'INTERNAL_ORGANIZATION', organization_id: '', external_organization: '', external_name: '', external_contact: '', recipient_title: '', recipient_role: 'TO', person_type: 'EMPLOYEE', person_id: '', person_label: '' })} style={btn('#0ea5e9', { padding: '4px 10px' })} data-testid="corr-add-recipient">+ مستلم</button>}
           </div>
           {c.recipients.length === 0 && <div style={{ fontSize: 12, color: '#94a3b8' }}>لا يوجد مستلمون — مطلوب مستلم واحد على الأقل قبل التقديم</div>}
           {c.recipients.map((r: any) => (
             <div key={r.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '6px 0', borderTop: '1px solid #f1f5f9' }} data-testid={`corr-recipient-${r.id}`}>
-              <span><Badge text={r.recipient_role} color="#0f2440" /> <b>{r.organization_name || r.user_name || r.external_organization || r.external_name}</b> <span style={{ color: '#64748b' }}>· {RECIPIENT_TYPE_AR[r.recipient_type]}</span></span>
+              <span><Badge text={r.recipient_role} color="#0f2440" /> <b>{r.recipient_title ? r.recipient_title + ' ' : ''}{r.person_name || r.organization_name || r.user_name || r.external_name || r.external_organization}</b>{(r.person_organization || (r.person_name && r.external_organization)) && <span style={{ color: '#475569' }}> — {r.person_organization || r.external_organization}</span>}{r.person_name && r.external_organization ? null : (r.external_name && r.external_organization ? <span style={{ color: '#475569' }}> — {r.external_organization}</span> : null)} <span style={{ color: '#64748b' }}>· {RECIPIENT_TYPE_AR[r.recipient_type]}</span></span>
               {c.can_edit && <button onClick={() => corrAPI.removeRecipient(id!, r.id).then(load).catch((e) => setErr(errMsg(e)))} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer' }}>✕</button>}
             </div>
           ))}
@@ -170,6 +171,8 @@ export default function CorrDetails() {
           </div>
           {recForm.recipient_type === 'INTERNAL_ORGANIZATION' ? (
             <Field label="الجهة"><select style={inp} value={recForm.organization_id} onChange={(e) => setRecForm({ ...recForm, organization_id: e.target.value })} data-testid="corr-rec-org"><option value="">— اختر —</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name_ar}</option>)}</select></Field>
+          ) : recForm.recipient_type === 'INTERNAL_PERSON' ? (
+            <PersonRecipientFields rec={recForm} onChange={(patch) => setRecForm({ ...recForm, ...patch })} testPrefix="corr-rec" />
           ) : (<>
             <Field label="الجهة الخارجية"><input style={inp} value={recForm.external_organization} onChange={(e) => setRecForm({ ...recForm, external_organization: e.target.value })} data-testid="corr-rec-ext-org" /></Field>
             <Field label="اسم الشخص"><input style={inp} value={recForm.external_name} onChange={(e) => setRecForm({ ...recForm, external_name: e.target.value })} /></Field>

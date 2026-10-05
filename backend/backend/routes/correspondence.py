@@ -21,7 +21,7 @@ log = logging.getLogger("correspondence")
 
 STATUSES = ("DRAFT", "SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUESTED", "APPROVED", "REJECTED", "SIGNED", "ISSUED", "ARCHIVED", "CANCELLED")
 PRIORITIES = ("NORMAL", "IMPORTANT", "URGENT", "IMMEDIATE")
-RECIPIENT_TYPES = ("INTERNAL_ORGANIZATION", "INTERNAL_USER", "EXTERNAL_ORGANIZATION", "EXTERNAL_PERSON")
+RECIPIENT_TYPES = ("INTERNAL_ORGANIZATION", "INTERNAL_USER", "INTERNAL_PERSON", "EXTERNAL_ORGANIZATION", "EXTERNAL_PERSON")
 RECIPIENT_ROLES = ("TO", "CC", "BCC")
 # action -> (from_status, to_status, permission)
 TRANSITIONS = {
@@ -229,6 +229,8 @@ class RecipientIn(BaseModel):
     external_name: Optional[str] = None
     external_organization: Optional[str] = None
     external_contact: Optional[str] = None
+    person_type: Optional[str] = None
+    person_id: Optional[str] = None
     recipient_title: Optional[str] = None
     recipient_role: str = "TO"
     is_primary: bool = False
@@ -697,8 +699,31 @@ def _validate_recipient(r: RecipientIn):
         raise HTTPException(status_code=400, detail="المنظمة المستلمة مطلوبة")
     if r.recipient_type == "INTERNAL_USER" and not r.user_id:
         raise HTTPException(status_code=400, detail="المستخدم المستلم مطلوب")
+    if r.recipient_type == "INTERNAL_PERSON" and (r.person_type not in ("EMPLOYEE", "TEACHER") or not r.person_id or not ObjectId.is_valid(r.person_id)):
+        raise HTTPException(status_code=400, detail="اختر الشخص الداخلي من بيانات الموظفين أو المدرسين")
     if r.recipient_type in ("EXTERNAL_ORGANIZATION", "EXTERNAL_PERSON") and not (r.external_name or r.external_organization):
         raise HTTPException(status_code=400, detail="اسم الجهة/الشخص الخارجي مطلوب")
+
+
+async def _enrich_person_recipient(db, r: dict) -> dict:
+    """INTERNAL_PERSON: الاسم/الصفة/الجهة من بيانات الموظفين أو المدرسين (مصدر موثوق) — لا من العميل"""
+    if r.get("recipient_type") != "INTERNAL_PERSON":
+        return r
+    if r.get("person_type") == "EMPLOYEE":
+        p = await db.employees.find_one({"_id": ObjectId(r["person_id"])}, {"full_name": 1, "job_title": 1, "org_unit_id": 1, "organization_id": 1, "user_id": 1})
+        if not p:
+            raise HTTPException(status_code=404, detail="الموظف غير موجود")
+        org = await db.org_units.find_one({"_id": ObjectId(p.get("org_unit_id") or p.get("organization_id") or "0" * 24)}, {"name": 1, "name_ar": 1}) if ObjectId.is_valid(str(p.get("org_unit_id") or p.get("organization_id") or "")) else None
+        r.update({"person_name": p.get("full_name", ""), "person_title": p.get("job_title", ""), "person_organization": (org or {}).get("name_ar") or (org or {}).get("name") or "", "user_id": p.get("user_id") or r.get("user_id")})
+    else:
+        p = await db.teachers.find_one({"_id": ObjectId(r["person_id"])}, {"full_name": 1, "name": 1, "academic_title": 1, "faculty_id": 1, "department_id": 1, "user_id": 1})
+        if not p:
+            raise HTTPException(status_code=404, detail="عضو هيئة التدريس غير موجود")
+        fac = await db.faculties.find_one({"_id": ObjectId(p["faculty_id"])}, {"name": 1}) if ObjectId.is_valid(str(p.get("faculty_id") or "")) else None
+        r.update({"person_name": p.get("full_name") or p.get("name", ""), "person_title": p.get("academic_title", ""), "person_organization": (fac or {}).get("name", ""), "user_id": p.get("user_id") or r.get("user_id")})
+    if not r.get("recipient_title"):
+        r["recipient_title"] = r.get("person_title") or ""
+    return r
 
 
 async def _sync_recipient_users(db, corr_id: str):
@@ -738,7 +763,7 @@ async def create_correspondence(data: CorrIn, request: Request, ctx: CorrContext
     r = await db.correspondences.insert_one(doc)
     cid = str(r.inserted_id)
     if data.recipients:
-        await db.correspondence_recipients.insert_many([{**x.dict(), "correspondence_id": cid, "created_at": now} for x in data.recipients])
+        await db.correspondence_recipients.insert_many([{**(await _enrich_person_recipient(db, x.dict())), "correspondence_id": cid, "created_at": now} for x in data.recipients])
         await _sync_recipient_users(db, cid)
     if data.entities:
         await db.correspondence_entities.insert_many([{**x.dict(), "correspondence_id": cid, "created_at": now} for x in data.entities])
@@ -900,7 +925,7 @@ async def add_recipient(corr_id: str, data: RecipientIn, request: Request, ctx: 
     c = await _editable(db, ctx, corr_id, request)
     _validate_recipient(data)
     cid = str(c["_id"])
-    r = await db.correspondence_recipients.insert_one({**data.dict(), "correspondence_id": cid, "created_at": _now()})
+    r = await db.correspondence_recipients.insert_one({**(await _enrich_person_recipient(db, data.dict())), "correspondence_id": cid, "created_at": _now()})
     await _sync_recipient_users(db, cid)
     await db.correspondences.update_one({"_id": c["_id"]}, {"$inc": {"version": 1}, "$set": {"updated_at": _now()}})
     await audit(db, ctx, "RECIPIENT_ADDED", "correspondence", cid, request, new=data.dict(), organization_id=c["organization_id"])
@@ -942,6 +967,8 @@ async def add_entity(corr_id: str, data: EntityIn, request: Request, ctx: CorrCo
     c = await _editable(db, ctx, corr_id, request)
     cid = str(c["_id"])
     await _check_entity(db, ctx, data, request, c["organization_id"], cid)
+    if await db.correspondence_entities.find_one({"correspondence_id": cid, "entity_type": data.entity_type, "entity_id": data.entity_id}):
+        raise HTTPException(status_code=409, detail="هذا الكيان مرتبط مسبقاً بالمراسلة")
     r = await db.correspondence_entities.insert_one({**data.dict(), "correspondence_id": cid, "created_at": _now()})
     await audit(db, ctx, "ENTITY_LINKED", "correspondence", cid, request, new=data.dict(), organization_id=c["organization_id"])
     return _ser(await db.correspondence_entities.find_one({"_id": r.inserted_id}))

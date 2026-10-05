@@ -22,6 +22,7 @@ export default function CorrCompose() {
   const [lhs, setLhs] = useState<any[]>([]);
   const [phs, setPhs] = useState<any[]>([]);
   const [sugg, setSugg] = useState<any | null>(null);
+  const [showAllKinds, setShowAllKinds] = useState(false);
   const [values, setValues] = useState<Record<string, string>>({});
   const [inputs, setInputs] = useState<Record<string, any>>({});
   const [dirty, setDirty] = useState(false);
@@ -103,7 +104,7 @@ export default function CorrCompose() {
 
   if (!bundle) return <CorrPage title="محرر الخطاب" loading={!err}>{!!err && <Empty text={err} />}</CorrPage>;
   const color = STATUS_COLOR[c.status] || '#64748b';
-  const entityOf = (t: string) => (bundle.entities || []).find((e: any) => (e.entity_type === 'TEACHER' ? 'FACULTY' : e.entity_type) === t);
+  const entitiesOf = (t: string) => (bundle.entities || []).filter((e: any) => (e.entity_type === 'TEACHER' ? 'FACULTY' : e.entity_type) === t);
   const problems = prev ? [...(prev.missing_entities || []).map((x: string) => `الكيان المطلوب غير محدد: ${ENTITY_KIND[x]?.label || x}`), ...(prev.missing_inputs || []).map((x: string) => `مدخل إلزامي فارغ: ${inputDefs.find((d) => d.key === x)?.label_ar || x}`), ...(prev.missing_required_sections || []).map((x: string) => `قسم إلزامي فارغ: ${sections.find((s) => s.id === x)?.title || x}`), ...(prev.unresolved || []).filter((x: string) => x !== 'correspondence.official_number').map((x: string) => `عنصر غير محلول: ${x}`)] : [];
 
   const header = (
@@ -164,15 +165,23 @@ export default function CorrCompose() {
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: 10, marginTop: 8 }}>
             <Field label="الترويسة"><select style={inp} value={content.letterhead_id || ''} disabled={!canEdit} onChange={(e) => setLetterhead(e.target.value)} data-testid="compose-letterhead">{lhs.map((l) => <option key={l.id} value={l.id}>{l.name_ar} — {l.organization_name}</option>)}{content.letterhead_id && !lhs.some((l) => l.id === content.letterhead_id) && <option value={content.letterhead_id}>{bundle.letterhead?.name_ar}</option>}</select></Field>
-            {(version?.required_entities || []).map((t: string) => {
-              const e = entityOf(t); const k = ENTITY_KIND[t];
+            {['STUDENT', 'EMPLOYEE', 'FACULTY'].filter((t) => (version?.required_entities || []).includes(t) || entitiesOf(t).length > 0 || showAllKinds).map((t: string) => {
+              const list = entitiesOf(t); const k = ENTITY_KIND[t]; const req = (version?.required_entities || []).includes(t);
               return (
-                <div key={t}><label style={lbl}>{k?.label || t} *</label>
-                  {e ? <div style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5 }} data-testid={`compose-entity-${t}`}><Badge text={k?.label || t} color="#7c3aed" /><b>{prev?.data_preview?.[t.toLowerCase()]?.full_name || e.entity_id}</b>{canEdit && <button onClick={() => unlinkEntity(e.id)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer' }}>✕</button>}</div>
-                    : <button disabled={!canEdit || !hasAnywhere(k?.perm || '')} onClick={() => setPicker(t)} style={btn('#7c3aed')} data-testid={`compose-pick-${t}`}>{hasAnywhere(k?.perm || '') ? `اختيار ${k?.label}` : 'لا صلاحية للاختيار'}</button>}
+                <div key={t} data-testid={`compose-entity-group-${t}`}><label style={lbl}>{k?.label || t}{req ? ' *' : ''} {list.length > 1 && <span style={{ color: '#7c3aed' }}>({list.length})</span>}</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+                    {list.map((e: any, i: number) => (
+                      <span key={e.id} data-testid={i === 0 ? `compose-entity-${t}` : `compose-entity-${t}-${i}`} style={{ display: 'inline-flex', gap: 4, alignItems: 'center', fontSize: 12, padding: '3px 8px', borderRadius: 999, backgroundColor: '#f3e8ff', color: '#4c1d95', fontWeight: 700 }}>
+                        {e.label || e.entity_id}{e.code ? <code style={{ fontSize: 10, color: '#6b21a8' }}>{e.code}</code> : null}
+                        {canEdit && <button onClick={() => unlinkEntity(e.id)} style={{ border: 'none', background: 'none', color: '#dc2626', cursor: 'pointer', padding: 0 }} title="إزالة">✕</button>}
+                      </span>
+                    ))}
+                    {canEdit && <button disabled={!hasAnywhere(k?.perm || '')} onClick={() => setPicker(t)} style={btn('#7c3aed', { padding: '4px 10px' })} data-testid={list.length ? `compose-add-${t}` : `compose-pick-${t}`}>{hasAnywhere(k?.perm || '') ? (list.length ? `+ إضافة ${k?.label}` : `اختيار ${k?.label}`) : 'لا صلاحية للاختيار'}</button>}
+                  </div>
                 </div>
               );
             })}
+            {canEdit && !showAllKinds && <div><label style={lbl}>&nbsp;</label><button onClick={() => setShowAllKinds(true)} style={btn('#64748b', { padding: '4px 10px' })} data-testid="compose-add-people">+ إضافة أشخاص آخرين (طلاب/موظفون/هيئة تدريس)</button><div style={{ fontSize: 10.5, color: '#64748b', marginTop: 4 }}>للقوائم المتعددة استخدم العناصر: {'{{students.table}}'} · {'{{employees.list}}'} · {'{{faculty_members.count}}'}</div></div>}
           </div>
           {inputDefs.length > 0 && (
             <div style={{ marginTop: 6 }}>
