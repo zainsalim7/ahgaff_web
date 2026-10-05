@@ -2,7 +2,6 @@ import React, { useEffect } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
-import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import { Table } from '@tiptap/extension-table';
 import { TableRow } from '@tiptap/extension-table-row';
@@ -15,7 +14,7 @@ const tb = (active = false): React.CSSProperties => ({ padding: '4px 8px', borde
 
 export const TipTapEditor: React.FC<Props> = ({ value, onChange, placeholder, placeholders = [], minHeight = 140, testID, readOnly }) => {
   const editor = useEditor({
-    extensions: [StarterKit, Underline, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }), Placeholder.configure({ placeholder: placeholder || 'اكتب هنا…' }), Table.configure({ resizable: false }), TableRow, TableHeader, TableCell],
+    extensions: [StarterKit, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'right' }), Placeholder.configure({ placeholder: placeholder || 'اكتب هنا…' }), Table.configure({ resizable: false }), TableRow, TableHeader, TableCell],
     content: value || '<p></p>',
     editable: !readOnly,
     immediatelyRender: false,

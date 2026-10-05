@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend-only E2E of Correspondence Phase 2 (Arabic RTL): Letterheads CRUD + versioning + toggle + duplicate-code error, Templates list (10 seeded) + builder (8 sections, A4 preview, version badge), full Template creation→save→validate→publish + negative validation (unchecked STUDENT required_entities with placeholder), Composer flow on pre-existing draft (A4 header/footer, status, checklist, input fill, entity picker, mode toggle, letterhead select, change-template modal, submit→مُقدَّمة), full lifecycle review→approve→sign→issue producing PRES-2026-000001, frozen snapshot badge/source + official number in A4, recipient modal with corr-rec-title, entity modal with corr-ent-pick (after selecting STUDENT type), nav pills القوالب/الترويسات, responsive 900px single-column stacking. ALL critical flows PASS. 3 minor issues found.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "compose (autosave indicator)", "issue": "No autosave feedback label observed while typing in compose-input-destination or body editor. Neither [data-testid='compose-saved'] nor the text 'جارٍ الحفظ…' / 'تغييرات غير محفوظة' appeared in the DOM (polled 15×300ms + 3s wait). Data IS persisted (confirmed via reopen), but the user has no visual confirmation.", "selector": "[data-testid='compose-saved']", "priority": "MEDIUM"},
+      {"component": "corr-letterheads row", "issue": "The 'تعيين' (set default) button is rendered in each row but lacks a data-testid; spec required lh-default-<CODE>. lh-toggle-<CODE> is present. lh-edit-<CODE> works. Only lh-default-<CODE> is missing.", "selector": "[data-testid='lh-default-<CODE>']", "priority": "LOW"},
+      {"component": "CorrCreateModal (EXTERNAL recipient)", "issue": "When creating a new correspondence with recipient type EXTERNAL_ORGANIZATION and corr-create-ext-name filled, the recipient does NOT appear to be persisted. Submitting the subsequent compose fires 'أضف مستلماً واحداً على الأقل قبل التقديم' instead of body-validation errors. This blocked the exact negative-submit test ('قسم إلزامي فارغ') the spec requested; the body validation itself was not reachable through the UI with a fresh external-only draft.", "selector": "[data-testid='corr-create-ext-name']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "all RN-web pages", "issues": ["Repeated console error 'Unexpected text node: . A text node cannot be a child of a <View>.' (carried over from iteration_93; not user-visible)."]},
+      {"screen": "corr-templates builder", "issues": ["Console warning 'tiptap warn: Duplicate extension names found: [underline]' logged 8× on open (one per TipTap instance). Cosmetic but indicates StarterKit + extra Underline extension registered twice."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/backend/tests/test_correspondence_phase2.py (existing, not run)"],
+  "action_items": [
+    "(MEDIUM) Surface autosave state in compose: expose [data-testid='compose-saved'] with text 'محفوظ' / 'جارٍ الحفظ…' / 'تغييرات غير محفوظة' as per spec, so users (and tests) can confirm saves.",
+    "(MEDIUM) Investigate CorrCreateModal: EXTERNAL_ORGANIZATION recipient from corr-create-ext-name is not being saved on the new correspondence (reproduce: /corr-list → مراسلة جديدة → external org name → save → open compose → submit returns 'أضف مستلماً واحداً على الأقل').",
+    "(LOW) Add data-testid='lh-default-<CODE>' to the 'تعيين' button in each letterhead row.",
+    "(LOW) Fix duplicate TipTap Underline extension registration in TipTapEditor.tsx to clean console.",
+    "(LOW, carryover) Fix 'Unexpected text node' RN-web warning."
+  ],
+  "critical_code_review_comments": [
+    "Template builder UX is strong: live A4 preview with yellow [placeholder] badges, section highlighting, clear version badge ('الإصدار الحالي منشور'), and correct validation surfacing ('العنصر student.full_name يتطلب إعلان الكيان STUDENT ضمن required_entities').",
+    "Full state machine wiring is correct end-to-end: review→approve→sign→issue produced PRES-2026-000001 on first issue, and the compose view immediately switched to frozen mode with 'من اللقطة المجمّدة' and the official number baked into the A4 reference section.",
+    "Responsive breakpoint at ~1100px works: at 900px wide, editor (y≈732) stacks above A4 preview (y≈2078) in a single column.",
+    "Error UX for duplicate letterhead code is excellent: 409 → Arabic 'كود الترويسة مستخدم في هذه المنظمة' via [data-testid='lh-form-error']."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "n/a (skipped per request; 23/23 pytest already green)", "frontend": "~95% — 10/10 flows pass with 3 minor issues (autosave indicator + lh-default testid + external-recipient save)"},
+  "test_credentials": "admin / admin123 (SUPER_ADMIN).",
+  "seed_data_creation": "Created during test on PRES org: letterhead TESTLH85759 (v2, toggled off); template UITPL34181 (v2 after unchecking STUDENT then save; v1 published then v2 draft w/ validation errors); 2 correspondences on PRES: (a) pre-existing 6ac3bc1b6bc27904a499b1ae taken through full lifecycle to ISSUED w/ official number PRES-2026-000001; (b) new 6ac3be1e3616383b894e73a2 (draft, GENERAL_CORRESPONDENCE applied, no recipient persisted). No cleanup performed; seeded globals (UNIVERSITY_GENERAL + 10 global templates) untouched.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Phase 2 UI is production-ready for the happy path. (1) To test autosave, mock agent must inspect [data-testid='compose-saved'] — currently missing from DOM. (2) To test body-validation 'قسم إلزامي فارغ' error, create the draft WITH an internal recipient first (external org path appears broken on save), apply GENERAL_CORRESPONDENCE, blank out body sections, then submit. (3) corr-ent-pick only appears AFTER selecting an entity type (STUDENT/EMPLOYEE/TEACHER) in the entity modal — this is correct behavior, not a bug. (4) Lifecycle on PRES org has now consumed one official number (PRES-2026-000001 → correspondence 6ac3bc1b6bc27904a499b1ae); next issue will be PRES-2026-000002.",
+  "rca of the issue": "Autosave indicator missing: TemplateBuilder/Compose likely wraps the save mutation but doesn't expose a status element with data-testid='compose-saved'; recommend a small <View data-testid='compose-saved'>{saving?'جارٍ الحفظ…':dirty?'تغييرات غير محفوظة':'محفوظ'}</View>. External-recipient save bug RCA likely in CorrCreateModal's onSave handler: when recipient_type==='EXTERNAL_ORGANIZATION', the payload may be sent as nested recipient object but backend expects a separate POST /recipients call afterward — verify in /app/frontend/src/components/corr/CorrCreateModal.tsx."
+}

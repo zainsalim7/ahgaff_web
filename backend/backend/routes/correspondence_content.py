@@ -720,8 +720,9 @@ async def validate_before_submit(db, ctx: CorrContext, c: dict) -> List[str]:
     allowed = _allowed_perms(ctx)
     data = await ph.build_data(db, ctx, c, entities, recipients, content.get("input_values") or {}, allowed)
     _, unresolved, missing_required = _render_sections(version, content, data, allowed, "preview")
+    titles = {s["id"]: s.get("title") or s["id"] for s in version.get("sections", [])}
     for sid in missing_required:
-        errors.append(f"قسم إلزامي فارغ: {sid}")
+        errors.append(f"قسم إلزامي فارغ: {titles.get(sid, sid)}")
     for k in unresolved:
         if k != "correspondence.official_number":
             errors.append(f"عنصر نائب غير محلول: {k}")

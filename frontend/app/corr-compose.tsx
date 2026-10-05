@@ -71,7 +71,7 @@ export default function CorrCompose() {
       setBundle((b: any) => ({ ...b, content: r.data }));
       setDirty(false);
       setPrev((await corrAPI.preview(id!, mode)).data);
-      if (!silent) setOk('تم الحفظ');
+      setOk(silent ? 'حُفظ تلقائياً' : 'تم الحفظ');
     } catch (e: any) {
       setErr(errMsgFull(e, 'فشل الحفظ')); setErrs(errList(e));
       if (e?.response?.status === 409) setTimeout(load, 800);
@@ -108,7 +108,7 @@ export default function CorrCompose() {
         <Badge text={STATUS_AR[c.status] || c.status} color={color} testID="compose-status" />
         {bundle.frozen && <Badge text={`مُجمَّدة (${bundle.snapshot?.stage})`} color="#0f766e" testID="compose-frozen" />}
         {content && <span style={{ fontSize: 12.5 }}>القالب: <b>{templates.find((t) => t.id === content.template_id)?.name_ar || content.template_id}</b> <code style={{ fontSize: 11 }}>v{content.template_version_number}</code></span>}
-        {saving ? <span style={{ fontSize: 11.5, color: '#f59e0b' }}>جارٍ الحفظ…</span> : dirty ? <span style={{ fontSize: 11.5, color: '#64748b' }}>تغييرات غير محفوظة</span> : ok ? <span style={{ fontSize: 11.5, color: '#16a34a' }} data-testid="compose-saved">✓ {ok}</span> : null}
+        {saving ? <span style={{ fontSize: 11.5, color: '#f59e0b' }} data-testid="compose-saving">جارٍ الحفظ…</span> : dirty ? <span style={{ fontSize: 11.5, color: '#64748b' }} data-testid="compose-dirty">تغييرات غير محفوظة</span> : ok ? <span style={{ fontSize: 11.5, color: '#16a34a' }} data-testid="compose-saved">✓ {ok}</span> : null}
       </div>
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         <button onClick={() => setMode(mode === 'preview' ? 'edit' : 'preview')} style={btn('#475569')} data-testid="compose-mode">{mode === 'preview' ? 'عرض التسميات' : 'عرض القيم'}</button>
