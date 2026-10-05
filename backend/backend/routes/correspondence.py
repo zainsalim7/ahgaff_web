@@ -722,6 +722,8 @@ async def create_correspondence(data: CorrIn, request: Request, ctx: CorrContext
         raise HTTPException(status_code=400, detail="الموضوع مطلوب")
     for r in data.recipients:
         _validate_recipient(r)
+    for e in data.entities:
+        await _check_entity(db, ctx, e, request, data.organization_id)
     now = _now()
     doc = {
         "uuid": str(uuid.uuid4()), "organization_id": data.organization_id, "document_type_id": data.document_type_id,
@@ -920,11 +922,26 @@ async def remove_recipient(corr_id: str, recipient_id: str, request: Request, ct
     return {"message": "تم حذف المستلم"}
 
 
+_ENT_SOURCES = {"STUDENT": ("students", "entity.student.read"), "EMPLOYEE": ("employees", "entity.employee.read"), "TEACHER": ("teachers", "entity.faculty.read"), "FACULTY": ("teachers", "entity.faculty.read")}
+
+
+async def _check_entity(db, ctx, data, request, org_id, cid=None):
+    """ربط كيان جامعي: صلاحية القراءة + وجود السجل فعلاً (لا معرّفات عشوائية)"""
+    if data.entity_type not in _ENT_SOURCES:
+        return
+    col, perm = _ENT_SOURCES[data.entity_type]
+    if not ctx.has_perm_anywhere(perm):
+        raise _forbid(ctx, db, request, f"link_entity:{data.entity_type}", org_id, cid)
+    if not ObjectId.is_valid(data.entity_id) or not await db[col].find_one({"_id": ObjectId(data.entity_id)}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="الكيان غير موجود في بيانات الجامعة")
+
+
 @router.post("/{corr_id}/entities")
 async def add_entity(corr_id: str, data: EntityIn, request: Request, ctx: CorrContext = Depends(ctx_dep)):
     db = get_db()
     c = await _editable(db, ctx, corr_id, request)
     cid = str(c["_id"])
+    await _check_entity(db, ctx, data, request, c["organization_id"], cid)
     r = await db.correspondence_entities.insert_one({**data.dict(), "correspondence_id": cid, "created_at": _now()})
     await audit(db, ctx, "ENTITY_LINKED", "correspondence", cid, request, new=data.dict(), organization_id=c["organization_id"])
     return _ser(await db.correspondence_entities.find_one({"_id": r.inserted_id}))

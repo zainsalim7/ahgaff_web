@@ -667,6 +667,27 @@ def bleach_text(s: str) -> str:
     return bleach.clean(s or "", tags=[], strip=True)
 
 
+SNAPSHOT_HASH_KEYS = ("resolved_data", "section_values", "template_version_id", "letterhead_id")
+
+
+def _snapshot_intact(snap: dict) -> bool:
+    return ph.checksum({k: snap.get(k) for k in SNAPSHOT_HASH_KEYS}) == snap.get("checksum")
+
+
+@router.get("/{corr_id}/snapshot/verify")
+async def verify_snapshot(corr_id: str, request: Request, ctx: CorrContext = Depends(ctx_dep)):
+    """يعيد حساب checksum اللقطة ويقارنه بالمخزّن — لا يعدّل شيئاً"""
+    db = get_db()
+    c = await _corr_editable(db, ctx, corr_id, request)
+    snap = await db.correspondence_data_snapshots.find_one({"correspondence_id": str(c["_id"])}, sort=[("created_at", -1)])
+    if not snap:
+        return {"exists": False, "valid": None}
+    ok = _snapshot_intact(snap)
+    if not ok:
+        await audit(db, ctx, "SNAPSHOT_INTEGRITY_FAILED", "correspondence", str(c["_id"]), request, meta={"snapshot_id": str(snap["_id"])}, organization_id=c["organization_id"])
+    return {"exists": True, "valid": ok, "stage": snap["snapshot_stage"], "checksum": snap["checksum"], "created_at": str(snap["created_at"]), "fields": {ns: sorted(v.keys()) for ns, v in snap["resolved_data"].items() if isinstance(v, dict)}}
+
+
 @router.post("/{corr_id}/preview")
 async def preview(corr_id: str, request: Request, mode: str = "preview", ctx: CorrContext = Depends(ctx_dep)):
     """المعاينة الخادمية: بعد التجميد من اللقطة؛ قبله من البيانات الحيّة المصرّح بها. لا تستهلك رقماً ولا تعدّل القالب."""
@@ -678,6 +699,9 @@ async def preview(corr_id: str, request: Request, mode: str = "preview", ctx: Co
     allowed = _allowed_perms(ctx)
     snap = await db.correspondence_data_snapshots.find_one({"correspondence_id": str(c["_id"])}, sort=[("created_at", -1)])
     if snap:
+        if not _snapshot_intact(snap):
+            await audit(db, ctx, "SNAPSHOT_INTEGRITY_FAILED", "correspondence", str(c["_id"]), request, meta={"snapshot_id": str(snap["_id"])}, organization_id=c["organization_id"])
+            raise HTTPException(status_code=409, detail="فشل التحقق من سلامة اللقطة المجمّدة — تم رصد تعديل غير مصرح به")
         data = snap["resolved_data"]
         data.setdefault("correspondence", {})["official_number"] = c.get("official_number") or data.get("correspondence", {}).get("official_number", "")
         source = "SNAPSHOT"
@@ -706,6 +730,10 @@ async def validate_before_submit(db, ctx: CorrContext, c: dict) -> List[str]:
         return ["اختر قالباً للمراسلة قبل التقديم"]
     if not letterhead:
         errors.append("لا توجد ترويسة متاحة لهذه المنظمة")
+    elif letterhead.get("deleted_at") or not letterhead.get("is_active", True):
+        errors.append("الترويسة المرتبطة موقوفة أو محذوفة — اختر ترويسة نشطة")
+    elif letterhead["organization_id"] not in _ancestors(ctx, c["organization_id"]):
+        errors.append("الترويسة المرتبطة لا تخص هذه المنظمة أو جهاتها الأعلى")
     if not (c.get("subject") or "").strip():
         errors.append("الموضوع مطلوب")
     if not recipients:
@@ -759,7 +787,7 @@ async def create_snapshot_if_due(db, ctx: CorrContext, c: dict, to_status: str, 
     doc = {"correspondence_id": cid, "template_id": content["template_id"], "template_version_id": content["template_version_id"], "letterhead_id": content.get("letterhead_id"),
            "snapshot_stage": stage, "resolved_data": resolved, "section_values": values, "entity_references": [{"entity_type": e.get("entity_type"), "entity_id": e.get("entity_id"), "relationship_type": e.get("relationship_type")} for e in entities],
            "generated_by": ctx.user_id, "created_at": _now()}
-    doc["checksum"] = ph.checksum({k: doc[k] for k in ("resolved_data", "section_values", "template_version_id", "letterhead_id")})
+    doc["checksum"] = ph.checksum({k: doc[k] for k in SNAPSHOT_HASH_KEYS})
     r = await db.correspondence_data_snapshots.insert_one(doc)
     await audit(db, ctx, "SNAPSHOT_CREATED", "correspondence", cid, request, new={"snapshot_id": str(r.inserted_id), "stage": stage, "checksum": doc["checksum"]}, organization_id=c["organization_id"])
     return str(r.inserted_id)

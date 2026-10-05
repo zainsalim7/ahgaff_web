@@ -104,7 +104,11 @@ def validate_keys(keys: List[str], input_keys: List[str]) -> List[str]:
 # ───────── التعقيم (منع XSS المخزّن) ─────────
 ALLOWED_TAGS = ["p", "br", "strong", "b", "em", "i", "u", "s", "ul", "ol", "li", "h1", "h2", "h3", "h4", "blockquote", "table", "thead", "tbody", "tr", "th", "td", "span", "div", "hr", "mark"]
 ALLOWED_ATTRS = {"*": ["style", "dir", "class"], "td": ["colspan", "rowspan"], "th": ["colspan", "rowspan"], "span": ["data-placeholder"]}
-_css = bleach.css_sanitizer.CSSSanitizer(allowed_css_properties=["text-align", "font-weight", "font-style", "text-decoration", "direction", "margin", "padding", "line-height", "font-size", "width"]) if hasattr(bleach, "css_sanitizer") else None
+try:
+    from bleach.css_sanitizer import CSSSanitizer
+    _css = CSSSanitizer(allowed_css_properties=["text-align", "font-weight", "font-style", "text-decoration", "direction", "margin", "padding", "line-height", "font-size", "width"])
+except Exception:
+    _css = None
 
 
 def sanitize_html(html: str) -> str:
