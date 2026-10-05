@@ -180,6 +180,13 @@ export default function RootLayout() {
           <Stack.Screen name="hr-my-leaves" options={{ title: 'إجازاتي' }} />
           <Stack.Screen name="hr-attendance" options={{ title: 'الحضور الإداري' }} />
           <Stack.Screen name="hr-correspondence" options={{ title: 'المراسلات والتعاميم' }} />
+          <Stack.Screen name="corr-dashboard" options={{ title: 'المراسلات الرسمية' }} />
+          <Stack.Screen name="corr-list" options={{ title: 'سجل المراسلات' }} />
+          <Stack.Screen name="corr-details" options={{ title: 'تفاصيل المراسلة' }} />
+          <Stack.Screen name="corr-organizations" options={{ title: 'الهيكل التنظيمي' }} />
+          <Stack.Screen name="corr-document-types" options={{ title: 'أنواع الوثائق' }} />
+          <Stack.Screen name="corr-numbering" options={{ title: 'مخططات الترقيم' }} />
+          <Stack.Screen name="corr-roles" options={{ title: 'الأدوار والعضويات' }} />
           <Stack.Screen name="hr-tasks" options={{ title: 'المهام' }} />
           <Stack.Screen name="hr-appraisals" options={{ title: 'التقييم السنوي' }} />
           <Stack.Screen name="hr-letters" options={{ title: 'الخطابات الرسمية' }} />

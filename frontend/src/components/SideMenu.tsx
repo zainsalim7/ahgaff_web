@@ -158,6 +158,12 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-my-profile', label: 'ملفي الإداري', icon: 'person-circle', path: '/hr-my-profile', permissions: [], forAll: true },
   { id: 'hr-my-leaves', label: 'إجازاتي', icon: 'calendar', path: '/hr-my-leaves', permissions: [], forAll: true },
 
+  // 📜 المراسلات الرسمية (المرحلة 1) — الصلاحيات تُقيَّم في الخادم حسب العضويات التنظيمية
+  { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', permissions: [], forAll: true },
+  { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', permissions: [], forAll: true },
+  { id: 'corr-list', label: 'سجل المراسلات', icon: 'documents', path: '/corr-list', permissions: [], forAll: true },
+  { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', permissions: [], forAll: true },
+
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: [], adminOnly: true },
   { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', permissions: [], adminOnly: true },
