@@ -575,3 +575,30 @@ def test_multi_entity_lists(env):
         assert len(ents) == 2 and all(e.get("label") for e in ents)
     finally:
         DB.students.delete_one({"_id": ObjectId(s2)})
+
+
+def test_seed_group_decision_templates(env):
+    d, a = H(env, "drafterA"), H(env, "adminA")
+    tpls = {t["code"]: t for t in requests.get(f"{API}/correspondence/templates", headers=d, params={"for_use": True, "organization_id": env.orgA, "page_size": 200}).json()["items"]}
+    for code in ("GROUP_ASSIGNMENT_DECISION", "EMPLOYEES_APPOINTMENT_DECISION", "EMPLOYEES_TERMINATION_DECISION", "STUDENTS_GROUP_DECISION", "FACULTY_COMMITTEE_FORMATION", "STUDENTS_LIST_LETTER"):
+        assert code in tpls and tpls[code]["status"] == "PUBLISHED", code
+        assert requests.post(f"{API}/correspondence/templates/{tpls[code]['id']}/validate", headers=env.admin).json()["valid"] is True, code
+    emps = list(DB.employees.find({}, {"_id": 1}).limit(2))
+    if len(emps) < 2:
+        pytest.skip("يلزم موظفان")
+    dt = [x for x in requests.get(f"{API}/correspondence/document-types", headers=d).json() if x["code"] == "ADMINISTRATIVE_DECISION"][0]["id"]
+    r = requests.post(f"{API}/correspondence", headers=d, json={"organization_id": env.orgA, "document_type_id": dt, "subject": f"قرار تكليف جماعي {TAG}", "recipients": [{"recipient_type": "INTERNAL_ORGANIZATION", "organization_id": env.pres_id, "recipient_role": "TO", "is_primary": True}],
+                                                             "entities": [{"entity_type": "EMPLOYEE", "entity_id": str(e["_id"]), "relationship_type": "SUBJECT"} for e in emps]})
+    assert r.status_code == 200, r.text
+    cid = r.json()["id"]
+    b = apply(env, d, cid, tpls["GROUP_ASSIGNMENT_DECISION"]["id"])
+    cv = b["content"]["content_version"]
+    # الأقسام المقفلة لا تُعدَّل
+    assert requests.patch(f"{API}/correspondence/{cid}/content", headers=d, json={"section_values": {"s4": "<p>x</p>"}, "content_version": cv}).status_code == 403
+    r = requests.patch(f"{API}/correspondence/{cid}/content", headers=d, json={"input_values": {"assignment": "متابعة أعمال الجرد السنوي", "start_date": "2026-11-01", "report_to": "مدير الشؤون الإدارية"}, "content_version": cv})
+    assert r.status_code == 200, r.text
+    p = requests.post(f"{API}/correspondence/{cid}/preview", headers=d).json()
+    sd = next(x["html"] for x in p["sections"] if x["type"] == "BODY")
+    assert "(2)" in sd and 'class="ph-table"' in sd and sd.count("<tr>") == 3 and "متابعة أعمال الجرد السنوي" in sd and "{{" not in sd
+    assert p["missing_inputs"] == [] and p["unresolved"] == [] and p["missing_entities"] == []
+    assert requests.post(f"{API}/correspondence/{cid}/submit", headers=d, json={"reason": ""}).status_code == 200

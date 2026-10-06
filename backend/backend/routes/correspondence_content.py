@@ -703,6 +703,15 @@ async def preview(corr_id: str, request: Request, mode: str = "preview", ctx: Co
     return await build_preview(db, ctx, c, request, mode)
 
 
+def _inputs_with_defaults(version: dict, content: dict) -> dict:
+    """القيم الافتراضية للمدخلات تُطبَّق خادمياً عند غياب قيمة الكاتب"""
+    vals = dict(content.get("input_values") or {})
+    for f in version.get("input_fields", []) or []:
+        if not str(vals.get(f["key"], "")).strip() and str(f.get("default_value") or "").strip():
+            vals[f["key"]] = f["default_value"]
+    return vals
+
+
 async def build_preview(db, ctx: CorrContext, c: dict, request: Request, mode: str = "preview") -> dict:
     content, version, letterhead, entities, recipients = await _load_bundle(db, ctx, c)
     if not content or not version:
@@ -718,7 +727,7 @@ async def build_preview(db, ctx: CorrContext, c: dict, request: Request, mode: s
         source = "SNAPSHOT"
         allowed = set(allowed) | {ph.P_STUDENT, ph.P_EMPLOYEE, ph.P_FACULTY, ph.P_CONTACT, ph.P_ACADEMIC}
     else:
-        data = await ph.build_data(db, ctx, c, entities, recipients, content.get("input_values") or {}, allowed)
+        data = await ph.build_data(db, ctx, c, entities, recipients, _inputs_with_defaults(version, content), allowed)
         source = "LIVE"
         if any(e.get("entity_type") in ("STUDENT", "EMPLOYEE", "FACULTY", "TEACHER") for e in entities):
             await audit(db, ctx, "PLACEHOLDER_RESOLVED", "correspondence", str(c["_id"]), request, meta={"entities": [e.get("entity_type") for e in entities]}, organization_id=c["organization_id"])
@@ -732,7 +741,8 @@ async def build_preview(db, ctx: CorrContext, c: dict, request: Request, mode: s
     required_entities = version.get("required_entities") or []
     have = {("FACULTY" if e.get("entity_type") == "TEACHER" else e.get("entity_type")) for e in entities}
     missing_entities = [e for e in required_entities if e not in have]
-    missing_inputs = [f["key"] for f in version.get("input_fields", []) if f.get("required") and not str((content.get("input_values") or {}).get(f["key"], "")).strip()]
+    _iv = _inputs_with_defaults(version, content)
+    missing_inputs = [f["key"] for f in version.get("input_fields", []) if f.get("required") and not str(_iv.get(f["key"], "")).strip()]
     return {"source": source, "sections": sections, "letterhead": _ser(letterhead) if letterhead else None, "unresolved": unresolved, "missing_entities": missing_entities,
             "missing_inputs": missing_inputs, "missing_required_sections": missing_required, "data_preview": {k: v for k, v in data.items() if k != "input"} if mode == "preview" else {},
             "content_version": content.get("content_version"), "frozen": bool(snap), "template_version_id": content.get("template_version_id")}
@@ -760,10 +770,10 @@ async def validate_before_submit(db, ctx: CorrContext, c: dict) -> List[str]:
         if e not in have:
             errors.append(f"الكيان المطلوب غير محدد: {e}")
     for f in version.get("input_fields", []):
-        if f.get("required") and not str((content.get("input_values") or {}).get(f["key"], "")).strip():
+        if f.get("required") and not str(_inputs_with_defaults(version, content).get(f["key"], "")).strip():
             errors.append(f"المدخل المطلوب فارغ: {f.get('label_ar') or f['key']}")
     allowed = _allowed_perms(ctx)
-    data = await ph.build_data(db, ctx, c, entities, recipients, content.get("input_values") or {}, allowed)
+    data = await ph.build_data(db, ctx, c, entities, recipients, _inputs_with_defaults(version, content), allowed)
     _, unresolved, missing_required = _render_sections(version, content, data, allowed, "preview")
     titles = {s["id"]: s.get("title") or s["id"] for s in version.get("sections", [])}
     for sid in missing_required:
@@ -790,7 +800,7 @@ async def create_snapshot_if_due(db, ctx: CorrContext, c: dict, to_status: str, 
     if await db.correspondence_data_snapshots.find_one({"correspondence_id": cid, "snapshot_stage": stage}):
         return None
     full = set((ph.P_STUDENT, ph.P_EMPLOYEE, ph.P_FACULTY, ph.P_CONTACT, ph.P_ACADEMIC))
-    data = await ph.build_data(db, ctx, c, entities, recipients, content.get("input_values") or {}, full)
+    data = await ph.build_data(db, ctx, c, entities, recipients, _inputs_with_defaults(version, content), full)
     used: List[str] = []
     values = content.get("section_values") or {}
     for s in version.get("sections", []):
@@ -855,6 +865,53 @@ SEED_TEMPLATES = [
 ]
 
 
+def _inp(key, label, typ="TEXT", required=True, default="", options=None, max_length=300):
+    return {"key": key, "label_ar": label, "label_en": key, "type": typ, "required": required, "max_length": None if typ in ("DATE", "NUMBER", "SELECT") else max_length, "options": options or [], "default_value": default}
+
+
+def _decision(preamble, decision_html, closing="ينفذ هذا القرار من تاريخ صدوره، ويُبلَّغ لمن يلزم لتنفيذه."):
+    """قالب قرار «مقفل البنية»: يتغير فقط ما يُدخله الكاتب (المدخلات + الأشخاص المختارون) — البنود والصياغة ثابتة"""
+    return [
+        _sec(1, "REFERENCE", "الرقم والتاريخ", "<p>الرقم: {{correspondence.official_number}}<br/>التاريخ: {{correspondence.date}} الموافق {{correspondence.date_hijri}}</p>", "SYSTEM"),
+        _sec(2, "SUBJECT", "عنوان القرار", "<p style=\"text-align:center\"><strong>{{correspondence.subject}}</strong></p>", "SYSTEM", True),
+        _sec(3, "INTRODUCTION", "الديباجة", f"<p>{preamble}</p><p>وبناءً على مقتضيات المصلحة العامة،</p><p style=\"text-align:center\"><strong>قرر ما يلي:</strong></p>", "LOCKED"),
+        _sec(4, "BODY", "منطوق القرار", decision_html, "LOCKED", True),
+        _sec(5, "CUSTOM", "ملاحظات إضافية (اختياري)", "<p></p>", "EDITABLE"),
+        _sec(6, "CLOSING", "الخاتمة", f"<p>{closing}</p>", "LOCKED"),
+        _sec(7, "SIGNATURE_BLOCK", "التوقيع", "<p>{{organization.name_ar}}</p>", "SYSTEM", cfg={"signer_source": "WORKFLOW_SIGNER", "show_name": True, "show_title": True}),
+        _sec(8, "CC", "نسخة إلى", "<p>- ملف القرارات</p>", "EDITABLE"),
+    ]
+
+
+_BASIS = _inp("basis", "السند النظامي", "TEXT", True, "اللائحة التنظيمية للجامعة والصلاحيات المخولة", max_length=300)
+SEED_DECISION_TEMPLATES = [
+    ("GROUP_ASSIGNMENT_DECISION", "قرار تكليف جماعي (موظفون)", "ADMINISTRATIVE_DECISION", ["EMPLOYEE"], "EMPLOYEE",
+     "استناداً إلى {{input.basis}}، وإلى ما تقتضيه حاجة العمل في {{organization.name_ar}}،",
+     "<p><strong>أولاً:</strong> يُكلَّف الموظفون المدرجة أسماؤهم أدناه وعددهم ({{employees.count}}) بـ <strong>{{input.assignment}}</strong>، اعتباراً من {{input.start_date}}{{input.duration}}.</p>{{employees.table}}<p><strong>ثانياً:</strong> يُعدّ هذا التكليف إضافة إلى مهامهم الأصلية، ويرفعون تقريراً عن أعمالهم إلى {{input.report_to}}.</p>",
+     [_BASIS, _inp("assignment", "موضوع التكليف", "TEXTAREA", True, max_length=800), _inp("start_date", "تاريخ البدء", "DATE"), _inp("duration", "المدة (مثال: ولمدة ثلاثة أشهر)", "TEXT", False, "", max_length=120), _inp("report_to", "جهة رفع التقارير", "TEXT", True, max_length=150)]),
+    ("EMPLOYEES_APPOINTMENT_DECISION", "قرار تعيين موظفين", "ADMINISTRATIVE_DECISION", ["EMPLOYEE"], "EMPLOYEE",
+     "استناداً إلى {{input.basis}}، وبعد استيفاء المعنيين لشروط شغل الوظيفة،",
+     "<p><strong>أولاً:</strong> يُعيَّن المذكورون أدناه وعددهم ({{employees.count}}) في الوظائف الموضحة قرين كل منهم، اعتباراً من {{input.start_date}}.</p>{{employees.table}}<p><strong>ثانياً:</strong> يخضع المعيَّنون لفترة تجربة مدتها {{input.probation}} تُقيَّم في نهايتها صلاحيتهم للعمل.</p><p><strong>ثالثاً:</strong> على الإدارة المختصة استكمال إجراءات المباشرة.</p>",
+     [_BASIS, _inp("start_date", "تاريخ المباشرة", "DATE"), _inp("probation", "فترة التجربة", "SELECT", True, "ثلاثة أشهر", ["ثلاثة أشهر", "ستة أشهر", "سنة"])]),
+    ("EMPLOYEES_TERMINATION_DECISION", "قرار إنهاء خدمة موظفين", "ADMINISTRATIVE_DECISION", ["EMPLOYEE"], "EMPLOYEE",
+     "استناداً إلى {{input.basis}}، وعلى {{input.reason}}،",
+     "<p><strong>أولاً:</strong> تُنهى خدمات الموظفين المدرجة أسماؤهم أدناه وعددهم ({{employees.count}}) اعتباراً من {{input.effective_date}}.</p>{{employees.table}}<p><strong>ثانياً:</strong> تُصرف لهم مستحقاتهم النظامية وفق اللوائح، وعليهم تسليم عهدهم قبل التاريخ المذكور.</p>",
+     [_BASIS, _inp("reason", "السبب / المستند", "TEXTAREA", True, max_length=600), _inp("effective_date", "تاريخ نفاذ الإنهاء", "DATE")]),
+    ("STUDENTS_GROUP_DECISION", "قرار بشأن مجموعة طلاب", "ADMINISTRATIVE_DECISION", ["STUDENT"], "STUDENT",
+     "استناداً إلى {{input.basis}}، وبناءً على {{input.reason}}،",
+     "<p><strong>أولاً:</strong> {{input.decision_type}} الطلاب المدرجة أسماؤهم أدناه وعددهم ({{students.count}}) اعتباراً من {{input.effective_date}}.</p>{{students.table}}<p><strong>ثانياً:</strong> على عمادة القبول والتسجيل والكليات المعنية تنفيذ ما يلزم وإشعار الطلاب.</p>",
+     [_BASIS, _inp("decision_type", "نوع القرار", "SELECT", True, "يُفصل", ["يُفصل", "يُوجَّه إنذار نهائي إلى", "يُوقَف قيد", "يُقبل", "يُحوَّل", "يُعاد قيد"]), _inp("reason", "المسوّغ", "TEXTAREA", True, max_length=600), _inp("effective_date", "تاريخ النفاذ", "DATE")]),
+    ("FACULTY_COMMITTEE_FORMATION", "قرار تشكيل لجنة (هيئة تدريس)", "ADMINISTRATIVE_DECISION", ["FACULTY"], "FACULTY",
+     "استناداً إلى {{input.basis}}، وإلى الحاجة إلى {{input.purpose}}،",
+     "<p><strong>أولاً:</strong> تُشكَّل لجنة باسم «{{input.committee_name}}» من الأعضاء التالية أسماؤهم وعددهم ({{faculty_members.count}}):</p>{{faculty_members.table}}<p><strong>ثانياً:</strong> يرأس اللجنة {{input.chair}}، وتتولى: {{input.tasks}}.</p><p><strong>ثالثاً:</strong> ترفع اللجنة تقريرها النهائي في موعد أقصاه {{input.deadline}}.</p>",
+     [_BASIS, _inp("committee_name", "اسم اللجنة", "TEXT", True, max_length=150), _inp("purpose", "الغرض", "TEXT", True, max_length=200), _inp("chair", "رئيس اللجنة", "TEXT", True, max_length=150), _inp("tasks", "مهام اللجنة", "TEXTAREA", True, max_length=800), _inp("deadline", "الموعد النهائي", "DATE")]),
+    ("STUDENTS_LIST_LETTER", "خطاب بكشف أسماء طلاب", "OFFICIAL_LETTER", ["STUDENT"], "STUDENT",
+     "تحية طيبة وبعد،",
+     "<p>نرفق لكم كشفاً بأسماء الطلاب وعددهم ({{students.count}}) {{input.purpose}}:</p>{{students.table}}<p>شاكرين لكم حسن تعاونكم.</p>",
+     [_inp("purpose", "الغرض من الكشف (مثال: المرشحين للتدريب الميداني)", "TEXT", True, max_length=250)]),
+]
+
+
 async def correspondence_content_startup(db):
     try:
         await db.correspondence_letterheads.create_index([("organization_id", 1), ("code", 1)])
@@ -882,6 +939,15 @@ async def correspondence_content_startup(db):
                                                               "description": "قالب عام مبذور", "template_category": "GENERAL" if not req else req[0], "freeze_stage": "ISSUED", "current_version": 1, "status": "PUBLISHED",
                                                               "is_global": True, "is_active": True, "created_by": "system", "created_at": _now(), "updated_at": _now(), "deleted_at": None})
             await db.correspondence_template_versions.insert_one({"template_id": str(r.inserted_id), "version_number": 1, "sections": _std(body_title, body), "input_fields": inputs, "required_entities": req,
+                                                                  "letterhead_id": None, "change_note": "الإصدار الأول (بذرة)", "is_published": True, "published_at": _now(), "created_by": "system", "created_at": _now()})
+        for code, name, dt_code, req, cat, preamble, decision_html, inputs in SEED_DECISION_TEMPLATES:
+            if await db.correspondence_templates.find_one({"code": code, "organization_id": None}):
+                continue
+            secs = _decision(preamble, decision_html) if dt_code == "ADMINISTRATIVE_DECISION" else _std("نص الخطاب", decision_html)
+            r = await db.correspondence_templates.insert_one({"organization_id": None, "document_type_id": dts.get(dt_code), "letterhead_id": None, "code": code, "name_ar": name, "name_en": code.replace("_", " ").title(),
+                                                              "description": "قالب جاهز متعدد الأسماء — تُملأ المدخلات ويُختار الأشخاص من الكشف فقط", "template_category": cat, "freeze_stage": "ISSUED", "current_version": 1, "status": "PUBLISHED",
+                                                              "is_global": True, "is_active": True, "created_by": "system", "created_at": _now(), "updated_at": _now(), "deleted_at": None})
+            await db.correspondence_template_versions.insert_one({"template_id": str(r.inserted_id), "version_number": 1, "sections": secs, "input_fields": inputs, "required_entities": req,
                                                                   "letterhead_id": None, "change_note": "الإصدار الأول (بذرة)", "is_published": True, "published_at": _now(), "created_by": "system", "created_at": _now()})
     except Exception as e:
         import logging

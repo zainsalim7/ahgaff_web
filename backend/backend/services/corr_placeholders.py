@@ -97,7 +97,7 @@ def _list_ns(ns: str, rows: List[dict]) -> dict:
     table = f'<table class="ph-table" style="width:100%;border-collapse:collapse"><thead><tr><th>م</th>{head}</tr></thead><tbody>{body}</tbody></table>' if rows else ""
     return {"table": table, "list": "، ".join(_h.escape(str(r.get("full_name") or "")) for r in rows), "count": str(len(rows)) if rows else ""}
 UNISSUED_NUMBER = "[سيتم إنشاء الرقم عند الإصدار]"
-SOFT_NS = {"recipient", "signer"}
+SOFT_NS = {"recipient", "signer", "input"}
 
 
 def registry_list(ctx) -> List[dict]:
