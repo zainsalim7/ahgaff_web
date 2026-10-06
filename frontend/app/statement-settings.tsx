@@ -11,6 +11,7 @@ import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
 import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
+import { LetterLayoutEditor, STATEMENT_MODEL } from '../src/components/letters/LetterLayoutEditor';
 
 interface Faculty { id: string; name: string; }
 
@@ -61,6 +62,33 @@ export default function StatementSettingsScreen() {
   const [editingTplId, setEditingTplId] = useState('');
   const [tplMsg, setTplMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [savingTpl, setSavingTpl] = useState(false);
+  const [layoutDefaults, setLayoutDefaults] = useState<any>({});
+  const [layoutPreview, setLayoutPreview] = useState('');
+  const [layoutPreviewBusy, setLayoutPreviewBusy] = useState(false);
+  const [sampleStudentId, setSampleStudentId] = useState('');
+
+  useEffect(() => { api.get('/statements/layout-defaults').then((r) => setLayoutDefaults(r.data)).catch(() => {}); }, []);
+  useEffect(() => {
+    if (!facultyId) return;
+    api.get('/departments', { params: { faculty_id: facultyId } }).then(async (r) => {
+      const depts = (r.data || []).filter((d: any) => (d.faculty_id || '') === facultyId);
+      for (const d of depts.length ? depts : r.data || []) {
+        const st = await api.get('/students', { params: { department_id: d.id || d._id } }).catch(() => ({ data: [] }));
+        if (st.data?.length) { setSampleStudentId(st.data[0].id); return; }
+      }
+      setSampleStudentId('');
+    }).catch(() => setSampleStudentId(''));
+  }, [facultyId]);
+  useEffect(() => {
+    if (!sampleStudentId) { setLayoutPreview(''); return; }
+    const t = setTimeout(() => {
+      setLayoutPreviewBusy(true);
+      api.post('/statements/preview-pdf?fmt=png', { student_id: sampleStudentId, purpose: 'نموذج لمعاينة التخطيط', layout: (form as any).layout || null }, { responseType: 'blob' })
+        .then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setLayoutPreview((o) => { if (o) URL.revokeObjectURL(o); return url; }); })
+        .catch(() => {}).finally(() => setLayoutPreviewBusy(false));
+    }, 600);
+    return () => clearTimeout(t);
+  }, [sampleStudentId, (form as any).layout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const TPL_VARS = ['{اسم_الطالب}', '{رقم_القيد}', '{الجنسية}', '{المستوى}', '{التخصص}', '{الكلية}', '{العام_الجامعي}', '{الحالة}', '{التاريخ}', '{الفصل}', '{المعدل}', '{التقدير}', '{الطالب}', '{هو}', '{له}', '{طلبه}', '{يدرس}', '{يحمل}', '{مستمر}', '{مقيد}', '{منتظم}', '{المذكور}', '{حصل}', '{اجتاز}', '{تخرج}', '{خريج}'];
 
@@ -363,6 +391,25 @@ export default function StatementSettingsScreen() {
                 <Text style={styles.saveBtnText}>حفظ إعدادات الكليشة</Text>
               </>
             )}
+          </TouchableOpacity>
+        </View>
+
+        {/* 📐 تخطيط صفحة الإفادة */}
+        <View style={[styles.card, { marginTop: 14 }]} testID="statement-layout-card">
+          <Text style={styles.title}>📐 تخطيط صفحة الإفادة (المسافات بالمليمتر)</Text>
+          <Text style={styles.hint}>اسحب الكتل على الصفحة المصغّرة لتقريبها أو إبعادها، وتظهر النتيجة في المعاينة بنموذج لطالب من الكلية. يُحفظ مع إعدادات الكليشة لهذه الكلية.</Text>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 14, alignItems: 'start', direction: 'rtl' }}>
+            <div style={{ overflowX: 'auto' }}>
+              <LetterLayoutEditor compact model={STATEMENT_MODEL} value={(form as any).layout || {}} defaults={layoutDefaults} onChange={(l) => setForm((p) => ({ ...p, layout: l } as any))} hasTable={false} testID="stmt-layout" />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة {layoutPreviewBusy ? '⏳' : ''}</div>
+              {layoutPreview ? <img src={layoutPreview} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="stmt-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>{sampleStudentId ? 'جاري التوليد…' : 'لا يوجد طلاب في هذه الكلية للمعاينة'}</div>}
+            </div>
+          </div>
+          <TouchableOpacity onPress={save} disabled={saving || !facultyId} style={[styles.saveBtn, { marginTop: 10 }, (saving || !facultyId) && { opacity: 0.6 }]} testID="statement-layout-save-btn">
+            <Ionicons name="save-outline" size={17} color="#fff" />
+            <Text style={styles.saveBtnText}>حفظ التخطيط مع الكليشة</Text>
           </TouchableOpacity>
         </View>
 

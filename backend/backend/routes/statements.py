@@ -137,6 +137,28 @@ class StatementSettings(BaseModel):
     faculty_name_en: str = ""
     logo_base64: str = ""
     reference_format: str = ""
+    layout: Optional[dict] = None   # 📐 تخطيط صفحة الإفادة (مم)
+
+
+STATEMENT_LAYOUT = {
+    "margin_side": 18, "header_bottom": 42, "ref_y": 52, "show_title": True, "title_y": 78, "start_y": 96,
+    "gap_intro": 9, "gap_who": 10, "gap_name": 6, "body_font": 14, "body_leading": 1.55, "gap_body": 9,
+    "gap_purpose": 9, "gap_signature": 24, "watermark": "",
+}
+
+
+def _layout(settings: dict, s: dict) -> dict:
+    out = dict(STATEMENT_LAYOUT)
+    for p in (settings.get("layout"), s.get("layout")):
+        for k, v in (p or {}).items():
+            if k in out and v is not None and v != "":
+                out[k] = v
+    return out
+
+
+@router.get("/statements/layout-defaults")
+async def statement_layout_defaults(current_user: dict = Depends(get_current_user)):
+    return STATEMENT_LAYOUT
 
 
 class IssueRequest(BaseModel):
@@ -153,6 +175,8 @@ class IssueRequest(BaseModel):
     grade: Optional[str] = None     # 🏅 التقدير — يعبّئ {التقدير}
     term: Optional[str] = None      # 📅 الفصل الدراسي — يعبّئ {الفصل} (إدخال يدوي)
     signatory_position_id: Optional[str] = None  # 🖋️ الموقّع من دليل المناصب
+    layout: Optional[dict] = None   # 📐 تجاوز التخطيط لهذه الإفادة
+    draft_id: Optional[str] = None  # تحديث مسودة قائمة
 
 
 class RevokeRequest(BaseModel):
@@ -233,8 +257,9 @@ async def _safe_dept(db, student: dict):
 
 async def _issue_core(db, student: dict, current_user: dict, nationality, purpose, valid_days, base_url,
                       signatory_name=None, signatory_title=None, body=None, template_name=None,
-                      gpa=None, grade=None, term=None, draft: bool = False) -> dict:
-    """draft=True: يبني الوثيقة للمعاينة فقط — بلا رقم تسلسلي ولا حفظ"""
+                      gpa=None, grade=None, term=None, draft: bool = False, layout: Optional[dict] = None,
+                      update_id: Optional[ObjectId] = None, extra: Optional[dict] = None) -> dict:
+    """draft=True: يبني الوثيقة للمعاينة فقط — بلا رقم تسلسلي ولا حفظ. update_id: اعتماد مسودة على نفس السجل"""
     dept = await _safe_dept(db, student)
     faculty_id = student.get("faculty_id") or (dept or {}).get("faculty_id", "")
     if not _can_issue(current_user, faculty_id):
@@ -306,13 +331,19 @@ async def _issue_core(db, student: dict, current_user: dict, nationality, purpos
         "issued_at": datetime.now(timezone.utc).isoformat(),
         "expires_at": expires_at,
         "is_revoked": False,
+        "layout": layout or None,
+        "status": "issued",
     }
     if draft:
         doc["number_display"] = f"{number_display} (مسوَّدة)"
         doc["verify_url"] = "DRAFT-PREVIEW"
         return doc
-    res = await db.student_statements.insert_one(doc)
-    doc["inserted_id"] = str(res.inserted_id)
+    if update_id is not None:
+        await db.student_statements.update_one({"_id": update_id}, {"$set": {**doc, **(extra or {})}})
+        doc["inserted_id"] = str(update_id)
+    else:
+        res = await db.student_statements.insert_one(doc)
+        doc["inserted_id"] = str(res.inserted_id)
     await log_activity(current_user, "issue_student_statement", "student", str(student["_id"]),
                        student.get("full_name", ""), {"number": number_display})
     return doc
@@ -328,8 +359,66 @@ async def issue_statement(data: IssueRequest, current_user: dict = Depends(get_c
     doc = await _issue_core(db, student, current_user, data.nationality, data.purpose, data.valid_days, data.base_url,
                             signatory_name=sig_name, signatory_title=sig_title,
                             body=data.body, template_name=data.template_name,
-                            gpa=data.gpa, grade=data.grade, term=data.term)
+                            gpa=data.gpa, grade=data.grade, term=data.term, layout=data.layout)
     return {"id": doc["inserted_id"], "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
+
+
+@router.post("/statements/draft")
+async def save_statement_draft(data: IssueRequest, current_user: dict = Depends(get_current_user)):
+    """💾 حفظ الإفادة كمسودة برقم مستقل (م-N) — الرقم الرسمي يُمنح عند الاعتماد"""
+    db = get_db()
+    student = await db.students.find_one({"_id": ObjectId(data.student_id)})
+    if not student:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    sig_name, sig_title = await resolve_signatory(db, data.signatory_position_id, data.signatory_name, data.signatory_title)
+    doc = await _issue_core(db, student, current_user, data.nationality, data.purpose, data.valid_days, data.base_url,
+                            signatory_name=sig_name, signatory_title=sig_title, body=data.body, template_name=data.template_name,
+                            gpa=data.gpa, grade=data.grade, term=data.term, draft=True, layout=data.layout)
+    doc.update({"status": "draft", "verify_url": "", "verify_token": "", "inputs": data.dict(), "valid_days": data.valid_days,
+                "updated_at": datetime.now(timezone.utc).isoformat(), "updated_by_name": current_user.get("full_name", "")})
+    if data.draft_id and ObjectId.is_valid(data.draft_id):
+        ex = await db.student_statements.find_one({"_id": ObjectId(data.draft_id)})
+        if not ex or ex.get("status") != "draft":
+            raise HTTPException(status_code=400, detail="المسودة غير موجودة أو صدرت رسمياً")
+        doc["number_display"] = ex["number_display"]
+        await db.student_statements.update_one({"_id": ex["_id"]}, {"$set": doc})
+        return {"id": str(ex["_id"]), "number": ex["number_display"], "status": "draft"}
+    counter = await db.statement_counters.find_one_and_update({"_id": "draft"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    doc["number_display"] = f"م-{counter['seq']}"
+    doc["draft_seq"] = counter["seq"]
+    res = await db.student_statements.insert_one(doc)
+    return {"id": str(res.inserted_id), "number": doc["number_display"], "status": "draft"}
+
+
+@router.post("/statements/{statement_id}/finalize")
+async def finalize_statement_draft(statement_id: str, base_url: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """✅ اعتماد المسودة: نفس السجل يأخذ الرقم الرسمي ورمز QR"""
+    db = get_db()
+    ex = await db.student_statements.find_one({"_id": ObjectId(statement_id)})
+    if not ex or ex.get("status") != "draft":
+        raise HTTPException(status_code=400, detail="المسودة غير موجودة أو صدرت مسبقاً")
+    inp = IssueRequest(**(ex.get("inputs") or {"student_id": ex["student_id"]}))
+    student = await db.students.find_one({"_id": ObjectId(inp.student_id)})
+    if not student:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    sig_name, sig_title = await resolve_signatory(db, inp.signatory_position_id, inp.signatory_name, inp.signatory_title)
+    doc = await _issue_core(db, student, current_user, inp.nationality, inp.purpose, inp.valid_days, base_url or inp.base_url,
+                            signatory_name=sig_name, signatory_title=sig_title, body=inp.body, template_name=inp.template_name,
+                            gpa=inp.gpa, grade=inp.grade, term=inp.term, layout=inp.layout, update_id=ex["_id"],
+                            extra={"draft_number": ex.get("number_display"), "inputs": None})
+    return {"id": doc["inserted_id"], "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
+
+
+@router.delete("/statements/{statement_id}")
+async def delete_statement_draft(statement_id: str, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    s = await db.student_statements.find_one({"_id": ObjectId(statement_id)})
+    if not s or s.get("status") != "draft":
+        raise HTTPException(status_code=400, detail="تُحذف المسودات فقط — الإفادات الصادرة تُلغى ولا تُحذف")
+    if not _can_issue(current_user, s.get("faculty_id", "")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    await db.student_statements.delete_one({"_id": s["_id"]})
+    return {"ok": True}
 
 
 @router.post("/statements/preview-pdf")
@@ -342,7 +431,9 @@ async def preview_statement_pdf(data: IssueRequest, fmt: str = "pdf", current_us
     sig_name, sig_title = await resolve_signatory(db, data.signatory_position_id, data.signatory_name, data.signatory_title)
     doc = await _issue_core(db, student, current_user, data.nationality, data.purpose, data.valid_days, data.base_url,
                             signatory_name=sig_name, signatory_title=sig_title, body=data.body, template_name=data.template_name,
-                            gpa=data.gpa, grade=data.grade, term=data.term, draft=True)
+                            gpa=data.gpa, grade=data.grade, term=data.term, draft=True, layout=data.layout)
+    doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادرة"}
+    doc["number_display"] = doc["number_display"].replace("(مسوَّدة)", "(معاينة)")
     settings = await db.statement_settings.find_one({"_id": f"faculty_{doc.get('faculty_id')}"}) or {}
     pdf = _build_pdf(doc, settings, draft=True)
     if fmt == "png":
@@ -555,10 +646,15 @@ async def bulk_issue_statements(data: BulkIssueRequest, current_user: dict = Dep
 @router.get("/statements")
 async def list_statements(
     faculty_id: Optional[str] = Query(None),
+    status: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
     q = {}
+    if status == "draft":
+        q["status"] = "draft"
+    elif status == "issued":
+        q["status"] = {"$ne": "draft"}
     if current_user.get("role") != "admin":
         fids = set(current_user.get("faculty_ids") or [])
         if current_user.get("faculty_id"):
@@ -569,11 +665,24 @@ async def list_statements(
     if faculty_id:
         q["faculty_id"] = faculty_id
     items = []
-    async for s in db.student_statements.find(q).sort("issued_at", -1).limit(500):
+    async for s in db.student_statements.find(q, {"inputs": 0}).sort("issued_at", -1).limit(500):
         s["id"] = str(s.pop("_id"))
         s.pop("verify_token", None)
         items.append(s)
     return items
+
+
+@router.get("/statements/{statement_id}")
+async def get_statement(statement_id: str, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    s = await db.student_statements.find_one({"_id": ObjectId(statement_id)})
+    if not s:
+        raise HTTPException(status_code=404, detail="الإفادة غير موجودة")
+    if not _can_issue(current_user, s.get("faculty_id", "")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    s["id"] = str(s.pop("_id"))
+    s.pop("verify_token", None)
+    return s
 
 
 @router.post("/statements/{statement_id}/revoke")
@@ -647,9 +756,10 @@ async def statement_pdf(statement_id: str, current_user: dict = Depends(get_curr
     if not _can_issue(current_user, s.get("faculty_id", "")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     settings = await db.statement_settings.find_one({"_id": f"faculty_{s.get('faculty_id')}"}) or {}
-    pdf = _build_pdf(s, settings)
+    is_draft = s.get("status") == "draft"
+    pdf = _build_pdf(s, settings, draft=is_draft)
     from urllib.parse import quote
-    fname = quote(f"إفادة {s.get('student_name', '') or s.get('serial', '')} - {export_stamp()}.pdf")
+    fname = quote(f"{'مسودة إفادة' if is_draft else 'إفادة'} {s.get('student_name', '') or s.get('serial', '')} - {export_stamp()}.pdf")
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
 
@@ -682,6 +792,10 @@ def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
     buf = io.BytesIO()
     W, H = A4
     c = pdfcanvas.Canvas(buf, pagesize=A4)
+    L = _layout(settings, s)
+    MS = float(L["margin_side"]) * mm
+    HB = float(L["header_bottom"]) * mm
+    BODY, LEAD = float(L["body_font"]), float(L["body_leading"])
 
     # ===== الترويسة (الكليشة) =====
     logo_b64 = settings.get("logo_base64") or ""
@@ -696,21 +810,23 @@ def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
         default_logo = Path(__file__).parent.parent / "assets" / "university_logo.jpeg"
         if default_logo.exists():
             img = ImageReader(str(default_logo))
+    logo = max(12 * mm, min(28 * mm, HB - 14 * mm))
     if img:
-        c.drawImage(img, W / 2 - 14 * mm, H - 38 * mm, 28 * mm, 28 * mm, mask="auto", preserveAspectRatio=True)
+        c.drawImage(img, W / 2 - logo / 2, H - 10 * mm - logo, logo, logo, mask="auto", preserveAspectRatio=True)
+    t1, t2 = H - HB + 24 * mm, H - HB + 16 * mm
     c.setFont("Amiri", 16)
-    c.drawRightString(W - 18 * mm, H - 18 * mm, ar("جامعة الأحقاف"))
+    c.drawRightString(W - MS, t1, ar("جامعة الأحقاف"))
     c.setFont("Amiri", 13)
-    c.drawRightString(W - 18 * mm, H - 26 * mm, ar(s.get("faculty_name", "")))
+    c.drawRightString(W - MS, t2, ar(s.get("faculty_name", "")))
     c.setFont("Helvetica-Bold", 12)
-    c.drawString(18 * mm, H - 18 * mm, "AL-AHGAFF UNIVERSITY")
+    c.drawString(MS, t1, "AL-AHGAFF UNIVERSITY")
     c.setFont("Helvetica", 10)
-    c.drawString(18 * mm, H - 26 * mm, settings.get("faculty_name_en", ""))
+    c.drawString(MS, t2, settings.get("faculty_name_en", ""))
     # خط مزدوج أسفل الترويسة (شكل رسمي)
     c.setLineWidth(1.3)
-    c.line(18 * mm, H - 41 * mm, W - 18 * mm, H - 41 * mm)
+    c.line(MS, H - HB + 1 * mm, W - MS, H - HB + 1 * mm)
     c.setLineWidth(0.4)
-    c.line(18 * mm, H - 42.4 * mm, W - 18 * mm, H - 42.4 * mm)
+    c.line(MS, H - HB - 0.4 * mm, W - MS, H - HB - 0.4 * mm)
 
     # المرجع والتاريخان
     issued = (s.get("issued_at") or "")[:10]
@@ -722,60 +838,58 @@ def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
         hijri_str = ""
     # المرجع (يسار، أخضر عريض) مقابل التاريخين (يمين، أخضر)
     GREEN = (0.0, 0.5, 0.13)
+    RY = H - float(L["ref_y"]) * mm
     c.setFillColorRGB(*GREEN)
     c.setFont(BOLD, 13)
-    c.drawString(18 * mm, H - 52 * mm, ar(f"المرجع : {s.get('number_display', '')}"))
+    c.drawString(MS, RY, ar(f"المرجع : {s.get('number_display', '')}"))
     c.setFont(BOLD, 11.5)
-    c.drawRightString(W - 18 * mm, H - 50 * mm, ar(f"التاريخ: {hijri_str}"))
+    c.drawRightString(W - MS, RY + 2 * mm, ar(f"التاريخ: {hijri_str}"))
     greg_str = f"{issued.replace('-', '/')}م" if issued else ""
-    c.drawRightString(W - 18 * mm, H - 57 * mm, ar(f"الموافق: {greg_str}"))
+    c.drawRightString(W - MS, RY - 5 * mm, ar(f"الموافق: {greg_str}"))
     c.setFillColorRGB(0, 0, 0)
 
     # ===== العنوان =====
-    c.setFont(BOLD, 20)
-    c.drawCentredString(W / 2, H - 78 * mm, ar("إلى من يهمه الأمر"))
-    c.setLineWidth(0.8)
-    c.line(W / 2 - 33 * mm, H - 80.5 * mm, W / 2 + 33 * mm, H - 80.5 * mm)
-    c.setLineWidth(1.0)
+    if L.get("show_title"):
+        TY = H - float(L["title_y"]) * mm
+        c.setFont(BOLD, 20)
+        c.drawCentredString(W / 2, TY, ar("إلى من يهمه الأمر"))
+        c.setLineWidth(0.8)
+        c.line(W / 2 - 33 * mm, TY - 2.5 * mm, W / 2 + 33 * mm, TY - 2.5 * mm)
+        c.setLineWidth(1.0)
 
     # ===== نص الإفادة =====
     level_ar = LEVEL_AR.get(s.get("level") or 1, str(s.get("level")))
     is_f = (s.get("gender") or "male") == "female"
     status_phrase = (STATUS_PHRASE_F if is_f else STATUS_PHRASE).get(s.get("student_status", "active"), "ومستمرةً في الدراسة" if is_f else "ومستمراً في الدراسة")
     who = "بأن الطالبة:" if is_f else "بأن الطالب:"
-    c.setFont("Amiri", 14)
-    yy = H - 96 * mm
+    c.setFont("Amiri", BODY)
+    yy = H - float(L["start_y"]) * mm
+    c.drawCentredString(W / 2, yy, ar(f"تفيد {s.get('faculty_name', '')} بجامعة الأحقاف"))
+    yy -= float(L["gap_intro"]) * mm
+    c.drawCentredString(W / 2, yy, ar(who))
+    yy -= float(L["gap_who"]) * mm
+    c.setFont("Amiri", BODY + 3)
+    c.drawCentredString(W / 2, yy, ar(s.get("student_name", "")))
+    yy -= float(L["gap_name"]) * mm
+    c.setFont("Amiri", BODY)
     if (s.get("body") or "").strip():
-        # 📝 متن مخصص من قالب أو إفادة حرة — نص عادي يُلف على أسطر، أو HTML منسّق (خط/حجم/عريض/محاذاة)
+        # 📝 متن مخصص من قالب أو إفادة حرة — نص عادي أو HTML منسّق (خط/حجم/عريض/محاذاة)
         from services.rich_text_pdf import parse_rich, draw_rich
-        c.drawCentredString(W / 2, yy, ar(f"تفيد {s.get('faculty_name', '')} بجامعة الأحقاف"))
-        yy -= 9 * mm
-        c.drawCentredString(W / 2, yy, ar(who))
-        yy -= 10 * mm
-        c.setFont("Amiri", 17)
-        c.drawCentredString(W / 2, yy, ar(s.get("student_name", "")))
-        yy -= 3 * mm
-        yy = draw_rich(c, parse_rich(s["body"], default_size=14, default_font="amiri"), 22 * mm, W - 22 * mm, yy)
-        c.setFont("Amiri", 14)
-        yy -= 4 * mm
+        yy = draw_rich(c, parse_rich(s["body"], default_size=BODY, default_font="amiri"), MS + 4 * mm, W - MS - 4 * mm, yy, leading=LEAD)
+        c.setFont("Amiri", BODY)
     else:
-        c.drawCentredString(W / 2, yy, ar(f"تفيد {s.get('faculty_name', '')} بجامعة الأحقاف"))
-        yy -= 9 * mm
-        c.drawCentredString(W / 2, yy, ar(who))
-        yy -= 10 * mm
-        c.setFont("Amiri", 17)
-        c.drawCentredString(W / 2, yy, ar(s.get("student_name", "")))
-        yy -= 11 * mm
-        c.setFont("Amiri", 14)
+        lh = BODY * LEAD
+        yy -= lh
         nat = feminize_nationality(s.get("nationality", "")) if is_f else s.get("nationality", "")
         c.drawCentredString(W / 2, yy, ar(f"{nat} الجنسية، {'تدرس' if is_f else 'يدرس'} بالمستوى {level_ar} تخصص ({s.get('department_name', '')})"))
-        yy -= 9 * mm
+        yy -= lh
         c.drawCentredString(W / 2, yy, ar(f"للعام الجامعي {s.get('academic_year', '')}، {'تحمل' if is_f else 'يحمل'} رقم قيد ({s.get('enrollment_no', '')}) {status_phrase}."))
-        yy -= 12 * mm
+        yy -= lh * 1.3
         c.drawCentredString(W / 2, yy, ar("أعطيت لها هذه الإفادة بناءً على طلبها." if is_f else "أعطيت له هذه الإفادة بناءً على طلبه."))
     if s.get("purpose"):
-        yy -= 9 * mm
+        yy -= float(L["gap_purpose"]) * mm
         c.drawCentredString(W / 2, yy, ar(f"وذلك لغرض: {s['purpose']}"))
+    yy -= float(L["gap_body"]) * mm
 
     # ===== التوقيع =====
     sig_title = (s.get("signatory_title") or settings.get("signatory_title") or "مسجل الكلية").strip()
@@ -788,11 +902,12 @@ def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
         except Exception:
             sig_img = None
     c.setFont("Amiri", 14)
-    c.drawString(30 * mm, yy - 24 * mm, ar(sig_title))
-    name_y = yy - 33 * mm
+    GS = float(L["gap_signature"]) * mm
+    c.drawString(30 * mm, yy - GS, ar(sig_title))
+    name_y = yy - GS - 9 * mm
     if sig_img:
-        c.drawImage(sig_img, 20 * mm, yy - 42 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True)
-        name_y = yy - 47 * mm
+        c.drawImage(sig_img, 20 * mm, yy - GS - 18 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True)
+        name_y = yy - GS - 23 * mm
     c.setFont("Amiri", 13)
     c.drawString(24 * mm, name_y, ar(sig_name))
 
@@ -811,11 +926,11 @@ def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
         c.setFont(BOLD, 72)
         c.translate(W / 2, H / 2)
         c.rotate(35)
-        c.drawCentredString(0, 0, ar("معاينة — غير صادرة"))
+        c.drawCentredString(0, 0, ar(L.get("watermark") or "مسوَّدة — غير صادرة"))
         c.restoreState()
 
     # ===== التذييل =====
-    c.line(18 * mm, 22 * mm, W - 18 * mm, 22 * mm)
+    c.line(MS, 22 * mm, W - MS, 22 * mm)
     c.setFont("Amiri", 9)
     footer_parts = []
     if settings.get("address"):

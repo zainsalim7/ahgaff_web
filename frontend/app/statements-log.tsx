@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Picker } from '@react-native-picker/picker';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { useRouter } from 'expo-router';
 
 interface StatementRow {
   id: string;
@@ -29,6 +30,7 @@ interface StatementRow {
 }
 
 const statusOf = (s: StatementRow) => {
+  if ((s as any).status === 'draft') return { label: 'مسودة', color: '#b45309', bg: '#fff7ed' };
   if (s.is_revoked) return { label: 'ملغاة', color: '#c62828', bg: '#ffebee' };
   if (s.expires_at && s.expires_at < new Date().toISOString()) return { label: 'منتهية', color: '#e65100', bg: '#fff3e0' };
   return { label: 'سارية', color: '#2e7d32', bg: '#e8f5e9' };
@@ -36,6 +38,7 @@ const statusOf = (s: StatementRow) => {
 
 export default function StatementsLogScreen() {
   const { user } = useAuth();
+  const router = useRouter();
   const [items, setItems] = useState<StatementRow[]>([]);
   const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
   const [facultyFilter, setFacultyFilter] = useState('');
@@ -46,6 +49,21 @@ export default function StatementsLogScreen() {
   const [revokeReason, setRevokeReason] = useState('');
   const [acting, setActing] = useState(false);
   const [msg, setMsg] = useState('');
+
+  const doFinalize = async (s: StatementRow) => {
+    if (typeof window !== 'undefined' && !window.confirm(`اعتماد المسودة ${s.number_display} وإصدارها برقم رسمي؟`)) return;
+    setActing(true);
+    try {
+      const r = await api.post(`/statements/${s.id}/finalize`, null, { params: { base_url: typeof window !== 'undefined' ? window.location.origin : '' } });
+      setMsg(`✅ صدرت الإفادة رقم ${r.data.number}`);
+      await downloadPdf({ ...s, id: r.data.id, student_name: s.student_name, number_display: r.data.number });
+      fetchData();
+    } catch (e: any) { setMsg(e?.response?.data?.detail || 'فشل الاعتماد'); } finally { setActing(false); }
+  };
+  const doDeleteDraft = async (s: StatementRow) => {
+    if (typeof window !== 'undefined' && !window.confirm('حذف المسودة نهائياً؟')) return;
+    try { await api.delete(`/statements/${s.id}`); fetchData(); } catch (e: any) { setMsg(e?.response?.data?.detail || 'فشل الحذف'); }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -184,7 +202,7 @@ export default function StatementsLogScreen() {
                     </View>
                   )}
                 </View>
-                <Text style={styles.number}>إفادة رقم {s.number_display}</Text>
+                <Text style={styles.number}>{(s as any).status === 'draft' ? 'مسودة' : 'إفادة'} رقم {s.number_display}{(s as any).draft_number ? <Text style={styles.dim}> (من {(s as any).draft_number})</Text> : null}</Text>
               </View>
               <Text style={styles.studentName}>{s.student_name} <Text style={styles.dim}>({s.enrollment_no})</Text></Text>
               <Text style={styles.meta}>{s.faculty_name} — {s.department_name}</Text>
@@ -198,6 +216,24 @@ export default function StatementsLogScreen() {
                 </Text>
               )}
               <View style={styles.actionsRow}>
+                {(s as any).status === 'draft' ? (<>
+                  <TouchableOpacity onPress={() => router.push({ pathname: '/student-details', params: { studentId: (s as any).student_id, draft: s.id } } as any)} style={[styles.actionBtn, { borderColor: '#c7d2fe' }]} testID={`statement-draft-edit-${s.id}`}>
+                    <Ionicons name="create-outline" size={14} color="#3730a3" />
+                    <Text style={[styles.actionText, { color: '#3730a3' }]}>تعديل</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => downloadPdf(s)} style={styles.actionBtn} testID={`statement-draft-pdf-${s.id}`}>
+                    <Ionicons name="download-outline" size={14} color="#00796b" />
+                    <Text style={styles.actionText}>PDF المسودة</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => doFinalize(s)} style={[styles.actionBtn, { borderColor: '#a5d6a7', backgroundColor: '#e8f5e9' }]} testID={`statement-draft-finalize-${s.id}`}>
+                    <Ionicons name="checkmark-done-outline" size={14} color="#2e7d32" />
+                    <Text style={[styles.actionText, { color: '#2e7d32' }]}>اعتماد وإصدار</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => doDeleteDraft(s)} style={[styles.actionBtn, { borderColor: '#ffcdd2' }]} testID={`statement-draft-delete-${s.id}`}>
+                    <Ionicons name="trash-outline" size={14} color="#c62828" />
+                    <Text style={[styles.actionText, { color: '#c62828' }]}>حذف</Text>
+                  </TouchableOpacity>
+                </>) : (<>
                 <TouchableOpacity onPress={() => downloadPdf(s)} style={styles.actionBtn} testID={`statement-pdf-btn-${s.id}`}>
                   <Ionicons name="download-outline" size={14} color="#00796b" />
                   <Text style={styles.actionText}>PDF</Text>
@@ -217,6 +253,7 @@ export default function StatementsLogScreen() {
                     <Text style={[styles.actionText, { color: '#c62828' }]}>إلغاء</Text>
                   </TouchableOpacity>
                 )}
+                </>)}
               </View>
             </View>
           );

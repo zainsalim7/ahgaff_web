@@ -30,6 +30,7 @@ import { StatusEditPill } from '../src/components/attendance/StatusEditPill';
 import { AttendanceFilterBar, AttFilter, EMPTY_ATT_FILTER, applyAttFilter } from '../src/components/attendance/AttendanceFilterBar';
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
 import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
+import { LetterLayoutEditor, STATEMENT_MODEL } from '../src/components/letters/LetterLayoutEditor';
 
 const STATEMENT_VARS = ['{اسم_الطالب}', '{رقم_القيد}', '{الجنسية}', '{المستوى}', '{التخصص}', '{الكلية}', '{العام_الجامعي}', '{الحالة}', '{التاريخ}', '{الفصل}', '{المعدل}', '{التقدير}', '{الطالب}', '{هو}', '{له}', '{طلبه}', '{يدرس}', '{يحمل}', '{مستمر}', '{المذكور}'];
 
@@ -111,7 +112,7 @@ const showConfirm = (title: string, message: string, onYes: () => void) => {
 };
 
 export default function StudentDetailsScreen() {
-  const { studentId } = useLocalSearchParams<{ studentId?: string }>();
+  const { studentId, draft: draftParam } = useLocalSearchParams<{ studentId?: string; draft?: string }>();
   const router = useRouter();
   const { hasPermission, user } = useAuth();
 
@@ -203,6 +204,10 @@ export default function StudentDetailsScreen() {
   const [statementPreviewOpen, setStatementPreviewOpen] = useState(false);
   const [statementPreviewUrl, setStatementPreviewUrl] = useState('');
   const [statementPreviewBusy, setStatementPreviewBusy] = useState(false);
+  const [statementLayout, setStatementLayout] = useState<any>({});
+  const [statementLayoutDefaults, setStatementLayoutDefaults] = useState<any>({});
+  const [statementLayoutOpen, setStatementLayoutOpen] = useState(false);
+  const [statementDraft, setStatementDraft] = useState<{ id: string; number: string } | null>(null);
   const [issuingStatement, setIssuingStatement] = useState(false);
   const [lastStatement, setLastStatement] = useState<any>(null);
   const [statementMode, setStatementMode] = useState<'standard' | 'template' | 'free'>('standard');
@@ -744,7 +749,52 @@ export default function StudentDetailsScreen() {
       template_name: statementMode === 'template'
         ? (statementTemplates.find((t: any) => t.id === selectedTemplateId)?.name || 'قالب')
         : statementMode === 'free' ? 'إفادة حرة' : undefined,
+      layout: Object.keys(statementLayout || {}).length ? statementLayout : undefined,
+      draft_id: statementDraft?.id || undefined,
     };
+  };
+
+  const openStatementModal = () => {
+    setStatementNationality((student as any)?.nationality || '');
+    setStatementPurpose('');
+    setStatementSig({ ...EMPTY_SIGNATORY });
+    setStatementLayout({});
+    setStatementDraft(null);
+    setLastStatement(null);
+    setStatementModal(true);
+  };
+
+  const loadStatementDraft = async (id: string) => {
+    try {
+      const { data: d } = await api.get(`/statements/${id}`);
+      if (d.status !== 'draft') { showMessage('تنبيه', 'هذه الإفادة صدرت رسمياً ولم تعد مسودة'); return; }
+      const inp = d.inputs || {};
+      setStatementDraft({ id: d.id, number: d.number_display });
+      setStatementMode(inp.body ? (inp.template_name && inp.template_name !== 'إفادة حرة' ? 'template' : 'free') : 'standard');
+      setStatementBody(inp.body || '');
+      setStatementNationality(inp.nationality || d.nationality || '');
+      setStatementPurpose(inp.purpose || '');
+      setStatementValidDays(inp.valid_days ? String(inp.valid_days) : '');
+      setStatementGpa(inp.gpa || ''); setStatementGrade(inp.grade || ''); setStatementTerm(inp.term || '');
+      setStatementSig({ position_id: inp.signatory_position_id || '', name: inp.signatory_name || '', title: inp.signatory_title || '' });
+      setStatementLayout(inp.layout || {});
+      setLastStatement(null);
+      setStatementModal(true);
+    } catch (e: any) { showMessage('خطأ', e?.response?.data?.detail || 'تعذر فتح المسودة'); }
+  };
+  useEffect(() => { if (draftParam && student) loadStatementDraft(String(draftParam)); }, [draftParam, student?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { api.get('/statements/layout-defaults').then((r) => setStatementLayoutDefaults(r.data)).catch(() => {}); }, []);
+
+  const saveStatementDraft = async () => {
+    if (!student) return;
+    if (statementMode !== 'standard' && !statementBody.trim()) { showMessage('تنبيه', 'اكتب متن الإفادة أولاً'); return; }
+    setIssuingStatement(true);
+    try {
+      const res = await api.post('/statements/draft', statementPayload());
+      setStatementDraft({ id: res.data.id, number: res.data.number });
+      setLastStatement(null);
+    } catch (e: any) { showMessage('خطأ', e?.response?.data?.detail || 'فشل حفظ المسودة'); }
+    finally { setIssuingStatement(false); }
   };
 
   const refreshStatementPreview = useCallback(async () => {
@@ -761,7 +811,7 @@ export default function StudentDetailsScreen() {
       setStatementPreviewBusy(false);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [student, statementNationality, statementPurpose, statementValidDays, statementSig, statementTerm, statementBody, statementGpa, statementGrade, statementMode, selectedTemplateId]);
+  }, [student, statementNationality, statementPurpose, statementValidDays, statementSig, statementTerm, statementBody, statementGpa, statementGrade, statementMode, selectedTemplateId, statementLayout]);
 
   useEffect(() => {
     if (!statementModal || !statementPreviewOpen) return;
@@ -797,7 +847,14 @@ export default function StudentDetailsScreen() {
     }
     setIssuingStatement(true);
     try {
-      const res = await api.post('/statements/issue', statementPayload());
+      let res;
+      if (statementDraft) {
+        await api.post('/statements/draft', statementPayload());
+        res = await api.post(`/statements/${statementDraft.id}/finalize`, null, { params: { base_url: typeof window !== 'undefined' ? window.location.origin : '' } });
+        setStatementDraft(null);
+      } else {
+        res = await api.post('/statements/issue', statementPayload());
+      }
       setLastStatement(res.data);
       const pdfRes = await api.get(`/statements/${res.data.id}/pdf`, { responseType: 'blob' });
       downloadBlob(pdfRes.data, `إفادة ${student.full_name}.pdf`, 'application/pdf');
@@ -925,13 +982,7 @@ export default function StudentDetailsScreen() {
             {canManage && (
               <TouchableOpacity
                 style={[styles.headerBtn, { backgroundColor: '#00796b' }]}
-                onPress={() => {
-                  setStatementNationality((student as any)?.nationality || '');
-                  setStatementPurpose('');
-                  setStatementSig({ ...EMPTY_SIGNATORY });
-                  setLastStatement(null);
-                  setStatementModal(true);
-                }}
+                onPress={openStatementModal}
                 testID="issue-statement-btn"
               >
                 <Ionicons name="ribbon" size={16} color="#fff" />
@@ -2397,6 +2448,16 @@ export default function StudentDetailsScreen() {
               style={{ borderWidth: 1, borderColor: '#dde3ec', borderRadius: 8, padding: 10, textAlign: 'right', marginBottom: 12, fontSize: 13 }}
               testID="statement-valid-days-input"
             />
+            <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }}>
+              <TouchableOpacity onPress={() => { setStatementLayoutOpen(true); setStatementPreviewOpen(true); }} style={{ paddingVertical: 6, paddingHorizontal: 12, borderRadius: 8, backgroundColor: '#eef2ff', borderWidth: 1, borderColor: '#c7d2fe' }} testID="statement-layout-btn">
+                <Text style={{ fontSize: 12, fontWeight: '700', color: '#3730a3' }}>📐 تخطيط الصفحة {Object.keys(statementLayout || {}).length ? `(${Object.keys(statementLayout).length} تعديل)` : ''}</Text>
+              </TouchableOpacity>
+            </View>
+            {statementDraft && (
+              <View style={{ backgroundColor: '#fffbeb', borderWidth: 1, borderColor: '#fde68a', borderRadius: 8, padding: 10, marginBottom: 10 }} testID="statement-draft-info">
+                <Text style={{ fontSize: 12.5, fontWeight: '800', color: '#92400e', textAlign: 'right' }}>📝 مسودة محفوظة برقم {statementDraft.number} — التعديلات تُحفظ على نفس النسخة وعند الاعتماد تأخذ الرقم الرسمي</Text>
+              </View>
+            )}
             {lastStatement && (
               <View style={{ backgroundColor: '#e8f5e9', borderRadius: 8, padding: 10, marginBottom: 10 }} testID="statement-issued-info">
                 <Text style={{ fontSize: 12.5, fontWeight: '800', color: '#2e7d32', textAlign: 'right' }}>
@@ -2407,6 +2468,16 @@ export default function StudentDetailsScreen() {
                 </Text>
               </View>
             )}
+            <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>
+              <TouchableOpacity onPress={saveStatementDraft} disabled={issuingStatement} style={{ flex: 1, backgroundColor: '#f59e0b', borderRadius: 8, padding: 10, alignItems: 'center', opacity: issuingStatement ? 0.6 : 1 }} testID="statement-draft-btn">
+                <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>{statementDraft ? '💾 تحديث المسودة' : '💾 حفظ كمسودة'}</Text>
+              </TouchableOpacity>
+              {statementDraft && (
+                <TouchableOpacity onPress={async () => { const r = await api.get(`/statements/${statementDraft.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `مسودة إفادة ${statementDraft.number}.pdf`, 'application/pdf'); }} style={{ flex: 0.7, backgroundColor: '#1a2540', borderRadius: 8, padding: 10, alignItems: 'center' }} testID="statement-draft-pdf-btn">
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13 }}>PDF المسودة</Text>
+                </TouchableOpacity>
+              )}
+            </View>
             <View style={{ flexDirection: 'row', gap: 8 }}>
               <TouchableOpacity
                 onPress={handleIssueStatement}
@@ -2415,7 +2486,7 @@ export default function StudentDetailsScreen() {
                 testID="statement-issue-confirm-btn"
               >
                 {issuingStatement ? <ActivityIndicator size="small" color="#fff" /> : (
-                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13.5 }}>إصدار وتنزيل PDF</Text>
+                  <Text style={{ color: '#fff', fontWeight: '700', fontSize: 13.5 }}>{statementDraft ? '✅ اعتماد وإصدار PDF' : 'إصدار وتنزيل PDF'}</Text>
                 )}
               </TouchableOpacity>
               <TouchableOpacity
@@ -2438,6 +2509,25 @@ export default function StudentDetailsScreen() {
             </ScrollView>
             </View>
           </View>
+          {statementLayoutOpen && (
+            <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(15,36,64,0.55)', alignItems: 'center', justifyContent: 'center', padding: 16 }} testID="statement-layout-panel">
+              <View style={{ backgroundColor: '#fff', borderRadius: 14, padding: 16, width: '100%', maxWidth: 1180, maxHeight: '92%' as any }}>
+                <View style={{ flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '800', color: '#1a2540' }}>📐 تخطيط صفحة الإفادة — لهذه الإفادة فقط (الافتراضي من إعدادات الكليشة)</Text>
+                  <TouchableOpacity onPress={() => setStatementLayoutOpen(false)} testID="statement-layout-done" style={{ paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, backgroundColor: '#1a2540' }}><Text style={{ color: '#fff', fontWeight: '700' }}>تم</Text></TouchableOpacity>
+                </View>
+                <ScrollView>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start', direction: 'rtl' }}>
+                    <LetterLayoutEditor model={STATEMENT_MODEL} value={statementLayout} defaults={statementLayoutDefaults} onChange={setStatementLayout} hasTable={false} testID="statement-layout" />
+                    <div>
+                      <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة الحقيقية {statementPreviewBusy ? '⏳' : ''}</div>
+                      {statementPreviewUrl ? <img src={statementPreviewUrl} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>اضغط «معاينة» لتوليد الصورة</div>}
+                    </div>
+                  </div>
+                </ScrollView>
+              </View>
+            </View>
+          )}
         </View>
       </Modal>
     </SafeAreaView>

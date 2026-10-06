@@ -1,9 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 
 export type LetterLayout = Record<string, any>;
+type Block = { key: string; label: string; param: string; h: number; color: string; fixed?: boolean };
+type Slider = [string, string, number, number, number];
+type Pos = Record<string, { top: number; h: number }>;
+export type LayoutModel = { blocks: Block[]; sliders: Slider[]; toggles: [string, string][]; positions: (num: (k: string) => number, L: LetterLayout, hasTable: boolean) => { pos: Pos; end: number }; sides?: Record<string, (ms: number) => React.CSSProperties> };
 
 // الكتل بترتيبها على الصفحة: المفتاح الذي يتغيّر عند سحب الكتلة + ارتفاع تقريبي للمخطط (مم)
-const BLOCKS: { key: string; label: string; param: string; h: number; color: string; fixed?: boolean }[] = [
+const BLOCKS: Block[] = [
   { key: 'header', label: 'الكليشة (الشعار واسم الجامعة)', param: 'header_bottom', h: 0, color: '#0f2440', fixed: true },
   { key: 'ref', label: 'الرقم / التاريخ', param: 'ref_y', h: 9, color: '#15803d', fixed: true },
   { key: 'recipient', label: 'إلى: المرسَل إليه', param: 'start_y', h: 15, color: '#1d4ed8', fixed: true },
@@ -14,7 +18,7 @@ const BLOCKS: { key: string; label: string; param: string; h: number; color: str
   { key: 'closing', label: 'عبارة الختام', param: 'gap_closing', h: 7, color: '#0e7490' },
   { key: 'signature', label: 'التوقيع', param: 'gap_signature', h: 22, color: '#be123c' },
 ];
-const SLIDERS: [string, string, number, number, number][] = [
+const SLIDERS: Slider[] = [
   ['margin_side', 'الهامش الجانبي (مم)', 10, 30, 1],
   ['body_font', 'حجم خط المتن (pt)', 10, 18, 0.5],
   ['body_leading', 'تباعد أسطر المتن', 1.1, 2.2, 0.05],
@@ -25,9 +29,70 @@ const SLIDERS: [string, string, number, number, number][] = [
 const PAGE_H = 297, SCALE = 1.9; // مم → بكسل
 const mm = (v: number) => v * SCALE;
 
-type Props = { value: LetterLayout; defaults: LetterLayout; onChange: (l: LetterLayout) => void; hasTable?: boolean; testID?: string };
+export const LETTER_MODEL: LayoutModel = {
+  blocks: BLOCKS, sliders: SLIDERS,
+  toggles: [['show_greeting', 'إظهار «السلام عليكم»'], ['show_closing', 'إظهار عبارة الختام']],
+  positions: (num, L, hasTable) => {
+    const pos: Pos = {};
+    pos.header = { top: 0, h: num('header_bottom') };
+    pos.ref = { top: num('ref_y') - 5, h: 9 };
+    let y = num('start_y') - 5;
+    pos.recipient = { top: y, h: 15 }; y += 15 + num('gap_recipient');
+    if (L.show_greeting !== false) { pos.greeting = { top: y, h: 7 }; y += 7 + num('gap_greeting'); } else y += num('gap_greeting') * 0.3;
+    pos.subject = { top: y, h: 7 }; y += 7 + num('gap_subject');
+    const bodyH = Math.max(18, num('body_font') * num('body_leading') * 6 * 0.3528);
+    pos.body = { top: y, h: bodyH }; y += bodyH;
+    if (hasTable) { y += num('gap_table_before'); const th = num('table_row_h') * 3; pos.table = { top: y, h: th }; y += th + num('gap_table_after'); }
+    y += num('gap_closing');
+    if (L.show_closing !== false) pos.closing = { top: y, h: 7 };
+    y += num('gap_signature');
+    pos.signature = { top: y + 2, h: 22 };
+    return { pos, end: y + 24 };
+  },
+  sides: { ref: (ms) => ({ left: mm(ms), width: mm(60) }), signature: () => ({ left: mm(20), width: mm(60) }), subject: () => ({ left: mm(60), right: mm(60) }) },
+};
 
-export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange, hasTable = true, testID = 'layout-editor' }) => {
+export const STATEMENT_MODEL: LayoutModel = {
+  blocks: [
+    { key: 'header', label: 'الكليشة (الشعار واسم الجامعة/الكلية)', param: 'header_bottom', h: 0, color: '#0f2440', fixed: true },
+    { key: 'ref', label: 'المرجع / التاريخ', param: 'ref_y', h: 9, color: '#15803d', fixed: true },
+    { key: 'title', label: 'إلى من يهمه الأمر', param: 'title_y', h: 9, color: '#b45309', fixed: true },
+    { key: 'intro', label: 'تفيد الكلية بجامعة الأحقاف', param: 'start_y', h: 7, color: '#1d4ed8', fixed: true },
+    { key: 'who', label: 'بأن الطالب:', param: 'gap_intro', h: 7, color: '#7c3aed' },
+    { key: 'name', label: 'اسم الطالب', param: 'gap_who', h: 8, color: '#0e7490' },
+    { key: 'body', label: 'متن الإفادة', param: 'gap_name', h: 30, color: '#334155' },
+    { key: 'purpose', label: 'وذلك لغرض…', param: 'gap_purpose', h: 7, color: '#6d28d9' },
+    { key: 'signature', label: 'التوقيع (الصفة والاسم)', param: 'gap_signature', h: 20, color: '#be123c' },
+  ],
+  sliders: [
+    ['margin_side', 'الهامش الجانبي (مم)', 10, 30, 1],
+    ['body_font', 'حجم خط المتن (pt)', 10, 18, 0.5],
+    ['body_leading', 'تباعد أسطر المتن', 1.1, 2.2, 0.05],
+    ['gap_body', 'مسافة بعد المتن (مم)', 0, 30, 1],
+  ],
+  toggles: [['show_title', 'إظهار «إلى من يهمه الأمر»']],
+  positions: (num, L) => {
+    const pos: Pos = {};
+    pos.header = { top: 0, h: num('header_bottom') };
+    pos.ref = { top: num('ref_y') - 5, h: 9 };
+    if (L.show_title !== false) pos.title = { top: num('title_y') - 7, h: 9 };
+    let y = num('start_y') - 5;
+    pos.intro = { top: y, h: 7 }; y += num('gap_intro');
+    pos.who = { top: y, h: 7 }; y += num('gap_who');
+    pos.name = { top: y, h: 8 }; y += 8 + num('gap_name');
+    const bodyH = Math.max(16, num('body_font') * num('body_leading') * 4 * 0.3528);
+    pos.body = { top: y, h: bodyH }; y += bodyH + num('gap_purpose');
+    pos.purpose = { top: y, h: 7 }; y += 7 + num('gap_body') + num('gap_signature');
+    pos.signature = { top: y - 4, h: 20 };
+    return { pos, end: y + 18 };
+  },
+  sides: { ref: (ms) => ({ left: mm(ms), width: mm(60) }), signature: () => ({ left: mm(20), width: mm(60) }), title: () => ({ left: mm(70), right: mm(70) }) },
+};
+
+type Props = { value: LetterLayout; defaults: LetterLayout; onChange: (l: LetterLayout) => void; hasTable?: boolean; testID?: string; model?: LayoutModel; compact?: boolean };
+
+export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange, hasTable = true, testID = 'layout-editor', model = LETTER_MODEL, compact = false }) => {
+  const { blocks, sliders, toggles } = model;
   const L = { ...defaults, ...Object.fromEntries(Object.entries(value || {}).filter(([, v]) => v !== null && v !== undefined && v !== '')) };
   const num = (k: string) => Number(L[k] ?? 0);
   const set = (k: string, v: any) => onChange({ ...(value || {}), [k]: v });
@@ -41,33 +106,20 @@ export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange,
   }); // eslint-disable-line react-hooks/exhaustive-deps
 
   // حساب مواضع الكتل (مم من الأعلى) بنفس منطق المولّد
-  const pos: Record<string, { top: number; h: number }> = {};
-  pos.header = { top: 0, h: num('header_bottom') };
-  pos.ref = { top: num('ref_y') - 5, h: 9 };
-  let y = num('start_y') - 5;
-  pos.recipient = { top: y, h: 15 }; y += 15 + num('gap_recipient');
-  if (L.show_greeting !== false) { pos.greeting = { top: y, h: 7 }; y += 7 + num('gap_greeting'); } else y += num('gap_greeting') * 0.3;
-  pos.subject = { top: y, h: 7 }; y += 7 + num('gap_subject');
-  const bodyH = Math.max(18, num('body_font') * num('body_leading') * 6 * 0.3528);
-  pos.body = { top: y, h: bodyH }; y += bodyH;
-  if (hasTable) { y += num('gap_table_before'); const th = num('table_row_h') * 3; pos.table = { top: y, h: th }; y += th + num('gap_table_after'); }
-  y += num('gap_closing');
-  if (L.show_closing !== false) pos.closing = { top: y, h: 7 };
-  y += num('gap_signature');
-  pos.signature = { top: y + 2, h: 22 };
-  const overflow = y + 24 > PAGE_H - 25;
+  const { pos, end } = model.positions(num, L, hasTable);
+  const overflow = end > PAGE_H - 25;
 
-  const startDrag = (b: typeof BLOCKS[number]) => (e: React.MouseEvent) => { e.preventDefault(); drag.current = { param: b.param, startY: e.clientY, startV: num(b.param) }; setActive(b.key); };
+  const startDrag = (b: Block) => (e: React.MouseEvent) => { e.preventDefault(); drag.current = { param: b.param, startY: e.clientY, startV: num(b.param) }; setActive(b.key); };
   const inp: React.CSSProperties = { width: 64, padding: '3px 6px', borderRadius: 6, border: '1px solid #dde3ec', fontSize: 12, textAlign: 'center' };
 
   return (
-    <div data-testid={testID} style={{ display: 'grid', gridTemplateColumns: `${mm(210) + 2}px 1fr`, gap: 14, direction: 'rtl' }}>
+    <div data-testid={testID} style={{ display: 'grid', gridTemplateColumns: compact ? '1fr' : `${mm(210) + 2}px 1fr`, gap: 14, direction: 'rtl', justifyItems: compact ? 'center' : undefined }}>
       <div style={{ position: 'relative', width: mm(210), height: mm(PAGE_H), background: '#fff', border: '1px solid #cbd5e1', boxShadow: '0 4px 16px rgba(0,0,0,.12)', borderRadius: 4, overflow: 'hidden', userSelect: 'none' }} data-testid={`${testID}-page`}>
         {[...Array(12)].map((_, i) => <div key={i} style={{ position: 'absolute', top: mm(i * 25), right: 0, left: 0, borderTop: '1px dashed #f1f5f9', fontSize: 8, color: '#cbd5e1', paddingRight: 2 }}>{i * 25}</div>)}
         <div style={{ position: 'absolute', top: mm(PAGE_H - 22), right: mm(num('margin_side')), left: mm(num('margin_side')), borderTop: '1px solid #94a3b8', fontSize: 8, color: '#94a3b8', textAlign: 'center' }}>التذييل</div>
-        {BLOCKS.filter((b) => pos[b.key]).map((b) => {
+        {blocks.filter((b) => pos[b.key]).map((b) => {
           const p = pos[b.key]; const isActive = active === b.key;
-          const side = b.key === 'ref' ? { left: mm(num('margin_side')), width: mm(60) } : b.key === 'signature' ? { left: mm(20), width: mm(60) } : b.key === 'subject' ? { left: mm(60), right: mm(60) } : { right: mm(num('margin_side')), left: mm(num('margin_side')) };
+          const side = model.sides?.[b.key] ? model.sides[b.key](num('margin_side')) : { right: mm(num('margin_side')), left: mm(num('margin_side')) };
           return (
             <div key={b.key} onMouseDown={startDrag(b)} data-testid={`${testID}-block-${b.key}`} title={`اسحب لتغيير ${b.fixed ? 'الموضع' : 'المسافة قبل الكتلة'} — ${b.param}: ${num(b.param)} مم`}
               style={{ position: 'absolute', top: mm(p.top), height: mm(p.h), ...side, background: isActive ? b.color : `${b.color}22`, border: `1.5px ${b.fixed ? 'solid' : 'dashed'} ${b.color}`, borderRadius: 4, cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: isActive ? '#fff' : b.color, transition: 'background-color .12s' }}>
@@ -81,7 +133,7 @@ export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange,
         <div style={{ fontWeight: 800, color: '#0f2440', marginBottom: 6 }}>📐 اسحب أي كتلة على الصفحة لأعلى/لأسفل لتقريبها أو إبعادها</div>
         <div style={{ color: '#64748b', fontSize: 11.5, lineHeight: 1.7, marginBottom: 10 }}>الكتل بإطار متصل (الكليشة، الرقم، المرسَل إليه) تتحرك بموضعها من أعلى الصفحة؛ والكتل بإطار متقطع تغيّر المسافة التي تسبقها فتنزاح معها كل الكتل التالية. تظهر النتيجة الحقيقية في المعاينة الحيّة.</div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 10 }}>
-          {BLOCKS.map((b) => (
+          {blocks.map((b) => (
             <label key={b.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '3px 6px', borderRadius: 6, background: active === b.key ? `${b.color}22` : 'transparent' }}>
               <span style={{ color: b.color, fontWeight: 700 }}>{b.fixed ? '⇕' : '↧'} {b.label}</span>
               <input type="number" step={0.5} min={0} value={num(b.param)} onChange={(e) => set(b.param, Number(e.target.value))} style={inp} data-testid={`${testID}-${b.param}`} />
@@ -89,7 +141,7 @@ export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange,
           ))}
         </div>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-          {SLIDERS.map(([k, l, mn, mx, st]) => (
+          {sliders.map(([k, l, mn, mx, st]) => (
             <label key={k} style={{ display: 'block' }}>
               <span style={{ display: 'flex', justifyContent: 'space-between', color: '#334155', fontWeight: 700 }}>{l}<b>{num(k)}</b></span>
               <input type="range" min={mn} max={mx} step={st} value={num(k)} onChange={(e) => set(k, Number(e.target.value))} style={{ width: '100%' }} data-testid={`${testID}-${k}`} />
@@ -97,8 +149,7 @@ export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange,
           ))}
         </div>
         <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
-          <label><input type="checkbox" checked={L.show_greeting !== false} onChange={(e) => set('show_greeting', e.target.checked)} data-testid={`${testID}-show_greeting`} /> إظهار «السلام عليكم»</label>
-          <label><input type="checkbox" checked={L.show_closing !== false} onChange={(e) => set('show_closing', e.target.checked)} data-testid={`${testID}-show_closing`} /> إظهار عبارة الختام</label>
+          {toggles.map(([k, l]) => <label key={k}><input type="checkbox" checked={L[k] !== false} onChange={(e) => set(k, e.target.checked)} data-testid={`${testID}-${k}`} /> {l}</label>)}
           <button type="button" onClick={() => onChange({})} style={{ marginRight: 'auto', padding: '4px 10px', borderRadius: 6, border: '1px solid #dde3ec', background: '#f8fafc', cursor: 'pointer', fontSize: 12 }} data-testid={`${testID}-reset`}>↺ استعادة الافتراضي</button>
         </div>
       </div>
