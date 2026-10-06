@@ -78,6 +78,7 @@ class LetterTemplate(BaseModel):
     body: str
     signatory_name: Optional[str] = ""
     signatory_title: Optional[str] = ""
+    signatory_position_id: Optional[str] = ""   # 🖋️ من دليل المناصب (يتقدّم على الاسم/الصفة اليدويين)
     concerns: Optional[str] = "none"  # none | student | employee | teacher | many
     is_active: bool = True
 
@@ -255,6 +256,7 @@ class IssueIn(BaseModel):
     people: List[dict] = []
     signatory_name: Optional[str] = ""
     signatory_title: Optional[str] = ""
+    signatory_position_id: Optional[str] = ""
     valid_days: Optional[int] = None
     base_url: Optional[str] = None
     notes: Optional[str] = ""
@@ -267,13 +269,21 @@ def _number_for(settings: dict, seq: int, year: int) -> str:
     return fmt.replace("{seq}", str(seq)).replace("{year}", str(year)).replace("{yy}", str(year % 100))
 
 
+async def _resolve_sig(db, position_id, name, title, settings: dict) -> tuple:
+    """الموقّع: منصب من الدليل → الاسم/الصفة اليدويان → الافتراضي من الكليشة"""
+    from .statements import resolve_signatory
+    n, t = await resolve_signatory(db, position_id or None, name, title)
+    return (n or settings.get("default_signatory_name") or "").strip(), (t or settings.get("default_signatory_title") or "").strip()
+
+
 async def _compose(db, data: IssueIn, settings: dict) -> dict:
     """الجزء المشترك: تعبئة المتغيرات + الجدول + بيانات المرسَل إليه والموقّع (بلا ترقيم)"""
     ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
+    sig_name, sig_title = await _resolve_sig(db, data.signatory_position_id, data.signatory_name, data.signatory_title, settings)
     return {"subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people,
             "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
             "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
-            "signatory_name": (data.signatory_name or settings.get("default_signatory_name") or "").strip(), "signatory_title": (data.signatory_title or settings.get("default_signatory_title") or "").strip(),
+            "signatory_name": sig_name, "signatory_title": sig_title, "signatory_position_id": data.signatory_position_id or "",
             "layout": data.layout or None, "valid_days": data.valid_days,
             "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id}}
 
@@ -352,6 +362,8 @@ async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user:
     ctx, table, people = await _build_ctx(db, inputs.get("recipient") or ex.get("recipient") or {}, ex.get("subject") or "", inputs.get("people") or [])
     upd = {**(await _finalize_fields(db, settings, base_url, ex.get("valid_days"), current_user)), "draft_number": ex.get("number_display"),
            "body": _apply_vars((inputs.get("body") or ex.get("body") or "").strip(), ctx), "table": table, "people": people}
+    if ex.get("signatory_position_id"):
+        upd["signatory_name"], upd["signatory_title"] = await _resolve_sig(db, ex["signatory_position_id"], ex.get("signatory_name"), ex.get("signatory_title"), settings)
     await db.letters.update_one({"_id": ex["_id"]}, {"$set": upd})
     await log_activity(current_user, "issue_letter", "letter", lid, ex.get("subject", ""), {"number": upd["number_display"], "from_draft": ex.get("number_display")})
     return {"id": lid, "number": upd["number_display"], "verify_url": upd["verify_url"], "token": upd["verify_token"]}

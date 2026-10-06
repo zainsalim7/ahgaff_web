@@ -187,6 +187,42 @@ def _fit(disp: str, key: str, bold: bool) -> str:
     return "".join(ch if ord(ch) in cm else unicodedata.normalize("NFKC", ch) for ch in disp)
 
 
+def parse_color(v) -> Optional[colors.Color]:
+    """يقبل #rgb / #rrggbb / rgb(r,g,b) / rgba(r,g,b,a) (المحرر يحفظ الألوان بصيغة rgb غالباً)"""
+    v = (v or "").strip().lower()
+    if not v:
+        return None
+    try:
+        if v.startswith("#"):
+            h = v[1:]
+            if len(h) == 3:
+                h = "".join(ch * 2 for ch in h)
+            return colors.HexColor("#" + h[:6])
+        m = re.match(r"rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)", v)
+        if m:
+            r, g, b = (min(255.0, float(m.group(i))) / 255.0 for i in (1, 2, 3))
+            return colors.Color(r, g, b)
+        return colors.toColor(v)
+    except Exception:
+        return None
+
+
+def color_hex(v) -> Optional[str]:
+    col = parse_color(v)
+    return col.hexval().replace("0x", "#") if col else None
+
+
+def placeholder_style(html: str, token: str) -> Optional[dict]:
+    """تنسيق المقطع الذي يحوي متغيراً (مثل {جدول_الأسماء}) ليرثه العنصر المولَّد مكانه"""
+    if not is_html(html) or token not in (html or ""):
+        return None
+    for p in parse_rich(html):
+        for r in p["runs"]:
+            if token in r["text"]:
+                return {"color": r.get("color"), "size": r.get("size"), "bold": r.get("bold"), "font": r.get("font")}
+    return None
+
+
 def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, leading: float = 1.55, para_gap: float = 4, ensure=None) -> float:
     """يرسم الفقرات من y نزولاً ويعيد y بعد آخر سطر. ensure(height) اختيارية: تعيد y جديدة عند الانتقال لصفحة جديدة"""
     max_w = x_right - x_left
@@ -222,10 +258,7 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
             x = x_right if align in ("right", "justify", "start") else (x_left + lw if align == "left" else x_right - (max_w - lw) / 2)
             for w in line:
                 c.setFont(w["font_name"], w["size"])
-                try:
-                    c.setFillColor(colors.HexColor(w["color"]) if w.get("color") and w["color"].startswith("#") else colors.black)
-                except Exception:
-                    c.setFillColor(colors.black)
+                c.setFillColor(parse_color(w.get("color")) or colors.black)
                 x -= w["w"]
                 c.drawString(x, y, w["disp"])
                 if w["underline"]:

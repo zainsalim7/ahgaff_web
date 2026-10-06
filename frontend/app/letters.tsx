@@ -7,6 +7,7 @@ import { downloadBlob } from '../src/utils/exportName';
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6, textAlign: 'right' };
 const errOf = (e: any, d: string) => e?.response?.data?.detail || d;
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
+import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
 import { LetterLayoutEditor, TableColumnsPicker } from '../src/components/letters/LetterLayoutEditor';
 
 type Person = { kind: string; id: string; label: string; sub?: string };
@@ -55,7 +56,7 @@ export default function LettersPage() {
   const [rec, setRec] = useState({ name: '', title: '', organization: '', suffix: 'المحترم' });
   const [peopleKind, setPeopleKind] = useState('student');
   const [people, setPeople] = useState<Person[]>([]);
-  const [signName, setSignName] = useState(''); const [signTitle, setSignTitle] = useState('');
+  const [sig, setSig] = useState<Signatory>(EMPTY_SIGNATORY);
   const [validDays, setValidDays] = useState('');
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<any>(null);
@@ -87,12 +88,12 @@ export default function LettersPage() {
   const tpl = templates.find((t) => t.id === tplId);
   const pickTpl = (id: string) => {
     setTplId(id); const t = templates.find((x) => x.id === id); if (!t) return;
-    setSubject(t.subject || t.name); setBody(t.body); setSignName(t.signatory_name || settings?.default_signatory_name || ''); setSignTitle(t.signatory_title || settings?.default_signatory_title || '');
+    setSubject(t.subject || t.name); setBody(t.body); setSig({ position_id: t.signatory_position_id || '', name: t.signatory_position_id ? '' : (t.signatory_name || ''), title: t.signatory_position_id ? '' : (t.signatory_title || '') });
     if (t.concerns && t.concerns !== 'none' && t.concerns !== 'many') setPeopleKind(t.concerns);
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
-  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: signName, signatory_title: signTitle, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null });
+  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null });
   useEffect(() => {
     if (!body.trim()) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
     const t = setTimeout(() => {
@@ -103,7 +104,7 @@ export default function LettersPage() {
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people, signName, signTitle, layout, previewLetterhead]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, subject, recipient, people, sig, layout, previewLetterhead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // معاينة تخطيط الكليشة الافتراضي (نموذج تجريبي) في تبويب الإعدادات
   useEffect(() => {
@@ -130,7 +131,7 @@ export default function LettersPage() {
     const kinds = new Set((src?.people || people).map((p: any) => p.kind));
     const concerns = (src?.people || people).length > 1 ? 'many' : kinds.size === 1 ? [...kinds][0] : 'none';
     try {
-      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src?.signatory_name ?? signName, signatory_title: src?.signatory_title ?? signTitle, concerns, is_active: true });
+      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src ? (src.signatory_position_id ? '' : src.signatory_name) : sig.name, signatory_title: src ? (src.signatory_position_id ? '' : src.signatory_title) : sig.title, signatory_position_id: src ? (src.signatory_position_id || '') : sig.position_id, concerns, is_active: true });
       loadAll(); window.alert(`✅ حُفظ القالب «${name}» — سيظهر في قائمة القوالب`);
     } catch (e) { setErr(errOf(e, 'فشل حفظ القالب')); }
   };
@@ -149,7 +150,7 @@ export default function LettersPage() {
     try { const r = await api.post('/letters/draft', issuePayload()); setDraft({ id: r.data.id, number: r.data.number }); setLast(null); }
     catch (e) { setErr(errOf(e, 'فشل حفظ المسودة')); } finally { setBusy(false); }
   };
-  const resetForm = () => { setDraft(null); setLast(null); setTplId(''); setSubject(''); setBody(''); setPeople([]); setRecId(''); setRec({ name: '', title: '', organization: '', suffix: 'المحترم' }); setLayout({}); setValidDays(''); };
+  const resetForm = () => { setDraft(null); setLast(null); setTplId(''); setSubject(''); setBody(''); setPeople([]); setRecId(''); setRec({ name: '', title: '', organization: '', suffix: 'المحترم' }); setLayout({}); setValidDays(''); setSig(EMPTY_SIGNATORY); };
   const loadDraft = async (id: string) => {
     try {
       const { data: d } = await api.get(`/letters/${id}`);
@@ -159,7 +160,7 @@ export default function LettersPage() {
       const r0 = inp0.recipient || d.recipient || {};
       if (r0.id) { setRecMode('list'); setRecId(r0.id); } else { setRecMode('manual'); setRec({ name: r0.name || '', title: r0.title || '', organization: r0.organization || '', suffix: r0.suffix || 'المحترم' }); }
       setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.name })));
-      setSignName(d.signatory_name || ''); setSignTitle(d.signatory_title || ''); setValidDays(d.valid_days ? String(d.valid_days) : ''); setLayout(d.layout || {});
+      setSig({ position_id: d.signatory_position_id || '', name: d.signatory_position_id ? '' : (d.signatory_name || ''), title: d.signatory_position_id ? '' : (d.signatory_title || '') }); setValidDays(d.valid_days ? String(d.valid_days) : ''); setLayout(d.layout || {});
       setTab('issue');
     } catch (e) { setErr(errOf(e, 'تعذر فتح المسودة')); }
   };
@@ -215,9 +216,8 @@ export default function LettersPage() {
             <PeoplePicker kind={peopleKind} people={people} onChange={setPeople} />
             <label style={{ ...lbl, marginTop: 12 }}>متن الخطاب — منسّق (خط/حجم/لون/محاذاة) والمتغيرات تُدرج بنقرة عند المؤشر</label>
             <StatementBodyEditor value={body} onChange={setBody} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={150} placeholder="اختر قالباً أو اكتب متن الخطاب هنا…" testID="letter-body" />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px', gap: 8, marginTop: 12 }}>
-              <div><label style={lbl}>صفة الموقِّع</label><input style={inp} value={signTitle} onChange={(e) => setSignTitle(e.target.value)} data-testid="letter-sign-title" /></div>
-              <div><label style={lbl}>اسم الموقِّع</label><input style={inp} value={signName} onChange={(e) => setSignName(e.target.value)} data-testid="letter-sign-name" /></div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8, marginTop: 12 }}>
+              <div><label style={lbl}>الموقِّع (المرسِل)</label><SignatoryPicker value={sig} onChange={setSig} defaultLabel={`الافتراضي من الكليشة${settings?.default_signatory_title ? ` — ${settings.default_signatory_title}` : ''}`} hint="من دليل المناصب والأسماء (يُقرأ الاسم والصفة تلقائياً) أو إدخال يدوي." testID="letter-signatory" /></div>
               <div><label style={lbl}>صلاحية (يوم)</label><input style={inp} value={validDays} onChange={(e) => setValidDays(e.target.value)} placeholder="∞" data-testid="letter-valid-days" /></div>
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
@@ -229,6 +229,13 @@ export default function LettersPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
                   <label style={{ fontSize: 12 }}><span style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>حجم خط الجدول <b>{layout.table_font ?? layoutDefaults.table_font ?? 10.5}</b></span><input type="range" min={7} max={14} step={0.5} value={layout.table_font ?? layoutDefaults.table_font ?? 10.5} onChange={(e) => setLayout({ ...layout, table_font: Number(e.target.value) })} style={{ width: '100%' }} data-testid="letter-table-font" /></label>
                   <label style={{ fontSize: 12 }}><span style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>ارتفاع الصف (مم) <b>{layout.table_row_h ?? layoutDefaults.table_row_h ?? 8}</b></span><input type="range" min={5} max={12} step={0.5} value={layout.table_row_h ?? layoutDefaults.table_row_h ?? 8} onChange={(e) => setLayout({ ...layout, table_row_h: Number(e.target.value) })} style={{ width: '100%' }} data-testid="letter-table-row-h" /></label>
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, alignItems: 'center', marginBottom: 10, padding: 8, background: '#fff', borderRadius: 8, border: '1px dashed #ddd6fe' }} data-testid="letter-table-colors">
+                  <span style={{ fontSize: 12, fontWeight: 700 }}>🎨 ألوان الجدول:</span>
+                  {([['table_text_color', 'نص الجدول', '#000000'], ['table_header_bg', 'خلفية الرأس', '#edf2fa'], ['table_header_color', 'نص الرأس', '#000000'], ['table_border_color', 'الإطار', '#000000']] as const).map(([k, l, d]) => (
+                    <label key={k} style={{ fontSize: 11.5, display: 'flex', alignItems: 'center', gap: 4 }}>{l}<input type="color" value={layout[k] || d} onChange={(e) => setLayout({ ...layout, [k]: e.target.value })} style={{ width: 28, height: 22, padding: 0, border: '1px solid #cbd5e1', borderRadius: 4, cursor: 'pointer' }} data-testid={`letter-${k.replace(/_/g, '-')}`} />{layout[k] && <button onClick={() => { const { [k]: _x, ...rest } = layout; setLayout(rest); }} title="إعادة" style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#94a3b8', fontSize: 11 }}>✕</button>}</label>
+                  ))}
+                  <span style={{ fontSize: 11, color: '#64748b', flexBasis: '100%' }}>💡 بدون تحديد لون هنا، يرث الجدول لون/حجم/عرض الخط من تنسيق المتغير {'{جدول_الأسماء}'} في المحرر.</span>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>الأعمدة الظاهرة وترتيبها (◀ ▶ للترتيب، ✕ للإخفاء):</div>
                 <TableColumnsPicker available={tableHeaders} value={layout.table_columns} onChange={(cols) => setLayout({ ...layout, table_columns: cols })} testID="letter-table-cols" />
@@ -285,16 +292,15 @@ export default function LettersPage() {
         <div style={card} data-testid="letter-templates">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><b>قوالب الخطابات ({templates.length})</b><button onClick={() => setTform({ name: '', subject: '', body: '', signatory_name: settings?.default_signatory_name || '', signatory_title: settings?.default_signatory_title || '', concerns: 'none', is_active: true })} style={btn('#16a34a')} data-testid="letter-template-add">+ قالب</button></div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['القالب', 'الموضوع', 'يخص', 'الموقِّع', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title}</td><td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => setTform(t)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })}>حذف</button></td></tr>)}</tbody></table>
+            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title || (t.signatory_position_id ? '🖋️ من دليل المناصب' : '—')}</td><td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => setTform(t)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })}>حذف</button></td></tr>)}</tbody></table>
           {tform && <Modal title={tform.id ? 'تعديل قالب' : 'قالب جديد'} onClose={() => setTform(null)} width={720} testID="letter-template-modal">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="اسم القالب *"><input style={inp} value={tform.name} onChange={(e) => setTform({ ...tform, name: e.target.value })} data-testid="lt-name" /></Field>
               <Field label="الموضوع الافتراضي"><input style={inp} value={tform.subject} onChange={(e) => setTform({ ...tform, subject: e.target.value })} data-testid="lt-subject" /></Field>
               <Field label="يخص"><select style={inp} value={tform.concerns} onChange={(e) => setTform({ ...tform, concerns: e.target.value })}><option value="none">عام</option><option value="student">طالب</option><option value="employee">موظف</option><option value="teacher">مدرّس</option><option value="many">عدة أسماء (جدول)</option></select></Field>
               <div />
-              <Field label="صفة الموقِّع (المرسِل)"><input style={inp} value={tform.signatory_title} onChange={(e) => setTform({ ...tform, signatory_title: e.target.value })} placeholder="رئيس الجامعة" data-testid="lt-sign-title" /></Field>
-              <Field label="اسم الموقِّع"><input style={inp} value={tform.signatory_name} onChange={(e) => setTform({ ...tform, signatory_name: e.target.value })} placeholder="أ.د/ …" data-testid="lt-sign-name" /></Field>
             </div>
+            <Field label="الموقِّع (المرسِل)"><SignatoryPicker value={{ position_id: tform.signatory_position_id || '', name: tform.signatory_name || '', title: tform.signatory_title || '' }} onChange={(v) => setTform((f: any) => ({ ...f, signatory_position_id: v.position_id, signatory_name: v.name, signatory_title: v.title }))} defaultLabel="الافتراضي من الكليشة (يُحدَّد عند الإصدار)" hint="اختر منصباً من الدليل أو أدخل الاسم والصفة يدوياً." testID="lt-signatory" /></Field>
             <Field label="المتن * — منسّق، والمتغيرات تُدرج بنقرة عند المؤشر"><StatementBodyEditor value={tform.body || ''} onChange={(h) => setTform((f: any) => ({ ...f, body: h }))} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={180} testID="lt-body" /></Field>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><button onClick={saveTpl} style={btn('#16a34a')} data-testid="lt-save">حفظ</button><button onClick={() => setTform(null)} style={btn('#f1f5f9', { color: '#0f2440' })}>إلغاء</button></div>
           </Modal>}

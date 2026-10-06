@@ -19,6 +19,10 @@ DEFAULT_LAYOUT = {
     "table_font": 10.5,
     "table_row_h": 8,
     "table_columns": None,    # قائمة عناوين الأعمدة الظاهرة بترتيبها (None = الكل)
+    "table_text_color": "",   # 🎨 لون نص الجدول ("" = يرث من تنسيق {جدول_الأسماء} أو أسود)
+    "table_header_bg": "",    # لون خلفية رأس الجدول ("" = رمادي فاتح)
+    "table_header_color": "", # لون نص رأس الجدول ("" = لون النص)
+    "table_border_color": "", # لون إطار الجدول ("" = أسود)
     "show_closing": True,
     "gap_closing": 4,         # قبل الخاتمة
     "gap_signature": 16,      # بين الخاتمة والتوقيع
@@ -58,10 +62,12 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfgen import canvas as pdfcanvas
-    from services.rich_text_pdf import is_html, parse_rich, draw_rich
+    from services.rich_text_pdf import is_html, parse_rich, draw_rich, parse_color, placeholder_style
+    from reportlab.lib import colors as rl_colors
 
     L = merge_layout(settings.get("layout"), s.get("layout"))
     f = lambda k: float(L[k])  # noqa: E731
+    explicit_tf = any((p or {}).get("table_font") for p in (settings.get("layout"), s.get("layout")))
 
     def ar(t):
         return get_display(arabic_reshaper.reshape(str(t or "")))
@@ -172,12 +178,21 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         if y - space < 60 * mm:
             footer(); c.showPage(); header(); y = H - (f("header_bottom") + 13) * mm
 
-    def draw_table(tbl):
+    def draw_table(tbl, inherit=None):
         nonlocal y
         tbl = filter_table(tbl, L.get("table_columns"))
         headers, rows = tbl.get("headers") or [], tbl.get("rows") or []
         if not headers or not rows:
             return
+        inh = inherit or {}
+        # 🎨 الأولوية: إعدادات الجدول الصريحة > تنسيق متغير {جدول_الأسماء} في المحرر > الافتراضي
+        tf = TF if explicit_tf or not inh.get("size") else min(float(inh["size"]), 16)
+        rh = RH if explicit_tf or not inh.get("size") else max(RH, tf * 2.1)
+        text_col = parse_color(L.get("table_text_color")) or parse_color(inh.get("color")) or rl_colors.black
+        head_bg = parse_color(L.get("table_header_bg")) or rl_colors.Color(0.93, 0.95, 0.98)
+        head_col = parse_color(L.get("table_header_color")) or text_col
+        border_col = parse_color(L.get("table_border_color")) or rl_colors.black
+        all_bold = bool(inh.get("bold"))
         n = len(headers)
         total = RM - LM
         has_idx = headers[0] == "م"
@@ -193,23 +208,27 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
 
         def row(cells, bold=False, fill=False):
             nonlocal y
-            ensure(RH)
+            ensure(rh)
             x = RM
+            c.setStrokeColor(border_col)
             if fill:
-                c.setFillColorRGB(0.93, 0.95, 0.98); c.rect(LM, y - RH, total, RH, fill=1, stroke=0); c.setFillColorRGB(0, 0, 0)
-            c.setFont(BOLD if bold else "Amiri", TF)
+                c.setFillColor(head_bg); c.rect(LM, y - rh, total, rh, fill=1, stroke=0)
+            fnt = BOLD if (bold or all_bold) else "Amiri"
+            c.setFont(fnt, tf)
+            c.setFillColor(head_col if fill else text_col)
             for i, cell in enumerate(cells):
-                c.rect(x - widths[i], y - RH, widths[i], RH, fill=0, stroke=1)
+                c.rect(x - widths[i], y - rh, widths[i], rh, fill=0, stroke=1)
                 txt = str(cell or "")
-                while pdfmetrics.stringWidth(ar(txt), "Amiri", TF) > widths[i] - 3 * mm and len(txt) > 3:
+                while pdfmetrics.stringWidth(ar(txt), fnt, tf) > widths[i] - 3 * mm and len(txt) > 3:
                     txt = txt[:-2]
-                c.drawCentredString(x - widths[i] / 2, y - RH + (RH - TF * 0.72) / 2, ar(txt))
+                c.drawCentredString(x - widths[i] / 2, y - rh + (rh - tf * 0.72) / 2, ar(txt))
                 x -= widths[i]
-            y -= RH
+            y -= rh
         c.setLineWidth(0.5)
         row(headers, bold=True, fill=True)
         for r in rows:
             row(r)
+        c.setFillColor(rl_colors.black); c.setStrokeColor(rl_colors.black)
 
     def ensure_y(space):
         nonlocal y
@@ -222,6 +241,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     parts = body.split("{جدول_الأسماء}")
     rich = is_html(body)
     has_table = bool((s.get("table") or {}).get("rows"))
+    tbl_inherit = placeholder_style(body, "{جدول_الأسماء}") if rich else None
     for pi, part in enumerate(parts):
         if rich:
             y = draw_rich(c, parse_rich(part, default_size=BODY, default_font="amiri", default_align="right"), LM, RM, y, leading=f("body_leading"), para_gap=3, ensure=ensure_y)
@@ -230,7 +250,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
                 ensure(BODY * f("body_leading"))
                 c.setFont("Amiri", BODY); c.drawRightString(RM, y, ar(line)); y -= BODY * f("body_leading")
         if pi < len(parts) - 1 and has_table:
-            y -= f("gap_table_before") * mm; draw_table(s["table"]); y -= f("gap_table_after") * mm
+            y -= f("gap_table_before") * mm; draw_table(s["table"], tbl_inherit); y -= f("gap_table_after") * mm
     if "{جدول_الأسماء}" not in body and has_table:
         y -= f("gap_table_before") * mm; draw_table(s["table"]); y -= f("gap_table_after") * mm
     y -= f("gap_closing") * mm
