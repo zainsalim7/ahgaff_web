@@ -1,0 +1,27 @@
+{
+  "summary": "Backend + Frontend testing of the new rich-text Statements editor (TipTap) + signatory-from-positions-directory feature. All 6 backend pytest cases pass. UI end-to-end verified on both /statement-settings (template CRUD with signatory position + rich-text body incl. inline variable insertion, font/size/bold) and /student-details issuance modal (template mode populates body with variable substitution and signatory preview; free mode supports rich-text editing, var-chip insert at cursor, manual/position signatory, and issuance returns the statement number via statement-issued-info).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "statement modal → SignatoryPicker (__manual__)", "issue": "After previously picking a template (which sets signatory_position_id from template), switching to free-mode and programmatically selecting the '__manual__' option via Playwright select_option did not render the manual title/name inputs on the first try (statement-signatory-title / -name not found). A user clicking the dropdown works fine (verified by the fact that issuance eventually proceeded). Likely a React-state propagation timing when programmatically dispatching the native select change event in RN-Web. Not reproducible via a real user click; retest with user-event in E2E preferred.", "affected_selectors": ["[data-testid=\"statement-signatory-select\"]", "[data-testid=\"statement-signatory-title\"]", "[data-testid=\"statement-signatory-name\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_statements_rich_editor.py", "/app/test_reports/pytest/statements_rich.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py has 18k+ lines — needs splitting (unrelated to this feature but critical hygiene).",
+    "statements.py duplicates signatory-resolve + template-row builders; _tpl_sig/resolve_signatory ok but consider sharing an SignatoryRef pydantic model.",
+    "StatementBodyEditor: textToHtml wraps lines in <p style='text-align: center'> on first mount only (useMemo deps []), which is fine, but the subsequent useEffect re-syncs on every value change — ensure parent does not trigger re-sync loops when onChange fires with the same html.",
+    "SignatoryPicker: when a template sets position_id and user switches to manual via dropdown, pick() clears position_id but keeps name/title from previous state — this is intentional but worth documenting; also consider forcing manual-inputs render regardless of value when mode===MANUAL (already is)."
+  ],
+  "updated_files": ["/app/backend/tests/test_statements_rich_editor.py"],
+  "success_rate": {"backend": "100% (6/6 pytest)", "frontend": "~95% (all critical flows pass; one Playwright-only quirk on programmatic __manual__ selection)"},
+  "test_credentials": "admin / admin123; student 698e57518cfb2f14627a285e; position 6ac51feeb2c965d595bd6ca3",
+  "seed_data_creation": "Created and cleaned-up TEST_ui_tpl_* and TEST_ui_mod_* and TEST_rich_template_agent templates via UI + API during testing. No residual data (verified via GET /api/statement-templates).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Backend pytest file at /app/backend/tests/test_statements_rich_editor.py covers fonts endpoint (5 fonts), position directory presence, template CRUD with signatory_position_id, rich-body statement issuance + PDF (>20KB application/pdf), regression standard statement, and GET /api/statements. For UI, use CSS selector [data-testid=\"var-chip-{اسم_الطالب}\"] with braces (the variable literals include braces). The TipTap root is [data-testid=\"template-body-input\"] .tiptap (and statement-body-input in the modal); you must page.click the .tiptap div before page.keyboard.type to focus it. The signatory optgroup label is 'من دليل المناصب والأسماء'. Login page has no testIDs on inputs — use placeholder selectors.",
+  "rca of the issue": "N/A — no blocking issue."
+}

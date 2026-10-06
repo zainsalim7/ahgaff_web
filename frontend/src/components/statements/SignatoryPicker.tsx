@@ -18,7 +18,10 @@ export const SignatoryPicker: React.FC<Props> = ({ value, onChange, defaultLabel
   const positions = usePositions();
   const manual = !value.position_id && !!(value.name || value.title);
   const [mode, setMode] = useState(manual ? MANUAL : value.position_id);
-  useEffect(() => { setMode(value.position_id || (value.name || value.title ? MANUAL : '')); }, [value.position_id, value.name, value.title]);
+  useEffect(() => {
+    if (value.position_id) setMode(value.position_id);
+    else if (value.name || value.title) setMode(MANUAL);
+  }, [value.position_id, value.name, value.title]);
   const pick = (v: string) => {
     setMode(v);
     if (v === MANUAL) onChange({ position_id: '', name: value.name, title: value.title });
