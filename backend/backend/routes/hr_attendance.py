@@ -16,6 +16,21 @@ from .hr_locations import GeoIn, evaluate_geo, geo_exempt_active
 router = APIRouter(prefix="/hr/attendance", tags=["شؤون الموظفين - الحضور الإداري"])
 
 ATT_STATUS = {"present": "حاضر", "late": "متأخر", "half_day": "نصف يوم", "absent": "غائب", "excused": "غياب بعذر", "leave": "إجازة", "mission": "مهمة رسمية", "holiday": "عطلة"}
+
+
+def _display_label(r: dict) -> str:
+    if r.get("auto_absent"):
+        return "غائب (تلقائي) — لم يحضر"
+    if r.get("status") in ("absent", "excused", "leave", "mission", "holiday"):
+        return ATT_STATUS.get(r["status"], "")
+    ci, co = r.get("check_in") or "—", r.get("check_out")
+    if co:
+        return f"{ci} → {co}" + (" (انصراف تلقائي)" if r.get("auto_checkout") else "")
+    return f"{ci} (مفتوح)"
+
+
+def _ser_rec(r: dict) -> dict:
+    return {**_ser(r), "status_label": ATT_STATUS.get(r.get("status"), ""), "display_label": _display_label(r)}
 MANUAL = ("present", "late", "half_day", "absent", "excused", "mission")
 COUNTED_PRESENT = ("present", "late", "half_day", "mission")
 
@@ -677,18 +692,16 @@ async def my_attendance(month: Optional[str] = None, current_user: dict = Depend
     next_shift = pick_shift(remaining, now_hm) if remaining else None
     leaves = await _leave_map(db, t)
     day = parse_date(t)
-    recs = [_ser(r) for r in await db.hr_attendance.find({"employee_id": eid, "date": {"$regex": f"^{m}"}}).sort("date", -1).to_list(60)]
-    for r in recs:
-        r["status_label"] = ATT_STATUS.get(r["status"], r["status"])
+    recs = [_ser_rec(r) for r in await db.hr_attendance.find({"employee_id": eid, "date": {"$regex": f"^{m}"}}).sort("date", -1).to_list(60)]
     on_leave = eid in leaves
     can_in = settings.get("allow_self_checkin", True) and is_work_day(day, settings) and not on_leave and bool(remaining) and not open_rec
     can_out = settings.get("allow_self_checkin", True) and bool(open_rec)
     counts = {k: 0 for k in ATT_STATUS}
     for r in recs:
         counts[r["status"]] = counts.get(r["status"], 0) + 1
-    shift_rows = [{"shift": sh, "record": next(({**_ser(r), "status_label": ATT_STATUS.get(r["status"], "")} for r in today_recs if _rec_shift(r, shifts) == sh["id"]), None)} for sh in shifts]
+    shift_rows = [{"shift": sh, "record": next((_ser_rec(r) for r in today_recs if _rec_shift(r, shifts) == sh["id"]), None)} for sh in shifts]
     return {"profile": {"id": eid, "full_name": emp.get("full_name", "")}, "date": t, "day_name": AR_DAYS[day.weekday()], "now": now_hm, "is_work_day": is_work_day(day, settings),
-            "holiday": holiday_name(day, settings), "on_leave": leaves.get(eid), "today": ({**_ser(today_rec), "status_label": ATT_STATUS.get(today_rec["status"], "")} if today_rec else None),
+            "holiday": holiday_name(day, settings), "on_leave": leaves.get(eid), "today": (_ser_rec(today_rec) if today_rec else None),
             "shifts": shifts, "today_shifts": shift_rows, "next_shift": next_shift, "multi_shift": len(settings["shifts"]) > 1,
             "can_check_in": can_in, "can_check_out": can_out, "settings": {k: settings[k] for k in ("work_start", "work_end", "late_grace_minutes", "allow_self_checkin")},
             "geofence": {"required": bool(settings.get("geofence_required", True)), "exempt": geo_exempt_active(emp), "locations_count": await db.hr_locations.count_documents({"is_active": True})},
