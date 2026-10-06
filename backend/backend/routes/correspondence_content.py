@@ -317,6 +317,18 @@ async def list_templates(organization_id: Optional[str] = None, document_type_id
     return {"items": [await _tpl_view(db, t, with_version=False) for t in rows], "total": total, "page": page, "page_size": page_size}
 
 
+@router.post("/templates/seed-defaults")
+async def seed_defaults_endpoint(request: Request, ctx: CorrContext = Depends(ctx_dep)):
+    """استعادة/بذر القوالب الجاهزة يدوياً (للإنتاج إن لم تُبذر عند الإقلاع)"""
+    db = get_db()
+    if not _uni_wide(ctx, TP["global"]):
+        raise _forbid(ctx, db, request, "seed_default_templates")
+    rep = await seed_default_templates(db)
+    total = len(SEED_TEMPLATES) + len(SEED_DECISION_TEMPLATES)
+    return {**rep, "total": total, "message": f"القوالب الجاهزة: {total} — أُضيف {rep['created']} جديد، {rep['skipped']} موجود مسبقاً"}
+
+
+
 @router.get("/templates/{tpl_id}")
 async def get_template(tpl_id: str, request: Request, ctx: CorrContext = Depends(ctx_dep)):
     db = get_db()
@@ -912,7 +924,36 @@ SEED_DECISION_TEMPLATES = [
 ]
 
 
+async def seed_default_templates(db) -> dict:
+    """بذر القوالب الجاهزة (آمن للتكرار — يتجاوز الموجود بالكود)"""
+    created, skipped = 0, 0
+    dts = {d["code"]: str(d["_id"]) for d in await db.document_types.find({"is_global": True}).to_list(100)}
+    for code, name, dt_code, req, body_title, body, inputs in SEED_TEMPLATES:
+        if await db.correspondence_templates.find_one({"code": code, "organization_id": None}):
+            skipped += 1; continue
+        created += 1
+        r = await db.correspondence_templates.insert_one({"organization_id": None, "document_type_id": dts.get(dt_code), "letterhead_id": None, "code": code, "name_ar": name, "name_en": code.replace("_", " ").title(),
+                                                          "description": "قالب عام مبذور", "template_category": "GENERAL" if not req else req[0], "freeze_stage": "ISSUED", "current_version": 1, "status": "PUBLISHED",
+                                                          "is_global": True, "is_active": True, "created_by": "system", "created_at": _now(), "updated_at": _now(), "deleted_at": None})
+        await db.correspondence_template_versions.insert_one({"template_id": str(r.inserted_id), "version_number": 1, "sections": _std(body_title, body), "input_fields": inputs, "required_entities": req,
+                                                              "letterhead_id": None, "change_note": "الإصدار الأول (بذرة)", "is_published": True, "published_at": _now(), "created_by": "system", "created_at": _now()})
+    for code, name, dt_code, req, cat, preamble, decision_html, inputs in SEED_DECISION_TEMPLATES:
+        if await db.correspondence_templates.find_one({"code": code, "organization_id": None}):
+            skipped += 1
+            continue
+        secs = _decision(preamble, decision_html) if dt_code == "ADMINISTRATIVE_DECISION" else _std("نص الخطاب", decision_html)
+        created += 1
+        r = await db.correspondence_templates.insert_one({"organization_id": None, "document_type_id": dts.get(dt_code), "letterhead_id": None, "code": code, "name_ar": name, "name_en": code.replace("_", " ").title(),
+                                                          "description": "قالب جاهز متعدد الأسماء — تُملأ المدخلات ويُختار الأشخاص من الكشف فقط", "template_category": cat, "freeze_stage": "ISSUED", "current_version": 1, "status": "PUBLISHED",
+                                                          "is_global": True, "is_active": True, "created_by": "system", "created_at": _now(), "updated_at": _now(), "deleted_at": None})
+        await db.correspondence_template_versions.insert_one({"template_id": str(r.inserted_id), "version_number": 1, "sections": secs, "input_fields": inputs, "required_entities": req,
+                                                              "letterhead_id": None, "change_note": "الإصدار الأول (بذرة)", "is_published": True, "published_at": _now(), "created_by": "system", "created_at": _now()})
+    return {"created": created, "skipped": skipped}
+
+
 async def correspondence_content_startup(db):
+    import logging
+    log = logging.getLogger("correspondence")
     try:
         await db.correspondence_letterheads.create_index([("organization_id", 1), ("code", 1)])
         await db.correspondence_letterheads.create_index([("organization_id", 1), ("is_default", 1), ("is_active", 1)])
@@ -931,24 +972,11 @@ async def correspondence_content_startup(db):
                 "branding_config": {"logo_asset_id": None, "logo_asset_url": uni.get("logo_url") or "", "secondary_logo_asset_id": None, "primary_color": "#0f2440"},
                 "page_config": {"size": "A4", "orientation": "portrait", "margins_mm": {"top": 15, "right": 20, "bottom": 15, "left": 20}, "direction": "rtl", "font_size_pt": 12, "line_height": 1.7},
                 "is_default": True, "is_active": True, "version": 1, "created_by": "system", "created_at": _now(), "updated_at": _now(), "deleted_at": None})
-        dts = {d["code"]: str(d["_id"]) for d in await db.document_types.find({"is_global": True}).to_list(100)}
-        for code, name, dt_code, req, body_title, body, inputs in SEED_TEMPLATES:
-            if await db.correspondence_templates.find_one({"code": code, "organization_id": None}):
-                continue
-            r = await db.correspondence_templates.insert_one({"organization_id": None, "document_type_id": dts.get(dt_code), "letterhead_id": None, "code": code, "name_ar": name, "name_en": code.replace("_", " ").title(),
-                                                              "description": "قالب عام مبذور", "template_category": "GENERAL" if not req else req[0], "freeze_stage": "ISSUED", "current_version": 1, "status": "PUBLISHED",
-                                                              "is_global": True, "is_active": True, "created_by": "system", "created_at": _now(), "updated_at": _now(), "deleted_at": None})
-            await db.correspondence_template_versions.insert_one({"template_id": str(r.inserted_id), "version_number": 1, "sections": _std(body_title, body), "input_fields": inputs, "required_entities": req,
-                                                                  "letterhead_id": None, "change_note": "الإصدار الأول (بذرة)", "is_published": True, "published_at": _now(), "created_by": "system", "created_at": _now()})
-        for code, name, dt_code, req, cat, preamble, decision_html, inputs in SEED_DECISION_TEMPLATES:
-            if await db.correspondence_templates.find_one({"code": code, "organization_id": None}):
-                continue
-            secs = _decision(preamble, decision_html) if dt_code == "ADMINISTRATIVE_DECISION" else _std("نص الخطاب", decision_html)
-            r = await db.correspondence_templates.insert_one({"organization_id": None, "document_type_id": dts.get(dt_code), "letterhead_id": None, "code": code, "name_ar": name, "name_en": code.replace("_", " ").title(),
-                                                              "description": "قالب جاهز متعدد الأسماء — تُملأ المدخلات ويُختار الأشخاص من الكشف فقط", "template_category": cat, "freeze_stage": "ISSUED", "current_version": 1, "status": "PUBLISHED",
-                                                              "is_global": True, "is_active": True, "created_by": "system", "created_at": _now(), "updated_at": _now(), "deleted_at": None})
-            await db.correspondence_template_versions.insert_one({"template_id": str(r.inserted_id), "version_number": 1, "sections": secs, "input_fields": inputs, "required_entities": req,
-                                                                  "letterhead_id": None, "change_note": "الإصدار الأول (بذرة)", "is_published": True, "published_at": _now(), "created_by": "system", "created_at": _now()})
     except Exception as e:
-        import logging
-        logging.getLogger("correspondence").error(f"content startup failed: {e}")
+        log.error(f"content startup (indexes/letterhead) failed: {e}")
+    try:
+        rep = await seed_default_templates(db)
+        if rep["created"]:
+            log.info(f"seeded {rep['created']} default correspondence templates")
+    except Exception as e:
+        log.error(f"seed_default_templates failed: {e}")

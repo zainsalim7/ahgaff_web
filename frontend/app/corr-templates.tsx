@@ -30,9 +30,14 @@ export default function CorrTemplates() {
 
   if (me && !hasAnywhere('template.read') && !hasAnywhere('template.use')) return <CorrPage title="القوالب"><Denied /></CorrPage>;
   const canCreate = hasAnywhere('template.create') || hasAnywhere('template.manage_global');
+  const canSeed = hasAnywhere('template.manage_global');
+  const seedDefaults = async () => { try { const r = await corrAPI.seedDefaultTemplates(); window.alert(r.data.message); load(); } catch (e) { setErr(errMsg(e, 'فشل استعادة القوالب الجاهزة')); } };
   return (
     <CorrPage title="قوالب الخطابات الذكية" subtitle="إصدارات غير قابلة للتغيير بعد النشر · أقسام بأنماط تحرير · عناصر نائبة مُصرَّح بها فقط" loading={loading && !builder} testID="corr-templates-page"
-      actions={!builder && canCreate ? <button onClick={() => setBuilder({ item: null })} style={btn('#16a34a')} data-testid="tpl-add">+ قالب</button> : null}>
+      actions={!builder ? <div style={{ display: 'flex', gap: 8 }}>
+        {canSeed && <button onClick={seedDefaults} style={btn('#f1f5f9', { color: '#0f2440' })} title="يضيف القوالب الجاهزة الناقصة (قرار تكليف جماعي، كشف طلاب، تشكيل لجنة…) دون المساس بالموجود" data-testid="tpl-seed-defaults">✨ القوالب الجاهزة</button>}
+        {canCreate && <button onClick={() => setBuilder({ item: null })} style={btn('#16a34a')} data-testid="tpl-add">+ قالب</button>}
+      </div> : null}>
       {!!err && <div style={{ ...card, color: '#b91c1c' }} data-testid="tpl-page-error">{err}</div>}
       {builder ? (
         <div style={card}><TemplateBuilder item={builder.item} onClose={() => setBuilder(null)} onSaved={load} orgs={orgs} types={types} /></div>

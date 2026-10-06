@@ -51,6 +51,7 @@ export const corrAPI = {
   publishTemplate: (id: string) => api.post(`${base}/templates/${id}/publish`),
   deactivateTemplate: (id: string) => api.post(`${base}/templates/${id}/deactivate`),
   cloneTemplate: (id: string, target_organization_id?: string) => api.post(`${base}/templates/${id}/clone`, null, { params: target_organization_id ? { target_organization_id } : {} }),
+  seedDefaultTemplates: () => api.post(`${base}/templates/seed-defaults`),
   placeholders: () => api.get(`${base}/placeholders`),
   entities: (kind: string, q: string, page = 1) => api.get(`${base}/entities/${kind}`, { params: { q, page, page_size: 20 } }),
   applyTemplate: (id: string, template_id: string) => api.post(`${base}/${id}/apply-template`, { template_id }),

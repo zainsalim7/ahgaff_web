@@ -757,3 +757,7 @@
 - باكند: `POST /attendance/bulk-status` {record_ids[] | student_ids[] + date_from/date_to/from_statuses[], status, reason, dry_run}. admin/dean ينفّذ مباشرة (يحفظ original_status/edit_reason + log_activity `bulk_update_attendance`)، غيرهم بصلاحية edit_attendance → طلبات اعتماد عبر create_change_requests_for_diff لكل محاضرة (`status: pending_approval`). يستثني سجلات المحاضرات غير الفعّالة ويتجاهل السجلات التي حالتها = الهدف.
 - واجهة: `BulkStatusPanel.tsx` (اختيار الحالة الهدف + سبب + معاينة حيّة dry_run + تأكيد). في وضع «حسب الطالب»: (1) طالب واحد → زر «⚡ تحويل الـ N سجل المعروضة…» يطبّق على السجلات المفلترة (record_ids). (2) اختيار **عدة طلاب** (رقائق، البحث يضيف بدل الاستبدال) → «إجراء جماعي على N طلاب» بنطاق student_ids + الفترة + حالة المصدر من الفلاتر العلوية.
 - مُختبر: curl (حاضر→بعذر→حاضر) + Playwright (معاينة فردية وجماعية). testIDs: student-att-bulk-toggle, single-bulk-*, group-bulk-*, student-att-chip-*, student-att-group.
+
+## 2026-10-06: القوالب الجاهزة لا تظهر على الإنتاج — إصلاح البذر + زر استعادة ✅
+- السبب المرجّح: `correspondence_content_startup` كانت كتلة try واحدة؛ أي فشل في إنشاء فهرس فريد (مثلاً template_versions/contents/snapshots على بيانات إنتاج فيها تكرار) يوقف البذر كله بصمت. الإصلاح: استُخرج `seed_default_templates(db) -> {created, skipped}` ويُستدعى في try مستقل بعد الفهارس.
+- جديد: `POST /correspondence/templates/seed-defaults` (صلاحية template.manage_global) + زر «✨ القوالب الجاهزة» في `/corr-templates` (testid `tpl-seed-defaults`) يضيف الناقص فقط (16 قالباً عاماً). مُختبر محلياً (0 جديد/16 موجود).
