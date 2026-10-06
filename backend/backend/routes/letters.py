@@ -13,6 +13,7 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user, log_activity, export_stamp
 from .statements import _apply_vars, _var_ctx, _safe_dept, _academic_year_display, get_verify_base, student_gender, GENDER_VARS
+from services.letter_pdf import build_letter_pdf
 
 router = APIRouter(tags=["الخطابات"])
 SETTINGS_ID = "letters"
@@ -245,7 +246,7 @@ async def preview_body(data: PreviewIn, current_user: dict = Depends(get_current
 class IssueIn(BaseModel):
     template_id: Optional[str] = None
     template_name: Optional[str] = ""
-    subject: str
+    subject: Optional[str] = ""
     body: str
     recipient: dict
     people: List[dict] = []
@@ -260,7 +261,7 @@ class IssueIn(BaseModel):
 async def issue_letter(data: IssueIn, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
-    if not data.subject.strip() or not data.body.strip() or not (data.recipient or {}).get("name") and not (data.recipient or {}).get("title"):
+    if not (data.subject or "").strip() or not data.body.strip() or not (data.recipient or {}).get("name") and not (data.recipient or {}).get("title"):
         raise HTTPException(status_code=400, detail="الموضوع والمتن والمرسَل إليه مطلوبة")
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
     ctx, table, people = await _build_ctx(db, data.recipient, data.subject, data.people)
@@ -282,6 +283,29 @@ async def issue_letter(data: IssueIn, current_user: dict = Depends(get_current_u
     r = await db.letters.insert_one(doc)
     await log_activity(current_user, "issue_letter", "letter", str(r.inserted_id), data.subject.strip(), {"number": number, "to": doc["recipient"].get("name") or doc["recipient"].get("title")})
     return {"id": str(r.inserted_id), "number": number, "verify_url": doc["verify_url"], "token": token}
+
+
+@router.post("/letters/preview-pdf")
+async def preview_letter_pdf(data: IssueIn, fmt: str = "png", current_user: dict = Depends(get_current_user)):
+    """👁️ معاينة حيّة للخطاب قبل الإصدار — بلا رقم تسلسلي ولا حفظ (png = صورة الصفحة الأولى)"""
+    _guard(current_user)
+    db = get_db()
+    settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
+    ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
+    year = datetime.now(timezone.utc).year
+    seq = (await db.letter_counters.find_one({"_id": str(year)}) or {}).get("seq", 0) + 1
+    fmt_ref = (settings.get("reference_format") or "").strip() or DEFAULT_REF
+    number = fmt_ref.replace("{seq}", str(seq)).replace("{year}", str(year)).replace("{yy}", str(year % 100)) + " (مسوَّدة)"
+    doc = {"serial": seq, "number_display": number, "year": year, "subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people,
+           "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
+           "signatory_name": (data.signatory_name or settings.get("default_signatory_name") or "").strip(), "signatory_title": (data.signatory_title or settings.get("default_signatory_title") or "").strip(),
+           "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
+    pdf = build_letter_pdf(doc, settings, draft=True)
+    if fmt == "png":
+        import pymupdf
+        page = pymupdf.open(stream=pdf, filetype="pdf")[0]
+        return StreamingResponse(io.BytesIO(page.get_pixmap(dpi=110).tobytes("png")), media_type="image/png", headers={"Cache-Control": "no-store"})
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/letters")

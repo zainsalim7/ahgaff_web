@@ -6,6 +6,8 @@ import { downloadBlob } from '../src/utils/exportName';
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6, textAlign: 'right' };
 const errOf = (e: any, d: string) => e?.response?.data?.detail || d;
+import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
+
 type Person = { kind: string; id: string; label: string; sub?: string };
 
 const KIND_AR: Record<string, string> = { student: 'طالب', employee: 'موظف', teacher: 'مدرّس' };
@@ -44,6 +46,8 @@ export default function LettersPage() {
   const [subject, setSubject] = useState('');
   const [body, setBody] = useState('');
   const [preview, setPreview] = useState('');
+  const [previewImg, setPreviewImg] = useState('');
+  const [previewBusy, setPreviewBusy] = useState(false);
   const [recMode, setRecMode] = useState<'list' | 'manual'>('list');
   const [recId, setRecId] = useState('');
   const [rec, setRec] = useState({ name: '', title: '', organization: '', suffix: 'المحترم' });
@@ -77,18 +81,25 @@ export default function LettersPage() {
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
+  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: signName, signatory_title: signTitle, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '' });
   useEffect(() => {
-    if (!body.trim()) { setPreview(''); return; }
-    const t = setTimeout(() => api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => setPreview(r.data.body)).catch(() => {}), 350);
+    if (!body.trim()) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
+    const t = setTimeout(() => {
+      api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => setPreview(r.data.body)).catch(() => {});
+      setPreviewBusy(true);
+      api.post('/letters/preview-pdf?fmt=png', issuePayload(), { responseType: 'blob' })
+        .then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; }); })
+        .catch(() => {}).finally(() => setPreviewBusy(false));
+    }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people]);
+  }, [body, subject, recipient, people, signName, signTitle]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const issue = async () => {
     if (!recipient) { window.alert('حدّد المرسَل إليه'); return; }
     if (!subject.trim() || !body.trim()) { window.alert('الموضوع والمتن مطلوبان'); return; }
     setBusy(true); setErr('');
     try {
-      const r = await api.post('/letters/issue', { template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: signName, signatory_title: signTitle, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: window.location.origin });
+      const r = await api.post('/letters/issue', issuePayload());
       setLast(r.data);
       const pdf = await api.get(`/letters/${r.data.id}/pdf`, { responseType: 'blob' });
       downloadBlob(pdf.data, `خطاب ${r.data.number}.pdf`, 'application/pdf');
@@ -139,9 +150,8 @@ export default function LettersPage() {
               <select style={{ ...inp, width: 'auto', padding: '4px 8px', fontSize: 12 }} value={peopleKind} onChange={(e) => setPeopleKind(e.target.value)} data-testid="letter-people-kind" title="نوع البحث — تبديل النوع لا يمسح الأسماء المضافة"><option value="student">طلاب</option><option value="employee">موظفون</option><option value="teacher">هيئة تدريس</option></select>
             </div>
             <PeoplePicker kind={peopleKind} people={people} onChange={setPeople} />
-            <label style={{ ...lbl, marginTop: 12 }}>متن الخطاب (قابل للتعديل قبل الإصدار)</label>
-            <textarea style={{ ...inp, minHeight: 150, lineHeight: 1.8 }} value={body} onChange={(e) => setBody(e.target.value)} data-testid="letter-body" />
-            <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>المتغيرات: {vars.map((v: string) => `{${v}}`).join(' ')}</div>
+            <label style={{ ...lbl, marginTop: 12 }}>متن الخطاب — منسّق (خط/حجم/لون/محاذاة) والمتغيرات تُدرج بنقرة عند المؤشر</label>
+            <StatementBodyEditor value={body} onChange={setBody} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={150} placeholder="اختر قالباً أو اكتب متن الخطاب هنا…" testID="letter-body" />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 90px', gap: 8, marginTop: 12 }}>
               <div><label style={lbl}>صفة الموقِّع</label><input style={inp} value={signTitle} onChange={(e) => setSignTitle(e.target.value)} data-testid="letter-sign-title" /></div>
               <div><label style={lbl}>اسم الموقِّع</label><input style={inp} value={signName} onChange={(e) => setSignName(e.target.value)} data-testid="letter-sign-name" /></div>
@@ -150,13 +160,18 @@ export default function LettersPage() {
             {last && <div style={{ marginTop: 12, padding: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-issued">✅ صدر الخطاب رقم <b>{last.number}</b> وتم تنزيل PDF<br /><span style={{ color: '#64748b', fontSize: 11 }}>{last.verify_url}</span></div>}
             <button onClick={issue} disabled={busy} style={btn('#16a34a', { width: '100%', marginTop: 14, padding: 12, fontSize: 14 })} data-testid="letter-issue-btn">{busy ? 'جاري الإصدار…' : 'إصدار وتنزيل PDF'}</button>
           </div>
-          <div style={{ ...card, minHeight: 400 }} data-testid="letter-preview">
-            <div style={{ fontWeight: 800, color: '#0f2440', marginBottom: 10 }}>معاينة المتن بعد تعبئة المتغيرات</div>
-            <div style={{ fontSize: 13, color: '#334155', marginBottom: 8 }}><b>إلى:</b> {recipient ? `${recipient.name || recipient.title} ${recipient.suffix || ''}` : <span style={{ color: '#b45309' }}>لم يُحدد</span>}{recipient?.name && recipient?.title ? <><br />{recipient.title}</> : null}{recipient?.organization ? <><br />{recipient.organization}</> : null}</div>
-            <div style={{ fontSize: 14, fontWeight: 800, textAlign: 'center', margin: '10px 0' }}>الموضوع: {subject || '…'}</div>
-            <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif' }}>{preview || <span style={{ color: '#94a3b8' }}>اختر قالباً ليظهر المتن هنا</span>}</div>
-            {people.length > 0 && body.includes('{جدول_الأسماء}') && <div style={{ fontSize: 12, color: '#7c3aed', marginTop: 8 }}>⊞ سيُرسم جدول بالأسماء ({people.length}) في موضع {'{جدول_الأسماء}'}</div>}
-            <div style={{ marginTop: 20, fontSize: 13, textAlign: 'left' }}><b>{signTitle}</b><br />{signName}</div>
+          <div style={{ ...card, minHeight: 400, position: 'sticky', top: 10, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }} data-testid="letter-preview">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ fontWeight: 800, color: '#0f2440' }}>👁️ معاينة حيّة للخطاب — لا تستهلك رقماً تسلسلياً {previewBusy ? '⏳' : ''}</div>
+              {people.length > 0 && body.includes('{جدول_الأسماء}') && <span style={{ fontSize: 12, color: '#7c3aed' }}>⊞ جدول بالأسماء ({people.length})</span>}
+            </div>
+            {!recipient && body.trim() && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>⚠️ المرسَل إليه لم يُحدد بعد — ستظهر بياناته في المعاينة عند اختياره</div>}
+            {previewImg ? (
+              <img src={previewImg} alt="معاينة الخطاب" data-testid="letter-preview-img" style={{ width: '100%', boxShadow: '0 4px 18px rgba(0,0,0,.18)', borderRadius: 4, background: '#fff' }} />
+            ) : (
+              <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif', color: '#94a3b8', textAlign: 'center', padding: 40 }}>{body.trim() ? 'جاري توليد المعاينة…' : 'اختر قالباً أو اكتب المتن لتظهر المعاينة هنا'}</div>
+            )}
+            {!!preview && !previewImg && <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif' }}>{preview.replace(/<[^>]+>/g, ' ')}</div>}
           </div>
         </div>
       )}
@@ -175,8 +190,7 @@ export default function LettersPage() {
               <Field label="صفة الموقِّع (المرسِل)"><input style={inp} value={tform.signatory_title} onChange={(e) => setTform({ ...tform, signatory_title: e.target.value })} placeholder="رئيس الجامعة" data-testid="lt-sign-title" /></Field>
               <Field label="اسم الموقِّع"><input style={inp} value={tform.signatory_name} onChange={(e) => setTform({ ...tform, signatory_name: e.target.value })} placeholder="أ.د/ …" data-testid="lt-sign-name" /></Field>
             </div>
-            <Field label="المتن *"><textarea style={{ ...inp, minHeight: 180, lineHeight: 1.8 }} value={tform.body} onChange={(e) => setTform({ ...tform, body: e.target.value })} data-testid="lt-body" /></Field>
-            <div style={{ fontSize: 11.5, color: '#64748b' }}>المتغيرات المتاحة (انقر للإدراج): {vars.map((v: string) => <span key={v} onClick={() => setTform({ ...tform, body: `${tform.body}{${v}}` })} style={{ display: 'inline-block', margin: 2, padding: '2px 7px', background: '#f1f5f9', borderRadius: 6, cursor: 'pointer' }}>{`{${v}}`}</span>)}</div>
+            <Field label="المتن * — منسّق، والمتغيرات تُدرج بنقرة عند المؤشر"><StatementBodyEditor value={tform.body || ''} onChange={(h) => setTform((f: any) => ({ ...f, body: h }))} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={180} testID="lt-body" /></Field>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><button onClick={saveTpl} style={btn('#16a34a')} data-testid="lt-save">حفظ</button><button onClick={() => setTform(null)} style={btn('#f1f5f9', { color: '#0f2440' })}>إلغاء</button></div>
           </Modal>}
         </div>

@@ -4,7 +4,7 @@ import base64
 from pathlib import Path
 
 
-def build_letter_pdf(s: dict, settings: dict) -> bytes:
+def build_letter_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
     import arabic_reshaper
     import qrcode
     from bidi.algorithm import get_display
@@ -140,10 +140,22 @@ def build_letter_pdf(s: dict, settings: dict) -> bytes:
     c.setFont("Amiri", 13.5)
     body = s.get("body") or ""
     parts = body.split("{جدول_الأسماء}")
+    from services.rich_text_pdf import is_html, parse_rich, draw_rich
+    rich = is_html(body)
+
+    def ensure_y(space):
+        nonlocal y
+        before = y
+        ensure(space)
+        return y if y != before else None
+
     for pi, part in enumerate(parts):
-        for line in wrap(part.strip("\n"), "Amiri", 13.5, RM - LM):
-            ensure(7.5 * mm)
-            c.setFont("Amiri", 13.5); c.drawRightString(RM, y, ar(line)); y -= 7.5 * mm
+        if rich:
+            y = draw_rich(c, parse_rich(part, default_size=13.5, default_font="amiri", default_align="right"), LM, RM, y, leading=1.5, para_gap=3, ensure=ensure_y)
+        else:
+            for line in wrap(part.strip("\n"), "Amiri", 13.5, RM - LM):
+                ensure(7.5 * mm)
+                c.setFont("Amiri", 13.5); c.drawRightString(RM, y, ar(line)); y -= 7.5 * mm
         if pi < len(parts) - 1:
             y -= 4 * mm; draw_table(s.get("table") or {}); c.setFont("Amiri", 13.5)
     if "{جدول_الأسماء}" not in body and (s.get("table") or {}).get("rows"):
@@ -170,6 +182,13 @@ def build_letter_pdf(s: dict, settings: dict) -> bytes:
     qb = io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)
     c.drawImage(ImageReader(qb), W - 48 * mm, 30 * mm, 26 * mm, 26 * mm)
     c.setFont("Helvetica", 8); c.drawCentredString(W - 35 * mm, 26 * mm, "Scan to verify")
+    if draft:
+        c.saveState()
+        c.setFillColorRGB(0.85, 0.15, 0.15, alpha=0.13)
+        c.setFont(BOLD, 72)
+        c.translate(W / 2, H / 2); c.rotate(35)
+        c.drawCentredString(0, 0, ar("معاينة — غير صادر"))
+        c.restoreState()
     footer()
     c.showPage(); c.save()
     return buf.getvalue()

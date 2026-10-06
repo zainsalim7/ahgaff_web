@@ -17,28 +17,28 @@ const COLORS = ['#000000', '#00802b', '#c62828', '#1565c0', '#6a1b9a'];
 const GF = 'https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Kufi+Arabic:wght@400;700&family=Tajawal:wght@400;700&family=Almarai:wght@400;700&display=swap';
 
 export const isHtmlBody = (s: string) => /<(p|div|br|span|b|strong|u|h[1-6])\b/i.test(s || '');
-export const textToHtml = (s: string) => (isHtmlBody(s) ? s : (s || '').split('\n').map((l) => `<p style="text-align: center">${l.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>`).join(''));
+export const textToHtml = (s: string, align: string = 'center') => (isHtmlBody(s) ? s : (s || '').split('\n').map((l) => `<p style="text-align: ${align}">${l.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>`).join(''));
 
-type Props = { value: string; onChange: (html: string) => void; variables?: string[]; placeholder?: string; minHeight?: number; testID?: string };
+type Props = { value: string; onChange: (html: string) => void; variables?: string[]; placeholder?: string; minHeight?: number; testID?: string; defaultAlign?: 'center' | 'right' };
 
 const tb = (active = false): React.CSSProperties => ({ padding: '3px 8px', borderRadius: 6, border: '1px solid #cbd5e1', backgroundColor: active ? '#00796b' : '#fff', color: active ? '#fff' : '#1a2540', fontSize: 12, fontWeight: 800, cursor: 'pointer', minWidth: 28 });
 const sel: React.CSSProperties = { padding: '3px 6px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12, backgroundColor: '#fff', color: '#1a2540', fontWeight: 700 };
 
-export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variables = [], placeholder, minHeight = 140, testID = 'statement-editor' }) => {
+export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variables = [], placeholder, minHeight = 140, testID = 'statement-editor', defaultAlign = 'center' }) => {
   useEffect(() => {
     if (typeof document === 'undefined' || document.getElementById('statement-fonts-link')) return;
     const link = document.createElement('link'); link.id = 'statement-fonts-link'; link.rel = 'stylesheet'; link.href = GF; document.head.appendChild(link);
   }, []);
-  const initial = useMemo(() => textToHtml(value), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const initial = useMemo(() => textToHtml(value, defaultAlign), []); // eslint-disable-line react-hooks/exhaustive-deps
   const editor = useEditor({
-    extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: 'center' }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' })],
+    extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' })],
     content: initial || '<p></p>',
     immediatelyRender: false,
     onUpdate: ({ editor: ed }) => onChange(ed.isEmpty ? '' : ed.getHTML()),
   });
   useEffect(() => {
     if (!editor || editor.isFocused) return;
-    const html = textToHtml(value);
+    const html = textToHtml(value, defaultAlign);
     if ((value || '') === '' && !editor.isEmpty) editor.commands.clearContent(false);
     else if (html && html !== editor.getHTML()) editor.commands.setContent(html, { emitUpdate: false });
   }, [value, editor]);
@@ -79,7 +79,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
           ))}
         </div>
       )}
-      <style>{`.stmt-tiptap .tiptap{min-height:${minHeight}px;padding:10px 12px;outline:none;font-size:14pt;line-height:1.9;color:#1e293b;direction:rtl;text-align:center;font-family:Amiri,serif}
+      <style>{`.stmt-tiptap .tiptap{min-height:${minHeight}px;padding:10px 12px;outline:none;font-size:14pt;line-height:1.9;color:#1e293b;direction:rtl;text-align:${defaultAlign};font-family:Amiri,serif}
       .stmt-tiptap .tiptap p{margin:0 0 4px}
       .stmt-tiptap .tiptap p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#94a3b8;float:right;pointer-events:none;height:0;font-size:13px;font-family:Cairo,sans-serif}`}</style>
     </div>

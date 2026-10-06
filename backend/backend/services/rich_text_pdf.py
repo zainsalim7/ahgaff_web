@@ -162,6 +162,9 @@ def _words(para: dict) -> List[dict]:
 
 
 def _disp(t: str) -> str:
+    if not re.search(r"[\u0621-\u064A]", t):
+        m = re.match(r"^(.*?)([،؛؟:.,]*)$", t)
+        return (m.group(2) + m.group(1)) if m and m.group(2) else t
     return get_display(arabic_reshaper.reshape(t))
 
 
@@ -184,8 +187,8 @@ def _fit(disp: str, key: str, bold: bool) -> str:
     return "".join(ch if ord(ch) in cm else unicodedata.normalize("NFKC", ch) for ch in disp)
 
 
-def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, leading: float = 1.55, para_gap: float = 4) -> float:
-    """يرسم الفقرات من y نزولاً ويعيد y بعد آخر سطر. المحاذاة الافتراضية وسط، والكلمات تُرتَّب من اليمين لليسار"""
+def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, leading: float = 1.55, para_gap: float = 4, ensure=None) -> float:
+    """يرسم الفقرات من y نزولاً ويعيد y بعد آخر سطر. ensure(height) اختيارية: تعيد y جديدة عند الانتقال لصفحة جديدة"""
     max_w = x_right - x_left
     for para in paras:
         words = _words(para)
@@ -211,6 +214,10 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
         align = (para.get("align") or "center").lower()
         for line, lw in lines:
             size = max(w["size"] for w in line)
+            if ensure:
+                ny = ensure(size * leading)
+                if ny is not None:
+                    y = ny
             y -= size * leading
             x = x_right if align in ("right", "justify", "start") else (x_left + lw if align == "left" else x_right - (max_w - lw) / 2)
             for w in line:
