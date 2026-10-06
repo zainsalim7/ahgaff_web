@@ -2466,6 +2466,10 @@ export default function StudentDetailsScreen() {
                 <Text style={{ fontSize: 11, color: '#557a5a', textAlign: 'right', marginTop: 4 }} selectable>
                   رابط التحقق: {lastStatement.verify_url}
                 </Text>
+                <View style={{ flexDirection: 'row-reverse', gap: 6, marginTop: 8 }}>
+                  <TouchableOpacity onPress={async () => { const r = await api.get(`/statements/${lastStatement.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `إفادة ${lastStatement.number}.pdf`, 'application/pdf'); }} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6, backgroundColor: '#00796b' }} testID="statement-last-pdf"><Text style={{ color: '#fff', fontSize: 11.5, fontWeight: '700' }}>PDF بالكليشة</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={async () => { const r = await api.get(`/statements/${lastStatement.id}/pdf`, { params: { letterhead: false }, responseType: 'blob' }); downloadBlob(r.data, `إفادة ${lastStatement.number} - بلا كليشة.pdf`, 'application/pdf'); }} style={{ paddingVertical: 5, paddingHorizontal: 10, borderRadius: 6, backgroundColor: '#e0f2f1', borderWidth: 1, borderColor: '#80cbc4' }} testID="statement-last-pdf-plain"><Text style={{ color: '#00796b', fontSize: 11.5, fontWeight: '700' }}>🖨️ PDF بلا كليشة (ورق مطبوع)</Text></TouchableOpacity>
+                </View>
               </View>
             )}
             <View style={{ flexDirection: 'row', gap: 8, marginBottom: 8 }}>

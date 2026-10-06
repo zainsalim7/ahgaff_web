@@ -46,7 +46,8 @@ def filter_table(tbl: dict, columns) -> dict:
     return {**tbl, "headers": [headers[i] for i in idx], "rows": [[r[i] if i < len(r) else "" for i in idx] for r in rows]}
 
 
-def build_letter_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
+def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: bool = True) -> bytes:
+    """letterhead=False: طباعة على ورق مطبوع مسبقاً (بلا ترويسة ولا تذييل) مع الحفاظ على مواضع المحتوى"""
     import arabic_reshaper
     import qrcode
     from bidi.algorithm import get_display
@@ -90,14 +91,24 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
             out.append(line)
         return out
 
+    def _img(key):
+        if not settings.get(key):
+            return None
+        try:
+            return ImageReader(io.BytesIO(base64.b64decode(settings[key].split(",")[-1])))
+        except Exception:
+            return None
+
     def header():
+        if not letterhead:
+            return
         hb = f("header_bottom") * mm
-        img = None
-        if settings.get("logo_base64"):
-            try:
-                img = ImageReader(io.BytesIO(base64.b64decode(settings["logo_base64"].split(",")[-1])))
-            except Exception:
-                img = None
+        head_img = _img("header_image_base64")
+        if head_img:
+            # 🖼️ ترويسة جاهزة كصورة: تملأ عرض الصفحة من الأعلى حتى نهاية الكليشة
+            c.drawImage(head_img, 0, H - hb, W, hb, mask="auto", preserveAspectRatio=True, anchor="n")
+            return
+        img = _img("logo_base64")
         if img is None:
             d = Path(__file__).parent.parent / "assets" / "university_logo.jpeg"
             if d.exists():
@@ -114,6 +125,12 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
         c.setLineWidth(0.4); c.line(LM, H - hb - 0.4 * mm, RM, H - hb - 0.4 * mm)
 
     def footer():
+        if not letterhead:
+            return
+        foot_img = _img("footer_image_base64")
+        if foot_img:
+            c.drawImage(foot_img, 0, 0, W, 24 * mm, mask="auto", preserveAspectRatio=True, anchor="s")
+            return
         c.setLineWidth(0.6); c.line(LM, 22 * mm, RM, 22 * mm)
         c.setFont("Amiri", 9)
         parts = [settings.get("address")] + [f"{l}: {settings[k]}" for k, l in (("phones", "تلفون"), ("fax", "فاكس")) if settings.get(k)] + ([f"ص.ب ({settings['po_box']})"] if settings.get("po_box") else []) + [settings.get("website")]
@@ -224,12 +241,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
 
     sig_title = (s.get("signatory_title") or "").strip()
     sig_name = (s.get("signatory_name") or "").strip()
-    sig_img = None
-    if settings.get("signature_base64"):
-        try:
-            sig_img = ImageReader(io.BytesIO(base64.b64decode(settings["signature_base64"].split(",")[-1])))
-        except Exception:
-            sig_img = None
+    sig_img = _img("signature_base64")
     c.setFont(BOLD, 13); c.drawString(30 * mm, y, ar(sig_title))
     name_y = y - 9 * mm
     if sig_img:

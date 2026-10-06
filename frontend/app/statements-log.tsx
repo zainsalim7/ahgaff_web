@@ -93,14 +93,14 @@ export default function StatementsLogScreen() {
     );
   }, [items, search]);
 
-  const downloadPdf = async (s: StatementRow) => {
+  const downloadPdf = async (s: StatementRow, letterhead = true) => {
     try {
-      const res = await api.get(`/statements/${s.id}/pdf`, { responseType: 'blob' });
+      const res = await api.get(`/statements/${s.id}/pdf`, { params: { letterhead }, responseType: 'blob' });
       if (Platform.OS === 'web') {
         const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
         const a = document.createElement('a');
         a.href = url;
-        a.download = filenameFromResponse(res, exportName(['إفادة', s.student_name || s.number_display], 'pdf'));
+        a.download = filenameFromResponse(res, exportName(['إفادة', s.student_name || s.number_display, letterhead ? '' : 'بلا كليشة'], 'pdf'));
         a.click();
         window.URL.revokeObjectURL(url);
       }
@@ -237,6 +237,10 @@ export default function StatementsLogScreen() {
                 <TouchableOpacity onPress={() => downloadPdf(s)} style={styles.actionBtn} testID={`statement-pdf-btn-${s.id}`}>
                   <Ionicons name="download-outline" size={14} color="#00796b" />
                   <Text style={styles.actionText}>PDF</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => downloadPdf(s, false)} style={styles.actionBtn} testID={`statement-pdf-plain-btn-${s.id}`}>
+                  <Ionicons name="print-outline" size={14} color="#00796b" />
+                  <Text style={styles.actionText}>بلا كليشة</Text>
                 </TouchableOpacity>
                 <TouchableOpacity onPress={() => copyLink(s)} style={styles.actionBtn} testID={`statement-copy-btn-${s.id}`}>
                   <Ionicons name="link-outline" size={14} color="#1565c0" />

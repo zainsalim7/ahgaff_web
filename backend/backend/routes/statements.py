@@ -138,6 +138,8 @@ class StatementSettings(BaseModel):
     logo_base64: str = ""
     reference_format: str = ""
     layout: Optional[dict] = None   # 📐 تخطيط صفحة الإفادة (مم)
+    header_image_base64: Optional[str] = ""   # 🖼️ ترويسة جاهزة كصورة
+    footer_image_base64: Optional[str] = ""   # 🖼️ تذييل جاهز كصورة
 
 
 STATEMENT_LAYOUT = {
@@ -405,7 +407,7 @@ async def finalize_statement_draft(statement_id: str, base_url: Optional[str] = 
     doc = await _issue_core(db, student, current_user, inp.nationality, inp.purpose, inp.valid_days, base_url or inp.base_url,
                             signatory_name=sig_name, signatory_title=sig_title, body=inp.body, template_name=inp.template_name,
                             gpa=inp.gpa, grade=inp.grade, term=inp.term, layout=inp.layout, update_id=ex["_id"],
-                            extra={"draft_number": ex.get("number_display"), "inputs": None})
+                            extra={"draft_number": ex.get("number_display")})
     return {"id": doc["inserted_id"], "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
 
 
@@ -422,7 +424,7 @@ async def delete_statement_draft(statement_id: str, current_user: dict = Depends
 
 
 @router.post("/statements/preview-pdf")
-async def preview_statement_pdf(data: IssueRequest, fmt: str = "pdf", current_user: dict = Depends(get_current_user)):
+async def preview_statement_pdf(data: IssueRequest, fmt: str = "pdf", letterhead: bool = True, current_user: dict = Depends(get_current_user)):
     """👁️ معاينة حيّة قبل الإصدار — بلا استهلاك رقم تسلسلي ولا حفظ. fmt=pdf | png (صورة الصفحة الأولى لعرضها في أي متصفح)"""
     db = get_db()
     student = await db.students.find_one({"_id": ObjectId(data.student_id)})
@@ -435,7 +437,7 @@ async def preview_statement_pdf(data: IssueRequest, fmt: str = "pdf", current_us
     doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادرة"}
     doc["number_display"] = doc["number_display"].replace("(مسوَّدة)", "(معاينة)")
     settings = await db.statement_settings.find_one({"_id": f"faculty_{doc.get('faculty_id')}"}) or {}
-    pdf = _build_pdf(doc, settings, draft=True)
+    pdf = _build_pdf(doc, settings, draft=True, letterhead=letterhead)
     if fmt == "png":
         import pymupdf
         page = pymupdf.open(stream=pdf, filetype="pdf")[0]
@@ -748,7 +750,7 @@ async def verify_statement(token: str):
 
 
 @router.get("/statements/{statement_id}/pdf")
-async def statement_pdf(statement_id: str, current_user: dict = Depends(get_current_user)):
+async def statement_pdf(statement_id: str, letterhead: bool = True, current_user: dict = Depends(get_current_user)):
     db = get_db()
     s = await db.student_statements.find_one({"_id": ObjectId(statement_id)})
     if not s:
@@ -757,14 +759,14 @@ async def statement_pdf(statement_id: str, current_user: dict = Depends(get_curr
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     settings = await db.statement_settings.find_one({"_id": f"faculty_{s.get('faculty_id')}"}) or {}
     is_draft = s.get("status") == "draft"
-    pdf = _build_pdf(s, settings, draft=is_draft)
+    pdf = _build_pdf(s, settings, draft=is_draft, letterhead=letterhead)
     from urllib.parse import quote
-    fname = quote(f"{'مسودة إفادة' if is_draft else 'إفادة'} {s.get('student_name', '') or s.get('serial', '')} - {export_stamp()}.pdf")
+    fname = quote(f"{'مسودة إفادة' if is_draft else 'إفادة'} {s.get('student_name', '') or s.get('serial', '')}{'' if letterhead else ' - بلا كليشة'} - {export_stamp()}.pdf")
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
                              headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
 
 
-def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
+def _build_pdf(s: dict, settings: dict, draft: bool = False, letterhead: bool = True) -> bytes:
     import base64
     import arabic_reshaper
     import qrcode
@@ -798,35 +800,42 @@ def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
     BODY, LEAD = float(L["body_font"]), float(L["body_leading"])
 
     # ===== الترويسة (الكليشة) =====
-    logo_b64 = settings.get("logo_base64") or ""
-    img = None
-    if logo_b64:
+    def _img(key):
+        if not settings.get(key):
+            return None
         try:
-            raw = base64.b64decode(logo_b64.split(",")[-1])
-            img = ImageReader(io.BytesIO(raw))
+            return ImageReader(io.BytesIO(base64.b64decode(settings[key].split(",")[-1])))
         except Exception:
-            img = None
-    if img is None:
-        default_logo = Path(__file__).parent.parent / "assets" / "university_logo.jpeg"
-        if default_logo.exists():
-            img = ImageReader(str(default_logo))
-    logo = max(12 * mm, min(28 * mm, HB - 14 * mm))
-    if img:
-        c.drawImage(img, W / 2 - logo / 2, H - 10 * mm - logo, logo, logo, mask="auto", preserveAspectRatio=True)
-    t1, t2 = H - HB + 24 * mm, H - HB + 16 * mm
-    c.setFont("Amiri", 16)
-    c.drawRightString(W - MS, t1, ar("جامعة الأحقاف"))
-    c.setFont("Amiri", 13)
-    c.drawRightString(W - MS, t2, ar(s.get("faculty_name", "")))
-    c.setFont("Helvetica-Bold", 12)
-    c.drawString(MS, t1, "AL-AHGAFF UNIVERSITY")
-    c.setFont("Helvetica", 10)
-    c.drawString(MS, t2, settings.get("faculty_name_en", ""))
-    # خط مزدوج أسفل الترويسة (شكل رسمي)
-    c.setLineWidth(1.3)
-    c.line(MS, H - HB + 1 * mm, W - MS, H - HB + 1 * mm)
-    c.setLineWidth(0.4)
-    c.line(MS, H - HB - 0.4 * mm, W - MS, H - HB - 0.4 * mm)
+            return None
+
+    head_img = _img("header_image_base64") if letterhead else None
+    if not letterhead:
+        pass  # 🖨️ طباعة على ورق مطبوع مسبقاً — بلا ترويسة
+    elif head_img:
+        c.drawImage(head_img, 0, H - HB, W, HB, mask="auto", preserveAspectRatio=True, anchor="n")
+    else:
+        img = _img("logo_base64")
+        if img is None:
+            default_logo = Path(__file__).parent.parent / "assets" / "university_logo.jpeg"
+            if default_logo.exists():
+                img = ImageReader(str(default_logo))
+        logo = max(12 * mm, min(28 * mm, HB - 14 * mm))
+        if img:
+            c.drawImage(img, W / 2 - logo / 2, H - 10 * mm - logo, logo, logo, mask="auto", preserveAspectRatio=True)
+        t1, t2 = H - HB + 24 * mm, H - HB + 16 * mm
+        c.setFont("Amiri", 16)
+        c.drawRightString(W - MS, t1, ar("جامعة الأحقاف"))
+        c.setFont("Amiri", 13)
+        c.drawRightString(W - MS, t2, ar(s.get("faculty_name", "")))
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(MS, t1, "AL-AHGAFF UNIVERSITY")
+        c.setFont("Helvetica", 10)
+        c.drawString(MS, t2, settings.get("faculty_name_en", ""))
+        # خط مزدوج أسفل الترويسة (شكل رسمي)
+        c.setLineWidth(1.3)
+        c.line(MS, H - HB + 1 * mm, W - MS, H - HB + 1 * mm)
+        c.setLineWidth(0.4)
+        c.line(MS, H - HB - 0.4 * mm, W - MS, H - HB - 0.4 * mm)
 
     # المرجع والتاريخان
     issued = (s.get("issued_at") or "")[:10]
@@ -930,20 +939,26 @@ def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
         c.restoreState()
 
     # ===== التذييل =====
-    c.line(MS, 22 * mm, W - MS, 22 * mm)
-    c.setFont("Amiri", 9)
-    footer_parts = []
-    if settings.get("address"):
-        footer_parts.append(settings["address"])
-    if settings.get("phones"):
-        footer_parts.append(f"تلفون: {settings['phones']}")
-    if settings.get("fax"):
-        footer_parts.append(f"فاكس: {settings['fax']}")
-    if settings.get("po_box"):
-        footer_parts.append(f"ص.ب ({settings['po_box']})")
-    if settings.get("website"):
-        footer_parts.append(settings["website"])
-    c.drawCentredString(W / 2, 16 * mm, ar(" — ".join(footer_parts)))
+    foot_img = _img("footer_image_base64") if letterhead else None
+    if not letterhead:
+        pass
+    elif foot_img:
+        c.drawImage(foot_img, 0, 0, W, 24 * mm, mask="auto", preserveAspectRatio=True, anchor="s")
+    else:
+        c.line(MS, 22 * mm, W - MS, 22 * mm)
+        c.setFont("Amiri", 9)
+        footer_parts = []
+        if settings.get("address"):
+            footer_parts.append(settings["address"])
+        if settings.get("phones"):
+            footer_parts.append(f"تلفون: {settings['phones']}")
+        if settings.get("fax"):
+            footer_parts.append(f"فاكس: {settings['fax']}")
+        if settings.get("po_box"):
+            footer_parts.append(f"ص.ب ({settings['po_box']})")
+        if settings.get("website"):
+            footer_parts.append(settings["website"])
+        c.drawCentredString(W / 2, 16 * mm, ar(" — ".join(footer_parts)))
 
     c.showPage()
     c.save()

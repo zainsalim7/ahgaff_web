@@ -184,7 +184,7 @@ export default function StatementSettingsScreen() {
 
   useEffect(() => { loadSettings(facultyId); }, [facultyId, loadSettings]);
 
-  const pickImage = (field: 'logo_base64' | 'signature_base64', label: string) => {
+  const pickImage = (field: 'logo_base64' | 'signature_base64' | 'header_image_base64' | 'footer_image_base64', label: string) => {
     if (Platform.OS !== 'web') return;
     const input = document.createElement('input');
     input.type = 'file';
@@ -300,6 +300,31 @@ export default function StatementSettingsScreen() {
                 <Text style={styles.logoPlaceholderText}>بدون صورة — يظهر الاسم فقط</Text>
               </View>
             )}
+          </View>
+
+          {(['header_image_base64', 'footer_image_base64'] as const).map((k) => (
+            <View key={k}>
+              <Text style={[styles.sectionTitle, { marginTop: 14 }]}>{k === 'header_image_base64' ? '🖼️ ترويسة جاهزة كصورة (تحل محل الشعار والنصوص — بعرض الصفحة كاملاً)' : '🖼️ تذييل جاهز كصورة (أسفل الصفحة — يحل محل نص العنوان والهاتف)'}</Text>
+              <View style={styles.logoRow}>
+                <TouchableOpacity onPress={() => pickImage(k as any, k === 'header_image_base64' ? 'الترويسة' : 'التذييل')} style={styles.uploadBtn} testID={`statement-${k === 'header_image_base64' ? 'header' : 'footer'}-upload-btn`}>
+                  <Ionicons name="cloud-upload-outline" size={16} color="#00796b" />
+                  <Text style={styles.uploadBtnText}>{(form as any)[k] ? 'تغيير الصورة' : 'رفع صورة'}</Text>
+                </TouchableOpacity>
+                {!!(form as any)[k] && (
+                  <TouchableOpacity onPress={() => setForm((p) => ({ ...p, [k]: '' } as any))} style={styles.removeBtn}>
+                    <Ionicons name="trash-outline" size={15} color="#c62828" />
+                    <Text style={styles.removeBtnText}>إزالة</Text>
+                  </TouchableOpacity>
+                )}
+                {(form as any)[k] ? (
+                  <Image source={{ uri: (form as any)[k] }} style={[styles.logoPreview, { width: 220 }]} resizeMode="contain" />
+                ) : (
+                  <View style={styles.logoPlaceholder}><Text style={styles.logoPlaceholderText}>بدون صورة — تُرسم الكليشة الافتراضية</Text></View>
+                )}
+              </View>
+            </View>
+          ))}
+          <View style={{ height: 0 }}>
           </View>
           <Text style={{ fontSize: 11, color: '#8a94a6', textAlign: 'right', marginBottom: 10, lineHeight: 18 }}>
             💡 يُفضل صورة PNG بخلفية شفافة ليظهر التوقيع نظيفاً فوق الورقة

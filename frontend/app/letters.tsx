@@ -49,6 +49,7 @@ export default function LettersPage() {
   const [preview, setPreview] = useState('');
   const [previewImg, setPreviewImg] = useState('');
   const [previewBusy, setPreviewBusy] = useState(false);
+  const [previewLetterhead, setPreviewLetterhead] = useState(true);
   const [recMode, setRecMode] = useState<'list' | 'manual'>('list');
   const [recId, setRecId] = useState('');
   const [rec, setRec] = useState({ name: '', title: '', organization: '', suffix: 'المحترم' });
@@ -97,12 +98,12 @@ export default function LettersPage() {
     const t = setTimeout(() => {
       api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); }).catch(() => {});
       setPreviewBusy(true);
-      api.post('/letters/preview-pdf?fmt=png', issuePayload(), { responseType: 'blob' })
+      api.post(`/letters/preview-pdf?fmt=png&letterhead=${previewLetterhead}`, issuePayload(), { responseType: 'blob' })
         .then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; }); })
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people, signName, signTitle, layout]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, subject, recipient, people, signName, signTitle, layout, previewLetterhead]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // معاينة تخطيط الكليشة الافتراضي (نموذج تجريبي) في تبويب الإعدادات
   useEffect(() => {
@@ -118,6 +119,20 @@ export default function LettersPage() {
     setLast(r.data); setDraft(null);
     const pdf = await api.get(`/letters/${r.data.id}/pdf`, { responseType: 'blob' });
     downloadBlob(pdf.data, `خطاب ${r.data.number}.pdf`, 'application/pdf');
+  };
+  const dlPdf = async (id: string, label: string, letterhead = true) => {
+    const r = await api.get(`/letters/${id}/pdf`, { params: { letterhead }, responseType: 'blob' });
+    downloadBlob(r.data, `${label}${letterhead ? '' : ' - بلا كليشة'}.pdf`, 'application/pdf');
+  };
+  const saveAsTemplate = async (src?: any) => {
+    const name = window.prompt('اسم القالب الجديد:', src?.subject || subject || '');
+    if (!name) return;
+    const kinds = new Set((src?.people || people).map((p: any) => p.kind));
+    const concerns = (src?.people || people).length > 1 ? 'many' : kinds.size === 1 ? [...kinds][0] : 'none';
+    try {
+      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src?.signatory_name ?? signName, signatory_title: src?.signatory_title ?? signTitle, concerns, is_active: true });
+      loadAll(); window.alert(`✅ حُفظ القالب «${name}» — سيظهر في قائمة القوالب`);
+    } catch (e) { setErr(errOf(e, 'فشل حفظ القالب')); }
   };
   const issue = async () => {
     if (!recipient) { window.alert('حدّد المرسَل إليه'); return; }
@@ -232,17 +247,28 @@ export default function LettersPage() {
               </Modal>
             )}
             {draft && <div style={{ marginTop: 12, padding: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-draft-info">📝 مسودة محفوظة برقم <b>{draft.number}</b> — التعديلات تُحفظ على نفس النسخة، وعند الاعتماد تأخذ الرقم الرسمي. <button onClick={resetForm} style={{ border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 12 }}>خطاب جديد</button></div>}
-            {last && <div style={{ marginTop: 12, padding: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-issued">✅ صدر الخطاب رقم <b>{last.number}</b> وتم تنزيل PDF<br /><span style={{ color: '#64748b', fontSize: 11 }}>{last.verify_url}</span></div>}
+            {last && <div style={{ marginTop: 12, padding: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-issued">✅ صدر الخطاب رقم <b>{last.number}</b> وتم تنزيل PDF<br /><span style={{ color: '#64748b', fontSize: 11 }}>{last.verify_url}</span>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => dlPdf(last.id, `خطاب ${last.number}`, true)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid="letter-last-pdf">PDF بالكليشة</button>
+                <button onClick={() => dlPdf(last.id, `خطاب ${last.number}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid="letter-last-pdf-plain">🖨️ PDF بلا كليشة (ورق مطبوع)</button>
+                <button onClick={() => saveAsTemplate()} style={btn('#f5f3ff', { color: '#6d28d9', padding: '5px 10px', fontSize: 12 })} data-testid="letter-save-template">⭐ حفظ كقالب</button>
+              </div>
+            </div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={saveDraft} disabled={busy} style={btn('#f59e0b', { flex: 1, padding: 12, fontSize: 14 })} data-testid="letter-draft-btn">{busy ? '…' : draft ? '💾 تحديث المسودة' : '💾 حفظ كمسودة'}</button>
-              {draft && <button onClick={async () => { const r = await api.get(`/letters/${draft.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `مسودة ${draft.number}.pdf`, 'application/pdf'); }} style={btn('#0f2440', { padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-btn">PDF المسودة</button>}
+              {draft && <button onClick={() => dlPdf(draft.id, `مسودة ${draft.number}`)} style={btn('#0f2440', { padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-btn">PDF المسودة</button>}
+              {draft && <button onClick={() => dlPdf(draft.id, `مسودة ${draft.number}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-plain-btn" title="للطباعة على ورق مطبوع مسبقاً">🖨️ بلا كليشة</button>}
+              <button onClick={() => saveAsTemplate()} disabled={!body.trim()} style={btn('#f5f3ff', { color: '#6d28d9', padding: 12, fontSize: 13 })} data-testid="letter-save-template-btn" title="يحفظ المتن (بمتغيراته) والموضوع والموقّع كقالب جديد">⭐ كقالب</button>
               <button onClick={issue} disabled={busy} style={btn('#16a34a', { flex: 1.4, padding: 12, fontSize: 14 })} data-testid="letter-issue-btn">{busy ? 'جاري الإصدار…' : draft ? '✅ اعتماد وإصدار PDF' : 'إصدار وتنزيل PDF'}</button>
             </div>
           </div>
           <div style={{ ...card, minHeight: 400, position: 'sticky', top: 10, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }} data-testid="letter-preview">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={{ fontWeight: 800, color: '#0f2440' }}>👁️ معاينة حيّة للخطاب — لا تستهلك رقماً تسلسلياً {previewBusy ? '⏳' : ''}</div>
-              {people.length > 0 && body.includes('{جدول_الأسماء}') && <span style={{ fontSize: 12, color: '#7c3aed' }}>⊞ جدول بالأسماء ({people.length})</span>}
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                <label style={{ fontSize: 11.5, color: '#475569', display: 'flex', alignItems: 'center', gap: 4, cursor: 'pointer' }} title="معاينة كما ستُطبع على ورق مطبوع مسبقاً"><input type="checkbox" checked={!previewLetterhead} onChange={(e) => setPreviewLetterhead(!e.target.checked)} data-testid="letter-preview-plain" /> بلا كليشة</label>
+                {people.length > 0 && body.includes('{جدول_الأسماء}') && <span style={{ fontSize: 12, color: '#7c3aed' }}>⊞ جدول بالأسماء ({people.length})</span>}
+              </div>
             </div>
             {!recipient && body.trim() && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>⚠️ المرسَل إليه لم يُحدد بعد — ستظهر بياناته في المعاينة عند اختياره</div>}
             {previewImg ? (
@@ -286,11 +312,14 @@ export default function LettersPage() {
               <td style={{ ...td, whiteSpace: 'nowrap' }}>
                 {l.status === 'draft' ? (<>
                   <button onClick={() => loadDraft(l.id)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-edit-${l.id}`}>تعديل</button>{' '}
-                  <button onClick={async () => { const r = await api.get(`/letters/${l.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `مسودة ${l.number_display}.pdf`, 'application/pdf'); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-pdf-${l.id}`}>PDF</button>{' '}
+                  <button onClick={() => dlPdf(l.id, `مسودة ${l.number_display}`)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-pdf-${l.id}`}>PDF</button>{' '}
+                  <button onClick={() => dlPdf(l.id, `مسودة ${l.number_display}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} title="بلا كليشة">🖨️</button>{' '}
                   <button onClick={() => finalizeFromLog(l)} style={btn('#16a34a', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-finalize-${l.id}`}>اعتماد وإصدار</button>{' '}
                   <button onClick={async () => { if (window.confirm('حذف المسودة نهائياً؟')) { await api.delete(`/letters/${l.id}`); if (draft?.id === l.id) resetForm(); loadLog(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-delete-${l.id}`}>حذف</button>
                 </>) : (<>
-                  <button onClick={async () => { const r = await api.get(`/letters/${l.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `خطاب ${l.number_display}.pdf`, 'application/pdf'); }} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })}>PDF</button>{' '}
+                  <button onClick={() => dlPdf(l.id, `خطاب ${l.number_display}`)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-pdf-${l.id}`}>PDF</button>{' '}
+                  <button onClick={() => dlPdf(l.id, `خطاب ${l.number_display}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} title="PDF بلا كليشة — للطباعة على ورق مطبوع مسبقاً" data-testid={`letter-pdf-plain-${l.id}`}>🖨️ بلا كليشة</button>{' '}
+                  <button onClick={async () => { const { data } = await api.get(`/letters/${l.id}`); saveAsTemplate(data); }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '5px 10px', fontSize: 12 })} title="حفظ هذا الخطاب كقالب" data-testid={`letter-template-from-${l.id}`}>⭐ قالب</button>{' '}
                   <button onClick={async () => { await api.post(`/letters/${l.id}/${l.is_revoked ? 'restore' : 'revoke'}`); loadLog(); }} style={btn('#f1f5f9', { color: l.is_revoked ? '#16a34a' : '#b91c1c', padding: '5px 10px', fontSize: 12 })}>{l.is_revoked ? 'استرجاع' : 'إلغاء'}</button>
                 </>)}
               </td></tr>)}</tbody></table>
@@ -304,6 +333,8 @@ export default function LettersPage() {
             {([['org_name', 'اسم الجامعة'], ['office_name', 'الجهة المصدِرة (رئاسة الجامعة / الشؤون الأكاديمية…)'], ['office_name_en', 'الجهة بالإنجليزية'], ['reference_format', 'صيغة الرقم ({seq} {year} {yy})'], ['default_signatory_title', 'صفة الموقِّع الافتراضي'], ['default_signatory_name', 'اسم الموقِّع الافتراضي'], ['phones', 'تلفون'], ['fax', 'فاكس'], ['address', 'العنوان'], ['po_box', 'ص.ب'], ['website', 'الموقع'], ['closing', 'عبارة الختام']] as const).map(([k, l]) => <Field key={k} label={l}><input style={inp} value={settings[k] || ''} onChange={(e) => setSettings({ ...settings, [k]: e.target.value })} data-testid={`ls-${k}`} /></Field>)}
             <Field label="الشعار (صورة)"><input type="file" accept="image/*" onChange={file64('logo_base64')} />{settings.logo_base64 && <img src={settings.logo_base64} alt="" style={{ height: 50, marginTop: 6 }} />}</Field>
             <Field label="صورة التوقيع"><input type="file" accept="image/*" onChange={file64('signature_base64')} />{settings.signature_base64 && <img src={settings.signature_base64} alt="" style={{ height: 50, marginTop: 6 }} />}</Field>
+            <Field label="🖼️ ترويسة جاهزة كصورة (تحل محل الشعار والنصوص — عرض A4 كامل، ارتفاعها = نهاية الكليشة)"><input type="file" accept="image/*" onChange={file64('header_image_base64')} data-testid="ls-header-image" />{settings.header_image_base64 && <div><img src={settings.header_image_base64} alt="" style={{ width: '100%', maxHeight: 90, objectFit: 'contain', marginTop: 6, border: '1px solid #e2e8f0' }} /><button onClick={() => setSettings({ ...settings, header_image_base64: '' })} style={{ ...btn('#fee2e2', { color: '#b91c1c', padding: '3px 8px', fontSize: 11 }), marginTop: 4 }}>إزالة الترويسة</button></div>}</Field>
+            <Field label="🖼️ تذييل جاهز كصورة (أسفل الصفحة — يحل محل نص العنوان والهاتف)"><input type="file" accept="image/*" onChange={file64('footer_image_base64')} data-testid="ls-footer-image" />{settings.footer_image_base64 && <div><img src={settings.footer_image_base64} alt="" style={{ width: '100%', maxHeight: 60, objectFit: 'contain', marginTop: 6, border: '1px solid #e2e8f0' }} /><button onClick={() => setSettings({ ...settings, footer_image_base64: '' })} style={{ ...btn('#fee2e2', { color: '#b91c1c', padding: '3px 8px', fontSize: 11 }), marginTop: 4 }}>إزالة التذييل</button></div>}</Field>
           </div>
           <button onClick={saveSettings} style={btn('#16a34a', { marginTop: 12 })} data-testid="ls-save">حفظ الإعدادات</button>
           <div style={{ marginTop: 18, borderTop: '1px solid #e2e8f0', paddingTop: 14 }} data-testid="ls-layout-section">

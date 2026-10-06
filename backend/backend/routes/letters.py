@@ -52,6 +52,8 @@ class LetterSettings(BaseModel):
     reference_format: Optional[str] = DEFAULT_REF
     closing: Optional[str] = "وتفضلوا بقبول فائق الاحترام والتقدير،"
     layout: Optional[dict] = None   # 📐 تخطيط الصفحة الافتراضي (مم)
+    header_image_base64: Optional[str] = ""   # 🖼️ ترويسة جاهزة كصورة (تحل محل الشعار والنصوص)
+    footer_image_base64: Optional[str] = ""   # 🖼️ تذييل جاهز كصورة
 
 
 @router.get("/letters/settings")
@@ -365,7 +367,7 @@ async def delete_draft(lid: str, current_user: dict = Depends(get_current_user))
 
 
 @router.post("/letters/preview-pdf")
-async def preview_letter_pdf(data: IssueIn, fmt: str = "png", current_user: dict = Depends(get_current_user)):
+async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool = True, current_user: dict = Depends(get_current_user)):
     """👁️ معاينة حيّة للخطاب قبل الإصدار — بلا رقم تسلسلي ولا حفظ (png = صورة الصفحة الأولى)"""
     _guard(current_user)
     db = get_db()
@@ -375,7 +377,7 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", current_user: dict
     doc = {**(await _compose(db, data, settings)), "serial": seq, "number_display": _number_for(settings, seq, year) + " (معاينة)", "year": year,
            "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
     doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادر"}
-    pdf = build_letter_pdf(doc, settings, draft=True)
+    pdf = build_letter_pdf(doc, settings, draft=True, letterhead=letterhead)
     if fmt == "png":
         import pymupdf
         page = pymupdf.open(stream=pdf, filetype="pdf")[0]
@@ -439,14 +441,14 @@ async def verify_letter(token: str):
 
 
 @router.get("/letters/{lid}/pdf")
-async def letter_pdf(lid: str, current_user: dict = Depends(get_current_user)):
+async def letter_pdf(lid: str, letterhead: bool = True, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
     s = await db.letters.find_one({"_id": ObjectId(lid)})
     if not s:
         raise HTTPException(status_code=404, detail="الخطاب غير موجود")
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
-    pdf = build_letter_pdf(s, settings, draft=s.get("status") == "draft")
+    pdf = build_letter_pdf(s, settings, draft=s.get("status") == "draft", letterhead=letterhead)
     from urllib.parse import quote
-    fname = quote(f"{'مسودة' if s.get('status') == 'draft' else 'خطاب'} {s.get('number_display', '')} - {export_stamp()}.pdf")
+    fname = quote(f"{'مسودة' if s.get('status') == 'draft' else 'خطاب'} {s.get('number_display', '')}{'' if letterhead else ' - بلا كليشة'} - {export_stamp()}.pdf")
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
