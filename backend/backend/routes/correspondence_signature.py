@@ -83,7 +83,12 @@ def signature_html(c: dict, letterhead: dict | None) -> str:
     """كتلة التوقيع المرئي + الختم — تُلحق بقسم SIGNATURE_BLOCK عند SIGNED/ISSUED/ARCHIVED فقط"""
     if c.get("status") not in ("SIGNED", "ISSUED", "ARCHIVED") or not c.get("signature"):
         return ""
-    s = c["signature"]
+    s = dict(c["signature"])
+    sp = c.get("signatory_position") or {}
+    if sp.get("holder_name"):
+        hon = (sp.get("honorific") or "").strip()
+        s["name"] = f"{hon}/ {sp['holder_name']}" if hon else sp["holder_name"]
+        s["job_title"] = sp.get("title_ar") or s.get("job_title", "")
     seal = ((letterhead or {}).get("branding_config") or {}).get("seal_asset_url")
     sig_img = f'<img class="sig-img" src="{s["asset_url"]}" alt="signature" style="height:60px;max-width:180px;object-fit:contain;display:block"/>' if s.get("asset_url") else ""
     seal_img = f'<img class="seal-img" src="{seal}" alt="seal" style="height:80px;width:80px;object-fit:contain;opacity:.9"/>' if seal else ""

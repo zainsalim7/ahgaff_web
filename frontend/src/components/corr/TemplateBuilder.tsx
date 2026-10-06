@@ -9,7 +9,7 @@ export type InputField = { key: string; label_ar: string; label_en?: string; typ
 
 const DEFAULT_SECTIONS: Section[] = [
   { id: 's1', type: 'REFERENCE', order: 1, title: 'الرقم والتاريخ', content: '<p>الرقم: {{correspondence.official_number}}<br/>التاريخ: {{correspondence.date}} الموافق {{correspondence.date_hijri}}</p>', editable: 'SYSTEM', required: false },
-  { id: 's2', type: 'RECIPIENT', order: 2, title: 'المستلم', content: '<p>إلى: {{recipient.title}} {{recipient.name}}<br/>{{recipient.organization}}</p>', editable: 'STRUCTURED', required: false },
+  { id: 's2', type: 'RECIPIENT', order: 2, title: 'المستلم', content: '<p>إلى: {{recipient.name}} {{recipient.suffix}}<br/>{{recipient.title}}<br/>{{recipient.organization}}</p>', editable: 'STRUCTURED', required: false },
   { id: 's3', type: 'SALUTATION', order: 3, title: 'التحية', content: '<p>السلام عليكم ورحمة الله وبركاته،</p>', editable: 'DEFAULT_EDITABLE', required: false },
   { id: 's4', type: 'SUBJECT', order: 4, title: 'الموضوع', content: '<p><strong>الموضوع: {{correspondence.subject}}</strong></p>', editable: 'SYSTEM', required: true },
   { id: 's5', type: 'BODY', order: 5, title: 'المتن', content: '<p></p>', editable: 'DEFAULT_EDITABLE', required: true },

@@ -61,6 +61,10 @@ export const corrAPI = {
   uploadSignature: (file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`${base}/signatures/me`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); },
   deleteSignature: () => api.delete(`${base}/signatures/me`),
   suggestions: (correspondence_id: string) => api.get(`${base}/suggestions`, { params: { correspondence_id } }),
+  positions: (kind?: string, includeInactive = false) => api.get(`${base}/positions`, { params: { kind, include_inactive: includeInactive } }),
+  createPosition: (data: any) => api.post(`${base}/positions`, data),
+  updatePosition: (id: string, data: any) => api.put(`${base}/positions/${id}`, data),
+  deletePosition: (id: string) => api.delete(`${base}/positions/${id}`),
   pdf: (id: string) => api.get(`${base}/${id}/pdf`, { responseType: 'blob' }),
   pdfInfo: (id: string) => api.get(`${base}/${id}/pdf/info`),
   preview: (id: string, mode: 'preview' | 'edit' = 'preview') => api.post(`${base}/${id}/preview`, null, { params: { mode } }),
@@ -105,5 +109,5 @@ export const ACTION_AR: Record<string, { label: string; color: string; needsReas
   sign: { label: 'توقيع', color: '#7c3aed' }, issue: { label: 'إصدار (توليد الرقم)', color: '#0f766e' },
   archive: { label: 'أرشفة', color: '#475569' }, cancel: { label: 'إلغاء', color: '#991b1b', needsReason: true },
 };
-export const RECIPIENT_TYPE_AR: Record<string, string> = { INTERNAL_ORGANIZATION: 'جهة داخلية', INTERNAL_PERSON: 'شخص داخلي (موظف/مدرس)', INTERNAL_USER: 'مستخدم داخلي', EXTERNAL_ORGANIZATION: 'جهة خارجية', EXTERNAL_PERSON: 'شخص خارجي' };
+export const RECIPIENT_TYPE_AR: Record<string, string> = { INTERNAL_ORGANIZATION: 'جهة داخلية', INTERNAL_PERSON: 'شخص داخلي (موظف/مدرس)', INTERNAL_USER: 'مستخدم داخلي', EXTERNAL_ORGANIZATION: 'جهة خارجية', EXTERNAL_PERSON: 'شخص خارجي', POSITION: 'منصب (من دليل المناصب)' };
 export const errMsg = (e: any, fallback = 'حدث خطأ') => (typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : fallback);

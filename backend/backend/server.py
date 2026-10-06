@@ -207,6 +207,7 @@ from routes.correspondence import router as correspondence_router, correspondenc
 from routes.correspondence_content import router as correspondence_content_router, correspondence_content_startup
 from routes.correspondence_pdf import router as correspondence_pdf_router, public_router as correspondence_public_router, pdf_startup as correspondence_pdf_startup
 from routes.correspondence_signature import router as correspondence_signature_router, signature_startup as correspondence_signature_startup
+from routes.correspondence_positions import router as correspondence_positions_router
 from routes.departments import router as departments_router
 from routes.students import router as students_router
 from routes.teachers import router as teachers_router
@@ -18258,6 +18259,7 @@ app.include_router(correspondence_content_router, prefix="/api")
 app.include_router(correspondence_pdf_router, prefix="/api")
 app.include_router(correspondence_public_router, prefix="/api")
 app.include_router(correspondence_signature_router, prefix="/api")
+app.include_router(correspondence_positions_router, prefix="/api")
 app.include_router(correspondence_router, prefix="/api")
 app.include_router(departments_router, prefix="/api")
 app.include_router(students_router, prefix="/api")

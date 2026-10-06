@@ -749,11 +749,13 @@ async def build_preview(db, ctx: CorrContext, c: dict, request: Request, mode: s
             await audit(db, ctx, "PLACEHOLDER_RESOLVED", "correspondence", str(c["_id"]), request, meta={"entities": [e.get("entity_type") for e in entities]}, organization_id=c["organization_id"])
     sections, unresolved, missing_required = _render_sections(version, content, data, allowed, mode if mode in ("edit", "preview") else "preview")
     from .correspondence_signature import signature_html
+    from .correspondence_positions import sender_html
     sig_html = signature_html(c, letterhead)
-    if sig_html:
+    extra_html = sig_html or sender_html(c)
+    if extra_html:
         for s_ in sections:
             if s_.get("type") == "SIGNATURE_BLOCK":
-                s_["html"] = (s_.get("html") or "") + sig_html
+                s_["html"] = (s_.get("html") or "") + extra_html
     required_entities = version.get("required_entities") or []
     have = {("FACULTY" if e.get("entity_type") == "TEACHER" else e.get("entity_type")) for e in entities}
     missing_entities = [e for e in required_entities if e not in have]
@@ -844,7 +846,7 @@ def _sec(i, typ, title, content, editable, required=False, cfg=None):
 def _std(body_title, body_html, extra_required=(), opening="السلام عليكم ورحمة الله وبركاته،"):
     return [
         _sec(1, "REFERENCE", "الرقم والتاريخ", "<p>الرقم: {{correspondence.official_number}}<br/>التاريخ: {{correspondence.date}} الموافق {{correspondence.date_hijri}}</p>", "SYSTEM"),
-        _sec(2, "RECIPIENT", "المستلم", "<p>إلى: {{recipient.title}} {{recipient.name}}<br/>{{recipient.organization}}</p>", "STRUCTURED"),
+        _sec(2, "RECIPIENT", "المستلم", "<p>إلى: {{recipient.name}} {{recipient.suffix}}<br/>{{recipient.title}}<br/>{{recipient.organization}}</p>", "STRUCTURED"),
         _sec(3, "SALUTATION", "التحية", f"<p>{opening}</p>", "DEFAULT_EDITABLE"),
         _sec(4, "SUBJECT", "الموضوع", "<p><strong>الموضوع: {{correspondence.subject}}</strong></p>", "SYSTEM", True),
         _sec(5, "BODY", body_title, body_html, "DEFAULT_EDITABLE", True),
@@ -931,6 +933,12 @@ SEED_DECISION_TEMPLATES = [
 async def seed_default_templates(db) -> dict:
     """بذر القوالب الجاهزة (آمن للتكرار — يتجاوز الموجود بالكود)"""
     created, skipped = 0, 0
+    # ترقية قسم المستلم في القوالب المبذورة إلى الصيغة الجديدة (اسم مع اللقب → المنصب → الجهة)
+    _old_rcp = "<p>إلى: {{recipient.title}} {{recipient.name}}<br/>{{recipient.organization}}</p>"
+    _new_rcp = "<p>إلى: {{recipient.name}} {{recipient.suffix}}<br/>{{recipient.title}}<br/>{{recipient.organization}}</p>"
+    async for v in db.correspondence_template_versions.find({"sections.content": _old_rcp}):
+        secs = [{**s_, "content": _new_rcp} if s_.get("type") == "RECIPIENT" and s_.get("content") == _old_rcp else s_ for s_ in v.get("sections", [])]
+        await db.correspondence_template_versions.update_one({"_id": v["_id"]}, {"$set": {"sections": secs}})
     dts = {d["code"]: str(d["_id"]) for d in await db.document_types.find({"is_global": True}).to_list(100)}
     for code, name, dt_code, req, body_title, body, inputs in SEED_TEMPLATES:
         if await db.correspondence_templates.find_one({"code": code, "organization_id": None}):

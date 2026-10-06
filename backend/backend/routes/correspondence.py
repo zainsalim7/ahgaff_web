@@ -21,7 +21,7 @@ log = logging.getLogger("correspondence")
 
 STATUSES = ("DRAFT", "SUBMITTED", "UNDER_REVIEW", "CHANGES_REQUESTED", "APPROVED", "REJECTED", "SIGNED", "ISSUED", "ARCHIVED", "CANCELLED")
 PRIORITIES = ("NORMAL", "IMPORTANT", "URGENT", "IMMEDIATE")
-RECIPIENT_TYPES = ("INTERNAL_ORGANIZATION", "INTERNAL_USER", "INTERNAL_PERSON", "EXTERNAL_ORGANIZATION", "EXTERNAL_PERSON")
+RECIPIENT_TYPES = ("INTERNAL_ORGANIZATION", "INTERNAL_USER", "INTERNAL_PERSON", "EXTERNAL_ORGANIZATION", "EXTERNAL_PERSON", "POSITION")
 RECIPIENT_ROLES = ("TO", "CC", "BCC")
 # action -> (from_status, to_status, permission)
 TRANSITIONS = {
@@ -232,6 +232,7 @@ class RecipientIn(BaseModel):
     person_type: Optional[str] = None
     person_id: Optional[str] = None
     recipient_title: Optional[str] = None
+    position_id: Optional[str] = None
     recipient_role: str = "TO"
     is_primary: bool = False
 
@@ -250,6 +251,7 @@ class CorrIn(BaseModel):
     priority: str = "NORMAL"
     security_classification: str = "INTERNAL"
     sender_organization_id: Optional[str] = None
+    signatory_position_id: Optional[str] = None
     recipients: List[RecipientIn] = []
     entities: List[EntityIn] = []
 
@@ -261,6 +263,7 @@ class CorrPatch(BaseModel):
     security_classification: Optional[str] = None
     document_type_id: Optional[str] = None
     sender_organization_id: Optional[str] = None
+    signatory_position_id: Optional[str] = None
     version: Optional[int] = None
 
 
@@ -697,6 +700,8 @@ def _validate_recipient(r: RecipientIn):
         raise HTTPException(status_code=400, detail="نوع/دور المستلم غير صالح")
     if r.recipient_type == "INTERNAL_ORGANIZATION" and not r.organization_id:
         raise HTTPException(status_code=400, detail="المنظمة المستلمة مطلوبة")
+    if r.recipient_type == "POSITION" and not (r.position_id and ObjectId.is_valid(r.position_id)):
+        raise HTTPException(status_code=400, detail="اختر المنصب من دليل المناصب")
     if r.recipient_type == "INTERNAL_USER" and not r.user_id:
         raise HTTPException(status_code=400, detail="المستخدم المستلم مطلوب")
     if r.recipient_type == "INTERNAL_PERSON" and (r.person_type not in ("EMPLOYEE", "TEACHER") or not r.person_id or not ObjectId.is_valid(r.person_id)):
@@ -705,8 +710,29 @@ def _validate_recipient(r: RecipientIn):
         raise HTTPException(status_code=400, detail="اسم الجهة/الشخص الخارجي مطلوب")
 
 
+async def _position_snapshot(db, pid: Optional[str]) -> Optional[dict]:
+    if not pid:
+        return None
+    from .correspondence_positions import load_position
+    p = await load_position(db, pid)
+    if not p:
+        raise HTTPException(status_code=404, detail="منصب الموقِّع غير موجود أو موقوف")
+    return {"id": str(p["_id"]), **{k: p.get(k) for k in ("title_ar", "holder_name", "honorific", "kind", "external_organization")}, "organization_name": p.get("organization_name", "")}
+
+
 async def _enrich_person_recipient(db, r: dict) -> dict:
-    """INTERNAL_PERSON: الاسم/الصفة/الجهة من بيانات الموظفين أو المدرسين (مصدر موثوق) — لا من العميل"""
+    """INTERNAL_PERSON: الاسم/الصفة/الجهة من بيانات الموظفين أو المدرسين (مصدر موثوق) — لا من العميل. POSITION: من دليل المناصب"""
+    if r.get("recipient_type") == "POSITION":
+        from .correspondence_positions import load_position, position_display
+        p = await load_position(db, r.get("position_id"))
+        if not p:
+            raise HTTPException(status_code=404, detail="المنصب غير موجود أو موقوف")
+        d = position_display(p)
+        r.update({"person_name": d["name"], "person_title": d["title"], "person_organization": d["organization"], "position_snapshot": {k: p.get(k) for k in ("title_ar", "holder_name", "honorific", "kind", "external_organization", "recipient_suffix")} | {"organization_name": p.get("organization_name", "")},
+                  "organization_id": p.get("organization_id") if p.get("kind") == "INTERNAL" else None, "external_organization": p.get("external_organization") if p.get("kind") == "EXTERNAL" else None})
+        if not r.get("recipient_title"):
+            r["recipient_title"] = d["title"]
+        return r
     if r.get("recipient_type") != "INTERNAL_PERSON":
         return r
     if r.get("person_type") == "EMPLOYEE":
@@ -755,6 +781,7 @@ async def create_correspondence(data: CorrIn, request: Request, ctx: CorrContext
         "official_number": None, "sequence_number": None, "numbering_year": None, "numbering_scheme_id": None,
         "sender_organization_id": data.sender_organization_id or data.organization_id,
         "subject": data.subject.strip(), "summary": (data.summary or "").strip(), "status": "DRAFT",
+        "signatory_position_id": data.signatory_position_id or None, "signatory_position": await _position_snapshot(db, data.signatory_position_id),
         "priority": data.priority, "security_classification": data.security_classification,
         "created_by": ctx.user_id, "current_owner_user_id": ctx.user_id, "current_owner_organization_id": data.organization_id,
         "issued_at": None, "archived_at": None, "cancelled_at": None, "deleted_at": None, "deleted_by": None,
@@ -888,6 +915,9 @@ async def patch_correspondence(corr_id: str, data: CorrPatch, request: Request, 
         upd["document_type_id"] = data.document_type_id
     if data.sender_organization_id is not None:
         upd["sender_organization_id"] = data.sender_organization_id or c["organization_id"]
+    if data.signatory_position_id is not None:
+        upd["signatory_position_id"] = data.signatory_position_id or None
+        upd["signatory_position"] = await _position_snapshot(db, data.signatory_position_id)
     if not upd:
         return await _enrich(db, c)
     upd["updated_at"] = _now()

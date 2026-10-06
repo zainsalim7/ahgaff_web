@@ -164,6 +164,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', permissions: [], forAll: true },
   { id: 'corr-list', label: 'سجل المراسلات', icon: 'documents', path: '/corr-list', permissions: [], forAll: true },
   { id: 'corr-templates', label: 'قوالب وترويسات الخطابات', icon: 'copy', path: '/corr-templates', permissions: [], forAll: true },
+  { id: 'corr-positions', label: 'المناصب والأسماء', icon: 'people-circle', path: '/corr-positions', permissions: [], forAll: true },
   { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', permissions: [], forAll: true },
 
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },

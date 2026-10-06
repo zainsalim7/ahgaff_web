@@ -57,6 +57,11 @@ REGISTRY: Dict[str, tuple] = {
     "recipient.name": ("اسم المستلم", "Recipient name", "STRING", "RECIPIENT", None),
     "recipient.organization": ("جهة المستلم", "Recipient organization", "STRING", "RECIPIENT", None),
     "recipient.title": ("صفة المستلم", "Recipient title", "STRING", "RECIPIENT", None),
+    "recipient.suffix": ("عبارة التكريم (المحترم)", "Recipient honorific suffix", "STRING", "RECIPIENT", None),
+    "recipient.full": ("المستلم كاملاً (اللقب/ الاسم — المنصب)", "Recipient full", "STRING", "RECIPIENT", None),
+    "sender.name": ("اسم المرسِل/الموقِّع مع اللقب", "Sender name", "STRING", "SENDER", None),
+    "sender.title": ("منصب المرسِل/الموقِّع", "Sender title", "STRING", "SENDER", None),
+    "sender.full": ("المرسِل كاملاً", "Sender full", "STRING", "SENDER", None),
     "correspondence.subject": ("موضوع الخطاب", "Subject", "STRING", "CORRESPONDENCE", None),
     "correspondence.official_number": ("الرقم الرسمي", "Official number", "STRING", "CORRESPONDENCE", None),
     "correspondence.date": ("تاريخ الخطاب (ميلادي)", "Date (Gregorian)", "DATE", "CORRESPONDENCE", None),
@@ -270,7 +275,17 @@ async def build_data(db, ctx, corr: dict, entities: List[dict], recipients: List
     rorg = prim.get("organization_name") or prim.get("external_organization") or prim.get("person_organization") or ""
     if not rname:
         rname, rorg = rorg, ""
-    data["recipient"] = {"name": rname, "organization": rorg, "title": prim.get("recipient_title") or ""}
+    rsuffix = ((prim.get("position_snapshot") or {}).get("recipient_suffix") or "").strip()
+    rtitle = prim.get("recipient_title") or ""
+    data["recipient"] = {"name": rname, "organization": rorg, "title": rtitle, "suffix": rsuffix,
+                         "full": " — ".join([x for x in (f"{rname} {rsuffix}".strip() if rsuffix else rname, rtitle if rtitle != rname else "", rorg if rorg and rorg != rtitle else "") if x])}
+    sp = corr.get("signatory_position") or {}
+    if sp:
+        s_hon = (sp.get("honorific") or "").strip()
+        s_name = f"{s_hon}/ {sp.get('holder_name', '')}" if s_hon else sp.get("holder_name", "")
+        data["sender"] = {"name": s_name, "title": sp.get("title_ar", ""), "full": f"{s_name} — {sp.get('title_ar', '')}"}
+    else:
+        data["sender"] = {"name": "", "title": "", "full": data.get("organization", {}).get("name_ar", "")}
     issued = corr.get("issued_at")
     doc_date = issued if isinstance(issued, datetime) else datetime.now(timezone.utc)
     data["correspondence"] = {"subject": corr.get("subject", ""), "official_number": corr.get("official_number") or UNISSUED_NUMBER, "date": greg_str(doc_date),

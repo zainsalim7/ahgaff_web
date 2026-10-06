@@ -19,10 +19,12 @@ export default function CorrQuick() {
   const { me, hasAnywhere } = useCorrMe();
   const [templates, setTemplates] = useState<any[]>([]);
   const [orgs, setOrgs] = useState<any[]>([]);
+  const [positions, setPositions] = useState<any[]>([]);
+  const [signerId, setSignerId] = useState('');
   const [tpl, setTpl] = useState<any | null>(null);
   const [orgId, setOrgId] = useState('');
   const [subject, setSubject] = useState('');
-  const [rec, setRec] = useState<any>({ recipient_type: 'INTERNAL_ORGANIZATION', organization_id: '', external_organization: '', external_name: '', recipient_title: '', recipient_role: 'TO', person_type: 'EMPLOYEE', person_id: '', person_label: '' });
+  const [rec, setRec] = useState<any>({ recipient_type: 'POSITION', position_id: '', organization_id: '', external_organization: '', external_name: '', recipient_title: '', recipient_role: 'TO', person_type: 'EMPLOYEE', person_id: '', person_label: '' });
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [people, setPeople] = useState<Record<string, { id: string; label: string; code: string }[]>>({});
   const [picker, setPicker] = useState<string | null>(null);
@@ -35,6 +37,7 @@ export default function CorrQuick() {
   useEffect(() => {
     corrAPI.templates({ status: 'PUBLISHED', page_size: 200 }).then((r) => setTemplates((r.data.items || []).filter((t: any) => t.is_active !== false))).catch(() => {});
     corrAPI.organizations().then((r) => setOrgs(r.data)).catch(() => {});
+    corrAPI.positions().then((r) => { setPositions(r.data.items); const d = r.data.items.find((x: any) => x.is_default_signer); if (d) setSignerId(d.id); }).catch(() => {});
   }, []);
   const allowedOrgs = useMemo(() => orgs.filter((o) => !me || me.is_super || me.can_create_in === 'ALL' || (me.can_create_in as string[]).includes(o.id)), [orgs, me]);
   useEffect(() => { if (!orgId && allowedOrgs.length) setOrgId(allowedOrgs[0].id); }, [allowedOrgs, orgId]);
@@ -46,7 +49,7 @@ export default function CorrQuick() {
     setErr(''); setCorr(null); setPrev(null); setInputs({}); setPeople({});
     try { const full = (await corrAPI.template(t.id)).data; setTpl(full); setSubject(full.name_ar); } catch (e) { setErr(errMsg(e, 'تعذر تحميل القالب')); }
   };
-  const recipientOk = rec.recipient_type === 'INTERNAL_PERSON' ? !!rec.person_id : rec.recipient_type === 'INTERNAL_ORGANIZATION' ? !!rec.organization_id : !!(rec.external_organization || rec.external_name);
+  const recipientOk = rec.recipient_type === 'POSITION' ? !!rec.position_id : rec.recipient_type === 'INTERNAL_PERSON' ? !!rec.person_id : rec.recipient_type === 'INTERNAL_ORGANIZATION' ? !!rec.organization_id : !!(rec.external_organization || rec.external_name);
   const namesOk = required.every((k) => (people[k] || []).length > 0);
   const inputsOk = inputDefs.filter((d) => d.is_required).every((d) => String(inputs[d.key] || '').trim());
 
@@ -56,14 +59,16 @@ export default function CorrQuick() {
       let id = corr?.id;
       if (!id) {
         const recipients: any[] = [];
-        if (rec.recipient_type === 'INTERNAL_PERSON') recipients.push({ recipient_type: rec.recipient_type, person_type: rec.person_type, person_id: rec.person_id, recipient_title: rec.recipient_title, recipient_role: 'TO', is_primary: true });
+        if (rec.recipient_type === 'POSITION') recipients.push({ recipient_type: 'POSITION', position_id: rec.position_id, recipient_title: rec.recipient_title, recipient_role: 'TO', is_primary: true });
+        else if (rec.recipient_type === 'INTERNAL_PERSON') recipients.push({ recipient_type: rec.recipient_type, person_type: rec.person_type, person_id: rec.person_id, recipient_title: rec.recipient_title, recipient_role: 'TO', is_primary: true });
         else if (rec.recipient_type === 'INTERNAL_ORGANIZATION') recipients.push({ recipient_type: rec.recipient_type, organization_id: rec.organization_id, recipient_title: rec.recipient_title, recipient_role: 'TO', is_primary: true });
         else recipients.push({ recipient_type: rec.recipient_type, external_organization: rec.external_organization, external_name: rec.external_name, recipient_title: rec.recipient_title, recipient_role: 'TO', is_primary: true });
         const entities = Object.entries(people).flatMap(([k, arr]) => arr.map((p) => ({ entity_type: k, entity_id: p.id, relationship_type: 'SUBJECT' })));
-        const r = await corrAPI.create({ organization_id: orgId, document_type_id: tpl.document_type_id, subject, summary: `خطاب سريع من قالب «${tpl.name_ar}»`, recipients, entities });
+        const r = await corrAPI.create({ organization_id: orgId, document_type_id: tpl.document_type_id, subject, summary: `خطاب سريع من قالب «${tpl.name_ar}»`, recipients, entities, signatory_position_id: signerId || null });
         id = r.data.id;
         await corrAPI.applyTemplate(id, tpl.id);
       }
+      if (corr?.id) await corrAPI.patch(id, { signatory_position_id: signerId || '', version: corr.version });
       const content = (await corrAPI.content(id)).data;
       const cv = content.content?.content_version ?? content.content_version ?? 1;
       await corrAPI.patchContent(id, { input_values: inputs, content_version: cv });
@@ -128,14 +133,29 @@ export default function CorrQuick() {
               <label style={lbl}>الموضوع<input style={inp} value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="quick-subject" /></label>
               <div style={{ ...lbl, marginTop: 6 }}>المرسَل إليه</div>
               <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                {[['INTERNAL_ORGANIZATION', 'جهة داخلية'], ['INTERNAL_PERSON', 'موظف / مدرّس'], ['EXTERNAL_ORGANIZATION', 'جهة خارجية']].map(([k, l]) => (
+                {[['POSITION', '👤 منصب (رئيس الجامعة، عميد…)'], ['INTERNAL_ORGANIZATION', 'جهة داخلية'], ['INTERNAL_PERSON', 'موظف / مدرّس'], ['EXTERNAL_ORGANIZATION', 'جهة خارجية']].map(([k, l]) => (
                   <button key={k} type="button" onClick={() => setRec((p: any) => ({ ...p, recipient_type: k }))} data-testid={`quick-rec-${k}`} style={{ ...btn(rec.recipient_type === k ? '#0f2440' : '#f1f5f9', { color: rec.recipient_type === k ? '#fff' : '#0f2440' }) }}>{l}</button>
                 ))}
               </div>
+              {rec.recipient_type === 'POSITION' && (
+                <div>
+                  <select style={inp} value={rec.position_id} onChange={(e) => setRec((p: any) => ({ ...p, position_id: e.target.value }))} data-testid="quick-rec-position">
+                    <option value="">— اختر المنصب —</option>
+                    <optgroup label="مناصب الجامعة">{positions.filter((x) => x.kind === 'INTERNAL').map((x) => <option key={x.id} value={x.id}>{x.title_ar} — {x.display?.name}</option>)}</optgroup>
+                    <optgroup label="جهات خارجية">{positions.filter((x) => x.kind === 'EXTERNAL').map((x) => <option key={x.id} value={x.id}>{x.title_ar} — {x.display?.name}{x.external_organization ? ` (${x.external_organization})` : ''}</option>)}</optgroup>
+                  </select>
+                  <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>يُكتب الاسم الكامل مع اللقب والمنصب تلقائياً. <span style={{ color: '#1565c0', cursor: 'pointer' }} onClick={() => router.push('/corr-positions' as any)} data-testid="quick-goto-positions">إدارة المناصب ←</span></div>
+                </div>
+              )}
               {rec.recipient_type === 'INTERNAL_ORGANIZATION' && <select style={inp} value={rec.organization_id} onChange={(e) => setRec((p: any) => ({ ...p, organization_id: e.target.value }))} data-testid="quick-rec-org"><option value="">— اختر الجهة —</option>{orgs.map((o) => <option key={o.id} value={o.id}>{o.name_ar}</option>)}</select>}
               {rec.recipient_type === 'INTERNAL_PERSON' && <PersonRecipientFields rec={rec} onChange={(patch: any) => setRec((p: any) => ({ ...p, ...patch }))} testPrefix="quick" />}
               {rec.recipient_type === 'EXTERNAL_ORGANIZATION' && <div style={{ display: 'grid', gap: 8 }}><input style={inp} placeholder="اسم الجهة الخارجية" value={rec.external_organization} onChange={(e) => setRec((p: any) => ({ ...p, external_organization: e.target.value }))} data-testid="quick-rec-ext-org" /><input style={inp} placeholder="اسم الشخص (اختياري)" value={rec.external_name} onChange={(e) => setRec((p: any) => ({ ...p, external_name: e.target.value }))} data-testid="quick-rec-ext-name" /></div>}
-              <input style={{ ...inp, marginTop: 8 }} placeholder="صفة المرسَل إليه (مثال: المحترم / حفظه الله) — اختياري" value={rec.recipient_title} onChange={(e) => setRec((p: any) => ({ ...p, recipient_title: e.target.value }))} data-testid="quick-rec-title" />
+              {rec.recipient_type !== 'POSITION' && <input style={{ ...inp, marginTop: 8 }} placeholder="صفة المرسَل إليه (مثال: المحترم / حفظه الله) — اختياري" value={rec.recipient_title} onChange={(e) => setRec((p: any) => ({ ...p, recipient_title: e.target.value }))} data-testid="quick-rec-title" />}
+              <div style={{ ...lbl, marginTop: 14 }}>المرسِل / الموقِّع</div>
+              <select style={inp} value={signerId} onChange={(e) => setSignerId(e.target.value)} data-testid="quick-signer">
+                <option value="">— باسم الجهة فقط (بدون اسم) —</option>
+                {positions.filter((x) => x.kind === 'INTERNAL').map((x) => <option key={x.id} value={x.id}>{x.title_ar} — {x.display?.name}{x.is_default_signer ? ' (افتراضي)' : ''}</option>)}
+              </select>
 
               {required.length > 0 && <div style={{ ...lbl, marginTop: 14 }}>الأسماء التي يخصّها الخطاب</div>}
               {required.map((k) => (
