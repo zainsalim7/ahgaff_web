@@ -287,6 +287,10 @@ async def _tpl_view(db, t: dict, with_version=True) -> dict:
         out["published_version"] = pub.get("version_number") if pub else None
         out["versions"] = [{"version_number": x["version_number"], "is_published": x.get("is_published", False), "created_at": str(x.get("created_at")), "change_note": x.get("change_note", "")}
                            for x in await db.correspondence_template_versions.find({"template_id": str(t["_id"])}, {"content": 0}).sort("version_number", -1).to_list(100)]
+    else:
+        pub = await db.correspondence_template_versions.find_one({"template_id": str(t["_id"]), "is_published": True}, {"required_entities": 1, "input_fields": 1}, sort=[("version_number", -1)])
+        out["required_entities"] = (pub or {}).get("required_entities", [])
+        out["inputs_count"] = len((pub or {}).get("input_fields") or [])
     return out
 
 

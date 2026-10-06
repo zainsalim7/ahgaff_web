@@ -160,6 +160,7 @@ const MENU_ITEMS: MenuItem[] = [
 
   // 📜 المراسلات الرسمية (المرحلة 1) — الصلاحيات تُقيَّم في الخادم حسب العضويات التنظيمية
   { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', permissions: [], forAll: true },
+  { id: 'corr-quick', label: 'خطاب سريع ⚡', icon: 'flash', path: '/corr-quick', permissions: [], forAll: true },
   { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', permissions: [], forAll: true },
   { id: 'corr-list', label: 'سجل المراسلات', icon: 'documents', path: '/corr-list', permissions: [], forAll: true },
   { id: 'corr-templates', label: 'قوالب وترويسات الخطابات', icon: 'copy', path: '/corr-templates', permissions: [], forAll: true },

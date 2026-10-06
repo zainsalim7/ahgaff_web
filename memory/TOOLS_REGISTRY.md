@@ -102,3 +102,4 @@ report-daily, report-course, report-student, report-teacher-summary, report-teac
 6. المستخدم يختبر على **الإنتاج app.ahgaff.net** — التغييرات تصله فقط بالنشر عبر Github؛ اختبر محلياً دائماً.
 | استيراد الموظفين من Excel (+ إنشاء وحدات تلقائياً) | معاينة ثم تنفيذ؛ الوحدات غير الموجودة تُنشأ مع اختيار النوع/الأم؛ مطابقة مرنة للأسماء | POST /api/hr/employees/import/preview?create_units= · POST /api/hr/employees/import (Form: units_config) |
 | إدارة الحضور — حسب الطالب | بحث طالب بالاسم/القيد + فلتر حالة وتاريخ → مقرراته وسجلاته، تعديل الحالة مباشرة أو فتح المحاضرة | GET /api/search?types=students · GET /api/attendance/student/{id} · PUT /api/attendance/{id}/status |
+| خطاب سريع ⚡ (/corr-quick) | نموذج → مرسَل إليه + أسماء → معاينة A4 → PDF مسودة أو إصدار+PDF رسمي بنقرة | POST /correspondence · /{id}/apply-template · PATCH /{id}/content · POST /{id}/preview · /{id}/{submit..issue} · GET /{id}/pdf |
