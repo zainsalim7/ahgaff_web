@@ -121,16 +121,22 @@ export default function ManageAttendanceScreen() {
     fetchLectures();
   };
 
+  const [deptF, setDeptF] = useState('');
+  const departments = useMemo(() => {
+    const m: Record<string, { id: string; name: string; faculty: string; n: number }> = {};
+    lectures.forEach((l: any) => { const id = l.department_id || '-'; (m[id] ||= { id, name: l.department_name || 'بدون قسم', faculty: l.faculty_name || '', n: 0 }).n++; });
+    return Object.values(m).sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+  }, [lectures]);
   const filteredLectures = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return lectures;
     return lectures.filter(
-      (l) =>
-        l.course_name?.toLowerCase().includes(q) ||
+      (l: any) =>
+        (!deptF || (l.department_id || '-') === deptF) &&
+        (!q || l.course_name?.toLowerCase().includes(q) ||
         l.course_code?.toLowerCase().includes(q) ||
-        l.teacher_name?.toLowerCase().includes(q)
+        l.teacher_name?.toLowerCase().includes(q))
     );
-  }, [lectures, search]);
+  }, [lectures, search, deptF]);
 
   const openAttendance = (lecture: Lecture) => {
     router.push({
@@ -219,6 +225,18 @@ export default function ManageAttendanceScreen() {
           </View>
         </View>
         <Text style={styles.dateCaption} testID="date-caption">{dayNameAr(date)} • {date} • {filteredLectures.length} محاضرة</Text>
+        {departments.length > 0 && (
+          <View style={styles.deptRow} testID="dept-filter">
+            <TouchableOpacity onPress={() => setDeptF('')} style={[styles.deptChip, !deptF && styles.deptChipActive]} testID="dept-all">
+              <Text style={[styles.deptText, !deptF && { color: '#fff' }]}>كل الأقسام ({lectures.length})</Text>
+            </TouchableOpacity>
+            {departments.map((d) => (
+              <TouchableOpacity key={d.id} onPress={() => setDeptF(deptF === d.id ? '' : d.id)} style={[styles.deptChip, deptF === d.id && styles.deptChipActive]} testID={`dept-${d.id}`}>
+                <Text style={[styles.deptText, deptF === d.id && { color: '#fff' }]}>{d.name}{d.faculty ? ` · ${d.faculty}` : ''} ({d.n})</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={16} color="#8a95a8" />
           <TextInput
@@ -302,6 +320,7 @@ export default function ManageAttendanceScreen() {
                   <Text style={styles.lectureDate}>
                     {l.day_name_ar ? `${l.day_name_ar} • ` : ''}
                     {l.lecture_date}
+                    {(l as any).department_name ? ` • ${(l as any).department_name}` : ''}
                   </Text>
                 </View>
                 <View style={styles.actionArea}>
@@ -386,6 +405,10 @@ const styles = StyleSheet.create({
   dateArrow: { padding: 6 },
   dateText: { fontSize: 13, color: '#0f2440', fontWeight: '700', minWidth: 96, textAlign: 'center' },
   dateCaption: { fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 6 },
+  deptRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 8, marginBottom: 2 },
+  deptChip: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: '#f5f6f8', borderWidth: 1, borderColor: '#e2e8f0' },
+  deptChipActive: { backgroundColor: '#7c3aed', borderColor: '#7c3aed' },
+  deptText: { fontSize: 11.5, fontWeight: '700', color: '#5b6678' },
   searchWrap: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
