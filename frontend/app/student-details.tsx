@@ -200,6 +200,9 @@ export default function StudentDetailsScreen() {
   const [statementPurpose, setStatementPurpose] = useState('');
   const [statementValidDays, setStatementValidDays] = useState('');
   const [statementSig, setStatementSig] = useState<Signatory>({ ...EMPTY_SIGNATORY });
+  const [statementPreviewOpen, setStatementPreviewOpen] = useState(false);
+  const [statementPreviewUrl, setStatementPreviewUrl] = useState('');
+  const [statementPreviewBusy, setStatementPreviewBusy] = useState(false);
   const [issuingStatement, setIssuingStatement] = useState(false);
   const [lastStatement, setLastStatement] = useState<any>(null);
   const [statementMode, setStatementMode] = useState<'standard' | 'template' | 'free'>('standard');
@@ -722,6 +725,56 @@ export default function StudentDetailsScreen() {
     }
   };
 
+  const statementPayload = () => {
+    if (!student) return null;
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
+    return {
+      student_id: student.id,
+      nationality: statementNationality || undefined,
+      purpose: statementPurpose || undefined,
+      base_url: baseUrl,
+      valid_days: statementValidDays && parseInt(statementValidDays, 10) > 0 ? parseInt(statementValidDays, 10) : undefined,
+      signatory_position_id: statementSig.position_id || undefined,
+      signatory_name: statementSig.name.trim() || undefined,
+      signatory_title: statementSig.title.trim() || undefined,
+      term: statementMode !== 'standard' && statementTerm.trim() ? statementTerm.trim() : undefined,
+      body: statementMode !== 'standard' ? statementBody.trim() : undefined,
+      gpa: statementMode !== 'standard' && statementGpa.trim() ? statementGpa.trim() : undefined,
+      grade: statementMode !== 'standard' && statementGrade.trim() ? statementGrade.trim() : undefined,
+      template_name: statementMode === 'template'
+        ? (statementTemplates.find((t: any) => t.id === selectedTemplateId)?.name || 'قالب')
+        : statementMode === 'free' ? 'إفادة حرة' : undefined,
+    };
+  };
+
+  const refreshStatementPreview = useCallback(async () => {
+    const payload = statementPayload();
+    if (!payload) return;
+    setStatementPreviewBusy(true);
+    try {
+      const res = await api.post('/statements/preview-pdf?fmt=png', payload, { responseType: 'blob' });
+      const url = URL.createObjectURL(new Blob([res.data], { type: 'image/png' }));
+      setStatementPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return url; });
+    } catch (e: any) {
+      showMessage('خطأ', e?.response?.data?.detail || 'تعذر توليد المعاينة');
+    } finally {
+      setStatementPreviewBusy(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [student, statementNationality, statementPurpose, statementValidDays, statementSig, statementTerm, statementBody, statementGpa, statementGrade, statementMode, selectedTemplateId]);
+
+  useEffect(() => {
+    if (!statementModal || !statementPreviewOpen) return;
+    const t = setTimeout(refreshStatementPreview, 700);
+    return () => clearTimeout(t);
+  }, [statementModal, statementPreviewOpen, refreshStatementPreview]);
+
+  useEffect(() => {
+    if (statementModal) return;
+    setStatementPreviewOpen(false);
+    setStatementPreviewUrl((old) => { if (old) URL.revokeObjectURL(old); return ''; });
+  }, [statementModal]);
+
   const handleIssueStatement = async () => {
     if (!student) return;
     if (statementMode !== 'standard' && !statementBody.trim()) {
@@ -744,24 +797,7 @@ export default function StudentDetailsScreen() {
     }
     setIssuingStatement(true);
     try {
-      const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      const res = await api.post('/statements/issue', {
-        student_id: student.id,
-        nationality: statementNationality || undefined,
-        purpose: statementPurpose || undefined,
-        base_url: baseUrl,
-        valid_days: statementValidDays && parseInt(statementValidDays, 10) > 0 ? parseInt(statementValidDays, 10) : undefined,
-        signatory_position_id: statementSig.position_id || undefined,
-        signatory_name: statementSig.name.trim() || undefined,
-        signatory_title: statementSig.title.trim() || undefined,
-        term: statementMode !== 'standard' && statementTerm.trim() ? statementTerm.trim() : undefined,
-        body: statementMode !== 'standard' ? statementBody.trim() : undefined,
-        gpa: statementMode !== 'standard' && statementGpa.trim() ? statementGpa.trim() : undefined,
-        grade: statementMode !== 'standard' && statementGrade.trim() ? statementGrade.trim() : undefined,
-        template_name: statementMode === 'template'
-          ? (statementTemplates.find((t: any) => t.id === selectedTemplateId)?.name || 'قالب')
-          : statementMode === 'free' ? 'إفادة حرة' : undefined,
-      });
+      const res = await api.post('/statements/issue', statementPayload());
       setLastStatement(res.data);
       const pdfRes = await api.get(`/statements/${res.data.id}/pdf`, { responseType: 'blob' });
       downloadBlob(pdfRes.data, `إفادة ${student.full_name}.pdf`, 'application/pdf');
@@ -2187,7 +2223,30 @@ export default function StudentDetailsScreen() {
       {/* نافذة إصدار إفادة الطالب */}
       <Modal visible={statementModal} transparent animationType="fade" onRequestClose={() => setStatementModal(false)}>
         <View style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
-          <View style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: 480, maxHeight: '92%' as any, overflow: 'hidden' }} testID="statement-modal">
+          <View style={{ backgroundColor: '#fff', borderRadius: 12, width: '100%', maxWidth: statementPreviewOpen ? 1100 : 480, maxHeight: '92%' as any, overflow: 'hidden', flexDirection: 'row-reverse' }} testID="statement-modal">
+            {statementPreviewOpen && (
+              <View style={{ flex: 1.15, backgroundColor: '#e9edf3', borderLeftWidth: 1, borderLeftColor: '#dde3ec', minHeight: 600 }} testID="statement-preview-pane">
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#f7f9fc', borderBottomWidth: 1, borderBottomColor: '#dde3ec' }}>
+                  <Text style={{ fontSize: 12, fontWeight: '800', color: '#1a2540' }}>👁️ معاينة حيّة — لا تستهلك رقماً تسلسلياً {statementPreviewBusy ? '⏳' : ''}</Text>
+                  <View style={{ flexDirection: 'row-reverse', gap: 6 }}>
+                    <TouchableOpacity onPress={refreshStatementPreview} style={{ paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6, backgroundColor: '#e0f2f1' }} testID="statement-preview-refresh">
+                      <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#00796b' }}>تحديث</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity onPress={() => setStatementPreviewOpen(false)} style={{ paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6, backgroundColor: '#fdecea' }} testID="statement-preview-close">
+                      <Text style={{ fontSize: 11.5, fontWeight: '700', color: '#c62828' }}>إخفاء</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                {statementPreviewUrl ? (
+                  <div style={{ flex: 1, overflow: 'auto', padding: 12, display: 'flex', justifyContent: 'center', alignItems: 'flex-start' }}>
+                    <img src={statementPreviewUrl} alt="معاينة الإفادة" style={{ width: '100%', maxWidth: 620, boxShadow: '0 4px 18px rgba(0,0,0,.18)', borderRadius: 4, background: '#fff' }} data-testid="statement-preview-frame" />
+                  </div>
+                ) : (
+                  <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator color="#00796b" /><Text style={{ marginTop: 8, fontSize: 12, color: '#5b6678' }}>جاري توليد المعاينة…</Text></View>
+                )}
+              </View>
+            )}
+            <View style={{ flex: 1, maxWidth: 480 }}>
             <ScrollView contentContainerStyle={{ padding: 20 }} showsVerticalScrollIndicator={false}>
             <View style={{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <Text style={{ fontSize: 16, fontWeight: '800', color: '#1a2540', textAlign: 'right' }}>📄 إصدار إفادة طالب</Text>
@@ -2360,6 +2419,16 @@ export default function StudentDetailsScreen() {
                 )}
               </TouchableOpacity>
               <TouchableOpacity
+                onPress={() => { if (statementPreviewOpen) { refreshStatementPreview(); } else { setStatementPreviewOpen(true); } }}
+                disabled={statementPreviewBusy}
+                style={{ flex: 0.8, borderWidth: 1, borderColor: '#1565c0', backgroundColor: '#e3f2fd', borderRadius: 8, padding: 12, alignItems: 'center', opacity: statementPreviewBusy ? 0.6 : 1 }}
+                testID="statement-preview-btn"
+              >
+                {statementPreviewBusy ? <ActivityIndicator size="small" color="#1565c0" /> : (
+                  <Text style={{ color: '#1565c0', fontWeight: '700', fontSize: 13 }}>👁️ معاينة</Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity
                 onPress={() => setStatementModal(false)}
                 style={{ flex: 0.5, borderWidth: 1, borderColor: '#dde3ec', borderRadius: 8, padding: 12, alignItems: 'center' }}
               >
@@ -2367,6 +2436,7 @@ export default function StudentDetailsScreen() {
               </TouchableOpacity>
             </View>
             </ScrollView>
+            </View>
           </View>
         </View>
       </Modal>

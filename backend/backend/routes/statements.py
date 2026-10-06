@@ -233,7 +233,8 @@ async def _safe_dept(db, student: dict):
 
 async def _issue_core(db, student: dict, current_user: dict, nationality, purpose, valid_days, base_url,
                       signatory_name=None, signatory_title=None, body=None, template_name=None,
-                      gpa=None, grade=None, term=None) -> dict:
+                      gpa=None, grade=None, term=None, draft: bool = False) -> dict:
+    """draft=True: يبني الوثيقة للمعاينة فقط — بلا رقم تسلسلي ولا حفظ"""
     dept = await _safe_dept(db, student)
     faculty_id = student.get("faculty_id") or (dept or {}).get("faculty_id", "")
     if not _can_issue(current_user, faculty_id):
@@ -248,10 +249,13 @@ async def _issue_core(db, student: dict, current_user: dict, nationality, purpos
     academic_year_display = await _academic_year_display(db)
 
     year = datetime.now(timezone.utc).year
-    counter = await db.statement_counters.find_one_and_update(
-        {"_id": f"{faculty_id}_{year}"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True
-    )
-    seq = counter["seq"]
+    if draft:
+        seq = (await db.statement_counters.find_one({"_id": f"{faculty_id}_{year}"}) or {}).get("seq", 0) + 1
+    else:
+        counter = await db.statement_counters.find_one_and_update(
+            {"_id": f"{faculty_id}_{year}"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True
+        )
+        seq = counter["seq"]
     # 🔢 صيغة رقم المرجع قابلة للضبط من إعدادات الإفادات: {seq} {year} {yy} {enrollment_no}
     DEFAULT_REF_FORMAT = "{seq} /7/2/ت ك ش ق /27/26"
     _st = await db.statement_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
@@ -303,6 +307,10 @@ async def _issue_core(db, student: dict, current_user: dict, nationality, purpos
         "expires_at": expires_at,
         "is_revoked": False,
     }
+    if draft:
+        doc["number_display"] = f"{number_display} (مسوَّدة)"
+        doc["verify_url"] = "DRAFT-PREVIEW"
+        return doc
     res = await db.student_statements.insert_one(doc)
     doc["inserted_id"] = str(res.inserted_id)
     await log_activity(current_user, "issue_student_statement", "student", str(student["_id"]),
@@ -322,6 +330,26 @@ async def issue_statement(data: IssueRequest, current_user: dict = Depends(get_c
                             body=data.body, template_name=data.template_name,
                             gpa=data.gpa, grade=data.grade, term=data.term)
     return {"id": doc["inserted_id"], "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
+
+
+@router.post("/statements/preview-pdf")
+async def preview_statement_pdf(data: IssueRequest, fmt: str = "pdf", current_user: dict = Depends(get_current_user)):
+    """👁️ معاينة حيّة قبل الإصدار — بلا استهلاك رقم تسلسلي ولا حفظ. fmt=pdf | png (صورة الصفحة الأولى لعرضها في أي متصفح)"""
+    db = get_db()
+    student = await db.students.find_one({"_id": ObjectId(data.student_id)})
+    if not student:
+        raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    sig_name, sig_title = await resolve_signatory(db, data.signatory_position_id, data.signatory_name, data.signatory_title)
+    doc = await _issue_core(db, student, current_user, data.nationality, data.purpose, data.valid_days, data.base_url,
+                            signatory_name=sig_name, signatory_title=sig_title, body=data.body, template_name=data.template_name,
+                            gpa=data.gpa, grade=data.grade, term=data.term, draft=True)
+    settings = await db.statement_settings.find_one({"_id": f"faculty_{doc.get('faculty_id')}"}) or {}
+    pdf = _build_pdf(doc, settings, draft=True)
+    if fmt == "png":
+        import pymupdf
+        page = pymupdf.open(stream=pdf, filetype="pdf")[0]
+        return StreamingResponse(io.BytesIO(page.get_pixmap(dpi=110).tobytes("png")), media_type="image/png", headers={"Cache-Control": "no-store"})
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Cache-Control": "no-store"})
 
 
 # ============ قوالب الإفادات (مشتركة لكل الكليات) ============
@@ -626,7 +654,7 @@ async def statement_pdf(statement_id: str, current_user: dict = Depends(get_curr
                              headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
 
 
-def _build_pdf(s: dict, settings: dict) -> bytes:
+def _build_pdf(s: dict, settings: dict, draft: bool = False) -> bytes:
     import base64
     import arabic_reshaper
     import qrcode
@@ -777,6 +805,14 @@ def _build_pdf(s: dict, settings: dict) -> bytes:
     c.drawImage(ImageReader(qb), W - 48 * mm, 30 * mm, 26 * mm, 26 * mm)
     c.setFont("Helvetica", 8)
     c.drawCentredString(W - 35 * mm, 26 * mm, "Scan to verify")
+    if draft:
+        c.saveState()
+        c.setFillColorRGB(0.85, 0.15, 0.15, alpha=0.13)
+        c.setFont(BOLD, 72)
+        c.translate(W / 2, H / 2)
+        c.rotate(35)
+        c.drawCentredString(0, 0, ar("معاينة — غير صادرة"))
+        c.restoreState()
 
     # ===== التذييل =====
     c.line(18 * mm, 22 * mm, W - 18 * mm, 22 * mm)

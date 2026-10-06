@@ -167,12 +167,26 @@ async def _person_row(db, kind: str, pid: str) -> Optional[dict]:
     return {"kind": "teacher", "name": t.get("full_name") or t.get("name", ""), "code": t.get("academic_title", ""), "c1": (fac or {}).get("name", ""), "c2": "", "c3": "", "_doc": t}
 
 
-TABLE_HEADERS = {"student": ["م", "الاسم", "رقم القيد", "الكلية", "القسم", "المستوى"], "employee": ["م", "الاسم", "الرقم الوظيفي", "الوظيفة", "الوحدة"], "teacher": ["م", "الاسم", "اللقب", "الكلية"]}
+TABLE_HEADERS = {"student": ["م", "الاسم", "رقم القيد", "الكلية", "القسم", "المستوى"], "employee": ["م", "الاسم", "الرقم الوظيفي", "الوظيفة", "الوحدة"], "teacher": ["م", "الاسم", "اللقب", "الكلية"],
+                 "mixed": ["م", "الاسم", "الصفة", "الرقم", "الجهة / الكلية", "القسم / الوظيفة"]}
+KIND_AR = {"student": "طالب", "employee": "موظف", "teacher": "مدرّس"}
 
 
 def _table_rows(rows: List[dict]) -> dict:
+    """جدول الأسماء: أعمدة حسب الصفة إن كانت موحّدة، وجدول مختلط (طلاب + موظفون + مدرّسون) إن تنوّعت"""
     if not rows:
         return {"headers": [], "rows": []}
+    kinds = {r["kind"] for r in rows}
+    if len(kinds) > 1:
+        data = []
+        for i, r in enumerate(rows):
+            if r["kind"] == "student":
+                data.append([str(i + 1), r["name"], KIND_AR["student"], r["code"], r["c1"], f"{r['c2']} — {r['c3']}".strip(" —")])
+            elif r["kind"] == "employee":
+                data.append([str(i + 1), r["name"], KIND_AR["employee"], r["code"], r["c2"], r["c1"]])
+            else:
+                data.append([str(i + 1), r["name"], KIND_AR["teacher"], r["code"], r["c1"], ""])
+        return {"headers": TABLE_HEADERS["mixed"], "rows": data, "mixed": True}
     k = rows[0]["kind"]
     if k == "student":
         data = [[str(i + 1), r["name"], r["code"], r["c1"], r["c2"], r["c3"]] for i, r in enumerate(rows)]
