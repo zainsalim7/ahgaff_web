@@ -6,6 +6,7 @@ import { formatGregorianDate } from '../../utils/dateUtils';
 import { StatusEditPill, ATT_STATUS_META } from './StatusEditPill';
 import { ReportKpis } from '../reports/ReportShell';
 import { C, card, fieldLbl, dateInp, textInp, Chip, Empty, th, td, dayNameAr } from './attUi';
+import { BulkStatusPanel } from './BulkStatusPanel';
 
 type Rec = { id: string; course_id: string; lecture_id?: string | null; course_name: string; status: string; date: string; start_time?: string; end_time?: string };
 type Hit = { id: string; title: string; subtitle: string };
@@ -16,7 +17,9 @@ export const StudentAttendanceSearch = ({ canEdit }: { canEdit: boolean }) => {
   const [q, setQ] = useState('');
   const [hits, setHits] = useState<Hit[]>([]);
   const [searching, setSearching] = useState(false);
-  const [student, setStudent] = useState<Hit | null>(null);
+  const [selected, setSelected] = useState<Hit[]>([]);
+  const student = selected.length === 1 ? selected[0] : null;
+  const [bulkOpen, setBulkOpen] = useState(false);
   const [recs, setRecs] = useState<Rec[]>([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('absent');
@@ -25,20 +28,23 @@ export const StudentAttendanceSearch = ({ canEdit }: { canEdit: boolean }) => {
 
   useEffect(() => {
     const s = q.trim();
-    if (s.length < 2 || (student && s === student.title)) { setHits([]); return; }
+    if (s.length < 2) { setHits([]); return; }
     const t = setTimeout(async () => {
       setSearching(true);
       try { const r = await api.get('/search', { params: { q: s, types: 'students', limit_per_type: 10 } }); setHits(r.data?.results?.students || []); }
       catch { setHits([]); } finally { setSearching(false); }
     }, 300);
     return () => clearTimeout(t);
-  }, [q, student]);
+  }, [q]);
 
-  const pick = async (h: Hit) => {
-    setStudent(h); setQ(h.title); setHits([]); setLoading(true);
-    try { const r = await attendanceAPI.getStudentAttendance(h.id); setRecs(r.data || []); } catch { setRecs([]); } finally { setLoading(false); }
+  const pick = (h: Hit) => { setQ(''); setHits([]); setSelected((p) => (p.some((x) => x.id === h.id) ? p : [...p, h])); };
+  const remove = (id: string) => setSelected((p) => p.filter((x) => x.id !== id));
+  const reset = () => { setSelected([]); setQ(''); setRecs([]); setHits([]); };
+  const loadRecs = async (id: string) => {
+    setLoading(true);
+    try { const r = await attendanceAPI.getStudentAttendance(id); setRecs(r.data || []); } catch { setRecs([]); } finally { setLoading(false); }
   };
-  const reset = () => { setStudent(null); setQ(''); setRecs([]); setHits([]); };
+  useEffect(() => { if (student) loadRecs(student.id); else setRecs([]); }, [student?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const inRange = useMemo(() => recs.filter((r) => { const d = (r.date || '').slice(0, 10); return (!from || d >= from) && (!to || d <= to); }), [recs, from, to]);
   const filtered = useMemo(() => inRange.filter((r) => !status || r.status === status), [inRange, status]);
@@ -57,11 +63,21 @@ export const StudentAttendanceSearch = ({ canEdit }: { canEdit: boolean }) => {
           <div style={{ position: 'relative' }}>
             <label style={fieldLbl}>الطالب (الاسم أو رقم القيد)</label>
             <div style={{ position: 'relative' }}>
-              <input value={q} onChange={(e) => { setQ(e.target.value); if (student) setStudent(null); }} placeholder="اكتب اسم الطالب أو رقم القيد…" style={{ ...textInp, paddingLeft: 34 }} data-testid="student-att-search-input" />
-              <span style={{ position: 'absolute', left: 10, top: 10, cursor: q ? 'pointer' : 'default' }} onClick={q ? reset : undefined} data-testid="student-att-search-clear">
+              <input value={q} onChange={(e) => setQ(e.target.value)} placeholder={selected.length ? 'أضف طالباً آخر لتنفيذ إجراء جماعي…' : 'اكتب اسم الطالب أو رقم القيد…'} style={{ ...textInp, paddingLeft: 34 }} data-testid="student-att-search-input" />
+              <span style={{ position: 'absolute', left: 10, top: 10, cursor: q ? 'pointer' : 'default' }} onClick={q ? () => setQ('') : undefined} data-testid="student-att-search-clear">
                 <Ionicons name={searching ? 'hourglass-outline' : q ? 'close-circle' : 'search'} size={17} color="#8a95a8" />
               </span>
             </div>
+            {selected.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 8 }} data-testid="student-att-selected">
+                {selected.map((s) => (
+                  <span key={s.id} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, backgroundColor: '#eef4ff', color: C.navy, borderRadius: 999, padding: '4px 10px', fontSize: 12.5, fontWeight: 800 }} data-testid={`student-att-chip-${s.id}`}>
+                    {s.title}<span onClick={() => remove(s.id)} style={{ cursor: 'pointer', color: C.muted }} data-testid={`student-att-chip-remove-${s.id}`}>✕</span>
+                  </span>
+                ))}
+                <button type="button" onClick={reset} data-testid="student-att-reset" style={{ border: 'none', background: 'transparent', color: C.muted, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>مسح الكل</button>
+              </div>
+            )}
             {hits.length > 0 && (
               <div style={{ position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 50, backgroundColor: '#fff', borderRadius: 12, border: `1px solid ${C.line}`, boxShadow: '0 10px 30px rgba(15,36,64,0.15)', marginTop: 4, overflow: 'hidden', maxHeight: 320, overflowY: 'auto' }} data-testid="student-att-hits">
                 {hits.map((h) => (
@@ -85,8 +101,17 @@ export const StudentAttendanceSearch = ({ canEdit }: { canEdit: boolean }) => {
         </div>
       </div>
 
-      {!student ? (
-        <div style={card}><Empty icon="person-circle-outline" title="ابحث عن طالب لعرض سجل حضوره" hint="اختر الطالب ثم حدّد الحالة والفترة — ستظهر مقرراته التي سُجّل فيها حضور أو غياب مع إمكانية التعديل الفوري" /></div>
+      {selected.length > 1 ? (
+        <>
+          <div style={card} data-testid="student-att-group">
+            <div style={{ fontSize: 15, fontWeight: 800, color: C.navy, marginBottom: 4 }}>إجراء جماعي على {selected.length} طلاب</div>
+            <div style={{ fontSize: 12.5, color: C.muted, marginBottom: 12 }}>يُطبَّق على سجلات الطلاب المحددين ضمن الفترة{from || to ? ` (${from || '…'} → ${to || '…'})` : ' (كل التواريخ)'} التي حالتها «{STATUS_CHIPS.find((c) => c.k === status)?.l}». غيّر الحالة أعلاه لتحديد المصدر، مثلاً: الغيابات فقط → بعذر.</div>
+            {canEdit ? <BulkStatusPanel testID="group-bulk" scope={{ student_ids: selected.map((s) => s.id), date_from: from || undefined, date_to: to || undefined, from_statuses: status ? [status] : [] }} scopeLabel={`${selected.length} طلاب · ${status ? STATUS_CHIPS.find((c) => c.k === status)?.l : 'كل الحالات'}`} onDone={() => {}} />
+              : <Empty icon="lock-closed-outline" title="ليست لديك صلاحية تعديل الحضور" />}
+          </div>
+        </>
+      ) : !student ? (
+        <div style={card}><Empty icon="person-circle-outline" title="ابحث عن طالب لعرض سجل حضوره" hint="اختر طالباً لعرض سجله وتعديله، أو اختر عدة طلاب لتنفيذ إجراء جماعي واحد عليهم (إجازة مرضية، مهمة رسمية…)" /></div>
       ) : (
         <>
           <div style={{ ...card, display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }} data-testid="student-att-header">
@@ -107,8 +132,19 @@ export const StudentAttendanceSearch = ({ canEdit }: { canEdit: boolean }) => {
           <div style={card}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: C.navy }}>المقررات ({byCourse.length}) · {filtered.length} سجل</div>
-              {canEdit && <div style={{ fontSize: 12, color: C.blue, fontWeight: 700 }} data-testid="student-att-summary">اضغط على الحالة لتعديلها مباشرة</div>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {canEdit && <span style={{ fontSize: 12, color: C.blue, fontWeight: 700 }} data-testid="student-att-summary">اضغط على الحالة لتعديلها مباشرة</span>}
+                {canEdit && filtered.length > 0 && (
+                  <button type="button" onClick={() => setBulkOpen((o) => !o)} data-testid="student-att-bulk-toggle"
+                    style={{ border: `1.5px solid ${C.purple}`, background: bulkOpen ? C.purple : '#fff', color: bulkOpen ? '#fff' : C.purple, borderRadius: 10, padding: '7px 14px', fontWeight: 800, fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit' }}>
+                    ⚡ تحويل الـ {filtered.length} سجل المعروضة…
+                  </button>
+                )}
+              </div>
             </div>
+            {bulkOpen && canEdit && filtered.length > 0 && (
+              <BulkStatusPanel testID="single-bulk" scope={{ record_ids: filtered.map((r) => r.id) }} scopeLabel={`${filtered.length} سجل معروض · ${status ? STATUS_CHIPS.find((c) => c.k === status)?.l : 'كل الحالات'}`} onDone={() => { setBulkOpen(false); loadRecs(student.id); }} />
+            )}
             {loading ? <div style={{ textAlign: 'center', padding: 30, color: C.muted }}>جاري التحميل…</div>
               : byCourse.length === 0 ? <Empty icon="checkmark-done-circle-outline" title="لا توجد سجلات مطابقة" hint="غيّر الحالة أو وسّع الفترة الزمنية" />
               : byCourse.map(([cid, g]) => (

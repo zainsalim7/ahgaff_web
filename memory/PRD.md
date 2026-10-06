@@ -752,3 +752,8 @@
 - `StudentAttendanceSearch.tsx` أُعيدت كتابتها DOM: الفلاتر (بحث + من/إلى + رقائق الحالة بعدّادات) ظاهرة قبل اختيار الطالب؛ بعد الاختيار: بطاقة الطالب + زر ملف الطالب + KPIs (سجلات الفترة/غائب/حاضر/متأخر/بعذر قابلة للنقر) + جدول لكل مقرر (اليوم/التاريخ/الوقت/الحالة القابلة للتعديل/كشف المحاضرة).
 - عناصر مشتركة: `src/components/attendance/attUi.tsx` (Seg, Chip, DateNav, Empty, card, th/td, dayNameAr…). testIDs: mode-lecture/mode-student, date-today/yesterday/input/next/prev, fac-filter, dept-filter, lecture-search, taken-all/pending/done, kpi-*, lecture-table, lecture-{id}, lecture-open-{id}, student-att-*.
 - مُختبر Playwright على الوضعين. ⚠️ يلزم Save to GitHub + نشر الواجهة.
+
+## 2026-10-06: تصحيح جماعي للحضور (فردي/جماعي) ✅
+- باكند: `POST /attendance/bulk-status` {record_ids[] | student_ids[] + date_from/date_to/from_statuses[], status, reason, dry_run}. admin/dean ينفّذ مباشرة (يحفظ original_status/edit_reason + log_activity `bulk_update_attendance`)، غيرهم بصلاحية edit_attendance → طلبات اعتماد عبر create_change_requests_for_diff لكل محاضرة (`status: pending_approval`). يستثني سجلات المحاضرات غير الفعّالة ويتجاهل السجلات التي حالتها = الهدف.
+- واجهة: `BulkStatusPanel.tsx` (اختيار الحالة الهدف + سبب + معاينة حيّة dry_run + تأكيد). في وضع «حسب الطالب»: (1) طالب واحد → زر «⚡ تحويل الـ N سجل المعروضة…» يطبّق على السجلات المفلترة (record_ids). (2) اختيار **عدة طلاب** (رقائق، البحث يضيف بدل الاستبدال) → «إجراء جماعي على N طلاب» بنطاق student_ids + الفترة + حالة المصدر من الفلاتر العلوية.
+- مُختبر: curl (حاضر→بعذر→حاضر) + Playwright (معاينة فردية وجماعية). testIDs: student-att-bulk-toggle, single-bulk-*, group-bulk-*, student-att-chip-*, student-att-group.

@@ -11160,6 +11160,73 @@ async def update_attendance_status(
     return {"message": f"تم تعديل الحالة إلى {new_status}", "old_status": old_status, "new_status": new_status}
 
 
+def _att_date_str(d) -> str:
+    return d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d or "")[:10]
+
+
+@api_router.post("/attendance/bulk-status")
+async def bulk_update_attendance_status(request: Request, current_user: dict = Depends(get_current_user)):
+    """تعديل جماعي لحالة الحضور: بسجلات محددة (record_ids) أو بطلاب + فترة + حالات مصدر. dry_run يرجع المعاينة فقط"""
+    is_direct = current_user["role"] in [UserRole.ADMIN, UserRole.DEAN]
+    if not is_direct and not has_permission(current_user, "edit_attendance"):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية تعديل الحضور")
+    body = await request.json()
+    new_status = body.get("status")
+    if new_status not in ["present", "absent", "late", "excused"]:
+        raise HTTPException(status_code=400, detail="حالة غير صالحة")
+    reason = (body.get("reason") or "").strip()
+    dry_run = bool(body.get("dry_run"))
+    record_ids = [r for r in (body.get("record_ids") or []) if ObjectId.is_valid(r)]
+    student_ids = [s for s in (body.get("student_ids") or []) if s]
+    if record_ids:
+        records = await db.attendance.find({"_id": {"$in": [ObjectId(r) for r in record_ids]}}).to_list(5000)
+    elif student_ids:
+        q = {"student_id": {"$in": student_ids}}
+        from_statuses = [s for s in (body.get("from_statuses") or []) if s]
+        if from_statuses:
+            q["status"] = {"$in": from_statuses}
+        records = await db.attendance.find(q).to_list(20000)
+        d_from, d_to = body.get("date_from") or "", body.get("date_to") or ""
+        active = await get_active_lecture_ids(None)
+        records = [r for r in records if (not d_from or _att_date_str(r.get("date")) >= d_from) and (not d_to or _att_date_str(r.get("date")) <= d_to)
+                   and (not r.get("lecture_id") or str(r["lecture_id"]) in active)]
+    else:
+        raise HTTPException(status_code=400, detail="حدّد سجلات أو طلاباً")
+    records = [r for r in records if r.get("status") != new_status]
+    by_status: dict = {}
+    for r in records:
+        by_status[r.get("status")] = by_status.get(r.get("status"), 0) + 1
+    students_n = len({r["student_id"] for r in records})
+    if dry_run:
+        return {"count": len(records), "students": students_n, "by_status": by_status}
+    if not records:
+        return {"count": 0, "students": 0, "by_status": {}, "message": "لا توجد سجلات تحتاج تعديلاً"}
+    if not is_direct:
+        class _R:
+            def __init__(self, sid, st):
+                self.student_id, self.status = sid, st
+        by_lecture: dict = {}
+        for r in records:
+            if r.get("lecture_id"):
+                by_lecture.setdefault(str(r["lecture_id"]), []).append(r)
+        req_ids = []
+        for lid, recs in by_lecture.items():
+            lecture = await db.lectures.find_one({"_id": ObjectId(lid)})
+            course = await db.courses.find_one({"_id": ObjectId(recs[0]["course_id"])}) if recs[0].get("course_id") else None
+            if lecture and course:
+                res = await create_change_requests_for_diff(lecture, course, [_R(r["student_id"], new_status) for r in recs], current_user, reason=reason or None)
+                req_ids += res.get("request_ids", [])
+        return {"status": "pending_approval", "count": len(records), "students": students_n, "request_ids": req_ids, "message": f"أُرسل {len(req_ids)} طلب تعديل لاعتماد العميد"}
+    now = get_yemen_time()
+    editor = current_user.get("sub", current_user.get("user_id"))
+    for r in records:
+        await db.attendance.update_one({"_id": r["_id"]}, {"$set": {"status": new_status, "edited_by": editor, "edited_at": now, "edit_reason": reason, "original_status": r.get("original_status") or r.get("status")}})
+    await log_activity(current_user, "bulk_update_attendance", entity_type="attendance", entity_id=None, entity_name=f"{len(records)} سجل · {students_n} طالب",
+                       details={"new_status": new_status, "reason": reason, "by_status": by_status, "record_ids": [str(r["_id"]) for r in records][:200]})
+    return {"count": len(records), "students": students_n, "by_status": by_status, "message": f"تم تعديل {len(records)} سجلاً لـ {students_n} طالب إلى «{ {'present': 'حاضر', 'absent': 'غائب', 'late': 'متأخر', 'excused': 'بعذر'}[new_status] }»"}
+
+
+
 @api_router.get("/attendance/student/{student_id}")
 async def get_student_attendance(
     student_id: str,
