@@ -11226,6 +11226,7 @@ async def get_student_attendance(
         result.append({
             "id": str(r["_id"]),
             "course_id": r["course_id"],
+            "lecture_id": str(r["lecture_id"]) if r.get("lecture_id") else (str(lecture["_id"]) if lecture else None),
             "course_name": course["name"] if course else "غير معروف",
             "status": r["status"],
             "date": r["date"].isoformat() if hasattr(r["date"], 'isoformat') else r["date"],

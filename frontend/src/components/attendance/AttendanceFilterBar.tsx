@@ -14,7 +14,7 @@ export const applyAttFilter = <T extends { date: string; status: string }>(recor
     return true;
   });
 
-const DateField = ({ value, onChange, label, testID }: { value: string; onChange: (v: string) => void; label: string; testID: string }) => (
+export const DateField = ({ value, onChange, label, testID }: { value: string; onChange: (v: string) => void; label: string; testID: string }) => (
   <View style={st.field}>
     <Text style={st.label}>{label}</Text>
     {Platform.OS === 'web' ? (

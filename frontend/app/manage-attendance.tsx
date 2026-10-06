@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
+import { StudentAttendanceSearch } from '../src/components/attendance/StudentAttendanceSearch';
 
 /**
  * 📋 صفحة إدارة الحضور المستقلة
@@ -66,7 +67,9 @@ const showMessage = (title: string, message: string) => {
 
 export default function ManageAttendanceScreen() {
   const router = useRouter();
-  const { hasAnyPermission } = useAuth();
+  const { hasAnyPermission, hasPermission, user } = useAuth();
+  const [mode, setMode] = useState<'lecture' | 'student'>('lecture');
+  const canEditAttendance = user?.role === 'admin' || user?.role === 'dean' || hasPermission(PERMISSIONS.EDIT_ATTENDANCE);
 
   const canView = hasAnyPermission([
     PERMISSIONS.MANAGE_ATTENDANCE || 'manage_attendance',
@@ -161,6 +164,21 @@ export default function ManageAttendanceScreen() {
         </View>
       </View>
 
+      {/* Mode switch */}
+      <View style={styles.modeRow}>
+        {([['lecture', 'حسب المحاضرة', 'calendar'], ['student', 'حسب الطالب', 'person-circle']] as const).map(([k, l, ic]) => (
+          <TouchableOpacity key={k} onPress={() => setMode(k)} style={[styles.modeBtn, mode === k && styles.modeBtnActive]} testID={`mode-${k}`}>
+            <Ionicons name={ic as any} size={15} color={mode === k ? '#1565c0' : '#5b6678'} />
+            <Text style={[styles.modeText, mode === k && { color: '#1565c0' }]}>{l}</Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+
+      {mode === 'student' ? (
+        <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent}>
+          <StudentAttendanceSearch canEdit={canEditAttendance} />
+        </ScrollView>
+      ) : (<>
       {/* Filter & Search */}
       <View style={styles.controls}>
         <View style={styles.filterRow}>
@@ -303,12 +321,17 @@ export default function ManageAttendanceScreen() {
         )}
         <View style={{ height: 30 }} />
       </ScrollView>
+      </>)}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f0f2f5' },
+  modeRow: { flexDirection: 'row-reverse', backgroundColor: '#fff', paddingHorizontal: 14, paddingTop: 10, gap: 8 },
+  modeBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingVertical: 8, paddingHorizontal: 14, borderRadius: 10, backgroundColor: '#f5f6f8' },
+  modeBtnActive: { backgroundColor: '#e3f2fd' },
+  modeText: { fontSize: 13, fontWeight: '800', color: '#5b6678' },
   scroll: { flex: 1 },
   scrollContent: { padding: 14 },
 
