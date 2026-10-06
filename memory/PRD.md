@@ -739,3 +739,8 @@
 
 ## 2026-10-06: إصلاح «null (مفتوح)» في شاشة دوامي بتطبيق الموظف 🐛
 - السبب: تطبيق الموبايل (وكيل آخر) يبني نص الحالة من `check_in` مباشرة؛ سجل الغياب التلقائي `auto_absent:true` فيه `check_in=null`. الإصلاح خادمياً: `_display_label()`/`_ser_rec()` في hr_attendance.py → حقل جاهز **`display_label`** في `/hr/attendance/my` (`today`, `today_shifts[].record`, `records[]`). الويب (SelfServiceCards) يستخدمه الآن. وثيقة الوكيل `EMPLOYEE_APP_PRESENCE_SHIFTS.md` (3 نسخ) أُضيف لها بند إلزامي باستخدام `display_label`. ⚠️ يتطلب تحديث تطبيق الموظف من وكيله.
+
+## 2026-10-06: تعديل غيابات الطالب بسرعة (حسب التاريخ / حسب المحاضرة) ✅
+- **إدارة الحضور** (`manage-attendance.tsx`): استُبدل فلتر «اليوم/الكل» (كان «الكل» يعرض اليوم فقط وبحقول غير متطابقة) بـ: اليوم · أمس · متصفح تاريخ ديناميكي (حقل تاريخ + أسهم يوم سابق/تالي) + سطر «اليوم • التاريخ • عدد المحاضرات». يستدعي `/lectures/all-schedule?date=` دائماً مع `normalizeLecture` لتوحيد الحقول. الباكند: أُضيف `attendance_taken` لنتيجة all-schedule (distinct على attendance.lecture_id).
+- **ملف الطالب** (`student-details.tsx`): مكوّنان جديدان `src/components/attendance/StatusEditPill.tsx` (حالة السجل قابلة للضغط → مودال 4 حالات + سبب اختياري → `PUT /attendance/{id}/status`؛ يتعامل مع `pending_approval` برسالة) و`AttendanceFilterBar.tsx` (من/إلى + «الغيابات فقط» + عدّاد + مسح). مفعّل في «سجل الحضور التفصيلي» وفي سجل كل مقرر. الصلاحية: admin/dean أو `edit_attendance`؛ بعد التعديل تُحدَّث الإحصاءات الإجمالية وإحصاءات المقرر محلياً.
+- مُختبر Playwright: تنقّل التاريخ (2026-10-07 → محاضرتان) + تغيير حالة سجل حاضر→بعذر ثم أُعيد.

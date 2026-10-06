@@ -8279,6 +8279,7 @@ async def get_all_schedule_lectures(
     _alas(_day_q, await _gas(db))
     lectures = await db.lectures.find(_day_q).sort("start_time", 1).to_list(200)
     lectures = await _attach_group_courses(lectures, course_map, _my_tid)
+    _taken_ids = set(await db.attendance.distinct("lecture_id", {"lecture_id": {"$in": [str(l["_id"]) for l in lectures]}})) if lectures else set()
 
     # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب (تحديث فعلي في القاعدة)
     now = get_yemen_time()
@@ -8357,6 +8358,7 @@ async def get_all_schedule_lectures(
             "day_shift_cancelled": bool(lecture.get("day_shift_cancelled")),
             "credited_minutes": lecture.get("credited_minutes") or 0,
             "cancel_reason": lecture.get("cancel_reason", ""),
+            "attendance_taken": str(lecture["_id"]) in _taken_ids,
             "teacher_name": teacher_map.get(str(course.get("teacher_id", "")), ""),
             "created_at": lecture.get("created_at", "")
         })

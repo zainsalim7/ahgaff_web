@@ -39,7 +39,22 @@ interface Lecture {
   status?: string;
   attendance_taken?: boolean;
   day_name_ar?: string;
+  room?: string;
+  group_name?: string;
 }
+
+const AR_DAYS = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+const ymd = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const shiftDay = (s: string, n: number) => { const d = new Date(`${s}T12:00:00`); d.setDate(d.getDate() + n); return ymd(d); };
+const dayNameAr = (s: string) => { const d = new Date(`${s}T12:00:00`); return isNaN(d.getTime()) ? '' : AR_DAYS[(d.getDay() + 6) % 7]; };
+const normalizeLecture = (l: any): Lecture => ({
+  ...l,
+  lecture_date: l.lecture_date || l.date || '',
+  scheduled_start_time: l.scheduled_start_time || l.start_time,
+  scheduled_end_time: l.scheduled_end_time || l.end_time,
+  attendance_taken: l.attendance_taken ?? ((l.attendance_count || 0) > 0 || l.status === 'completed'),
+  day_name_ar: l.day_name_ar || dayNameAr(l.lecture_date || l.date || ''),
+});
 
 const showMessage = (title: string, message: string) => {
   if (Platform.OS === 'web') {
@@ -64,9 +79,12 @@ export default function ManageAttendanceScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [lectures, setLectures] = useState<Lecture[]>([]);
-  const [filter, setFilter] = useState<'today' | 'all'>('today');
+  const [date, setDate] = useState<string>(ymd(new Date()));
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const today = ymd(new Date());
+  const yesterday = shiftDay(today, -1);
+  const filter: 'today' | 'yesterday' | 'date' = date === today ? 'today' : date === yesterday ? 'yesterday' : 'date';
 
   // 🔒 حماية الوصول
   useEffect(() => {
@@ -79,10 +97,9 @@ export default function ManageAttendanceScreen() {
   const fetchLectures = useCallback(async () => {
     setError(null);
     try {
-      const endpoint = filter === 'today' ? '/lectures/today' : '/lectures/all-schedule';
-      const res = await api.get(endpoint);
+      const res = await api.get('/lectures/all-schedule', { params: { date } });
       const data = Array.isArray(res.data) ? res.data : res.data?.lectures || [];
-      setLectures(data);
+      setLectures(data.map(normalizeLecture));
     } catch (err: any) {
       console.error('Error fetching lectures:', err);
       setError(err?.response?.data?.detail || 'فشل تحميل المحاضرات');
@@ -90,7 +107,7 @@ export default function ManageAttendanceScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [filter]);
+  }, [date]);
 
   useEffect(() => {
     fetchLectures();
@@ -149,21 +166,41 @@ export default function ManageAttendanceScreen() {
         <View style={styles.filterRow}>
           <TouchableOpacity
             style={[styles.filterBtn, filter === 'today' && styles.filterBtnActive]}
-            onPress={() => setFilter('today')}
+            onPress={() => setDate(today)}
             data-testid="filter-today"
           >
             <Ionicons name="today" size={14} color={filter === 'today' ? '#fff' : '#5b6678'} />
             <Text style={[styles.filterBtnText, filter === 'today' && { color: '#fff' }]}>اليوم</Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={[styles.filterBtn, filter === 'all' && styles.filterBtnActive]}
-            onPress={() => setFilter('all')}
-            data-testid="filter-all"
+            style={[styles.filterBtn, filter === 'yesterday' && styles.filterBtnActive]}
+            onPress={() => setDate(yesterday)}
+            data-testid="filter-yesterday"
           >
-            <Ionicons name="calendar" size={14} color={filter === 'all' ? '#fff' : '#5b6678'} />
-            <Text style={[styles.filterBtnText, filter === 'all' && { color: '#fff' }]}>الكل</Text>
+            <Ionicons name="arrow-redo" size={14} color={filter === 'yesterday' ? '#fff' : '#5b6678'} />
+            <Text style={[styles.filterBtnText, filter === 'yesterday' && { color: '#fff' }]}>أمس</Text>
           </TouchableOpacity>
+          <View style={[styles.dateNav, filter === 'date' && styles.dateNavActive]} testID="date-nav">
+            <TouchableOpacity onPress={() => setDate(shiftDay(date, 1))} style={styles.dateArrow} testID="date-next">
+              <Ionicons name="chevron-forward" size={16} color="#1565c0" />
+            </TouchableOpacity>
+            {Platform.OS === 'web' ? (
+              <input
+                type="date"
+                value={date}
+                onChange={(e: any) => e.target.value && setDate(e.target.value)}
+                style={{ border: 'none', background: 'transparent', fontSize: 13, color: '#0f2440', fontWeight: 700, outline: 'none', fontFamily: 'inherit', direction: 'ltr' }}
+                data-testid="date-input"
+              />
+            ) : (
+              <TextInput value={date} onChangeText={(v) => /^\d{4}-\d{2}-\d{2}$/.test(v) && setDate(v)} style={styles.dateText} placeholder="YYYY-MM-DD" />
+            )}
+            <TouchableOpacity onPress={() => setDate(shiftDay(date, -1))} style={styles.dateArrow} testID="date-prev">
+              <Ionicons name="chevron-back" size={16} color="#1565c0" />
+            </TouchableOpacity>
+          </View>
         </View>
+        <Text style={styles.dateCaption} testID="date-caption">{dayNameAr(date)} • {date} • {filteredLectures.length} محاضرة</Text>
         <View style={styles.searchWrap}>
           <Ionicons name="search" size={16} color="#8a95a8" />
           <TextInput
@@ -197,12 +234,12 @@ export default function ManageAttendanceScreen() {
           <View style={styles.empty}>
             <Ionicons name="calendar-outline" size={56} color="#cfd6e1" />
             <Text style={styles.emptyTitle}>
-              {filter === 'today' ? 'لا توجد محاضرات اليوم' : 'لا توجد محاضرات'}
+              {filter === 'today' ? 'لا توجد محاضرات اليوم' : `لا توجد محاضرات في ${dayNameAr(date)} ${date}`}
             </Text>
             <Text style={styles.emptyText}>
               {filter === 'today'
-                ? 'لا توجد محاضرات مجدولة لليوم. جرّب فلتر "الكل" لعرض جميع المحاضرات.'
-                : 'لا توجد محاضرات مسجلة في النظام.'}
+                ? 'لا توجد محاضرات مجدولة لليوم. استخدم الأسهم أو حقل التاريخ لعرض يوم آخر.'
+                : 'جرّب تاريخاً آخر عبر الأسهم أو حقل التاريخ.'}
             </Text>
           </View>
         ) : (
@@ -321,6 +358,11 @@ const styles = StyleSheet.create({
   },
   filterBtnActive: { backgroundColor: '#1565c0' },
   filterBtnText: { fontSize: 13, color: '#5b6678', fontWeight: '700' },
+  dateNav: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#f5f6f8', borderRadius: 10, paddingHorizontal: 4, gap: 2, borderWidth: 1, borderColor: 'transparent' },
+  dateNavActive: { borderColor: '#1565c0', backgroundColor: '#e3f2fd' },
+  dateArrow: { padding: 6 },
+  dateText: { fontSize: 13, color: '#0f2440', fontWeight: '700', minWidth: 96, textAlign: 'center' },
+  dateCaption: { fontSize: 11.5, color: '#5b6678', textAlign: 'right', marginTop: 6 },
   searchWrap: {
     flexDirection: 'row-reverse',
     alignItems: 'center',

@@ -26,6 +26,8 @@ import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { formatGregorianDate } from '../src/utils/dateUtils';
 import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
+import { StatusEditPill } from '../src/components/attendance/StatusEditPill';
+import { AttendanceFilterBar, AttFilter, EMPTY_ATT_FILTER, applyAttFilter } from '../src/components/attendance/AttendanceFilterBar';
 
 // ============== الأنواع ==============
 interface StudentCourse {
@@ -130,6 +132,17 @@ export default function StudentDetailsScreen() {
   const [expandedCourseId, setExpandedCourseId] = useState<string | null>(null);
   const [courseRecordsCache, setCourseRecordsCache] = useState<Record<string, AttendanceRecord[]>>({});
   const [loadingCourseId, setLoadingCourseId] = useState<string | null>(null);
+  const [attFilter, setAttFilter] = useState<AttFilter>(EMPTY_ATT_FILTER);
+  const canEditAttendance = user?.role === 'admin' || user?.role === 'dean' || (!!user && hasPermission(PERMISSIONS.EDIT_ATTENDANCE));
+  const onAttendanceChanged = (recordId: string, newStatus: string) => {
+    setAttendanceRecords((p) => p.map((r) => (r.id === recordId ? { ...r, status: newStatus } : r)));
+    setCourseRecordsCache((p) => Object.fromEntries(Object.entries(p).map(([k, v]) => [k, v.map((r) => (r.id === recordId ? { ...r, status: newStatus } : r))])));
+    if (student?.id) {
+      attendanceAPI.getStudentStats(student.id).then((r) => setAttendanceStats(r.data)).catch(() => {});
+      const rec = attendanceRecords.find((r) => r.id === recordId) || Object.values(courseRecordsCache).flat().find((r) => r.id === recordId);
+      if (rec?.course_id) attendanceAPI.getStudentStats(student.id, rec.course_id).then((r) => setAttendanceByCourse((p) => ({ ...p, [rec.course_id]: r.data }))).catch(() => {});
+    }
+  };
 
   // مودال تغيير المستوى
   const [showLevelModal, setShowLevelModal] = useState(false);
@@ -1272,17 +1285,9 @@ export default function StudentDetailsScreen() {
                       ) : (
                         <View style={{ gap: 6 }}>
                           {records.map(r => {
-                            const isP = r.status === 'present';
-                            const isL = r.status === 'late';
-                            const isE = r.status === 'excused';
-                            const color = isP ? '#2e7d32' : isL ? '#e65100' : isE ? '#1565c0' : '#c62828';
-                            const bg = isP ? '#e8f5e9' : isL ? '#fff3e0' : isE ? '#e3f2fd' : '#ffebee';
-                            const label = isP ? 'حاضر' : isL ? 'متأخر' : isE ? 'بعذر' : 'غائب';
                             return (
                               <View key={r.id} style={styles.miniRecordRow}>
-                                <View style={[styles.attStatusPill, { backgroundColor: bg }]}>
-                                  <Text style={[styles.attStatusText, { color }]}>{label}</Text>
-                                </View>
+                                <StatusEditPill recordId={r.id} status={r.status} editable={canEditAttendance} size="sm" title={`${course.name} · ${formatGregorianDate(new Date(r.date))}`} onChanged={(s) => onAttendanceChanged(r.id, s)} />
                                 <Text style={styles.attDate}>
                                   {formatGregorianDate(new Date(r.date))}
                                   {r.start_time ? ` · ${r.start_time}-${r.end_time}` : ''}
@@ -1469,31 +1474,15 @@ export default function StudentDetailsScreen() {
           </View>
           {showRecords && (
             <View style={{ padding: 14 }}>
-              {attendanceRecords.length === 0 ? (
-                <Text style={styles.noAttendance}>لا توجد سجلات حضور</Text>
+              <AttendanceFilterBar value={attFilter} onChange={setAttFilter} count={applyAttFilter(attendanceRecords, attFilter).length} />
+              {canEditAttendance && <Text style={styles.editHint} testID="att-edit-hint">اضغط على حالة أي سجل لتغييرها مباشرة</Text>}
+              {applyAttFilter(attendanceRecords, attFilter).length === 0 ? (
+                <Text style={styles.noAttendance}>لا توجد سجلات حضور{attFilter.from || attFilter.to || attFilter.absentOnly ? ' مطابقة للفلتر' : ''}</Text>
               ) : (
-                attendanceRecords.slice(0, 100).map(record => {
-                    const isPresent = record.status === 'present';
-                    const isLate = record.status === 'late';
-                    const statusColor = isPresent ? '#2e7d32'
-                      : isLate ? '#e65100'
-                      : record.status === 'excused' ? '#1565c0'
-                      : '#c62828';
-                    const statusBg = isPresent ? '#e8f5e9'
-                      : isLate ? '#fff3e0'
-                      : record.status === 'excused' ? '#e3f2fd'
-                      : '#ffebee';
-                    const statusLabel = isPresent ? 'حاضر'
-                      : isLate ? 'متأخر'
-                      : record.status === 'excused' ? 'بعذر'
-                      : 'غائب';
+                applyAttFilter(attendanceRecords, attFilter).slice(0, 150).map(record => {
                     return (
                       <View key={record.id} style={styles.attendanceRow}>
-                        <View style={[styles.attStatusPill, { backgroundColor: statusBg }]}>
-                          <Text style={[styles.attStatusText, { color: statusColor }]}>
-                            {statusLabel}
-                          </Text>
-                        </View>
+                        <StatusEditPill recordId={record.id} status={record.status} editable={canEditAttendance} title={`${record.course_name} · ${formatGregorianDate(new Date(record.date))}`} onChanged={(s) => onAttendanceChanged(record.id, s)} />
                         <View style={{ flex: 1, alignItems: 'flex-end' }}>
                           <Text style={styles.attCourseName}>{record.course_name}</Text>
                           <Text style={styles.attDate}>
@@ -1505,9 +1494,9 @@ export default function StudentDetailsScreen() {
                     );
                   })
               )}
-              {attendanceRecords.length > 100 && (
+              {applyAttFilter(attendanceRecords, attFilter).length > 150 && (
                 <Text style={styles.morePill}>
-                  عُرضت أول 100 سجل من إجمالي {attendanceRecords.length}
+                  عُرضت أول 150 سجلاً من إجمالي {applyAttFilter(attendanceRecords, attFilter).length} — ضيّق الفترة بالفلتر
                 </Text>
               )}
             </View>
@@ -2675,6 +2664,7 @@ const styles = StyleSheet.create({
 
   recordsTitle: { fontSize: 14, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 10 },
   noAttendance: { fontSize: 13, color: '#8a95a8', textAlign: 'center', padding: 20 },
+  editHint: { fontSize: 11, color: '#1565c0', textAlign: 'right', marginBottom: 6 },
   attendanceRow: {
     flexDirection: 'row-reverse',
     alignItems: 'center',
