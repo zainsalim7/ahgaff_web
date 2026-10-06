@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { usersAPI, permissionsAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
+import { HrScopeEditor } from '../src/components/hr/HrScopeEditor';
 
 interface Permission {
   key: string;
@@ -296,6 +297,8 @@ export default function PermissionsScreen() {
                 <Text style={styles.modalUserName}>{selectedUser.full_name}</Text>
                 <Text style={styles.modalUserUsername}>@{selectedUser.username}</Text>
               </View>
+
+              {!['teacher', 'student'].includes(selectedUser.role) && <HrScopeEditor userId={selectedUser.id} />}
 
               {/* Role Selection */}
               <View style={styles.section}>

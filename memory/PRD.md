@@ -779,3 +779,17 @@
 - متغيرات المتن: {اسم_المرسل_إليه} {صفة_المرسل_إليه} {جهة_المرسل_إليه} {تكريم} {الموضوع} {التاريخ} {التاريخ_الهجري} {العام_الجامعي} {اسم_الطالب} {رقم_القيد} {الكلية} {القسم} {المستوى} {الجنسية} {اسم_الموظف} {الوظيفة} {وحدة_الموظف} {اسم_المدرس} {قائمة_الأسماء} {عدد_الأسماء} {جدول_الأسماء} (يُرسم جدولاً في PDF) + متغيرات الجنس من الإفادات.
 - واجهة `app/letters.tsx` (CorrPage hideNav): تبويبات إصدار خطاب (قالب → موضوع → مرسَل إليه من المناصب أو يدوي → أسماء بالبحث → متن قابل للتعديل + معاينة حيّة → إصدار وتنزيل PDF) · القوالب (CRUD + إدراج متغير بنقرة) · سجل الخطابات (بحث/PDF/إلغاء/استرجاع) · الكليشة. `verify-letter.tsx` صفحة تحقق عامة. مداخل: SideMenu «الخطابات الرسمية ✉️»، بطاقة في التقارير، زر «خطاب» في تفاصيل الطالب (يمرر student_id/name). `downloadBlob` أُضيفت في utils/exportName.ts. `hideNav` prop في CorrPage.
 - مُختبر: Playwright إصدار 2/خ/26 + PDF مُعاين بصرياً (memory/letter_sample.png). قالب تجريبي «خطاب ترشيح طلاب للتدريب» في قاعدة المعاينة.
+
+## 2026-10-06: نطاق الوحدة لشؤون الموظفين — المرحلة أ ✅
+- `users.hr_scope` ∈ ALL|MY_UNIT|UNITS + `hr_scope_unit_ids`. helpers في `hr_common.py`: `hr_scope_units(db,user)` (None=الكل؛ admin دائماً None؛ MY_UNIT من org_units.head_employee_id للموظف المرتبط أو وحدته؛ UNITS من القائمة) مع `_descendants` للتابعة، `scope_filter`, `scope_employee_ids`, `assert_in_scope(employee_id|unit_id)`, `scope_summary`.
+- مطبّق: hr.py (قائمة/تصدير/عرض/إنشاء/تعديل/حذف الموظفين، الاستيراد يرفض الصفوف خارج النطاق ولا ينشئ وحدات، org-units قائمة/إنشاء/تعديل ضمن النطاق)، hr_attendance (daily, mark, mark-all-present, monthly)، hr_leaves (قائمة + قرار مرحلة HR)، hr_dashboard (headcount/section عبر current_user من management_dashboard). Endpoints: GET /hr/my-scope · GET/PUT /hr/users/{id}/scope (admin أو hr_manage_org).
+- واجهة: `HrScopeEditor.tsx` داخل نافذة صلاحيات المستخدم (permissions.tsx) لغير المعلم/الطالب؛ شارة «🔒 نطاقك: …» في سجل الموظفين (hrAPI.myScope).
+- مُختبر: Salim (dean) بنطاق كلية البنات → 1 موظف/2 وحدة/1 حضور/1 إجازة، و403 لموظف خارج النطاق؛ admin 6 موظفين.
+- **المرحلة ب (متبقية)**: المهام، الوثائق، التقارير، التنبيهات، التقييمات، الخطابات الوظيفية، attendance details/employee/{id}/devices، leaves balances.
+
+## 2026-10-06: نطاق الوحدة لشؤون الموظفين — المرحلة ب ✅
+- إصلاح P0: `management_dashboard.build_hr_dashboard` كان يمرّر `current_user` غير معرّف → `user` (F821).
+- helpers جديدة في `hr_common.py`: `in_scope(db,user,employee_id) -> bool`، `restrict_ids(q, field, allowed)` (تقاطع شرط employee_id الحالي مع المسموح).
+- مطبّق: **hr_tasks** (assignable مفلتر، view=all مقيّد، `_is_party.hr` = صلاحية + داخل النطاق، إنشاء/إعادة إسناد HR تتحقق من النطاق، عرض المهمة للمشاهد ضمن النطاق فقط) · **hr_documents** (`_can_read` ضمن النطاق، expiring مقيّد، رفع/تعديل/حذف assert_in_scope) · **hr_reports** (annual/export: بدون وحدة → نطاق المستخدم «نطاق صلاحيتي»؛ وحدة خارج النطاق → 403؛ `build_annual(..., scope)`) · **hr_alerts** (`/summary` عبر `scope_employee_ids`) · **hr_appraisals** (overview all مفلتر، `_access.hr/viewer` ضمن النطاق، metrics/create/approve/return/delete assert) · **hr_letters** (`_can_see`, قائمة+counts مقيّدة، issue/approve/reject/delete/preview assert).
+- مُختبر: `backend/tests/test_hr_scope_stage_b.py` (18 فحصاً PASS: Salim ضمن «كلية البنات» vs admin). Salim أُضيف له hr_manage_tasks + hr_manage_appraisals في custom_permissions.
+- متبقٍ (اختياري): attendance details/employee/{id}/devices، leaves balances.

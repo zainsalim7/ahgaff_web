@@ -11,7 +11,7 @@ from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, has_permission, log_activity, get_password_hash
-from .hr_common import _today
+from .hr_common import _today, hr_scope_units, scope_filter, assert_in_scope, scope_summary
 
 router = APIRouter(prefix="/hr", tags=["شؤون الموظفين"])
 YEMEN_TZ = timezone(timedelta(hours=3))
@@ -64,12 +64,56 @@ async def list_org_units(current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user) and not has_permission(current_user, P_ORG):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
-    units = [_ser(u) for u in await db.org_units.find({"is_active": {"$ne": False}}).sort([("order", 1), ("name", 1)]).to_list(2000)]
+    scope = await hr_scope_units(db, current_user)
+    uq: dict = {"is_active": {"$ne": False}}
+    if scope is not None:
+        uq["_id"] = {"$in": [ObjectId(x) for x in scope if ObjectId.is_valid(x)]}
+    units = [_ser(u) for u in await db.org_units.find(uq).sort([("order", 1), ("name", 1)]).to_list(2000)]
     counts = {c["_id"]: c["n"] async for c in db.employees.aggregate([{"$match": {"status": {"$ne": "ended"}}}, {"$group": {"_id": "$org_unit_id", "n": {"$sum": 1}}}])}
     for u in units:
         u["employees_count"] = counts.get(u["id"], 0)
         u["type_label"] = UNIT_TYPES.get(u.get("type"), u.get("type"))
-    return {"units": units, "types": UNIT_TYPES}
+    return {"units": units, "types": UNIT_TYPES, "scope": await scope_summary(db, current_user)}
+
+
+@router.get("/my-scope")
+async def my_scope(current_user: dict = Depends(get_current_user)):
+    return await scope_summary(get_db(), current_user)
+
+
+class ScopeIn(BaseModel):
+    hr_scope: str = "ALL"
+    hr_scope_unit_ids: List[str] = []
+
+
+def _scope_admin(u: dict):
+    if u.get("role") != "admin" and not has_permission(u, P_ORG):
+        raise HTTPException(status_code=403, detail="تعديل نطاق الصلاحيات للمدير أو مدير الهيكل فقط")
+
+
+@router.get("/users/{user_id}/scope")
+async def get_user_scope(user_id: str, current_user: dict = Depends(get_current_user)):
+    _scope_admin(current_user)
+    db = get_db()
+    u = await db.users.find_one({"_id": _oid(user_id)}, {"hr_scope": 1, "hr_scope_unit_ids": 1, "role": 1, "full_name": 1})
+    if not u:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    fake = {"id": user_id, "sub": user_id, "role": u.get("role")}
+    return {"hr_scope": u.get("hr_scope") or "ALL", "hr_scope_unit_ids": u.get("hr_scope_unit_ids") or [], "effective": await scope_summary(db, fake)}
+
+
+@router.put("/users/{user_id}/scope")
+async def set_user_scope(user_id: str, data: ScopeIn, current_user: dict = Depends(get_current_user)):
+    _scope_admin(current_user)
+    if data.hr_scope not in ("ALL", "MY_UNIT", "UNITS"):
+        raise HTTPException(status_code=400, detail="نطاق غير صالح")
+    db = get_db()
+    ids = [i for i in data.hr_scope_unit_ids if ObjectId.is_valid(i)] if data.hr_scope == "UNITS" else []
+    r = await db.users.update_one({"_id": _oid(user_id)}, {"$set": {"hr_scope": data.hr_scope, "hr_scope_unit_ids": ids}})
+    if not r.matched_count:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    await log_activity(current_user, "hr_set_scope", "user", user_id, data.hr_scope, {"units": ids})
+    return {"ok": True, "effective": await scope_summary(db, {"id": user_id, "sub": user_id, "role": (await db.users.find_one({"_id": _oid(user_id)}, {"role": 1}) or {}).get("role")})}
 
 
 @router.post("/org-units/sync-academic")
@@ -130,6 +174,10 @@ async def _auto_org_code(db, utype: str, taken: Optional[set] = None) -> str:
 async def create_org_unit(data: OrgUnitIn, current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_ORG)
     db = get_db()
+    if await hr_scope_units(db, current_user) is not None:
+        if not data.parent_id:
+            raise HTTPException(status_code=403, detail="يمكنك إنشاء وحدات تابعة لوحدتك فقط — اختر الوحدة الأم")
+        await assert_in_scope(db, current_user, unit_id=data.parent_id)
     if data.type not in UNIT_TYPES:
         raise HTTPException(status_code=400, detail="نوع الوحدة غير صحيح")
     if data.parent_id and not await db.org_units.find_one({"_id": _oid(data.parent_id, "الوحدة الأم")}):
@@ -150,6 +198,9 @@ async def update_org_unit(unit_id: str, data: OrgUnitIn, current_user: dict = De
     _guard(current_user, P_ORG)
     db = get_db()
     oid = _oid(unit_id)
+    await assert_in_scope(db, current_user, unit_id=unit_id)
+    if data.parent_id:
+        await assert_in_scope(db, current_user, unit_id=data.parent_id)
     if data.parent_id == unit_id:
         raise HTTPException(status_code=400, detail="لا يمكن أن تكون الوحدة أماً لنفسها")
     # منع الحلقات: الأم الجديدة لا تكون من أبناء الوحدة
@@ -300,7 +351,7 @@ async def export_employees(search: Optional[str] = None, org_unit_id: Optional[s
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
-    q = await _build_query(db, search, org_unit_id, category, status, contract_type)
+    q = {**(await _build_query(db, search, org_unit_id, category, status, contract_type)), **(await scope_filter(db, current_user))}
     emps = await _enrich(db, await db.employees.find(q).sort("full_name", 1).to_list(10000))
     import io
     from fastapi.responses import StreamingResponse
@@ -330,12 +381,13 @@ async def list_employees(search: Optional[str] = None, org_unit_id: Optional[str
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
-    q = await _build_query(db, search, org_unit_id, category, status, contract_type)
+    q = {**(await _build_query(db, search, org_unit_id, category, status, contract_type)), **(await scope_filter(db, current_user))}
     total = await db.employees.count_documents(q)
     per_page = max(1, min(per_page, 200))
     emps = await db.employees.find(q).sort("full_name", 1).skip((page - 1) * per_page).limit(per_page).to_list(per_page)
-    stats_raw = {s["_id"]: s["n"] async for s in db.employees.aggregate([{"$group": {"_id": "$status", "n": {"$sum": 1}}}])}
-    cat_raw = {s["_id"]: s["n"] async for s in db.employees.aggregate([{"$group": {"_id": "$category", "n": {"$sum": 1}}}])}
+    sf = await scope_filter(db, current_user)
+    stats_raw = {s["_id"]: s["n"] async for s in db.employees.aggregate([{"$match": sf}, {"$group": {"_id": "$status", "n": {"$sum": 1}}}])}
+    cat_raw = {s["_id"]: s["n"] async for s in db.employees.aggregate([{"$match": sf}, {"$group": {"_id": "$category", "n": {"$sum": 1}}}])}
     return {"employees": await _enrich(db, emps), "total": total, "page": page, "per_page": per_page,
             "stats": {"total": sum(stats_raw.values()), "by_status": stats_raw, "by_category": cat_raw}}
 
@@ -428,6 +480,7 @@ async def get_employee(emp_id: str, current_user: dict = Depends(get_current_use
     e = await db.employees.find_one({"_id": _oid(emp_id)})
     if not e:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    await assert_in_scope(db, current_user, employee_id=emp_id)
     d = (await _enrich(db, [e]))[0]
     d["subordinates"] = [{"id": str(s["_id"]), "full_name": s.get("full_name", ""), "job_title": s.get("job_title", "")} for s in await db.employees.find({"manager_employee_id": emp_id}, {"full_name": 1, "job_title": 1}).to_list(200)]
     d["history"] = [_ser(h) for h in await db.employee_history.find({"employee_id": emp_id}).sort("at", -1).limit(50).to_list(50)]
@@ -457,6 +510,10 @@ async def create_employee(data: EmployeeIn, current_user: dict = Depends(get_cur
     _guard(current_user, P_MANAGE)
     db = get_db()
     _validate(data)
+    if await hr_scope_units(db, current_user) is not None:
+        if not data.org_unit_id:
+            raise HTTPException(status_code=403, detail="حدّد الوحدة التنظيمية (ضمن نطاقك) للموظف الجديد")
+        await assert_in_scope(db, current_user, unit_id=data.org_unit_id)
     if await db.employees.find_one({"employee_no": data.employee_no.strip()}):
         raise HTTPException(status_code=400, detail="الرقم الوظيفي مستخدم لموظف آخر")
     if data.teacher_id and await db.employees.find_one({"teacher_id": data.teacher_id}):
@@ -477,6 +534,9 @@ async def update_employee(emp_id: str, data: EmployeeIn, current_user: dict = De
     db = get_db()
     oid = _oid(emp_id)
     old = await db.employees.find_one({"_id": oid})
+    await assert_in_scope(db, current_user, employee_id=emp_id)
+    if data.org_unit_id:
+        await assert_in_scope(db, current_user, unit_id=data.org_unit_id)
     if not old:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     _validate(data)
@@ -500,6 +560,7 @@ async def update_employee(emp_id: str, data: EmployeeIn, current_user: dict = De
 async def delete_employee(emp_id: str, force: bool = False, current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_MANAGE)
     db = get_db()
+    await assert_in_scope(db, current_user, employee_id=emp_id)
     e = await db.employees.find_one({"_id": _oid(emp_id)})
     if not e:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
@@ -823,6 +884,12 @@ async def import_employees(file: UploadFile = File(...), update_existing: bool =
     _guard(current_user, P_MANAGE)
     db = get_db()
     rows, new_units = await _parse_import(db, file, create_units)
+    scope = await hr_scope_units(db, current_user)
+    if scope is not None:
+        for r in rows:
+            if r["data"].get("new_unit_key") or (r["data"].get("org_unit_id") and r["data"]["org_unit_id"] not in scope) or not r["data"].get("org_unit_id"):
+                r["errors"].append("الوحدة خارج نطاق صلاحيتك أو غير محددة")
+        new_units = []
     key_to_id = await _create_import_units(db, new_units, units_config, current_user) if new_units else {}
     created, updated, skipped = 0, 0, 0
     for r in rows:

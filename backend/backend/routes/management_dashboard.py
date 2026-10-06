@@ -573,7 +573,7 @@ async def build_hr_dashboard(db, user: dict, period: str, org_unit_id: Optional[
     from .hr_dashboard import hr_dashboard_section, hr_units_list
     period = period if period in PERIOD_LABELS else "week"
     d_from, d_to = _period_range(period)
-    hr = await hr_dashboard_section(db, period, d_from, d_to, org_unit_id or None)
+    hr = await hr_dashboard_section(db, period, d_from, d_to, org_unit_id or None, user)
     return {"view": "hr", "generated_at": _now_yemen().strftime("%Y-%m-%d %H:%M"), "period": period, "period_label": PERIOD_LABELS[period],
             "date_from": d_from.isoformat(), "date_to": d_to.isoformat(), "sections": dashboard_sections(user),
             "read_only": user.get("role") in READ_ONLY_ROLES, "units": await hr_units_list(db), "hr": hr}

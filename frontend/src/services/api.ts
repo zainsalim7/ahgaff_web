@@ -747,6 +747,7 @@ export const hrAPI = {
   createAccount: (id: string, role_id: string | null = null) => api.post(`/hr/employees/${id}/account`, { role_id }),
   setAccountRole: (id: string, role_id: string | null) => api.put(`/hr/employees/${id}/account-role`, { role_id }),
   hrRoles: () => api.get('/hr/roles'),
+  myScope: () => api.get('/hr/my-scope'),
   importPreview: (form: FormData, createUnits = true) => api.post(`/hr/employees/import/preview?create_units=${createUnits}`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   importRun: (form: FormData, createUnits = true) => api.post(`/hr/employees/import?update_existing=true&create_units=${createUnits}`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),
   // الإجازات

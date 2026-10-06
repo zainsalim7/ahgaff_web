@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, has_permission, log_activity, export_headers, export_filename
-from .hr_common import (P_LEAVES, YEMEN_TZ, _now, _today, _oid, _ser, _can_view, _guard, parse_date, user_id_of, get_hr_settings,
+from .hr_common import (scope_employee_ids, assert_in_scope, P_LEAVES, YEMEN_TZ, _now, _today, _oid, _ser, _can_view, _guard, parse_date, user_id_of, get_hr_settings,
                         work_days_between, find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids, enrich_employee_refs)
 
 router = APIRouter(prefix="/hr/leaves", tags=["شؤون الموظفين - الإجازات"])
@@ -365,6 +365,15 @@ async def list_leaves(status: Optional[str] = None, type: Optional[str] = None, 
     if org_unit_id:
         ids = [str(e["_id"]) for e in await db.employees.find({"org_unit_id": org_unit_id}, {"_id": 1}).to_list(5000)]
         q["employee_id"] = {"$in": ids}
+    sc_ids = await scope_employee_ids(db, current_user)
+    if sc_ids is not None:
+        cur = q.get("employee_id")
+        allowed = set(sc_ids)
+        if isinstance(cur, dict):
+            allowed &= set(cur.get("$in", []))
+        elif isinstance(cur, str):
+            allowed = allowed & {cur}
+        q["employee_id"] = {"$in": list(allowed)}
     if month:
         q["start_date"] = {"$lte": f"{month}-31"}
         q["end_date"] = {"$gte": f"{month}-01"}
@@ -432,6 +441,8 @@ async def decide_leave(leave_id: str, data: DecisionIn, current_user: dict = Dep
         raise HTTPException(status_code=400, detail="الإجراء غير صحيح")
     uid = user_id_of(current_user)
     is_hr = has_permission(current_user, P_LEAVES)
+    if is_hr and l.get("status") == "hr_pending":
+        await assert_in_scope(db, current_user, employee_id=l["employee_id"])
     is_mgr = l.get("manager_user_id") == uid
     if l["status"] == "pending" and not (is_mgr or is_hr):
         raise HTTPException(status_code=403, detail="هذا الطلب بانتظار المدير المباشر")

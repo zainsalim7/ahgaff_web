@@ -8,12 +8,15 @@
 - Username: Salim
 - Password: test1234  (تم إعادة التعيين 2026-06-20 لاختبار RBAC)
 - custom_permissions: manage_fee_receipts (أُضيفت 2026-09 لاختبار نطاق السندات المالية)
+- 2026-10-06: أُضيفت صلاحيات HR (hr_view/manage_employees, hr_manage_org/leaves/attendance) + **hr_scope=UNITS على «كلية البنات»** لاختبار نطاق الوحدة — يرى موظف واحد (Saeed) فقط. لإلغاء: PUT /api/hr/users/698f71ba5c5620a4449eeb7e/scope {hr_scope:'ALL'}
+- 2026-10-06 (المرحلة ب): custom_permissions += hr_manage_tasks, hr_manage_appraisals (لاختبار نطاق المهام/التقييمات). سكربت الاختبار: `python3 backend/tests/test_hr_scope_stage_b.py`
 
 ## Department Head
 - Username: Saeed
 - Password: test1234  (تم إعادة التعيين 2026-06-20 لاختبار RBAC)
 - Department: الدراسات الإسلامية / كلية البنات
 - custom_permissions: manage_fee_receipts (أُضيفت 2026-09 لاختبار نطاق السندات المالية)
+- 2026-10-06: أُضيفت صلاحيات HR (hr_view/manage_employees, hr_manage_org/leaves/attendance) + **hr_scope=UNITS على «كلية البنات»** لاختبار نطاق الوحدة — يرى موظف واحد (Saeed) فقط. لإلغاء: PUT /api/hr/users/698f71ba5c5620a4449eeb7e/scope {hr_scope:'ALL'}
 
 ## View-Curriculum Test User (Added 2026-06-26)
 - Username: view_curr_user

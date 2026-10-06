@@ -9,7 +9,8 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user, has_permission, log_activity
 from .hr_common import (P_APPRAISE, YEMEN_TZ, _now, _today, _oid, _ser, _can_view, _guard, user_id_of, get_hr_settings, is_work_day,
-                        find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids, enrich_employee_refs, team_of, can_act_on)
+                        find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids, enrich_employee_refs, team_of, can_act_on,
+                        scope_filter, assert_in_scope, in_scope)
 
 router = APIRouter(prefix="/hr/appraisals", tags=["شؤون الموظفين - التقييم السنوي"])
 
@@ -95,8 +96,9 @@ async def _load(db, aid: str) -> dict:
 
 async def _access(db, user: dict, a: dict) -> dict:
     me = await find_my_employee(db, user)
-    return {"hr": has_permission(user, P_APPRAISE), "manager": await can_act_on(db, user, a["employee_id"], "__none__"),
-            "owner": bool(me) and str(me["_id"]) == a["employee_id"], "viewer": _can_view(user)}
+    scoped = await in_scope(db, user, a["employee_id"])
+    return {"hr": has_permission(user, P_APPRAISE) and scoped, "manager": await can_act_on(db, user, a["employee_id"], "__none__"),
+            "owner": bool(me) and str(me["_id"]) == a["employee_id"], "viewer": _can_view(user) and scoped}
 
 
 @router.get("/meta")
@@ -113,7 +115,7 @@ async def overview(year: Optional[int] = None, view: str = "team", current_user:
     if view == "all":
         if not (_can_view(current_user) or has_permission(current_user, P_APPRAISE)):
             raise HTTPException(status_code=403, detail="غير مصرح")
-        emps = [_ser(e) for e in await db.employees.find({"status": {"$ne": "ended"}}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1, "manager_employee_id": 1}).sort("full_name", 1).to_list(5000)]
+        emps = [_ser(e) for e in await db.employees.find({"status": {"$ne": "ended"}, **(await scope_filter(db, current_user))}, {"full_name": 1, "employee_no": 1, "job_title": 1, "org_unit_id": 1, "manager_employee_id": 1}).sort("full_name", 1).to_list(5000)]
     else:
         emps = await team_of(db, me)
     ids = [e["id"] for e in emps]
@@ -150,6 +152,8 @@ async def metrics_preview(employee_id: str, year: Optional[int] = None, current_
     db = get_db()
     if not (await can_act_on(db, current_user, employee_id, P_APPRAISE) or _can_view(current_user)):
         raise HTTPException(status_code=403, detail="غير مصرح")
+    if has_permission(current_user, P_APPRAISE) or _can_view(current_user):
+        await assert_in_scope(db, current_user, employee_id=employee_id)
     return await compute_metrics(db, employee_id, year or datetime.now(YEMEN_TZ).year)
 
 
@@ -162,6 +166,8 @@ async def create_appraisal(data: CreateIn, current_user: dict = Depends(get_curr
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     if not await can_act_on(db, current_user, data.employee_id, P_APPRAISE):
         raise HTTPException(status_code=403, detail="التقييم من صلاحية المدير المباشر أو شؤون الموظفين")
+    if has_permission(current_user, P_APPRAISE):
+        await assert_in_scope(db, current_user, employee_id=data.employee_id)
     ex = await db.hr_appraisals.find_one({"employee_id": data.employee_id, "year": data.year})
     if ex:
         return {"id": str(ex["_id"]), "existing": True, "message": "يوجد تقييم لهذه السنة"}
@@ -238,6 +244,7 @@ async def approve(aid: str, data: CommentIn, current_user: dict = Depends(get_cu
     _guard(current_user, P_APPRAISE)
     db = get_db()
     a = await _load(db, aid)
+    await assert_in_scope(db, current_user, employee_id=a["employee_id"])
     if a["status"] != "submitted":
         raise HTTPException(status_code=400, detail="التقييم ليس بانتظار الاعتماد")
     await db.hr_appraisals.update_one({"_id": a["_id"]}, {"$set": {"status": "approved", "hr_comment": data.comment or "", "approved_at": _now(), "approved_by_name": current_user.get("full_name", "")}, "$push": {"history": {"action": "approved", "by_name": current_user.get("full_name", ""), "at": _now(), "note": data.comment or ""}}})
@@ -255,6 +262,7 @@ async def return_to_draft(aid: str, data: CommentIn, current_user: dict = Depend
     _guard(current_user, P_APPRAISE)
     db = get_db()
     a = await _load(db, aid)
+    await assert_in_scope(db, current_user, employee_id=a["employee_id"])
     if a["status"] not in ("submitted", "approved"):
         raise HTTPException(status_code=400, detail="لا يمكن إعادة هذا التقييم")
     await db.hr_appraisals.update_one({"_id": a["_id"]}, {"$set": {"status": "draft", "hr_comment": data.comment or ""}, "$push": {"history": {"action": "returned", "by_name": current_user.get("full_name", ""), "at": _now(), "note": data.comment or ""}}})
@@ -283,6 +291,7 @@ async def delete_appraisal(aid: str, current_user: dict = Depends(get_current_us
     _guard(current_user, P_APPRAISE)
     db = get_db()
     a = await _load(db, aid)
+    await assert_in_scope(db, current_user, employee_id=a["employee_id"])
     if a["status"] != "draft":
         raise HTTPException(status_code=400, detail="تُحذف المسودات فقط")
     await db.hr_appraisals.delete_one({"_id": a["_id"]})

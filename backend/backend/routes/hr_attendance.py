@@ -9,7 +9,7 @@ from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, log_activity, export_headers, export_filename
-from .hr_common import (P_ATTEND, P_WORK_SETTINGS, YEMEN_TZ, AR_DAYS, DEFAULT_SETTINGS, _now, _today, _oid, _ser, _can_view, _guard, parse_date, get_hr_settings,
+from .hr_common import (scope_filter, assert_in_scope, P_ATTEND, P_WORK_SETTINGS, YEMEN_TZ, AR_DAYS, DEFAULT_SETTINGS, _now, _today, _oid, _ser, _can_view, _guard, parse_date, get_hr_settings,
                         is_work_day, holiday_name, find_my_employee, enrich_employee_refs, employee_shifts, pick_shift, shift_late, employee_user_ids, notify_users, hr_manager_user_ids)
 from .hr_locations import GeoIn, evaluate_geo, geo_exempt_active
 
@@ -172,8 +172,8 @@ def _warnings(r: dict) -> List[str]:
     return w
 
 
-async def _daily_rows(db, d: str, org_unit_id: Optional[str], category: Optional[str], settings: dict) -> List[dict]:
-    q: dict = {"status": {"$nin": ["ended", "suspended"]}}
+async def _daily_rows(db, d: str, org_unit_id: Optional[str], category: Optional[str], settings: dict, scope: Optional[dict] = None) -> List[dict]:
+    q: dict = {"status": {"$nin": ["ended", "suspended"]}, **(scope or {})}
     if org_unit_id:
         q["org_unit_id"] = org_unit_id
     if category:
@@ -216,7 +216,7 @@ async def daily_sheet(date: Optional[str] = None, org_unit_id: Optional[str] = N
     d = date or _today()
     day = parse_date(d)
     settings = await get_hr_settings(db)
-    rows = await _daily_rows(db, d, org_unit_id, category, settings)
+    rows = await _daily_rows(db, d, org_unit_id, category, settings, await scope_filter(db, current_user))
     summary = {k: 0 for k in [*ATT_STATUS, "unmarked"]}
     for r in rows:
         summary[r["status"] or "unmarked"] += 1
@@ -227,6 +227,7 @@ async def daily_sheet(date: Optional[str] = None, org_unit_id: Optional[str] = N
 async def mark_attendance(data: MarkIn, current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_ATTEND)
     db = get_db()
+    await assert_in_scope(db, current_user, employee_id=data.employee_id)
     parse_date(data.date)
     if data.date > _today():
         raise HTTPException(status_code=400, detail="لا يمكن تسجيل حضور لتاريخ مستقبلي")
@@ -266,7 +267,7 @@ async def mark_all_present(data: DateIn, org_unit_id: Optional[str] = None, curr
     settings = await get_hr_settings(db)
     if not is_work_day(parse_date(data.date), settings):
         raise HTTPException(status_code=400, detail="هذا اليوم ليس يوم عمل")
-    rows = await _daily_rows(db, data.date, org_unit_id, None, settings)
+    rows = await _daily_rows(db, data.date, org_unit_id, None, settings, await scope_filter(db, current_user))
     n = 0
     for r in rows:
         if r["status"] is None:
@@ -289,7 +290,7 @@ async def delete_record(employee_id: str, d: str, shift_id: Optional[str] = None
     return {"deleted": r.deleted_count, "message": "تم حذف السجل"}
 
 
-async def _monthly(db, month: str, org_unit_id: Optional[str], category: Optional[str]) -> dict:
+async def _monthly(db, month: str, org_unit_id: Optional[str], category: Optional[str], scope: Optional[dict] = None) -> dict:
     try:
         y, m = int(month[:4]), int(month[5:7])
         first = date(y, m, 1)
@@ -300,7 +301,7 @@ async def _monthly(db, month: str, org_unit_id: Optional[str], category: Optiona
     end = min(last, today)
     settings = await get_hr_settings(db)
     work_dates = [(first + timedelta(days=i)).strftime("%Y-%m-%d") for i in range((end - first).days + 1) if is_work_day(first + timedelta(days=i), settings)] if end >= first else []
-    q: dict = {"status": {"$nin": ["ended"]}}
+    q: dict = {"status": {"$nin": ["ended"]}, **(scope or {})}
     if org_unit_id:
         q["org_unit_id"] = org_unit_id
     if category:
@@ -347,7 +348,7 @@ async def _monthly(db, month: str, org_unit_id: Optional[str], category: Optiona
 async def monthly_report(month: Optional[str] = None, org_unit_id: Optional[str] = None, category: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
-    return await _monthly(get_db(), month or _today()[:7], org_unit_id, category)
+    return await _monthly(get_db(), month or _today()[:7], org_unit_id, category, await scope_filter(get_db(), current_user))
 
 
 @router.get("/monthly/export")

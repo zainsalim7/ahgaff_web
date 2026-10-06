@@ -33,6 +33,8 @@ export default function HrEmployees() {
   const [detail, setDetail] = useState<any>(null);
   const [importState, setImportState] = useState<{ file: File | null; preview: any | null; busy: boolean }>({ file: null, preview: null, busy: false });
   const [newUnits, setNewUnits] = useState<NewUnitCfg[]>([]);
+  const [scopeInfo, setScopeInfo] = useState<any>(null);
+  useEffect(() => { hrAPI.myScope().then((r) => setScopeInfo(r.data)).catch(() => {}); }, []);
   const [createUnits, setCreateUnits] = useState(true);
   const [showImport, setShowImport] = useState(false);
 
@@ -100,6 +102,7 @@ export default function HrEmployees() {
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={reportPage.content}>
         <ReportHero kicker="شؤون الموظفين" title="سجل الموظفين" subtitle="الملف الإداري الموحّد لأعضاء هيئة التدريس والموظفين الإداريين" onBack={() => goBack()} canExport={false} testID="hr-employees-hero" />
+        {scopeInfo && scopeInfo.scope !== 'ALL' && <div style={{ backgroundColor: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', borderRadius: 10, padding: '8px 12px', fontSize: 12.5, fontWeight: 700, marginBottom: 10, direction: 'rtl' }} data-testid="hr-scope-badge">🔒 نطاقك: {scopeInfo.label} — تُعرض وتُدار وحداتك وما تبعها فقط</div>}
 
         {canManage && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12, direction: 'rtl' }}>

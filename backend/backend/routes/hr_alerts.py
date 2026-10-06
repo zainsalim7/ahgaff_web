@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .deps import get_db, get_current_user, has_permission
 from .hr_common import (P_MANAGE, P_LEAVES, P_APPRAISE, YEMEN_TZ, _now, _today, _can_view, employee_user_ids, notify_users, hr_manager_user_ids, enrich_employee_refs,
-                        get_hr_settings, is_work_day, parse_date)
+                        get_hr_settings, is_work_day, parse_date, scope_employee_ids)
 
 router = APIRouter(prefix="/hr/alerts", tags=["شؤون الموظفين - التنبيهات"])
 logger = logging.getLogger(__name__)
@@ -174,7 +174,8 @@ async def hr_dashboard_summary(db, emp_ids: Optional[list] = None) -> dict:
 async def summary(current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
-    return await hr_dashboard_summary(get_db())
+    db = get_db()
+    return await hr_dashboard_summary(db, await scope_employee_ids(db, current_user))
 
 
 @router.post("/run-now")

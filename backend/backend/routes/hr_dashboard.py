@@ -3,7 +3,7 @@ import logging
 from collections import defaultdict
 from datetime import date, timedelta
 
-from .hr_common import get_hr_settings, is_work_day, _today, enrich_employee_refs
+from .hr_common import scope_filter, get_hr_settings, is_work_day, _today, enrich_employee_refs
 
 ACTIVE_Q = {"status": {"$nin": ["ended", "suspended"]}}
 PRESENT_STATUSES = ("present", "late", "half_day", "mission")
@@ -28,7 +28,7 @@ def _add_cat(b: dict, cat: str):
     b["academic" if cat == "academic" else "administrative" if cat == "administrative" else "other"] += 1
 
 
-async def _headcount(db, emps: list, units: dict, root_id=None) -> dict:
+async def _headcount(db, emps: list, units: dict, root_id=None, scope_q: dict = None) -> dict:
     """الأرقام الثابتة: الإجمالي حسب الفئة/العقد/الحالة، وموظفو كل وحدة (مع فروعها) مقسّمين أكاديمي/إداري/غيرهم.
     بدون نطاق: الوحدات الرئيسية (الجذر + أبنائه). مع نطاق: الوحدات الفرعية المباشرة للوحدة المختارة + «مباشرة في الوحدة»."""
     children = defaultdict(list)
@@ -54,6 +54,7 @@ async def _headcount(db, emps: list, units: dict, root_id=None) -> dict:
     per_unit = defaultdict(_cat_bucket); own_unit = defaultdict(_cat_bucket); unlinked = _cat_bucket(); direct = _cat_bucket()
     scope_ids = _subtree(units, root_id) if root_id else None
     all_q = {"org_unit_id": {"$in": list(scope_ids)}} if scope_ids is not None else {}
+    all_q = {**all_q, **(scope_q or {})}
     for e in await db.employees.find(all_q, {"status": 1}).to_list(20000):
         by_status[e.get("status") or "active"] += 1
     for e in emps:
@@ -223,17 +224,18 @@ async def hr_units_list(db) -> list:
     return [{"id": str(u["_id"]), "name": (u.get("name") or "").strip(), "type": u.get("type"), "type_label": UNIT_TYPE_LABELS.get(u.get("type"), u.get("type") or ""), "parent_id": u.get("parent_id")} for u in units]
 
 
-async def hr_dashboard_section(db, period: str, d_from: date, d_to: date, org_unit_id=None) -> dict:
+async def hr_dashboard_section(db, period: str, d_from: date, d_to: date, org_unit_id=None, current_user: dict = None) -> dict:
     """القسم الكامل: ملخص اليوم + الأعداد + الفترة + التنبيهات — كل الجامعة أو وحدة تنظيمية مع فروعها"""
     from .hr_alerts import hr_dashboard_summary
     settings = await get_hr_settings(db)
     units = {str(u["_id"]): u for u in await db.org_units.find({}, {"name": 1, "type": 1, "parent_id": 1}).to_list(2000)}
     root = org_unit_id if org_unit_id in units else None
-    emp_q = dict(ACTIVE_Q)
+    scope_q = (await scope_filter(db, current_user)) if current_user else {}
+    emp_q = {**ACTIVE_Q, **scope_q}
     if root:
         emp_q["org_unit_id"] = {"$in": list(_subtree(units, root))}
     emps = await db.employees.find(emp_q, {"full_name": 1, "employee_no": 1, "category": 1, "contract_type": 1, "org_unit_id": 1, "status": 1}).to_list(20000)
-    today = await hr_dashboard_summary(db, [str(e["_id"]) for e in emps] if root else None)
+    today = await hr_dashboard_summary(db, [str(e["_id"]) for e in emps] if (root or "org_unit_id" in emp_q) else None)
     emp_scope = {"_id": {"$in": [e["_id"] for e in emps]}} if root else {}
     today["pending_photos"] = [{"employee_id": str(e["_id"]), "employee_name": e.get("full_name", ""), "employee_no": e.get("employee_no", ""), "pending_photo_at": (e.get("pending_photo_at") or "")[:10]}
                                for e in await db.employees.find({**emp_scope, "pending_photo_path": {"$exists": True, "$ne": ""}}, {"full_name": 1, "employee_no": 1, "pending_photo_at": 1}).sort("pending_photo_at", 1).limit(50).to_list(50)]
@@ -262,7 +264,7 @@ async def hr_dashboard_section(db, period: str, d_from: date, d_to: date, org_un
     await enrich_employee_refs(db, kinds)
     today["auto_today"] = kinds
     try:
-        headcount = await _headcount(db, emps, units, root)
+        headcount = await _headcount(db, emps, units, root, scope_q)
     except Exception as e:
         logging.warning(f"hr headcount failed: {e}"); headcount = None
     try:

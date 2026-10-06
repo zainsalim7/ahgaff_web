@@ -235,3 +235,97 @@ async def can_act_on(db, current_user: dict, target_employee_id: str, perm: str)
         return False
     t = await db.employees.find_one({"_id": ObjectId(target_employee_id)}, {"manager_employee_id": 1})
     return bool(t and t.get("manager_employee_id") == str(me["_id"]))
+
+
+# ══════════════ نطاق الوحدة (hr_scope) ══════════════
+# user.hr_scope: ALL | MY_UNIT | UNITS · user.hr_scope_unit_ids: [...] — None = كل الجامعة
+
+async def _descendants(db, roots: set) -> set:
+    units = await db.org_units.find({"is_active": {"$ne": False}}, {"parent_id": 1}).to_list(5000)
+    children: dict = {}
+    for u in units:
+        children.setdefault(u.get("parent_id") or None, []).append(str(u["_id"]))
+    out, stack = set(roots), list(roots)
+    while stack:
+        for ch in children.get(stack.pop(), []):
+            if ch not in out:
+                out.add(ch); stack.append(ch)
+    return out
+
+
+async def hr_scope_units(db, current_user: dict) -> Optional[set]:
+    """مجموعة معرّفات الوحدات المسموح بها، أو None إن كان النطاق كل الجامعة"""
+    if current_user.get("role") == "admin":
+        return None
+    uid = user_id_of(current_user)
+    u = await db.users.find_one({"_id": ObjectId(uid)}, {"hr_scope": 1, "hr_scope_unit_ids": 1}) if ObjectId.is_valid(uid) else None
+    scope = (u or {}).get("hr_scope") or "ALL"
+    if scope == "ALL":
+        return None
+    roots: set = set()
+    if scope == "UNITS":
+        roots = {str(x) for x in (u or {}).get("hr_scope_unit_ids") or [] if x}
+    else:
+        emp = await find_my_employee(db, current_user)
+        if emp:
+            heads = await db.org_units.find({"head_employee_id": str(emp["_id"]), "is_active": {"$ne": False}}, {"_id": 1}).to_list(50)
+            roots = {str(h["_id"]) for h in heads} or ({str(emp["org_unit_id"])} if emp.get("org_unit_id") else set())
+    return await _descendants(db, roots) if roots else set()
+
+
+async def scope_filter(db, current_user: dict, field: str = "org_unit_id") -> dict:
+    s = await hr_scope_units(db, current_user)
+    return {} if s is None else {field: {"$in": list(s)}}
+
+
+async def scope_employee_ids(db, current_user: dict) -> Optional[list]:
+    """قائمة معرّفات الموظفين داخل النطاق (None = الكل) — للجداول التي تخزّن employee_id فقط"""
+    s = await hr_scope_units(db, current_user)
+    if s is None:
+        return None
+    return [str(e["_id"]) for e in await db.employees.find({"org_unit_id": {"$in": list(s)}}, {"_id": 1}).to_list(20000)]
+
+
+async def assert_in_scope(db, current_user: dict, employee_id: Optional[str] = None, unit_id: Optional[str] = None):
+    s = await hr_scope_units(db, current_user)
+    if s is None:
+        return
+    if employee_id:
+        e = await db.employees.find_one({"_id": ObjectId(employee_id)}, {"org_unit_id": 1}) if ObjectId.is_valid(str(employee_id)) else None
+        if not e or str(e.get("org_unit_id") or "") not in s:
+            raise HTTPException(status_code=403, detail="هذا الموظف خارج نطاق صلاحيتك (وحدتك وما تبعها فقط)")
+    if unit_id and str(unit_id) not in s:
+        raise HTTPException(status_code=403, detail="هذه الوحدة خارج نطاق صلاحيتك")
+
+
+async def in_scope(db, current_user: dict, employee_id: Optional[str]) -> bool:
+    """هل الموظف داخل نطاق المستخدم؟ (True دائماً لنطاق كل الجامعة)"""
+    s = await hr_scope_units(db, current_user)
+    if s is None:
+        return True
+    e = await db.employees.find_one({"_id": ObjectId(employee_id)}, {"org_unit_id": 1}) if employee_id and ObjectId.is_valid(str(employee_id)) else None
+    return bool(e) and str(e.get("org_unit_id") or "") in s
+
+
+def restrict_ids(q: dict, field: str, allowed: Optional[list]) -> dict:
+    """تقاطع شرط employee_id الحالي في الاستعلام مع قائمة المسموح (None = بلا قيد)"""
+    if allowed is None:
+        return q
+    cur = q.get(field)
+    ok = set(allowed)
+    if isinstance(cur, dict):
+        ok &= set(cur.get("$in", []))
+    elif isinstance(cur, str):
+        ok &= {cur}
+    return {**q, field: {"$in": list(ok)}}
+
+
+async def scope_summary(db, current_user: dict) -> dict:
+    s = await hr_scope_units(db, current_user)
+    if s is None:
+        return {"scope": "ALL", "label": "كل الجامعة", "unit_ids": None}
+    units = await db.org_units.find({"_id": {"$in": [ObjectId(x) for x in s if ObjectId.is_valid(x)]}}, {"name": 1, "parent_id": 1}).to_list(5000)
+    roots = [u["name"] for u in units if not u.get("parent_id") or u["parent_id"] not in s]
+    label = (" · ".join(roots[:2]) + (f" +{len(roots) - 2}" if len(roots) > 2 else "")) if roots else "لا توجد وحدة محددة"
+    extra = len(units) - len(roots)
+    return {"scope": "UNIT", "label": label + (f" + {extra} وحدة تابعة" if extra > 0 else ""), "unit_ids": list(s), "units_count": len(units)}

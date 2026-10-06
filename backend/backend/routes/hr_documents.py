@@ -9,7 +9,8 @@ from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, has_permission, log_activity
-from .hr_common import P_MANAGE, YEMEN_TZ, _now, _today, _oid, _ser, _can_view, _guard, parse_date, find_my_employee, enrich_employee_refs
+from .hr_common import (P_MANAGE, YEMEN_TZ, _now, _today, _oid, _ser, _can_view, _guard, parse_date, find_my_employee, enrich_employee_refs,
+                        scope_employee_ids, assert_in_scope, in_scope, restrict_ids)
 
 router = APIRouter(prefix="/hr/documents", tags=["شؤون الموظفين - المستندات"])
 
@@ -42,7 +43,7 @@ def _view(d: dict) -> dict:
 
 
 async def _can_read(db, user: dict, employee_id: str) -> bool:
-    if _can_view(user):
+    if _can_view(user) and await in_scope(db, user, employee_id):
         return True
     me = await find_my_employee(db, user)
     return bool(me) and str(me["_id"]) == employee_id
@@ -59,7 +60,8 @@ async def expiring(days: int = 60, current_user: dict = Depends(get_current_user
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
     limit = (datetime.now(YEMEN_TZ).date() + timedelta(days=days)).strftime("%Y-%m-%d")
-    items = [_view(d) for d in await db.hr_documents.find({"expiry_date": {"$ne": None, "$lte": limit}}).sort("expiry_date", 1).to_list(500)]
+    q = restrict_ids({"expiry_date": {"$ne": None, "$lte": limit}}, "employee_id", await scope_employee_ids(db, current_user))
+    items = [_view(d) for d in await db.hr_documents.find(q).sort("expiry_date", 1).to_list(500)]
     return {"items": await enrich_employee_refs(db, items), "days": days}
 
 
@@ -108,6 +110,7 @@ async def upload_doc(employee_id: str, file: UploadFile = File(...), type: str =
     emp = await db.employees.find_one({"_id": _oid(employee_id, "الموظف")}, {"full_name": 1})
     if not emp:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    await assert_in_scope(db, current_user, employee_id=employee_id)
     if type not in DOC_TYPES:
         raise HTTPException(status_code=400, detail="نوع المستند غير صحيح")
     if file.content_type not in ALLOWED:
@@ -138,6 +141,7 @@ async def update_doc(doc_id: str, data: DocMetaIn, current_user: dict = Depends(
     d = await db.hr_documents.find_one({"_id": _oid(doc_id)})
     if not d:
         raise HTTPException(status_code=404, detail="المستند غير موجود")
+    await assert_in_scope(db, current_user, employee_id=d["employee_id"])
     if data.type not in DOC_TYPES:
         raise HTTPException(status_code=400, detail="نوع المستند غير صحيح")
     for f, label in ((data.issue_date, "تاريخ الإصدار"), (data.expiry_date, "تاريخ الانتهاء")):
@@ -154,6 +158,7 @@ async def delete_doc(doc_id: str, current_user: dict = Depends(get_current_user)
     d = await db.hr_documents.find_one({"_id": _oid(doc_id)})
     if not d:
         raise HTTPException(status_code=404, detail="المستند غير موجود")
+    await assert_in_scope(db, current_user, employee_id=d["employee_id"])
     await db.hr_documents.delete_one({"_id": d["_id"]})
     await log_activity(current_user, "hr_doc_delete", "employee", d["employee_id"], "", {"title": d.get("title")})
     return {"message": "تم حذف المستند"}

@@ -8,13 +8,13 @@ from fastapi.responses import StreamingResponse
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, export_headers, export_filename
-from .hr_common import YEMEN_TZ, _today, _can_view, get_hr_settings, is_work_day
+from .hr_common import YEMEN_TZ, _today, _can_view, get_hr_settings, is_work_day, hr_scope_units, assert_in_scope
 
 router = APIRouter(prefix="/hr/reports", tags=["شؤون الموظفين - التقارير"])
 AR_MONTHS = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
 
 
-async def build_annual(db, year: int, org_unit_id: Optional[str]) -> dict:
+async def build_annual(db, year: int, org_unit_id: Optional[str], scope: Optional[set] = None) -> dict:
     from .hr import CATEGORIES, STATUSES, CONTRACT_TYPES
     from .hr_leaves import LEAVE_TYPES
     from .hr_appraisals import STATUSES as APPR_STATUSES
@@ -28,9 +28,12 @@ async def build_annual(db, year: int, org_unit_id: Optional[str]) -> dict:
             kids = [str(u["_id"]) for u in await db.org_units.find({"parent_id": {"$in": frontier}}, {"_id": 1}).to_list(2000)]
             frontier = [k for k in kids if k not in ids]
             ids |= set(kids)
-        q["org_unit_id"] = {"$in": list(ids)}
+        q["org_unit_id"] = {"$in": list(ids if scope is None else ids & scope)}
         u = await db.org_units.find_one({"_id": ObjectId(org_unit_id)}, {"name": 1}) if ObjectId.is_valid(org_unit_id) else None
         unit_name = (u or {}).get("name", "")
+    elif scope is not None:
+        q["org_unit_id"] = {"$in": list(scope)}
+        unit_name = "نطاق صلاحيتي"
     emps = await db.employees.find(q, {"full_name": 1, "category": 1, "status": 1, "contract_type": 1, "org_unit_id": 1, "hire_date": 1, "gender": 1}).to_list(10000)
     eids = [str(e["_id"]) for e in emps]
     emp_map = {str(e["_id"]): e for e in emps}
@@ -122,18 +125,25 @@ async def build_annual(db, year: int, org_unit_id: Optional[str]) -> dict:
             "tasks": {"total": sum(t_stats.values()), "done": t_stats.get("done", 0), "on_time": on_time, "open": t_stats.get("open", 0) + t_stats.get("in_progress", 0), "cancelled": t_stats.get("cancelled", 0)}}
 
 
+async def _scoped_build(db, year: Optional[int], org_unit_id: Optional[str], current_user: dict) -> dict:
+    scope = await hr_scope_units(db, current_user)
+    if org_unit_id and scope is not None:
+        await assert_in_scope(db, current_user, unit_id=org_unit_id)
+    return await build_annual(db, year or datetime.now(YEMEN_TZ).year, org_unit_id, scope)
+
+
 @router.get("/annual")
 async def annual(year: Optional[int] = None, org_unit_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
-    return await build_annual(get_db(), year or datetime.now(YEMEN_TZ).year, org_unit_id)
+    return await _scoped_build(get_db(), year, org_unit_id, current_user)
 
 
 @router.get("/annual/export")
 async def annual_export(fmt: str = "pdf", year: Optional[int] = None, org_unit_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
-    r = await build_annual(get_db(), year or datetime.now(YEMEN_TZ).year, org_unit_id)
+    r = await _scoped_build(get_db(), year, org_unit_id, current_user)
     w, at, lv, ap, tk = r["workforce"], r["attendance"], r["leaves"], r["appraisals"], r["tasks"]
     kpis = [("الموظفون", w["total"]), ("على رأس العمل", w["active"]), ("تعيينات السنة", w["hires"]), ("متوسط الحضور", f"{at['avg_rate']}%" if at["avg_rate"] is not None else "—"), ("أيام الإجازات", lv["total_days"]), ("متوسط التقييم", ap["avg"] if ap["avg"] is not None else "—"), ("مهام مُنجزة", f"{tk['done']}/{tk['total']}")]
     sections = [

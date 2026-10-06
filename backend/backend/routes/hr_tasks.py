@@ -8,7 +8,7 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user, has_permission, log_activity
 from .hr_common import (P_TASKS, YEMEN_TZ, _now, _today, _oid, _ser, _can_view, parse_date, user_id_of, find_my_employee, employee_user_ids,
-                        notify_users, enrich_employee_refs, team_of, can_act_on)
+                        notify_users, enrich_employee_refs, team_of, can_act_on, scope_filter, scope_employee_ids, assert_in_scope, in_scope, restrict_ids)
 
 router = APIRouter(prefix="/hr/tasks", tags=["شؤون الموظفين - المهام"])
 
@@ -51,7 +51,8 @@ async def _is_party(db, user: dict, t: dict, me: Optional[dict]) -> dict:
     uid = user_id_of(user)
     my_id = str(me["_id"]) if me else ""
     return {"assignee": my_id == t["assignee_employee_id"], "assigner": t.get("assigner_user_id") == uid,
-            "manager": await can_act_on(db, user, t["assignee_employee_id"], P_TASKS), "hr": has_permission(user, P_TASKS)}
+            "manager": await can_act_on(db, user, t["assignee_employee_id"], "__none__"),
+            "hr": has_permission(user, P_TASKS) and await in_scope(db, user, t["assignee_employee_id"])}
 
 
 @router.get("/meta")
@@ -65,7 +66,7 @@ async def assignable(current_user: dict = Depends(get_current_user)):
     db = get_db()
     me = await find_my_employee(db, current_user)
     if has_permission(current_user, P_TASKS):
-        emps = [_ser(e) for e in await db.employees.find({"status": {"$nin": ["ended", "suspended"]}}, {"full_name": 1, "employee_no": 1, "job_title": 1}).sort("full_name", 1).to_list(2000)]
+        emps = [_ser(e) for e in await db.employees.find({"status": {"$nin": ["ended", "suspended"]}, **(await scope_filter(db, current_user))}, {"full_name": 1, "employee_no": 1, "job_title": 1}).sort("full_name", 1).to_list(2000)]
         scope = "all"
     else:
         emps, scope = await team_of(db, me), "team"
@@ -89,6 +90,7 @@ async def list_tasks(view: str = "mine", status: Optional[str] = None, priority:
     elif view == "all":
         if not (_can_view(current_user) or has_permission(current_user, P_TASKS)):
             raise HTTPException(status_code=403, detail="غير مصرح")
+        q = restrict_ids(q, "assignee_employee_id", await scope_employee_ids(db, current_user))
     else:
         raise HTTPException(status_code=400, detail="view غير صحيح")
     if status:
@@ -96,7 +98,7 @@ async def list_tasks(view: str = "mine", status: Optional[str] = None, priority:
     if priority:
         q["priority"] = priority
     if assignee_employee_id and view in ("all", "team"):
-        q["assignee_employee_id"] = assignee_employee_id
+        q = restrict_ids({**q, "assignee_employee_id": assignee_employee_id}, "assignee_employee_id", (await scope_employee_ids(db, current_user)) if view == "all" else None)
     if search:
         import re
         q["title"] = {"$regex": re.escape(search.strip()), "$options": "i"}
@@ -134,6 +136,8 @@ async def create_task(data: TaskIn, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
     if not await can_act_on(db, current_user, data.assignee_employee_id, P_TASKS):
         raise HTTPException(status_code=403, detail="يمكنك إسناد المهام لأعضاء فريقك فقط")
+    if has_permission(current_user, P_TASKS):
+        await assert_in_scope(db, current_user, employee_id=data.assignee_employee_id)
     me = await find_my_employee(db, current_user)
     doc = {**data.dict(), "title": data.title.strip(), "status": "open", "progress": 0, "assigner_user_id": user_id_of(current_user), "assigner_name": current_user.get("full_name", ""),
            "assigner_employee_id": str(me["_id"]) if me else None, "updates": [{"action": "created", "by_name": current_user.get("full_name", ""), "at": _now(), "note": ""}],
@@ -153,7 +157,7 @@ async def get_task(task_id: str, current_user: dict = Depends(get_current_user))
     t = await _load(db, task_id)
     me = await find_my_employee(db, current_user)
     p = await _is_party(db, current_user, t, me)
-    if not any(p.values()) and not _can_view(current_user):
+    if not any(p.values()) and not (_can_view(current_user) and await in_scope(db, current_user, t["assignee_employee_id"])):
         raise HTTPException(status_code=403, detail="غير مصرح")
     d = _view(t)
     await enrich_employee_refs(db, [d], "assignee_employee_id")
@@ -171,6 +175,8 @@ async def update_task(task_id: str, data: TaskIn, current_user: dict = Depends(g
         raise HTTPException(status_code=403, detail="غير مصرح بتعديل هذه المهمة")
     if data.assignee_employee_id != t["assignee_employee_id"] and not await can_act_on(db, current_user, data.assignee_employee_id, P_TASKS):
         raise HTTPException(status_code=403, detail="لا يمكنك إعادة الإسناد لهذا الموظف")
+    if data.assignee_employee_id != t["assignee_employee_id"] and has_permission(current_user, P_TASKS):
+        await assert_in_scope(db, current_user, employee_id=data.assignee_employee_id)
     if data.due_date:
         parse_date(data.due_date, "تاريخ الاستحقاق")
     upd = {**data.dict(), "title": data.title.strip(), "updated_at": _now()}

@@ -9,7 +9,8 @@ from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel
 
 from .deps import get_db, get_current_user, log_activity, export_headers, export_filename
-from .hr_common import P_MANAGE, YEMEN_TZ, _now, _oid, _ser, _can_view, _guard, find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids, enrich_employee_refs
+from .hr_common import (P_MANAGE, YEMEN_TZ, _now, _oid, _ser, _can_view, _guard, find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids, enrich_employee_refs,
+                        scope_employee_ids, assert_in_scope, in_scope, restrict_ids)
 from .statements import get_verify_base
 
 router = APIRouter(prefix="/hr/letters", tags=["شؤون الموظفين - الخطابات الرسمية"])
@@ -156,6 +157,11 @@ async def _is_owner(db, user: dict, l: dict) -> bool:
     return bool(emp and str(emp["_id"]) == l.get("employee_id"))
 
 
+async def _can_see(db, user: dict, l: dict) -> bool:
+    """HR ضمن نطاقها، أو صاحب الخطاب"""
+    return (_can_view(user) and await in_scope(db, user, l.get("employee_id"))) or await _is_owner(db, user, l)
+
+
 @router.get("/meta")
 async def meta(current_user: dict = Depends(get_current_user)):
     return {"types": LETTER_TYPES, "types_en": LETTER_TYPES_EN, "languages": LANGS, "statuses": STATUSES}
@@ -197,7 +203,7 @@ async def request_letter(data: RequestIn, current_user: dict = Depends(get_curre
 async def cancel_letter(lid: str, current_user: dict = Depends(get_current_user)):
     db = get_db()
     l = await _load(db, lid)
-    if not await _is_owner(db, current_user, l) and not _can_view(current_user):
+    if not await _can_see(db, current_user, l):
         raise HTTPException(status_code=403, detail="غير مصرح")
     if l["status"] != "pending":
         raise HTTPException(status_code=400, detail="لا يمكن إلغاء طلب تم البت فيه")
@@ -216,8 +222,10 @@ async def list_letters(status: Optional[str] = None, employee_id: Optional[str] 
         q["status"] = {"$in": status.split(",")}
     if employee_id:
         q["employee_id"] = employee_id
+    sc = await scope_employee_ids(db, current_user)
+    q = restrict_ids(q, "employee_id", sc)
     items = await _enrich(db, [_view(l) for l in await db.hr_letters.find(q).sort("created_at", -1).to_list(1000)])
-    counts = {s: await db.hr_letters.count_documents({"status": s}) for s in STATUSES}
+    counts = {s: await db.hr_letters.count_documents(restrict_ids({"status": s}, "employee_id", sc)) for s in STATUSES}
     return {"items": items, "counts": counts}
 
 
@@ -290,6 +298,7 @@ async def issue_direct(data: DirectIn, current_user: dict = Depends(get_current_
     emp = await db.employees.find_one({"_id": _oid(data.employee_id)})
     if not emp:
         raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    await assert_in_scope(db, current_user, employee_id=data.employee_id)
     if data.type not in LETTER_TYPES or data.language not in LANGS:
         raise HTTPException(status_code=400, detail="نوع الخطاب أو اللغة غير صحيح")
     doc = {"employee_id": str(emp["_id"]), "type": data.type, "language": data.language, "addressed_to": data.addressed_to.strip(), "purpose": data.purpose.strip(),
@@ -304,7 +313,7 @@ async def issue_direct(data: DirectIn, current_user: dict = Depends(get_current_
 async def get_letter(lid: str, current_user: dict = Depends(get_current_user)):
     db = get_db()
     l = await _load(db, lid)
-    if not _can_view(current_user) and not await _is_owner(db, current_user, l):
+    if not await _can_see(db, current_user, l):
         raise HTTPException(status_code=403, detail="غير مصرح")
     emp = await db.employees.find_one({"_id": ObjectId(l["employee_id"])}) or {}
     v = (await _enrich(db, [_view(l)]))[0]
@@ -331,6 +340,7 @@ async def approve_letter(lid: str, data: DecisionIn, current_user: dict = Depend
     _guard(current_user, P_MANAGE)
     db = get_db()
     l = await _load(db, lid)
+    await assert_in_scope(db, current_user, employee_id=l["employee_id"])
     if l["status"] != "pending":
         raise HTTPException(status_code=400, detail="الطلب ليس معلّقاً")
     emp = await db.employees.find_one({"_id": ObjectId(l["employee_id"])})
@@ -345,6 +355,7 @@ async def reject_letter(lid: str, data: DecisionIn, current_user: dict = Depends
     _guard(current_user, P_MANAGE)
     db = get_db()
     l = await _load(db, lid)
+    await assert_in_scope(db, current_user, employee_id=l["employee_id"])
     if l["status"] != "pending":
         raise HTTPException(status_code=400, detail="الطلب ليس معلّقاً")
     if not data.note.strip():
@@ -361,6 +372,7 @@ async def delete_letter(lid: str, current_user: dict = Depends(get_current_user)
     _guard(current_user, P_MANAGE)
     db = get_db()
     l = await _load(db, lid)
+    await assert_in_scope(db, current_user, employee_id=l["employee_id"])
     if l["status"] == "approved":
         raise HTTPException(status_code=400, detail="لا يمكن حذف خطاب صادر — سجله محفوظ للتحقق")
     await db.hr_letters.delete_one({"_id": l["_id"]})
@@ -377,6 +389,7 @@ async def letter_preview_pdf(lid: str, data: PreviewIn, current_user: dict = Dep
     _guard(current_user, P_MANAGE)
     db = get_db()
     l = await _load(db, lid)
+    await assert_in_scope(db, current_user, employee_id=l["employee_id"])
     emp = await db.employees.find_one({"_id": ObjectId(l["employee_id"])}) or {}
     ctx = await _emp_ctx(db, emp)
     body = (data.body or "").strip() or l.get("body") or default_body(l["type"], l.get("language", "ar"), ctx, l.get("addressed_to", ""), l.get("purpose", ""))
@@ -391,7 +404,7 @@ async def letter_preview_pdf(lid: str, data: PreviewIn, current_user: dict = Dep
 async def letter_pdf(lid: str, current_user: dict = Depends(get_current_user)):
     db = get_db()
     l = await _load(db, lid)
-    if not _can_view(current_user) and not await _is_owner(db, current_user, l):
+    if not await _can_see(db, current_user, l):
         raise HTTPException(status_code=403, detail="غير مصرح")
     if l["status"] != "approved":
         raise HTTPException(status_code=400, detail="يُصدر الملف للخطابات المعتمدة فقط")
