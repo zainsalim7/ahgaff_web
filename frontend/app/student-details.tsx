@@ -28,6 +28,10 @@ import { formatGregorianDate } from '../src/utils/dateUtils';
 import { StudentEditFields, StudentEditValues, emptyStudentEdit, studentToEditValues } from '../src/components/StudentEditFields';
 import { StatusEditPill } from '../src/components/attendance/StatusEditPill';
 import { AttendanceFilterBar, AttFilter, EMPTY_ATT_FILTER, applyAttFilter } from '../src/components/attendance/AttendanceFilterBar';
+import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
+import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
+
+const STATEMENT_VARS = ['{اسم_الطالب}', '{رقم_القيد}', '{الجنسية}', '{المستوى}', '{التخصص}', '{الكلية}', '{العام_الجامعي}', '{الحالة}', '{التاريخ}', '{الفصل}', '{المعدل}', '{التقدير}', '{الطالب}', '{هو}', '{له}', '{طلبه}', '{يدرس}', '{يحمل}', '{مستمر}', '{المذكور}'];
 
 // ============== الأنواع ==============
 interface StudentCourse {
@@ -195,8 +199,7 @@ export default function StudentDetailsScreen() {
   const [statementNationality, setStatementNationality] = useState('');
   const [statementPurpose, setStatementPurpose] = useState('');
   const [statementValidDays, setStatementValidDays] = useState('');
-  const [statementSignatoryName, setStatementSignatoryName] = useState('');
-  const [statementSignatoryTitle, setStatementSignatoryTitle] = useState('');
+  const [statementSig, setStatementSig] = useState<Signatory>({ ...EMPTY_SIGNATORY });
   const [issuingStatement, setIssuingStatement] = useState(false);
   const [lastStatement, setLastStatement] = useState<any>(null);
   const [statementMode, setStatementMode] = useState<'standard' | 'template' | 'free'>('standard');
@@ -704,6 +707,9 @@ export default function StudentDetailsScreen() {
     setSelectedTemplateId(tid);
     const t = statementTemplates.find((x: any) => x.id === tid);
     if (!t || !student) { setStatementBody(''); return; }
+    if (t.signatory_position_id || t.signatory_name || t.signatory_title) {
+      setStatementSig({ position_id: t.signatory_position_id || '', name: t.signatory_name || '', title: t.signatory_title || '' });
+    }
     setPreviewLoading(true);
     try {
       const res = await api.post('/statements/preview-body', { student_id: student.id, body: t.body, gpa: statementGpa, grade: statementGrade, term: statementTerm });
@@ -745,8 +751,10 @@ export default function StudentDetailsScreen() {
         purpose: statementPurpose || undefined,
         base_url: baseUrl,
         valid_days: statementValidDays && parseInt(statementValidDays, 10) > 0 ? parseInt(statementValidDays, 10) : undefined,
-        signatory_name: statementSignatoryName.trim() || undefined,
-        signatory_title: statementSignatoryTitle.trim() || undefined,
+        signatory_position_id: statementSig.position_id || undefined,
+        signatory_name: statementSig.name.trim() || undefined,
+        signatory_title: statementSig.title.trim() || undefined,
+        term: statementMode !== 'standard' && statementTerm.trim() ? statementTerm.trim() : undefined,
         body: statementMode !== 'standard' ? statementBody.trim() : undefined,
         gpa: statementMode !== 'standard' && statementGpa.trim() ? statementGpa.trim() : undefined,
         grade: statementMode !== 'standard' && statementGrade.trim() ? statementGrade.trim() : undefined,
@@ -884,6 +892,7 @@ export default function StudentDetailsScreen() {
                 onPress={() => {
                   setStatementNationality((student as any)?.nationality || '');
                   setStatementPurpose('');
+                  setStatementSig({ ...EMPTY_SIGNATORY });
                   setLastStatement(null);
                   setStatementModal(true);
                 }}
@@ -2236,16 +2245,18 @@ export default function StudentDetailsScreen() {
             {statementMode !== 'standard' && (
               <>
                 <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>
-                  متن الإفادة {previewLoading ? '⏳ جاري استبدال المتغيرات...' : '(قابل للتعديل قبل الإصدار)'}
+                  متن الإفادة {previewLoading ? '⏳ جاري استبدال المتغيرات...' : '(منسّق — قابل للتعديل قبل الإصدار)'}
                 </Text>
-                <TextInput
-                  value={statementBody}
-                  onChangeText={setStatementBody}
-                  multiline
-                  placeholder={statementMode === 'free' ? 'اكتب نص الإفادة هنا... يمكنك استخدام متغيرات مثل {اسم_الطالب}' : 'سيظهر متن القالب هنا بعد اختياره'}
-                  style={{ borderWidth: 1, borderColor: '#dde3ec', borderRadius: 8, padding: 10, textAlign: 'right', marginBottom: 6, fontSize: 13, minHeight: 110, textAlignVertical: 'top' as any }}
-                  testID="statement-body-input"
-                />
+                <View style={{ marginBottom: 6 }}>
+                  <StatementBodyEditor
+                    value={statementBody}
+                    onChange={setStatementBody}
+                    variables={STATEMENT_VARS}
+                    placeholder={statementMode === 'free' ? 'اكتب نص الإفادة هنا… وأدرج المتغيرات بنقرة من الأسفل' : 'سيظهر متن القالب هنا بعد اختياره'}
+                    minHeight={110}
+                    testID="statement-body-input"
+                  />
+                </View>
                 {(statementBody.includes('{المعدل}') || statementBody.includes('{التقدير}')) && (
                   <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 8 }}>
                     {statementBody.includes('{المعدل}') && (
@@ -2289,8 +2300,8 @@ export default function StudentDetailsScreen() {
                 )}
                 <Text style={{ fontSize: 10.5, color: '#8a94a6', textAlign: 'right', marginBottom: 10, lineHeight: 17 }}>
                   {statementMode === 'free'
-                    ? '💡 المتغيرات المتاحة (تُستبدل تلقائياً عند الإصدار): {اسم_الطالب} {رقم_القيد} {الجنسية} {المستوى} {التخصص} {الكلية} {العام_الجامعي} {الحالة} {التاريخ} {الفصل} {المعدل} {التقدير}'
-                    : '💡 يُطبع المتن في الـ PDF بعد سطر «بأن الطالب: الاسم» مع نفس الترويسة والتوقيع ورمز QR'}
+                    ? '💡 المتغيرات تُستبدل تلقائياً ببيانات الطالب عند الإصدار — انقر أي متغير لإدراجه مكان المؤشر'
+                    : '💡 يُطبع المتن في الـ PDF بعد سطر «بأن الطالب: الاسم» بنفس التنسيق (الخط والحجم والمحاذاة) مع الترويسة والتوقيع ورمز QR'}
                 </Text>
               </>
             )}
@@ -2314,6 +2325,10 @@ export default function StudentDetailsScreen() {
               style={{ borderWidth: 1, borderColor: '#dde3ec', borderRadius: 8, padding: 10, textAlign: 'right', marginBottom: 12, fontSize: 13 }}
               testID="statement-purpose-input"
             />
+            <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>الموقّع</Text>
+            <View style={{ marginBottom: 12 }}>
+              <SignatoryPicker value={statementSig} onChange={setStatementSig} hint="يُؤخذ من القالب إن كان محدداً فيه، وإلا من دليل المناصب أو الافتراضي من إعدادات الكليشة." testID="statement-signatory" />
+            </View>
             <Text style={{ fontSize: 12, fontWeight: '700', color: '#1a2540', textAlign: 'right', marginBottom: 4 }}>مدة الصلاحية بالأيام (اختياري — الافتراضي 90 يوماً)</Text>
             <TextInput
               value={statementValidDays}

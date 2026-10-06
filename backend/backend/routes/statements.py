@@ -152,6 +152,7 @@ class IssueRequest(BaseModel):
     gpa: Optional[str] = None       # 📊 المعدل — يعبّئ {المعدل}
     grade: Optional[str] = None     # 🏅 التقدير — يعبّئ {التقدير}
     term: Optional[str] = None      # 📅 الفصل الدراسي — يعبّئ {الفصل} (إدخال يدوي)
+    signatory_position_id: Optional[str] = None  # 🖋️ الموقّع من دليل المناصب
 
 
 class RevokeRequest(BaseModel):
@@ -315,10 +316,11 @@ async def issue_statement(data: IssueRequest, current_user: dict = Depends(get_c
     student = await db.students.find_one({"_id": ObjectId(data.student_id)})
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    sig_name, sig_title = await resolve_signatory(db, data.signatory_position_id, data.signatory_name, data.signatory_title)
     doc = await _issue_core(db, student, current_user, data.nationality, data.purpose, data.valid_days, data.base_url,
-                            signatory_name=data.signatory_name, signatory_title=data.signatory_title,
+                            signatory_name=sig_name, signatory_title=sig_title,
                             body=data.body, template_name=data.template_name,
-                            gpa=data.gpa, grade=data.grade)
+                            gpa=data.gpa, grade=data.grade, term=data.term)
     return {"id": doc["inserted_id"], "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
 
 
@@ -331,6 +333,31 @@ def _can_manage_templates(user: dict) -> bool:
 class StatementTemplate(BaseModel):
     name: str
     body: str
+    signatory_position_id: Optional[str] = None
+    signatory_name: Optional[str] = ""
+    signatory_title: Optional[str] = ""
+
+
+def _tpl_sig(data: StatementTemplate) -> dict:
+    return {"signatory_position_id": (data.signatory_position_id or "").strip() or None,
+            "signatory_name": (data.signatory_name or "").strip(), "signatory_title": (data.signatory_title or "").strip()}
+
+
+async def resolve_signatory(db, position_id: Optional[str], name: Optional[str], title: Optional[str]) -> tuple:
+    """الموقّع: من دليل المناصب إن حُدد منصب، وإلا الاسم/الصفة اليدويان"""
+    if position_id:
+        from .correspondence_positions import load_position, position_display
+        p = await load_position(db, position_id)
+        if p:
+            d = position_display(p)
+            return d["name"], d["title"]
+    return (name or "").strip(), (title or "").strip()
+
+
+@router.get("/statements/fonts")
+async def statement_fonts(current_user: dict = Depends(get_current_user)):
+    from services.rich_text_pdf import font_list
+    return {"fonts": font_list()}
 
 
 @router.get("/statement-templates")
@@ -356,7 +383,7 @@ async def create_statement_template(data: StatementTemplate, current_user: dict 
     db = get_db()
     if await db.statement_templates.find_one({"name": name}):
         raise HTTPException(status_code=400, detail="يوجد قالب بهذا الاسم مسبقاً")
-    doc = {"name": name, "body": body,
+    doc = {"name": name, "body": body, **_tpl_sig(data),
            "created_by_name": current_user.get("full_name", ""),
            "created_at": datetime.now(timezone.utc).isoformat()}
     res = await db.statement_templates.insert_one(doc)
@@ -376,7 +403,7 @@ async def update_statement_template(template_id: str, data: StatementTemplate, c
         raise HTTPException(status_code=400, detail="يوجد قالب آخر بهذا الاسم")
     r = await db.statement_templates.update_one(
         {"_id": ObjectId(template_id)},
-        {"$set": {"name": name, "body": body, "updated_at": datetime.now(timezone.utc).isoformat()}})
+        {"$set": {"name": name, "body": body, **_tpl_sig(data), "updated_at": datetime.now(timezone.utc).isoformat()}})
     if r.matched_count == 0:
         raise HTTPException(status_code=404, detail="القالب غير موجود")
     return {"message": "تم تحديث القالب"}
@@ -691,20 +718,17 @@ def _build_pdf(s: dict, settings: dict) -> bytes:
     c.setFont("Amiri", 14)
     yy = H - 96 * mm
     if (s.get("body") or "").strip():
-        # 📝 متن مخصص من قالب أو إفادة حرة — يُلف على أسطر
-        import textwrap as _tw
+        # 📝 متن مخصص من قالب أو إفادة حرة — نص عادي يُلف على أسطر، أو HTML منسّق (خط/حجم/عريض/محاذاة)
+        from services.rich_text_pdf import parse_rich, draw_rich
         c.drawCentredString(W / 2, yy, ar(f"تفيد {s.get('faculty_name', '')} بجامعة الأحقاف"))
         yy -= 9 * mm
         c.drawCentredString(W / 2, yy, ar(who))
         yy -= 10 * mm
         c.setFont("Amiri", 17)
         c.drawCentredString(W / 2, yy, ar(s.get("student_name", "")))
-        yy -= 11 * mm
+        yy -= 3 * mm
+        yy = draw_rich(c, parse_rich(s["body"], default_size=14, default_font="amiri"), 22 * mm, W - 22 * mm, yy)
         c.setFont("Amiri", 14)
-        for para in s["body"].split("\n"):
-            for line in (_tw.wrap(para, width=72) or [""]):
-                c.drawCentredString(W / 2, yy, ar(line))
-                yy -= 8 * mm
         yy -= 4 * mm
     else:
         c.drawCentredString(W / 2, yy, ar(f"تفيد {s.get('faculty_name', '')} بجامعة الأحقاف"))

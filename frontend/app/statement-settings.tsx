@@ -9,6 +9,8 @@ import { useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
+import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
 
 interface Faculty { id: string; name: string; }
 
@@ -55,6 +57,7 @@ export default function StatementSettingsScreen() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [tplName, setTplName] = useState('');
   const [tplBody, setTplBody] = useState('');
+  const [tplSig, setTplSig] = useState<Signatory>({ ...EMPTY_SIGNATORY });
   const [editingTplId, setEditingTplId] = useState('');
   const [tplMsg, setTplMsg] = useState<{ type: 'ok' | 'err'; text: string } | null>(null);
   const [savingTpl, setSavingTpl] = useState(false);
@@ -78,14 +81,15 @@ export default function StatementSettingsScreen() {
     setSavingTpl(true);
     setTplMsg(null);
     try {
+      const payload = { name: tplName.trim(), body: tplBody.trim(), signatory_position_id: tplSig.position_id || null, signatory_name: tplSig.name.trim(), signatory_title: tplSig.title.trim() };
       if (editingTplId) {
-        await api.put(`/statement-templates/${editingTplId}`, { name: tplName.trim(), body: tplBody.trim() });
+        await api.put(`/statement-templates/${editingTplId}`, payload);
         setTplMsg({ type: 'ok', text: '✅ تم تحديث القالب' });
       } else {
-        await api.post('/statement-templates', { name: tplName.trim(), body: tplBody.trim() });
+        await api.post('/statement-templates', payload);
         setTplMsg({ type: 'ok', text: '✅ تم إنشاء القالب — سيظهر عند إصدار أي إفادة' });
       }
-      setTplName(''); setTplBody(''); setEditingTplId('');
+      setTplName(''); setTplBody(''); setTplSig({ ...EMPTY_SIGNATORY }); setEditingTplId('');
       loadTemplates();
     } catch (e: any) {
       setTplMsg({ type: 'err', text: e?.response?.data?.detail || 'فشل حفظ القالب' });
@@ -377,7 +381,7 @@ export default function StatementSettingsScreen() {
             <View key={t.id} style={styles.tplRow} testID={`template-row-${t.id}`}>
               <View style={{ flexDirection: 'row', gap: 6 }}>
                 <TouchableOpacity
-                  onPress={() => { setEditingTplId(t.id); setTplName(t.name); setTplBody(t.body); setTplMsg(null); }}
+                  onPress={() => { setEditingTplId(t.id); setTplName(t.name); setTplBody(t.body); setTplSig({ position_id: t.signatory_position_id || '', name: t.signatory_name || '', title: t.signatory_title || '' }); setTplMsg(null); }}
                   style={styles.tplActionBtn}
                   testID={`template-edit-btn-${t.id}`}
                 >
@@ -396,7 +400,10 @@ export default function StatementSettingsScreen() {
                     </View>
                   )}
                 </View>
-                <Text style={styles.tplBodyPreview} numberOfLines={2}>{t.body}</Text>
+                <Text style={styles.tplBodyPreview} numberOfLines={2}>{String(t.body || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()}</Text>
+                {!!(t.signatory_position_id || t.signatory_name || t.signatory_title) && (
+                  <Text style={{ fontSize: 11, color: '#00796b', textAlign: 'right', marginTop: 2 }} testID={`template-sig-${t.id}`}>🖋️ موقّع محدد في القالب{t.signatory_name ? `: ${t.signatory_name}` : ''}{t.signatory_title ? ` — ${t.signatory_title}` : ''}</Text>
+                )}
               </View>
             </View>
           ))}
@@ -409,23 +416,20 @@ export default function StatementSettingsScreen() {
             placeholder="اسم القالب"
             testID="template-name-input"
           />
-          <Text style={styles.label}>متن القالب</Text>
-          <TextInput
-            value={tplBody}
-            onChangeText={setTplBody}
-            multiline
-            placeholder={'مثال: {الجنسية} الجنسية، يدرس بالمستوى {المستوى} تخصص ({التخصص}) للعام الجامعي {العام_الجامعي}، ويحمل رقم قيد ({رقم_القيد}) وهو {الحالة}.'}
-            placeholderTextColor="#9aa4b2"
-            style={[styles.input, { minHeight: 100, textAlignVertical: 'top' as any, marginBottom: 8 }]}
-            testID="template-body-input"
-          />
-          <Text style={styles.label}>المتغيرات المتاحة — اضغط لإدراجها في المتن:</Text>
-          <View style={{ flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginTop: 4, marginBottom: 6 }}>
-            {TPL_VARS.map((v) => (
-              <TouchableOpacity key={v} onPress={() => setTplBody((p) => (p ? `${p} ${v}` : v))} style={styles.varChip} testID={`var-chip-${v}`}>
-                <Text style={styles.varChipText}>{v}</Text>
-              </TouchableOpacity>
-            ))}
+          <Text style={styles.label}>متن القالب — محرر منسّق (خط/حجم/عريض/محاذاة) والمتغيرات تُدرج بنقرة عند المؤشر</Text>
+          <View style={{ marginBottom: 8 }}>
+            <StatementBodyEditor
+              value={tplBody}
+              onChange={setTplBody}
+              variables={TPL_VARS}
+              placeholder={'مثال: {الجنسية} الجنسية، يدرس بالمستوى {المستوى} تخصص ({التخصص}) للعام الجامعي {العام_الجامعي}، ويحمل رقم قيد ({رقم_القيد}) وهو {الحالة}.'}
+              minHeight={120}
+              testID="template-body-input"
+            />
+          </View>
+          <Text style={styles.label}>الموقّع الافتراضي لهذا القالب (اختياري)</Text>
+          <View style={{ marginBottom: 8 }}>
+            <SignatoryPicker value={tplSig} onChange={setTplSig} hint="إن لم يُحدد، يُستخدم الموقّع المختار عند الإصدار أو الافتراضي من إعدادات الكليشة." testID="template-signatory" />
           </View>
           <Text style={{ fontSize: 11, color: '#8a94a6', textAlign: 'right', lineHeight: 18 }}>
             💡 يُطبع المتن في الـ PDF بعد سطر «بأن الطالب: الاسم» مع نفس الترويسة والتوقيع ورمز QR
@@ -450,7 +454,7 @@ export default function StatementSettingsScreen() {
             </TouchableOpacity>
             {!!editingTplId && (
               <TouchableOpacity
-                onPress={() => { setEditingTplId(''); setTplName(''); setTplBody(''); setTplMsg(null); }}
+                onPress={() => { setEditingTplId(''); setTplName(''); setTplBody(''); setTplSig({ ...EMPTY_SIGNATORY }); setTplMsg(null); }}
                 style={[styles.saveBtn, { backgroundColor: '#90a4ae', flex: 0.5 }]}
                 testID="template-cancel-edit-btn"
               >
