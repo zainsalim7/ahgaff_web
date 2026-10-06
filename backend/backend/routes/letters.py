@@ -262,6 +262,8 @@ class IssueIn(BaseModel):
     notes: Optional[str] = ""
     layout: Optional[dict] = None     # 📐 تجاوز تخطيط الصفحة لهذا الخطاب
     draft_id: Optional[str] = None    # تحديث مسودة قائمة
+    per_person: bool = False          # 👥 خطاب مستقل لكل شخص (إصدار جماعي)
+    person_as_recipient: bool = False  # الشخص نفسه هو المرسَل إليه
 
 
 def _number_for(settings: dict, seq: int, year: int) -> str:
@@ -293,6 +295,33 @@ def _validate(data: IssueIn):
         raise HTTPException(status_code=400, detail="الموضوع والمتن والمرسَل إليه مطلوبة")
 
 
+def _person_recipient(row: dict, suffix: str) -> dict:
+    """عندما يكون الشخص نفسه هو المرسَل إليه: «إلى: الطالب/ فلان المحترم» ثم الجهة من بياناته"""
+    female = False
+    if row["kind"] == "student":
+        female = student_gender(row["_doc"], row.get("_fac")) == "female"
+        prefix, title, org = ("الطالبة/" if female else "الطالب/"), "", " — ".join(x for x in (row["c2"], row["c1"]) if x)
+    elif row["kind"] == "employee":
+        prefix, title, org = "الأخ/", row["c1"], row["c2"]
+    else:
+        prefix, title, org = f"{row['code']}/" if row["code"] else "الأستاذ/", "", row["c1"]
+    sfx = suffix or "المحترم"
+    if female and sfx == "المحترم":
+        sfx = "المحترمة"
+    return {"id": "", "name": f"{prefix} {row['name']}".strip(), "title": title, "organization": org, "suffix": sfx}
+
+
+async def _per_person_data(db, data: IssueIn, person: dict) -> Optional[IssueIn]:
+    """نسخة من بيانات الإصدار لشخص واحد (المتغيرات تُملأ ببياناته، واختيارياً يصبح هو المرسَل إليه)"""
+    row = await _person_row(db, person.get("kind", "student"), person.get("id", ""))
+    if not row:
+        return None
+    d = data.model_copy(update={"people": [person], "per_person": False, "draft_id": None})
+    if data.person_as_recipient:
+        d.recipient = _person_recipient(row, (data.recipient or {}).get("suffix", "المحترم"))
+    return d
+
+
 async def _finalize_fields(db, settings: dict, base_url: Optional[str], valid_days: Optional[int], current_user: dict) -> dict:
     """يمنح رقماً رسمياً تسلسلياً ورمز تحقق وتاريخ إصدار"""
     year = datetime.now(timezone.utc).year
@@ -322,6 +351,55 @@ async def issue_letter(data: IssueIn, current_user: dict = Depends(get_current_u
     r = await db.letters.insert_one(doc)
     await log_activity(current_user, "issue_letter", "letter", str(r.inserted_id), doc["subject"], {"number": doc["number_display"], "to": doc["recipient"].get("name") or doc["recipient"].get("title")})
     return {"id": str(r.inserted_id), "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
+
+
+@router.post("/letters/issue-batch")
+async def issue_batch(data: IssueIn, current_user: dict = Depends(get_current_user)):
+    """👥 خطاب مستقل لكل شخص (رقم تسلسلي وQR لكل خطاب) في عملية واحدة — يرجع batch_id لتنزيل PDF مجمّع"""
+    _guard(current_user)
+    db = get_db()
+    if not (data.subject or "").strip() or not data.body.strip():
+        raise HTTPException(status_code=400, detail="الموضوع والمتن مطلوبان")
+    if not data.people:
+        raise HTTPException(status_code=400, detail="اختر شخصاً واحداً على الأقل")
+    if len(data.people) > 200:
+        raise HTTPException(status_code=400, detail="الحد الأقصى 200 خطاب في العملية الواحدة")
+    if not data.person_as_recipient and not ((data.recipient or {}).get("name") or (data.recipient or {}).get("title")):
+        raise HTTPException(status_code=400, detail="حدّد المرسَل إليه أو فعّل «الشخص نفسه هو المرسَل إليه»")
+    settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
+    batch_id = uuid.uuid4().hex[:12]
+    out, skipped = [], []
+    for i, person in enumerate(data.people):
+        d = await _per_person_data(db, data, person)
+        if not d:
+            skipped.append(person.get("id", "")); continue
+        doc = {**(await _compose(db, d, settings)), **(await _finalize_fields(db, settings, data.base_url, data.valid_days, current_user)),
+               "batch_id": batch_id, "batch_index": i + 1, "batch_total": len(data.people), "person_as_recipient": data.person_as_recipient, "auto_table": False}
+        r = await db.letters.insert_one(doc)
+        out.append({"id": str(r.inserted_id), "number": doc["number_display"], "name": (doc["people"] or [{}])[0].get("name", ""), "verify_url": doc["verify_url"]})
+    if not out:
+        raise HTTPException(status_code=400, detail="تعذر العثور على الأشخاص المحددين")
+    await log_activity(current_user, "issue_letter_batch", "letter", batch_id, data.subject or "", {"count": len(out), "numbers": [o["number"] for o in out][:20]})
+    return {"batch_id": batch_id, "count": len(out), "letters": out, "skipped": skipped}
+
+
+@router.get("/letters/batch/{batch_id}/pdf")
+async def batch_pdf(batch_id: str, letterhead: bool = True, current_user: dict = Depends(get_current_user)):
+    """PDF واحد يجمع خطابات الدفعة متتابعة (كل خطاب يبدأ بصفحة جديدة)"""
+    _guard(current_user)
+    db = get_db()
+    rows = await db.letters.find({"batch_id": batch_id}).sort("batch_index", 1).to_list(500)
+    if not rows:
+        raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+    settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
+    from pypdf import PdfReader, PdfWriter
+    w = PdfWriter()
+    for r in rows:
+        w.append(PdfReader(io.BytesIO(build_letter_pdf(r, settings, letterhead=letterhead))))
+    buf = io.BytesIO(); w.write(buf)
+    from urllib.parse import quote
+    fname = quote(f"خطابات {rows[0].get('subject', '')} - {len(rows)} خطاب{'' if letterhead else ' - بلا كليشة'} - {export_stamp()}.pdf")
+    return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
 
 
 @router.post("/letters/draft")
@@ -384,9 +462,12 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool =
     _guard(current_user)
     db = get_db()
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
+    per_person = data.per_person and bool(data.people)
+    if per_person:
+        data = (await _per_person_data(db, data, data.people[0])) or data
     year = datetime.now(timezone.utc).year
     seq = (await db.letter_counters.find_one({"_id": str(year)}) or {}).get("seq", 0) + 1
-    doc = {**(await _compose(db, data, settings)), "serial": seq, "number_display": _number_for(settings, seq, year) + " (معاينة)", "year": year,
+    doc = {**(await _compose(db, data, settings)), "auto_table": not per_person, "serial": seq, "number_display": _number_for(settings, seq, year) + " (معاينة)", "year": year,
            "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
     doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادر"}
     pdf = build_letter_pdf(doc, settings, draft=True, letterhead=letterhead)

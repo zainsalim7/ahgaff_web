@@ -66,6 +66,8 @@ export default function LettersPage() {
   const [showLayout, setShowLayout] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [draft, setDraft] = useState<{ id: string; number: string } | null>(null);
+  const [perPerson, setPerPerson] = useState(false); const [personAsRec, setPersonAsRec] = useState(false);
+  const [batch, setBatch] = useState<any>(null);
   const [settingsPreview, setSettingsPreview] = useState('');
   // templates/log state
   const [tform, setTform] = useState<any | null>(null);
@@ -93,7 +95,7 @@ export default function LettersPage() {
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
-  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null });
+  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
   useEffect(() => {
     if (!body.trim()) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
     const t = setTimeout(() => {
@@ -104,7 +106,7 @@ export default function LettersPage() {
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people, sig, layout, previewLetterhead]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, subject, recipient, people, sig, layout, previewLetterhead, perPerson, personAsRec]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // معاينة تخطيط الكليشة الافتراضي (نموذج تجريبي) في تبويب الإعدادات
   useEffect(() => {
@@ -135,12 +137,19 @@ export default function LettersPage() {
       loadAll(); window.alert(`✅ حُفظ القالب «${name}» — سيظهر في قائمة القوالب`);
     } catch (e) { setErr(errOf(e, 'فشل حفظ القالب')); }
   };
+  const isBatch = perPerson && people.length > 1;
+  const dlBatchPdf = async (b: any, letterhead = true) => {
+    const r = await api.get(`/letters/batch/${b.batch_id}/pdf`, { params: { letterhead }, responseType: 'blob' });
+    downloadBlob(r.data, `خطابات ${subject || ''} - ${b.count} خطاب${letterhead ? '' : ' - بلا كليشة'}.pdf`, 'application/pdf');
+  };
   const issue = async () => {
-    if (!recipient) { window.alert('حدّد المرسَل إليه'); return; }
+    if (!recipient && !(isBatch && personAsRec)) { window.alert('حدّد المرسَل إليه'); return; }
     if (!subject.trim() || !body.trim()) { window.alert('الموضوع والمتن مطلوبان'); return; }
+    if (isBatch && !window.confirm(`سيصدر ${people.length} خطاباً مستقلاً (رقم تسلسلي لكل شخص). متابعة؟`)) return;
     setBusy(true); setErr('');
     try {
-      if (draft) { await api.post('/letters/draft', issuePayload()); await afterIssue(await api.post(`/letters/${draft.id}/finalize`, null, { params: { base_url: window.location.origin } })); }
+      if (isBatch) { const r = await api.post('/letters/issue-batch', issuePayload()); setBatch(r.data); setLast(null); setDraft(null); await dlBatchPdf(r.data); }
+      else if (draft) { await api.post('/letters/draft', issuePayload()); await afterIssue(await api.post(`/letters/${draft.id}/finalize`, null, { params: { base_url: window.location.origin } })); }
       else await afterIssue(await api.post('/letters/issue', issuePayload()));
     } catch (e) { setErr(errOf(e, 'فشل إصدار الخطاب')); } finally { setBusy(false); }
   };
@@ -150,7 +159,7 @@ export default function LettersPage() {
     try { const r = await api.post('/letters/draft', issuePayload()); setDraft({ id: r.data.id, number: r.data.number }); setLast(null); }
     catch (e) { setErr(errOf(e, 'فشل حفظ المسودة')); } finally { setBusy(false); }
   };
-  const resetForm = () => { setDraft(null); setLast(null); setTplId(''); setSubject(''); setBody(''); setPeople([]); setRecId(''); setRec({ name: '', title: '', organization: '', suffix: 'المحترم' }); setLayout({}); setValidDays(''); setSig(EMPTY_SIGNATORY); };
+  const resetForm = () => { setDraft(null); setLast(null); setTplId(''); setSubject(''); setBody(''); setPeople([]); setRecId(''); setRec({ name: '', title: '', organization: '', suffix: 'المحترم' }); setLayout({}); setValidDays(''); setSig(EMPTY_SIGNATORY); setBatch(null); setPerPerson(false); setPersonAsRec(false); };
   const loadDraft = async (id: string) => {
     try {
       const { data: d } = await api.get(`/letters/${id}`);
@@ -214,6 +223,16 @@ export default function LettersPage() {
               <select style={{ ...inp, width: 'auto', padding: '4px 8px', fontSize: 12 }} value={peopleKind} onChange={(e) => setPeopleKind(e.target.value)} data-testid="letter-people-kind" title="نوع البحث — تبديل النوع لا يمسح الأسماء المضافة"><option value="student">طلاب</option><option value="employee">موظفون</option><option value="teacher">هيئة تدريس</option></select>
             </div>
             <PeoplePicker kind={peopleKind} people={people} onChange={setPeople} />
+            {people.length > 1 && (
+              <div style={{ border: `1px solid ${perPerson ? '#fdba74' : '#e2e8f0'}`, background: perPerson ? '#fff7ed' : '#f8fafc', borderRadius: 10, padding: 10, marginTop: 8, fontSize: 12.5 }} data-testid="letter-mode-panel">
+                <div style={{ fontWeight: 800, marginBottom: 6 }}>👥 طريقة الإصدار لـ {people.length} أشخاص:</div>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', marginBottom: 4 }}><input type="radio" checked={!perPerson} onChange={() => setPerPerson(false)} data-testid="letter-mode-single" /> خطاب واحد يضمّ الجميع (جدول/قائمة أسماء)</label>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}><input type="radio" checked={perPerson} onChange={() => setPerPerson(true)} data-testid="letter-mode-per-person" /> <b>خطاب مستقل لكل شخص</b> — {people.length} خطابات برقم تسلسلي وQR لكل منها، في عملية واحدة وملف PDF مجمّع</label>
+                {perPerson && (
+                  <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', marginTop: 8, marginRight: 22, color: '#9a3412' }}><input type="checkbox" checked={personAsRec} onChange={(e) => setPersonAsRec(e.target.checked)} data-testid="letter-person-as-recipient" /> الشخص نفسه هو المرسَل إليه (يُوجَّه كل خطاب إلى صاحبه، ويُتجاهل حقل المرسَل إليه أعلاه)</label>
+                )}
+              </div>
+            )}
             <label style={{ ...lbl, marginTop: 12 }}>متن الخطاب — منسّق (خط/حجم/لون/محاذاة) والمتغيرات تُدرج بنقرة عند المؤشر</label>
             <StatementBodyEditor value={body} onChange={setBody} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={150} placeholder="اختر قالباً أو اكتب متن الخطاب هنا…" testID="letter-body" />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8, marginTop: 12 }}>
@@ -254,6 +273,14 @@ export default function LettersPage() {
               </Modal>
             )}
             {draft && <div style={{ marginTop: 12, padding: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-draft-info">📝 مسودة محفوظة برقم <b>{draft.number}</b> — التعديلات تُحفظ على نفس النسخة، وعند الاعتماد تأخذ الرقم الرسمي. <button onClick={resetForm} style={{ border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 12 }}>خطاب جديد</button></div>}
+            {batch && <div style={{ marginTop: 12, padding: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-batch-issued">✅ صدر <b>{batch.count}</b> خطاباً مستقلاً وتم تنزيل PDF المجمّع{batch.skipped?.length ? ` (تُخطّي ${batch.skipped.length} غير موجود)` : ''}
+              <div style={{ maxHeight: 140, overflowY: 'auto', marginTop: 6, fontSize: 11.5, color: '#334155' }}>{batch.letters.map((l: any) => <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '2px 0', borderBottom: '1px dashed #d1fae5' }}><span>{l.name}</span><b>{l.number}</b></div>)}</div>
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                <button onClick={() => dlBatchPdf(batch, true)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid="letter-batch-pdf">PDF المجمّع بالكليشة</button>
+                <button onClick={() => dlBatchPdf(batch, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid="letter-batch-pdf-plain">🖨️ المجمّع بلا كليشة</button>
+                <button onClick={() => setTab('log')} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })}>السجل</button>
+              </div>
+            </div>}
             {last && <div style={{ marginTop: 12, padding: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-issued">✅ صدر الخطاب رقم <b>{last.number}</b> وتم تنزيل PDF<br /><span style={{ color: '#64748b', fontSize: 11 }}>{last.verify_url}</span>
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 <button onClick={() => dlPdf(last.id, `خطاب ${last.number}`, true)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid="letter-last-pdf">PDF بالكليشة</button>
@@ -262,11 +289,11 @@ export default function LettersPage() {
               </div>
             </div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-              <button onClick={saveDraft} disabled={busy} style={btn('#f59e0b', { flex: 1, padding: 12, fontSize: 14 })} data-testid="letter-draft-btn">{busy ? '…' : draft ? '💾 تحديث المسودة' : '💾 حفظ كمسودة'}</button>
+              <button onClick={saveDraft} disabled={busy || isBatch} title={isBatch ? 'المسودات غير متاحة في وضع «خطاب لكل شخص»' : ''} style={btn(isBatch ? '#e2e8f0' : '#f59e0b', { flex: 1, padding: 12, fontSize: 14, color: isBatch ? '#94a3b8' : '#fff' })} data-testid="letter-draft-btn">{busy ? '…' : draft ? '💾 تحديث المسودة' : '💾 حفظ كمسودة'}</button>
               {draft && <button onClick={() => dlPdf(draft.id, `مسودة ${draft.number}`)} style={btn('#0f2440', { padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-btn">PDF المسودة</button>}
               {draft && <button onClick={() => dlPdf(draft.id, `مسودة ${draft.number}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-plain-btn" title="للطباعة على ورق مطبوع مسبقاً">🖨️ بلا كليشة</button>}
               <button onClick={() => saveAsTemplate()} disabled={!body.trim()} style={btn('#f5f3ff', { color: '#6d28d9', padding: 12, fontSize: 13 })} data-testid="letter-save-template-btn" title="يحفظ المتن (بمتغيراته) والموضوع والموقّع كقالب جديد">⭐ كقالب</button>
-              <button onClick={issue} disabled={busy} style={btn('#16a34a', { flex: 1.4, padding: 12, fontSize: 14 })} data-testid="letter-issue-btn">{busy ? 'جاري الإصدار…' : draft ? '✅ اعتماد وإصدار PDF' : 'إصدار وتنزيل PDF'}</button>
+              <button onClick={issue} disabled={busy} style={btn('#16a34a', { flex: 1.4, padding: 12, fontSize: 14 })} data-testid="letter-issue-btn">{busy ? 'جاري الإصدار…' : isBatch ? `👥 إصدار ${people.length} خطابات وتنزيل PDF مجمّع` : draft ? '✅ اعتماد وإصدار PDF' : 'إصدار وتنزيل PDF'}</button>
             </div>
           </div>
           <div style={{ ...card, minHeight: 400, position: 'sticky', top: 10, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }} data-testid="letter-preview">
@@ -277,7 +304,8 @@ export default function LettersPage() {
                 {people.length > 0 && body.includes('{جدول_الأسماء}') && <span style={{ fontSize: 12, color: '#7c3aed' }}>⊞ جدول بالأسماء ({people.length})</span>}
               </div>
             </div>
-            {!recipient && body.trim() && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>⚠️ المرسَل إليه لم يُحدد بعد — ستظهر بياناته في المعاينة عند اختياره</div>}
+            {isBatch && <div style={{ fontSize: 12, color: '#9a3412', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '6px 10px', marginBottom: 8 }} data-testid="letter-batch-banner">👥 سيصدر <b>{people.length}</b> خطاباً مستقلاً — المعاينة لخطاب الأول: <b>{people[0]?.label}</b></div>}
+            {!recipient && !(isBatch && personAsRec) && body.trim() && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>⚠️ المرسَل إليه لم يُحدد بعد — ستظهر بياناته في المعاينة عند اختياره</div>}
             {previewImg ? (
               <img src={previewImg} alt="معاينة الخطاب" data-testid="letter-preview-img" style={{ width: '100%', boxShadow: '0 4px 18px rgba(0,0,0,.18)', borderRadius: 4, background: '#fff' }} />
             ) : (
@@ -314,7 +342,7 @@ export default function LettersPage() {
             <select style={{ ...inp, width: 'auto' }} value={logStatus} onChange={(e) => setLogStatus(e.target.value)} data-testid="letters-log-status"><option value="">الكل</option><option value="draft">المسودات</option><option value="issued">الصادرة</option></select>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['الرقم', 'التاريخ', 'الموضوع', 'إلى', 'الأسماء', 'الحالة', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
+            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}{l.batch_id ? <div style={{ fontSize: 10, color: '#c2410c', fontWeight: 700 }} title="ضمن إصدار جماعي — خطاب لكل شخص">👥 {l.batch_index}/{l.batch_total}</div> : null}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
               <td style={{ ...td, whiteSpace: 'nowrap' }}>
                 {l.status === 'draft' ? (<>
                   <button onClick={() => loadDraft(l.id)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-edit-${l.id}`}>تعديل</button>{' '}

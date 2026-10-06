@@ -251,7 +251,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
                 c.setFont("Amiri", BODY); c.drawRightString(RM, y, ar(line)); y -= BODY * f("body_leading")
         if pi < len(parts) - 1 and has_table:
             y -= f("gap_table_before") * mm; draw_table(s["table"], tbl_inherit); y -= f("gap_table_after") * mm
-    if "{جدول_الأسماء}" not in body and has_table:
+    if "{جدول_الأسماء}" not in body and has_table and s.get("auto_table", True):
         y -= f("gap_table_before") * mm; draw_table(s["table"]); y -= f("gap_table_after") * mm
     y -= f("gap_closing") * mm
     ensure(45 * mm)
