@@ -12,6 +12,7 @@ import { AccountRoleModal } from '../src/components/hr/AccountRoleModal';
 import { BulkToolbar } from '../src/components/hr/BulkToolbar';
 import { HrSelect, optsFromMap } from '../src/components/hr/HrSelect';
 import { EmployeePhotoPanel } from '../src/components/hr/EmployeePhotoPanel';
+import { ImportNewUnits, NewUnitCfg } from '../src/components/hr/ImportNewUnits';
 
 const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f97316', leave: '#0284c7', suspended: '#dc2626', ended: '#64748b' };
 
@@ -31,6 +32,8 @@ export default function HrEmployees() {
   const [form, setForm] = useState<{ open: boolean; emp: any | null }>({ open: false, emp: null });
   const [detail, setDetail] = useState<any>(null);
   const [importState, setImportState] = useState<{ file: File | null; preview: any | null; busy: boolean }>({ file: null, preview: null, busy: false });
+  const [newUnits, setNewUnits] = useState<NewUnitCfg[]>([]);
+  const [createUnits, setCreateUnits] = useState(true);
   const [showImport, setShowImport] = useState(false);
 
   const load = useCallback(async () => {
@@ -68,8 +71,29 @@ export default function HrEmployees() {
       const url = URL.createObjectURL(res.data); const a = document.createElement('a'); a.href = url; a.download = 'نموذج استيراد الموظفين.xlsx'; a.click(); URL.revokeObjectURL(url);
     } catch (e) { alertMsg(e); }
   };
-  const pickFile = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.xlsx'; i.onchange = async (e: any) => { const file = e.target.files?.[0]; if (!file) return; setImportState({ file, preview: null, busy: true }); try { const fd = new FormData(); fd.append('file', file); const r = await hrAPI.importPreview(fd); setImportState({ file, preview: r.data, busy: false }); } catch (err) { alertMsg(err); setImportState({ file: null, preview: null, busy: false }); } }; i.click(); };
-  const runImport = async () => { if (!importState.file) return; setImportState((p) => ({ ...p, busy: true })); try { const fd = new FormData(); fd.append('file', importState.file); const r = await hrAPI.importRun(fd); window.alert(r.data.message); setShowImport(false); setImportState({ file: null, preview: null, busy: false }); load(); } catch (e) { alertMsg(e); setImportState((p) => ({ ...p, busy: false })); } };
+  const previewFile = async (file: File, cu: boolean) => {
+    setImportState({ file, preview: null, busy: true });
+    try {
+      const fd = new FormData(); fd.append('file', file);
+      const r = await hrAPI.importPreview(fd, cu);
+      setImportState({ file, preview: r.data, busy: false });
+      setNewUnits((r.data.new_units || []).map((u: any) => ({ ...u, type: 'office', parent_id: r.data.default_parent_id || '' })));
+    } catch (err) { alertMsg(err); setImportState({ file: null, preview: null, busy: false }); }
+  };
+  const pickFile = () => { const i = document.createElement('input'); i.type = 'file'; i.accept = '.xlsx'; i.onchange = (e: any) => { const file = e.target.files?.[0]; if (file) previewFile(file, createUnits); }; i.click(); };
+  const toggleCreateUnits = (v: boolean) => { setCreateUnits(v); if (importState.file) previewFile(importState.file, v); };
+  const patchUnit = (key: string, patch: Partial<NewUnitCfg>) => setNewUnits((p) => p.map((u) => (u.key === key ? { ...u, ...patch } : u)));
+  const runImport = async () => {
+    if (!importState.file) return;
+    setImportState((p) => ({ ...p, busy: true }));
+    try {
+      const fd = new FormData(); fd.append('file', importState.file);
+      if (createUnits && newUnits.length) fd.append('units_config', JSON.stringify(newUnits.map((u) => ({ key: u.key, name: u.name, type: u.type, parent_id: u.parent_id || null }))));
+      const r = await hrAPI.importRun(fd, createUnits);
+      window.alert(r.data.message); setShowImport(false); setImportState({ file: null, preview: null, busy: false }); setNewUnits([]); load();
+      hrAPI.orgUnits().then((x) => setUnits(x.data.units || [])).catch(() => {});
+    } catch (e) { alertMsg(e); setImportState((p) => ({ ...p, busy: false })); }
+  };
 
   const st = data.stats || {};
   return (
@@ -184,7 +208,7 @@ export default function HrEmployees() {
         <div style={{ position: 'fixed', inset: 0, zIndex: 1000, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl' }} onClick={() => !importState.busy && setShowImport(false)}>
           <div onClick={(e) => e.stopPropagation()} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 22, width: 640, maxWidth: '95%', maxHeight: '88vh', overflowY: 'auto' }} data-testid="hr-import-modal">
             <div style={{ fontSize: 16, fontWeight: 800, color: '#0f2440', marginBottom: 6 }}>📥 استيراد الموظفين من Excel</div>
-            <div style={{ fontSize: 12, color: '#5b6678', lineHeight: 1.7, marginBottom: 12 }}>حمّل النموذج، املأه (الرقم الوظيفي والاسم إلزاميان، الوحدة التنظيمية بالاسم كما في الهيكل)، ثم ارفعه. الأرقام الوظيفية الموجودة تُحدَّث، والجديدة تُضاف.</div>
+            <div style={{ fontSize: 12, color: '#5b6678', lineHeight: 1.7, marginBottom: 12 }}>حمّل النموذج، املأه (الرقم الوظيفي والاسم إلزاميان)، ثم ارفعه. الأرقام الوظيفية الموجودة تُحدَّث، والجديدة تُضاف. الوحدات التنظيمية غير الموجودة تُنشأ تلقائياً ويمكنك تحديد الإدارة التي تتبعها قبل الاستيراد.</div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <button onClick={downloadTemplate} style={btn('#f1f5f9', '#0f2440')} data-testid="hr-import-template-btn">⬇ تحميل النموذج</button>
               <button onClick={pickFile} disabled={importState.busy} style={btn('#1565c0')} data-testid="hr-import-pick-btn">{importState.busy ? 'جاري الفحص...' : '📂 اختيار الملف'}</button>
@@ -194,9 +218,12 @@ export default function HrEmployees() {
                 <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                   {[['صفوف', importState.preview.total, '#0f2440'], ['جديد', importState.preview.new, '#16a34a'], ['تحديث', importState.preview.updates, '#0284c7'], ['أخطاء', importState.preview.invalid, '#dc2626']].map(([l, v, c]: any) => <div key={l} style={{ flex: 1, textAlign: 'center', backgroundColor: '#f7f9fc', borderRadius: 8, padding: 8 }}><div style={{ fontSize: 18, fontWeight: 800, color: c }}>{v}</div><div style={{ fontSize: 11, color: '#64748b' }}>{l}</div></div>)}
                 </div>
+                {(importState.preview.new_units?.length > 0 || !createUnits) && (
+                  <ImportNewUnits units={newUnits} types={importState.preview.unit_types || {}} parents={units} createUnits={createUnits} onToggleCreate={toggleCreateUnits} onChange={patchUnit} />
+                )}
                 <div style={{ maxHeight: 260, overflowY: 'auto', border: '1px solid #eee', borderRadius: 8 }}>
                   <table style={{ width: '100%', fontSize: 11.5, borderCollapse: 'collapse' }}><thead><tr style={{ backgroundColor: '#f1f5f9' }}><th style={{ padding: 6 }}>#</th><th style={{ padding: 6, textAlign: 'right' }}>الرقم</th><th style={{ padding: 6, textAlign: 'right' }}>الاسم</th><th style={{ padding: 6, textAlign: 'right' }}>الوحدة</th><th style={{ padding: 6, textAlign: 'right' }}>النتيجة</th></tr></thead>
-                    <tbody>{importState.preview.rows.map((r: any) => <tr key={r.row} style={{ borderTop: '1px solid #f1f5f9', color: r.errors.length ? '#c62828' : '#0f2440' }}><td style={{ padding: 5, textAlign: 'center' }}>{r.row}</td><td style={{ padding: 5 }}>{r.data.employee_no}</td><td style={{ padding: 5 }}>{r.data.full_name}</td><td style={{ padding: 5 }}>{r.data.org_unit_name || '—'}</td><td style={{ padding: 5 }}>{r.errors.length ? r.errors.join('، ') : r.exists ? 'تحديث' : 'جديد'}</td></tr>)}</tbody></table>
+                    <tbody>{importState.preview.rows.map((r: any) => <tr key={r.row} style={{ borderTop: '1px solid #f1f5f9', color: r.errors.length ? '#c62828' : '#0f2440' }}><td style={{ padding: 5, textAlign: 'center' }}>{r.row}</td><td style={{ padding: 5 }}>{r.data.employee_no}</td><td style={{ padding: 5 }}>{r.data.full_name}</td><td style={{ padding: 5 }}>{r.data.org_unit_name || '—'}{r.data.new_unit_key && !r.errors.length ? <span style={{ marginRight: 4, fontSize: 9.5, fontWeight: 800, color: '#b45309', backgroundColor: '#fef3c7', padding: '1px 5px', borderRadius: 6 }}>جديدة</span> : null}</td><td style={{ padding: 5 }}>{r.errors.length ? r.errors.join('، ') : r.exists ? 'تحديث' : 'جديد'}</td></tr>)}</tbody></table>
                 </div>
                 <button onClick={runImport} disabled={importState.busy || !importState.preview.valid} style={btn('#16a34a', '#fff', { width: '100%', marginTop: 12 })} data-testid="hr-import-run-btn">{importState.busy ? 'جاري الاستيراد...' : `✅ استيراد ${importState.preview.valid} صفاً صالحاً`}</button>
               </div>

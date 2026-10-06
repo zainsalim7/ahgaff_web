@@ -1,9 +1,11 @@
 """🏢 شؤون الموظفين — المرحلة 1 (الأساس): الهيكل التنظيمي + سجل الموظفين الموحّد (معلمون وإداريون) + استيراد Excel + حسابات الخدمة الذاتية"""
 import io
+import re
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Depends, UploadFile, File
+from fastapi import APIRouter, HTTPException, Depends, UploadFile, File, Form
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
@@ -105,6 +107,25 @@ async def sync_academic_units(current_user: dict = Depends(get_current_user)):
     return {"created": created, "linked": rl["linked"], "message": f"تمت مزامنة الهيكل — أُضيفت {created} وحدة جديدة" + (f" وربط {rl['linked']} معلماً بوحداتهم" if rl["linked"] else "")}
 
 
+_CODE_PREFIX = {"presidency": "PRES", "faculty": "FAC", "department": "DEP", "administration": "ADM", "office": "OFF"}
+
+
+async def _auto_org_code(db, utype: str, taken: Optional[set] = None) -> str:
+    prefix = _CODE_PREFIX.get(utype, "UNIT")
+    pat = re.compile(rf"^{prefix}-(\d+)$", re.I)
+    n = 0
+    async for u in db.org_units.find({"code": {"$regex": f"^{prefix}-\\d+$", "$options": "i"}}, {"code": 1}):
+        m = pat.match(u.get("code", "") or "")
+        if m:
+            n = max(n, int(m.group(1)))
+    code = f"{prefix}-{n + 1:03d}"
+    while taken is not None and code in taken:
+        n += 1; code = f"{prefix}-{n + 1:03d}"
+    if taken is not None:
+        taken.add(code)
+    return code
+
+
 @router.post("/org-units")
 async def create_org_unit(data: OrgUnitIn, current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_ORG)
@@ -115,7 +136,10 @@ async def create_org_unit(data: OrgUnitIn, current_user: dict = Depends(get_curr
         raise HTTPException(status_code=404, detail="الوحدة الأم غير موجودة")
     if not data.name.strip():
         raise HTTPException(status_code=400, detail="اسم الوحدة مطلوب")
-    doc = {**data.dict(), "name": data.name.strip(), "order": 50, "is_active": True, "created_at": _now(), "created_by_name": current_user.get("full_name", "")}
+    code = (data.code or "").strip() or await _auto_org_code(db, data.type)
+    if await db.org_units.find_one({"code": code}):
+        raise HTTPException(status_code=400, detail=f"الرمز «{code}» مستخدم لوحدة أخرى")
+    doc = {**data.dict(), "name": data.name.strip(), "code": code, "order": 50, "is_active": True, "created_at": _now(), "created_by_name": current_user.get("full_name", "")}
     r = await db.org_units.insert_one(doc)
     await log_activity(current_user, "hr_create_org_unit", "org_unit", str(r.inserted_id), data.name)
     return {"id": str(r.inserted_id), "message": "تمت إضافة الوحدة"}
@@ -138,6 +162,10 @@ async def update_org_unit(unit_id: str, data: OrgUnitIn, current_user: dict = De
         p = await db.org_units.find_one({"_id": ObjectId(cur)}, {"parent_id": 1}) if ObjectId.is_valid(cur) else None
         cur = (p or {}).get("parent_id")
     upd = {k: v for k, v in data.dict().items() if k != "type" or not (await db.org_units.find_one({"_id": oid})).get("faculty_id")}
+    if not (upd.get("code") or "").strip():
+        upd.pop("code", None)
+    elif await db.org_units.find_one({"code": upd["code"].strip(), "_id": {"$ne": oid}}):
+        raise HTTPException(status_code=400, detail=f"الرمز «{upd['code']}» مستخدم لوحدة أخرى")
     await db.org_units.update_one({"_id": oid}, {"$set": {**upd, "updated_at": _now()}})
     return {"message": "تم تحديث الوحدة"}
 
@@ -660,7 +688,17 @@ async def import_template(current_user: dict = Depends(get_current_user)):
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(export_filename("نموذج استيراد الموظفين", ext="xlsx")))
 
 
-async def _parse_import(db, file: UploadFile) -> List[dict]:
+_AR_DIAC = re.compile(r"[\u064B-\u0652\u0640]")
+
+
+def _norm_unit_name(s: str) -> str:
+    s = _AR_DIAC.sub("", str(s or "")).strip().lower()
+    s = re.sub(r"[أإآٱ]", "ا", s).replace("ة", "ه").replace("ى", "ي")
+    words = [w[2:] if w.startswith("ال") and len(w) > 3 else w for w in re.split(r"[\s\-_/،,]+", s) if w]
+    return " ".join(words)
+
+
+async def _parse_import(db, file: UploadFile, create_units: bool = True):
     from openpyxl import load_workbook
     try:
         wb = load_workbook(io.BytesIO(await file.read()), data_only=True)
@@ -676,9 +714,14 @@ async def _parse_import(db, file: UploadFile) -> List[dict]:
     col_keys = [label_to_key.get(h.replace("*", "").strip()) or (h if h in dict(IMPORT_COLUMNS) else None) for h in header]
     if "employee_no" not in col_keys or "full_name" not in col_keys:
         raise HTTPException(status_code=400, detail="الملف يجب أن يحوي عمودَي «الرقم الوظيفي» و«الاسم الكامل» — استخدم النموذج")
-    units = {u["name"].strip(): str(u["_id"]) for u in await db.org_units.find({"is_active": {"$ne": False}}, {"name": 1}).to_list(2000)}
+    units = {}
+    for u in await db.org_units.find({"is_active": {"$ne": False}}, {"name": 1}).to_list(2000):
+        units[u["name"].strip()] = str(u["_id"])
+        units.setdefault(_norm_unit_name(u["name"]), str(u["_id"]))
+    new_units: dict = {}
     cat_rev, ct_rev, st_rev = _REV(CATEGORIES), _REV(CONTRACT_TYPES), _REV(STATUSES)
     cat_rev.update({"إداري": "administrative", "أكاديمي": "academic", "معلم": "academic", "فني": "technical", "خدمات": "service"})
+    ct_rev.update({"مؤقت": "contract", "عقد": "contract", "دوام جزئي": "part_time"})
     existing_nos = {e["employee_no"]: str(e["_id"]) for e in await db.employees.find({}, {"employee_no": 1}).to_list(50000)}
     out, seen = [], set()
 
@@ -710,42 +753,84 @@ async def _parse_import(db, file: UploadFile) -> List[dict]:
         if ct is None: errs.append(f"نوع تعاقد غير معروف: {rec.get('contract_type')}")
         st = st_rev.get(rec.get("status", ""), "active" if not rec.get("status") else None)
         if st is None: errs.append(f"حالة غير معروفة: {rec.get('status')}")
-        unit_id = None
+        unit_id, unit_key = None, ""
         if rec.get("org_unit"):
-            unit_id = units.get(rec["org_unit"])
-            if not unit_id: errs.append(f"وحدة تنظيمية غير موجودة: {rec['org_unit']}")
+            unit_id = units.get(rec["org_unit"]) or units.get(_norm_unit_name(rec["org_unit"]))
+            if not unit_id:
+                unit_key = _norm_unit_name(rec["org_unit"])
+                if create_units:
+                    nu = new_units.setdefault(unit_key, {"key": unit_key, "name": rec["org_unit"], "count": 0})
+                    nu["count"] += 1
+                else:
+                    errs.append(f"وحدة تنظيمية غير موجودة: {rec['org_unit']}")
         dates = {}
         for f in ("hire_date", "contract_end_date", "id_expiry_date", "birth_date"):
             dates[f] = _d(rec.get(f))
             if dates[f] == "INVALID": errs.append(f"تاريخ غير صحيح في {dict(IMPORT_COLUMNS)[f]}")
         out.append({"row": idx, "errors": errs, "exists": no in existing_nos, "existing_id": existing_nos.get(no), "data": {
             "employee_no": no, "full_name": name, "category": cat or "administrative", "job_title": rec.get("job_title", ""), "grade": rec.get("grade", ""),
-            "org_unit_id": unit_id, "org_unit_name": rec.get("org_unit", ""), "contract_type": ct or "permanent", "status": st or "active", **dates,
+            "org_unit_id": unit_id, "org_unit_name": rec.get("org_unit", ""), "new_unit_key": unit_key, "contract_type": ct or "permanent", "status": st or "active", **dates,
             "gender": rec.get("gender", ""), "nationality": rec.get("nationality", ""), "national_id": rec.get("national_id", ""), "phone": rec.get("phone", ""),
             "email": rec.get("email", ""), "qualification": rec.get("qualification", ""), "specialization": rec.get("specialization", ""),
             "manager_no": rec.get("manager_no", ""), "notes": rec.get("notes", ""),
         }})
-    return out
+    return out, list(new_units.values())
+
+
+async def _default_parent_id(db) -> Optional[str]:
+    root = await db.org_units.find_one({"type": "presidency", "is_active": {"$ne": False}}, {"_id": 1})
+    return str(root["_id"]) if root else None
 
 
 @router.post("/employees/import/preview")
-async def import_preview(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+async def import_preview(file: UploadFile = File(...), create_units: bool = True, current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_MANAGE)
-    rows = await _parse_import(get_db(), file)
+    db = get_db()
+    rows, new_units = await _parse_import(db, file, create_units)
     return {"rows": rows, "total": len(rows), "valid": sum(1 for r in rows if not r["errors"]), "invalid": sum(1 for r in rows if r["errors"]),
-            "new": sum(1 for r in rows if not r["errors"] and not r["exists"]), "updates": sum(1 for r in rows if not r["errors"] and r["exists"])}
+            "new": sum(1 for r in rows if not r["errors"] and not r["exists"]), "updates": sum(1 for r in rows if not r["errors"] and r["exists"]),
+            "new_units": new_units, "default_parent_id": await _default_parent_id(db),
+            "unit_types": {k: v for k, v in UNIT_TYPES.items() if k not in ("presidency", "department")}}
+
+
+async def _create_import_units(db, new_units: List[dict], units_config: Optional[str], current_user: dict) -> dict:
+    cfg = {}
+    try:
+        for u in (json.loads(units_config) if units_config else []):
+            cfg[u.get("key") or _norm_unit_name(u.get("name", ""))] = u
+    except (ValueError, AttributeError):
+        raise HTTPException(status_code=400, detail="إعدادات الوحدات الجديدة غير صالحة")
+    default_parent = await _default_parent_id(db)
+    key_to_id, taken = {}, set()
+    for nu in new_units:
+        c = cfg.get(nu["key"], {})
+        utype = c.get("type") if c.get("type") in UNIT_TYPES and c.get("type") not in ("presidency", "department") else "office"
+        parent = c.get("parent_id", default_parent)
+        if parent and not (ObjectId.is_valid(parent) and await db.org_units.find_one({"_id": ObjectId(parent)}, {"_id": 1})):
+            parent = default_parent
+        name = (c.get("name") or nu["name"]).strip()
+        code = await _auto_org_code(db, utype, taken)
+        r = await db.org_units.insert_one({"name": name, "type": utype, "parent_id": parent or None, "code": code, "head_employee_id": None, "description": "",
+                                           "order": 50, "is_active": True, "source": "import", "created_at": _now()})
+        key_to_id[nu["key"]] = str(r.inserted_id)
+        await log_activity(current_user, "hr_create_org_unit", "org_unit", str(r.inserted_id), name, {"source": "import"})
+    return key_to_id
 
 
 @router.post("/employees/import")
-async def import_employees(file: UploadFile = File(...), update_existing: bool = True, current_user: dict = Depends(get_current_user)):
+async def import_employees(file: UploadFile = File(...), update_existing: bool = True, create_units: bool = True, units_config: Optional[str] = Form(None),
+                           current_user: dict = Depends(get_current_user)):
     _guard(current_user, P_MANAGE)
     db = get_db()
-    rows = await _parse_import(db, file)
+    rows, new_units = await _parse_import(db, file, create_units)
+    key_to_id = await _create_import_units(db, new_units, units_config, current_user) if new_units else {}
     created, updated, skipped = 0, 0, 0
     for r in rows:
         if r["errors"]:
             skipped += 1; continue
-        d = {k: v for k, v in r["data"].items() if k not in ("org_unit_name", "manager_no")}
+        if r["data"].get("new_unit_key"):
+            r["data"]["org_unit_id"] = key_to_id.get(r["data"]["new_unit_key"])
+        d = {k: v for k, v in r["data"].items() if k not in ("org_unit_name", "manager_no", "new_unit_key")}
         d.update({"address": "", "emergency_contact": "", "teacher_id": None, "manager_employee_id": None, "_manager_no": r["data"].get("manager_no", "")})
         if r["exists"]:
             if not update_existing:
@@ -761,5 +846,6 @@ async def import_employees(file: UploadFile = File(...), update_existing: bool =
         m = r["data"].get("manager_no")
         if not r["errors"] and m and nos.get(m) and nos.get(r["data"]["employee_no"]) != nos.get(m):
             await db.employees.update_one({"employee_no": r["data"]["employee_no"]}, {"$set": {"manager_employee_id": nos[m]}})
-    await log_activity(current_user, "hr_import_employees", "employee", None, "استيراد Excel", {"created": created, "updated": updated, "skipped": skipped})
-    return {"created": created, "updated": updated, "skipped": skipped, "message": f"تم الاستيراد: {created} جديد، {updated} مُحدَّث، {skipped} مُتجاوَز"}
+    await log_activity(current_user, "hr_import_employees", "employee", None, "استيراد Excel", {"created": created, "updated": updated, "skipped": skipped, "units_created": len(key_to_id)})
+    units_msg = f"، {len(key_to_id)} وحدة تنظيمية جديدة" if key_to_id else ""
+    return {"created": created, "updated": updated, "skipped": skipped, "units_created": len(key_to_id), "message": f"تم الاستيراد: {created} جديد، {updated} مُحدَّث، {skipped} مُتجاوَز{units_msg}"}

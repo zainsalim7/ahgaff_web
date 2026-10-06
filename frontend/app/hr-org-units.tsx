@@ -44,6 +44,7 @@ export default function HrOrgUnits() {
 
   const children = (pid: string | null) => units.filter((u) => (u.parent_id || null) === pid);
   const roots = units.filter((u) => !u.parent_id || !units.some((x) => x.id === u.parent_id));
+  const unlinked = (u: any) => u.type !== 'presidency' && (!u.parent_id || !units.some((x) => x.id === u.parent_id));
 
   const Node = ({ u, depth }: { u: any; depth: number }) => {
     const kids = u._flat ? [] : children(u.id);
@@ -53,6 +54,8 @@ export default function HrOrgUnits() {
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', marginRight: depth * 26, borderRight: `3px solid ${color}`, backgroundColor: depth % 2 ? '#fff' : '#f7f9fc', borderRadius: 8, marginBottom: 6 }} data-testid={`org-unit-${u.id}`}>
           <span style={{ backgroundColor: color + '18', color, fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>{u.type_label}</span>
+          {u.source === 'import' && <span title="أُنشئت تلقائياً من استيراد Excel" style={{ backgroundColor: '#fef3c7', color: '#b45309', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 8, whiteSpace: 'nowrap' }} data-testid={`org-imported-badge-${u.id}`}>مستوردة</span>}
+          {unlinked(u) && <span title="غير مربوطة بإدارة أم" style={{ backgroundColor: '#ffebee', color: '#c62828', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 8, whiteSpace: 'nowrap' }} data-testid={`org-unlinked-badge-${u.id}`}>بلا إدارة</span>}
           <span style={{ flex: 1, fontWeight: 700, color: '#0f2440', fontSize: 13.5, cursor: 'pointer' }} onClick={() => router.push(`/hr-employees?unit=${u.id}`)}>{u.name}{u.code ? <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: 11 }}> · {u.code}</span> : null}</span>
           <span style={{ fontSize: 11.5, color: '#64748b', whiteSpace: 'nowrap' }}>👥 {u.employees_count}</span>
           {canManage && (
@@ -71,7 +74,7 @@ export default function HrOrgUnits() {
   const byType = (t: string) => units.filter((u) => u.type === t).length;
   const [typeF, setTypeF] = useState('');
   const typeKpi = (t: string) => ({ testID: `kpi-${t}`, active: typeF === t, onPress: () => setTypeF((p) => (p === t ? '' : t)) });
-  const flat = units.filter((u) => u.type === typeF);
+  const flat = typeF === 'unlinked' ? units.filter(unlinked) : typeF === 'imported' ? units.filter((u) => u.source === 'import') : units.filter((u) => u.type === typeF);
   return (
     <SafeAreaView style={reportPage.container} edges={['bottom']}>
       <ScrollView contentContainerStyle={reportPage.content}>
@@ -87,6 +90,8 @@ export default function HrOrgUnits() {
           { label: 'أقسام أكاديمية', value: byType('department'), color: '#7c3aed', icon: 'library', ...typeKpi('department') },
           { label: 'إدارات', value: byType('administration'), color: '#0f766e', icon: 'business', ...typeKpi('administration') },
           { label: 'مكاتب / وحدات', value: byType('office'), color: '#b45309', icon: 'folder', ...typeKpi('office') },
+          { label: 'مستوردة من Excel', value: units.filter((u) => u.source === 'import').length, color: '#d97706', icon: 'cloud-download', ...typeKpi('imported') },
+          { label: 'غير مربوطة بإدارة', value: units.filter(unlinked).length, color: '#c62828', icon: 'unlink', ...typeKpi('unlinked') },
         ]} />
         <View style={reportPage.card}>
           {loading ? <Text style={{ textAlign: 'center', color: '#94a3b8' }}>جاري التحميل...</Text>

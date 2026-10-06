@@ -100,3 +100,4 @@ report-daily, report-course, report-student, report-teacher-summary, report-teac
 4. **التسجيل**: `build_course_student_query` و`enroll_student_in_matching_courses` في `routes/deps.py` هما المصدر الوحيد لمنطق مطابقة الطلاب (همزة أ↔ا، شعبة المقرر الفارغة = كل الشعب) — استخدمهما ولا تعد كتابة الاستعلام.
 5. **النظري/العملي**: slot_type على الخانة يحكم النصاب؛ practical_hours على المقرر وصفي.
 6. المستخدم يختبر على **الإنتاج app.ahgaff.net** — التغييرات تصله فقط بالنشر عبر Github؛ اختبر محلياً دائماً.
+| استيراد الموظفين من Excel (+ إنشاء وحدات تلقائياً) | معاينة ثم تنفيذ؛ الوحدات غير الموجودة تُنشأ مع اختيار النوع/الأم؛ مطابقة مرنة للأسماء | POST /api/hr/employees/import/preview?create_units= · POST /api/hr/employees/import (Form: units_config) |
