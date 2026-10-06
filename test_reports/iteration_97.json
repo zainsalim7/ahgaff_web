@@ -1,0 +1,19 @@
+{
+  "summary": "End-to-end testing of /letters feature set: page layout drag editor, table settings panel, draft lifecycle (save/update/pdf/edit/finalize/delete), log view actions, and settings-tab default layout. Both backend (pytest-style script test_letters_drafts.py, 16/16 PASS) and frontend (Playwright UI across issue/log/settings tabs) are green.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_letters_drafts.py"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Many RN deprecation warnings (shadow*, pointerEvents, TouchableMixin, require-cycle in hr/EmployeeFormModal<->HrSelect, Unknown onResponder* on web) — cosmetic, non-blocking.",
+    "letter-draft-info text does not visibly change between 'save' and 'update' (same copy); product-level only — functionally correct (same id/number preserved m-6)."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin / admin123",
+  "seed_data_creation": "Created and cleaned up test drafts and finalized letters (revoked by subject match: اختبار UI للمسودات/للحذف/إصدار مباشر, deleted leftover drafts).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All /letters flows verified in iteration 97. Backend self-test test_letters_drafts.py covers layout-defaults, draft CRUD, finalize, verify, settings layout persistence. Frontend covered: template/recipient selection, mixed people chips+badge, preview-img, letter-table-panel (font slider & col remove), letter-layout-panel (drag reduced gap_subject 11→3.5, numeric edit, reset to 11, done), draft save m-6 → update same number → draft-pdf (no error), log filter=draft shows edit/pdf/finalize/delete testids, edit loads subject+draft-info, letter-issue-btn finalizes draft to 7/خ/26, draft-info hidden after issue, delete from log reduces count, finalize-from-log converts draft, settings ls-layout-section preview + ls-save-layout persists gap_signature=12 across reload (restored to 16). All /api requests returned 200.",
+  "rca of the issue": "N/A — no bugs found."
+}
