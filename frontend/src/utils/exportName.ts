@@ -23,3 +23,12 @@ export const filenameFromResponse = (res: any, fallback: string): string => {
   }
   return fallback;
 };
+
+export const downloadBlob = (data: any, filename: string, mime: string) => {
+  const blob = new Blob([data], { type: mime });
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.style.display = 'none';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); window.URL.revokeObjectURL(url); }, 100);
+};

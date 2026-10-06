@@ -242,6 +242,7 @@ from routes.hr_reports import router as hr_reports_router
 from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
 from routes.schedule_integrity import router as schedule_integrity_router
 from routes.statements import router as statements_router
+from routes.letters import router as letters_router
 from routes.grades import router as grades_router
 from routes.certificates import router as certificates_router
 from routes.student_cards import router as student_cards_router
@@ -18304,6 +18305,7 @@ app.include_router(hr_reports_router, prefix="/api")
 app.include_router(hr_alerts_router, prefix="/api")
 app.include_router(schedule_integrity_router, prefix="/api")
 app.include_router(statements_router, prefix="/api")
+app.include_router(letters_router, prefix="/api")
 app.include_router(grades_router, prefix="/api")
 app.include_router(certificates_router, prefix="/api")
 app.include_router(student_cards_router, prefix="/api")

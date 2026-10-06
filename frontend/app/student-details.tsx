@@ -893,6 +893,16 @@ export default function StudentDetailsScreen() {
                 <Text style={styles.btnPrimaryText}>إفادة</Text>
               </TouchableOpacity>
             )}
+            {!['teacher', 'student'].includes(user?.role || '') && (
+              <TouchableOpacity
+                style={[styles.btnPrimary, { backgroundColor: '#6d28d9' }]}
+                onPress={() => router.push({ pathname: '/letters', params: { student_id: student?.id, name: student?.full_name } } as any)}
+                testID="issue-letter-btn"
+              >
+                <Ionicons name="mail-open" size={16} color="#fff" />
+                <Text style={styles.btnPrimaryText}>خطاب</Text>
+              </TouchableOpacity>
+            )}
             {canManage && (
               <TouchableOpacity
                 style={[styles.headerBtn, { backgroundColor: '#00695c' }]}

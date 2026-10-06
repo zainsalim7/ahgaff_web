@@ -34,7 +34,7 @@ export const useCorrMe = () => {
   return { me, hasAnywhere };
 };
 
-export const CorrPage: React.FC<{ title: string; subtitle?: string; children: React.ReactNode; loading?: boolean; actions?: React.ReactNode; testID?: string }> = ({ title, subtitle, children, loading, actions, testID }) => {
+export const CorrPage: React.FC<{ title: string; subtitle?: string; children: React.ReactNode; loading?: boolean; actions?: React.ReactNode; testID?: string; hideNav?: boolean }> = ({ title, subtitle, children, loading, actions, testID, hideNav }) => {
   const router = useRouter();
   const { me, hasAnywhere } = useCorrMe();
   return (
@@ -47,14 +47,14 @@ export const CorrPage: React.FC<{ title: string; subtitle?: string; children: Re
         </View>
         {actions}
       </View>
-      <div style={{ display: 'flex', flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, padding: '8px 16px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', direction: 'rtl' }} data-testid="corr-nav">
+      {!hideNav &&       <div style={{ display: 'flex', flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, padding: '8px 16px', backgroundColor: '#fff', borderBottom: '1px solid #e2e8f0', direction: 'rtl' }} data-testid="corr-nav">
         {NAV.filter((n) => !n.perm || !me || hasAnywhere(n.perm)).map((n) => (
           <button key={n.path} onClick={() => router.push(n.path as any)} data-testid={`corr-nav-${n.path.replace('/', '').replace('?', '-').replace('=', '-')}`}
             style={{ padding: '6px 12px', borderRadius: 999, border: '1px solid #cbd5e1', backgroundColor: '#f8fafc', fontSize: 12, fontWeight: 700, cursor: 'pointer', color: '#0f2440' }}>
             {n.label}
           </button>
         ))}
-      </div>
+      </div>}
       <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 60, maxWidth: 1400, width: '100%', alignSelf: 'center' }}>
         {loading ? <ActivityIndicator size="large" color="#0f2440" style={{ marginTop: 40 }} /> : children}
       </ScrollView>

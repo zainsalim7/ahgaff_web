@@ -692,6 +692,20 @@ export default function ReportsScreen() {
             </TouchableOpacity>
             )}
 
+            {!['teacher', 'student'].includes(userRole) && (
+            <TouchableOpacity
+              style={styles.reportTypeCard}
+              onPress={() => router.push('/letters' as any)}
+              data-testid="letters-btn"
+            >
+              <View style={[styles.reportTypeIcon, { backgroundColor: '#ede9fe' }]}>
+                <Ionicons name="mail-open" size={28} color="#6d28d9" />
+              </View>
+              <Text style={styles.reportTypeTitle}>الخطابات الرسمية</Text>
+              <Text style={styles.reportTypeDesc}>قوالب جاهزة، مرسَل إليه، أسماء، PDF برقم و QR — مثل الإفادات</Text>
+            </TouchableOpacity>
+            )}
+
             {/* اعتماد صور الطلاب */}
             {!['teacher', 'student'].includes(userRole) && (
             <TouchableOpacity
