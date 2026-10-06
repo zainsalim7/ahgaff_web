@@ -51,6 +51,7 @@ class LetterSettings(BaseModel):
     website: Optional[str] = ""
     reference_format: Optional[str] = DEFAULT_REF
     closing: Optional[str] = "وتفضلوا بقبول فائق الاحترام والتقدير،"
+    layout: Optional[dict] = None   # 📐 تخطيط الصفحة الافتراضي (مم)
 
 
 @router.get("/letters/settings")
@@ -242,7 +243,7 @@ async def preview_body(data: PreviewIn, current_user: dict = Depends(get_current
     return {"body": _apply_vars(data.body, ctx), "table": table}
 
 
-# ───────── الإصدار ─────────
+# ───────── الإصدار / المسودات ─────────
 class IssueIn(BaseModel):
     template_id: Optional[str] = None
     template_name: Optional[str] = ""
@@ -255,34 +256,112 @@ class IssueIn(BaseModel):
     valid_days: Optional[int] = None
     base_url: Optional[str] = None
     notes: Optional[str] = ""
+    layout: Optional[dict] = None     # 📐 تجاوز تخطيط الصفحة لهذا الخطاب
+    draft_id: Optional[str] = None    # تحديث مسودة قائمة
+
+
+def _number_for(settings: dict, seq: int, year: int) -> str:
+    fmt = (settings.get("reference_format") or "").strip() or DEFAULT_REF
+    return fmt.replace("{seq}", str(seq)).replace("{year}", str(year)).replace("{yy}", str(year % 100))
+
+
+async def _compose(db, data: IssueIn, settings: dict) -> dict:
+    """الجزء المشترك: تعبئة المتغيرات + الجدول + بيانات المرسَل إليه والموقّع (بلا ترقيم)"""
+    ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
+    return {"subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people,
+            "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
+            "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
+            "signatory_name": (data.signatory_name or settings.get("default_signatory_name") or "").strip(), "signatory_title": (data.signatory_title or settings.get("default_signatory_title") or "").strip(),
+            "layout": data.layout or None, "valid_days": data.valid_days,
+            "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id}}
+
+
+def _validate(data: IssueIn):
+    if not (data.subject or "").strip() or not data.body.strip() or not (data.recipient or {}).get("name") and not (data.recipient or {}).get("title"):
+        raise HTTPException(status_code=400, detail="الموضوع والمتن والمرسَل إليه مطلوبة")
+
+
+async def _finalize_fields(db, settings: dict, base_url: Optional[str], valid_days: Optional[int], current_user: dict) -> dict:
+    """يمنح رقماً رسمياً تسلسلياً ورمز تحقق وتاريخ إصدار"""
+    year = datetime.now(timezone.utc).year
+    counter = await db.letter_counters.find_one_and_update({"_id": str(year)}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    token = uuid.uuid4().hex
+    verify_base = (await get_verify_base(db)) or (base_url or "").rstrip("/")
+    now = datetime.now(timezone.utc)
+    return {"serial": counter["seq"], "number_display": _number_for(settings, counter["seq"], year), "year": year, "status": "issued",
+            "verify_token": token, "verify_url": f"{verify_base}/verify-letter?token={token}" if verify_base else token,
+            "issued_by": current_user.get("id", ""), "issued_by_name": current_user.get("full_name", ""), "issued_at": now.isoformat(),
+            "expires_at": (now + timedelta(days=valid_days)).isoformat() if valid_days and valid_days > 0 else None, "is_revoked": False}
+
+
+@router.get("/letters/layout-defaults")
+async def layout_defaults(current_user: dict = Depends(get_current_user)):
+    from services.letter_pdf import DEFAULT_LAYOUT
+    return DEFAULT_LAYOUT
 
 
 @router.post("/letters/issue")
 async def issue_letter(data: IssueIn, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
-    if not (data.subject or "").strip() or not data.body.strip() or not (data.recipient or {}).get("name") and not (data.recipient or {}).get("title"):
-        raise HTTPException(status_code=400, detail="الموضوع والمتن والمرسَل إليه مطلوبة")
+    _validate(data)
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
-    ctx, table, people = await _build_ctx(db, data.recipient, data.subject, data.people)
-    body = _apply_vars(data.body.strip(), ctx)
-    year = datetime.now(timezone.utc).year
-    counter = await db.letter_counters.find_one_and_update({"_id": str(year)}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
-    seq = counter["seq"]
-    fmt = (settings.get("reference_format") or "").strip() or DEFAULT_REF
-    number = fmt.replace("{seq}", str(seq)).replace("{year}", str(year)).replace("{yy}", str(year % 100))
-    token = uuid.uuid4().hex
-    verify_base = (await get_verify_base(db)) or (data.base_url or "").rstrip("/")
-    doc = {"serial": seq, "number_display": number, "year": year, "subject": data.subject.strip(), "body": body, "table": table, "people": people,
-           "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
-           "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
-           "signatory_name": (data.signatory_name or settings.get("default_signatory_name") or "").strip(), "signatory_title": (data.signatory_title or settings.get("default_signatory_title") or "").strip(),
-           "verify_token": token, "verify_url": f"{verify_base}/verify-letter?token={token}" if verify_base else token,
-           "issued_by": current_user.get("id", ""), "issued_by_name": current_user.get("full_name", ""), "issued_at": datetime.now(timezone.utc).isoformat(),
-           "expires_at": (datetime.now(timezone.utc) + timedelta(days=data.valid_days)).isoformat() if data.valid_days and data.valid_days > 0 else None, "is_revoked": False}
+    doc = {**(await _compose(db, data, settings)), **(await _finalize_fields(db, settings, data.base_url, data.valid_days, current_user))}
     r = await db.letters.insert_one(doc)
-    await log_activity(current_user, "issue_letter", "letter", str(r.inserted_id), data.subject.strip(), {"number": number, "to": doc["recipient"].get("name") or doc["recipient"].get("title")})
-    return {"id": str(r.inserted_id), "number": number, "verify_url": doc["verify_url"], "token": token}
+    await log_activity(current_user, "issue_letter", "letter", str(r.inserted_id), doc["subject"], {"number": doc["number_display"], "to": doc["recipient"].get("name") or doc["recipient"].get("title")})
+    return {"id": str(r.inserted_id), "number": doc["number_display"], "verify_url": doc["verify_url"], "token": doc["verify_token"]}
+
+
+@router.post("/letters/draft")
+async def save_draft(data: IssueIn, current_user: dict = Depends(get_current_user)):
+    """💾 حفظ كمسودة برقم مسودة مستقل (م-N) — الرقم الرسمي يُمنح عند الاعتماد"""
+    _guard(current_user)
+    db = get_db()
+    if not data.body.strip():
+        raise HTTPException(status_code=400, detail="المتن مطلوب لحفظ المسودة")
+    settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
+    doc = {**(await _compose(db, data, settings)), "status": "draft", "is_revoked": False, "updated_at": datetime.now(timezone.utc).isoformat(),
+           "updated_by_name": current_user.get("full_name", "")}
+    if data.draft_id and ObjectId.is_valid(data.draft_id):
+        ex = await db.letters.find_one({"_id": ObjectId(data.draft_id)})
+        if not ex or ex.get("status") != "draft":
+            raise HTTPException(status_code=400, detail="المسودة غير موجودة أو صدرت رسمياً")
+        await db.letters.update_one({"_id": ex["_id"]}, {"$set": doc})
+        return {"id": str(ex["_id"]), "number": ex["number_display"], "status": "draft"}
+    counter = await db.letter_counters.find_one_and_update({"_id": "draft"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    doc.update({"draft_seq": counter["seq"], "number_display": f"م-{counter['seq']}", "created_by": current_user.get("id", ""), "created_by_name": current_user.get("full_name", ""),
+                "issued_at": datetime.now(timezone.utc).isoformat()})
+    r = await db.letters.insert_one(doc)
+    return {"id": str(r.inserted_id), "number": doc["number_display"], "status": "draft"}
+
+
+@router.post("/letters/{lid}/finalize")
+async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """✅ اعتماد المسودة وإصدارها: نفس النسخة تأخذ الرقم الرسمي ورمز QR وتُؤرشف"""
+    _guard(current_user)
+    db = get_db()
+    ex = await db.letters.find_one({"_id": ObjectId(lid)})
+    if not ex or ex.get("status") != "draft":
+        raise HTTPException(status_code=400, detail="المسودة غير موجودة أو صدرت مسبقاً")
+    if not ex.get("subject") or not ((ex.get("recipient") or {}).get("name") or (ex.get("recipient") or {}).get("title")):
+        raise HTTPException(status_code=400, detail="أكمل الموضوع والمرسَل إليه قبل الاعتماد")
+    settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
+    inputs = ex.get("inputs") or {}
+    ctx, table, people = await _build_ctx(db, inputs.get("recipient") or ex.get("recipient") or {}, ex.get("subject") or "", inputs.get("people") or [])
+    upd = {**(await _finalize_fields(db, settings, base_url, ex.get("valid_days"), current_user)), "draft_number": ex.get("number_display"),
+           "body": _apply_vars((inputs.get("body") or ex.get("body") or "").strip(), ctx), "table": table, "people": people}
+    await db.letters.update_one({"_id": ex["_id"]}, {"$set": upd})
+    await log_activity(current_user, "issue_letter", "letter", lid, ex.get("subject", ""), {"number": upd["number_display"], "from_draft": ex.get("number_display")})
+    return {"id": lid, "number": upd["number_display"], "verify_url": upd["verify_url"], "token": upd["verify_token"]}
+
+
+@router.delete("/letters/{lid}")
+async def delete_draft(lid: str, current_user: dict = Depends(get_current_user)):
+    _guard(current_user)
+    r = await get_db().letters.delete_one({"_id": ObjectId(lid), "status": "draft"})
+    if not r.deleted_count:
+        raise HTTPException(status_code=400, detail="تُحذف المسودات فقط — الخطابات الصادرة تُلغى ولا تُحذف")
+    return {"ok": True}
 
 
 @router.post("/letters/preview-pdf")
@@ -291,15 +370,11 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", current_user: dict
     _guard(current_user)
     db = get_db()
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
-    ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
     year = datetime.now(timezone.utc).year
     seq = (await db.letter_counters.find_one({"_id": str(year)}) or {}).get("seq", 0) + 1
-    fmt_ref = (settings.get("reference_format") or "").strip() or DEFAULT_REF
-    number = fmt_ref.replace("{seq}", str(seq)).replace("{year}", str(year)).replace("{yy}", str(year % 100)) + " (مسوَّدة)"
-    doc = {"serial": seq, "number_display": number, "year": year, "subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people,
-           "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
-           "signatory_name": (data.signatory_name or settings.get("default_signatory_name") or "").strip(), "signatory_title": (data.signatory_title or settings.get("default_signatory_title") or "").strip(),
+    doc = {**(await _compose(db, data, settings)), "serial": seq, "number_display": _number_for(settings, seq, year) + " (معاينة)", "year": year,
            "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
+    doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادر"}
     pdf = build_letter_pdf(doc, settings, draft=True)
     if fmt == "png":
         import pymupdf
@@ -309,9 +384,13 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", current_user: dict
 
 
 @router.get("/letters")
-async def list_letters(q: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, limit: int = 200, current_user: dict = Depends(get_current_user)):
+async def list_letters(q: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, status: Optional[str] = None, limit: int = 200, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     query: dict = {}
+    if status == "draft":
+        query["status"] = "draft"
+    elif status == "issued":
+        query["status"] = {"$ne": "draft"}
     if q:
         rx = {"$regex": re.escape(q), "$options": "i"}
         query["$or"] = [{"subject": rx}, {"number_display": rx}, {"recipient.name": rx}, {"recipient.title": rx}, {"people.name": rx}, {"template_name": rx}]
@@ -319,8 +398,17 @@ async def list_letters(q: Optional[str] = None, date_from: Optional[str] = None,
         query.setdefault("issued_at", {})["$gte"] = date_from
     if date_to:
         query.setdefault("issued_at", {})["$lte"] = date_to + "T23:59:59"
-    rows = await get_db().letters.find(query, {"body": 0, "table": 0}).sort("issued_at", -1).limit(limit).to_list(limit)
+    rows = await get_db().letters.find(query, {"body": 0, "table": 0, "inputs": 0}).sort("issued_at", -1).limit(limit).to_list(limit)
     return [_ser(r) for r in rows]
+
+
+@router.get("/letters/{lid}")
+async def get_letter(lid: str, current_user: dict = Depends(get_current_user)):
+    _guard(current_user)
+    s = await get_db().letters.find_one({"_id": ObjectId(lid)})
+    if not s:
+        raise HTTPException(status_code=404, detail="الخطاب غير موجود")
+    return _ser(s)
 
 
 @router.post("/letters/{lid}/revoke")
@@ -358,8 +446,7 @@ async def letter_pdf(lid: str, current_user: dict = Depends(get_current_user)):
     if not s:
         raise HTTPException(status_code=404, detail="الخطاب غير موجود")
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
-    from services.letter_pdf import build_letter_pdf
-    pdf = build_letter_pdf(s, settings)
+    pdf = build_letter_pdf(s, settings, draft=s.get("status") == "draft")
     from urllib.parse import quote
-    fname = quote(f"خطاب {s.get('number_display', '')} - {export_stamp()}.pdf")
+    fname = quote(f"{'مسودة' if s.get('status') == 'draft' else 'خطاب'} {s.get('number_display', '')} - {export_stamp()}.pdf")
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})

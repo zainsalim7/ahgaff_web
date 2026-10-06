@@ -7,6 +7,7 @@ import { downloadBlob } from '../src/utils/exportName';
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6, textAlign: 'right' };
 const errOf = (e: any, d: string) => e?.response?.data?.detail || d;
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
+import { LetterLayoutEditor, TableColumnsPicker } from '../src/components/letters/LetterLayoutEditor';
 
 type Person = { kind: string; id: string; label: string; sub?: string };
 
@@ -57,17 +58,26 @@ export default function LettersPage() {
   const [validDays, setValidDays] = useState('');
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<any>(null);
+  const [layoutDefaults, setLayoutDefaults] = useState<any>({});
+  const [layout, setLayout] = useState<any>({});
+  const [tableHeaders, setTableHeaders] = useState<string[]>([]);
+  const [showLayout, setShowLayout] = useState(false);
+  const [showTable, setShowTable] = useState(false);
+  const [draft, setDraft] = useState<{ id: string; number: string } | null>(null);
+  const [settingsPreview, setSettingsPreview] = useState('');
   // templates/log state
   const [tform, setTform] = useState<any | null>(null);
-  const [log, setLog] = useState<any[]>([]); const [logQ, setLogQ] = useState('');
+  const [log, setLog] = useState<any[]>([]); const [logQ, setLogQ] = useState(''); const [logStatus, setLogStatus] = useState('');
 
   const loadAll = () => {
     api.get('/letter-templates').then((r) => setTemplates(r.data)).catch(() => {});
     api.get('/letters/recipients').then((r) => setRecips(r.data)).catch(() => {});
     api.get('/letters/settings').then((r) => setSettings(r.data)).catch((e) => setErr(errOf(e, 'غير مصرح')));
+    api.get('/letters/layout-defaults').then((r) => setLayoutDefaults(r.data)).catch(() => {});
   };
+  const loadLog = () => api.get('/letters', { params: { q: logQ || undefined, status: logStatus || undefined } }).then((r) => setLog(r.data)).catch(() => {});
   useEffect(loadAll, []);
-  useEffect(() => { if (tab === 'log') api.get('/letters', { params: { q: logQ || undefined } }).then((r) => setLog(r.data)).catch(() => {}); }, [tab, logQ]);
+  useEffect(() => { if (tab === 'log') loadLog(); }, [tab, logQ, logStatus]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const pre = params.student_id ? { kind: 'student', id: params.student_id } : params.employee_id ? { kind: 'employee', id: params.employee_id } : params.teacher_id ? { kind: 'teacher', id: params.teacher_id } : null;
     if (pre) { setPeopleKind(pre.kind); setPeople([{ ...pre, label: (params.name as string) || 'المحدد' }]); }
@@ -81,29 +91,67 @@ export default function LettersPage() {
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
-  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: signName, signatory_title: signTitle, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '' });
+  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: signName, signatory_title: signTitle, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null });
   useEffect(() => {
     if (!body.trim()) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
     const t = setTimeout(() => {
-      api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => setPreview(r.data.body)).catch(() => {});
+      api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); }).catch(() => {});
       setPreviewBusy(true);
       api.post('/letters/preview-pdf?fmt=png', issuePayload(), { responseType: 'blob' })
         .then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; }); })
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people, signName, signTitle]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, subject, recipient, people, signName, signTitle, layout]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // معاينة تخطيط الكليشة الافتراضي (نموذج تجريبي) في تبويب الإعدادات
+  useEffect(() => {
+    if (tab !== 'settings' || !settings) return;
+    const t = setTimeout(() => {
+      const sample = { subject: 'نموذج لمعاينة التخطيط', body: '<p style="text-align: right">تهديكم {جهة_المرسل_إليه} أطيب التحيات، وبالإشارة إلى الموضوع أعلاه نفيدكم بأن هذا نص تجريبي لمعاينة تخطيط الصفحة والمسافات بين الكتل.</p><p>{جدول_الأسماء}</p><p style="text-align: right">آملين التكرم بالاطلاع.</p>', recipient: { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }, people: [], signatory_name: settings.default_signatory_name, signatory_title: settings.default_signatory_title, layout: settings.layout || null };
+      api.post('/letters/preview-pdf?fmt=png', sample, { responseType: 'blob' }).then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setSettingsPreview((o) => { if (o) URL.revokeObjectURL(o); return url; }); }).catch(() => {});
+    }, 600);
+    return () => clearTimeout(t);
+  }, [tab, settings?.layout]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const afterIssue = async (r: any) => {
+    setLast(r.data); setDraft(null);
+    const pdf = await api.get(`/letters/${r.data.id}/pdf`, { responseType: 'blob' });
+    downloadBlob(pdf.data, `خطاب ${r.data.number}.pdf`, 'application/pdf');
+  };
   const issue = async () => {
     if (!recipient) { window.alert('حدّد المرسَل إليه'); return; }
     if (!subject.trim() || !body.trim()) { window.alert('الموضوع والمتن مطلوبان'); return; }
     setBusy(true); setErr('');
     try {
-      const r = await api.post('/letters/issue', issuePayload());
-      setLast(r.data);
-      const pdf = await api.get(`/letters/${r.data.id}/pdf`, { responseType: 'blob' });
-      downloadBlob(pdf.data, `خطاب ${r.data.number}.pdf`, 'application/pdf');
+      if (draft) { await api.post('/letters/draft', issuePayload()); await afterIssue(await api.post(`/letters/${draft.id}/finalize`, null, { params: { base_url: window.location.origin } })); }
+      else await afterIssue(await api.post('/letters/issue', issuePayload()));
     } catch (e) { setErr(errOf(e, 'فشل إصدار الخطاب')); } finally { setBusy(false); }
+  };
+  const saveDraft = async () => {
+    if (!body.trim()) { window.alert('اكتب المتن أولاً'); return; }
+    setBusy(true); setErr('');
+    try { const r = await api.post('/letters/draft', issuePayload()); setDraft({ id: r.data.id, number: r.data.number }); setLast(null); }
+    catch (e) { setErr(errOf(e, 'فشل حفظ المسودة')); } finally { setBusy(false); }
+  };
+  const resetForm = () => { setDraft(null); setLast(null); setTplId(''); setSubject(''); setBody(''); setPeople([]); setRecId(''); setRec({ name: '', title: '', organization: '', suffix: 'المحترم' }); setLayout({}); setValidDays(''); };
+  const loadDraft = async (id: string) => {
+    try {
+      const { data: d } = await api.get(`/letters/${id}`);
+      const inp0 = d.inputs || {};
+      setDraft({ id: d.id, number: d.number_display }); setLast(null);
+      setTplId(d.template_id || ''); setSubject(d.subject || ''); setBody(inp0.body || d.body || '');
+      const r0 = inp0.recipient || d.recipient || {};
+      if (r0.id) { setRecMode('list'); setRecId(r0.id); } else { setRecMode('manual'); setRec({ name: r0.name || '', title: r0.title || '', organization: r0.organization || '', suffix: r0.suffix || 'المحترم' }); }
+      setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.name })));
+      setSignName(d.signatory_name || ''); setSignTitle(d.signatory_title || ''); setValidDays(d.valid_days ? String(d.valid_days) : ''); setLayout(d.layout || {});
+      setTab('issue');
+    } catch (e) { setErr(errOf(e, 'تعذر فتح المسودة')); }
+  };
+  const finalizeFromLog = async (l: any) => {
+    if (!window.confirm(`اعتماد المسودة ${l.number_display} وإصدارها برقم رسمي؟`)) return;
+    try { const r = await api.post(`/letters/${l.id}/finalize`, null, { params: { base_url: window.location.origin } }); const pdf = await api.get(`/letters/${r.data.id}/pdf`, { responseType: 'blob' }); downloadBlob(pdf.data, `خطاب ${r.data.number}.pdf`, 'application/pdf'); loadLog(); }
+    catch (e) { setErr(errOf(e, 'فشل الاعتماد')); }
   };
   const saveTpl = async () => { try { if (tform.id) await api.put(`/letter-templates/${tform.id}`, tform); else await api.post('/letter-templates', tform); setTform(null); loadAll(); } catch (e) { setErr(errOf(e, 'فشل الحفظ')); } };
   const saveSettings = async () => { try { await api.put('/letters/settings', settings); window.alert('تم حفظ إعدادات الكليشة'); } catch (e) { setErr(errOf(e, 'فشل الحفظ')); } };
@@ -157,8 +205,39 @@ export default function LettersPage() {
               <div><label style={lbl}>اسم الموقِّع</label><input style={inp} value={signName} onChange={(e) => setSignName(e.target.value)} data-testid="letter-sign-name" /></div>
               <div><label style={lbl}>صلاحية (يوم)</label><input style={inp} value={validDays} onChange={(e) => setValidDays(e.target.value)} placeholder="∞" data-testid="letter-valid-days" /></div>
             </div>
+            <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+              <button onClick={() => setShowTable((v) => !v)} style={btn(showTable ? '#6d28d9' : '#f5f3ff', { color: showTable ? '#fff' : '#6d28d9', padding: '6px 12px', fontSize: 12 })} data-testid="letter-table-toggle">⊞ إعدادات الجدول</button>
+              <button onClick={() => setShowLayout((v) => !v)} style={btn(showLayout ? '#0f2440' : '#f1f5f9', { color: showLayout ? '#fff' : '#0f2440', padding: '6px 12px', fontSize: 12 })} data-testid="letter-layout-toggle">📐 تخطيط الصفحة {Object.keys(layout || {}).length ? `(${Object.keys(layout).length} تعديل)` : ''}</button>
+            </div>
+            {showTable && (
+              <div style={{ border: '1px solid #ddd6fe', borderRadius: 10, padding: 10, marginTop: 8, background: '#faf5ff' }} data-testid="letter-table-panel">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 8 }}>
+                  <label style={{ fontSize: 12 }}><span style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>حجم خط الجدول <b>{layout.table_font ?? layoutDefaults.table_font ?? 10.5}</b></span><input type="range" min={7} max={14} step={0.5} value={layout.table_font ?? layoutDefaults.table_font ?? 10.5} onChange={(e) => setLayout({ ...layout, table_font: Number(e.target.value) })} style={{ width: '100%' }} data-testid="letter-table-font" /></label>
+                  <label style={{ fontSize: 12 }}><span style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700 }}>ارتفاع الصف (مم) <b>{layout.table_row_h ?? layoutDefaults.table_row_h ?? 8}</b></span><input type="range" min={5} max={12} step={0.5} value={layout.table_row_h ?? layoutDefaults.table_row_h ?? 8} onChange={(e) => setLayout({ ...layout, table_row_h: Number(e.target.value) })} style={{ width: '100%' }} data-testid="letter-table-row-h" /></label>
+                </div>
+                <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>الأعمدة الظاهرة وترتيبها (◀ ▶ للترتيب، ✕ للإخفاء):</div>
+                <TableColumnsPicker available={tableHeaders} value={layout.table_columns} onChange={(cols) => setLayout({ ...layout, table_columns: cols })} testID="letter-table-cols" />
+              </div>
+            )}
+            {showLayout && (
+              <Modal title="📐 تخطيط الصفحة — لهذا الخطاب فقط (الافتراضي العام من تبويب «الكليشة»)" onClose={() => setShowLayout(false)} width={1180} testID="letter-layout-panel">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start' }}>
+                  <LetterLayoutEditor value={layout} defaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onChange={setLayout} hasTable={people.length > 0} testID="letter-layout" />
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة الحقيقية {previewBusy ? '⏳' : ''}</div>
+                    {previewImg ? <img src={previewImg} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>اكتب المتن لتظهر المعاينة</div>}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}><button onClick={() => setShowLayout(false)} style={btn('#0f2440')} data-testid="letter-layout-done">تم</button></div>
+              </Modal>
+            )}
+            {draft && <div style={{ marginTop: 12, padding: 10, background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-draft-info">📝 مسودة محفوظة برقم <b>{draft.number}</b> — التعديلات تُحفظ على نفس النسخة، وعند الاعتماد تأخذ الرقم الرسمي. <button onClick={resetForm} style={{ border: 'none', background: 'none', color: '#2563eb', cursor: 'pointer', fontSize: 12 }}>خطاب جديد</button></div>}
             {last && <div style={{ marginTop: 12, padding: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, fontSize: 12.5 }} data-testid="letter-issued">✅ صدر الخطاب رقم <b>{last.number}</b> وتم تنزيل PDF<br /><span style={{ color: '#64748b', fontSize: 11 }}>{last.verify_url}</span></div>}
-            <button onClick={issue} disabled={busy} style={btn('#16a34a', { width: '100%', marginTop: 14, padding: 12, fontSize: 14 })} data-testid="letter-issue-btn">{busy ? 'جاري الإصدار…' : 'إصدار وتنزيل PDF'}</button>
+            <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+              <button onClick={saveDraft} disabled={busy} style={btn('#f59e0b', { flex: 1, padding: 12, fontSize: 14 })} data-testid="letter-draft-btn">{busy ? '…' : draft ? '💾 تحديث المسودة' : '💾 حفظ كمسودة'}</button>
+              {draft && <button onClick={async () => { const r = await api.get(`/letters/${draft.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `مسودة ${draft.number}.pdf`, 'application/pdf'); }} style={btn('#0f2440', { padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-btn">PDF المسودة</button>}
+              <button onClick={issue} disabled={busy} style={btn('#16a34a', { flex: 1.4, padding: 12, fontSize: 14 })} data-testid="letter-issue-btn">{busy ? 'جاري الإصدار…' : draft ? '✅ اعتماد وإصدار PDF' : 'إصدار وتنزيل PDF'}</button>
+            </div>
           </div>
           <div style={{ ...card, minHeight: 400, position: 'sticky', top: 10, alignSelf: 'flex-start', maxHeight: 'calc(100vh - 40px)', overflowY: 'auto' }} data-testid="letter-preview">
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
@@ -198,10 +277,23 @@ export default function LettersPage() {
 
       {tab === 'log' && (
         <div style={card} data-testid="letters-log">
-          <input style={{ ...inp, marginBottom: 10 }} placeholder="بحث بالرقم / الموضوع / المرسَل إليه / الاسم…" value={logQ} onChange={(e) => setLogQ(e.target.value)} data-testid="letters-log-search" />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input style={{ ...inp, flex: 1 }} placeholder="بحث بالرقم / الموضوع / المرسَل إليه / الاسم…" value={logQ} onChange={(e) => setLogQ(e.target.value)} data-testid="letters-log-search" />
+            <select style={{ ...inp, width: 'auto' }} value={logStatus} onChange={(e) => setLogStatus(e.target.value)} data-testid="letters-log-status"><option value="">الكل</option><option value="draft">المسودات</option><option value="issued">الصادرة</option></select>
+          </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['الرقم', 'التاريخ', 'الموضوع', 'إلى', 'الأسماء', 'الحالة', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject}</td><td style={td}>{l.recipient?.title || l.recipient?.name}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
-              <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={async () => { const r = await api.get(`/letters/${l.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `خطاب ${l.number_display}.pdf`, 'application/pdf'); }} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })}>PDF</button> <button onClick={async () => { await api.post(`/letters/${l.id}/${l.is_revoked ? 'restore' : 'revoke'}`); setLogQ((q) => q + ''); api.get('/letters', { params: { q: logQ || undefined } }).then((r) => setLog(r.data)); }} style={btn('#f1f5f9', { color: l.is_revoked ? '#16a34a' : '#b91c1c', padding: '5px 10px', fontSize: 12 })}>{l.is_revoked ? 'استرجاع' : 'إلغاء'}</button></td></tr>)}</tbody></table>
+            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
+              <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                {l.status === 'draft' ? (<>
+                  <button onClick={() => loadDraft(l.id)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-edit-${l.id}`}>تعديل</button>{' '}
+                  <button onClick={async () => { const r = await api.get(`/letters/${l.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `مسودة ${l.number_display}.pdf`, 'application/pdf'); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-pdf-${l.id}`}>PDF</button>{' '}
+                  <button onClick={() => finalizeFromLog(l)} style={btn('#16a34a', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-finalize-${l.id}`}>اعتماد وإصدار</button>{' '}
+                  <button onClick={async () => { if (window.confirm('حذف المسودة نهائياً؟')) { await api.delete(`/letters/${l.id}`); if (draft?.id === l.id) resetForm(); loadLog(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-delete-${l.id}`}>حذف</button>
+                </>) : (<>
+                  <button onClick={async () => { const r = await api.get(`/letters/${l.id}/pdf`, { responseType: 'blob' }); downloadBlob(r.data, `خطاب ${l.number_display}.pdf`, 'application/pdf'); }} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })}>PDF</button>{' '}
+                  <button onClick={async () => { await api.post(`/letters/${l.id}/${l.is_revoked ? 'restore' : 'revoke'}`); loadLog(); }} style={btn('#f1f5f9', { color: l.is_revoked ? '#16a34a' : '#b91c1c', padding: '5px 10px', fontSize: 12 })}>{l.is_revoked ? 'استرجاع' : 'إلغاء'}</button>
+                </>)}
+              </td></tr>)}</tbody></table>
           {log.length === 0 && <div style={{ color: '#94a3b8', padding: 16, textAlign: 'center' }}>لا توجد خطابات</div>}
         </div>
       )}
@@ -214,6 +306,17 @@ export default function LettersPage() {
             <Field label="صورة التوقيع"><input type="file" accept="image/*" onChange={file64('signature_base64')} />{settings.signature_base64 && <img src={settings.signature_base64} alt="" style={{ height: 50, marginTop: 6 }} />}</Field>
           </div>
           <button onClick={saveSettings} style={btn('#16a34a', { marginTop: 12 })} data-testid="ls-save">حفظ الإعدادات</button>
+          <div style={{ marginTop: 18, borderTop: '1px solid #e2e8f0', paddingTop: 14 }} data-testid="ls-layout-section">
+            <div style={{ fontWeight: 800, color: '#0f2440', marginBottom: 8 }}>📐 تخطيط الصفحة الافتراضي لكل الخطابات (المسافات بالمليمتر، أحجام الخطوط، الجدول)</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start' }}>
+              <div style={{ overflowX: 'auto' }}><LetterLayoutEditor value={settings.layout || {}} defaults={layoutDefaults} onChange={(l) => setSettings({ ...settings, layout: l })} testID="ls-layout" /></div>
+              <div style={{ position: 'sticky', top: 10 }}>
+                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>معاينة بنموذج تجريبي (تتحدث تلقائياً)</div>
+                {settingsPreview ? <img src={settingsPreview} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="ls-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري التوليد…</div>}
+              </div>
+            </div>
+            <button onClick={saveSettings} style={btn('#16a34a', { marginTop: 12 })} data-testid="ls-save-layout">حفظ التخطيط الافتراضي</button>
+          </div>
         </div>
       )}
     </CorrPage>
