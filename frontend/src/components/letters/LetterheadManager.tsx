@@ -35,7 +35,7 @@ export const VisibilityPicker: React.FC<{ value: Visibility; onChange: (v: Visib
   );
 };
 
-const EMPTY_LH = { name: '', description: '', org_name: 'جامعة الأحقاف', org_name_en: 'AL-AHGAFF UNIVERSITY', office_name: '', office_name_en: '', logo_base64: '', signature_base64: '', default_signatory_name: '', default_signatory_title: '', default_signatory_position_id: '', phones: '', fax: '', address: '', po_box: '', website: '', closing: 'وتفضلوا بقبول فائق الاحترام والتقدير،', layout: null as any, header_image_base64: '', footer_image_base64: '', visibility: { type: 'private', roles: [] } as Visibility };
+const EMPTY_LH = { name: '', description: '', org_name: 'جامعة الأحقاف', org_name_en: 'AL-AHGAFF UNIVERSITY', office_name: '', office_name_en: '', logo_base64: '', signature_base64: '', default_signatory_name: '', default_signatory_title: '', default_signatory_position_id: '', phones: '', fax: '', address: '', po_box: '', website: '', closing: 'وتفضلوا بقبول فائق الاحترام والتقدير،', layout: null as any, header_image_base64: '', footer_image_base64: '', watermark_mode: 'none', watermark_base64: '', visibility: { type: 'private', roles: [] } as Visibility };
 
 const LetterheadForm: React.FC<{ initial: any; layoutDefaults: any; onSaved: () => void; onClose: () => void }> = ({ initial, layoutDefaults, onSaved, onClose }) => {
   const [f, setF] = useState<any>({ ...EMPTY_LH, ...initial, visibility: initial?.visibility || EMPTY_LH.visibility });
@@ -81,6 +81,16 @@ const LetterheadForm: React.FC<{ initial: any; layoutDefaults: any; onSaved: () 
             {imgField('signature_base64', 'صورة التوقيع', 50)}
             {imgField('header_image_base64', '🖼️ ترويسة جاهزة كصورة (تحل محل الشعار والنصوص)', 90)}
             {imgField('footer_image_base64', '🖼️ تذييل جاهز كصورة', 60)}
+          </div>
+          <div style={{ border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#f8fafc', marginBottom: 10 }} data-testid="lh-watermark">
+            <div style={{ fontSize: 12, fontWeight: 800, marginBottom: 6 }}>💧 العلامة المائية خلف المحتوى</div>
+            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+              {([['none', 'بدون'], ['default', 'الافتراضية (خط «جامعة الأحقاف»)'], ['custom', 'صورة مخصصة']] as const).map(([v, l]) => (
+                <label key={v} style={{ fontSize: 12.5, display: 'flex', gap: 4, alignItems: 'center', cursor: 'pointer' }}><input type="radio" checked={(f.watermark_mode || 'none') === v} onChange={() => setF({ ...f, watermark_mode: v })} data-testid={`lh-watermark-${v}`} /> {l}</label>
+              ))}
+            </div>
+            {f.watermark_mode === 'custom' && <div style={{ marginTop: 8 }}>{imgField('watermark_base64', 'صورة العلامة (يفضَّل PNG بخلفية شفافة)', 70)}</div>}
+            {f.watermark_mode && f.watermark_mode !== 'none' && <div style={{ fontSize: 11.5, color: '#64748b', marginTop: 4 }}>الشفافية والحجم والموضع والدوران من «تخطيط الصفحة» أدناه (💧).</div>}
           </div>
           <VisibilityPicker value={f.visibility} onChange={(v) => setF({ ...f, visibility: v })} testID="lh-visibility" />
           <details style={{ marginTop: 12 }} data-testid="lh-layout-details">

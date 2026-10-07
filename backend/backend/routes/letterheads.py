@@ -98,6 +98,8 @@ class LetterheadIn(BaseModel):
     layout: Optional[dict] = None
     header_image_base64: Optional[str] = ""
     footer_image_base64: Optional[str] = ""
+    watermark_mode: Optional[str] = "none"      # 💧 none | default | custom
+    watermark_base64: Optional[str] = ""
     visibility: Visibility = Visibility()
 
 
@@ -105,7 +107,7 @@ class LetterheadIn(BaseModel):
 async def list_letterheads(current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
-    rows = await db.letterheads.find(await visible_filter(db, current_user), {"logo_base64": 0, "signature_base64": 0, "header_image_base64": 0, "footer_image_base64": 0}).sort([("is_default", -1), ("name", 1)]).to_list(200)
+    rows = await db.letterheads.find(await visible_filter(db, current_user), {"logo_base64": 0, "signature_base64": 0, "header_image_base64": 0, "footer_image_base64": 0, "watermark_base64": 0}).sort([("is_default", -1), ("name", 1)]).to_list(200)
     return [_ser(r, current_user) for r in rows]
 
 

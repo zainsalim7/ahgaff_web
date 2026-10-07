@@ -25,6 +25,10 @@ DEFAULT_LAYOUT = {
     "header_font_ar2": 13,       # السطر الثاني عربي (أصغر)
     "header_font_en1": 12,       # السطر الأول إنجليزي
     "header_font_en2": 10,       # السطر الثاني إنجليزي
+    "watermark_opacity": 1.0,    # 💧 شفافية العلامة المائية (0 = مخفية؛ الصورة الافتراضية باهتة أصلاً)
+    "watermark_width": 150,      # عرض العلامة المائية (مم)
+    "watermark_y": 150,          # مركز العلامة من أعلى الصفحة (مم)
+    "watermark_rotate": 0,       # دوران (درجات)
     "header_line1": 24,          # ارتفاع السطر الأول فوق خط الكليشة (مم)
     "header_line2": 16,          # ارتفاع السطر الثاني فوق خط الكليشة (مم)
     "signature_align": "left",   # left | center | right
@@ -133,7 +137,27 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         except Exception:
             return None
 
+    def watermark():
+        """💧 علامة مائية خلف المحتوى: مخصصة (watermark_base64) أو الافتراضية (خط «جامعة الأحقاف») حسب watermark_mode"""
+        mode = settings.get("watermark_mode") or "none"
+        if not letterhead or mode == "none" or f("watermark_opacity") <= 0:
+            return
+        img = _img("watermark_base64") if mode == "custom" else None
+        if img is None and mode in ("default", "custom"):
+            d = Path(__file__).parent.parent / "assets" / "letter_watermark_default.jpg"
+            img = ImageReader(str(d)) if d.exists() else None
+        if img is None:
+            return
+        iw, ih = img.getSize()
+        w = f("watermark_width") * mm; h = w * ih / iw
+        cx, cy = W / 2, H - f("watermark_y") * mm
+        c.saveState(); c.setFillAlpha(f("watermark_opacity")); c.setStrokeAlpha(f("watermark_opacity"))
+        c.translate(cx, cy); c.rotate(f("watermark_rotate"))
+        c.drawImage(img, -w / 2, -h / 2, w, h, mask="auto", preserveAspectRatio=True)
+        c.restoreState()
+
     def header():
+        watermark()
         if not letterhead:
             return
         hb = f("header_bottom") * mm
