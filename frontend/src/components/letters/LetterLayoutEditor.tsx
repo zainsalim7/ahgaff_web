@@ -4,7 +4,8 @@ export type LetterLayout = Record<string, any>;
 type Block = { key: string; label: string; param: string; h: number; color: string; fixed?: boolean };
 type Slider = [string, string, number, number, number];
 type Pos = Record<string, { top: number; h: number }>;
-export type LayoutModel = { blocks: Block[]; sliders: Slider[]; toggles: [string, string][]; positions: (num: (k: string) => number, L: LetterLayout, hasTable: boolean) => { pos: Pos; end: number }; sides?: Record<string, (ms: number) => React.CSSProperties> };
+type Select = [string, string, [string, string][]];
+export type LayoutModel = { blocks: Block[]; sliders: Slider[]; toggles: [string, string][]; selects?: Select[]; positions: (num: (k: string) => number, L: LetterLayout, hasTable: boolean) => { pos: Pos; end: number }; sides?: Record<string, (ms: number, L: LetterLayout) => React.CSSProperties> };
 
 // الكتل بترتيبها على الصفحة: المفتاح الذي يتغيّر عند سحب الكتلة + ارتفاع تقريبي للمخطط (مم)
 const BLOCKS: Block[] = [
@@ -25,12 +26,18 @@ const SLIDERS: Slider[] = [
   ['table_font', 'حجم خط الجدول (pt)', 7, 14, 0.5],
   ['table_row_h', 'ارتفاع صف الجدول (مم)', 5, 12, 0.5],
   ['gap_table_after', 'مسافة بعد الجدول (مم)', 0, 30, 1],
+  ['recipient_indent', '📍 إزاحة المرسَل إليه من الهامش (مم)', 0, 60, 1],
+  ['signature_offset', '🖋️ إزاحة التوقيع من الهامش (مم)', 0, 80, 1],
+];
+const SELECTS: Select[] = [
+  ['recipient_align', 'محاذاة المرسَل إليه', [['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار (خطاب بلغة أجنبية)']]],
+  ['signature_align', 'موضع التوقيع', [['left', 'يسار'], ['center', 'وسط'], ['right', 'يمين']]],
 ];
 const PAGE_H = 297, SCALE = 1.9; // مم → بكسل
 const mm = (v: number) => v * SCALE;
 
 export const LETTER_MODEL: LayoutModel = {
-  blocks: BLOCKS, sliders: SLIDERS,
+  blocks: BLOCKS, sliders: SLIDERS, selects: SELECTS,
   toggles: [['show_greeting', 'إظهار «السلام عليكم»'], ['show_closing', 'إظهار عبارة الختام']],
   positions: (num, L, hasTable) => {
     const pos: Pos = {};
@@ -49,7 +56,12 @@ export const LETTER_MODEL: LayoutModel = {
     pos.signature = { top: y + 2, h: 22 };
     return { pos, end: y + 24 };
   },
-  sides: { ref: (ms) => ({ left: mm(ms), width: mm(60) }), signature: () => ({ left: mm(20), width: mm(60) }), subject: () => ({ left: mm(60), right: mm(60) }) },
+  sides: {
+    ref: (ms) => ({ left: mm(ms), width: mm(60) }),
+    recipient: (ms, L) => { const ind = Number(L.recipient_indent || 0); const a = L.recipient_align || 'right'; return a === 'center' ? { left: mm(55), right: mm(55) } : a === 'left' ? { left: mm(ms + ind), width: mm(90) } : { right: mm(ms + ind), width: mm(90) }; },
+    signature: (ms, L) => { const off = Number(L.signature_offset || 0); const a = L.signature_align || 'left'; return a === 'center' ? { left: mm(75), right: mm(75) } : a === 'right' ? { right: mm(ms + off), width: mm(60) } : { left: mm(ms + off), width: mm(60) }; },
+    subject: () => ({ left: mm(60), right: mm(60) }),
+  },
 };
 
 export const STATEMENT_MODEL: LayoutModel = {
@@ -92,7 +104,7 @@ export const STATEMENT_MODEL: LayoutModel = {
 type Props = { value: LetterLayout; defaults: LetterLayout; onChange: (l: LetterLayout) => void; hasTable?: boolean; testID?: string; model?: LayoutModel; compact?: boolean };
 
 export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange, hasTable = true, testID = 'layout-editor', model = LETTER_MODEL, compact = false }) => {
-  const { blocks, sliders, toggles } = model;
+  const { blocks, sliders, toggles, selects = [] } = model;
   const L = { ...defaults, ...Object.fromEntries(Object.entries(value || {}).filter(([, v]) => v !== null && v !== undefined && v !== '')) };
   const num = (k: string) => Number(L[k] ?? 0);
   const set = (k: string, v: any) => onChange({ ...(value || {}), [k]: v });
@@ -119,7 +131,7 @@ export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange,
         <div style={{ position: 'absolute', top: mm(PAGE_H - 22), right: mm(num('margin_side')), left: mm(num('margin_side')), borderTop: '1px solid #94a3b8', fontSize: 8, color: '#94a3b8', textAlign: 'center' }}>التذييل</div>
         {blocks.filter((b) => pos[b.key]).map((b) => {
           const p = pos[b.key]; const isActive = active === b.key;
-          const side = model.sides?.[b.key] ? model.sides[b.key](num('margin_side')) : { right: mm(num('margin_side')), left: mm(num('margin_side')) };
+          const side = model.sides?.[b.key] ? model.sides[b.key](num('margin_side'), L) : { right: mm(num('margin_side')), left: mm(num('margin_side')) };
           return (
             <div key={b.key} onMouseDown={startDrag(b)} data-testid={`${testID}-block-${b.key}`} title={`اسحب لتغيير ${b.fixed ? 'الموضع' : 'المسافة قبل الكتلة'} — ${b.param}: ${num(b.param)} مم`}
               style={{ position: 'absolute', top: mm(p.top), height: mm(p.h), ...side, background: isActive ? b.color : `${b.color}22`, border: `1.5px ${b.fixed ? 'solid' : 'dashed'} ${b.color}`, borderRadius: 4, cursor: 'ns-resize', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: isActive ? '#fff' : b.color, transition: 'background-color .12s' }}>
@@ -148,6 +160,17 @@ export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange,
             </label>
           ))}
         </div>
+        {selects.length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
+            {selects.map(([k, l, opts]) => (
+              <label key={k} style={{ display: 'block' }}><span style={{ color: '#334155', fontWeight: 700 }}>{l}</span>
+                <select value={String(L[k] ?? opts[0][0])} onChange={(e) => set(k, e.target.value)} style={{ width: '100%', padding: '4px 6px', borderRadius: 6, border: '1px solid #dde3ec', fontSize: 12, marginTop: 2 }} data-testid={`${testID}-${k}`}>
+                  {opts.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
+                </select>
+              </label>
+            ))}
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 14, marginTop: 8, flexWrap: 'wrap' }}>
           {toggles.map(([k, l]) => <label key={k}><input type="checkbox" checked={L[k] !== false} onChange={(e) => set(k, e.target.checked)} data-testid={`${testID}-${k}`} /> {l}</label>)}
           <button type="button" onClick={() => onChange({})} style={{ marginRight: 'auto', padding: '4px 10px', borderRadius: 6, border: '1px solid #dde3ec', background: '#f8fafc', cursor: 'pointer', fontSize: 12 }} data-testid={`${testID}-reset`}>↺ استعادة الافتراضي</button>
@@ -157,24 +180,37 @@ export const LetterLayoutEditor: React.FC<Props> = ({ value, defaults, onChange,
   );
 };
 
-export const TableColumnsPicker: React.FC<{ available: string[]; value?: string[] | null; onChange: (cols: string[] | null) => void; testID?: string }> = ({ available, value, onChange, testID = 'table-cols' }) => {
-  const cols = value && value.length ? value.filter((c) => available.includes(c)) : available;
+export type TableCol = string | { label: string; text?: string };
+const colKey = (c: TableCol) => (typeof c === 'string' ? c : `custom:${c.label}`);
+const colLabel = (c: TableCol) => (typeof c === 'string' ? c : `✎ ${c.label}${c.text ? ` = «${c.text}»` : ' (فارغ)'}`);
+
+export const TableColumnsPicker: React.FC<{ available: string[]; defaults?: string[]; value?: TableCol[] | null; onChange: (cols: TableCol[] | null) => void; testID?: string }> = ({ available, defaults, value, onChange, testID = 'table-cols' }) => {
+  const cols: TableCol[] = value && value.length ? value.filter((c) => typeof c !== 'string' || available.includes(c)) : (defaults && defaults.length ? defaults : available);
   const move = (i: number, d: number) => { const n = [...cols]; const j = i + d; if (j < 0 || j >= n.length) return; [n[i], n[j]] = [n[j], n[i]]; onChange(n); };
+  const addCustom = () => {
+    const label = window.prompt('عنوان العمود المخصص (مثال: التوقيع، ملاحظات):', '');
+    if (!label || !label.trim()) return;
+    const text = window.prompt('نص ثابت يُكرر في كل الصفوف (اتركه فارغاً لعمود فارغ للتعبئة اليدوية):', '') || '';
+    onChange([...cols, { label: label.trim(), text }]);
+  };
   if (!available.length) return <div style={{ fontSize: 12, color: '#94a3b8' }}>أضف أسماء ليظهر الجدول وأعمدته</div>;
+  const used = new Set(cols.filter((c) => typeof c === 'string') as string[]);
   return (
-    <div data-testid={testID} style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+    <div data-testid={testID} style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
       {cols.map((c, i) => (
-        <span key={c} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #c4b5fd', background: '#f5f3ff', borderRadius: 8, padding: '2px 6px', fontSize: 12, fontWeight: 700 }}>
+        <span key={colKey(c)} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: `1px solid ${typeof c === 'string' ? '#c4b5fd' : '#fcd34d'}`, background: typeof c === 'string' ? '#f5f3ff' : '#fffbeb', borderRadius: 8, padding: '2px 6px', fontSize: 12, fontWeight: 700 }} data-testid={`${testID}-col-${colKey(c)}`}>
           <button type="button" onClick={() => move(i, -1)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11 }} title="يمين">◀</button>
-          {c}
+          {colLabel(c)}
           <button type="button" onClick={() => move(i, 1)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 11 }} title="يسار">▶</button>
-          <button type="button" onClick={() => onChange(cols.filter((x) => x !== c))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#b91c1c' }} data-testid={`${testID}-remove-${c}`}>✕</button>
+          <button type="button" onClick={() => onChange(cols.filter((x) => colKey(x) !== colKey(c)))} style={{ border: 'none', background: 'none', cursor: 'pointer', color: '#b91c1c' }} data-testid={`${testID}-remove-${colKey(c)}`}>✕</button>
         </span>
       ))}
-      {available.filter((c) => !cols.includes(c)).map((c) => (
+      <span style={{ flexBasis: '100%', fontSize: 11, color: '#64748b', marginTop: 2 }}>➕ أعمدة من بيانات النظام (حسب نوع الأشخاص المختارين):</span>
+      {available.filter((c) => !used.has(c)).map((c) => (
         <button key={c} type="button" onClick={() => onChange([...cols, c])} style={{ border: '1px dashed #cbd5e1', background: '#fff', borderRadius: 8, padding: '2px 8px', fontSize: 12, cursor: 'pointer', color: '#64748b' }} data-testid={`${testID}-add-${c}`}>+ {c}</button>
       ))}
-      {value && value.length > 0 && <button type="button" onClick={() => onChange(null)} style={{ border: 'none', background: 'none', fontSize: 11.5, color: '#2563eb', cursor: 'pointer' }}>كل الأعمدة</button>}
+      <button type="button" onClick={addCustom} style={{ border: '1px dashed #f59e0b', background: '#fffbeb', borderRadius: 8, padding: '2px 8px', fontSize: 12, cursor: 'pointer', color: '#b45309', fontWeight: 700 }} data-testid={`${testID}-add-custom`}>✎ عمود مخصص (فارغ/نص ثابت)</button>
+      {value && value.length > 0 && <button type="button" onClick={() => onChange(null)} style={{ border: 'none', background: 'none', fontSize: 11.5, color: '#2563eb', cursor: 'pointer' }} data-testid={`${testID}-reset`}>↺ الأعمدة الافتراضية</button>}
     </div>
   );
 };

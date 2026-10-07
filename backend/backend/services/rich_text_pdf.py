@@ -20,7 +20,7 @@ FONTS = {
 }
 _ALIASES = {v[3].lower(): k for k, v in FONTS.items()}
 _ALIASES.update({"kufi": "kufi", "noto kufi": "kufi"})
-_HTML_RE = re.compile(r"<(p|div|br|span|b|strong|i|em|u|h[1-6]|font|li|ul|ol)\b", re.I)
+_HTML_RE = re.compile(r"</?(p|div|br|span|b|strong|i|em|u|h[1-6]|font|li|ul|ol)\b", re.I)
 _here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _registered: set = set()
 
@@ -161,14 +161,33 @@ def _words(para: dict) -> List[dict]:
     return out
 
 
-def _disp(t: str) -> str:
+def _disp(t: str, rtl: bool = True) -> str:
     if not re.search(r"[\u0621-\u064A]", t):
-        m = re.match(r"^(.*?)([،؛؟:.,]*)$", t)
+        m = re.match(r"^(.*?)([،؛؟:.,]*)$", t) if rtl else None
         return (m.group(2) + m.group(1)) if m and m.group(2) else t
     return get_display(arabic_reshaper.reshape(t))
 
 
 _cmaps: dict = {}
+_LTR_RE = re.compile(r"[A-Za-z]")
+_AR_RE = re.compile(r"[\u0600-\u06FF]")
+
+
+def _visual_order(line: List[dict], ltr: bool = False) -> List[dict]:
+    """ترتيب الكلمات بصرياً: السطر يُرسم من اليمين لليسار، فالمقاطع اللاتينية المتتالية تُعكس لتظهر بترتيبها الصحيح.
+    ltr=True (محاذاة يسار): السطر كله LTR والمقاطع العربية هي التي تُعكس داخلياً"""
+    def is_ltr(w):
+        t = w["text"]
+        return bool(_LTR_RE.search(t)) and not _AR_RE.search(t)
+    out, grp = [], []
+    flip_ltr_groups = not ltr
+    for w in (line if not ltr else list(reversed(line))):
+        if (is_ltr(w) if flip_ltr_groups else not is_ltr(w) and _AR_RE.search(w["text"])):
+            grp.append(w)
+        else:
+            out += list(reversed(grp)); grp = []; out.append(w)
+    out += list(reversed(grp))
+    return out
 
 
 def _fit(disp: str, key: str, bold: bool) -> str:
@@ -233,7 +252,7 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
             continue
         for w in words:
             w["font_name"] = font_name(w["font"], w["bold"])
-            w["disp"] = _fit(_disp(w["text"]), w["font"], w["bold"])
+            w["disp"] = _fit(_disp(w["text"], rtl=(para.get("align") or "").lower() != "left"), w["font"], w["bold"])
             w["w"] = pdfmetrics.stringWidth(w["disp"], w["font_name"], w["size"])
             w["sp"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"])
         lines, cur, cur_w = [], [], 0.0
@@ -255,6 +274,7 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
                 if ny is not None:
                     y = ny
             y -= size * leading
+            line = _visual_order(line, ltr=(align == "left"))
             x = x_right if align in ("right", "justify", "start") else (x_left + lw if align == "left" else x_right - (max_w - lw) / 2)
             for w in line:
                 c.setFont(w["font_name"], w["size"])

@@ -63,7 +63,7 @@ export default function LettersPage() {
   const [last, setLast] = useState<any>(null);
   const [layoutDefaults, setLayoutDefaults] = useState<any>({});
   const [layout, setLayout] = useState<any>({});
-  const [tableHeaders, setTableHeaders] = useState<string[]>([]);
+  const [tableHeaders, setTableHeaders] = useState<string[]>([]); const [tableDefaults, setTableDefaults] = useState<string[]>([]);
   const [showLayout, setShowLayout] = useState(false);
   const [showTable, setShowTable] = useState(false);
   const [draft, setDraft] = useState<{ id: string; number: string } | null>(null);
@@ -100,7 +100,7 @@ export default function LettersPage() {
   useEffect(() => {
     if (!body.trim()) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
     const t = setTimeout(() => {
-      api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); }).catch(() => {});
+      api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); setTableDefaults(r.data.table?.default_headers || []); }).catch(() => {});
       setPreviewBusy(true);
       api.post(`/letters/preview-pdf?fmt=png&letterhead=${previewLetterhead}`, issuePayload(), { responseType: 'blob' })
         .then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; }); })
@@ -258,7 +258,7 @@ export default function LettersPage() {
                   <span style={{ fontSize: 11, color: '#64748b', flexBasis: '100%' }}>💡 بدون تحديد لون هنا، يرث الجدول لون/حجم/عرض الخط من تنسيق المتغير {'{جدول_الأسماء}'} في المحرر.</span>
                 </div>
                 <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 4 }}>الأعمدة الظاهرة وترتيبها (◀ ▶ للترتيب، ✕ للإخفاء):</div>
-                <TableColumnsPicker available={tableHeaders} value={layout.table_columns} onChange={(cols) => setLayout({ ...layout, table_columns: cols })} testID="letter-table-cols" />
+                <TableColumnsPicker available={tableHeaders} defaults={tableDefaults} value={layout.table_columns} onChange={(cols) => setLayout({ ...layout, table_columns: cols })} testID="letter-table-cols" />
               </div>
             )}
             {showLayout && (

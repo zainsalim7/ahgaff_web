@@ -9,6 +9,10 @@ DEFAULT_LAYOUT = {
     "ref_y": 52,              # سطر الرقم/التاريخ من الأعلى
     "start_y": 70,            # بداية المحتوى (إلى:) من الأعلى
     "gap_recipient": 3,       # بعد كتلة المرسَل إليه
+    "recipient_indent": 0,    # 📍 إزاحة كتلة المرسَل إليه من الهامش (مم)
+    "recipient_align": "right",  # right | center | left
+    "signature_align": "left",   # left | center | right
+    "signature_offset": 0,       # إزاحة كتلة التوقيع من الهامش (مم)
     "show_greeting": True,
     "gap_greeting": 10,       # بعد السلام
     "gap_subject": 11,        # بعد الموضوع
@@ -40,14 +44,22 @@ def merge_layout(*parts) -> dict:
 
 
 def filter_table(tbl: dict, columns) -> dict:
-    """يُبقي الأعمدة المختارة فقط وبترتيبها"""
+    """يُبقي الأعمدة المختارة بترتيبها: نص = عمود من بيانات النظام، {label, text} = عمود مخصص (فارغ أو نص ثابت).
+    بلا تخصيص → الأعمدة الافتراضية (default_headers) فقط"""
     headers, rows = (tbl or {}).get("headers") or [], (tbl or {}).get("rows") or []
-    if not columns or not headers:
+    if not headers:
         return tbl or {}
-    idx = [headers.index(cname) for cname in columns if cname in headers]
-    if not idx:
+    if not columns:
+        columns = (tbl or {}).get("default_headers") or headers
+    out_h, picks = [], []
+    for col in columns:
+        if isinstance(col, dict):
+            out_h.append(str(col.get("label") or "")); picks.append(("custom", str(col.get("text") or "")))
+        elif col in headers:
+            out_h.append(col); picks.append(("idx", headers.index(col)))
+    if not out_h:
         return tbl
-    return {**tbl, "headers": [headers[i] for i in idx], "rows": [[r[i] if i < len(r) else "" for i in idx] for r in rows]}
+    return {**tbl, "headers": out_h, "rows": [[(r[p] if p < len(r) else "") if t == "idx" else p for t, p in picks] for r in rows]}
 
 
 def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: bool = True) -> bytes:
@@ -157,14 +169,23 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
 
     y = H - f("start_y") * mm
     rec = s.get("recipient") or {}
+    r_align, r_ind = str(L.get("recipient_align") or "right"), f("recipient_indent") * mm
+
+    def rec_line(text, sub=False):
+        if r_align == "center":
+            c.drawCentredString(W / 2, y, ar(text))
+        elif r_align == "left":
+            c.drawString(LM + r_ind + (10 * mm if sub else 0), y, ar(text))
+        else:
+            c.drawRightString(RM - r_ind - (10 * mm if sub else 0), y, ar(text))
     c.setFont(BOLD, 14)
     first = " ".join(x for x in [rec.get("name") or rec.get("title"), rec.get("suffix") or ""] if x)
-    c.drawRightString(RM, y, ar(f"إلى: {first}")); y -= 7.5 * mm
+    rec_line(f"إلى: {first}"); y -= 7.5 * mm
     c.setFont("Amiri", 13)
     if rec.get("name") and rec.get("title"):
-        c.drawRightString(RM - 10 * mm, y, ar(rec["title"])); y -= 7 * mm
+        rec_line(rec["title"], sub=True); y -= 7 * mm
     if rec.get("organization") and rec.get("organization") != rec.get("title"):
-        c.drawRightString(RM - 10 * mm, y, ar(rec["organization"])); y -= 7 * mm
+        rec_line(rec["organization"], sub=True); y -= 7 * mm
     y -= f("gap_recipient") * mm
     if L.get("show_greeting"):
         c.drawRightString(RM, y, ar("السلام عليكم ورحمة الله وبركاته،")); y -= f("gap_greeting") * mm
@@ -196,15 +217,19 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         n = len(headers)
         total = RM - LM
         has_idx = headers[0] == "م"
-        widths = [10 * mm] * has_idx + [(total - (10 * mm if has_idx else 0)) / max(1, n - has_idx)] * (n - has_idx)
-        name_i = headers.index("الاسم") if "الاسم" in headers else -1
-        if name_i >= 0 and n - has_idx >= 2:
-            rest_n = n - has_idx - 1
-            widths[name_i] = widths[name_i] * 1.6
-            rest = total - (10 * mm if has_idx else 0) - widths[name_i]
-            for i in range(n):
-                if i != name_i and not (has_idx and i == 0):
-                    widths[i] = rest / rest_n
+        # عرض الأعمدة حسب المحتوى الفعلي (بحد أدنى وأقصى) ثم يُضبط على عرض الصفحة
+        def nat(i):
+            w = pdfmetrics.stringWidth(ar(headers[i]), BOLD, tf)
+            for r in rows:
+                w = max(w, pdfmetrics.stringWidth(ar(str(r[i] if i < len(r) else "")), "Amiri", tf))
+            return min(max(w + 4 * mm, 14 * mm), 75 * mm)
+        widths = [(10 * mm if has_idx and i == 0 else nat(i)) for i in range(n)]
+        flex = [i for i in range(n) if not (has_idx and i == 0)]
+        cur = sum(widths)
+        if flex and abs(cur - total) > 0.1:
+            k = (total - (10 * mm if has_idx else 0)) / max(1e-6, sum(widths[i] for i in flex))
+            for i in flex:
+                widths[i] *= k
 
         def row(cells, bold=False, fill=False):
             nonlocal y
@@ -262,11 +287,13 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     sig_title = (s.get("signatory_title") or "").strip()
     sig_name = (s.get("signatory_name") or "").strip()
     sig_img = _img("signature_base64")
-    c.setFont(BOLD, 13); c.drawString(30 * mm, y, ar(sig_title))
+    s_align, s_off = str(L.get("signature_align") or "left"), f("signature_offset") * mm
+    sig_cx = (W / 2) if s_align == "center" else (RM - s_off - 22 * mm) if s_align == "right" else (LM + s_off + 22 * mm)
+    c.setFont(BOLD, 13); c.drawCentredString(sig_cx, y, ar(sig_title))
     name_y = y - 9 * mm
     if sig_img:
-        c.drawImage(sig_img, 20 * mm, y - 20 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); name_y = y - 25 * mm
-    c.setFont("Amiri", 13); c.drawString(24 * mm, name_y, ar(sig_name))
+        c.drawImage(sig_img, sig_cx - 19 * mm, y - 20 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); name_y = y - 25 * mm
+    c.setFont("Amiri", 13); c.drawCentredString(sig_cx, name_y, ar(sig_name))
 
     qr = qrcode.make(s.get("verify_url") or s.get("verify_token", "") or "DRAFT", box_size=4, border=1)
     qb = io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)

@@ -214,6 +214,15 @@ async def people(kind: str = Query(...), q: str = Query("", min_length=0), curre
 
 
 # ───────── بناء سياق المتغيرات ─────────
+# 📋 حقول إضافية متاحة كأعمدة في جدول الأسماء (حسب نوع الشخص) — التسمية هي عنوان العمود
+STUDENT_STATUS_AR = {"active": "مستمر", "repeat": "إعادة", "graduated": "متخرج", "expelled": "مفصول", "frozen": "مجمَّد", "suspended": "موقوف"}
+FIELD_CATALOG = {
+    "student": ["الاسم", "رقم القيد", "الرقم المرجعي", "الكلية", "القسم", "المستوى", "الشعبة", "الجنسية", "الجنس", "الهاتف", "البريد", "الحالة", "سنة الالتحاق"],
+    "employee": ["الاسم", "الرقم الوظيفي", "الوظيفة", "الوحدة", "الفئة", "الجنسية", "الهاتف", "البريد", "تاريخ التعيين", "المؤهل", "التخصص"],
+    "teacher": ["الاسم", "اللقب العلمي", "الكلية", "القسم", "التخصص", "الهاتف", "البريد"],
+}
+
+
 async def _person_row(db, kind: str, pid: str) -> Optional[dict]:
     oid = _oid(pid)
     if not oid:
@@ -224,18 +233,27 @@ async def _person_row(db, kind: str, pid: str) -> Optional[dict]:
             return None
         dept = await _safe_dept(db, s)
         fac = await db.faculties.find_one({"_id": _oid(s.get("faculty_id") or (dept or {}).get("faculty_id"))}) if (s.get("faculty_id") or (dept or {}).get("faculty_id")) else None
-        return {"kind": "student", "name": s.get("full_name", ""), "code": s.get("student_id", ""), "c1": (fac or {}).get("name", ""), "c2": (dept or {}).get("name", ""), "c3": f"المستوى {s.get('level', '')}", "_doc": s, "_dept": dept, "_fac": fac}
+        g = student_gender(s, fac)
+        fields = {"الاسم": s.get("full_name", ""), "رقم القيد": s.get("student_id", ""), "الرقم المرجعي": s.get("reference_number", ""), "الكلية": (fac or {}).get("name", ""), "القسم": (dept or {}).get("name", ""),
+                  "المستوى": f"المستوى {s.get('level', '')}", "الشعبة": str(s.get("section") or ""), "الجنسية": (s.get("nationality") or "يمني"), "الجنس": "أنثى" if g == "female" else "ذكر",
+                  "الهاتف": s.get("phone") or "", "البريد": s.get("email") or "", "الحالة": STUDENT_STATUS_AR.get(s.get("status") or "active", "مستمر"), "سنة الالتحاق": str(s.get("enrollment_year") or "")}
+        return {"kind": "student", "name": s.get("full_name", ""), "code": s.get("student_id", ""), "c1": (fac or {}).get("name", ""), "c2": (dept or {}).get("name", ""), "c3": f"المستوى {s.get('level', '')}", "fields": fields, "_doc": s, "_dept": dept, "_fac": fac}
     if kind == "employee":
         e = await db.employees.find_one({"_id": oid})
         if not e:
             return None
         unit = await db.org_units.find_one({"_id": _oid(e.get("org_unit_id"))}, {"name": 1}) if e.get("org_unit_id") else None
-        return {"kind": "employee", "name": e.get("full_name", ""), "code": e.get("employee_no", ""), "c1": e.get("job_title", ""), "c2": (unit or {}).get("name", ""), "c3": "", "_doc": e}
+        fields = {"الاسم": e.get("full_name", ""), "الرقم الوظيفي": e.get("employee_no", ""), "الوظيفة": e.get("job_title", ""), "الوحدة": (unit or {}).get("name", ""), "الفئة": e.get("category") or "",
+                  "الجنسية": e.get("nationality") or "", "الهاتف": e.get("phone") or "", "البريد": e.get("email") or "", "تاريخ التعيين": str(e.get("hire_date") or "")[:10], "المؤهل": e.get("qualification") or "", "التخصص": e.get("specialization") or ""}
+        return {"kind": "employee", "name": e.get("full_name", ""), "code": e.get("employee_no", ""), "c1": e.get("job_title", ""), "c2": (unit or {}).get("name", ""), "c3": "", "fields": fields, "_doc": e}
     t = await db.teachers.find_one({"_id": oid})
     if not t:
         return None
     fac = await db.faculties.find_one({"_id": _oid(t.get("faculty_id"))}, {"name": 1}) if t.get("faculty_id") else None
-    return {"kind": "teacher", "name": t.get("full_name") or t.get("name", ""), "code": t.get("academic_title", ""), "c1": (fac or {}).get("name", ""), "c2": "", "c3": "", "_doc": t}
+    tdept = await db.departments.find_one({"_id": _oid(t.get("department_id"))}, {"name": 1}) if t.get("department_id") else None
+    fields = {"الاسم": t.get("full_name") or t.get("name", ""), "اللقب العلمي": t.get("academic_title", ""), "الكلية": (fac or {}).get("name", ""), "القسم": (tdept or {}).get("name", ""),
+              "التخصص": t.get("specialization") or "", "الهاتف": t.get("phone") or "", "البريد": t.get("email") or ""}
+    return {"kind": "teacher", "name": t.get("full_name") or t.get("name", ""), "code": t.get("academic_title", ""), "c1": (fac or {}).get("name", ""), "c2": "", "c3": "", "fields": fields, "_doc": t}
 
 
 TABLE_HEADERS = {"student": ["م", "الاسم", "رقم القيد", "الكلية", "القسم", "المستوى"], "employee": ["م", "الاسم", "الرقم الوظيفي", "الوظيفة", "الوحدة"], "teacher": ["م", "الاسم", "اللقب", "الكلية"],
@@ -257,7 +275,7 @@ def _table_rows(rows: List[dict]) -> dict:
                 data.append([str(i + 1), r["name"], KIND_AR["employee"], r["code"], r["c2"], r["c1"]])
             else:
                 data.append([str(i + 1), r["name"], KIND_AR["teacher"], r["code"], r["c1"], ""])
-        return {"headers": TABLE_HEADERS["mixed"], "rows": data, "mixed": True}
+        return _with_extra_fields(TABLE_HEADERS["mixed"], data, rows)
     k = rows[0]["kind"]
     if k == "student":
         data = [[str(i + 1), r["name"], r["code"], r["c1"], r["c2"], r["c3"]] for i, r in enumerate(rows)]
@@ -265,7 +283,17 @@ def _table_rows(rows: List[dict]) -> dict:
         data = [[str(i + 1), r["name"], r["code"], r["c1"], r["c2"]] for i, r in enumerate(rows)]
     else:
         data = [[str(i + 1), r["name"], r["code"], r["c1"]] for i, r in enumerate(rows)]
-    return {"headers": TABLE_HEADERS[k], "rows": data}
+    return _with_extra_fields(TABLE_HEADERS[k], data, rows)
+
+
+def _with_extra_fields(default_headers: list, data: list, rows: list) -> dict:
+    """يلحق كل الحقول الإضافية المتاحة كأعمدة (تُخفى افتراضياً) — default_headers = الأعمدة الظاهرة بلا تخصيص"""
+    extra: list = []
+    for k in ("student", "employee", "teacher"):
+        if any(r["kind"] == k for r in rows):
+            extra += [h for h in FIELD_CATALOG[k] if h not in default_headers and h not in extra]
+    full = [row + [(rows[i].get("fields") or {}).get(h, "") for h in extra] for i, row in enumerate(data)]
+    return {"headers": default_headers + extra, "default_headers": default_headers, "rows": full, "mixed": len({r["kind"] for r in rows}) > 1}
 
 
 async def _build_ctx(db, rec: dict, subject: str, people_in: List[dict]) -> tuple:

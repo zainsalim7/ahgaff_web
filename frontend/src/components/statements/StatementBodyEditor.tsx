@@ -67,6 +67,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
         <button type="button" style={tb(editor.isActive({ textAlign: 'right' }))} onClick={run(() => editor.chain().focus().setTextAlign('right').run())} title="يمين">⇤</button>
         <button type="button" style={tb(editor.isActive({ textAlign: 'center' }))} onClick={run(() => editor.chain().focus().setTextAlign('center').run())} title="وسط">↔</button>
         <button type="button" style={tb(editor.isActive({ textAlign: 'justify' }))} onClick={run(() => editor.chain().focus().setTextAlign('justify').run())} title="ضبط">☰</button>
+        <button type="button" data-testid={`${testID}-align-left`} style={tb(editor.isActive({ textAlign: 'left' }))} onClick={run(() => editor.chain().focus().setTextAlign('left').run())} title="يسار (نص بلغة أجنبية LTR)">⇥</button>
         <button type="button" style={{ ...tb(), marginRight: 'auto', color: '#64748b' }} onClick={run(() => editor.chain().focus().unsetAllMarks().clearNodes().run())} title="مسح التنسيق">⌫ تنسيق</button>
       </div>
       <EditorContent editor={editor} className="stmt-tiptap" />
@@ -81,6 +82,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
       )}
       <style>{`.stmt-tiptap .tiptap{min-height:${minHeight}px;padding:10px 12px;outline:none;font-size:14pt;line-height:1.9;color:#1e293b;direction:rtl;text-align:${defaultAlign};font-family:Amiri,serif}
       .stmt-tiptap .tiptap p{margin:0 0 4px}
+      .stmt-tiptap .tiptap p[style*="text-align: left"]{direction:ltr}
       .stmt-tiptap .tiptap p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#94a3b8;float:right;pointer-events:none;height:0;font-size:13px;font-family:Cairo,sans-serif}`}</style>
     </div>
   );
