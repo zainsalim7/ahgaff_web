@@ -35,7 +35,7 @@ export const VisibilityPicker: React.FC<{ value: Visibility; onChange: (v: Visib
   );
 };
 
-const EMPTY_LH = { name: '', description: '', org_name: 'جامعة الأحقاف', office_name: '', office_name_en: '', logo_base64: '', signature_base64: '', default_signatory_name: '', default_signatory_title: '', default_signatory_position_id: '', phones: '', fax: '', address: '', po_box: '', website: '', closing: 'وتفضلوا بقبول فائق الاحترام والتقدير،', layout: null as any, header_image_base64: '', footer_image_base64: '', visibility: { type: 'private', roles: [] } as Visibility };
+const EMPTY_LH = { name: '', description: '', org_name: 'جامعة الأحقاف', org_name_en: 'AL-AHGAFF UNIVERSITY', office_name: '', office_name_en: '', logo_base64: '', signature_base64: '', default_signatory_name: '', default_signatory_title: '', default_signatory_position_id: '', phones: '', fax: '', address: '', po_box: '', website: '', closing: 'وتفضلوا بقبول فائق الاحترام والتقدير،', layout: null as any, header_image_base64: '', footer_image_base64: '', visibility: { type: 'private', roles: [] } as Visibility };
 
 const LetterheadForm: React.FC<{ initial: any; layoutDefaults: any; onSaved: () => void; onClose: () => void }> = ({ initial, layoutDefaults, onSaved, onClose }) => {
   const [f, setF] = useState<any>({ ...EMPTY_LH, ...initial, visibility: initial?.visibility || EMPTY_LH.visibility });
@@ -69,7 +69,7 @@ const LetterheadForm: React.FC<{ initial: any; layoutDefaults: any; onSaved: () 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
             <Field label="اسم الكليشة *"><input style={inp} value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="مثال: كليشة كلية الشريعة — داخلي" data-testid="lh-name" /></Field>
             <Field label="وصف مختصر"><input style={inp} value={f.description || ''} onChange={(e) => setF({ ...f, description: e.target.value })} data-testid="lh-description" /></Field>
-            {([['org_name', 'اسم الجامعة'], ['office_name', 'الجهة المصدِرة'], ['office_name_en', 'الجهة بالإنجليزية'], ['phones', 'تلفون'], ['fax', 'فاكس'], ['address', 'العنوان'], ['po_box', 'ص.ب'], ['website', 'الموقع'], ['closing', 'عبارة الختام']] as const).map(([k, l]) => (
+            {([['org_name', '🏛️ السطر الأول (عربي — يمين، كبير)'], ['org_name_en', '🏛️ السطر الأول (إنجليزي — يسار)'], ['office_name', '🏛️ السطر الثاني (عربي — أصغر)'], ['office_name_en', '🏛️ السطر الثاني (إنجليزي)'], ['phones', 'تلفون'], ['fax', 'فاكس'], ['address', 'العنوان'], ['po_box', 'ص.ب'], ['website', 'الموقع'], ['closing', 'عبارة الختام']] as const).map(([k, l]) => (
               <Field key={k} label={l}><input style={inp} value={f[k] || ''} onChange={(e) => setF({ ...f, [k]: e.target.value })} data-testid={`lh-${k}`} /></Field>
             ))}
           </div>

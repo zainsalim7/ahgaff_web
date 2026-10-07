@@ -81,6 +81,7 @@ class LetterheadIn(BaseModel):
     name: str
     description: Optional[str] = ""
     org_name: Optional[str] = "جامعة الأحقاف"
+    org_name_en: Optional[str] = "AL-AHGAFF UNIVERSITY"
     office_name: Optional[str] = ""
     office_name_en: Optional[str] = ""
     logo_base64: Optional[str] = ""

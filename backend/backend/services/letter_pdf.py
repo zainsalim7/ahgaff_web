@@ -11,6 +11,22 @@ DEFAULT_LAYOUT = {
     "gap_recipient": 3,       # بعد كتلة المرسَل إليه
     "recipient_indent": 0,    # 📍 إزاحة كتلة المرسَل إليه من الهامش (مم)
     "recipient_align": "right",  # right | center | left
+    "recipient_font": 14,        # حجم خط سطر «إلى:»
+    "recipient_sub_font": 13,    # حجم خط الصفة/الجهة
+    "recipient_line_gap": 7,     # المسافة بين أسطر كتلة المرسَل إليه (مم)
+    "recipient_suffix_gap": 0,   # مسافة إضافية بين الاسم و«المحترم» (مم)
+    "greeting_align": "right",   # 🙏 موضع التحية: right | center | left
+    "greeting_indent": 0,        # إزاحة التحية من الهامش (مم)
+    "greeting_font": 13,
+    "ref_layout": "num_left",    # 🔢 الرقم/التاريخ: num_left (رقم يسار، تاريخ يمين) | num_right | stack_right | stack_left
+    "ref_x": 0,                  # إزاحة كتلة الرقم/التاريخ من الهامش (مم)
+    "ref_font": 13,
+    "header_font_ar1": 16,       # 🏛️ الكليشة: السطر الأول عربي (كبير)
+    "header_font_ar2": 13,       # السطر الثاني عربي (أصغر)
+    "header_font_en1": 12,       # السطر الأول إنجليزي
+    "header_font_en2": 10,       # السطر الثاني إنجليزي
+    "header_line1": 24,          # ارتفاع السطر الأول فوق خط الكليشة (مم)
+    "header_line2": 16,          # ارتفاع السطر الثاني فوق خط الكليشة (مم)
     "signature_align": "left",   # left | center | right
     "signature_offset": 0,       # إزاحة كتلة التوقيع من الهامش (مم)
     "show_greeting": True,
@@ -134,11 +150,11 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         logo = max(12 * mm, min(28 * mm, hb - 14 * mm))
         if img:
             c.drawImage(img, W / 2 - logo / 2, H - 10 * mm - logo, logo, logo, mask="auto", preserveAspectRatio=True)
-        t1, t2 = H - hb + 24 * mm, H - hb + 16 * mm
-        c.setFont("Amiri", 16); c.drawRightString(RM, t1, ar(settings.get("org_name") or "جامعة الأحقاف"))
-        c.setFont("Amiri", 13); c.drawRightString(RM, t2, ar(settings.get("office_name", "")))
-        c.setFont("Helvetica-Bold", 12); c.drawString(LM, t1, "AL-AHGAFF UNIVERSITY")
-        c.setFont("Helvetica", 10); c.drawString(LM, t2, settings.get("office_name_en", "") or "")
+        t1, t2 = H - hb + f("header_line1") * mm, H - hb + f("header_line2") * mm
+        c.setFont("Amiri", f("header_font_ar1")); c.drawRightString(RM, t1, ar(settings.get("org_name") or "جامعة الأحقاف"))
+        c.setFont("Amiri", f("header_font_ar2")); c.drawRightString(RM, t2, ar(settings.get("office_name", "")))
+        c.setFont("Helvetica-Bold", f("header_font_en1")); c.drawString(LM, t1, settings.get("org_name_en") or "AL-AHGAFF UNIVERSITY")
+        c.setFont("Helvetica", f("header_font_en2")); c.drawString(LM, t2, settings.get("office_name_en", "") or "")
         c.setLineWidth(1.3); c.line(LM, H - hb + 1 * mm, RM, H - hb + 1 * mm)
         c.setLineWidth(0.4); c.line(LM, H - hb - 0.4 * mm, RM, H - hb - 0.4 * mm)
 
@@ -162,33 +178,60 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     except Exception:
         hijri = ""
     ry = H - f("ref_y") * mm
+    rf, rx, rl = f("ref_font"), f("ref_x") * mm, str(L.get("ref_layout") or "num_left")
+    num_txt, d1, d2 = ar(f"الرقم : {s.get('number_display', '')}"), ar(f"التاريخ: {hijri}"), ar(f"الموافق: {issued.replace('-', '/')}م")
     c.setFillColorRGB(0.0, 0.5, 0.13)
-    c.setFont(BOLD, 13); c.drawString(LM, ry, ar(f"الرقم : {s.get('number_display', '')}"))
-    c.setFont(BOLD, 11.5); c.drawRightString(RM, ry + 2 * mm, ar(f"التاريخ: {hijri}")); c.drawRightString(RM, ry - 5 * mm, ar(f"الموافق: {issued.replace('-', '/')}م"))
+    if rl == "num_right":       # الرقم يمين، التاريخ يسار
+        c.setFont(BOLD, rf); c.drawRightString(RM - rx, ry, num_txt)
+        c.setFont(BOLD, rf - 1.5); c.drawString(LM + rx, ry + 2 * mm, d1); c.drawString(LM + rx, ry - 5 * mm, d2)
+    elif rl in ("stack_right", "stack_left"):   # الثلاثة متراصّة في جهة واحدة
+        draw = (lambda yy, t: c.drawRightString(RM - rx, yy, t)) if rl == "stack_right" else (lambda yy, t: c.drawString(LM + rx, yy, t))
+        c.setFont(BOLD, rf); draw(ry + 2 * mm, num_txt)
+        c.setFont(BOLD, rf - 1.5); draw(ry - 4 * mm, d1); draw(ry - 10 * mm, d2)
+    else:                       # الافتراضي: الرقم يسار، التاريخ يمين
+        c.setFont(BOLD, rf); c.drawString(LM + rx, ry, num_txt)
+        c.setFont(BOLD, rf - 1.5); c.drawRightString(RM - rx, ry + 2 * mm, d1); c.drawRightString(RM - rx, ry - 5 * mm, d2)
     c.setFillColorRGB(0, 0, 0)
 
     y = H - f("start_y") * mm
     rec = s.get("recipient") or {}
     r_align, r_ind = str(L.get("recipient_align") or "right"), f("recipient_indent") * mm
 
-    def rec_line(text, sub=False):
+    rfont, rsub, rgap, sgap = f("recipient_font"), f("recipient_sub_font"), f("recipient_line_gap") * mm, f("recipient_suffix_gap") * mm
+
+    def rec_line(text, sub=False, suffix=""):
+        """سطر من كتلة المرسَل إليه؛ suffix («المحترم») يُرسم منفصلاً بمسافة إضافية عن الاسم"""
+        fnt, size = ("Amiri", rsub) if sub else (BOLD, rfont)
+        c.setFont(fnt, size)
+        main, sfx = ar(text), ar(suffix) if suffix else ""
+        w_main = pdfmetrics.stringWidth(main, fnt, size)
+        w_sfx = pdfmetrics.stringWidth(sfx, fnt, size) if sfx else 0
+        total = w_main + ((pdfmetrics.stringWidth(" ", fnt, size) + sgap + w_sfx) if sfx else 0)
         if r_align == "center":
-            c.drawCentredString(W / 2, y, ar(text))
+            right = W / 2 + total / 2
         elif r_align == "left":
-            c.drawString(LM + r_ind + (10 * mm if sub else 0), y, ar(text))
+            right = LM + r_ind + (10 * mm if sub else 0) + total
         else:
-            c.drawRightString(RM - r_ind - (10 * mm if sub else 0), y, ar(text))
-    c.setFont(BOLD, 14)
-    first = " ".join(x for x in [rec.get("name") or rec.get("title"), rec.get("suffix") or ""] if x)
-    rec_line(f"إلى: {first}"); y -= 7.5 * mm
-    c.setFont("Amiri", 13)
+            right = RM - r_ind - (10 * mm if sub else 0)
+        c.drawRightString(right, y, main)
+        if sfx:
+            c.drawRightString(right - w_main - pdfmetrics.stringWidth(" ", fnt, size) - sgap, y, sfx)
+    rec_line(f"إلى: {rec.get('name') or rec.get('title') or ''}", suffix=rec.get("suffix") or ""); y -= rgap + 0.5 * mm
     if rec.get("name") and rec.get("title"):
-        rec_line(rec["title"], sub=True); y -= 7 * mm
+        rec_line(rec["title"], sub=True); y -= rgap
     if rec.get("organization") and rec.get("organization") != rec.get("title"):
-        rec_line(rec["organization"], sub=True); y -= 7 * mm
+        rec_line(rec["organization"], sub=True); y -= rgap
     y -= f("gap_recipient") * mm
     if L.get("show_greeting"):
-        c.drawRightString(RM, y, ar("السلام عليكم ورحمة الله وبركاته،")); y -= f("gap_greeting") * mm
+        g_al, g_in = str(L.get("greeting_align") or "right"), f("greeting_indent") * mm
+        c.setFont("Amiri", f("greeting_font")); g_txt = ar("السلام عليكم ورحمة الله وبركاته،")
+        if g_al == "center":
+            c.drawCentredString(W / 2, y, g_txt)
+        elif g_al == "left":
+            c.drawString(LM + g_in, y, g_txt)
+        else:
+            c.drawRightString(RM - g_in, y, g_txt)
+        y -= f("gap_greeting") * mm
     c.setFont(BOLD, 14)
     c.drawCentredString(W / 2, y, ar(f"الموضوع: {s.get('subject', '')}"))
     sw = pdfmetrics.stringWidth(ar(f"الموضوع: {s.get('subject', '')}"), BOLD, 14)

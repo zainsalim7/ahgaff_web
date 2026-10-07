@@ -27,11 +27,27 @@ const SLIDERS: Slider[] = [
   ['table_row_h', 'ارتفاع صف الجدول (مم)', 5, 12, 0.5],
   ['gap_table_after', 'مسافة بعد الجدول (مم)', 0, 30, 1],
   ['recipient_indent', '📍 إزاحة المرسَل إليه من الهامش (مم)', 0, 60, 1],
+  ['recipient_font', '📍 حجم خط «إلى:» (pt)', 10, 20, 0.5],
+  ['recipient_sub_font', '📍 حجم خط الصفة/الجهة (pt)', 9, 18, 0.5],
+  ['recipient_line_gap', '📍 تباعد أسطر المرسَل إليه (مم)', 4, 14, 0.5],
+  ['recipient_suffix_gap', '📍 مسافة بين الاسم و«المحترم» (مم)', 0, 40, 1],
+  ['greeting_indent', '🙏 إزاحة التحية من الهامش (مم)', 0, 80, 1],
+  ['greeting_font', '🙏 حجم خط التحية (pt)', 9, 18, 0.5],
+  ['ref_x', '🔢 إزاحة الرقم/التاريخ من الهامش (مم)', 0, 80, 1],
+  ['ref_font', '🔢 حجم خط الرقم (pt)', 9, 18, 0.5],
   ['signature_offset', '🖋️ إزاحة التوقيع من الهامش (مم)', 0, 80, 1],
+  ['header_font_ar1', '🏛️ الكليشة: السطر الأول عربي (pt)', 10, 26, 0.5],
+  ['header_font_ar2', '🏛️ الكليشة: السطر الثاني عربي (pt)', 8, 20, 0.5],
+  ['header_font_en1', '🏛️ الكليشة: السطر الأول إنجليزي (pt)', 8, 20, 0.5],
+  ['header_font_en2', '🏛️ الكليشة: السطر الثاني إنجليزي (pt)', 7, 16, 0.5],
+  ['header_line1', '🏛️ ارتفاع السطر الأول فوق خط الكليشة (مم)', 5, 45, 1],
+  ['header_line2', '🏛️ ارتفاع السطر الثاني فوق خط الكليشة (مم)', 2, 40, 1],
 ];
 const SELECTS: Select[] = [
   ['recipient_align', 'محاذاة المرسَل إليه', [['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار (خطاب بلغة أجنبية)']]],
   ['signature_align', 'موضع التوقيع', [['left', 'يسار'], ['center', 'وسط'], ['right', 'يمين']]],
+  ['greeting_align', '🙏 موضع التحية', [['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار']]],
+  ['ref_layout', '🔢 ترتيب الرقم والتاريخ', [['num_left', 'الرقم يسار والتاريخ يمين'], ['num_right', 'الرقم يمين والتاريخ يسار'], ['stack_right', 'متراصّة يميناً'], ['stack_left', 'متراصّة يساراً']]],
 ];
 const PAGE_H = 297, SCALE = 1.9; // مم → بكسل
 const mm = (v: number) => v * SCALE;
@@ -57,7 +73,8 @@ export const LETTER_MODEL: LayoutModel = {
     return { pos, end: y + 24 };
   },
   sides: {
-    ref: (ms) => ({ left: mm(ms), width: mm(60) }),
+    ref: (ms, L) => { const rx = Number(L.ref_x || 0); const rl = L.ref_layout || 'num_left'; return rl === 'num_right' || rl === 'stack_right' ? { right: mm(ms + rx), width: mm(60) } : rl === 'stack_left' ? { left: mm(ms + rx), width: mm(60) } : { left: mm(ms + rx), right: mm(ms + rx) }; },
+    greeting: (ms, L) => { const gi = Number(L.greeting_indent || 0); const a = L.greeting_align || 'right'; return a === 'center' ? { left: mm(60), right: mm(60) } : a === 'left' ? { left: mm(ms + gi), width: mm(80) } : { right: mm(ms + gi), width: mm(80) }; },
     recipient: (ms, L) => { const ind = Number(L.recipient_indent || 0); const a = L.recipient_align || 'right'; return a === 'center' ? { left: mm(55), right: mm(55) } : a === 'left' ? { left: mm(ms + ind), width: mm(90) } : { right: mm(ms + ind), width: mm(90) }; },
     signature: (ms, L) => { const off = Number(L.signature_offset || 0); const a = L.signature_align || 'left'; return a === 'center' ? { left: mm(75), right: mm(75) } : a === 'right' ? { right: mm(ms + off), width: mm(60) } : { left: mm(ms + off), width: mm(60) }; },
     subject: () => ({ left: mm(60), right: mm(60) }),
