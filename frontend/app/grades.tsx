@@ -27,6 +27,7 @@ export default function GradesScreen() {
   const [academicYear, setAcademicYear] = useState('2025-2026');
   const [batchNo, setBatchNo] = useState('');
   const [file, setFile] = useState<File | null>(null);
+  const [detected, setDetected] = useState<any>(null); const [detecting, setDetecting] = useState(false);
   const [preview, setPreview] = useState<any>(null);
   const [replaceExisting, setReplaceExisting] = useState(false);
 
@@ -85,6 +86,25 @@ export default function GradesScreen() {
 
   const filteredDepts = facultyId ? departments.filter((d) => d.faculty_id === facultyId) : departments;
 
+  const onPickFile = async (f: File | null) => {
+    setFile(f); setDetected(null); setPreview(null);
+    if (!f) return;
+    setDetecting(true);
+    try {
+      const fd = new FormData(); fd.append('file', f);
+      const res = await api.post('/grades/detect-meta', fd, { headers: { 'Content-Type': 'multipart/form-data' } });
+      const d = res.data || {};
+      if (d.faculty_id) setFacultyId(d.faculty_id);
+      if (d.department_id) setDepartmentId(d.department_id);
+      if (d.level) setLevel(String(d.level));
+      if (d.semester_no) setSemesterNo(String(d.semester_no));
+      if (d.academic_year) setAcademicYear(d.academic_year);
+      if (d.batch_no) setBatchNo(String(d.batch_no));
+      setDetected(d);
+    } catch (e: any) {
+      setMsg({ type: 'error', text: e?.response?.data?.detail || 'تعذر استنتاج بيانات الكشف من الملف — أدخلها يدوياً' });
+    } finally { setDetecting(false); }
+  };
   const doImport = async (commit: boolean) => {
     if (!file) { showMsg('error', '❌ اختر ملف الإكسل أولاً'); return; }
     if (commit && !departmentId) { showMsg('error', '❌ اختر القسم'); return; }
@@ -302,9 +322,19 @@ export default function GradesScreen() {
                   <TextInput style={st.input} value={batchNo} onChangeText={setBatchNo} testID="grades-batch-input" />
                 </View>
               </View>
+              {detecting && <Text style={{ fontSize: 12, color: '#1565c0', marginBottom: 6 }}>🔎 جاري قراءة بيانات الكشف من الملف…</Text>}
+              {detected && !detecting && (
+                <View style={{ backgroundColor: '#f0fdf4', borderWidth: 1, borderColor: '#86efac', borderRadius: 8, padding: 8, marginBottom: 8 }} testID="grades-detected-box">
+                  <Text style={{ fontSize: 12.5, fontWeight: '700', color: '#166534', textAlign: 'right' }}>✅ عُبّئت البيانات تلقائياً من الملف — راجعها وصحّح ما يلزم ثم اضغط «معاينة»</Text>
+                  <Text style={{ fontSize: 11.5, color: '#3f6212', textAlign: 'right', marginTop: 3 }}>
+                    {(['faculty_id', 'department_id', 'level', 'semester_no', 'batch_no', 'academic_year'] as const).map((k) => `${({ faculty_id: 'الكلية', department_id: 'القسم', level: 'المستوى', semester_no: 'الفصل', batch_no: 'الدفعة', academic_year: 'العام' } as any)[k]}: ${({ file: 'من الملف', filename: 'من اسم الملف', students: 'من الطلاب المطابقين', previous_import: 'من استيراد سابق', curriculum: 'من الخطة الدراسية', current: 'العام الحالي (افتراضي)' } as any)[detected.sources?.[k]] || 'غير مكتشف ⚠️'}`).join(' · ')}
+                    {detected.students_in_file ? ` · ${detected.students_in_file} طالب و${detected.courses_in_file} مقرر في الملف` : ''}
+                  </Text>
+                </View>
+              )}
               <Text style={st.label}>ملف الإكسل (.xls / .xlsx)</Text>
               {Platform.OS === 'web' && (
-                <input type="file" accept=".xls,.xlsx" onChange={(e: any) => setFile(e.target.files?.[0] || null)} data-testid="grades-file-input" style={{ marginBottom: 10, fontSize: 13 }} />
+                <input type="file" accept=".xls,.xlsx" onChange={(e: any) => onPickFile(e.target.files?.[0] || null)} data-testid="grades-file-input" style={{ marginBottom: 10, fontSize: 13 }} />
               )}
               <TouchableOpacity style={[st.btn, { backgroundColor: '#1565c0' }]} onPress={() => doImport(false)} disabled={busy} testID="grades-preview-btn">
                 {busy ? <ActivityIndicator size="small" color="#fff" /> : <Text style={st.btnTxt}>🔍 معاينة قبل الاعتماد</Text>}

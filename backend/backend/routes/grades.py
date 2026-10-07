@@ -521,6 +521,177 @@ async def cumulative_analysis(current_user: dict = Depends(get_current_user)):
 
 # ===== الاستيراد =====
 
+@router.post("/grades/detect-meta")
+async def detect_grades_meta(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    """🔎 يستنتج بيانات الكشف (الكلية/القسم/المستوى/الفصل/الدفعة/العام) من اسم الملف ومحتواه والطلاب المطابقين
+    وسجل الاستيرادات السابقة — ليُعبَّأ النموذج تلقائياً ويكتفي المستخدم بالتصحيح"""
+    if not _can_manage(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    content = await file.read()
+    fname = file.filename or ""
+    try:
+        parsed = _parse_grades_file(content, fname)
+    except Exception:
+        parsed = {"students": [], "courses": [], "meta": {}}
+    return await _detect_meta(db, fname, parsed)
+
+
+_ORDINALS = {"الاول": 1, "الأول": 1, "اول": 1, "الثاني": 2, "ثاني": 2, "الثالث": 3, "ثالث": 3, "الرابع": 4, "رابع": 4, "الخامس": 5, "خامس": 5,
+             "السادس": 6, "سادس": 6, "السابع": 7, "سابع": 7, "الثامن": 8, "ثامن": 8, "التاسع": 9, "العاشر": 10}
+_FAC_ALIASES = {"شريعة": "الشريعة", "قانون": "القانون", "هندسة": "الهندسة", "حاسوب": "الحاسوب", "تربية": "التربية", "اداب": "الآداب", "آداب": "الآداب", "بنات": "البنات", "دراسات": "الدراسات"}
+
+
+def _digits(s: str) -> str:
+    return s.translate(str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789"))
+
+
+def _parse_filename_meta(fname: str) -> dict:
+    """المستوى الثاني شريعة وقانون ف1 الدفعة 30.xls → level=2, semester=1, batch=30, words=[شريعة, قانون]"""
+    base = _digits(re.sub(r"\.(xlsx?|csv)$", "", fname, flags=re.I)).replace("_", " ").replace("-", " - ")
+    out: dict = {}
+    m = re.search(r"(?:المستوى|مستوى|م)\s*(\d{1,2})\b", base) or re.search(r"\bL(\d{1,2})\b", base, re.I)
+    if m:
+        out["level"] = int(m.group(1))
+    else:
+        m = re.search(r"(?:المستوى|مستوى)\s+(\S+)", base)
+        if m and m.group(1) in _ORDINALS:
+            out["level"] = _ORDINALS[m.group(1)]
+    m = re.search(r"(?:الفصل|فصل|ف)\s*(\d)\b", base) or re.search(r"\bS(\d)\b", base, re.I)
+    if m:
+        out["semester_no"] = int(m.group(1))
+    else:
+        m = re.search(r"(?:الفصل|فصل)\s+(\S+)", base)
+        if m and m.group(1) in _ORDINALS:
+            out["semester_no"] = _ORDINALS[m.group(1)]
+    m = re.search(r"(?:الدفعة|دفعة|د)\s*(\d{1,3})\b", base)
+    if m:
+        out["batch_no"] = m.group(1)
+    m = re.search(r"(20\d{2})\s*[/\- ]\s*(20\d{2})", base)
+    if m:
+        out["academic_year"] = f"{m.group(1)}-{m.group(2)}"
+    else:
+        m = re.search(r"\b(20\d{2})\b", base)
+        if m:
+            out["academic_year"] = f"{m.group(1)}-{int(m.group(1)) + 1}"
+    words = [w for w in re.split(r"[\s،,()]+", base) if len(w) >= 3 and not w.isdigit() and w not in ("المستوى", "مستوى", "الفصل", "فصل", "الدفعة", "دفعة", "كشف", "درجات", "نتائج", "نتيجة", "ملف")]
+    words = [re.sub(r"^و", "", w) if len(w) > 3 else w for w in words]
+    out["words"] = [_FAC_ALIASES.get(w, w) for w in words]
+    return out
+
+
+def _name_score(words: list, name: str) -> int:
+    n = _norm_name(name)
+    return sum(1 for w in words if len(_norm_name(w)) >= 3 and _norm_name(w) in n)
+
+
+async def _detect_meta(db, fname: str, parsed: dict) -> dict:
+    src: dict = {}
+    out: dict = {"faculty_id": "", "department_id": "", "level": 0, "semester_no": 0, "batch_no": "", "academic_year": ""}
+    # 1) النموذج الموحّد يحمل البيانات صراحة
+    meta = parsed.get("meta") or {}
+    if meta.get("department_name"):
+        dq = await db.departments.find_one({"name": {"$regex": re.escape(meta["department_name"].strip()), "$options": "i"}})
+        if dq:
+            out["department_id"], out["faculty_id"] = str(dq["_id"]), dq.get("faculty_id", ""); src["department_id"] = src["faculty_id"] = "file"
+    for k in ("level", "semester_no"):
+        if meta.get(k):
+            try:
+                out[k] = int(float(meta[k])); src[k] = "file"
+            except (ValueError, TypeError):
+                pass
+    for k in ("academic_year", "batch_no"):
+        if meta.get(k):
+            out[k] = str(meta[k]); src[k] = "file"
+    # 2) اسم الملف
+    fm = _parse_filename_meta(fname)
+    for k in ("level", "semester_no", "batch_no", "academic_year"):
+        if not out[k] and fm.get(k):
+            out[k] = fm[k]; src[k] = "filename"
+    faculties = await db.faculties.find({}, {"name": 1}).to_list(200)
+    departments = await db.departments.find({}, {"name": 1, "faculty_id": 1}).to_list(500)
+    if not out["department_id"] and fm.get("words"):
+        best = max(departments, key=lambda d: _name_score(fm["words"], d.get("name", "")), default=None)
+        if best and _name_score(fm["words"], best.get("name", "")) > 0:
+            out["department_id"], out["faculty_id"] = str(best["_id"]), best.get("faculty_id", ""); src["department_id"] = src["faculty_id"] = "filename"
+    if not out["faculty_id"] and fm.get("words"):
+        best = max(faculties, key=lambda f: _name_score(fm["words"], f.get("name", "")), default=None)
+        if best and _name_score(fm["words"], best.get("name", "")) > 0:
+            out["faculty_id"] = str(best["_id"]); src["faculty_id"] = "filename"
+    # 3) الطلاب المطابقون بالقيد/الاسم → أغلبية القسم (والمستوى)
+    students = parsed.get("students") or []
+    if students:
+        regs = [s["reg_no"] for s in students if s.get("reg_no")]
+        names = [_norm_name(s.get("name", "")) for s in students if s.get("name")]
+        hits = await db.students.find({"$or": [{"student_id": {"$in": regs}}] + ([{"full_name": {"$exists": True}}] if not regs else [])}, {"student_id": 1, "full_name": 1, "department_id": 1, "faculty_id": 1, "level": 1}).to_list(20000)
+        if not regs:
+            hits = [h for h in hits if _norm_name(h.get("full_name", "")) in set(names)]
+        if hits:
+            def majority(key):
+                cnt: dict = {}
+                for h in hits:
+                    v = h.get(key)
+                    if v:
+                        cnt[str(v)] = cnt.get(str(v), 0) + 1
+                return max(cnt.items(), key=lambda kv: kv[1])[0] if cnt else None
+            mdept = majority("department_id")
+            if mdept and not out["department_id"]:
+                out["department_id"] = mdept; src["department_id"] = "students"
+                dd = next((d for d in departments if str(d["_id"]) == mdept), None)
+                if dd and not out["faculty_id"]:
+                    out["faculty_id"] = dd.get("faculty_id", ""); src["faculty_id"] = "students"
+            mlvl = majority("level")
+            if mlvl and not out["level"]:
+                try:
+                    out["level"] = int(float(mlvl)); src["level"] = "students"
+                except ValueError:
+                    pass
+            out["matched_students"] = len(hits)
+    # 4) استيراد سابق بنفس المقررات (إعادة رفع/تصحيح)
+    cnames = sorted(_norm_name(c.get("name", "")) for c in (parsed.get("courses") or []) if c.get("name"))
+    if cnames:
+        async for gi in db.grade_imports.find({}, {"courses": 1, "department_id": 1, "faculty_id": 1, "level": 1, "semester_no": 1, "academic_year": 1, "batch_no": 1}).sort("created_at", -1).limit(200):
+            prev = sorted(_norm_name(c.get("name", "")) for c in (gi.get("courses") or []) if c.get("name"))
+            if prev and len(set(prev) & set(cnames)) >= max(2, int(0.7 * len(cnames))):
+                for k in ("faculty_id", "department_id", "level", "semester_no", "batch_no", "academic_year"):
+                    if not out[k] and gi.get(k):
+                        out[k] = gi[k]; src[k] = "previous_import"
+                out["previous_import_id"] = str(gi["_id"])
+                break
+    # 5) المقررات مقابل الخطة الدراسية (المستوى/الفصل/القسم)
+    if cnames and (not out["level"] or not out["semester_no"] or not out["department_id"]):
+        tally: dict = {}
+        async for cc in db.curriculum_courses.find({"is_active": {"$ne": False}}, {"name": 1, "level": 1, "term": 1, "department_id": 1, "faculty_id": 1}):
+            if _norm_name(cc.get("name", "")) in cnames:
+                key = (cc.get("department_id", ""), cc.get("level"), cc.get("term"), cc.get("faculty_id", ""))
+                tally[key] = tally.get(key, 0) + 1
+        if tally:
+            (dep, lvl, term, fac), n = max(tally.items(), key=lambda kv: kv[1])
+            if n >= 2:
+                if not out["department_id"] and dep:
+                    out["department_id"] = dep; src["department_id"] = "curriculum"
+                if not out["faculty_id"] and fac:
+                    out["faculty_id"] = fac; src["faculty_id"] = "curriculum"
+                if not out["level"] and lvl:
+                    out["level"] = int(lvl); src["level"] = "curriculum"
+                if not out["semester_no"] and term:
+                    out["semester_no"] = int(term); src["semester_no"] = "curriculum"
+    # 6) العام الجامعي الحالي كافتراض أخير
+    if not out["academic_year"]:
+        now = datetime.now(timezone.utc)
+        y = now.year if now.month >= 9 else now.year - 1
+        out["academic_year"] = f"{y}-{y + 1}"; src["academic_year"] = "current"
+    if out["department_id"] and not out["faculty_id"]:
+        dd = next((d for d in departments if str(d["_id"]) == out["department_id"]), None)
+        if dd:
+            out["faculty_id"] = dd.get("faculty_id", ""); src["faculty_id"] = src.get("department_id", "")
+    out["sources"] = src
+    out["filename_words"] = fm.get("words", [])
+    out["students_in_file"] = len(students)
+    out["courses_in_file"] = len(cnames)
+    return out
+
+
 @router.post("/grades/import")
 async def import_grades(
     file: UploadFile = File(...),
