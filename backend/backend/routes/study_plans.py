@@ -22,6 +22,73 @@ from models.lectures import LectureStatus
 
 router = APIRouter(tags=["الخطة الدراسية"])
 
+# 📥 أسماء الأعمدة المقبولة في ملف الاستيراد (المقارنة بعد trim وبدون حساسية لحالة الأحرف اللاتينية)
+WEEK_COL_NAMES = ["رقم الأسبوع", "الأسبوع", "الاسبوع", "اسبوع", "أسبوع", "week", "week_number"]
+TOPIC_COL_NAMES = ["عنوان الموضوع", "عنوان الدرس", "الموضوع", "الدرس", "موضوع", "درس", "topic", "lesson", "title"]
+NOTES_COL_NAMES = ["ملاحظات", "ملاحظة", "notes"]
+_EASTERN_DIGITS = str.maketrans("٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹", "01234567890123456789")
+
+
+def normalize_digits(v) -> str:
+    """تحويل الأرقام الهندية/الفارسية إلى غربية: ١٢٣ → 123"""
+    return str(v).translate(_EASTERN_DIGITS)
+
+
+def parse_week_number(v) -> Optional[int]:
+    """رقم الأسبوع من الخلية؛ None إن كانت فارغة أو غير رقمية"""
+    if v is None or (isinstance(v, float) and pd.isna(v)):
+        return None
+    txt = normalize_digits(v).strip()
+    if not txt or txt.lower() == "nan":
+        return None
+    try:
+        return int(float(txt))
+    except Exception:
+        return None
+
+
+def _match_col(df_columns, names: list) -> Optional[str]:
+    wanted = {n.strip().lower() for n in names}
+    for c in df_columns:
+        if str(c).strip().lower() in wanted:
+            return c
+    return None
+
+
+def parse_study_plan_rows(df) -> dict:
+    """قواعد الصفوف: أسبوع+موضوع → يُضاف؛ أسبوع بلا موضوع → أسبوع فارغ؛ موضوع بلا أسبوع → يُلحق بالأسبوع السابق؛
+    صف فارغ أو أسبوع غير رقمي → يُتجاهل. يرجع {week_number: [topics]} (قد تكون القائمة فارغة)"""
+    week_col = _match_col(df.columns, WEEK_COL_NAMES)
+    title_col = _match_col(df.columns, TOPIC_COL_NAMES)
+    notes_col = _match_col(df.columns, NOTES_COL_NAMES)
+    if week_col is None or title_col is None:
+        raise HTTPException(status_code=400, detail=(
+            "لم يُعثر على الأعمدة المطلوبة. عمود الأسبوع (أحد): " + " | ".join(WEEK_COL_NAMES)
+            + " — عمود الموضوع (أحد): " + " | ".join(TOPIC_COL_NAMES)))
+    weeks_data: dict = {}
+    last_week: Optional[int] = None
+    for _, row in df.iterrows():
+        raw_wk = row.get(week_col)
+        wk_empty = raw_wk is None or pd.isna(raw_wk) or not normalize_digits(raw_wk).strip()
+        wk_num = None if wk_empty else parse_week_number(raw_wk)
+        raw_title = row.get(title_col)
+        title_str = "" if raw_title is None or pd.isna(raw_title) else str(raw_title).strip()
+        if not wk_empty and wk_num is None:
+            continue  # نص غير رقمي في عمود الأسبوع (مثل صف التعليمات) → يُتجاهل
+        if wk_empty and not title_str:
+            continue
+        notes = ""
+        if notes_col is not None and not pd.isna(row.get(notes_col)):
+            notes = str(row.get(notes_col)).strip()
+        if wk_num is not None:
+            weeks_data.setdefault(wk_num, [])
+            last_week = wk_num
+            if title_str:
+                weeks_data[wk_num].append({"title": title_str, "notes": notes})
+        elif last_week is not None:
+            weeks_data[last_week].append({"title": title_str, "notes": notes})
+    return weeks_data
+
 YEMEN_TIMEZONE = timezone(timedelta(hours=3))
 
 
@@ -216,19 +283,25 @@ async def get_study_plan_template(current_user: dict = Depends(get_current_user)
         and not has_permission(current_user, "manage_courses")
     ):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    df = pd.DataFrame({
-        "رقم الأسبوع": [1, 1, 2, 2, 3],
-        "عنوان الموضوع": [
-            "مقدمة في المقرر",
-            "المفاهيم الأساسية",
-            "الوحدة الأولى - الجزء 1",
-            "الوحدة الأولى - الجزء 2",
-            "الوحدة الثانية - مقدمة",
-        ],
-        "ملاحظات": ["", "", "", "", ""],
-    })
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "الخطة الدراسية"
+    ws.sheet_view.rightToLeft = True
+    ws.append(["رقم الأسبوع", "عنوان الموضوع", "ملاحظات"])
+    for c in ws[1]:
+        c.font = Font(bold=True); c.fill = PatternFill("solid", fgColor="DDEBF7"); c.alignment = Alignment(horizontal="center")
+    ws.append(["يمكنك استخدام: عنوان الدرس، الموضوع، الدرس — اترك الموضوع فارغاً لأسبوع بدون درس — الأرقام العربية والهندية مقبولة", "", ""])
+    ws.merge_cells("A2:C2")
+    ws["A2"].font = Font(italic=True, color="666666"); ws["A2"].fill = PatternFill("solid", fgColor="F2F2F2")
+    ws["A2"].alignment = Alignment(horizontal="right", wrap_text=True); ws.row_dimensions[2].height = 32
+    for r in [[1, "مقدمة في المقرر", ""], ["", "المفاهيم الأساسية", "موضوع إضافي لنفس الأسبوع"], ["٢", "الوحدة الأولى - الجزء 1", "رقم هندي مقبول"],
+              [3, "", "أسبوع بدون درس (يُملأ لاحقاً)"], [4, "الوحدة الثانية - مقدمة", ""]]:
+        ws.append(r)
+    ws.column_dimensions["A"].width = 14; ws.column_dimensions["B"].width = 48; ws.column_dimensions["C"].width = 32
     output = BytesIO()
-    df.to_excel(output, index=False, engine="openpyxl")
+    wb.save(output)
     output.seek(0)
     return StreamingResponse(
         output,
@@ -248,7 +321,7 @@ async def upload_study_plan_excel(
     """رفع الخطة الدراسية من ملف Excel/CSV.
     - replace=true: استبدال الخطة الكاملة
     - replace=false: دمج (إضافة المواضيع للأسابيع الموجودة)
-    أعمدة مطلوبة: 'رقم الأسبوع', 'عنوان الموضوع'
+    أعمدة مطلوبة: عمود الأسبوع (رقم الأسبوع | الأسبوع | week ...) وعمود الموضوع (عنوان الموضوع | عنوان الدرس | الموضوع | topic ...)
     """
     if (
         current_user["role"] != UserRole.ADMIN
@@ -283,39 +356,7 @@ async def upload_study_plan_excel(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"تعذر قراءة الملف: {e}")
 
-    week_col: Optional[str] = None
-    title_col: Optional[str] = None
-    notes_col: Optional[str] = None
-    for c in df.columns:
-        cl = str(c).strip()
-        if cl in ("رقم الأسبوع", "الأسبوع", "week", "week_number"):
-            week_col = c
-        elif cl in ("عنوان الموضوع", "الموضوع", "topic", "title"):
-            title_col = c
-        elif cl in ("ملاحظات", "ملاحظة", "notes"):
-            notes_col = c
-    if week_col is None or title_col is None:
-        raise HTTPException(status_code=400, detail="الأعمدة المطلوبة: 'رقم الأسبوع' و 'عنوان الموضوع'")
-
-    weeks_data: dict = {}
-    for _, row in df.iterrows():
-        wk = row.get(week_col)
-        title = row.get(title_col)
-        if pd.isna(wk) or pd.isna(title):
-            continue
-        try:
-            wk_num = int(float(wk))
-        except Exception:
-            continue
-        title_str = str(title).strip()
-        if not title_str:
-            continue
-        notes = ""
-        if notes_col is not None and not pd.isna(row.get(notes_col)):
-            notes = str(row.get(notes_col)).strip()
-        if wk_num not in weeks_data:
-            weeks_data[wk_num] = []
-        weeks_data[wk_num].append({"title": title_str, "notes": notes})
+    weeks_data = parse_study_plan_rows(df)
 
     if not weeks_data:
         raise HTTPException(status_code=400, detail="الملف لا يحتوي على بيانات صالحة")
