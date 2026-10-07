@@ -243,6 +243,7 @@ from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
 from routes.schedule_integrity import router as schedule_integrity_router
 from routes.statements import router as statements_router
 from routes.letters import router as letters_router, backfill_people_faculty as letters_backfill_people_faculty
+from routes.letterheads import router as letterheads_router, migrate_letterheads
 from routes.grades import router as grades_router
 from routes.certificates import router as certificates_router
 from routes.student_cards import router as student_cards_router
@@ -18306,6 +18307,7 @@ app.include_router(hr_alerts_router, prefix="/api")
 app.include_router(schedule_integrity_router, prefix="/api")
 app.include_router(statements_router, prefix="/api")
 app.include_router(letters_router, prefix="/api")
+app.include_router(letterheads_router, prefix="/api")
 app.include_router(grades_router, prefix="/api")
 app.include_router(certificates_router, prefix="/api")
 app.include_router(student_cards_router, prefix="/api")
@@ -18401,6 +18403,7 @@ async def _startup_db_tasks():
         ("dedup_teaching_loads_internal", dedup_teaching_loads_internal),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
+        ("migrate_letterheads", lambda: migrate_letterheads(db)),
     ]
     t0 = asyncio.get_event_loop().time()
     for name, fn in steps:

@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useLocalSearchParams } from 'expo-router';
 import api from '../src/services/api';
+import { useAuth } from '../src/contexts/AuthContext';
 import { CorrPage, card, btn, inp, th, td, Badge, Field, Modal } from '../src/components/corr/CorrUI';
 import { downloadBlob } from '../src/utils/exportName';
 
@@ -8,6 +9,8 @@ const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 8
 const errOf = (e: any, d: string) => e?.response?.data?.detail || d;
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
 import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
+import { LetterheadManager } from '../src/components/letters/LetterheadManager';
+import { SeriesManager } from '../src/components/letters/SeriesManager';
 import { LetterLayoutEditor, TableColumnsPicker } from '../src/components/letters/LetterLayoutEditor';
 
 type Person = { kind: string; id: string; label: string; sub?: string };
@@ -42,6 +45,7 @@ export default function LettersPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [recips, setRecips] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
+  const { user } = useAuth();
   const canEdit = !!settings?.can_edit_settings;
   const [err, setErr] = useState('');
   // issue state
@@ -62,6 +66,8 @@ export default function LettersPage() {
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<any>(null);
   const [layoutDefaults, setLayoutDefaults] = useState<any>({});
+  const [letterheads, setLetterheads] = useState<any[]>([]); const [seriesList, setSeriesList] = useState<any[]>([]);
+  const [lhId, setLhId] = useState(''); const [seriesId, setSeriesId] = useState('');
   const [layout, setLayout] = useState<any>({});
   const [tableHeaders, setTableHeaders] = useState<string[]>([]); const [tableDefaults, setTableDefaults] = useState<string[]>([]);
   const [showLayout, setShowLayout] = useState(false);
@@ -69,7 +75,6 @@ export default function LettersPage() {
   const [draft, setDraft] = useState<{ id: string; number: string } | null>(null);
   const [perPerson, setPerPerson] = useState(false); const [personAsRec, setPersonAsRec] = useState(false);
   const [batch, setBatch] = useState<any>(null);
-  const [settingsPreview, setSettingsPreview] = useState('');
   // templates/log state
   const [tform, setTform] = useState<any | null>(null);
   const [log, setLog] = useState<any[]>([]); const [logQ, setLogQ] = useState(''); const [logStatus, setLogStatus] = useState('');
@@ -79,6 +84,11 @@ export default function LettersPage() {
     api.get('/letters/recipients').then((r) => setRecips(r.data)).catch(() => {});
     api.get('/letters/settings').then((r) => setSettings(r.data)).catch((e) => setErr(errOf(e, 'غير مصرح')));
     api.get('/letters/layout-defaults').then((r) => setLayoutDefaults(r.data)).catch(() => {});
+    loadLhSeries();
+  };
+  const loadLhSeries = () => {
+    api.get('/letterheads').then((r) => { setLetterheads(r.data); setLhId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
+    api.get('/letter-series').then((r) => { setSeriesList(r.data); setSeriesId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
   };
   const loadLog = () => api.get('/letters', { params: { q: logQ || undefined, status: logStatus || undefined } }).then((r) => setLog(r.data)).catch(() => {});
   useEffect(loadAll, []);
@@ -93,10 +103,12 @@ export default function LettersPage() {
     setTplId(id); const t = templates.find((x) => x.id === id); if (!t) return;
     setSubject(t.subject || t.name); setBody(t.body); setSig({ position_id: t.signatory_position_id || '', name: t.signatory_position_id ? '' : (t.signatory_name || ''), title: t.signatory_position_id ? '' : (t.signatory_title || '') });
     if (t.concerns && t.concerns !== 'none' && t.concerns !== 'many') setPeopleKind(t.concerns);
+    if (t.letterhead_id && letterheads.some((x) => x.id === t.letterhead_id)) setLhId(t.letterhead_id);
+    if (t.series_id && seriesList.some((x) => x.id === t.series_id)) setSeriesId(t.series_id);
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
-  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
+  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', letterhead_id: lhId, series_id: seriesId, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
   useEffect(() => {
     if (!body.trim()) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
     const t = setTimeout(() => {
@@ -107,17 +119,7 @@ export default function LettersPage() {
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people, sig, layout, previewLetterhead, perPerson, personAsRec]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // معاينة تخطيط الكليشة الافتراضي (نموذج تجريبي) في تبويب الإعدادات
-  useEffect(() => {
-    if (tab !== 'settings' || !settings) return;
-    const t = setTimeout(() => {
-      const sample = { subject: 'نموذج لمعاينة التخطيط', body: '<p style="text-align: right">تهديكم {جهة_المرسل_إليه} أطيب التحيات، وبالإشارة إلى الموضوع أعلاه نفيدكم بأن هذا نص تجريبي لمعاينة تخطيط الصفحة والمسافات بين الكتل.</p><p>{جدول_الأسماء}</p><p style="text-align: right">آملين التكرم بالاطلاع.</p>', recipient: { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }, people: [], signatory_name: settings.default_signatory_name, signatory_title: settings.default_signatory_title, layout: settings.layout || null };
-      api.post('/letters/preview-pdf?fmt=png', sample, { responseType: 'blob' }).then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setSettingsPreview((o) => { if (o) URL.revokeObjectURL(o); return url; }); }).catch(() => {});
-    }, 600);
-    return () => clearTimeout(t);
-  }, [tab, settings?.layout]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, subject, recipient, people, sig, layout, previewLetterhead, perPerson, personAsRec, lhId, seriesId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const afterIssue = async (r: any) => {
     setLast(r.data); setDraft(null);
@@ -134,7 +136,7 @@ export default function LettersPage() {
     const kinds = new Set((src?.people || people).map((p: any) => p.kind));
     const concerns = (src?.people || people).length > 1 ? 'many' : kinds.size === 1 ? [...kinds][0] : 'none';
     try {
-      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src ? (src.signatory_position_id ? '' : src.signatory_name) : sig.name, signatory_title: src ? (src.signatory_position_id ? '' : src.signatory_title) : sig.title, signatory_position_id: src ? (src.signatory_position_id || '') : sig.position_id, concerns, is_active: true });
+      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src ? (src.signatory_position_id ? '' : src.signatory_name) : sig.name, signatory_title: src ? (src.signatory_position_id ? '' : src.signatory_title) : sig.title, signatory_position_id: src ? (src.signatory_position_id || '') : sig.position_id, letterhead_id: src ? (src.letterhead_id || '') : lhId, series_id: src ? (src.series_id || '') : seriesId, concerns, is_active: true });
       loadAll(); window.alert(`✅ حُفظ القالب «${name}» — سيظهر في قائمة القوالب`);
     } catch (e) { setErr(errOf(e, 'فشل حفظ القالب')); }
   };
@@ -170,6 +172,7 @@ export default function LettersPage() {
       const r0 = inp0.recipient || d.recipient || {};
       if (r0.id) { setRecMode('list'); setRecId(r0.id); } else { setRecMode('manual'); setRec({ name: r0.name || '', title: r0.title || '', organization: r0.organization || '', suffix: r0.suffix || 'المحترم' }); }
       setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.name })));
+      if (d.letterhead_id) setLhId(d.letterhead_id); if (d.series_id) setSeriesId(d.series_id);
       setSig({ position_id: d.signatory_position_id || '', name: d.signatory_position_id ? '' : (d.signatory_name || ''), title: d.signatory_position_id ? '' : (d.signatory_title || '') }); setValidDays(d.valid_days ? String(d.valid_days) : ''); setLayout(d.layout || {});
       setTab('issue');
     } catch (e) { setErr(errOf(e, 'تعذر فتح المسودة')); }
@@ -180,13 +183,11 @@ export default function LettersPage() {
     catch (e) { setErr(errOf(e, 'فشل الاعتماد')); }
   };
   const saveTpl = async () => { try { if (tform.id) await api.put(`/letter-templates/${tform.id}`, tform); else await api.post('/letter-templates', tform); setTform(null); loadAll(); } catch (e) { setErr(errOf(e, 'فشل الحفظ')); } };
-  const saveSettings = async () => { try { await api.put('/letters/settings', settings); window.alert('تم حفظ إعدادات الكليشة'); } catch (e) { setErr(errOf(e, 'فشل الحفظ')); } };
-  const file64 = (k: string) => (e: any) => { const f = e.target.files?.[0]; if (!f) return; const rd = new FileReader(); rd.onload = () => setSettings((s: any) => ({ ...s, [k]: rd.result })); rd.readAsDataURL(f); };
   const vars = settings?.variables || [];
 
   return (
     <CorrPage title="الخطابات الرسمية" subtitle="مثل الإفادات تماماً: اختر القالب → حدّد المرسَل إليه والأسماء → إصدار وتنزيل PDF برقم تسلسلي ورمز QR" testID="letters-page" hideNav
-      actions={<div style={{ display: 'flex', gap: 6 }}>{([['issue', '✉️ إصدار خطاب'], ['templates', '📋 القوالب'], ['log', '🗂 سجل الخطابات'], ['settings', '⚙️ الكليشة']] as const).filter(([k]) => k !== 'settings' || canEdit).map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k ? '#0f2440' : '#f1f5f9', { color: tab === k ? '#fff' : '#0f2440' })} data-testid={`letters-tab-${k}`}>{l}</button>)}</div>}>
+      actions={<div style={{ display: 'flex', gap: 6 }}>{([['issue', '✉️ إصدار خطاب'], ['templates', '📋 القوالب'], ['log', '🗂 سجل الخطابات'], ['settings', '📄 الكليشات والترقيم']] as const).map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k ? '#0f2440' : '#f1f5f9', { color: tab === k ? '#fff' : '#0f2440' })} data-testid={`letters-tab-${k}`}>{l}</button>)}</div>}>
       {!!err && <div style={{ ...card, color: '#b91c1c' }} data-testid="letters-error">{err}</div>}
 
       {tab === 'issue' && (
@@ -198,6 +199,11 @@ export default function LettersPage() {
               {templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
             </select>
             {templates.length === 0 && <div style={{ fontSize: 12, color: '#b45309', marginTop: 4 }}>لا توجد قوالب بعد — أنشئها من تبويب «القوالب».</div>}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 12, padding: 10, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10 }} data-testid="letter-lh-series">
+              <div><label style={lbl}>📄 الكليشة</label><select style={inp} value={lhId} onChange={(e) => setLhId(e.target.value)} data-testid="letter-letterhead-select">{letterheads.map((x) => <option key={x.id} value={x.id}>{x.is_default ? '⭐ ' : ''}{x.name}</option>)}</select></div>
+              <div><label style={lbl}>🔢 سلسلة الترقيم</label><select style={inp} value={seriesId} onChange={(e) => setSeriesId(e.target.value)} data-testid="letter-series-select">{seriesList.map((x) => <option key={x.id} value={x.id}>{x.is_default ? '⭐ ' : ''}{x.name} — القادم {x.next_number}</option>)}</select></div>
+              <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#64748b' }}>الكليشة والترقيم مستقلان: نفس الكليشة قد تُستخدم بترقيم داخلي أو خارجي. أنشئ المزيد من تبويب «الكليشات والترقيم».</div>
+            </div>
             <label style={{ ...lbl, marginTop: 12 }}>الموضوع</label>
             <input style={inp} value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="letter-subject" />
             <label style={{ ...lbl, marginTop: 12 }}>المرسَل إليه</label>
@@ -328,6 +334,8 @@ export default function LettersPage() {
               <Field label="الموضوع الافتراضي"><input style={inp} value={tform.subject} onChange={(e) => setTform({ ...tform, subject: e.target.value })} data-testid="lt-subject" /></Field>
               <Field label="يخص"><select style={inp} value={tform.concerns} onChange={(e) => setTform({ ...tform, concerns: e.target.value })}><option value="none">عام</option><option value="student">طالب</option><option value="employee">موظف</option><option value="teacher">مدرّس</option><option value="many">عدة أسماء (جدول)</option></select></Field>
               <div />
+              <Field label="📄 الكليشة المفضّلة"><select style={inp} value={tform.letterhead_id || ''} onChange={(e) => setTform({ ...tform, letterhead_id: e.target.value })} data-testid="lt-letterhead"><option value="">— حسب اختيار المُصدِر —</option>{letterheads.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
+              <Field label="🔢 سلسلة الترقيم المفضّلة"><select style={inp} value={tform.series_id || ''} onChange={(e) => setTform({ ...tform, series_id: e.target.value })} data-testid="lt-series"><option value="">— حسب اختيار المُصدِر —</option>{seriesList.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}</select></Field>
             </div>
             <Field label="الموقِّع (المرسِل)"><SignatoryPicker value={{ position_id: tform.signatory_position_id || '', name: tform.signatory_name || '', title: tform.signatory_title || '' }} onChange={(v) => setTform((f: any) => ({ ...f, signatory_position_id: v.position_id, signatory_name: v.name, signatory_title: v.title }))} defaultLabel="الافتراضي من الكليشة (يُحدَّد عند الإصدار)" hint="اختر منصباً من الدليل أو أدخل الاسم والصفة يدوياً." testID="lt-signatory" /></Field>
             <Field label="المتن * — منسّق، والمتغيرات تُدرج بنقرة عند المؤشر"><StatementBodyEditor value={tform.body || ''} onChange={(h) => setTform((f: any) => ({ ...f, body: h }))} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={180} testID="lt-body" /></Field>
@@ -343,7 +351,7 @@ export default function LettersPage() {
             <select style={{ ...inp, width: 'auto' }} value={logStatus} onChange={(e) => setLogStatus(e.target.value)} data-testid="letters-log-status"><option value="">الكل</option><option value="draft">المسودات</option><option value="issued">الصادرة</option></select>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['الرقم', 'التاريخ', 'الموضوع', 'إلى', 'الأسماء', 'الحالة', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}{l.batch_id ? <div style={{ fontSize: 10, color: '#c2410c', fontWeight: 700 }} title="ضمن إصدار جماعي — خطاب لكل شخص">👥 {l.batch_index}/{l.batch_total}</div> : null}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
+            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}{l.series_name ? <div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }} title={`الكليشة: ${l.letterhead_name || ''}`}>{l.series_name}{l.letterhead_name ? ` · ${l.letterhead_name}` : ''}</div> : null}{l.batch_id ? <div style={{ fontSize: 10, color: '#c2410c', fontWeight: 700 }} title="ضمن إصدار جماعي — خطاب لكل شخص">👥 {l.batch_index}/{l.batch_total}</div> : null}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
               <td style={{ ...td, whiteSpace: 'nowrap' }}>
                 {l.status === 'draft' ? (<>
                   <button onClick={() => loadDraft(l.id)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-edit-${l.id}`}>تعديل</button>{' '}
@@ -362,27 +370,10 @@ export default function LettersPage() {
         </div>
       )}
 
-      {tab === 'settings' && settings && (
-        <div style={card} data-testid="letters-settings">
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-            {([['org_name', 'اسم الجامعة'], ['office_name', 'الجهة المصدِرة (رئاسة الجامعة / الشؤون الأكاديمية…)'], ['office_name_en', 'الجهة بالإنجليزية'], ['reference_format', 'صيغة الرقم ({seq} {year} {yy})'], ['default_signatory_title', 'صفة الموقِّع الافتراضي'], ['default_signatory_name', 'اسم الموقِّع الافتراضي'], ['phones', 'تلفون'], ['fax', 'فاكس'], ['address', 'العنوان'], ['po_box', 'ص.ب'], ['website', 'الموقع'], ['closing', 'عبارة الختام']] as const).map(([k, l]) => <Field key={k} label={l}><input style={inp} value={settings[k] || ''} onChange={(e) => setSettings({ ...settings, [k]: e.target.value })} data-testid={`ls-${k}`} /></Field>)}
-            <Field label="الشعار (صورة)"><input type="file" accept="image/*" onChange={file64('logo_base64')} />{settings.logo_base64 && <img src={settings.logo_base64} alt="" style={{ height: 50, marginTop: 6 }} />}</Field>
-            <Field label="صورة التوقيع"><input type="file" accept="image/*" onChange={file64('signature_base64')} />{settings.signature_base64 && <img src={settings.signature_base64} alt="" style={{ height: 50, marginTop: 6 }} />}</Field>
-            <Field label="🖼️ ترويسة جاهزة كصورة (تحل محل الشعار والنصوص — عرض A4 كامل، ارتفاعها = نهاية الكليشة)"><input type="file" accept="image/*" onChange={file64('header_image_base64')} data-testid="ls-header-image" />{settings.header_image_base64 && <div><img src={settings.header_image_base64} alt="" style={{ width: '100%', maxHeight: 90, objectFit: 'contain', marginTop: 6, border: '1px solid #e2e8f0' }} /><button onClick={() => setSettings({ ...settings, header_image_base64: '' })} style={{ ...btn('#fee2e2', { color: '#b91c1c', padding: '3px 8px', fontSize: 11 }), marginTop: 4 }}>إزالة الترويسة</button></div>}</Field>
-            <Field label="🖼️ تذييل جاهز كصورة (أسفل الصفحة — يحل محل نص العنوان والهاتف)"><input type="file" accept="image/*" onChange={file64('footer_image_base64')} data-testid="ls-footer-image" />{settings.footer_image_base64 && <div><img src={settings.footer_image_base64} alt="" style={{ width: '100%', maxHeight: 60, objectFit: 'contain', marginTop: 6, border: '1px solid #e2e8f0' }} /><button onClick={() => setSettings({ ...settings, footer_image_base64: '' })} style={{ ...btn('#fee2e2', { color: '#b91c1c', padding: '3px 8px', fontSize: 11 }), marginTop: 4 }}>إزالة التذييل</button></div>}</Field>
-          </div>
-          <button onClick={saveSettings} style={btn('#16a34a', { marginTop: 12 })} data-testid="ls-save">حفظ الإعدادات</button>
-          <div style={{ marginTop: 18, borderTop: '1px solid #e2e8f0', paddingTop: 14 }} data-testid="ls-layout-section">
-            <div style={{ fontWeight: 800, color: '#0f2440', marginBottom: 8 }}>📐 تخطيط الصفحة الافتراضي لكل الخطابات (المسافات بالمليمتر، أحجام الخطوط، الجدول)</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start' }}>
-              <div style={{ overflowX: 'auto' }}><LetterLayoutEditor value={settings.layout || {}} defaults={layoutDefaults} onChange={(l) => setSettings({ ...settings, layout: l })} testID="ls-layout" /></div>
-              <div style={{ position: 'sticky', top: 10 }}>
-                <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>معاينة بنموذج تجريبي (تتحدث تلقائياً)</div>
-                {settingsPreview ? <img src={settingsPreview} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="ls-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري التوليد…</div>}
-              </div>
-            </div>
-            <button onClick={saveSettings} style={btn('#16a34a', { marginTop: 12 })} data-testid="ls-save-layout">حفظ التخطيط الافتراضي</button>
-          </div>
+      {tab === 'settings' && (
+        <div data-testid="letters-settings">
+          <LetterheadManager layoutDefaults={layoutDefaults} isAdmin={user?.role === 'admin'} onChanged={loadLhSeries} />
+          <SeriesManager isAdmin={user?.role === 'admin'} onChanged={loadLhSeries} />
         </div>
       )}
     </CorrPage>

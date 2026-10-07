@@ -94,3 +94,4 @@
 ## ✉️ الخطابات الرسمية (2026-10-07)
 - الوصول: صلاحية `issue_letters` (مزروعة في أدوار dean/department_head/registrar/registration_manager) أو `hr_manage_correspondence`/`hr_manage_employees`. تعديل الكليشة/القوالب: `manage_letter_settings` (admin فقط افتراضياً).
 - Salim: يرى خطابات طلاب كلية الشريعة + موظفي نطاق HR (كلية البنات) + ما أصدره + العامة. Saeed: بلا كلية → العامة + ما أصدره + موظفو كلية البنات.
+- الكليشات/السلاسل: `/api/letterheads`, `/api/letter-series` — المالك أو الأدمن يعدّل؛ الافتراضية العامة «الكليشة العامة»/«الترقيم العام» (system_key=general).
