@@ -242,7 +242,7 @@ from routes.hr_reports import router as hr_reports_router
 from routes.hr_alerts import router as hr_alerts_router, hr_alerts_loop
 from routes.schedule_integrity import router as schedule_integrity_router
 from routes.statements import router as statements_router
-from routes.letters import router as letters_router
+from routes.letters import router as letters_router, backfill_people_faculty as letters_backfill_people_faculty
 from routes.grades import router as grades_router
 from routes.certificates import router as certificates_router
 from routes.student_cards import router as student_cards_router
@@ -18400,6 +18400,7 @@ async def _startup_db_tasks():
         ("cleanup_orphan_teaching_loads_internal", cleanup_orphan_teaching_loads_internal),
         ("dedup_teaching_loads_internal", dedup_teaching_loads_internal),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
+        ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
     ]
     t0 = asyncio.get_event_loop().time()
     for name, fn in steps:
@@ -19124,6 +19125,10 @@ async def sync_default_roles():
                     {"$addToSet": {"permissions": Permission.APPROVE_ATTENDANCE_CHANGES}}
                 )
                 logging.info(f"تمت إضافة approve_attendance_changes إلى دور العميد")
+            # ✉️ إصدار الخطابات الرسمية (ميزة جديدة): تُمنح مرة واحدة للأدوار التي كانت تصل للشاشة سابقاً
+            if system_key in ("dean", "department_head", "registrar", "registration_manager") and not existing.get("letters_perm_seeded"):
+                await db.roles.update_one({"_id": existing["_id"]}, {"$addToSet": {"permissions": Permission.ISSUE_LETTERS}, "$set": {"letters_perm_seeded": True}})
+                logging.info(f"تمت إضافة issue_letters إلى دور {system_key}")
             # 📊 صلاحيات لوحة القيادة (ميزة جديدة): تُمنح مرة واحدة للأدوار القيادية إن لم تُمنح بعد
             if system_key in ("admin", "dean", "department_head") and not existing.get("dashboard_perms_seeded"):
                 await db.roles.update_one({"_id": existing["_id"]}, {

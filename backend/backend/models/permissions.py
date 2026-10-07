@@ -155,9 +155,15 @@ class Permission:
     MANAGE_CURRICULUM = "manage_curriculum"    # الوصول الكامل لصفحة الخطة الدراسية (إنشاء/تعديل/حذف)
     VIEW_CURRICULUM = "view_curriculum"        # عرض الخطة الدراسية فقط (قراءة، تصدير)
 
+    # ✉️ الخطابات الرسمية
+    ISSUE_LETTERS = "issue_letters"                    # إصدار الخطابات الرسمية (السجل حسب النطاق)
+    MANAGE_LETTER_SETTINGS = "manage_letter_settings"  # كليشة وقوالب الخطابات
+
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
     UserRole.ADMIN: [
+        Permission.ISSUE_LETTERS,
+        Permission.MANAGE_LETTER_SETTINGS,
         Permission.MANAGE_USERS,
         Permission.MANAGE_DEPARTMENTS,
         Permission.MANAGE_COURSES,
@@ -211,6 +217,7 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_STUDENT,
     ],
     UserRole.DEAN: [
+        Permission.ISSUE_LETTERS,
         Permission.MANAGE_DEPARTMENTS,
         Permission.MANAGE_COURSES,
         Permission.MANAGE_STUDENTS,
@@ -239,6 +246,7 @@ DEFAULT_PERMISSIONS = {
         Permission.EXPORT_ARCHIVE,
     ],
     UserRole.DEPARTMENT_HEAD: [
+        Permission.ISSUE_LETTERS,
         Permission.MANAGE_COURSES,
         Permission.MANAGE_STUDENTS,
         Permission.MANAGE_TEACHERS,
@@ -262,6 +270,7 @@ DEFAULT_PERMISSIONS = {
         Permission.VIEW_TEACHING_LOAD,
     ],
     UserRole.REGISTRAR: [
+        Permission.ISSUE_LETTERS,
         Permission.MANAGE_STUDENTS,
         Permission.MANAGE_ENROLLMENTS,
         Permission.VIEW_ATTENDANCE,
@@ -276,6 +285,7 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_ATTENDANCE_OVERVIEW,
     ],
     UserRole.REGISTRATION_MANAGER: [
+        Permission.ISSUE_LETTERS,
         Permission.MANAGE_STUDENTS,
         Permission.MANAGE_ENROLLMENTS,
         Permission.MANAGE_COURSES,
@@ -349,6 +359,8 @@ ALL_PERMISSIONS = [
     {"key": Permission.HR_MANAGE_CORRESPONDENCE, "label": "إدارة المراسلات والتعاميم", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_TASKS, "label": "إسناد المهام لأي موظف ومتابعتها (المدير المباشر يسند لفريقه دون هذه الصلاحية)", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_APPRAISALS, "label": "اعتماد التقييم السنوي وإدارته لكل الموظفين", "category": "شؤون الموظفين"},
+    {"key": Permission.ISSUE_LETTERS, "label": "إصدار الخطابات الرسمية (يرى في السجل ما أصدره وما يخص كلياته/نطاقه الإداري)", "category": "الخطابات الرسمية"},
+    {"key": Permission.MANAGE_LETTER_SETTINGS, "label": "إدارة كليشة الخطابات وقوالبها", "category": "الخطابات الرسمية"},
     {"key": Permission.MANAGE_ENROLLMENTS, "label": "إدارة كاملة للتسجيل", "category": "التسجيل"},
     {"key": Permission.VIEW_ENROLLMENTS, "label": "عرض التسجيلات", "category": "التسجيل"},
     {"key": Permission.ADD_ENROLLMENT, "label": "تسجيل طالب في مقرر", "category": "التسجيل"},

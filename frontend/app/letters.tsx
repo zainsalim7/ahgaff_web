@@ -42,6 +42,7 @@ export default function LettersPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [recips, setRecips] = useState<any[]>([]);
   const [settings, setSettings] = useState<any>(null);
+  const canEdit = !!settings?.can_edit_settings;
   const [err, setErr] = useState('');
   // issue state
   const [tplId, setTplId] = useState('');
@@ -185,7 +186,7 @@ export default function LettersPage() {
 
   return (
     <CorrPage title="الخطابات الرسمية" subtitle="مثل الإفادات تماماً: اختر القالب → حدّد المرسَل إليه والأسماء → إصدار وتنزيل PDF برقم تسلسلي ورمز QR" testID="letters-page" hideNav
-      actions={<div style={{ display: 'flex', gap: 6 }}>{([['issue', '✉️ إصدار خطاب'], ['templates', '📋 القوالب'], ['log', '🗂 سجل الخطابات'], ['settings', '⚙️ الكليشة']] as const).map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k ? '#0f2440' : '#f1f5f9', { color: tab === k ? '#fff' : '#0f2440' })} data-testid={`letters-tab-${k}`}>{l}</button>)}</div>}>
+      actions={<div style={{ display: 'flex', gap: 6 }}>{([['issue', '✉️ إصدار خطاب'], ['templates', '📋 القوالب'], ['log', '🗂 سجل الخطابات'], ['settings', '⚙️ الكليشة']] as const).filter(([k]) => k !== 'settings' || canEdit).map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k ? '#0f2440' : '#f1f5f9', { color: tab === k ? '#fff' : '#0f2440' })} data-testid={`letters-tab-${k}`}>{l}</button>)}</div>}>
       {!!err && <div style={{ ...card, color: '#b91c1c' }} data-testid="letters-error">{err}</div>}
 
       {tab === 'issue' && (
@@ -285,14 +286,14 @@ export default function LettersPage() {
               <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
                 <button onClick={() => dlPdf(last.id, `خطاب ${last.number}`, true)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid="letter-last-pdf">PDF بالكليشة</button>
                 <button onClick={() => dlPdf(last.id, `خطاب ${last.number}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid="letter-last-pdf-plain">🖨️ PDF بلا كليشة (ورق مطبوع)</button>
-                <button onClick={() => saveAsTemplate()} style={btn('#f5f3ff', { color: '#6d28d9', padding: '5px 10px', fontSize: 12 })} data-testid="letter-save-template">⭐ حفظ كقالب</button>
+                {canEdit && <button onClick={() => saveAsTemplate()} style={btn('#f5f3ff', { color: '#6d28d9', padding: '5px 10px', fontSize: 12 })} data-testid="letter-save-template">⭐ حفظ كقالب</button>}
               </div>
             </div>}
             <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
               <button onClick={saveDraft} disabled={busy || isBatch} title={isBatch ? 'المسودات غير متاحة في وضع «خطاب لكل شخص»' : ''} style={btn(isBatch ? '#e2e8f0' : '#f59e0b', { flex: 1, padding: 12, fontSize: 14, color: isBatch ? '#94a3b8' : '#fff' })} data-testid="letter-draft-btn">{busy ? '…' : draft ? '💾 تحديث المسودة' : '💾 حفظ كمسودة'}</button>
               {draft && <button onClick={() => dlPdf(draft.id, `مسودة ${draft.number}`)} style={btn('#0f2440', { padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-btn">PDF المسودة</button>}
               {draft && <button onClick={() => dlPdf(draft.id, `مسودة ${draft.number}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: 12, fontSize: 13 })} data-testid="letter-draft-pdf-plain-btn" title="للطباعة على ورق مطبوع مسبقاً">🖨️ بلا كليشة</button>}
-              <button onClick={() => saveAsTemplate()} disabled={!body.trim()} style={btn('#f5f3ff', { color: '#6d28d9', padding: 12, fontSize: 13 })} data-testid="letter-save-template-btn" title="يحفظ المتن (بمتغيراته) والموضوع والموقّع كقالب جديد">⭐ كقالب</button>
+              {canEdit && <button onClick={() => saveAsTemplate()} disabled={!body.trim()} style={btn('#f5f3ff', { color: '#6d28d9', padding: 12, fontSize: 13 })} data-testid="letter-save-template-btn" title="يحفظ المتن (بمتغيراته) والموضوع والموقّع كقالب جديد">⭐ كقالب</button>}
               <button onClick={issue} disabled={busy} style={btn('#16a34a', { flex: 1.4, padding: 12, fontSize: 14 })} data-testid="letter-issue-btn">{busy ? 'جاري الإصدار…' : isBatch ? `👥 إصدار ${people.length} خطابات وتنزيل PDF مجمّع` : draft ? '✅ اعتماد وإصدار PDF' : 'إصدار وتنزيل PDF'}</button>
             </div>
           </div>
@@ -318,9 +319,9 @@ export default function LettersPage() {
 
       {tab === 'templates' && (
         <div style={card} data-testid="letter-templates">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><b>قوالب الخطابات ({templates.length})</b><button onClick={() => setTform({ name: '', subject: '', body: '', signatory_name: settings?.default_signatory_name || '', signatory_title: settings?.default_signatory_title || '', concerns: 'none', is_active: true })} style={btn('#16a34a')} data-testid="letter-template-add">+ قالب</button></div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><b>قوالب الخطابات ({templates.length})</b>{canEdit && <button onClick={() => setTform({ name: '', subject: '', body: '', signatory_name: settings?.default_signatory_name || '', signatory_title: settings?.default_signatory_title || '', concerns: 'none', is_active: true })} style={btn('#16a34a')} data-testid="letter-template-add">+ قالب</button>}</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['القالب', 'الموضوع', 'يخص', 'الموقِّع', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title || (t.signatory_position_id ? '🖋️ من دليل المناصب' : '—')}</td><td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => setTform(t)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })}>حذف</button></td></tr>)}</tbody></table>
+            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title || (t.signatory_position_id ? '🖋️ من دليل المناصب' : '—')}</td><td style={{ ...td, whiteSpace: 'nowrap' }}>{canEdit ? (<><button onClick={() => setTform(t)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })}>حذف</button></>) : <button onClick={() => { pickTpl(t.id); setTab('issue'); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-use-${t.id}`}>استخدام</button>}</td></tr>)}</tbody></table>
           {tform && <Modal title={tform.id ? 'تعديل قالب' : 'قالب جديد'} onClose={() => setTform(null)} width={720} testID="letter-template-modal">
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="اسم القالب *"><input style={inp} value={tform.name} onChange={(e) => setTform({ ...tform, name: e.target.value })} data-testid="lt-name" /></Field>
@@ -353,7 +354,7 @@ export default function LettersPage() {
                 </>) : (<>
                   <button onClick={() => dlPdf(l.id, `خطاب ${l.number_display}`)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-pdf-${l.id}`}>PDF</button>{' '}
                   <button onClick={() => dlPdf(l.id, `خطاب ${l.number_display}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} title="PDF بلا كليشة — للطباعة على ورق مطبوع مسبقاً" data-testid={`letter-pdf-plain-${l.id}`}>🖨️ بلا كليشة</button>{' '}
-                  <button onClick={async () => { const { data } = await api.get(`/letters/${l.id}`); saveAsTemplate(data); }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '5px 10px', fontSize: 12 })} title="حفظ هذا الخطاب كقالب" data-testid={`letter-template-from-${l.id}`}>⭐ قالب</button>{' '}
+                  {canEdit && <><button onClick={async () => { const { data } = await api.get(`/letters/${l.id}`); saveAsTemplate(data); }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '5px 10px', fontSize: 12 })} title="حفظ هذا الخطاب كقالب" data-testid={`letter-template-from-${l.id}`}>⭐ قالب</button>{' '}</>}
                   <button onClick={async () => { await api.post(`/letters/${l.id}/${l.is_revoked ? 'restore' : 'revoke'}`); loadLog(); }} style={btn('#f1f5f9', { color: l.is_revoked ? '#16a34a' : '#b91c1c', padding: '5px 10px', fontSize: 12 })}>{l.is_revoked ? 'استرجاع' : 'إلغاء'}</button>
                 </>)}
               </td></tr>)}</tbody></table>

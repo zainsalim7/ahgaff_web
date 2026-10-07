@@ -11,7 +11,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity, export_stamp
+from .deps import get_db, get_current_user, log_activity, export_stamp, has_permission, has_any_permission
+from .hr_common import scope_employee_ids, user_id_of
 from .statements import _apply_vars, _var_ctx, _safe_dept, _academic_year_display, get_verify_base, student_gender, GENDER_VARS
 from services.letter_pdf import build_letter_pdf
 
@@ -22,13 +23,77 @@ LETTER_VARS = ["اسم_المرسل_إليه", "صفة_المرسل_إليه", "
                "اسم_الطالب", "رقم_القيد", "الكلية", "القسم", "المستوى", "الجنسية", "اسم_الموظف", "الوظيفة", "وحدة_الموظف", "اسم_المدرس", "جدول_الأسماء", "قائمة_الأسماء", "عدد_الأسماء"]
 
 
+P_ISSUE, P_SETTINGS = "issue_letters", "manage_letter_settings"
+HR_PERMS = ["hr_manage_correspondence", "hr_manage_employees"]
+
+
 def _can(user: dict) -> bool:
-    return user.get("role") not in ("teacher", "student")
+    """إصدار الخطابات: صلاحية issue_letters أو صلاحيات HR (لخطابات الموظفين) — الأدمن دائماً"""
+    if user.get("role") in ("teacher", "student"):
+        return False
+    return has_permission(user, P_ISSUE) or has_any_permission(user, HR_PERMS)
 
 
 def _guard(user: dict):
     if not _can(user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك بإصدار الخطابات")
+        raise HTTPException(status_code=403, detail="ليست لديك صلاحية إصدار الخطابات الرسمية")
+
+
+def _guard_settings(user: dict):
+    _guard(user)
+    if not has_permission(user, P_SETTINGS):
+        raise HTTPException(status_code=403, detail="تعديل الكليشة والقوالب يتطلب صلاحية «إدارة كليشة الخطابات وقوالبها»")
+
+
+def _user_faculties(user: dict) -> list:
+    fids = set(user.get("faculty_ids") or [])
+    if user.get("faculty_id"):
+        fids.add(user["faculty_id"])
+    return [str(f) for f in fids if f]
+
+
+async def _visible_filter(db, user: dict) -> dict:
+    """نطاق السجل: الأدمن الكل؛ غيره: ما أصدره + العامة (بلا أشخاص) + ما يخص كلياته + موظفو نطاقه الإداري"""
+    if user.get("role") == "admin":
+        return {}
+    uid = user_id_of(user)
+    ors: list = [{"issued_by": uid}, {"created_by": uid}, {"people": {"$size": 0}}, {"people": {"$exists": False}}]
+    fids = _user_faculties(user)
+    if fids:
+        ors.append({"people": {"$elemMatch": {"kind": {"$in": ["student", "teacher"]}, "faculty_id": {"$in": fids}}}})
+    if has_any_permission(user, HR_PERMS):
+        emp_ids = await scope_employee_ids(db, user)
+        ors.append({"people.kind": "employee"} if emp_ids is None else {"people": {"$elemMatch": {"kind": "employee", "id": {"$in": emp_ids}}}})
+    return {"$or": ors}
+
+
+async def _load_visible(db, user: dict, lid: str) -> dict:
+    if not ObjectId.is_valid(lid):
+        raise HTTPException(status_code=404, detail="الخطاب غير موجود")
+    s = await db.letters.find_one({"_id": ObjectId(lid)})
+    if not s:
+        raise HTTPException(status_code=404, detail="الخطاب غير موجود")
+    if user.get("role") != "admin" and not await db.letters.find_one({"_id": s["_id"], **(await _visible_filter(db, user))}, {"_id": 1}):
+        raise HTTPException(status_code=403, detail="هذا الخطاب خارج نطاق صلاحيتك")
+    return s
+
+
+def _people_faculty(row: dict) -> str:
+    if row["kind"] == "student":
+        return str((row.get("_fac") or {}).get("_id") or row["_doc"].get("faculty_id") or (row.get("_dept") or {}).get("faculty_id") or "")
+    if row["kind"] == "teacher":
+        return str(row["_doc"].get("faculty_id") or "")
+    return ""
+
+
+async def backfill_people_faculty(db):
+    """ترحيل مرة واحدة: إضافة faculty_id لأشخاص الخطابات القديمة ليعمل نطاق السجل"""
+    async for l in db.letters.find({"people.0": {"$exists": True}, "people.faculty_id": {"$exists": False}}, {"people": 1}):
+        people = []
+        for p in l.get("people") or []:
+            row = await _person_row(db, p.get("kind", "student"), p.get("id", ""))
+            people.append({**p, "faculty_id": _people_faculty(row) if row else ""})
+        await db.letters.update_one({"_id": l["_id"]}, {"$set": {"people": people}})
 
 
 def _oid(v):
@@ -58,15 +123,16 @@ class LetterSettings(BaseModel):
 
 @router.get("/letters/settings")
 async def get_settings(current_user: dict = Depends(get_current_user)):
+    """يرجع أيضاً can_edit_settings (كليشة/قوالب)"""
     _guard(current_user)
     s = await get_db().letter_settings.find_one({"_id": SETTINGS_ID}) or {}
     s.pop("_id", None)
-    return {**LetterSettings().dict(), **s, "variables": LETTER_VARS}
+    return {**LetterSettings().dict(), **s, "variables": LETTER_VARS, "can_edit_settings": has_permission(current_user, P_SETTINGS)}
 
 
 @router.put("/letters/settings")
 async def put_settings(data: LetterSettings, current_user: dict = Depends(get_current_user)):
-    _guard(current_user)
+    _guard_settings(current_user)
     await get_db().letter_settings.update_one({"_id": SETTINGS_ID}, {"$set": {**data.dict(), "updated_at": datetime.now(timezone.utc).isoformat()}}, upsert=True)
     return {"ok": True}
 
@@ -95,7 +161,7 @@ async def list_templates(current_user: dict = Depends(get_current_user)):
 
 @router.post("/letter-templates")
 async def create_template(data: LetterTemplate, current_user: dict = Depends(get_current_user)):
-    _guard(current_user)
+    _guard_settings(current_user)
     if not data.name.strip() or not data.body.strip():
         raise HTTPException(status_code=400, detail="اسم القالب والمتن مطلوبان")
     r = await get_db().letter_templates.insert_one({**data.dict(), "created_at": datetime.now(timezone.utc).isoformat(), "created_by": current_user.get("id")})
@@ -104,14 +170,14 @@ async def create_template(data: LetterTemplate, current_user: dict = Depends(get
 
 @router.put("/letter-templates/{tid}")
 async def update_template(tid: str, data: LetterTemplate, current_user: dict = Depends(get_current_user)):
-    _guard(current_user)
+    _guard_settings(current_user)
     await get_db().letter_templates.update_one({"_id": ObjectId(tid)}, {"$set": data.dict()})
     return {"ok": True}
 
 
 @router.delete("/letter-templates/{tid}")
 async def delete_template(tid: str, current_user: dict = Depends(get_current_user)):
-    _guard(current_user)
+    _guard_settings(current_user)
     await get_db().letter_templates.update_one({"_id": ObjectId(tid)}, {"$set": {"is_active": False}})
     return {"ok": True}
 
@@ -229,7 +295,7 @@ async def _build_ctx(db, rec: dict, subject: str, people_in: List[dict]) -> tupl
         ctx["عدد_الأسماء"] = str(len(rows))
         ctx["جدول_الأسماء"] = "{جدول_الأسماء}"  # يبقى علامة يرسمها مولّد PDF كجدول
     table = _table_rows([{k: v for k, v in r.items() if not k.startswith("_")} for r in rows])
-    return ctx, table, [{"kind": r["kind"], "id": str(r["_doc"]["_id"]), "name": r["name"]} for r in rows]
+    return ctx, table, [{"kind": r["kind"], "id": str(r["_doc"]["_id"]), "name": r["name"], "faculty_id": _people_faculty(r)} for r in rows]
 
 
 class PreviewIn(BaseModel):
@@ -388,7 +454,7 @@ async def batch_pdf(batch_id: str, letterhead: bool = True, current_user: dict =
     """PDF واحد يجمع خطابات الدفعة متتابعة (كل خطاب يبدأ بصفحة جديدة)"""
     _guard(current_user)
     db = get_db()
-    rows = await db.letters.find({"batch_id": batch_id}).sort("batch_index", 1).to_list(500)
+    rows = await db.letters.find({"batch_id": batch_id, **(await _visible_filter(db, current_user))}).sort("batch_index", 1).to_list(500)
     if not rows:
         raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
@@ -413,8 +479,8 @@ async def save_draft(data: IssueIn, current_user: dict = Depends(get_current_use
     doc = {**(await _compose(db, data, settings)), "status": "draft", "is_revoked": False, "updated_at": datetime.now(timezone.utc).isoformat(),
            "updated_by_name": current_user.get("full_name", "")}
     if data.draft_id and ObjectId.is_valid(data.draft_id):
-        ex = await db.letters.find_one({"_id": ObjectId(data.draft_id)})
-        if not ex or ex.get("status") != "draft":
+        ex = await _load_visible(db, current_user, data.draft_id)
+        if ex.get("status") != "draft":
             raise HTTPException(status_code=400, detail="المسودة غير موجودة أو صدرت رسمياً")
         await db.letters.update_one({"_id": ex["_id"]}, {"$set": doc})
         return {"id": str(ex["_id"]), "number": ex["number_display"], "status": "draft"}
@@ -430,8 +496,8 @@ async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user:
     """✅ اعتماد المسودة وإصدارها: نفس النسخة تأخذ الرقم الرسمي ورمز QR وتُؤرشف"""
     _guard(current_user)
     db = get_db()
-    ex = await db.letters.find_one({"_id": ObjectId(lid)})
-    if not ex or ex.get("status") != "draft":
+    ex = await _load_visible(db, current_user, lid)
+    if ex.get("status") != "draft":
         raise HTTPException(status_code=400, detail="المسودة غير موجودة أو صدرت مسبقاً")
     if not ex.get("subject") or not ((ex.get("recipient") or {}).get("name") or (ex.get("recipient") or {}).get("title")):
         raise HTTPException(status_code=400, detail="أكمل الموضوع والمرسَل إليه قبل الاعتماد")
@@ -450,6 +516,7 @@ async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user:
 @router.delete("/letters/{lid}")
 async def delete_draft(lid: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
+    await _load_visible(get_db(), current_user, lid)
     r = await get_db().letters.delete_one({"_id": ObjectId(lid), "status": "draft"})
     if not r.deleted_count:
         raise HTTPException(status_code=400, detail="تُحذف المسودات فقط — الخطابات الصادرة تُلغى ولا تُحذف")
@@ -493,6 +560,9 @@ async def list_letters(q: Optional[str] = None, date_from: Optional[str] = None,
         query.setdefault("issued_at", {})["$gte"] = date_from
     if date_to:
         query.setdefault("issued_at", {})["$lte"] = date_to + "T23:59:59"
+    vis = await _visible_filter(get_db(), current_user)
+    if vis:
+        query = {"$and": [query, vis]} if query else vis
     rows = await get_db().letters.find(query, {"body": 0, "table": 0, "inputs": 0}).sort("issued_at", -1).limit(limit).to_list(limit)
     return [_ser(r) for r in rows]
 
@@ -500,15 +570,13 @@ async def list_letters(q: Optional[str] = None, date_from: Optional[str] = None,
 @router.get("/letters/{lid}")
 async def get_letter(lid: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
-    s = await get_db().letters.find_one({"_id": ObjectId(lid)})
-    if not s:
-        raise HTTPException(status_code=404, detail="الخطاب غير موجود")
-    return _ser(s)
+    return _ser(await _load_visible(get_db(), current_user, lid))
 
 
 @router.post("/letters/{lid}/revoke")
 async def revoke(lid: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
+    await _load_visible(get_db(), current_user, lid)
     await get_db().letters.update_one({"_id": ObjectId(lid)}, {"$set": {"is_revoked": True, "revoked_at": datetime.now(timezone.utc).isoformat(), "revoked_by": current_user.get("full_name", "")}})
     return {"ok": True}
 
@@ -516,6 +584,7 @@ async def revoke(lid: str, current_user: dict = Depends(get_current_user)):
 @router.post("/letters/{lid}/restore")
 async def restore(lid: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
+    await _load_visible(get_db(), current_user, lid)
     await get_db().letters.update_one({"_id": ObjectId(lid)}, {"$set": {"is_revoked": False}})
     return {"ok": True}
 
@@ -537,9 +606,7 @@ async def verify_letter(token: str):
 async def letter_pdf(lid: str, letterhead: bool = True, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
-    s = await db.letters.find_one({"_id": ObjectId(lid)})
-    if not s:
-        raise HTTPException(status_code=404, detail="الخطاب غير موجود")
+    s = await _load_visible(db, current_user, lid)
     settings = await db.letter_settings.find_one({"_id": SETTINGS_ID}) or {}
     pdf = build_letter_pdf(s, settings, draft=s.get("status") == "draft", letterhead=letterhead)
     from urllib.parse import quote
