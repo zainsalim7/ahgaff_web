@@ -49,6 +49,8 @@
 
 - ✅ **تحسين استيراد ملف الخطة الدراسية** 📥 (2026-10-07): study_plans.py — `WEEK_COL_NAMES`/`TOPIC_COL_NAMES`/`NOTES_COL_NAMES` (مطابقة بعد trim وبلا حساسية لحالة الأحرف اللاتينية)؛ `normalize_digits` (٠-٩ و۰-۹ → 0-9) و`parse_week_number`؛ `parse_study_plan_rows(df)` بقواعد: أسبوع+موضوع → يُضاف، أسبوع بلا موضوع → أسبوع فارغ `topics: []`، موضوع بلا أسبوع → يُلحق بالأسبوع السابق (ولا أسبوع سابق → يُتجاهل)، صف فارغ أو نص غير رقمي في عمود الأسبوع (مثل صف التعليمات) → يُتجاهل؛ عناوين المواضيع تُحفظ كما هي (لا تُحوَّل أرقامها). رسالة الخطأ عند غياب العمودين تذكر كل الأسماء المقبولة. `GET /template/study-plan` صار openpyxl: رأس أزرق فاتح + صف تعليمات رمادي مدمج A2:C2 + أمثلة (موضوع إضافي بلا رقم، رقم هندي ٢، أسبوع 3 بلا درس) + RTL. تلميح شاشة manage-study-plan محدَّث. لم يُمس أي endpoint آخر. (مُختبر curl: رفع القالب نفسه → 4 أسابيع (الأسبوع 3 فارغ، الأسبوع 1 بموضوعين)؛ CSV بأعمدة « اسبوع » و« الدرس » وأرقام هندية وصف «الأسبوع التاسع» → 7،8 فقط؛ أعمدة خاطئة → 400 بالقائمة الكاملة — نُظفت خطة الاختبار)
 
+- ✅ **إزالة زر «خطاب» من رأس صفحة تفاصيل الطالب** (2026-10-07): بطلب المستخدم؛ حُذف `issue-letter-btn` (student-details.tsx) — زر «إفادة» باقٍ، وإصدار الخطابات يتم من شاشة الخطابات الرسمية فقط (أخطاء tsc في الملف قديمة 24 قبل/بعد).
+
 ## البنية
 - Backend: `/app/backend/backend/server.py` (قديم/ضخم) + `/app/backend/backend/routes/*` (weekly_schedule, statements, schedule_import, student_transfer, teaching_load...)
 - Frontend: `/app/frontend/app/*` (expo router) + `/app/frontend/src/components/MasterScheduleView.tsx`
