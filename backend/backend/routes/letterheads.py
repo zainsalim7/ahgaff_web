@@ -100,6 +100,7 @@ class LetterheadIn(BaseModel):
     footer_image_base64: Optional[str] = ""
     watermark_mode: Optional[str] = "none"      # 💧 none | default | custom
     watermark_base64: Optional[str] = ""
+    sections: Optional[dict] = None             # ✍️ أقسام الخطاب الافتراضية لهذه الكليشة (HTML)
     visibility: Visibility = Visibility()
 
 
@@ -138,6 +139,20 @@ async def update_letterhead(lid: str, data: LetterheadIn, current_user: dict = D
     db = get_db()
     await _owned_or_admin(db, "letterheads", lid, current_user)
     await db.letterheads.update_one({"_id": ObjectId(lid)}, {"$set": {**data.dict(exclude={"visibility"}), **(await _owner_fields(db, current_user, data.visibility))}})
+    return {"ok": True}
+
+
+class SectionsIn(BaseModel):
+    sections: dict
+
+
+@router.patch("/letterheads/{lid}/sections")
+async def patch_letterhead_sections(lid: str, data: SectionsIn, current_user: dict = Depends(get_current_user)):
+    """حفظ تنسيق أقسام الخطاب كافتراضي للكليشة (المالك/الأدمن)"""
+    _guard(current_user)
+    db = get_db()
+    await _owned_or_admin(db, "letterheads", lid, current_user)
+    await db.letterheads.update_one({"_id": ObjectId(lid)}, {"$set": {"sections": {k: v for k, v in data.sections.items() if isinstance(v, str)}, "updated_at": datetime.now(timezone.utc).isoformat()}})
     return {"ok": True}
 
 

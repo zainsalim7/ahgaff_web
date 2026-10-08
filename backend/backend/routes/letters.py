@@ -20,7 +20,16 @@ from services.letter_pdf import build_letter_pdf
 router = APIRouter(tags=["الخطابات"])
 SETTINGS_ID = "letters"
 DEFAULT_REF = "{seq}/خ/{yy}"
-LETTER_VARS = ["اسم_المرسل_إليه", "صفة_المرسل_إليه", "جهة_المرسل_إليه", "تكريم", "الموضوع", "التاريخ", "التاريخ_الهجري", "العام_الجامعي",
+SECTION_KEYS = ["recipient", "greeting", "subject", "closing", "signature"]
+SECTION_LABELS = {"recipient": "المستلم", "greeting": "التحية", "subject": "الموضوع", "closing": "الخاتمة", "signature": "التوقيع"}
+DEFAULT_SECTIONS = {
+    "recipient": '<p style="text-align: right"><strong><span style="font-size: 14pt">إلى: {اسم_المرسل_إليه} {تكريم}</span></strong></p><p style="text-align: right"><span style="font-size: 13pt">{صفة_المرسل_إليه}</span></p><p style="text-align: right"><span style="font-size: 13pt">{جهة_المرسل_إليه}</span></p>',
+    "greeting": '<p style="text-align: right"><span style="font-size: 13pt">السلام عليكم ورحمة الله وبركاته،</span></p>',
+    "subject": '<p style="text-align: center"><strong><u><span style="font-size: 14pt">الموضوع: {الموضوع}</span></u></strong></p>',
+    "closing": '<p style="text-align: right"><span style="font-size: 13.5pt">وتفضلوا بقبول فائق الاحترام والتقدير،</span></p>',
+    "signature": '<p style="text-align: center"><strong><span style="font-size: 13pt">{صفة_الموقع}</span></strong></p><p style="text-align: center"><span style="font-size: 13pt">{اسم_الموقع}</span></p>',
+}
+LETTER_VARS = ["اسم_المرسل_إليه", "صفة_المرسل_إليه", "جهة_المرسل_إليه", "تكريم", "الموضوع", "اسم_الموقع", "صفة_الموقع", "التاريخ", "التاريخ_الهجري", "العام_الجامعي",
                "اسم_الطالب", "رقم_القيد", "الكلية", "القسم", "المستوى", "الجنسية", "اسم_الموظف", "الوظيفة", "وحدة_الموظف", "اسم_المدرس", "جدول_الأسماء", "قائمة_الأسماء", "عدد_الأسماء"]
 
 
@@ -151,6 +160,7 @@ class LetterTemplate(BaseModel):
     signatory_position_id: Optional[str] = ""   # 🖋️ من دليل المناصب (يتقدّم على الاسم/الصفة اليدويين)
     letterhead_id: Optional[str] = ""
     series_id: Optional[str] = ""
+    sections: Optional[dict] = None
     concerns: Optional[str] = "none"  # none | student | employee | teacher | many
     is_active: bool = True
 
@@ -366,6 +376,7 @@ class IssueIn(BaseModel):
     letterhead_id: Optional[str] = ""  # 📄 الكليشة المختارة (فارغ = الافتراضية العامة)
     series_id: Optional[str] = ""      # 🔢 سلسلة الترقيم المختارة (فارغ = الافتراضية العامة)
     letterhead_override: Optional[dict] = None  # 👁️ معاينة كليشة قيد التحرير (غير محفوظة)
+    sections: Optional[dict] = None   # ✍️ أقسام منسّقة (المستلم/التحية/الموضوع/الخاتمة/التوقيع) HTML بمتغيرات
     person_as_recipient: bool = False  # الشخص نفسه هو المرسَل إليه
 
 
@@ -396,12 +407,14 @@ async def _compose(db, data: IssueIn, settings: dict) -> dict:
     """الجزء المشترك: تعبئة المتغيرات + الجدول + بيانات المرسَل إليه والموقّع (بلا ترقيم)"""
     ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
     sig_name, sig_title = await _resolve_sig(db, data.signatory_position_id, data.signatory_name, data.signatory_title, settings)
-    return {"subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people,
+    ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title}
+    sections = {k: _apply_vars(v, ctx) for k, v in (data.sections or {}).items() if k in SECTION_KEYS and v}
+    return {"subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people, "sections": sections,
             "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
             "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
             "signatory_name": sig_name, "signatory_title": sig_title, "signatory_position_id": data.signatory_position_id or "",
             "layout": data.layout or None, "valid_days": data.valid_days,
-            "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id}}
+            "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id, "sections": data.sections or {}}}
 
 
 def _validate(data: IssueIn):
@@ -446,6 +459,20 @@ async def _finalize_fields(db, series: dict, base_url: Optional[str], valid_days
             "verify_token": token, "verify_url": f"{verify_base}/verify-letter?token={token}" if verify_base else token,
             "issued_by": current_user.get("id", ""), "issued_by_name": current_user.get("full_name", ""), "issued_at": now.isoformat(),
             "expires_at": (now + timedelta(days=valid_days)).isoformat() if valid_days and valid_days > 0 else None, "is_revoked": False}
+
+
+@router.get("/letters/section-defaults")
+async def section_defaults(letterhead_id: Optional[str] = None, template_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """✍️ المحتوى الافتراضي لأقسام الخطاب: النظام ← الكليشة ← القالب (القالب يتقدم)"""
+    _guard(current_user)
+    db = get_db()
+    out = dict(DEFAULT_SECTIONS)
+    lh = await resolve_letterhead(db, current_user, letterhead_id)
+    out.update({k: v for k, v in (lh.get("sections") or {}).items() if k in SECTION_KEYS and v})
+    if template_id and ObjectId.is_valid(template_id):
+        t = await db.letter_templates.find_one({"_id": ObjectId(template_id)}, {"sections": 1})
+        out.update({k: v for k, v in ((t or {}).get("sections") or {}).items() if k in SECTION_KEYS and v})
+    return {"sections": out, "labels": SECTION_LABELS, "keys": SECTION_KEYS}
 
 
 @router.get("/letters/layout-defaults")
@@ -552,7 +579,9 @@ async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user:
     series = await resolve_series(db, current_user, ex.get("series_id"))
     inputs = ex.get("inputs") or {}
     ctx, table, people = await _build_ctx(db, inputs.get("recipient") or ex.get("recipient") or {}, ex.get("subject") or "", inputs.get("people") or [])
+    sctx = {**ctx, "اسم_الموقع": ex.get("signatory_name", ""), "صفة_الموقع": ex.get("signatory_title", "")}
     upd = {**(await _finalize_fields(db, series, base_url, ex.get("valid_days"), current_user)), **_lh_fields(settings, series), "draft_number": ex.get("number_display"),
+           "sections": {k: _apply_vars(v, sctx) for k, v in (inputs.get("sections") or {}).items() if k in SECTION_KEYS and v} or ex.get("sections") or {},
            "body": _apply_vars((inputs.get("body") or ex.get("body") or "").strip(), ctx), "table": table, "people": people}
     if ex.get("signatory_position_id"):
         upd["signatory_name"], upd["signatory_title"] = await _resolve_sig(db, ex["signatory_position_id"], ex.get("signatory_name"), ex.get("signatory_title"), settings)

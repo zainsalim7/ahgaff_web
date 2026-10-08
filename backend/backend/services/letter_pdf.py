@@ -226,6 +226,24 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     c.setFillColorRGB(0, 0, 0)
 
     y = H - f("start_y") * mm
+    def ensure(space):
+        nonlocal y
+        if y - space < 60 * mm:
+            footer(); c.showPage(); header(); y = H - (f("header_bottom") + 13) * mm
+
+    def ensure_y(space):
+        nonlocal y
+        before = y
+        ensure(space)
+        return y if y != before else None
+
+    secs = {k: v for k, v in (s.get("sections") or {}).items() if v and is_html(v) and parse_rich(v) and any(r["text"].strip() for p in parse_rich(v) for r in p["runs"])}
+
+    def rich_sec(key, x_l, x_r, default_size=13, default_align="right", lead=1.5):
+        """✍️ قسم منسّق (HTML من المحرر) بدل الكتلة المرسومة يدوياً"""
+        nonlocal y
+        y = draw_rich(c, parse_rich(secs[key], default_size=default_size, default_font="amiri", default_align=default_align), x_l, x_r, y + default_size * 0.35 * lead, leading=lead, para_gap=2, ensure=ensure_y)
+
     rec = s.get("recipient") or {}
     r_align, r_ind = str(L.get("recipient_align") or "right"), f("recipient_indent") * mm
 
@@ -250,13 +268,18 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         c.drawRightString(right, y, main)
         if sfx:
             c.drawRightString(right - w_main - pdfmetrics.stringWidth(" ", fnt, size) - sgap, y, sfx)
-    rec_line(f"إلى: {rec.get('name') or rec.get('title') or ''}", suffix=rec.get("suffix") or ""); y -= rgap + 0.5 * mm
-    if rec.get("name") and rec.get("title"):
-        rec_line(rec["title"], sub=True); y -= rgap
-    if rec.get("organization") and rec.get("organization") != rec.get("title"):
-        rec_line(rec["organization"], sub=True); y -= rgap
+    if "recipient" in secs:
+        rich_sec("recipient", LM, RM - r_ind, default_size=rfont, default_align=r_align); y -= 2 * mm
+    else:
+        rec_line(f"إلى: {rec.get('name') or rec.get('title') or ''}", suffix=rec.get("suffix") or ""); y -= rgap + 0.5 * mm
+        if rec.get("name") and rec.get("title"):
+            rec_line(rec["title"], sub=True); y -= rgap
+        if rec.get("organization") and rec.get("organization") != rec.get("title"):
+            rec_line(rec["organization"], sub=True); y -= rgap
     y -= f("gap_recipient") * mm
-    if L.get("show_greeting"):
+    if "greeting" in secs:
+        rich_sec("greeting", LM, RM - f("greeting_indent") * mm, default_size=f("greeting_font"), default_align=str(L.get("greeting_align") or "right")); y -= f("gap_greeting") * mm - 4 * mm
+    elif L.get("show_greeting"):
         g_al, g_in = str(L.get("greeting_align") or "right"), f("greeting_indent") * mm
         c.setFont("Amiri", f("greeting_font")); g_txt = ar("السلام عليكم ورحمة الله وبركاته،")
         if g_al == "center":
@@ -266,15 +289,13 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         else:
             c.drawRightString(RM - g_in, y, g_txt)
         y -= f("gap_greeting") * mm
-    c.setFont(BOLD, 14)
-    c.drawCentredString(W / 2, y, ar(f"الموضوع: {s.get('subject', '')}"))
-    sw = pdfmetrics.stringWidth(ar(f"الموضوع: {s.get('subject', '')}"), BOLD, 14)
-    c.setLineWidth(0.7); c.line(W / 2 - sw / 2, y - 1.6 * mm, W / 2 + sw / 2, y - 1.6 * mm); y -= f("gap_subject") * mm
-
-    def ensure(space):
-        nonlocal y
-        if y - space < 60 * mm:
-            footer(); c.showPage(); header(); y = H - (f("header_bottom") + 13) * mm
+    if "subject" in secs:
+        rich_sec("subject", LM, RM, default_size=14, default_align="center"); y -= f("gap_subject") * mm - 5 * mm
+    else:
+        c.setFont(BOLD, 14)
+        c.drawCentredString(W / 2, y, ar(f"الموضوع: {s.get('subject', '')}"))
+        sw = pdfmetrics.stringWidth(ar(f"الموضوع: {s.get('subject', '')}"), BOLD, 14)
+        c.setLineWidth(0.7); c.line(W / 2 - sw / 2, y - 1.6 * mm, W / 2 + sw / 2, y - 1.6 * mm); y -= f("gap_subject") * mm
 
     def draw_table(tbl, inherit=None):
         nonlocal y
@@ -332,12 +353,6 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
             row(r)
         c.setFillColor(rl_colors.black); c.setStrokeColor(rl_colors.black)
 
-    def ensure_y(space):
-        nonlocal y
-        before = y
-        ensure(space)
-        return y if y != before else None
-
     c.setFont("Amiri", BODY)
     body = s.get("body") or ""
     parts = body.split("{جدول_الأسماء}")
@@ -357,7 +372,9 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         y -= f("gap_table_before") * mm; draw_table(s["table"]); y -= f("gap_table_after") * mm
     y -= f("gap_closing") * mm
     ensure(45 * mm)
-    if L.get("show_closing"):
+    if "closing" in secs:
+        rich_sec("closing", LM, RM, default_size=BODY)
+    elif L.get("show_closing"):
         c.setFont("Amiri", BODY); c.drawRightString(RM, y, ar(settings.get("closing") or "وتفضلوا بقبول فائق الاحترام والتقدير،"))
     y -= f("gap_signature") * mm
 
@@ -367,11 +384,18 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     s_align, s_off = str(L.get("signature_align") or "left"), f("signature_offset") * mm
     sig_cx = (W / 2) if s_align == "center" else (RM - s_off - 22 * mm) if s_align == "right" else (LM + s_off + 22 * mm)
     sfam = str(L.get("signature_font_family") or "amiri")
-    c.setFont(rt_font(sfam, bool(L.get("signature_title_bold", True))), f("signature_title_font")); c.drawCentredString(sig_cx, y, rt_fit(ar(sig_title), sfam, bool(L.get("signature_title_bold", True))))
-    name_y = y - 9 * mm
-    if sig_img:
-        c.drawImage(sig_img, sig_cx - 19 * mm, y - 20 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); name_y = y - 25 * mm
-    c.setFont(rt_font(sfam, bool(L.get("signature_name_bold", False))), f("signature_name_font")); c.drawCentredString(sig_cx, name_y, rt_fit(ar(sig_name), sfam, bool(L.get("signature_name_bold", False))))
+    if "signature" in secs:
+        y0 = y
+        rich_sec("signature", sig_cx - 40 * mm, sig_cx + 40 * mm, default_size=f("signature_title_font"), default_align="center")
+        if sig_img:
+            c.drawImage(sig_img, sig_cx - 19 * mm, y - 16 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); y -= 17 * mm
+        y = min(y, y0 - 25 * mm)
+    else:
+        c.setFont(rt_font(sfam, bool(L.get("signature_title_bold", True))), f("signature_title_font")); c.drawCentredString(sig_cx, y, rt_fit(ar(sig_title), sfam, bool(L.get("signature_title_bold", True))))
+        name_y = y - 9 * mm
+        if sig_img:
+            c.drawImage(sig_img, sig_cx - 19 * mm, y - 20 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); name_y = y - 25 * mm
+        c.setFont(rt_font(sfam, bool(L.get("signature_name_bold", False))), f("signature_name_font")); c.drawCentredString(sig_cx, name_y, rt_fit(ar(sig_name), sfam, bool(L.get("signature_name_bold", False))))
 
     qr = qrcode.make(s.get("verify_url") or s.get("verify_token", "") or "DRAFT", box_size=4, border=1)
     qb = io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)
