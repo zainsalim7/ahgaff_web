@@ -21,6 +21,22 @@ export const textToHtml = (s: string, align: string = 'center') => (isHtmlBody(s
 
 type Props = { value: string; onChange: (html: string) => void; variables?: string[]; placeholder?: string; minHeight?: number; testID?: string; defaultAlign?: 'center' | 'right' };
 
+const AR_DAYS = ['الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت'];
+/** «يوم الاثنين 12/10/2026م الموافق 30/04/1448هـ» — الهجري بتقويم أم القرى من المتصفح */
+export const formatArabicDate = (iso: string): string => {
+  if (!iso) return '';
+  const d = new Date(`${iso}T12:00:00`);
+  if (isNaN(d.getTime())) return '';
+  const g = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}م`;
+  let h = '';
+  try {
+    const parts = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', { day: '2-digit', month: '2-digit', year: 'numeric' }).formatToParts(d);
+    const get = (t: string) => parts.find((x) => x.type === t)?.value || '';
+    if (get('year')) h = ` الموافق ${get('day')}/${get('month')}/${get('year').replace(/\D/g, '')}هـ`;
+  } catch { /* متصفح بلا تقويم هجري */ }
+  return `يوم ${AR_DAYS[d.getDay()]} ${g}${h}`;
+};
+
 const tb = (active = false): React.CSSProperties => ({ padding: '3px 8px', borderRadius: 6, border: '1px solid #cbd5e1', backgroundColor: active ? '#00796b' : '#fff', color: active ? '#fff' : '#1a2540', fontSize: 12, fontWeight: 800, cursor: 'pointer', minWidth: 28 });
 const sel: React.CSSProperties = { padding: '3px 6px', borderRadius: 6, border: '1px solid #cbd5e1', fontSize: 12, backgroundColor: '#fff', color: '#1a2540', fontWeight: 700 };
 
@@ -68,6 +84,10 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
         <button type="button" style={tb(editor.isActive({ textAlign: 'center' }))} onClick={run(() => editor.chain().focus().setTextAlign('center').run())} title="وسط">↔</button>
         <button type="button" style={tb(editor.isActive({ textAlign: 'justify' }))} onClick={run(() => editor.chain().focus().setTextAlign('justify').run())} title="ضبط">☰</button>
         <button type="button" data-testid={`${testID}-align-left`} style={tb(editor.isActive({ textAlign: 'left' }))} onClick={run(() => editor.chain().focus().setTextAlign('left').run())} title="يسار (نص بلغة أجنبية LTR)">⇥</button>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #cbd5e1', borderRadius: 6, padding: '1px 6px', background: '#fff' }} title="إدراج تاريخ معيّن (باليوم والهجري) عند المؤشر">
+          <span style={{ fontSize: 11.5, fontWeight: 800 }}>📅</span>
+          <input type="date" data-testid={`${testID}-date-pick`} style={{ border: 'none', fontSize: 11.5, outline: 'none', width: 118 }} onChange={(e) => { const txt = formatArabicDate(e.target.value); if (txt) { editor.chain().focus().insertContent(`${txt} `).run(); e.target.value = ''; } }} />
+        </span>
         <button type="button" style={{ ...tb(), marginRight: 'auto', color: '#64748b' }} onClick={run(() => editor.chain().focus().unsetAllMarks().clearNodes().run())} title="مسح التنسيق">⌫ تنسيق</button>
       </div>
       <EditorContent editor={editor} className="stmt-tiptap" />

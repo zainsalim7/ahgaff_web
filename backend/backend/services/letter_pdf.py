@@ -11,6 +11,14 @@ DEFAULT_LAYOUT = {
     "gap_recipient": 3,       # بعد كتلة المرسَل إليه
     "recipient_indent": 0,    # 📍 إزاحة كتلة المرسَل إليه من الهامش (مم)
     "recipient_align": "right",  # right | center | left
+    "body_indent": 8,            # ✍️ مسافة بادئة لأول سطر في كل فقرة (مم)
+    "recipient_font_family": "amiri",  # خط كتلة المرسَل إليه: amiri | kufi | cairo | tajawal | almarai
+    "recipient_bold": True,      # «إلى:» عريض
+    "signature_font_family": "amiri",
+    "signature_title_font": 13,  # حجم صفة الموقِّع
+    "signature_name_font": 13,   # حجم اسم الموقِّع
+    "signature_title_bold": True,
+    "signature_name_bold": False,
     "recipient_font": 14,        # حجم خط سطر «إلى:»
     "recipient_sub_font": 13,    # حجم خط الصفة/الجهة
     "recipient_line_gap": 7,     # المسافة بين أسطر كتلة المرسَل إليه (مم)
@@ -94,7 +102,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     from reportlab.pdfbase import pdfmetrics
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.pdfgen import canvas as pdfcanvas
-    from services.rich_text_pdf import is_html, parse_rich, draw_rich, parse_color, placeholder_style
+    from services.rich_text_pdf import is_html, parse_rich, draw_rich, parse_color, placeholder_style, font_name as rt_font, _fit as rt_fit
     from reportlab.lib import colors as rl_colors
 
     L = merge_layout(settings.get("layout"), s.get("layout"))
@@ -225,9 +233,11 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
 
     def rec_line(text, sub=False, suffix=""):
         """سطر من كتلة المرسَل إليه؛ suffix («المحترم») يُرسم منفصلاً بمسافة إضافية عن الاسم"""
-        fnt, size = ("Amiri", rsub) if sub else (BOLD, rfont)
+        rfam = str(L.get("recipient_font_family") or "amiri")
+        rbold = False if sub else bool(L.get("recipient_bold", True))
+        fnt, size = (rt_font(rfam, rbold), rsub if sub else rfont)
         c.setFont(fnt, size)
-        main, sfx = ar(text), ar(suffix) if suffix else ""
+        main, sfx = rt_fit(ar(text), rfam, rbold), rt_fit(ar(suffix), rfam, rbold) if suffix else ""
         w_main = pdfmetrics.stringWidth(main, fnt, size)
         w_sfx = pdfmetrics.stringWidth(sfx, fnt, size) if sfx else 0
         total = w_main + ((pdfmetrics.stringWidth(" ", fnt, size) + sgap + w_sfx) if sfx else 0)
@@ -336,7 +346,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     tbl_inherit = placeholder_style(body, "{جدول_الأسماء}") if rich else None
     for pi, part in enumerate(parts):
         if rich:
-            y = draw_rich(c, parse_rich(part, default_size=BODY, default_font="amiri", default_align="right"), LM, RM, y, leading=f("body_leading"), para_gap=3, ensure=ensure_y)
+            y = draw_rich(c, parse_rich(part, default_size=BODY, default_font="amiri", default_align="right"), LM, RM, y, leading=f("body_leading"), para_gap=3, ensure=ensure_y, first_indent=f("body_indent") * mm)
         else:
             for line in wrap(part.strip("\n"), "Amiri", BODY, RM - LM):
                 ensure(BODY * f("body_leading"))
@@ -356,11 +366,12 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     sig_img = _img("signature_base64")
     s_align, s_off = str(L.get("signature_align") or "left"), f("signature_offset") * mm
     sig_cx = (W / 2) if s_align == "center" else (RM - s_off - 22 * mm) if s_align == "right" else (LM + s_off + 22 * mm)
-    c.setFont(BOLD, 13); c.drawCentredString(sig_cx, y, ar(sig_title))
+    sfam = str(L.get("signature_font_family") or "amiri")
+    c.setFont(rt_font(sfam, bool(L.get("signature_title_bold", True))), f("signature_title_font")); c.drawCentredString(sig_cx, y, rt_fit(ar(sig_title), sfam, bool(L.get("signature_title_bold", True))))
     name_y = y - 9 * mm
     if sig_img:
         c.drawImage(sig_img, sig_cx - 19 * mm, y - 20 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); name_y = y - 25 * mm
-    c.setFont("Amiri", 13); c.drawCentredString(sig_cx, name_y, ar(sig_name))
+    c.setFont(rt_font(sfam, bool(L.get("signature_name_bold", False))), f("signature_name_font")); c.drawCentredString(sig_cx, name_y, rt_fit(ar(sig_name), sfam, bool(L.get("signature_name_bold", False))))
 
     qr = qrcode.make(s.get("verify_url") or s.get("verify_token", "") or "DRAFT", box_size=4, border=1)
     qb = io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)

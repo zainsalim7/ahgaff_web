@@ -31,7 +31,10 @@ const SLIDERS: Slider[] = [
   ['recipient_sub_font', '📍 حجم خط الصفة/الجهة (pt)', 9, 18, 0.5],
   ['recipient_line_gap', '📍 تباعد أسطر المرسَل إليه (مم)', 4, 14, 0.5],
   ['recipient_suffix_gap', '📍 مسافة بين الاسم و«المحترم» (مم)', 0, 40, 1],
-  ['greeting_indent', '🙏 إزاحة التحية من الهامش (مم)', 0, 80, 1],
+  ['greeting_indent', '🙏 إزاحة التحية من الهامش (مم)', 0, 100, 1],
+  ['body_indent', '✍️ مسافة بادئة لأول سطر في الفقرة (مم)', 0, 30, 1],
+  ['signature_title_font', '🖋️ حجم صفة الموقِّع (pt)', 9, 20, 0.5],
+  ['signature_name_font', '🖋️ حجم اسم الموقِّع (pt)', 9, 20, 0.5],
   ['greeting_font', '🙏 حجم خط التحية (pt)', 9, 18, 0.5],
   ['ref_x', '🔢 إزاحة الرقم/التاريخ من الهامش (مم)', 0, 80, 1],
   ['ref_font', '🔢 حجم خط الرقم (pt)', 9, 18, 0.5],
@@ -51,6 +54,8 @@ const SELECTS: Select[] = [
   ['recipient_align', 'محاذاة المرسَل إليه', [['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار (خطاب بلغة أجنبية)']]],
   ['signature_align', 'موضع التوقيع', [['left', 'يسار'], ['center', 'وسط'], ['right', 'يمين']]],
   ['greeting_align', '🙏 موضع التحية', [['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار']]],
+  ['recipient_font_family', '📍 خط المرسَل إليه', [['amiri', 'أميري (نسخي رسمي)'], ['kufi', 'نوتو كوفي'], ['cairo', 'القاهرة'], ['tajawal', 'تجوّل'], ['almarai', 'المرعي']]],
+  ['signature_font_family', '🖋️ خط الموقِّع', [['amiri', 'أميري (نسخي رسمي)'], ['kufi', 'نوتو كوفي'], ['cairo', 'القاهرة'], ['tajawal', 'تجوّل'], ['almarai', 'المرعي']]],
   ['ref_layout', '🔢 ترتيب الرقم والتاريخ', [['num_left', 'الرقم يسار والتاريخ يمين'], ['num_right', 'الرقم يمين والتاريخ يسار'], ['stack_right', 'متراصّة يميناً'], ['stack_left', 'متراصّة يساراً']]],
 ];
 const PAGE_H = 297, SCALE = 1.9; // مم → بكسل
@@ -58,7 +63,7 @@ const mm = (v: number) => v * SCALE;
 
 export const LETTER_MODEL: LayoutModel = {
   blocks: BLOCKS, sliders: SLIDERS, selects: SELECTS,
-  toggles: [['show_greeting', 'إظهار «السلام عليكم»'], ['show_closing', 'إظهار عبارة الختام']],
+  toggles: [['show_greeting', 'إظهار «السلام عليكم»'], ['show_closing', 'إظهار عبارة الختام'], ['recipient_bold', '«إلى:» بخط عريض'], ['signature_title_bold', 'صفة الموقِّع عريضة'], ['signature_name_bold', 'اسم الموقِّع عريض']],
   positions: (num, L, hasTable) => {
     const pos: Pos = {};
     pos.header = { top: 0, h: num('header_bottom') };

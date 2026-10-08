@@ -242,8 +242,9 @@ def placeholder_style(html: str, token: str) -> Optional[dict]:
     return None
 
 
-def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, leading: float = 1.55, para_gap: float = 4, ensure=None) -> float:
-    """يرسم الفقرات من y نزولاً ويعيد y بعد آخر سطر. ensure(height) اختيارية: تعيد y جديدة عند الانتقال لصفحة جديدة"""
+def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, leading: float = 1.55, para_gap: float = 4, ensure=None, first_indent: float = 0) -> float:
+    """يرسم الفقرات من y نزولاً ويعيد y بعد آخر سطر. ensure(height) اختيارية: تعيد y جديدة عند الانتقال لصفحة جديدة.
+    first_indent: مسافة بادئة لأول سطر في كل فقرة (نقاط) — للمحاذاة يمين/ضبط/يسار فقط"""
     max_w = x_right - x_left
     for para in paras:
         words = _words(para)
@@ -255,10 +256,12 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
             w["disp"] = _fit(_disp(w["text"], rtl=(para.get("align") or "").lower() != "left"), w["font"], w["bold"])
             w["w"] = pdfmetrics.stringWidth(w["disp"], w["font_name"], w["size"])
             w["sp"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"])
+        align = (para.get("align") or "center").lower()
+        indent = first_indent if (first_indent and align != "center") else 0
         lines, cur, cur_w = [], [], 0.0
         for w in words:
             add = w["w"] + (cur[-1]["sp"] if cur else 0)
-            if cur and cur_w + add > max_w:
+            if cur and cur_w + add > max_w - (indent if not lines else 0):
                 lines.append((cur, cur_w))
                 cur, cur_w = [w], w["w"]
             else:
@@ -266,8 +269,7 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
                 cur_w += add
         if cur:
             lines.append((cur, cur_w))
-        align = (para.get("align") or "center").lower()
-        for line, lw in lines:
+        for li, (line, lw) in enumerate(lines):
             size = max(w["size"] for w in line)
             if ensure:
                 ny = ensure(size * leading)
@@ -275,7 +277,8 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
                     y = ny
             y -= size * leading
             line = _visual_order(line, ltr=(align == "left"))
-            x = x_right if align in ("right", "justify", "start") else (x_left + lw if align == "left" else x_right - (max_w - lw) / 2)
+            ind = indent if li == 0 else 0
+            x = x_right - ind if align in ("right", "justify", "start") else (x_left + ind + lw if align == "left" else x_right - (max_w - lw) / 2)
             for w in line:
                 c.setFont(w["font_name"], w["size"])
                 c.setFillColor(parse_color(w.get("color")) or colors.black)
