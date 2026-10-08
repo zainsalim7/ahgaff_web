@@ -90,9 +90,9 @@ export default function LettersPage() {
     loadLhSeries();
   };
   useEffect(() => {
-    if (!lhId) return;
+    if (!lhId || tab !== 'issue') return;
     api.get('/letters/section-defaults', { params: { letterhead_id: lhId, template_id: tplId || undefined } }).then((r) => setSecDefaults(r.data.sections || {})).catch(() => {});
-  }, [lhId, tplId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [lhId, tplId, tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadLhSeries = () => {
     api.get('/letterheads').then((r) => { setLetterheads(r.data); setLhId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
     api.get('/letter-series').then((r) => { setSeriesList(r.data); setSeriesId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
@@ -117,16 +117,19 @@ export default function LettersPage() {
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
   const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', letterhead_id: lhId, series_id: seriesId, sections, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
   useEffect(() => {
-    if (!body.trim()) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
+    const sample = !body.trim();
+    if (sample && !showLayout) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
     const t = setTimeout(() => {
-      api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); setTableDefaults(r.data.table?.default_headers || []); }).catch(() => {});
+      if (!sample) api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); setTableDefaults(r.data.table?.default_headers || []); }).catch(() => {});
       setPreviewBusy(true);
-      api.post(`/letters/preview-pdf?fmt=png&letterhead=${previewLetterhead}`, issuePayload(), { responseType: 'blob' })
+      const payload = issuePayload();
+      if (sample) { payload.body = '<p style="text-align: right">هذا نص تجريبي لمعاينة تخطيط الصفحة — يظهر مكانه متن الخطاب عند كتابته.</p>'; payload.subject = payload.subject || 'نموذج لمعاينة التخطيط'; if (!Object.keys(payload.recipient).length) payload.recipient = { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }; }
+      api.post(`/letters/preview-pdf?fmt=png&letterhead=${previewLetterhead}`, payload, { responseType: 'blob' })
         .then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; }); })
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people, sig, layout, previewLetterhead, perPerson, personAsRec, lhId, seriesId, sections]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [body, subject, recipient, people, sig, layout, previewLetterhead, perPerson, personAsRec, lhId, seriesId, sections, showLayout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const afterIssue = async (r: any) => {
     setLast(r.data); setDraft(null);
@@ -283,7 +286,7 @@ export default function LettersPage() {
                     actions={letterheads.find((x) => x.id === lhId)?.can_edit && <button type="button" onClick={async () => { try { await api.patch(`/letterheads/${lhId}/sections`, { sections }); setSecDefaults(sections); setSecOverrides({}); window.alert('حُفظ التنسيق كافتراضي لهذه الكليشة — سيُطبَّق على كل خطاباتها'); } catch (e: any) { window.alert(e?.response?.data?.detail || 'فشل الحفظ'); } }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '4px 10px', fontSize: 12 })} data-testid="letter-sections-save-lh" title="يصبح هذا التنسيق افتراضياً لكل خطابات هذه الكليشة">💾 حفظ كافتراضي للكليشة</button>} />
                   <div style={{ position: 'sticky', top: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة الحقيقية {previewBusy ? '⏳' : ''}</div>
-                    {previewImg ? <img src={previewImg} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="letter-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>اكتب المتن لتظهر المعاينة</div>}
+                    {previewImg ? <img src={previewImg} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="letter-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري توليد المعاينة…</div>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}><button onClick={() => setShowLayout(false)} style={btn('#0f2440')} data-testid="letter-layout-done">تم</button></div>

@@ -98,7 +98,7 @@ const LetterheadForm: React.FC<{ initial: any; layoutDefaults: any; onSaved: () 
           <VisibilityPicker value={f.visibility} onChange={(v) => setF({ ...f, visibility: v })} testID="lh-visibility" />
           <details style={{ marginTop: 12 }} data-testid="lh-layout-details">
             <summary style={{ cursor: 'pointer', fontWeight: 800, color: '#0f2440', fontSize: 13 }}>📐 تخطيط الصفحة الخاص بهذه الكليشة {Object.keys(f.sections || {}).length ? `· ${Object.keys(f.sections).length} جزء مُعدَّل` : ''}</summary>
-            <div style={{ marginTop: 8 }}><LetterSectionsEditor sections={effSecs} onChange={(k, h) => setF((s: any) => ({ ...s, sections: { ...(s.sections || {}), [k]: h } }))} onReset={() => setF({ ...f, sections: {}, layout: null })} layout={f.layout || {}} layoutDefaults={layoutDefaults} onLayoutChange={(l) => setF({ ...f, layout: l })} testID="lh-layout" /></div>
+            <div style={{ marginTop: 8 }}><LetterSectionsEditor sections={effSecs} onChange={(k, h) => setF((s: any) => ({ ...s, sections: { ...(s.sections || {}), [k]: h } }))} onReset={() => setF((s: any) => ({ ...s, sections: {}, layout: null }))} layout={f.layout || {}} layoutDefaults={layoutDefaults} onLayoutChange={(l) => setF((s: any) => ({ ...s, layout: l }))} testID="lh-layout" /></div>
           </details>
         </div>
         <div style={{ position: 'sticky', top: 0 }}>

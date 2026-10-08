@@ -18,13 +18,31 @@ const ADV_GROUPS: { title: string; nums: Num[] }[] = [
   { title: 'الصفحة والكليشة', nums: [['margin_side', 'الهامش الجانبي (مم)', 10, 30, 1], ['header_bottom', 'نهاية الكليشة من الأعلى (مم)', 20, 70, 1], ['ref_y', 'سطر الرقم/التاريخ من الأعلى (مم)', 30, 90, 1], ['start_y', 'بداية المحتوى من الأعلى (مم)', 40, 120, 1], ['ref_x', 'إزاحة الرقم/التاريخ من الهامش (مم)', 0, 80, 1], ['ref_font', 'حجم خط الرقم (pt)', 9, 18, 0.5]] },
   { title: 'سطور الكليشة', nums: [['header_font_ar1', 'السطر الأول عربي (pt)', 10, 26, 0.5], ['header_font_ar2', 'السطر الثاني عربي (pt)', 8, 20, 0.5], ['header_font_en1', 'السطر الأول إنجليزي (pt)', 8, 20, 0.5], ['header_font_en2', 'السطر الثاني إنجليزي (pt)', 7, 16, 0.5], ['header_line1', 'ارتفاع السطر الأول فوق الخط (مم)', 5, 45, 1], ['header_line2', 'ارتفاع السطر الثاني فوق الخط (مم)', 2, 40, 1]] },
   { title: 'المتن والمسافات', nums: [['body_font', 'حجم خط المتن (pt)', 10, 18, 0.5], ['body_leading', 'تباعد أسطر المتن', 1.1, 2.2, 0.05], ['body_indent', 'بادئة أول سطر (مم)', 0, 30, 1], ['gap_recipient', 'مسافة بعد المرسَل إليه (مم)', 0, 30, 1], ['gap_greeting', 'مسافة بعد التحية (مم)', 0, 30, 1], ['gap_subject', 'مسافة بعد الموضوع (مم)', 0, 30, 1], ['gap_closing', 'مسافة قبل الخاتمة (مم)', 0, 30, 1], ['gap_signature', 'مسافة قبل التوقيع (مم)', 0, 40, 1], ['recipient_indent', 'إزاحة المرسَل إليه من الهامش (مم)', 0, 60, 1], ['greeting_indent', 'إزاحة التحية من الهامش (مم)', 0, 100, 1], ['signature_offset', 'إزاحة التوقيع من الهامش (مم)', 0, 80, 1]] },
+  { title: '🔗 مرتبط بالمحررات أعلاه (يتغير معها والعكس)', nums: [['recipient_font', 'حجم خط المرسَل إليه (pt)', 9, 24, 0.5], ['greeting_font', 'حجم خط التحية (pt)', 9, 24, 0.5], ['signature_title_font', 'حجم خط التوقيع (pt)', 9, 24, 0.5]] },
   { title: 'الجدول', nums: [['table_font', 'حجم خط الجدول (pt)', 7, 14, 0.5], ['table_row_h', 'ارتفاع الصف (مم)', 5, 12, 0.5], ['gap_table_before', 'مسافة قبل الجدول (مم)', 0, 30, 1], ['gap_table_after', 'مسافة بعد الجدول (مم)', 0, 30, 1]] },
   { title: '💧 العلامة المائية', nums: [['watermark_opacity', 'الشفافية (0–1)', 0, 1, 0.05], ['watermark_width', 'العرض (مم)', 40, 200, 5], ['watermark_y', 'الموضع من الأعلى (مم)', 40, 260, 5], ['watermark_rotate', 'الدوران (درجة)', -90, 90, 5]] },
 ];
+const ALIGN_OPTS: [string, string][] = [['right', 'يمين'], ['center', 'وسط'], ['left', 'يسار']];
 const ADV_SELECTS: [string, string, [string, string][]][] = [
   ['ref_layout', 'ترتيب الرقم والتاريخ', [['num_left', 'الرقم يسار والتاريخ يمين'], ['num_right', 'الرقم يمين والتاريخ يسار'], ['stack_right', 'متراصّة يميناً'], ['stack_left', 'متراصّة يساراً']]],
-  ['signature_align', 'جهة كتلة التوقيع', [['left', 'يسار'], ['center', 'وسط'], ['right', 'يمين']]],
+  ['recipient_align', '🔗 محاذاة المرسَل إليه', ALIGN_OPTS],
+  ['greeting_align', '🔗 محاذاة التحية', ALIGN_OPTS],
+  ['signature_align', '🔗 جهة كتلة التوقيع', ALIGN_OPTS],
 ];
+/* 🔗 ربط المحررات بالأرقام: محاذاة/حجم كل جزء ↔ مفاتيح التخطيط */
+const SYNC: Record<string, { align: string; size: string }> = {
+  recipient: { align: 'recipient_align', size: 'recipient_font' },
+  greeting: { align: 'greeting_align', size: 'greeting_font' },
+  signature: { align: 'signature_align', size: 'signature_title_font' },
+};
+const htmlAlign = (html: string) => { const m = /text-align:\s*(left|center|right|justify)/.exec(html || ''); return m ? (m[1] === 'justify' ? 'right' : m[1]) : undefined; };
+const htmlSize = (html: string) => { const s = Array.from((html || '').matchAll(/font-size:\s*([\d.]+)pt/g)).map((m) => Number(m[1])); return s.length ? Math.max(...s) : undefined; };
+const withAlign = (html: string, a: string) => (html || '').replace(/<p([^>]*)>/g, (_m, attrs: string) => /text-align:/.test(attrs) ? `<p${attrs.replace(/text-align:\s*[a-z]+/, `text-align: ${a}`)}>` : /style="/.test(attrs) ? `<p${attrs.replace('style="', `style="text-align: ${a}; `)}>` : `<p${attrs} style="text-align: ${a}">`);
+const withSize = (html: string, s: number) => {
+  const h = html || '';
+  if (/font-size:/.test(h)) { const mx = htmlSize(h) || s; return h.replace(/font-size:\s*([\d.]+)pt/g, (_m, v: string) => `font-size: ${Math.max(6, Math.round((Number(v) + (s - mx)) * 2) / 2)}pt`); }
+  return h.replace(/<p([^>]*)>([\s\S]*?)<\/p>/g, (_m, a: string, inner: string) => `<p${a}><span style="font-size: ${s}pt">${inner}</span></p>`);
+};
 
 type Props = {
   sections: Sections; onChange: (key: string, html: string) => void; onReset?: () => void; actions?: React.ReactNode;
@@ -33,7 +51,22 @@ type Props = {
 
 export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onReset, actions, layout = {}, layoutDefaults = {}, onLayoutChange, hasTable = true, testID = 'letter-sections' }) => {
   const L = { ...layoutDefaults, ...Object.fromEntries(Object.entries(layout || {}).filter(([, v]) => v !== null && v !== undefined && v !== '')) };
-  const setL = (k: string, v: any) => onLayoutChange?.({ ...(layout || {}), [k]: v });
+  const handleSec = (key: string, html: string) => {
+    onChange(key, html);
+    const s = SYNC[key]; if (!s || !onLayoutChange) return;
+    const a = htmlAlign(html), sz = htmlSize(html), patch: Record<string, any> = {};
+    if (a && a !== L[s.align]) patch[s.align] = a;
+    if (sz && sz !== Number(L[s.size])) patch[s.size] = sz;
+    if (Object.keys(patch).length) onLayoutChange({ ...(layout || {}), ...patch });
+  };
+  const setL = (k: string, v: any) => {
+    onLayoutChange?.({ ...(layout || {}), [k]: v });
+    const sec = Object.entries(SYNC).find(([, s]) => s.align === k || s.size === k);
+    if (!sec) return;
+    const [secKey, s] = sec; const html = sections[secKey] || '';
+    if (!html) return;
+    onChange(secKey, s.align === k ? withAlign(html, String(v)) : withSize(html, Number(v)));
+  };
   const numInp: React.CSSProperties = { width: 64, padding: '3px 6px', borderRadius: 6, border: '1px solid #dde3ec', fontSize: 12, textAlign: 'center' };
   const fixed = (title: string, text: string) => (
     <div style={{ border: '1.5px dashed #e2e8f0', borderRadius: 10, padding: '6px 10px', marginBottom: 8, background: '#f8fafc', display: 'flex', gap: 8, alignItems: 'center' }} data-testid={`${testID}-fixed-${title}`}>
@@ -50,10 +83,10 @@ export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onRe
         </div>
       </div>
       {fixed('الرقم والتاريخ', 'يُنشأ الرقم من سلسلة الترقيم عند الإصدار، والتاريخ تلقائي (هجري/ميلادي)')}
-      {SECS.slice(0, 3).map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={onChange} testID={testID} />)}
+      {SECS.slice(0, 3).map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={handleSec} testID={testID} />)}
       {fixed('المتن', 'يُكتب في نموذج الإصدار بمحرره الخاص')}
       {hasTable && fixed('جدول الأسماء', 'يُدرج تلقائياً عند إضافة أسماء (أعمدته وألوانه من «إعدادات الجدول»)')}
-      {SECS.slice(3).map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={onChange} testID={testID} />)}
+      {SECS.slice(3).map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={handleSec} testID={testID} />)}
       {onLayoutChange && (
         <details style={{ marginTop: 10, border: '1px solid #e2e8f0', borderRadius: 10, padding: '6px 10px', background: '#fafbfc' }} data-testid={`${testID}-advanced`}>
           <summary style={{ cursor: 'pointer', fontWeight: 800, color: '#475569', fontSize: 12.5 }}>⚙️ إعدادات متقدمة (هوامش، مواضع، كليشة، علامة مائية) {Object.keys(layout || {}).length ? `· ${Object.keys(layout).length} تعديل` : ''}</summary>
