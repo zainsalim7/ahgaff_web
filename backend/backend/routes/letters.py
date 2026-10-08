@@ -408,13 +408,24 @@ async def _compose(db, data: IssueIn, settings: dict) -> dict:
     ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
     sig_name, sig_title = await _resolve_sig(db, data.signatory_position_id, data.signatory_name, data.signatory_title, settings)
     ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title}
-    sections = {k: _apply_vars(v, ctx) for k, v in (data.sections or {}).items() if k in SECTION_KEYS and v}
+    raw_secs = data.sections if data.sections is not None else await _effective_sections(db, settings, data.template_id)
+    sections = {k: _apply_vars(v, ctx) for k, v in (raw_secs or {}).items() if k in SECTION_KEYS and v}
     return {"subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people, "sections": sections,
             "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
             "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
             "signatory_name": sig_name, "signatory_title": sig_title, "signatory_position_id": data.signatory_position_id or "",
             "layout": data.layout or None, "valid_days": data.valid_days,
-            "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id, "sections": data.sections or {}}}
+            "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id, "sections": raw_secs or {}}}
+
+
+async def _effective_sections(db, lh: dict, template_id: Optional[str] = None) -> dict:
+    """✍️ أقسام الخطاب الفعلية: النظام ← الكليشة ← القالب (القالب يتقدم)"""
+    out = dict(DEFAULT_SECTIONS)
+    out.update({k: v for k, v in (lh.get("sections") or {}).items() if k in SECTION_KEYS and v})
+    if template_id and ObjectId.is_valid(template_id):
+        t = await db.letter_templates.find_one({"_id": ObjectId(template_id)}, {"sections": 1})
+        out.update({k: v for k, v in ((t or {}).get("sections") or {}).items() if k in SECTION_KEYS and v})
+    return out
 
 
 def _validate(data: IssueIn):
@@ -466,13 +477,9 @@ async def section_defaults(letterhead_id: Optional[str] = None, template_id: Opt
     """✍️ المحتوى الافتراضي لأقسام الخطاب: النظام ← الكليشة ← القالب (القالب يتقدم)"""
     _guard(current_user)
     db = get_db()
-    out = dict(DEFAULT_SECTIONS)
     lh = await resolve_letterhead(db, current_user, letterhead_id)
-    out.update({k: v for k, v in (lh.get("sections") or {}).items() if k in SECTION_KEYS and v})
-    if template_id and ObjectId.is_valid(template_id):
-        t = await db.letter_templates.find_one({"_id": ObjectId(template_id)}, {"sections": 1})
-        out.update({k: v for k, v in ((t or {}).get("sections") or {}).items() if k in SECTION_KEYS and v})
-    return {"sections": out, "labels": SECTION_LABELS, "keys": SECTION_KEYS}
+    out = await _effective_sections(db, lh, template_id)
+    return {"sections": out, "system": DEFAULT_SECTIONS, "labels": SECTION_LABELS, "keys": SECTION_KEYS}
 
 
 @router.get("/letters/layout-defaults")

@@ -11,7 +11,8 @@ import { StatementBodyEditor } from '../src/components/statements/StatementBodyE
 import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
 import { LetterheadManager } from '../src/components/letters/LetterheadManager';
 import { SeriesManager } from '../src/components/letters/SeriesManager';
-import { LetterLayoutEditor, TableColumnsPicker } from '../src/components/letters/LetterLayoutEditor';
+import { TableColumnsPicker } from '../src/components/letters/LetterLayoutEditor';
+import { LetterSectionsEditor } from '../src/components/letters/LetterSectionsEditor';
 
 type Person = { kind: string; id: string; label: string; sub?: string };
 
@@ -68,7 +69,8 @@ export default function LettersPage() {
   const [layoutDefaults, setLayoutDefaults] = useState<any>({});
   const [letterheads, setLetterheads] = useState<any[]>([]); const [seriesList, setSeriesList] = useState<any[]>([]);
   const [lhId, setLhId] = useState(''); const [seriesId, setSeriesId] = useState('');
-  const [sections, setSections] = useState<Record<string, string>>({}); const [secLabels, setSecLabels] = useState<Record<string, string>>({});
+  const [secOverrides, setSecOverrides] = useState<Record<string, string>>({}); const [secDefaults, setSecDefaults] = useState<Record<string, string>>({});
+  const sections = useMemo(() => ({ ...secDefaults, ...secOverrides }), [secDefaults, secOverrides]);
   const [layout, setLayout] = useState<any>({});
   const [tableHeaders, setTableHeaders] = useState<string[]>([]); const [tableDefaults, setTableDefaults] = useState<string[]>([]);
   const [showLayout, setShowLayout] = useState(false);
@@ -89,7 +91,7 @@ export default function LettersPage() {
   };
   useEffect(() => {
     if (!lhId) return;
-    api.get('/letters/section-defaults', { params: { letterhead_id: lhId, template_id: tplId || undefined } }).then((r) => { setSections(r.data.sections || {}); setSecLabels(r.data.labels || {}); }).catch(() => {});
+    api.get('/letters/section-defaults', { params: { letterhead_id: lhId, template_id: tplId || undefined } }).then((r) => setSecDefaults(r.data.sections || {})).catch(() => {});
   }, [lhId, tplId]); // eslint-disable-line react-hooks/exhaustive-deps
   const loadLhSeries = () => {
     api.get('/letterheads').then((r) => { setLetterheads(r.data); setLhId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
@@ -167,7 +169,7 @@ export default function LettersPage() {
     try { const r = await api.post('/letters/draft', issuePayload()); setDraft({ id: r.data.id, number: r.data.number }); setLast(null); }
     catch (e) { setErr(errOf(e, 'فشل حفظ المسودة')); } finally { setBusy(false); }
   };
-  const resetForm = () => { setDraft(null); setLast(null); setTplId(''); setSubject(''); setBody(''); setPeople([]); setRecId(''); setRec({ name: '', title: '', organization: '', suffix: 'المحترم' }); setLayout({}); setValidDays(''); setSig(EMPTY_SIGNATORY); setBatch(null); setPerPerson(false); setPersonAsRec(false); };
+  const resetForm = () => { setDraft(null); setLast(null); setTplId(''); setSubject(''); setBody(''); setPeople([]); setRecId(''); setRec({ name: '', title: '', organization: '', suffix: 'المحترم' }); setLayout({}); setSecOverrides({}); setValidDays(''); setSig(EMPTY_SIGNATORY); setBatch(null); setPerPerson(false); setPersonAsRec(false); };
   const loadDraft = async (id: string) => {
     try {
       const { data: d } = await api.get(`/letters/${id}`);
@@ -178,7 +180,7 @@ export default function LettersPage() {
       if (r0.id) { setRecMode('list'); setRecId(r0.id); } else { setRecMode('manual'); setRec({ name: r0.name || '', title: r0.title || '', organization: r0.organization || '', suffix: r0.suffix || 'المحترم' }); }
       setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.name })));
       if (d.letterhead_id) setLhId(d.letterhead_id); if (d.series_id) setSeriesId(d.series_id);
-      if (d.inputs?.sections && Object.keys(d.inputs.sections).length) setTimeout(() => setSections(d.inputs.sections), 400);
+      setSecOverrides(d.inputs?.sections && Object.keys(d.inputs.sections).length ? d.inputs.sections : {});
       setSig({ position_id: d.signatory_position_id || '', name: d.signatory_position_id ? '' : (d.signatory_name || ''), title: d.signatory_position_id ? '' : (d.signatory_title || '') }); setValidDays(d.valid_days ? String(d.valid_days) : ''); setLayout(d.layout || {});
       setTab('issue');
     } catch (e) { setErr(errOf(e, 'تعذر فتح المسودة')); }
@@ -210,6 +212,8 @@ export default function LettersPage() {
               <div><label style={lbl}>🔢 سلسلة الترقيم</label><select style={inp} value={seriesId} onChange={(e) => setSeriesId(e.target.value)} data-testid="letter-series-select">{seriesList.map((x) => <option key={x.id} value={x.id}>{x.is_default ? '⭐ ' : ''}{x.name} — القادم {x.next_number}</option>)}</select></div>
               <div style={{ gridColumn: '1 / -1', fontSize: 11, color: '#64748b' }}>الكليشة والترقيم مستقلان: نفس الكليشة قد تُستخدم بترقيم داخلي أو خارجي. أنشئ المزيد من تبويب «الكليشات والترقيم».</div>
             </div>
+            <label style={{ ...lbl, marginTop: 12 }}>الموضوع</label>
+            <input style={inp} value={subject} onChange={(e) => setSubject(e.target.value)} data-testid="letter-subject" />
             <label style={{ ...lbl, marginTop: 12 }}>المرسَل إليه</label>
             <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
               <button onClick={() => setRecMode('list')} style={btn(recMode === 'list' ? '#0f2440' : '#f1f5f9', { color: recMode === 'list' ? '#fff' : '#0f2440', padding: '6px 12px', fontSize: 12 })} data-testid="letter-rec-list-mode">من المناصب المحفوظة</button>
@@ -244,34 +248,15 @@ export default function LettersPage() {
                 )}
               </div>
             )}
+            <label style={{ ...lbl, marginTop: 12 }}>متن الخطاب — منسّق (خط/حجم/لون/محاذاة) والمتغيرات تُدرج بنقرة عند المؤشر</label>
+            <StatementBodyEditor value={body} onChange={setBody} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={150} placeholder="اختر قالباً أو اكتب متن الخطاب هنا…" testID="letter-body" />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 90px', gap: 8, marginTop: 12 }}>
               <div><label style={lbl}>الموقِّع (المرسِل)</label><SignatoryPicker value={sig} onChange={setSig} defaultLabel={`الافتراضي من الكليشة${settings?.default_signatory_title ? ` — ${settings.default_signatory_title}` : ''}`} hint="من دليل المناصب والأسماء (يُقرأ الاسم والصفة تلقائياً) أو إدخال يدوي." testID="letter-signatory" /></div>
               <div><label style={lbl}>صلاحية (يوم)</label><input style={inp} value={validDays} onChange={(e) => setValidDays(e.target.value)} placeholder="∞" data-testid="letter-valid-days" /></div>
             </div>
-            <div style={{ marginTop: 16, borderTop: '2px solid #e2e8f0', paddingTop: 12 }} data-testid="letter-sections">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
-                <b style={{ color: '#0f2440', fontSize: 15 }}>أقسام الخطاب</b>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  {letterheads.find((x) => x.id === lhId)?.can_edit && <button onClick={async () => { try { await api.patch(`/letterheads/${lhId}/sections`, { sections }); window.alert('حُفظ تنسيق الأقسام كافتراضي لهذه الكليشة'); } catch (e: any) { window.alert(e?.response?.data?.detail || 'فشل الحفظ'); } }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '4px 10px', fontSize: 11.5 })} data-testid="letter-sections-save-lh" title="يصبح هذا التنسيق افتراضياً لكل خطابات هذه الكليشة">💾 حفظ كافتراضي للكليشة</button>}
-                  <button onClick={() => api.get('/letters/section-defaults', { params: { letterhead_id: lhId, template_id: tplId || undefined } }).then((r) => setSections(r.data.sections || {}))} style={btn('#f1f5f9', { color: '#0f2440', padding: '4px 10px', fontSize: 11.5 })} data-testid="letter-sections-reset">↺ استعادة</button>
-                </div>
-              </div>
-              <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 8 }}>الأقسام النظامية تُملأ تلقائياً · حرّر أي قسم آخر كما في وورد (خط/حجم/لون/محاذاة) والمتغيرات تُدرج بنقرة</div>
-              <SecCard title="الرقم والتاريخ" badge="نظامي" color="#64748b"><div style={{ fontSize: 12.5, color: '#475569', background: '#f8fafc', padding: '6px 10px', borderRadius: 8 }}>الرقم: [يُنشأ من سلسلة الترقيم عند الإصدار] · التاريخ: تلقائي (ميلادي/هجري)</div></SecCard>
-              <SecCard title={secLabels.recipient || 'المستلم'} badge="قابل للتحرير" color="#6d28d9"><StatementBodyEditor value={sections.recipient || ''} onChange={(h) => setSections((x) => ({ ...x, recipient: h }))} variables={['{اسم_المرسل_إليه}', '{تكريم}', '{صفة_المرسل_إليه}', '{جهة_المرسل_إليه}']} defaultAlign="right" minHeight={70} testID="letter-sec-recipient" /></SecCard>
-              <SecCard title={secLabels.greeting || 'التحية'} badge="قابل للتحرير" color="#6d28d9"><StatementBodyEditor value={sections.greeting || ''} onChange={(h) => setSections((x) => ({ ...x, greeting: h }))} variables={[]} defaultAlign="right" minHeight={44} testID="letter-sec-greeting" /></SecCard>
-              <SecCard title="الموضوع" badge="إلزامي" color="#dc2626">
-                <input style={{ ...inp, marginBottom: 6 }} value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="عنوان الموضوع (يظهر في السجل وفي المتغير {الموضوع})" data-testid="letter-subject" />
-                <StatementBodyEditor value={sections.subject || ''} onChange={(h) => setSections((x) => ({ ...x, subject: h }))} variables={['{الموضوع}']} defaultAlign="center" minHeight={44} testID="letter-sec-subject" />
-              </SecCard>
-              <SecCard title="المتن" badge="إلزامي" color="#dc2626"><StatementBodyEditor value={body} onChange={setBody} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={150} placeholder="اختر قالباً أو اكتب متن الخطاب هنا…" testID="letter-body" /></SecCard>
-              {people.length > 0 && <SecCard title="جدول الأسماء" badge="نظامي" color="#64748b"><div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, color: '#475569' }}><span>{people.length} اسم — يُدرج مكان {'{جدول_الأسماء}'} أو بعد المتن تلقائياً</span><button onClick={() => setShowTable((v) => !v)} style={btn(showTable ? '#6d28d9' : '#f5f3ff', { color: showTable ? '#fff' : '#6d28d9', padding: '4px 10px', fontSize: 11.5 })} data-testid="letter-table-toggle">⊞ أعمدة وألوان الجدول</button></div></SecCard>}
-              <SecCard title={secLabels.closing || 'الخاتمة'} badge="قابل للتحرير" color="#6d28d9"><StatementBodyEditor value={sections.closing || ''} onChange={(h) => setSections((x) => ({ ...x, closing: h }))} variables={[]} defaultAlign="right" minHeight={44} testID="letter-sec-closing" /></SecCard>
-              <SecCard title={secLabels.signature || 'التوقيع'} badge="قابل للتحرير" color="#6d28d9"><StatementBodyEditor value={sections.signature || ''} onChange={(h) => setSections((x) => ({ ...x, signature: h }))} variables={['{صفة_الموقع}', '{اسم_الموقع}']} defaultAlign="center" minHeight={60} testID="letter-sec-signature" /></SecCard>
-            </div>
-            <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
-              {people.length === 0 && <button onClick={() => setShowTable((v) => !v)} style={btn('#f5f3ff', { color: '#6d28d9', padding: '4px 10px', fontSize: 11.5 })} data-testid="letter-table-toggle">⊞ إعدادات الجدول</button>}
-              <button onClick={() => setShowLayout((v) => !v)} style={btn(showLayout ? '#0f2440' : '#f1f5f9', { color: showLayout ? '#fff' : '#0f2440', padding: '4px 10px', fontSize: 11.5 })} data-testid="letter-layout-toggle">⚙️ ضبط دقيق (متقدم) {Object.keys(layout || {}).length ? `(${Object.keys(layout).length})` : ''}</button>
+            <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
+              <button onClick={() => setShowTable((v) => !v)} style={btn(showTable ? '#6d28d9' : '#f5f3ff', { color: showTable ? '#fff' : '#6d28d9', padding: '6px 12px', fontSize: 12 })} data-testid="letter-table-toggle">⊞ إعدادات الجدول</button>
+              <button onClick={() => setShowLayout((v) => !v)} style={btn(showLayout ? '#0f2440' : '#f1f5f9', { color: showLayout ? '#fff' : '#0f2440', padding: '6px 12px', fontSize: 12 })} data-testid="letter-layout-toggle">📐 تخطيط الصفحة {Object.keys(secOverrides).length + Object.keys(layout || {}).length ? `(${Object.keys(secOverrides).length + Object.keys(layout || {}).length} تعديل)` : ''}</button>
             </div>
             {showTable && (
               <div style={{ border: '1px solid #ddd6fe', borderRadius: 10, padding: 10, marginTop: 8, background: '#faf5ff' }} data-testid="letter-table-panel">
@@ -291,12 +276,14 @@ export default function LettersPage() {
               </div>
             )}
             {showLayout && (
-              <Modal title="📐 تخطيط الصفحة — لهذا الخطاب فقط (الافتراضي العام من تبويب «الكليشة»)" onClose={() => setShowLayout(false)} width={1180} testID="letter-layout-panel">
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 300px', gap: 14, alignItems: 'start' }}>
-                  <LetterLayoutEditor value={layout} defaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onChange={setLayout} hasTable={people.length > 0} testID="letter-layout" />
-                  <div>
+              <Modal title="📐 تخطيط الصفحة — لهذا الخطاب فقط (الافتراضي يأتي من الكليشة المختارة)" onClose={() => setShowLayout(false)} width={1180} testID="letter-layout-panel">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 14, alignItems: 'start' }}>
+                  <LetterSectionsEditor sections={sections} onChange={(k, h) => setSecOverrides((x) => ({ ...x, [k]: h }))} onReset={() => { setSecOverrides({}); setLayout({}); }} hasTable={people.length > 0}
+                    layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} testID="letter-layout"
+                    actions={letterheads.find((x) => x.id === lhId)?.can_edit && <button type="button" onClick={async () => { try { await api.patch(`/letterheads/${lhId}/sections`, { sections }); setSecDefaults(sections); setSecOverrides({}); window.alert('حُفظ التنسيق كافتراضي لهذه الكليشة — سيُطبَّق على كل خطاباتها'); } catch (e: any) { window.alert(e?.response?.data?.detail || 'فشل الحفظ'); } }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '4px 10px', fontSize: 12 })} data-testid="letter-sections-save-lh" title="يصبح هذا التنسيق افتراضياً لكل خطابات هذه الكليشة">💾 حفظ كافتراضي للكليشة</button>} />
+                  <div style={{ position: 'sticky', top: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة الحقيقية {previewBusy ? '⏳' : ''}</div>
-                    {previewImg ? <img src={previewImg} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>اكتب المتن لتظهر المعاينة</div>}
+                    {previewImg ? <img src={previewImg} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="letter-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>اكتب المتن لتظهر المعاينة</div>}
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}><button onClick={() => setShowLayout(false)} style={btn('#0f2440')} data-testid="letter-layout-done">تم</button></div>
@@ -402,10 +389,3 @@ export default function LettersPage() {
     </CorrPage>
   );
 }
-
-const SecCard: React.FC<{ title: string; badge: string; color: string; children: React.ReactNode }> = ({ title, badge, color, children }) => (
-  <div style={{ border: '1.5px solid #eef0f3', borderRadius: 10, padding: 8, marginBottom: 10, background: '#fff' }} data-testid={`letter-sec-card-${title}`}>
-    <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><b style={{ fontSize: 12.5 }}>{title}</b><Badge text={badge} color={color} /></div>
-    {children}
-  </div>
-);

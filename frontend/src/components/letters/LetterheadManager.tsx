@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import api from '../../services/api';
 import { card, btn, inp, Field, Modal, Badge } from '../corr/CorrUI';
-import { LetterLayoutEditor } from './LetterLayoutEditor';
+import { LetterSectionsEditor } from './LetterSectionsEditor';
 import { SignatoryPicker, EMPTY_SIGNATORY } from '../statements/SignatoryPicker';
 
 export type Visibility = { type: 'private' | 'unit' | 'roles' | 'all'; roles: string[] };
@@ -39,12 +39,15 @@ const EMPTY_LH = { name: '', description: '', org_name: 'جامعة الأحقا
 
 const LetterheadForm: React.FC<{ initial: any; layoutDefaults: any; onSaved: () => void; onClose: () => void }> = ({ initial, layoutDefaults, onSaved, onClose }) => {
   const [f, setF] = useState<any>({ ...EMPTY_LH, ...initial, visibility: initial?.visibility || EMPTY_LH.visibility });
+  const [sysSecs, setSysSecs] = useState<Record<string, string>>({});
+  useEffect(() => { api.get('/letters/section-defaults').then((r) => setSysSecs(r.data.system || {})).catch(() => {}); }, []);
+  const effSecs = { ...sysSecs, ...(f.sections || {}) };
   const [preview, setPreview] = useState(''); const [err, setErr] = useState(''); const [busy, setBusy] = useState(false);
   const file64 = (k: string) => (e: any) => { const file = e.target.files?.[0]; if (!file) return; const rd = new FileReader(); rd.onload = () => setF((s: any) => ({ ...s, [k]: rd.result })); rd.readAsDataURL(file); };
   useEffect(() => {
     const t = setTimeout(() => {
       const { visibility, id, can_edit, owner_id, owner_name, is_default, ...override } = f;
-      const sample = { subject: 'نموذج لمعاينة الكليشة', body: '<p style="text-align: right">تهديكم {جهة_المرسل_إليه} أطيب التحيات، وبالإشارة إلى الموضوع أعلاه نفيدكم بأن هذا نص تجريبي لمعاينة الكليشة والتخطيط.</p>', recipient: { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }, people: [], signatory_name: f.default_signatory_name, signatory_title: f.default_signatory_title, signatory_position_id: f.default_signatory_position_id, letterhead_id: initial?.id || '', letterhead_override: override };
+      const sample = { subject: 'نموذج لمعاينة الكليشة', body: '<p style="text-align: right">تهديكم {جهة_المرسل_إليه} أطيب التحيات، وبالإشارة إلى الموضوع أعلاه نفيدكم بأن هذا نص تجريبي لمعاينة الكليشة والتخطيط.</p>', recipient: { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }, people: [], signatory_name: f.default_signatory_name, signatory_title: f.default_signatory_title, signatory_position_id: f.default_signatory_position_id, letterhead_id: initial?.id || '', letterhead_override: { ...override, sections: f.sections || {} } };
       api.post('/letters/preview-pdf?fmt=png', sample, { responseType: 'blob' }).then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setPreview((o) => { if (o) URL.revokeObjectURL(o); return url; }); }).catch(() => {});
     }, 700);
     return () => clearTimeout(t);
@@ -94,8 +97,8 @@ const LetterheadForm: React.FC<{ initial: any; layoutDefaults: any; onSaved: () 
           </div>
           <VisibilityPicker value={f.visibility} onChange={(v) => setF({ ...f, visibility: v })} testID="lh-visibility" />
           <details style={{ marginTop: 12 }} data-testid="lh-layout-details">
-            <summary style={{ cursor: 'pointer', fontWeight: 800, color: '#0f2440', fontSize: 13 }}>📐 تخطيط الصفحة الخاص بهذه الكليشة</summary>
-            <div style={{ overflowX: 'auto', marginTop: 8 }}><LetterLayoutEditor value={f.layout || {}} defaults={layoutDefaults} onChange={(l) => setF({ ...f, layout: l })} testID="lh-layout" /></div>
+            <summary style={{ cursor: 'pointer', fontWeight: 800, color: '#0f2440', fontSize: 13 }}>📐 تخطيط الصفحة الخاص بهذه الكليشة {Object.keys(f.sections || {}).length ? `· ${Object.keys(f.sections).length} جزء مُعدَّل` : ''}</summary>
+            <div style={{ marginTop: 8 }}><LetterSectionsEditor sections={effSecs} onChange={(k, h) => setF((s: any) => ({ ...s, sections: { ...(s.sections || {}), [k]: h } }))} onReset={() => setF({ ...f, sections: {}, layout: null })} layout={f.layout || {}} layoutDefaults={layoutDefaults} onLayoutChange={(l) => setF({ ...f, layout: l })} testID="lh-layout" /></div>
           </details>
         </div>
         <div style={{ position: 'sticky', top: 0 }}>
