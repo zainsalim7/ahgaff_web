@@ -1,0 +1,21 @@
+{
+  "summary": "Comprehensive backend+frontend regression for Letters module page-layout (sections) refactor. All checks pass: form matches shape-1, layout modal uses TipTap editors with no range sliders / no drag page, LetterSectionsEditor applied inside Letterhead form too, letterhead sections fallback applies to drafts when sections not sent, preview-pdf accepts letterhead_override.sections, section-defaults returns required keys, full E2E draft→finalize→PDF→revoke with greeting marker persisted end-to-end.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_letters_layout_sections.py",
+    "/app/test_reports/pytest/letters_sections.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "letters.tsx is ~390 lines but dense; consider extracting IssueTab/LogTab/SettingsTab into separate files (DRY, maintainability).",
+    "issuePayload is recomputed on every render inside preview debounce effect but excluded from deps via eslint-disable; acceptable here but worth memoizing to avoid subtle stale closures."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (4/4)", "frontend": "100% (all assertions passed)"},
+  "test_credentials": "admin / admin123",
+  "seed_data_creation": "Draft م-19 created and finalized to 18/خ/26 during E2E then revoked (cleanup done). Letterhead sections patched then restored to original.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file at /app/backend/tests/test_letters_layout_sections.py. Must set REACT_APP_BACKEND_URL env var when running pytest since module reads it at import time (no default). Marker string used: 'تحية اختبار 777' / 'تحية_اختبار_777_UNIQUE_LH'. letter-layout-done button closes modal; TipTap editors selected via '[data-testid=letter-layout-greeting] .tiptap'. Finalize consumes a serial number — in test env we revoke afterwards."
+}
