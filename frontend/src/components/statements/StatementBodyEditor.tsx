@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
@@ -46,6 +46,8 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
     const link = document.createElement('link'); link.id = 'statement-fonts-link'; link.rel = 'stylesheet'; link.href = GF; document.head.appendChild(link);
   }, []);
   const initial = useMemo(() => textToHtml(value, defaultAlign), []); // eslint-disable-line react-hooks/exhaustive-deps
+  const [pickedDate, setPickedDate] = useState('');
+  const insertDate = () => { const txt = formatArabicDate(pickedDate); if (txt && editor) { editor.chain().focus().insertContent(`${txt} `).run(); setPickedDate(''); } };
   const editor = useEditor({
     extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' })],
     content: initial || '<p></p>',
@@ -86,7 +88,8 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
         <button type="button" data-testid={`${testID}-align-left`} style={tb(editor.isActive({ textAlign: 'left' }))} onClick={run(() => editor.chain().focus().setTextAlign('left').run())} title="يسار (نص بلغة أجنبية LTR)">⇥</button>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #cbd5e1', borderRadius: 6, padding: '1px 6px', background: '#fff' }} title="إدراج تاريخ معيّن (باليوم والهجري) عند المؤشر">
           <span style={{ fontSize: 11.5, fontWeight: 800 }}>📅</span>
-          <input type="date" data-testid={`${testID}-date-pick`} style={{ border: 'none', fontSize: 11.5, outline: 'none', width: 118 }} onChange={(e) => { const txt = formatArabicDate(e.target.value); if (txt) { editor.chain().focus().insertContent(`${txt} `).run(); e.target.value = ''; } }} />
+          <input type="date" value={pickedDate} data-testid={`${testID}-date-pick`} style={{ border: 'none', fontSize: 11.5, outline: 'none', width: 118 }} onChange={(e) => setPickedDate(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertDate(); }} />
+          <button type="button" data-testid={`${testID}-date-insert`} disabled={!pickedDate} onClick={insertDate} style={{ border: 'none', background: pickedDate ? '#0f2440' : '#e2e8f0', color: pickedDate ? '#fff' : '#94a3b8', borderRadius: 5, fontSize: 11, padding: '2px 7px', cursor: pickedDate ? 'pointer' : 'default', fontWeight: 700 }}>إدراج</button>
         </span>
         <button type="button" style={{ ...tb(), marginRight: 'auto', color: '#64748b' }} onClick={run(() => editor.chain().focus().unsetAllMarks().clearNodes().run())} title="مسح التنسيق">⌫ تنسيق</button>
       </div>

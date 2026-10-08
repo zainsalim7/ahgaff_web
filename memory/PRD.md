@@ -63,6 +63,8 @@
 
 - ✅ **مسافة بادئة للفقرات + خطوط المرسَل إليه/الموقِّع + إدراج تاريخ معيّن** ✍️ (2026-10-08): `rich_text_pdf.draw_rich(first_indent=)` مسافة بادئة لأول سطر في كل فقرة (يمين/ضبط/يسار؛ لا تُطبَّق على الوسط) تُقلّص عرض السطر الأول وتزيحه؛ مفاتيح تخطيط جديدة: `body_indent` 8مم، `recipient_font_family` (amiri|kufi|cairo|tajawal|almarai) + `recipient_bold`، `signature_font_family` + `signature_title_font` 13 + `signature_name_font` 13 + `signature_title_bold` + `signature_name_bold`؛ كتلة المرسَل إليه والتوقيع تستخدمان `font_name`/`_fit` من rich_text_pdf (إصلاح مربعات الحروف المنفصلة مع القاهرة/تجوّل)؛ `greeting_indent` حتى 100مم. LetterLayoutEditor: شرائح/قوائم/خانات لكل ذلك. `StatementBodyEditor`: حقل 📅 تاريخ في شريط الأدوات يدرج عند المؤشر «يوم الاثنين 12/10/2026م الموافق 01/05/1448هـ» (`formatArabicDate` — الهجري بتقويم أم القرى عبر Intl). (مُختبر معاينة PNG: بادئة 10مم، المرسَل إليه بخط القاهرة 15 ومسافة قبل «المحترم»، تحية بإزاحة 45مم، توقيع كوفي)
 
+- ✅ **إصلاح إدراج التاريخ: زر «إدراج» بدل الإدراج عند كل تغيير** (2026-10-08): كان حقل التاريخ يدرج نصاً عند كل تقليب في منتقي التاريخ (onChange لكل قيمة وسيطة). الآن الحقل محكوم (`pickedDate`) ويُدرج مرة واحدة بزر «إدراج» (`-date-insert`) أو Enter ثم يُفرَّغ. (Playwright: إدراج واحد فقط)
+
 ## البنية
 - Backend: `/app/backend/backend/server.py` (قديم/ضخم) + `/app/backend/backend/routes/*` (weekly_schedule, statements, schedule_import, student_transfer, teaching_load...)
 - Frontend: `/app/frontend/app/*` (expo router) + `/app/frontend/src/components/MasterScheduleView.tsx`
