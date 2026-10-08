@@ -9194,6 +9194,25 @@ _EN_TO_AR_DAY = {
 }
 
 
+def _hhmm_minutes(t: str) -> int:
+    try:
+        h, m = str(t or "0:0").split(":")[:2]
+        return int(h) * 60 + int(m)
+    except (ValueError, TypeError):
+        return -1
+
+
+def _nearest_time_slot(time_slots: list, start_time: str, end_time: str = "") -> dict:
+    """أقرب فترة معرّفة لوقت المحاضرة: التي يقع وقت البداية داخلها أولاً، وإلا الأقرب بداية"""
+    st = _hhmm_minutes(start_time)
+    if st < 0 or not time_slots:
+        return None
+    inside = [ts for ts in time_slots if _hhmm_minutes(ts.get("start_time")) <= st < _hhmm_minutes(ts.get("end_time"))]
+    if inside:
+        return inside[0]
+    return min(time_slots, key=lambda ts: abs(_hhmm_minutes(ts.get("start_time")) - st))
+
+
 async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequest", current_user: dict, group: str = "", group_def: dict = None):
     """🔄 (نظام ← جدول) انعكاس المواعيد المتكررة على الجدول الأسبوعي:
     كل (يوم، وقت) يطابق فترة معرفة في إعدادات الكلية → خلية في الجدول، مع فحص التعارضات."""
@@ -9234,9 +9253,14 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                 notes.append(f"{loc} يوم غير معروف — لم يُدرج في الجدول الأسبوعي")
                 continue
             ts = slot_by_start.get(slot.start_time)
+            approx_note = ""
             if not ts:
-                notes.append(f"{loc} الوقت لا يطابق أي فترة معرفة في إعدادات الكلية — لم يُدرج في الجدول الأسبوعي")
-                continue
+                # 🎯 لا تطابق تاماً → أقرب فترة معرّفة (الفترة التي يقع فيها وقت البداية، وإلا أقرب بداية)
+                ts = _nearest_time_slot(time_slots, slot.start_time, slot.end_time)
+                if not ts:
+                    notes.append(f"{loc} لا توجد فترات معرّفة في إعدادات الكلية — لم يُدرج في الجدول الأسبوعي")
+                    continue
+                approx_note = f"{loc} ⚠️ الوقت لا يطابق فترة معرّفة — أُدرج في أقرب فترة: الفترة {ts.get('slot_number')} ({ts.get('start_time')}–{ts.get('end_time')})"
             if working_days and ar_day not in working_days:
                 notes.append(f"{loc} اليوم ليس من أيام عمل الكلية — لم يُدرج في الجدول الأسبوعي")
                 continue
@@ -9283,6 +9307,10 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                     "created_at": datetime.now(timezone.utc), "created_by": current_user.get("id", ""),
                     "created_from_lectures": True,
                 }
+                if approx_note:
+                    doc["approx_time"] = True
+                    doc["actual_start_time"] = slot.start_time
+                    doc["actual_end_time"] = slot.end_time
                 if teacher_id:
                     doc["teacher_id"] = teacher_id
                 if group:
@@ -9290,6 +9318,8 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                     doc["group_name"] = group_name
                 await db.weekly_schedule.insert_one(doc)
                 created += 1
+                if approx_note:
+                    notes.append(approx_note)
             except DuplicateKeyError:
                 notes.append(f"{loc} تعارض فريد في الجدول الأسبوعي — لم تُدرج")
     return created, existing, notes

@@ -1049,7 +1049,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                             <div
                               key={item.id}
                               onClick={(ev: any) => { ev.stopPropagation(); onEntryClick(item); }}
-                              title={`${item.course_name}\n${item.teacher_name}\n${item.room_name}`}
+                              title={`${item.course_name}\n${item.teacher_name}\n${item.room_name}${item.approx_time ? `\n⚠️ الوقت الفعلي للمحاضرات ${item.actual_start_time} — أُدرج في أقرب فترة` : ''}`}
                               data-testid={`master-entry-${item.id}`}
                               style={{
                                 backgroundColor: bg, color: fg, borderRadius: 4, padding: '2px 4px', marginBottom: 1,
@@ -1062,7 +1062,7 @@ export const MasterScheduleView = ({ facultyId, departmentId }: Props) => {
                             >
                               <div style={{ fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>{(item.merged_with?.length > 0) ? '🔗 ' : ''}{item.course_name}</div>
                               <div style={{ fontSize: 8.5, opacity: 0.9, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 110 }}>
-                                {shortName(item.teacher_name)}{item.room_name ? ` · ${item.room_name}` : ''}{item.duration_minutes ? ` · ⏱${item.duration_minutes}د` : ''}
+                                {shortName(item.teacher_name)}{item.room_name ? ` · ${item.room_name}` : ''}{item.duration_minutes ? ` · ⏱${item.duration_minutes}د` : ''}{item.approx_time ? ` · ≈${item.actual_start_time}` : ''}
                               </div>
                               {(item.computed_start_time || item.computed_end_time) && (
                                 <div data-testid="shifted-time-badge" style={{ fontSize: 8, fontWeight: 700, whiteSpace: 'nowrap', overflow: 'hidden', maxWidth: 110, background: 'rgba(0,0,0,0.22)', borderRadius: 3, padding: '0 3px', marginTop: 1 }}>

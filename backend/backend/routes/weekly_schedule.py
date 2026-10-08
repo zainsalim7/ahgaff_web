@@ -5261,6 +5261,8 @@ async def _build_master_data(db, faculty_id: str, department_id: Optional[str] =
             "slot_type": s.get("slot_type", "theory"),
             "group": s.get("group") or "",
             "group_name": s.get("group_name") or "",
+            "approx_time": bool(s.get("approx_time")),
+            "actual_start_time": s.get("actual_start_time") or "",
         })
         ck = (s.get("course_id", ""), s.get("department_id", ""), s.get("level") or 1, s.get("section", "") or "")
         scheduled_counts[ck] = scheduled_counts.get(ck, 0) + 1
