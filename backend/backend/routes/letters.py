@@ -16,6 +16,7 @@ from .hr_common import scope_employee_ids, user_id_of
 from .letterheads import resolve_letterhead, resolve_series, next_serial, format_number
 from .statements import _apply_vars, _var_ctx, _safe_dept, _academic_year_display, get_verify_base, student_gender, GENDER_VARS
 from services.letter_pdf import build_letter_pdf
+from services.letter_docx import build_letter_docx
 
 router = APIRouter(tags=["الخطابات"])
 SETTINGS_ID = "letters"
@@ -411,7 +412,7 @@ async def _compose(db, data: IssueIn, settings: dict) -> dict:
     ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title, **{str(k): str(v) for k, v in (data.extra_vars or {}).items() if k}}
     raw_secs = data.sections if data.sections is not None else await _effective_sections(db, settings, data.template_id)
     sections = {k: _apply_vars(v, ctx) for k, v in (raw_secs or {}).items() if k in SECTION_KEYS and v}
-    return {"subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people, "sections": sections,
+    return {"subject": _apply_vars((data.subject or "").strip(), ctx), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people, "sections": sections,
             "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
             "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
             "signatory_name": sig_name, "signatory_title": sig_title, "signatory_position_id": data.signatory_position_id or "",
@@ -690,13 +691,38 @@ async def verify_letter(token: str):
     return {"valid": True, "message": "خطاب صحيح صادر رسمياً من جامعة الأحقاف", **base, "signatory": s.get("signatory_title", ""), "template": s.get("template_name", "")}
 
 
+def _letter_fname(s: dict, ext: str, letterhead: bool = True) -> str:
+    """📁 اسم الملف: الموضوع + الرقم + توقيت الإصدار"""
+    subj = re.sub(r'[\\/:*?"<>|]+', " ", (s.get("subject") or "خطاب")).strip()[:60]
+    stamp = (s.get("issued_at") or "")[:16].replace("T", " ").replace(":", "-") or export_stamp()
+    num = str(s.get("number_display", "")).replace("/", "-")
+    return f"{'مسودة ' if s.get('status') == 'draft' else ''}{subj} - {num}{'' if letterhead else ' - بلا كليشة'} - {stamp}.{ext}"
+
+
 @router.get("/letters/{lid}/pdf")
-async def letter_pdf(lid: str, letterhead: bool = True, current_user: dict = Depends(get_current_user)):
+async def letter_pdf(lid: str, letterhead: bool = True, fmt: str = "pdf", current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
     s = await _load_visible(db, current_user, lid)
     settings = await _letter_settings(db, current_user, s)
     pdf = build_letter_pdf(s, settings, draft=s.get("status") == "draft", letterhead=letterhead)
+    if fmt == "png":
+        import pymupdf
+        page = pymupdf.open(stream=pdf, filetype="pdf")[0]
+        return StreamingResponse(io.BytesIO(page.get_pixmap(dpi=110).tobytes("png")), media_type="image/png", headers={"Cache-Control": "no-store"})
     from urllib.parse import quote
-    fname = quote(f"{'مسودة' if s.get('status') == 'draft' else 'خطاب'} {s.get('number_display', '')}{'' if letterhead else ' - بلا كليشة'} - {export_stamp()}.pdf")
+    fname = quote(_letter_fname(s, "pdf", letterhead))
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
+
+
+@router.get("/letters/{lid}/docx")
+async def letter_docx(lid: str, letterhead: bool = True, current_user: dict = Depends(get_current_user)):
+    """📝 تصدير الخطاب إلى Word قابل للتحرير (نفس الأقسام والكليشة)"""
+    _guard(current_user)
+    db = get_db()
+    s = await _load_visible(db, current_user, lid)
+    settings = await _letter_settings(db, current_user, s)
+    data = build_letter_docx(s, settings, letterhead=letterhead)
+    from urllib.parse import quote
+    fname = quote(_letter_fname(s, "docx", letterhead))
+    return StreamingResponse(io.BytesIO(data), media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document", headers={"Content-Disposition": f"attachment; filename*=UTF-8''{fname}", "X-Filename": fname})
