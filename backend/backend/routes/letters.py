@@ -635,16 +635,30 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool =
 
 
 @router.get("/letters")
-async def list_letters(q: Optional[str] = None, date_from: Optional[str] = None, date_to: Optional[str] = None, status: Optional[str] = None, limit: int = 200, current_user: dict = Depends(get_current_user)):
+async def list_letters(q: Optional[str] = None, subject: Optional[str] = None, recipient: Optional[str] = None, template_id: Optional[str] = None,
+                       date_from: Optional[str] = None, date_to: Optional[str] = None, status: Optional[str] = None, limit: int = 300, current_user: dict = Depends(get_current_user)):
+    """🗂 سجل/أرشيف الخطابات — فلاتر: بحث عام، الموضوع، المرسَل إليه (معرّف أو نص)، القالب، الفترة، الحالة"""
     _guard(current_user)
     query: dict = {}
     if status == "draft":
         query["status"] = "draft"
     elif status == "issued":
-        query["status"] = {"$ne": "draft"}
+        query["status"] = {"$ne": "draft"}; query["is_revoked"] = {"$ne": True}
+    elif status == "revoked":
+        query["is_revoked"] = True
     if q:
         rx = {"$regex": re.escape(q), "$options": "i"}
-        query["$or"] = [{"subject": rx}, {"number_display": rx}, {"recipient.name": rx}, {"recipient.title": rx}, {"people.name": rx}, {"template_name": rx}]
+        query["$or"] = [{"subject": rx}, {"number_display": rx}, {"recipient.name": rx}, {"recipient.title": rx}, {"recipient.organization": rx}, {"people.name": rx}, {"template_name": rx}]
+    if subject:
+        query["subject"] = {"$regex": re.escape(subject), "$options": "i"}
+    if recipient:
+        if ObjectId.is_valid(recipient):
+            query["recipient.id"] = recipient
+        else:
+            rrx = {"$regex": re.escape(recipient), "$options": "i"}
+            query.setdefault("$and", []).append({"$or": [{"recipient.name": rrx}, {"recipient.title": rrx}, {"recipient.organization": rrx}]})
+    if template_id:
+        query["template_id"] = template_id
     if date_from:
         query.setdefault("issued_at", {})["$gte"] = date_from
     if date_to:

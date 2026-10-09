@@ -58,6 +58,7 @@ export default function LettersPage() {
   // templates/log state
   const [tform, setTform] = useState<any | null>(null);
   const [log, setLog] = useState<any[]>([]); const [logQ, setLogQ] = useState(''); const [logStatus, setLogStatus] = useState('');
+  const [logF, setLogF] = useState({ subject: '', recipient: '', template_id: '', date_from: '', date_to: '' });
 
   const loadAll = () => {
     api.get('/letter-templates').then((r) => setTemplates(r.data)).catch(() => {});
@@ -74,14 +75,14 @@ export default function LettersPage() {
     api.get('/letterheads').then((r) => { setLetterheads(r.data); setLhId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
     api.get('/letter-series').then((r) => { setSeriesList(r.data); setSeriesId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
   };
-  const loadLog = () => api.get('/letters', { params: { q: logQ || undefined, status: logStatus || undefined } }).then((r) => setLog(r.data)).catch(() => {});
+  const loadLog = () => api.get('/letters', { params: { q: logQ || undefined, status: logStatus || undefined, ...Object.fromEntries(Object.entries(logF).filter(([, v]) => v)) } }).then((r) => setLog(r.data)).catch(() => {});
   useEffect(loadAll, []);
-  useEffect(() => { if (tab === 'log') loadLog(); }, [tab, logQ, logStatus]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { if (tab !== 'log') return; const t = setTimeout(loadLog, 300); return () => clearTimeout(t); }, [tab, logQ, logStatus, logF]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const pre = params.student_id ? { kind: 'student', id: params.student_id } : params.employee_id ? { kind: 'employee', id: params.employee_id } : params.teacher_id ? { kind: 'teacher', id: params.teacher_id } : null;
     if (pre) { setPeopleKind(pre.kind); setPeople([{ ...pre, label: (params.name as string) || 'المحدد' }]); }
   }, [params.student_id, params.employee_id, params.teacher_id]); // eslint-disable-line
-  useEffect(() => { if (params.tab === 'templates') setTab('templates'); }, [params.tab]);
+  useEffect(() => { if (params.tab && ['issue', 'templates', 'log', 'settings'].includes(params.tab)) setTab(params.tab as any); }, [params.tab]);
   useEffect(() => {
     if (!params.tpl || !templates.length) return;
     const t = templates.find((x) => x.id === params.tpl);
@@ -347,10 +348,20 @@ export default function LettersPage() {
 
       {tab === 'log' && (
         <div style={card} data-testid="letters-log">
-          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-            <input style={{ ...inp, flex: 1 }} placeholder="بحث بالرقم / الموضوع / المرسَل إليه / الاسم…" value={logQ} onChange={(e) => setLogQ(e.target.value)} data-testid="letters-log-search" />
-            <select style={{ ...inp, width: 'auto' }} value={logStatus} onChange={(e) => setLogStatus(e.target.value)} data-testid="letters-log-status"><option value="">الكل</option><option value="draft">المسودات</option><option value="issued">الصادرة</option></select>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
+            <input style={{ ...inp, flex: 1 }} placeholder="بحث عام: الرقم / الموضوع / المرسَل إليه / الاسم / القالب…" value={logQ} onChange={(e) => setLogQ(e.target.value)} data-testid="letters-log-search" />
+            <select style={{ ...inp, width: 'auto' }} value={logStatus} onChange={(e) => setLogStatus(e.target.value)} data-testid="letters-log-status"><option value="">كل الحالات</option><option value="issued">الصادرة (سارية)</option><option value="draft">المسودات</option><option value="revoked">الملغاة</option></select>
           </div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.3fr 1fr auto auto auto', gap: 8, marginBottom: 10, alignItems: 'center' }} data-testid="letters-log-filters">
+            <input style={inp} placeholder="الموضوع يحتوي…" value={logF.subject} onChange={(e) => setLogF({ ...logF, subject: e.target.value })} data-testid="letters-log-subject" />
+            <input style={inp} list="log-recips" placeholder="المرسَل إليه (اختر أو اكتب)…" value={logF.recipient} onChange={(e) => { const hit = recips.find((r) => `${r.title} — ${r.name}` === e.target.value); setLogF({ ...logF, recipient: hit ? hit.id : e.target.value }); }} data-testid="letters-log-recipient" />
+            <datalist id="log-recips">{recips.map((r) => <option key={r.id} value={`${r.title} — ${r.name}`} />)}</datalist>
+            <select style={inp} value={logF.template_id} onChange={(e) => setLogF({ ...logF, template_id: e.target.value })} data-testid="letters-log-template"><option value="">كل القوالب</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+            <label style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>من <input type="date" style={{ ...inp, width: 'auto', padding: '6px 8px' }} value={logF.date_from} onChange={(e) => setLogF({ ...logF, date_from: e.target.value })} data-testid="letters-log-from" /></label>
+            <label style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>إلى <input type="date" style={{ ...inp, width: 'auto', padding: '6px 8px' }} value={logF.date_to} onChange={(e) => setLogF({ ...logF, date_to: e.target.value })} data-testid="letters-log-to" /></label>
+            <button onClick={() => { setLogQ(''); setLogStatus(''); setLogF({ subject: '', recipient: '', template_id: '', date_from: '', date_to: '' }); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 10px', fontSize: 12 })} data-testid="letters-log-clear">↺ مسح</button>
+          </div>
+          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }} data-testid="letters-log-count">{log.length} خطاب{log.length >= 300 ? ' (أول 300 — ضيّق الفلاتر)' : ''}</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['الرقم', 'التاريخ', 'الموضوع', 'إلى', 'الأسماء', 'الحالة', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
             <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}{l.series_name ? <div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }} title={`الكليشة: ${l.letterhead_name || ''}`}>{l.series_name}{l.letterhead_name ? ` · ${l.letterhead_name}` : ''}</div> : null}{l.batch_id ? <div style={{ fontSize: 10, color: '#c2410c', fontWeight: 700 }} title="ضمن إصدار جماعي — خطاب لكل شخص">👥 {l.batch_index}/{l.batch_total}</div> : null}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
               <td style={{ ...td, whiteSpace: 'nowrap' }}>

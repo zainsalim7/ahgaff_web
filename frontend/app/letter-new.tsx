@@ -195,7 +195,7 @@ export default function LetterNewPage() {
             {!result.batch && <button onClick={() => dl(`/letters/${result.id}/docx`, `${subject} - ${result.number}.docx`, DOCX)} style={btn('#1d4ed8')} data-testid="letter-new-docx-btn">📝 Word</button>}
             <button onClick={() => { setStep('fill'); setResult(null); setImg(''); setDraft(null); }} style={btn('#6d28d9')} data-testid="letter-new-again-same">✉️ رسالة أخرى بنفس القالب</button>
             <button onClick={reset} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="letter-new-again">⚡ رسالة جديدة</button>
-            <button onClick={() => router.push('/letters' as any)} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="letter-new-log">🗂 سجل الخطابات</button>
+            <button onClick={() => router.push('/letters?tab=log' as any)} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="letter-new-log">🗂 سجل الخطابات</button>
           </div>
         </div>
       )}
