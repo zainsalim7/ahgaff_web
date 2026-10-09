@@ -378,6 +378,7 @@ class IssueIn(BaseModel):
     letterhead_override: Optional[dict] = None  # 👁️ معاينة كليشة قيد التحرير (غير محفوظة)
     sections: Optional[dict] = None   # ✍️ أقسام منسّقة (المستلم/التحية/الموضوع/الخاتمة/التوقيع) HTML بمتغيرات
     person_as_recipient: bool = False  # الشخص نفسه هو المرسَل إليه
+    extra_vars: Optional[dict] = None  # ✉️ متغيرات مخصصة يطلبها القالب (رسالة سريعة)
 
 
 async def _lh_series(db, user: dict, data: IssueIn) -> tuple:
@@ -407,7 +408,7 @@ async def _compose(db, data: IssueIn, settings: dict) -> dict:
     """الجزء المشترك: تعبئة المتغيرات + الجدول + بيانات المرسَل إليه والموقّع (بلا ترقيم)"""
     ctx, table, people = await _build_ctx(db, data.recipient or {}, data.subject or "", data.people)
     sig_name, sig_title = await _resolve_sig(db, data.signatory_position_id, data.signatory_name, data.signatory_title, settings)
-    ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title}
+    ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title, **{str(k): str(v) for k, v in (data.extra_vars or {}).items() if k}}
     raw_secs = data.sections if data.sections is not None else await _effective_sections(db, settings, data.template_id)
     sections = {k: _apply_vars(v, ctx) for k, v in (raw_secs or {}).items() if k in SECTION_KEYS and v}
     return {"subject": (data.subject or "").strip(), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people, "sections": sections,
@@ -415,7 +416,7 @@ async def _compose(db, data: IssueIn, settings: dict) -> dict:
             "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
             "signatory_name": sig_name, "signatory_title": sig_title, "signatory_position_id": data.signatory_position_id or "",
             "layout": data.layout or None, "valid_days": data.valid_days,
-            "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id, "sections": raw_secs or {}}}
+            "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id, "sections": raw_secs or {}, "extra_vars": data.extra_vars or {}}}
 
 
 async def _effective_sections(db, lh: dict, template_id: Optional[str] = None) -> dict:

@@ -151,6 +151,7 @@ export default function RootLayout() {
           <Stack.Screen name="statement-settings" options={{ title: 'إعدادات كليشة الإفادة' }} />
           <Stack.Screen name="statements-log" options={{ title: 'سجل الإفادات الصادرة' }} />
           <Stack.Screen name="letters" options={{ title: 'الخطابات الرسمية' }} />
+          <Stack.Screen name="letter-new" options={{ title: 'رسالة جديدة' }} />
           <Stack.Screen name="grades" options={{ title: 'نظام الدرجات', headerShown: false }} />
           <Stack.Screen name="schedule" options={{ title: 'جدول المحاضرات' }} />
           <Stack.Screen name="students" options={{ title: 'الطلاب' }} />

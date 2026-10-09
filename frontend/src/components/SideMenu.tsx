@@ -159,6 +159,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-my-leaves', label: 'إجازاتي', icon: 'calendar', path: '/hr-my-leaves', permissions: [], forAll: true },
 
   // 📜 المراسلات الرسمية (المرحلة 1) — الصلاحيات تُقيَّم في الخادم حسب العضويات التنظيمية
+  { id: 'letter-new', label: 'رسالة جديدة ⚡', icon: 'flash', path: '/letter-new', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'] },
   { id: 'letters', label: 'الخطابات الرسمية ✉️', icon: 'mail-open', path: '/letters', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'] },
   { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', permissions: [], forAll: true },
   { id: 'corr-quick', label: 'خطاب سريع ⚡', icon: 'flash', path: '/corr-quick', permissions: [], forAll: true },

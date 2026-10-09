@@ -695,6 +695,20 @@ export default function ReportsScreen() {
             {!['teacher', 'student'].includes(userRole) && (
             <TouchableOpacity
               style={styles.reportTypeCard}
+              onPress={() => router.push('/letter-new' as any)}
+              data-testid="letter-new-btn"
+            >
+              <View style={[styles.reportTypeIcon, { backgroundColor: '#fef3c7' }]}>
+                <Ionicons name="flash" size={28} color="#d97706" />
+              </View>
+              <Text style={styles.reportTypeTitle}>رسالة جديدة ⚡</Text>
+              <Text style={styles.reportTypeDesc}>اختر القالب → أدخل المطلوب فقط → معاينة → إصدار برقم</Text>
+            </TouchableOpacity>
+            )}
+
+            {!['teacher', 'student'].includes(userRole) && (
+            <TouchableOpacity
+              style={styles.reportTypeCard}
               onPress={() => router.push('/letters' as any)}
               data-testid="letters-btn"
             >
