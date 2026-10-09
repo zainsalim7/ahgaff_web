@@ -6452,6 +6452,7 @@ async def get_course_lecture_stats(
         LectureStatus.COMPLETED: 0,
         LectureStatus.CANCELLED: 0,
         LectureStatus.ABSENT: 0,
+        LectureStatus.ABSENT_EXCUSED: 0,
     }
     total = 0
     async for row in db.lectures.aggregate(pipeline):
@@ -6467,6 +6468,7 @@ async def get_course_lecture_stats(
         "completed": buckets[LectureStatus.COMPLETED],
         "cancelled": buckets[LectureStatus.CANCELLED],
         "absent": buckets[LectureStatus.ABSENT],
+        "absent_excused": buckets[LectureStatus.ABSENT_EXCUSED],
     }
 
 @api_router.get("/courses/{course_id}/backup-info")
@@ -9046,9 +9048,10 @@ async def update_lecture_status(lecture_id: str, request: Request, current_user:
     data = await request.json()
     new_status = data.get("status")
     cancellation_reason = (data.get("cancellation_reason") or "").strip()
-    valid = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.CANCELLED, LectureStatus.ABSENT]
+    valid = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.CANCELLED, LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED]
+    valid_labels = {LectureStatus.SCHEDULED: "مجدولة", LectureStatus.COMPLETED: "منعقدة", LectureStatus.CANCELLED: "ملغاة", LectureStatus.ABSENT: "غائب", LectureStatus.ABSENT_EXCUSED: "غائب بعذر"}
     if new_status not in valid:
-        raise HTTPException(status_code=400, detail=f"حالة غير صالحة. الحالات المتاحة: {valid}")
+        raise HTTPException(status_code=400, detail=f"حالة غير صالحة. الحالات المتاحة: {valid_labels}")
     
     lecture = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
     if not lecture:
@@ -12109,7 +12112,7 @@ async def get_course_detailed_report(
     active_lecture_ids = await get_active_lecture_ids(course_id)
     lectures = await db.lectures.find({
         "course_id": course_id,
-        "status": {"$in": [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT]}
+        "status": {"$in": [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED]}
     }).sort("date", 1).to_list(500)
     
     # جلب التسجيلات
@@ -12191,8 +12194,9 @@ async def get_course_detailed_report(
         "lectures": lectures_data,
         "summary": {
             "total_students": len(students_data),
-            "total_lectures": sum(1 for l in lectures_data if l.get("status") != LectureStatus.ABSENT),
+            "total_lectures": sum(1 for l in lectures_data if l.get("status") not in (LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED)),
             "absent_lectures": sum(1 for l in lectures_data if l.get("status") == LectureStatus.ABSENT),
+            "absent_excused_lectures": sum(1 for l in lectures_data if l.get("status") == LectureStatus.ABSENT_EXCUSED),
             "avg_attendance_rate": round(sum(s["attendance_rate"] for s in students_data) / len(students_data), 2) if students_data else 0
         }
     }
@@ -12791,6 +12795,7 @@ async def export_teacher_delays_report(
 _TEACHER_ATT_STATUS_LABELS = {
     "executed": "نُفّذت",
     "absent": "غياب / لم تُنفّذ",
+    "absent_excused": "غياب بعذر",
     "cancelled": "ملغاة",
     "pending": "لم يحن وقتها",
 }
@@ -12843,6 +12848,8 @@ async def _build_teacher_attendance_report(start_date, end_date, department_id, 
             return "cancelled"
         if st == LectureStatus.ABSENT:
             return "absent"
+        if st == LectureStatus.ABSENT_EXCUSED:
+            return "absent_excused"
         # scheduled: إذا انتهى وقتها وتاريخها قد مضى فهي غياب فعلياً
         try:
             end_dt = datetime.strptime(f"{lec['date']} {lec['end_time']}", "%Y-%m-%d %H:%M").replace(tzinfo=YEMEN_TIMEZONE)
@@ -12931,6 +12938,7 @@ async def _build_teacher_attendance_report(start_date, end_date, department_id, 
                 "total": 0,
                 "executed": 0,
                 "absent": 0,
+                "absent_excused": 0,
                 "cancelled": 0,
                 "pending": 0,
                 "lectures": [],
@@ -12954,6 +12962,7 @@ async def _build_teacher_attendance_report(start_date, end_date, department_id, 
 
     total_executed = sum(t["executed"] for t in teachers_list)
     total_absent = sum(t["absent"] for t in teachers_list)
+    total_absent_excused = sum(t["absent_excused"] for t in teachers_list)
     total_cancelled = sum(t["cancelled"] for t in teachers_list)
     total_pending = sum(t["pending"] for t in teachers_list)
     total_lectures = len(flat_lectures)
@@ -12976,6 +12985,7 @@ async def _build_teacher_attendance_report(start_date, end_date, department_id, 
             "teachers_with_absence": len([t for t in teachers_list if t["absent"] > 0]),
             "executed": total_executed,
             "absent": total_absent,
+            "absent_excused": total_absent_excused,
             "cancelled": total_cancelled,
             "pending": total_pending,
             "execution_rate": round(total_executed / denom * 100, 1) if denom > 0 else 0,
@@ -14053,6 +14063,7 @@ async def export_semester_report_pdf(
         # إحصائيات المحاضرات
         completed_count = sum(1 for l in lectures if l.get("status") == LectureStatus.COMPLETED)
         absent_count = sum(1 for l in lectures if l.get("status") == LectureStatus.ABSENT)
+        absent_excused_count = sum(1 for l in lectures if l.get("status") == LectureStatus.ABSENT_EXCUSED)
         cancelled_count = sum(1 for l in lectures if l.get("status") == LectureStatus.CANCELLED)
         scheduled_count = sum(1 for l in lectures if l.get("status") == LectureStatus.SCHEDULED)
         
@@ -14094,7 +14105,7 @@ async def export_semester_report_pdf(
         c_pdf.setFillColor(colors.HexColor("#f5f5f5"))
         c_pdf.roundRect(30, y - 20, width - 60, 35, 5, fill=1, stroke=0)
         c_pdf.setFillColor(colors.black)
-        draw_arabic(c_pdf, f"المحاضرات: {len(lectures)}     منعقدة: {completed_count}     غائب: {absent_count}     ملغاة: {cancelled_count}     مجدولة: {scheduled_count}     الطلاب: {len(students)}", width - 40, y, font_size=10)
+        draw_arabic(c_pdf, f"المحاضرات: {len(lectures)}     منعقدة: {completed_count}     غائب: {absent_count}     بعذر: {absent_excused_count}     ملغاة: {cancelled_count}     مجدولة: {scheduled_count}     الطلاب: {len(students)}", width - 40, y, font_size=10)
         
         # =================== جدول الطلاب ===================
         y -= 45
@@ -18284,6 +18295,24 @@ async def cleanup_duplicate_roles_now(current_user: dict = Depends(get_current_u
 # ملاحظة: api_router يجب أن يُضاف أولاً لأنه يحتوي على routes محددة مثل /departments/dashboard
 app.include_router(api_router)
 
+# 🩺 نظام تبرير غياب الأستاذ (router مستقل — absence_justifications.py)
+from absence_justifications import build_router as build_absence_justifications_router
+from services.firebase_service import send_notification_to_many as _aj_send_push_many
+
+
+async def _aj_user_from_token(token: str):
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user = await db.users.find_one({"_id": ObjectId(payload.get("sub"))})
+        if not user:
+            return None
+        return {"id": str(user["_id"]), "role": user.get("role"), "full_name": user.get("full_name")}
+    except Exception:
+        return None
+
+
+app.include_router(build_absence_justifications_router(db, get_current_user, _aj_send_push_many, _aj_user_from_token), prefix="/api")
+
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(roles_router, prefix="/api")
@@ -19011,7 +19040,7 @@ async def _ensure_lectures_unique_index(db):
     3. ننشئ فهرس فريد جزئي بحيث ترفض MongoDB أي إدخال مكرر حتى لو أخطأ الكود.
     """
     try:
-        active_statuses = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT]
+        active_statuses = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED]
         cancelled_total = 0
         pipe = [
             {"$match": {"status": {"$in": active_statuses}}},

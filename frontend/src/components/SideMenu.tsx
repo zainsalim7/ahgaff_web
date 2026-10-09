@@ -23,6 +23,7 @@ interface MenuItem {
   permissions: string[]; // أي صلاحية من هذه تكفي لإظهار العنصر
   adminOnly?: boolean;
   forAll?: boolean;
+  roles?: string[]; // يظهر لهذه الأدوار فقط (مثل مراجعي تبرير الغياب)
 }
 
 // قائمة العناصر مرتبطة بالصلاحيات
@@ -116,6 +117,7 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.REPORT_ATTENDANCE_OVERVIEW, PERMISSIONS.REPORT_WARNINGS, PERMISSIONS.REPORT_COURSE,
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
   ]},
+  { id: 'absence-justifications', label: 'تبرير غياب الأساتذة 🩺', icon: 'medkit', path: '/absence-justifications', permissions: [], roles: ['admin', 'dean', 'department_head'] },
   { id: 'reports', label: 'جميع التقارير', icon: 'document-text', path: '/reports', permissions: [
     PERMISSIONS.VIEW_REPORTS, PERMISSIONS.EXPORT_REPORTS
   ]},
@@ -195,6 +197,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
   // فلترة العناصر حسب صلاحيات المستخدم الفردية
   const filteredItems = MENU_ITEMS.filter(item => {
     if (item.forAll) return true;
+    if (item.roles) return item.roles.includes(userRole);
     if (item.adminOnly) return isAdmin;
     // العناصر الخاصة بالمعلم فقط
     if ((item as any).teacherOnly && userRole !== 'teacher') return false;

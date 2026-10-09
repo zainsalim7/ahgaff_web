@@ -10,6 +10,7 @@ class LectureStatus:
     COMPLETED = "completed"
     CANCELLED = "cancelled"
     ABSENT = "absent"
+    ABSENT_EXCUSED = "absent_excused"  # غائب بعذر (طلب تبرير مقبول) — status_override دائماً
 
 # المحاضرات الفعّالة فقط - غياب الأستاذ والملغاة لا تُحسب على الطالب
 ACTIVE_LECTURE_STATUSES = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED]
