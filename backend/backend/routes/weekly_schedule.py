@@ -581,12 +581,12 @@ async def get_schedule_settings(
             default_days = global_settings.get("working_days", default_days)
         settings = {
             "time_slots": default_slots,
-            "working_days": default_days,
+            "working_days": canon_days(default_days),
         }
     _global = await db.schedule_settings.find_one({"_id": "global"}) or {}
     return {
         "time_slots": settings.get("time_slots", []),
-        "working_days": settings.get("working_days", []),
+        "working_days": canon_days(settings.get("working_days", [])),
         "practical_hour_weight": _global.get("practical_hour_weight", 0.5),
     }
 
@@ -605,7 +605,7 @@ async def update_schedule_settings(
     if time_slots is not None:
         update["time_slots"] = time_slots
     if working_days is not None:
-        update["working_days"] = working_days
+        update["working_days"] = canon_days(working_days)
     if practical_hour_weight is not None:
         if not (0 < practical_hour_weight <= 1):
             raise HTTPException(status_code=400, detail="معامل الساعة العملية يجب أن يكون بين 0 و 1")
@@ -616,6 +616,12 @@ async def update_schedule_settings(
 
 
 DEFAULT_WORKING_DAYS = ["السبت", "الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس"]
+_DAY_ORDER = {d: i for i, d in enumerate(["السبت", "الأحد", "الاثنين", "الإثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة"])}
+
+
+def canon_days(days):
+    """📅 ترتيب أيام العمل ترتيباً أسبوعياً ثابتاً (السبت ← الجمعة) مهما كان ترتيب الحفظ"""
+    return sorted(dict.fromkeys(days or []), key=lambda d: _DAY_ORDER.get(str(d).strip(), 99))
 
 
 @router.post("/schedule-settings/time-slots")
@@ -663,7 +669,7 @@ async def save_working_days(
     settings_id = f"faculty_{faculty_id}" if faculty_id else "global"
     await db.schedule_settings.update_one(
         {"_id": settings_id},
-        {"$set": {"working_days": data.days}},
+        {"$set": {"working_days": canon_days(data.days)}},
         upsert=True
     )
     return {"message": "تم حفظ أيام العمل"}
@@ -5152,7 +5158,7 @@ async def _build_master_data(db, faculty_id: str, department_id: Optional[str] =
     if not settings:
         settings = await db.schedule_settings.find_one({"_id": "global"})
     time_slots = (settings or {}).get("time_slots", [])
-    working_days = (settings or {}).get("working_days", [])
+    working_days = canon_days((settings or {}).get("working_days", []))
 
     dept_query = {"faculty_id": faculty_id, "is_active": {"$ne": False}}
     if department_id:
