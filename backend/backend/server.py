@@ -11033,6 +11033,21 @@ async def record_attendance_session(
         "records_count": len(attendance_records), "offline_recorded_at": session.offline_recorded_at, "location": loc_doc,
         "recorded_at": get_yemen_time().isoformat(),
     })
+    # 🔔 تحضير خارج النطاق → إشعار رؤساء قسم المقرر (in-app + Push)
+    if loc_doc and loc_doc.get("inside_campus") is False:
+        try:
+            course_doc = await db.courses.find_one({"_id": ObjectId(lecture["course_id"])}, {"name": 1, "department_id": 1}) or {}
+            dep_id = course_doc.get("department_id")
+            heads = await db.users.find({"role": "department_head", "$or": [{"department_id": dep_id}, {"department_ids": dep_id}]}, {"_id": 1}).to_list(50) if dep_id else []
+            if heads:
+                from routes.hr_common import notify_users as _hr_notify
+                dm = loc_doc.get("distance_m")
+                dist_txt = f"{dm / 1000:.1f} كم" if isinstance(dm, (int, float)) and dm >= 1000 else (f"{int(dm)} م" if isinstance(dm, (int, float)) else "مسافة غير معروفة")
+                await _hr_notify(db, [str(h["_id"]) for h in heads], "📍 تحضير محاضرة خارج نطاق الكلية",
+                                 f"{current_user.get('full_name', 'الأستاذ')} حضّر محاضرة {course_doc.get('name', '')} بتاريخ {lecture.get('date', '')} على بُعد {dist_txt} من {loc_doc.get('nearest_location_name') or 'الجامعة'}",
+                                 "attendance_location", {"data": {"type": "attendance_location", "lecture_id": session.lecture_id, "route": "/attendance-locations"}})
+        except Exception as _e:
+            logging.warning(f"geofence notify failed: {_e}")
     
     return {"message": f"تم تسجيل حضور {len(attendance_records)} طالب بنجاح"}
 
