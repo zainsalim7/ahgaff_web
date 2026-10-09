@@ -17,6 +17,7 @@ class AttendanceSessionCreate(BaseModel):
     offline_recorded_at: Optional[str] = None  # وقت التسجيل الأوفلاين (ISO format)
     lesson_title: Optional[str] = None  # عنوان الدرس
     plan_topic_id: Optional[str] = None  # ربط بموضوع من الخطة الدراسية
+    location: Optional[dict] = None  # 📍 موقع التحضير (تنبيه فقط — لا يُرفض الطلب): status/lat/lng/accuracy/captured_at/inside_campus/nearest_location_id/nearest_location_name/distance_m
 
 class AttendanceResponse(BaseModel):
     id: str

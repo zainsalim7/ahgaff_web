@@ -188,6 +188,8 @@ export default function CourseDetailedReport() {
                   <View style={{ flex: 1 }}>
                     <Text style={styles.lectureTime}>{lecture.start_time}</Text>
                     <Text style={styles.lectureStats}>{lecture.status === 'absent' ? 'لم تنعقد (غياب المدرّس)' : `${lecture.present_count}/${lecture.total_students} حاضر`}</Text>
+                    {lecture.location_flag === 'outside' && <Text style={{ fontSize: 11, color: '#b91c1c', fontWeight: '700', marginTop: 2 }} testID={`course-lecture-${index}-geo`}>📍 حُضّرت خارج النطاق{lecture.location_distance_m ? ` (${Math.round(lecture.location_distance_m) >= 1000 ? `${(lecture.location_distance_m / 1000).toFixed(1)} كم` : `${Math.round(lecture.location_distance_m)} م`})` : ''}</Text>}
+                    {lecture.location_flag === 'no_location' && <Text style={{ fontSize: 11, color: '#92400e', fontWeight: '700', marginTop: 2 }} testID={`course-lecture-${index}-geo`}>📍 بدون موقع</Text>}
                   </View>
                   {lecture.status === 'absent' ? (
                     <View style={[styles.rateBadge, { backgroundColor: '#fff3e0' }]}><Text style={[styles.rateText, { color: '#e65100' }]}>غياب</Text></View>

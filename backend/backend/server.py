@@ -11016,10 +11016,23 @@ async def record_attendance_session(
         if _c and _c.get("teacher_id"):
             lecture_update["teacher_id"] = _c["teacher_id"]
     
+    # 📍 موقع التحضير (geofence صامت — تنبيه فقط، لا رفض): نخزّن الحقول المعروفة فقط
+    loc_in = session.location if isinstance(session.location, dict) else None
+    loc_doc = None
+    if loc_in:
+        loc_doc = {k: loc_in.get(k) for k in ("status", "lat", "lng", "accuracy", "captured_at", "inside_campus", "nearest_location_id", "nearest_location_name", "distance_m")}
+        lecture_update["attendance_location"] = loc_doc
+        lecture_update["attendance_outside_campus"] = loc_doc.get("inside_campus") is False
+
     await db.lectures.update_one(
         {"_id": ObjectId(session.lecture_id)},
         {"$set": lecture_update}
     )
+    await db.attendance_operations.insert_one({
+        "lecture_id": session.lecture_id, "course_id": lecture["course_id"], "user_id": current_user["id"], "user_name": current_user.get("full_name", ""),
+        "records_count": len(attendance_records), "offline_recorded_at": session.offline_recorded_at, "location": loc_doc,
+        "recorded_at": get_yemen_time().isoformat(),
+    })
     
     return {"message": f"تم تسجيل حضور {len(attendance_records)} طالب بنجاح"}
 
@@ -12169,13 +12182,17 @@ async def get_course_detailed_report(
             else:
                 date_str = ""
             
+            _loc = lecture.get("attendance_location") or None
             lectures_data.append({
                 "date": date_str,
                 "start_time": lecture.get("start_time", ""),
                 "status": lecture.get("status", LectureStatus.SCHEDULED),
                 "present_count": present,
                 "total_students": len(records),
-                "attendance_rate": round(present / len(records) * 100, 2) if records else 0
+                "attendance_rate": round(present / len(records) * 100, 2) if records else 0,
+                # 📍 موقع التحضير: outside / no_location / inside / None (تطبيق قديم)
+                "location_flag": ("outside" if lecture.get("attendance_outside_campus") else ("no_location" if _loc.get("status") != "ok" else "inside")) if _loc else None,
+                "location_distance_m": (_loc or {}).get("distance_m"),
             })
         except Exception as e:
             logger.warning(f"Skipping lecture {lecture.get('_id')}: {e}")
@@ -18312,6 +18329,10 @@ async def _aj_user_from_token(token: str):
 
 
 app.include_router(build_absence_justifications_router(db, get_current_user, _aj_send_push_many, _aj_user_from_token), prefix="/api")
+
+# 📍 النطاق الجغرافي لتحضير المحاضرات (geofence_attendance.py)
+from geofence_attendance import build_router as build_geofence_router
+app.include_router(build_geofence_router(db, get_current_user), prefix="/api")
 
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")

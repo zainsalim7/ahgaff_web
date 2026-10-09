@@ -153,6 +153,7 @@ export default function RootLayout() {
           <Stack.Screen name="letters" options={{ title: 'الخطابات الرسمية' }} />
           <Stack.Screen name="letter-new" options={{ title: 'رسالة جديدة' }} />
           <Stack.Screen name="absence-justifications" options={{ title: 'تبرير غياب الأساتذة' }} />
+          <Stack.Screen name="attendance-locations" options={{ title: 'مواقع تحضير المحاضرات' }} />
           <Stack.Screen name="grades" options={{ title: 'نظام الدرجات', headerShown: false }} />
           <Stack.Screen name="schedule" options={{ title: 'جدول المحاضرات' }} />
           <Stack.Screen name="students" options={{ title: 'الطلاب' }} />
