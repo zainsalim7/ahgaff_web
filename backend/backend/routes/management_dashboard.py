@@ -320,6 +320,23 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
         alerts.append({"key": "pending_fees", "level": "warning" if pend else "ok", "count": pend,
                        "title": "سندات مالية بانتظار التعميد", "hint": finance["academic_year"] or "", "items": [], "route": "/fee-receipts"})
 
+    # 🩺 طلبات تبرير غياب الأساتذة المعلقة — للمراجعين فقط (admin / dean / department_head)
+    role = user.get("role")
+    if role in ("admin", "dean", "department_head"):
+        aj_q: dict = {"status": {"$in": ["pending", "needs_info"]}}
+        if role == "dean":
+            aj_q["faculty_id"] = user.get("faculty_id") or "__none__"
+        elif dept_ids is not None:
+            aj_q["department_id"] = {"$in": dept_ids}
+        aj_docs = await db.absence_justifications.find(aj_q, {"ref_no": 1, "teacher_name": 1, "department_name": 1, "excuse_type": 1, "lectures": 1, "status": 1, "created_at": 1}).sort("created_at", 1).to_list(200)
+        aj_pending = [d for d in aj_docs if d.get("status") == "pending"]
+        from absence_justifications import EXCUSE_TYPES as _AJ_TYPES
+        aj_items = [{"id": str(d["_id"]), "ref_no": d.get("ref_no"), "teacher_name": d.get("teacher_name", ""), "department_name": d.get("department_name") or "",
+                     "excuse": _AJ_TYPES.get(d.get("excuse_type"), d.get("excuse_type")), "lectures": len(d.get("lectures") or []),
+                     "created_at": (d.get("created_at") or "")[:10], "status": d.get("status")} for d in aj_pending[:10]]
+        alerts.append({"key": "absence_justifications", "level": "warning" if aj_pending else ("info" if aj_docs else "ok"), "count": len(aj_pending),
+                       "title": "طلبات تبرير غياب أساتذة بانتظار البتّ", "hint": f"{len(aj_pending)} قيد المراجعة · {len(aj_docs) - len(aj_pending)} بانتظار استكمال من الأستاذ", "items": aj_items, "route": "/absence-justifications"})
+
     phase2 = await _phase2(db, scope, dept_ids, lectures, today_lectures, course_map, active_courses, att_by_lecture, att_by_student, stu_q, period)
     for k in ("teachers", "students", "rooms"):
         if not sections[k]:
