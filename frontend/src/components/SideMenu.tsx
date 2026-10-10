@@ -174,6 +174,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', permissions: [], forAll: true },
 
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
+  { id: 'university-calendar', label: 'التقويم الجامعي والعطل', icon: 'calendar', path: '/university-calendar', permissions: ['manage_calendar'] },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
   { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', permissions: [], adminOnly: true },
   { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', permissions: [PERMISSIONS.MANAGE_ROLES] },

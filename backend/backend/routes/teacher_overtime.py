@@ -119,6 +119,40 @@ def weeks_between(start: datetime, end: datetime) -> int:
     return max(1, round(days / 7))
 
 
+AR_DAYS = {"الإثنين": 0, "الاثنين": 0, "الثلاثاء": 1, "الأربعاء": 2, "الخميس": 3, "الجمعة": 4, "السبت": 5, "الأحد": 6,
+           "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+
+
+async def _course_day_hours(db, course_id: str, lectures: List[dict], weekly: float) -> Dict[int, float]:
+    """{يوم الأسبوع: ساعات الجلسة} من الجدول الأسبوعي، وإلا من أيام المحاضرات الفعلية (توزيع متساوٍ)"""
+    out: Dict[int, float] = {}
+    async for s in db.weekly_schedule.find({"course_id": course_id}, {"day": 1, "day_of_week": 1, "start_time": 1, "end_time": 1}):
+        d = s.get("day_of_week")
+        if d is None:
+            d = AR_DAYS.get(str(s.get("day", "")).strip().lower()) if str(s.get("day", "")).lower() in AR_DAYS else AR_DAYS.get(str(s.get("day", "")).strip())
+        if d is not None:
+            out[int(d)] = out.get(int(d), 0.0) + _lec_hours(s)
+    if out:
+        return out
+    days = {d.weekday() for d in (_d(l.get("date")) for l in lectures) if d}
+    return {d: round(weekly / len(days), 2) for d in days} if days else {}
+
+
+def _holiday_deduction(holidays: Dict[str, str], day_hours: Dict[int, float], first: datetime, end: datetime, lecture_dates: set) -> (float, List[str]):
+    """ساعات الإجازات الرسمية التي تصادف أيام المقرر بين أول محاضرة ونهاية الفترة (ما لم تُنفَّذ محاضرة فعلاً في ذلك اليوم)"""
+    total, names = 0.0, []
+    for ds, name in holidays.items():
+        d = _d(ds)
+        if not d or d < first or d > end or ds in lecture_dates:
+            continue
+        h = day_hours.get(d.weekday())
+        if h:
+            total += h
+            if name not in names:
+                names.append(name)
+    return round(total, 2), names
+
+
 async def _course_weekly_hours(db, teacher_id: str, course: dict) -> float:
     load = await db.teaching_loads.find_one({"teacher_id": teacher_id, "course_id": str(course["_id"])})
     if load and load.get("weekly_hours"):
@@ -131,9 +165,11 @@ async def _course_weekly_hours(db, teacher_id: str, course: dict) -> float:
 
 async def compute_workload(db, teachers: List[dict], start: datetime, end: datetime, hide_empty: bool = False) -> dict:
     """يعيد نفس بنية /reports/teacher-workload القديمة + أعمدة كشف الساعات الإضافية"""
+    from .calendar_events import holiday_dates
     policies = await load_policies(db)
     total_weeks = weeks_between(start, end)
     start_str, end_str = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+    holidays = await holiday_dates(db, start_str, end_str)
     fac_names = {str(f["_id"]): f.get("name", "") for f in await db.faculties.find({}, {"name": 1}).to_list(300)}
     dep_docs = {str(d["_id"]): d for d in await db.departments.find({}, {"name": 1, "faculty_id": 1}).to_list(1000)}
 
@@ -167,6 +203,9 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
             }).to_list(1000)
             lec_ids = [str(l["_id"]) for l in lectures]
             executed_ids = set(await db.attendance.distinct("lecture_id", {"lecture_id": {"$in": lec_ids}})) if lec_ids else set()
+            # محاضرات تقع في إجازة رسمية ولم تُنفَّذ تُستبعد من المجدولة (لا تُعد نقصاً)
+            executed_dates = {str(l.get("date"))[:10] for l in lectures if str(l["_id"]) in executed_ids}
+            lectures = [l for l in lectures if str(l.get("date"))[:10] not in holidays or str(l["_id"]) in executed_ids]
             excused = [l for l in lectures if l.get("status") == LectureStatus.ABSENT_EXCUSED]
             executed = [l for l in lectures if str(l["_id"]) in executed_ids]
 
@@ -186,9 +225,15 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
             else:
                 course_weeks = 0
                 notes.append("لا محاضرات مجدولة في الفترة")
-            expected = round(max(0.0, weekly * course_weeks - excused_hours), 2)
+            holiday_hours, holiday_names = 0.0, []
+            if first and holidays:
+                day_hours = await _course_day_hours(db, cid, lectures, weekly)
+                holiday_hours, holiday_names = _holiday_deduction(holidays, day_hours, first, end, executed_dates)
+            expected = round(max(0.0, weekly * course_weeks - excused_hours - holiday_hours), 2)
             if excused_hours:
                 notes.append(f"غياب بعذر {excused_hours:g} س (خُصم من الافتراضية)")
+            if holiday_hours:
+                notes.append(f"إجازة رسمية {holiday_hours:g} س ({'، '.join(holiday_names)})")
             shortfall = round(max(0.0, expected - actual_hours), 2)
             rate = round(actual_hours / expected * 100) if expected > 0 else (100 if actual_hours > 0 else 0)
 
@@ -200,7 +245,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 "weekly_hours": weekly, "first_lecture_date": first.strftime("%Y-%m-%d") if first else None, "course_weeks": course_weeks,
                 "scheduled_lectures": len(lectures), "executed_lectures": len(executed), "excused_lectures": len(excused),
                 "scheduled_hours": scheduled_hours, "actual_hours": actual_hours, "excused_hours": excused_hours,
-                "expected_hours": expected, "shortfall_hours": shortfall, "completion_rate": rate, "is_low": expected > 0 and rate < LOW_RATE_THRESHOLD,
+                "expected_hours": expected, "holiday_hours": holiday_hours, "shortfall_hours": shortfall, "completion_rate": rate, "is_low": expected > 0 and rate < LOW_RATE_THRESHOLD,
                 "note": "، ".join(notes),
             })
 
@@ -235,7 +280,8 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         result = [t for t in result if t["summary"]["total_scheduled_hours"] > 0]
     sem = await get_active_semester(db)
     return {
-        "period": {"start_date": start.isoformat(), "end_date": end.isoformat(), "total_weeks": total_weeks,
+        "holidays": [{"date": k, "name": v} for k, v in sorted(holidays.items())],
+        "period": {"start_date": start.isoformat(), "end_date": end.isoformat(), "total_weeks": total_weeks, "holiday_days": len(holidays),
                    "semester_name": (sem or {}).get("name", ""), "academic_year": (sem or {}).get("academic_year", "")},
         "teachers": result,
         "summary": {
@@ -385,7 +431,7 @@ def build_sheet_pdf(report: dict, issuer: str, generated_by: str) -> io.BytesIO:
         el.append(RLImage(logo, width=16 * mm, height=16 * mm))
     sem = f"للفصل {p.get('semester_name') or ''} {p.get('academic_year') or ''}".strip()
     el += [Paragraph(ar(f"كشف يبين الساعات الإضافية للأساتذة {sem}"), st_title),
-           Paragraph(ar(f"الفترة من {str(p['start_date'])[:10]} إلى {str(p['end_date'])[:10]}   ·   عدد الأسابيع: {p['total_weeks']}   ·   جهة الإصدار: {issuer or 'قسم التسجيل'}"), st_sub),
+           Paragraph(ar(f"الفترة من {str(p['start_date'])[:10]} إلى {str(p['end_date'])[:10]}   ·   عدد الأسابيع: {p['total_weeks']}   ·   أيام الإجازات الرسمية: {p.get('holiday_days', 0)}   ·   جهة الإصدار: {issuer or 'قسم التسجيل'}"), st_sub),
            Spacer(1, 3 * mm)]
 
     widths = [7, 34, 30, 17, 13, 13, 12, 15, 14, 14, 16, 18, 16, 11, 12, 35]
@@ -415,7 +461,7 @@ def build_sheet_pdf(report: dict, issuer: str, generated_by: str) -> io.BytesIO:
     s = report["summary"]
     el += [Spacer(1, 4 * mm),
            Paragraph(ar(f"الإجمالي: {s['total_teachers']} أستاذ · النصاب {s['total_required_hours']:g} س · المنجز {s['total_actual_hours']:g} س · الإضافة {s['total_bonus_hours']:g} س · الساعات الإضافية {s['total_overtime_hours']:g} س · النقص {s['total_shortfall_hours']:g} س"), st_small),
-           Paragraph(wrap_ar("المنجز = محاضرات سُجّل لها حضور بمدتها الفعلية. الافتراضية = الساعات الأسبوعية × أسابيع المقرر من أول محاضرة حتى نهاية الفترة (يُخصم غياب الأستاذ بعذر). الإضافة = المنجز ÷ المُقسِّم (إن فُعِّلت للكلية). الساعات الإضافية = (المنجز + الإضافة) − النصاب. تُظلَّل نسبة الإنجاز الأقل من 75٪."
+           Paragraph(wrap_ar("المنجز = محاضرات سُجّل لها حضور بمدتها الفعلية. الافتراضية = الساعات الأسبوعية × أسابيع المقرر من أول محاضرة حتى نهاية الفترة (يُخصم غياب الأستاذ بعذر والإجازات الرسمية). الإضافة = المنجز ÷ المُقسِّم (إن فُعِّلت للكلية). الساعات الإضافية = (المنجز + الإضافة) − النصاب. تُظلَّل نسبة الإنجاز الأقل من 75٪."
                         + (f"  |  أُصدر بواسطة: {generated_by}" if generated_by else "") + f"  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}", 150), st_small)]
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=landscape(A4), rightMargin=8 * mm, leftMargin=8 * mm, topMargin=8 * mm, bottomMargin=8 * mm, title="كشف الساعات الإضافية").build(el)
@@ -439,7 +485,7 @@ def build_sheet_excel(report: dict, issuer: str) -> io.BytesIO:
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=n)
     c = ws.cell(row=1, column=1, value=f"كشف يبين الساعات الإضافية للأساتذة للفصل {p.get('semester_name') or ''} {p.get('academic_year') or ''}".strip()); c.font = Font(bold=True, size=14, color="0F2440"); c.alignment = center
     ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=n)
-    c = ws.cell(row=2, column=1, value=f"الفترة من {str(p['start_date'])[:10]} إلى {str(p['end_date'])[:10]} · عدد الأسابيع: {p['total_weeks']} · جهة الإصدار: {issuer or 'قسم التسجيل'}"); c.font = Font(size=10, color="64748B"); c.alignment = center
+    c = ws.cell(row=2, column=1, value=f"الفترة من {str(p['start_date'])[:10]} إلى {str(p['end_date'])[:10]} · عدد الأسابيع: {p['total_weeks']} · أيام الإجازات الرسمية: {p.get('holiday_days', 0)} · جهة الإصدار: {issuer or 'قسم التسجيل'}"); c.font = Font(size=10, color="64748B"); c.alignment = center
     for i, h in enumerate(headers, 1):
         c = ws.cell(row=4, column=i, value=h); c.font = Font(bold=True, color="FFFFFF", size=10); c.fill = PatternFill(start_color="0F2440", end_color="0F2440", fill_type="solid"); c.alignment = center; c.border = border
     ws.row_dimensions[4].height = 42

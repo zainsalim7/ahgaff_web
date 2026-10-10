@@ -110,7 +110,7 @@ const SECTIONS: Section[] = [
         color: '#f97316',
         bg: '#ffedd5',
         route: '/university-calendar',
-        adminOnly: true,
+        permissions: ['manage_calendar'],
       },
       {
         id: 'view-calendar',

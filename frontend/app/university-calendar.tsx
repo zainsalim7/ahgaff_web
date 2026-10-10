@@ -25,6 +25,7 @@ interface CalendarEvent {
   event_type: string;
   notes?: string;
   gregorian_date: string;
+  end_date?: string | null;
   hijri_date: string;
   hijri_formatted: string;
   weekday_ar: string;
@@ -59,7 +60,7 @@ const API_URL =
   '';
 
 export default function UniversityCalendarScreen() {
-  const { user } = useAuth();
+  const { user, hasPermission } = useAuth();
   const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -69,12 +70,13 @@ export default function UniversityCalendarScreen() {
 
   // Form state
   const [formDate, setFormDate] = useState('');
+  const [formEnd, setFormEnd] = useState('');
   const [formName, setFormName] = useState('');
   const [formType, setFormType] = useState('general');
   const [formNotes, setFormNotes] = useState('');
   const [previewHijri, setPreviewHijri] = useState<string>('');
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || hasPermission('manage_calendar');
 
   const fetchEvents = useCallback(async () => {
     setLoading(true);
@@ -117,6 +119,7 @@ export default function UniversityCalendarScreen() {
   const resetForm = () => {
     setEditingId(null);
     setFormDate('');
+    setFormEnd('');
     setFormName('');
     setFormType('general');
     setFormNotes('');
@@ -131,6 +134,7 @@ export default function UniversityCalendarScreen() {
   const openEditModal = (ev: CalendarEvent) => {
     setEditingId(ev.id);
     setFormDate(ev.gregorian_date);
+    setFormEnd(ev.end_date || '');
     setFormName(ev.event_name);
     setFormType(ev.event_type || 'general');
     setFormNotes(ev.notes || '');
@@ -148,8 +152,10 @@ export default function UniversityCalendarScreen() {
     }
     setSaving(true);
     try {
+      if (formEnd && formEnd < formDate) { showAlert('تنبيه', 'تاريخ النهاية يجب أن يكون بعد البداية'); setSaving(false); return; }
       const payload = {
         gregorian_date: formDate,
+        end_date: formEnd || null,
         event_name: formName.trim(),
         event_type: formType,
         notes: formNotes.trim(),
@@ -340,7 +346,7 @@ export default function UniversityCalendarScreen() {
                     <View style={styles.datesRow}>
                       <View style={styles.dateBox}>
                         <Ionicons name="calendar-clear-outline" size={14} color="#666" />
-                        <Text style={styles.dateText}>{ev.weekday_ar} {ev.gregorian_date}</Text>
+                        <Text style={styles.dateText}>{ev.weekday_ar} {ev.gregorian_date}{ev.end_date ? ` ← ${ev.end_date}` : ''}</Text>
                       </View>
                       <View style={styles.dateBox}>
                         <Ionicons name="moon-outline" size={14} color="#6a1b9a" />
@@ -417,6 +423,17 @@ export default function UniversityCalendarScreen() {
                         direction: 'ltr',
                       } as any}
                     />
+                  )}
+                  {formType === 'holiday' && (
+                    <View style={{ marginTop: 8 }}>
+                      <Text style={styles.label}>نهاية الإجازة (اختياري — لإجازة تمتد عدة أيام)</Text>
+                      {Platform.OS === 'web' ? (
+                        <input type="date" value={formEnd} min={formDate || undefined} onChange={(e: any) => setFormEnd(e.target.value)} style={{ padding: 10, borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 14, width: '100%', direction: 'ltr' } as any} data-testid="form-end-date-input" />
+                      ) : (
+                        <TextInput style={styles.input} value={formEnd} onChangeText={setFormEnd} placeholder="YYYY-MM-DD" placeholderTextColor="#aaa" testID="form-end-date-input" />
+                      )}
+                      <Text style={{ fontSize: 11, color: '#2e7d32', marginTop: 4, textAlign: 'right' }}>تُخصم أيام الإجازات الرسمية تلقائياً من الساعات الافتراضية في كشف الساعات الإضافية</Text>
+                    </View>
                   )}
                   {previewHijri ? (
                     <View style={styles.hijriPreview}>

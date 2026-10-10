@@ -63,6 +63,7 @@ def _gregorian_to_hijri(date_str: str) -> dict:
 
 class CalendarEventCreate(BaseModel):
     gregorian_date: str  # YYYY-MM-DD
+    end_date: Optional[str] = None  # نهاية الفترة (للإجازات متعددة الأيام)
     event_name: str
     event_type: Optional[str] = "general"  # general, holiday, exam, semester_start, semester_end
     notes: Optional[str] = ""
@@ -70,9 +71,46 @@ class CalendarEventCreate(BaseModel):
 
 class CalendarEventUpdate(BaseModel):
     gregorian_date: Optional[str] = None
+    end_date: Optional[str] = None
     event_name: Optional[str] = None
     event_type: Optional[str] = None
     notes: Optional[str] = None
+
+
+def _can_manage(u: dict) -> bool:
+    from .deps import has_permission
+    return has_permission(u, "manage_calendar")
+
+
+def _check_end(start: str, end: Optional[str]) -> Optional[str]:
+    if not end:
+        return None
+    _gregorian_to_hijri(end)
+    if end < start:
+        raise HTTPException(status_code=400, detail="تاريخ النهاية يجب أن يكون بعد البداية")
+    return end
+
+
+async def holiday_dates(db, start: str, end: str) -> dict:
+    """{YYYY-MM-DD: اسم الإجازة} لكل أيام الإجازات الرسمية داخل الفترة (تشمل الفترات متعددة الأيام)"""
+    out = {}
+    async for ev in db.calendar_events.find({"event_type": "holiday", "gregorian_date": {"$lte": end}}):
+        s = ev.get("gregorian_date"); e = ev.get("end_date") or s
+        if not s or e < start:
+            continue
+        d = datetime.strptime(max(s, start), "%Y-%m-%d").date()
+        last = datetime.strptime(min(e, end), "%Y-%m-%d").date()
+        while d <= last:
+            out[d.strftime("%Y-%m-%d")] = ev.get("event_name", "إجازة")
+            d += timedelta(days=1)
+    return out
+
+
+@router.get("/calendar/holidays")
+async def list_holidays(start: str, end: str, current_user: dict = Depends(get_current_user)):
+    """أيام الإجازات الرسمية داخل فترة — تُستخدم في كشف الساعات الإضافية والجداول"""
+    days = await holiday_dates(get_db(), start, end)
+    return {"days": [{"date": k, "name": v} for k, v in sorted(days.items())], "count": len(days)}
 
 
 @router.get("/calendar/convert")
@@ -119,8 +157,8 @@ async def create_calendar_event(
     current_user: dict = Depends(get_current_user),
 ):
     """إضافة حدث جديد للتقويم (للأدمن فقط)."""
-    if current_user.get("role") != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+    if not _can_manage(current_user):
+        raise HTTPException(status_code=403, detail="تحتاج صلاحية «التقويم الجامعي والعطل»")
 
     name = (data.event_name or "").strip()
     if not name:
@@ -132,6 +170,7 @@ async def create_calendar_event(
         "event_name": name,
         "event_type": data.event_type or "general",
         "notes": (data.notes or "").strip(),
+        "end_date": _check_end(data.gregorian_date, data.end_date),
         **converted,
         "created_at": _now(),
         "created_by": current_user.get("id"),
@@ -150,8 +189,8 @@ async def update_calendar_event(
     current_user: dict = Depends(get_current_user),
 ):
     """تعديل حدث (للأدمن فقط)."""
-    if current_user.get("role") != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+    if not _can_manage(current_user):
+        raise HTTPException(status_code=403, detail="تحتاج صلاحية «التقويم الجامعي والعطل»")
     try:
         oid = ObjectId(event_id)
     except Exception:
@@ -172,6 +211,8 @@ async def update_calendar_event(
         updates["event_type"] = data.event_type
     if data.notes is not None:
         updates["notes"] = data.notes.strip()
+    if data.end_date is not None:
+        updates["end_date"] = _check_end(data.gregorian_date or existing.get("gregorian_date"), data.end_date) if data.end_date else None
     if data.gregorian_date is not None:
         converted = _gregorian_to_hijri(data.gregorian_date)
         updates.update(converted)
@@ -190,8 +231,8 @@ async def delete_calendar_event(
     current_user: dict = Depends(get_current_user),
 ):
     """حذف حدث (للأدمن فقط)."""
-    if current_user.get("role") != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+    if not _can_manage(current_user):
+        raise HTTPException(status_code=403, detail="تحتاج صلاحية «التقويم الجامعي والعطل»")
     try:
         oid = ObjectId(event_id)
     except Exception:
@@ -206,8 +247,8 @@ async def delete_calendar_event(
 @router.delete("/calendar/events")
 async def clear_all_events(current_user: dict = Depends(get_current_user)):
     """حذف جميع أحداث التقويم (للأدمن فقط) - يستخدم قبل استيراد جديد."""
-    if current_user.get("role") != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+    if not _can_manage(current_user):
+        raise HTTPException(status_code=403, detail="تحتاج صلاحية «التقويم الجامعي والعطل»")
     db = get_db()
     res = await db.calendar_events.delete_many({})
     return {"message": f"تم حذف {res.deleted_count} حدث", "deleted_count": res.deleted_count}
@@ -227,8 +268,8 @@ async def import_calendar_from_excel(
     - "النوع" أو "type" (اختياري) → نوع الحدث
     - "ملاحظات" أو "notes" (اختياري)
     """
-    if current_user.get("role") != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
+    if not _can_manage(current_user):
+        raise HTTPException(status_code=403, detail="تحتاج صلاحية «التقويم الجامعي والعطل»")
 
     if not (file.filename or "").lower().endswith((".xlsx", ".xls")):
         raise HTTPException(status_code=400, detail="يجب أن يكون الملف من نوع Excel (.xlsx)")
