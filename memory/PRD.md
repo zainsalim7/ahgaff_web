@@ -887,3 +887,9 @@
 - API الحالي `GET /reports/teacher-workload` أصبح يقبل `faculty_id`، `department_id`، `hide_empty`.
 - Frontend: `report-teacher-workload.tsx` (فلتر الكلية، إخفاء من لا محاضرات لهم، تبديل ملخص/كشف، KPIs الإضافية والمستحق، أعمدة المقرر الجديدة) + `reports/OvertimeSheet.tsx` + `reports/OvertimePolicyModal.tsx`.
 - بيانات تجريبية: `backend/tests/seed_overtime_demo.py` (seed_ot:true). تقرير الاختبار `test_reports/iteration_101.json` (ناجح).
+
+## 2026-10-10: تفصيل الصلاحيات الإدارية (كل مهمة إدارية لها صلاحية مستقلة) ✅
+- `models/permissions.py`: ~40 مفتاحاً جديداً (الهيكل الأكاديمي، الطلاب/المعلمون — عمليات متقدمة، المقررات والتسجيل، المحاضرات والجدول، الاستيراد والتصدير، المستخدمون، السجلات والمحذوفات، أدوات الصيانة، المالية، شؤون الموظفين الدقيقة). الصلاحيات الشاملة (manage_students…) ما زالت تغطي المفاتيح الدقيقة عبر `FULL_PERMISSION_MAPPING` فلا يتغير شيء للمستخدمين الحاليين، والمدير يملك الكل تلقائياً.
+- `server.py`: ~90 مساراً تحوّل شرطها من «الدور = مدير» إلى `has_permission(<مفتاح دقيق>) أو الشرط القديم`. HR: `_guard_any` في `hr_common.py`؛ صور البطاقات → `hr_approve_photos`، طباعة البطاقات → `hr_print_cards`، مواقع العمل → `hr_manage_locations`؛ السندات: قراءة `view_fee_receipts`؛ الإفادات: `issue_statements`.
+- أدوار إدارية جاهزة (`ADMIN_ROLE_PRESETS`) عبر `POST /roles/admin-presets` وزر في /manage-roles: القبول والتسجيل، الجداول والمحاضرات، الاستيراد والبيانات، مدقق السجلات، مهندس نظام، طباعة البطاقات، المراسلات. القائمة الجانبية تعتمد الصلاحيات بدل الدور للإعدادات/سجل النشاط/سلة المحذوفات.
+- مؤجَّل: تفصيل صلاحيات الخطابات (مسودة/مراجعة/توقيع/إصدار). تقرير الاختبار `test_reports/iteration_102.json` (ناجح 24/24 + واجهة).

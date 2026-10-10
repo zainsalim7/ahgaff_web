@@ -1,0 +1,42 @@
+{
+  "summary": "End-to-end validation of the fine-grained admin permission split. Verified the ~129-item permissions catalog (incl. all 30 new keys, no duplicates), the 7 ready-made admin role presets endpoint (idempotent — second call: created=0 updated=7, all 7 names present in /api/roles), fine-grained enforcement on EMP-100 against 15 endpoints (activity-logs read/delete, trash, student activate/reset/bulk-activate, hr card print-settings/batch-preview, fee receipts read/write, admin diagnose-roles, semesters create, export-students, admin/fix-user, grant system_tools+export_students then re-login and re-check), and admin + dean umbrella regressions. UI verified: /manage-roles admin-presets-card renders with all 7 preset role names, and the user-permissions editor shows all 7 new Arabic category headers (الطلاب — عمليات متقدمة، السجلات والمحذوفات، أدوات الصيانة، المحاضرات والجدول، الاستيراد والتصدير، الهيكل الأكاديمي، المعلمون — عمليات متقدمة). SideMenu.tsx guards 'سجلات النشاط' with view_activity_logs and 'سلة المحذوفات' with manage_trash/purge_trash as spec'd. 24/24 backend tests pass. EMP-100 and the roles collection were fully restored at teardown.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/fees/receipts/{id}/approve", "issue": "Permission check runs AFTER DB lookup → returns 404 for non-existent receipt even when caller is unauthorized. Prefer failing fast with 403. (Non-functional; used /fees/receipts/bulk-review for the enforcement test.)"},
+      {"endpoint": "POST /api/admin/fix-user, POST /api/fees/receipts, etc.", "issue": "FastAPI validates Pydantic body before dependency-level permission check → returns 422 for malformed bodies even when caller lacks permission. Minor info-disclosure; tests use valid bodies to confirm 403."},
+      {"endpoint": "PUT /api/users/{id}", "issue": "Sending {role_id: null} is silently ignored (user remains attached to prior role_id). Had to send a concrete fallback role_id (employee system role) to detach from the test role. Document or honor null explicitly."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "global (RN-Web)", "issues": ["Console warnings only (non-blocking): deprecated 'shadow*' / 'pointerEvents' style props, Require cycle in HR EmployeeFormModal ↔ HrSelect — pre-existing, unrelated to this feature."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_permissions_split.py",
+    "/app/test_reports/pytest/perm_split.xml"
+  ],
+  "action_items": [
+    "(Optional) Move permission check in /fees/receipts/{id}/approve and /reject BEFORE the DB lookup so unauthorized callers consistently see 403 rather than 404.",
+    "(Optional) In PUT /api/users/{id}, decide and document semantics of role_id=null (currently a no-op)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 19,133 lines — far above the 700-line rule-of-thumb. The new fine-grained rewrites (~90 routes) are inline; please consider extracting admin/HR/fee domains into their own routers (several already exist under routes/*.py). The /roles/admin-presets endpoint belongs with /roles/hr-presets in a presets module.",
+    "FULL_PERMISSION_MAPPING + has_permission expansion is correct, but the pattern 'if not has_permission(x, fine_key) and (<old condition>)' is repeated ~90× — a small decorator or dependency (require_any_permission) would cut noise and prevent future deviations.",
+    "ADMIN_ROLE_PRESETS: preset_key is written but not surfaced in GET /api/roles response — if the frontend wants to badge preset roles differently it can't. Consider including preset_key in the role projection.",
+    "The alert() handling in manage-roles.tsx inside RN-Web triggers window.alert dialogs — fine for admin tooling but makes automated UI testing brittle (dialog must be registered before click). Prefer a toast/banner for consistency with the rest of the app."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_permissions_split.py (new, 24 pytest cases)"
+  ],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% (manage-roles card + 7 preset names + 7 category headers all verified)"},
+  "test_credentials": "admin/admin123, Salim/test1234 (dean), EMP-100/EMP-100 (employee). All used.",
+  "seed_data_creation": "No persistent seed. Test fixture creates a temporary role 'TEST_fine_role_perm_split' and assigns it to EMP-100, then on teardown reassigns EMP-100 back to the 'موظف' (employee) system role (698a4cffbc4813c8639d66d4) and deletes the temp role. Admin presets endpoint was called twice (idempotent) — the 7 preset roles now exist in the roles collection, which is the expected target state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_permissions_split.py (pytest). On a cold DB where EMP-100 had never been touched the fixture snapshots role_id/permissions and restores them; on re-runs it detects the stale TEST role and falls back to the employee system role. If a prior run leaves EMP-100 attached to a 'TEST_fine_role_perm_split' role, run the fixture once (any pytest invocation) — teardown cleans up. The 7 preset admin roles persist in Mongo after this iteration (that is intended).",
+  "rca of the issue": "N/A — no functional bugs. The only observed deviations (approve 404-before-403, PUT role_id:null no-op) are minor code-quality items, not regressions."
+}
