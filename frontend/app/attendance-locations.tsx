@@ -23,7 +23,7 @@ export default function AttendanceLocationsPage() {
 
   const saveGeo = async () => {
     setGeoBusy(true);
-    try { const r = await api.put('/geofence/campus', { enabled: geo.enabled !== false, locations: geo.locations.map((l: any) => ({ ...l, lat: Number(l.lat), lng: Number(l.lng), radius_m: Number(l.radius_m) || 200 })) }); window.alert(r.data.message); const g = await api.get('/geofence/campus'); setGeo(g.data); }
+    try { const r = await api.put('/geofence/campus', { enabled: geo.enabled !== false, locations: geo.locations.filter((l: any) => l.source !== 'hr').map((l: any) => ({ ...l, lat: Number(l.lat), lng: Number(l.lng), radius_m: Number(l.radius_m) || 200 })) }); window.alert(r.data.message); const g = await api.get('/geofence/campus'); setGeo(g.data); }
     catch (e) { window.alert(errOf(e, 'فشل الحفظ')); } finally { setGeoBusy(false); }
   };
   const setLoc = (i: number, k: string, v: any) => setGeo({ ...geo, locations: geo.locations.map((l: any, j: number) => (j === i ? { ...l, [k]: v } : l)) });
@@ -36,22 +36,27 @@ export default function AttendanceLocationsPage() {
       {geoOpen && geo && (
         <div style={card} data-testid="geo-settings">
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <b style={{ color: '#0f2440' }}>المواقع المعتمدة (يخزّنها تطبيق الأستاذ محلياً ويُحدّثها كل 12 ساعة)</b>
+            <div><b style={{ color: '#0f2440' }}>المواقع المعتمدة (يخزّنها تطبيق الأستاذ محلياً ويُحدّثها كل 12 ساعة)</b><div style={{ fontSize: 11.5, color: '#64748b' }}>مواقع <a href="/hr-locations" style={{ color: '#1d4ed8' }} data-testid="geo-hr-link">مواقع الدوام (HR)</a> النشطة تُعتمد تلقائياً كحدود للتحضير — عدّلها من هناك. هنا تضيف مواقع إضافية خاصة بالتحضير فقط.</div></div>
             <label style={{ fontSize: 12.5, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer' }}><input type="checkbox" checked={geo.enabled !== false} onChange={(e) => setGeo({ ...geo, enabled: e.target.checked })} data-testid="geo-enabled" /> تفعيل التقاط الموقع</label>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['الاسم', 'خط العرض (lat)', 'خط الطول (lng)', 'نصف القطر (م)', ''].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
             <tbody>{(geo.locations || []).map((l: any, i: number) => (
+              l.source === 'hr' ? (
+              <tr key={l.id || i} data-testid={`geo-loc-${i}`} style={{ background: '#f8fafc' }}>
+                <td style={td}>{l.name} <Badge text="HR" color="#0369a1" /></td><td style={td}>{l.lat}</td><td style={td}>{l.lng}</td><td style={td}>{l.radius_m}</td><td style={{ ...td, fontSize: 11, color: '#94a3b8' }}>من مواقع الدوام</td>
+              </tr>) : (
               <tr key={l.id || i} data-testid={`geo-loc-${i}`}>
                 <td style={td}><input style={inp} value={l.name || ''} onChange={(e) => setLoc(i, 'name', e.target.value)} placeholder="الحرم الرئيسي" data-testid={`geo-loc-${i}-name`} /></td>
                 <td style={td}><input style={inp} value={l.lat ?? ''} onChange={(e) => setLoc(i, 'lat', e.target.value)} placeholder="14.5412" data-testid={`geo-loc-${i}-lat`} /></td>
                 <td style={td}><input style={inp} value={l.lng ?? ''} onChange={(e) => setLoc(i, 'lng', e.target.value)} placeholder="49.1242" data-testid={`geo-loc-${i}-lng`} /></td>
                 <td style={td}><input style={inp} value={l.radius_m ?? 200} onChange={(e) => setLoc(i, 'radius_m', e.target.value)} data-testid={`geo-loc-${i}-radius`} /></td>
                 <td style={td}><button onClick={() => setGeo({ ...geo, locations: geo.locations.filter((_: any, j: number) => j !== i) })} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })} data-testid={`geo-loc-${i}-del`}>حذف</button></td>
-              </tr>
+              </tr>)
             ))}</tbody></table>
           <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
             <button onClick={() => setGeo({ ...geo, locations: [...(geo.locations || []), { name: '', lat: '', lng: '', radius_m: 300 }] })} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="geo-loc-add">+ إضافة موقع</button>
             <button onClick={saveGeo} disabled={geoBusy} style={btn('#16a34a')} data-testid="geo-save">{geoBusy ? '⏳' : '💾 حفظ حدود الكلية'}</button>
+            <button onClick={async () => { if (!window.confirm('إعادة تقييم كل المحاضرات المسجّلة بإحداثيات في الفترة المختارة مقابل الحدود الحالية؟')) return; setGeoBusy(true); try { const r = await api.post('/geofence/reevaluate', null, { params: { start_date: from, end_date: to } }); window.alert(r.data.message); load(); } catch (e) { window.alert(errOf(e, 'فشل')); } finally { setGeoBusy(false); } }} disabled={geoBusy} style={btn('#f59e0b', { color: '#1f2937' })} title="يصحّح المحاضرات التي قُيّمت على الهاتف بحدود قديمة" data-testid="geo-reevaluate">🔁 إعادة تقييم المسجّل ({from} → {to})</button>
           </div>
         </div>
       )}
