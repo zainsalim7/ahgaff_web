@@ -1,0 +1,25 @@
+{
+  "summary": "Comprehensive backend+frontend testing of the new HR employee card batch-printing system (/api/hr/cards/*) mirroring the student card system. 24/24 pytest backend tests pass covering: print-settings (admin 200 + teacher 403), batch-preview (default/exclude_printed/only_with_photo/exclude_ids/q search/employee_ids mode), batches list (no employees arrays)/get/reset 404, full batch-pdf cycle (headers X-Batch-No / X-Batch-Count, reprint without new batch, reset modifies count), empty filter 400, print-report xlsx, back-settings GET/PUT (lines cap at 10), back-preview PNG, batch-back-pdf (count + 400 when disabled), sample-preview valid + invalid-template fallback, /hr/card-settings regression, /cards/batches student regression. Frontend /hr-card-print validated: hero, both tabs, all testids (filters hr-print-unit/search/category/status, preview+summary, orientation buttons, 6 mm inputs moving dashed A4 preview boxes, history, report btn, back controls, design tab template buttons + sample img + save, card-back-editor). hr-employees → selecting employees updates button label 'طباعة بطاقات المحددين (6)' and navigates to /hr-card-print?ids=... showing hr-print-ids-mode banner. All HR card data-testids present and interactive.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Global (RN-Web)", "issues": ["Non-blocking console warnings: 'Unexpected text node: . A text node cannot be a child of a <View>' and multiple 'Unknown event handler property onStartShouldSetResponder/onResponderX' from react-native-web internals — pre-existing across app, not introduced by this feature."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_hr_card_print.py", "/app/test_reports/pytest/hr_card_print.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "hr_card_print.py reuses student card rendering by faking student-only payload fields (student_name, enrollment_no, academic_year, level, section, validity_text) in _render_employee_png — works but is a leaky abstraction; consider a shared card renderer with a role-neutral payload schema.",
+    "GET /hr/cards/back-settings returns can_edit using an internal helper that calls _guard inside a try/except — ok, but duplicating permission logic; could be replaced by direct permission check.",
+    "_candidates default status filter: {'status': {'$ne': 'ended'}} silently excludes 'ended' employees unless an explicit status is given — this is per-spec, keep documented."
+  ],
+  "updated_files": ["/app/backend/tests/test_hr_card_print.py"],
+  "success_rate": {"backend": "100% (24/24)", "frontend": "100% of probed selectors (hero, tabs, filters, preview, summary, download, orientation, 6 mm inputs, A4 preview boxes, history, report, back controls, design tpls, sample img, save, card-back-editor, ids-mode banner, hr-print-cards-btn dynamic label)"},
+  "test_credentials": "admin/admin123; teacher180156/teacher123",
+  "seed_data_creation": "Reset pre-existing batch #1 and created a new real batch via POST /hr/cards/batch-pdf during tests; it is then reset within the same test. End-state: all previously-printed employees have been reset at least once; a new batch may remain in hr_card_print_batches with reset_at set.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend tests live at /app/backend/tests/test_hr_card_print.py — rerun with REACT_APP_BACKEND_URL set. The suite mutates data (creates and resets a batch) but is idempotent; local DB has 6 employees, ~3 with photo. If photos don't render from object storage, PNG previews will have an empty photo box (acceptable per request). Side-menu link to /hr-card-print was not probed via click (hamburger side-drawer); the route itself works directly."
+}
