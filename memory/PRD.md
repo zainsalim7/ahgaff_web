@@ -869,3 +869,9 @@
 - **ترويسة/تذييل كصورة**: `letter_settings.header_image_base64/footer_image_base64` و`statement_settings` كذلك؛ عند وجودها تُرسم بعرض الصفحة (الترويسة حتى header_bottom، التذييل 24مم من الأسفل) بدل الشعار/النصوص. رفع من تبويب الكليشة (letters) وإعدادات كليشة الإفادة.
 - **طباعة بلا كليشة**: معامل `letterhead=false` على `GET /letters/{id}/pdf`, `GET /statements/{id}/pdf`, و`preview-pdf` للاثنين (يُخفي الترويسة والتذييل ويحافظ على المواضع). الواجهة: «🖨️ بلا كليشة» في سجل الخطابات/الإفادات، بعد الإصدار، لمسودة الخطاب، وخانة «بلا كليشة» في المعاينة الحيّة.
 - مُختبر: curl (معاينة بصورة ترويسة/تذييل، بلا كليشة، PDF إفادة بلا كليشة) + Playwright (حفظ كقالب يزيد القوالب، خانة المعاينة بلا كليشة، حقول الرفع).
+
+## 2026-10-10: فلترة شاملة لصفحة «اعتماد تعديلات الحضور» (/attendance-approvals) ✅
+- Backend (`routes/attendance_approval.py`): `GET /attendance-changes` يدعم status/faculty_id/department_id/level/section/course_id/semester_id/requested_by/new_status/q/lecture_from,to/requested_from,to/sort/page,page_size ويعيد items (مُثراة بالمستوى/الشعبة/الرقم الجامعي/أسماء الكلية والقسم) + counts لكل حالة + pages. بدون `page` يعيد الكل (توافق مع التطبيق).
+- جديد: `GET /attendance-changes/filter-options` (خيارات من الطلبات الفعلية)، `GET /attendance-changes/stats` (معلّق إجمالي/حسب الكلية، أقدم معلّق، اليوم، المراجَع آخر 7 أيام)، `GET /attendance-changes/export` (Excel بنفس الفلاتر).
+- Frontend: `app/attendance-approvals.tsx` + `src/components/attendance/approvals/*` — تبويبات حالة بعدّادات، بحث فوري (debounce)، قوائم متسلسلة كلية←قسم←مستوى←شعبة←مقرر، فصل/مقدّم الطلب/نوع التغيير/ترتيب، نطاقَي تاريخ + اختصارات، شرائح الفلاتر + مسح الكل، مزامنة الفلاتر مع الرابط، عرض «حسب المحاضرة» مع اعتماد/رفض المحاضرة كاملة، ترقيم صفحات (50)، تصدير Excel، بطاقات إحصائية.
+- بيانات تجريبية محلية: `backend/tests/seed_attendance_changes.py` (101 طلب، seed:true). اختبارات: `backend/tests/test_attendance_approvals_api.py`، تقرير `test_reports/iteration_99.json` (كل شيء ناجح).

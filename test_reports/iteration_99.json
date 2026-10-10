@@ -1,0 +1,37 @@
+{
+  "summary": "Comprehensive backend + frontend testing of attendance change approvals (/attendance-approvals). All 15 backend pytest tests pass covering list filters, pagination, counts, search by name/student_number, sort, new_status filter, filter-options, stats, Excel export (xlsx magic bytes verified), RBAC (teacher 403, Salim dean-scoped). Frontend: all required data-testids present and wired (approval-stats + 4 stat cards + faculty chips, 5 status tabs with count badges, filter bar with all 9 selects, search w/ debounce + URL sync, chips add/remove, approval-filters-reset appears when filters active, approval-filters-toggle, date shortcuts set lecture range + chip-lecture_range, view-list/view-grouped (75 group elements rendered), lecture-group-approve/reject buttons, pagination w/ page-2 + next on status=all, empty-state + empty-reset-btn, reject modal (reject-notes-input/confirm/cancel), batch-approve/batch-reject buttons on row-select, select-all-btn, request-row-<id>, faculty chip click filters URL correctly). RTL layout renders cleanly.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/attendance-approvals (console)", "issues": [
+        "Three initial 403 responses on page load (one axios Promise.all failure) even when logged in as admin. The approvals page itself works, so these likely come from an unrelated badge/widget that calls another endpoint lacking an admin bypass. Please locate the failing request (dev tools Network tab) and either hide for admin or grant correct permission. Not blocking.",
+        "Numerous React Native Web warnings: 'shadow* deprecated → use boxShadow', 'props.pointerEvents deprecated', 'TouchableMixin deprecated', 'Unknown event handler onStartShouldSetResponder/...', 'Unexpected text node: a text node cannot be a child of a <View>', and 'Require cycle: EmployeeFormModal <-> HrSelect'. Pre-existing but worth cleaning up.",
+        "Chip for level filter displays as 'المستوى: 99p' when level=99 (visual artefact — appears to concatenate a sort suffix 'p'). Minor cosmetic; worth checking chip label logic in ApprovalFilterBar for level."
+      ]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_attendance_approvals_api.py",
+    "/app/test_reports/pytest/attendance_approvals.xml"
+  ],
+  "action_items": [
+    "Investigate 3 initial 403 console errors on /attendance-approvals as admin (likely unrelated widget).",
+    "Verify chip label for level filter does not append spurious character (saw 'المستوى: 99p')."
+  ],
+  "critical_code_review_comments": [
+    "attendance_approval.py is ~850 lines — close to the 700-line guideline threshold; consider splitting (helpers, list/filter-options/stats, export, mutations).",
+    "_build_filter_query mutates faculty_id only if not already in scope — correct, dean scope preserved. Good.",
+    "requested_at date-range parses with datetime.fromisoformat on 'YYYY-MM-DD' and sets tzinfo — fine.",
+    "Count aggregation uses the same base filter (excluding status) — matches spec.",
+    "Export uses StreamingResponse + proper RTL xlsx, headers at row 4 — matches spec."
+  ],
+  "updated_files": ["/app/backend/tests/test_attendance_approvals_api.py"],
+  "success_rate": {"backend": "100% (15/15)", "frontend": "100% of specified testids present and interactive"},
+  "test_credentials": "admin/admin123, Salim/test1234, teacher180156/teacher123",
+  "seed_data_creation": "None — used existing 101 seeded requests.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "backend pytest: pytest /app/backend/tests/test_attendance_approvals_api.py. Approve/Reject actual mutations were NOT executed to preserve pending count; modal only opened and cancelled. Faculty chip click sets faculty_id query param (not necessarily switches to pending tab in URL, but current UI already defaults to pending)."
+}

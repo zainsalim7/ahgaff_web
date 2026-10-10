@@ -22,8 +22,9 @@ const notify = (title: string, msg: string) => {
 const STATUS_TABS = ['pending', 'approved', 'rejected', 'cancelled', 'all'] as const;
 
 export default function AttendanceApprovalsScreen() {
-  const { hasPermission } = useAuth();
+  const { hasPermission, isLoading: authLoading } = useAuth();
   const canApprove = hasPermission(PERMISSIONS.APPROVE_ATTENDANCE_CHANGES);
+  const ready = !authLoading && canApprove;
   const { filters, effective, update, reset, activeCount } = useApprovalFilters();
 
   const [loading, setLoading] = useState(true);
@@ -64,8 +65,8 @@ export default function AttendanceApprovalsScreen() {
     } catch (e) { console.error(e); }
   }, []);
 
-  useEffect(() => { if (canApprove) fetchList(); }, [fetchList, canApprove]);
-  useEffect(() => { if (canApprove) fetchMeta(); }, [fetchMeta, canApprove]);
+  useEffect(() => { if (ready) fetchList(); }, [fetchList, ready]);
+  useEffect(() => { if (ready) fetchMeta(); }, [fetchMeta, ready]);
 
   const refreshAll = useCallback(async () => { await Promise.all([fetchList(), fetchMeta()]); }, [fetchList, fetchMeta]);
 
