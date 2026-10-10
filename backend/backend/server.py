@@ -229,6 +229,7 @@ from routes.course_groups import router as course_groups_router
 from routes.hr_appraisals import router as hr_appraisals_router, public_router as hr_verify_router
 from routes.hr_cards import router as hr_cards_router, public_router as hr_cards_public_router
 from routes.hr_card_print import router as hr_card_print_router
+from routes.teacher_overtime import router as teacher_overtime_router
 from routes.hr_letters import router as hr_letters_router, public_router as hr_letters_public_router
 from routes.hr_profile_requests import router as hr_profile_requests_router
 from routes.hr_locations import router as hr_locations_router
@@ -13266,172 +13267,17 @@ async def get_teacher_workload_report(
     teacher_id: Optional[str] = None,
     start_date: str = None,
     end_date: str = None,
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    hide_empty: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
-    """تقرير نصاب المدرس - كم نصابه، كم درسها فعلياً، كم ساعات زائدة"""
-    # السماح للمعلم بالوصول لتقريره الخاص
-    if current_user["role"] == UserRole.TEACHER:
-        # المعلم يرى تقريره فقط
-        teacher_record = await db.teachers.find_one({"user_id": current_user["id"]})
-        if teacher_record:
-            teacher_id = str(teacher_record["_id"])
-        else:
-            raise HTTPException(status_code=404, detail="لم يتم العثور على سجل المعلم")
-    elif not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
-    # تحديد الفترة
-    if not start_date or not end_date:
-        # افتراضي: الشهر الحالي
-        today = get_yemen_time()
-        start = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        end = (start + timedelta(days=32)).replace(day=1) - timedelta(seconds=1)
-    else:
-        start = datetime.fromisoformat(start_date)
-        end = datetime.fromisoformat(end_date)
-    
-    # جلب المعلمين
-    teacher_query = {"is_active": {"$ne": False}}
-    if teacher_id:
-        teacher_query["_id"] = ObjectId(teacher_id)
-    
-    teachers = await db.teachers.find(teacher_query).to_list(100)
-    
-    result = []
-    for teacher in teachers:
-        tid = str(teacher["_id"])
-        
-        # النصاب الأسبوعي (افتراضي 12 ساعة)
-        weekly_hours = teacher.get("weekly_hours", 12)
-        
-        # حساب عدد الأسابيع في الفترة (أسابيع كاملة فقط)
-        total_days = (end - start).days + 1
-        total_weeks = total_days // 7
-        
-        # الساعات المطلوبة = النصاب الأسبوعي × عدد الأسابيع
-        required_hours = round(weekly_hours * total_weeks, 2)
-        
-        # جلب المقررات الحالية + مقررات سابقة نفّذ فيها محاضرات (سجل lecture.teacher_id)
-        courses = await db.courses.find({"teacher_id": tid, "is_active": True}).to_list(50)
-        _cur_ids = {str(c["_id"]) for c in courses}
-        for _hc in await db.lectures.distinct("course_id", {"teacher_id": tid}):
-            if _hc not in _cur_ids:
-                try:
-                    _cdoc = await db.courses.find_one({"_id": ObjectId(_hc)})
-                except Exception:
-                    _cdoc = None
-                if _cdoc:
-                    _cdoc["_hist_only"] = True
-                    courses.append(_cdoc)
-        
-        total_scheduled_hours = 0
-        total_actual_hours = 0
-        courses_data = []
-        
-        for course in courses:
-            cid = str(course["_id"])
-            
-            # المحاضرات المجدولة في الفترة
-            # تحويل التواريخ لمقارنة النصوص
-            start_str = start.strftime("%Y-%m-%d")
-            end_str = end.strftime("%Y-%m-%d")
+    """تقرير نصاب المدرس + كشف الساعات الإضافية — الحساب في routes/teacher_overtime.py"""
+    from routes.teacher_overtime import compute_workload, select_teachers, parse_period
+    start, end = parse_period(start_date, end_date)
+    teachers = await select_teachers(db, current_user, teacher_id, faculty_id, department_id)
+    return await compute_workload(db, teachers, start, end, hide_empty)
 
-            # المحاضرات المجدولة في الفترة (دعم date كنص أو datetime)
-            # 🔧 استبعاد الملغاة: الإلغاء يضبط status=cancelled (حقل is_cancelled قديم يُبقى للتوافق)
-            # 🧾 الإسناد الفعلي: المختومة لهذا المعلم + غير المختومة على مقرره الحالي فقط
-            _attr = [{"teacher_id": tid}] if course.get("_hist_only") else [{"teacher_id": tid}, {"teacher_id": None}]
-            scheduled_lectures = await db.lectures.find({
-                "course_id": cid,
-                "$and": [
-                    {"$or": [
-                        {"date": {"$gte": start_str, "$lte": end_str}},
-                        {"date": {"$gte": start, "$lte": end}}
-                    ]},
-                    {"$or": _attr},
-                ],
-                "is_cancelled": {"$ne": True},
-                "status": {"$ne": LectureStatus.CANCELLED}
-            }).to_list(500)
-            
-            # المحاضرات التي تم تسجيل حضور فيها (المنفذة فعلياً)
-            executed_lectures = []
-            for lecture in scheduled_lectures:
-                attendance_count = await db.attendance.count_documents({"lecture_id": str(lecture["_id"])})
-                if attendance_count > 0:
-                    executed_lectures.append(lecture)
-            
-            # حساب الساعات
-            scheduled_hours = 0
-            actual_hours = 0
-            
-            # ⏰ المحاضرات المتقلصة بإزاحة اليوم تُحسب بمدتها الأصلية (credited_minutes) في النصاب
-            def _lec_hours(lecture):
-                if lecture.get("credited_minutes"):
-                    return float(lecture["credited_minutes"]) / 60
-                start_time = datetime.strptime(lecture.get("start_time", "00:00"), "%H:%M")
-                end_time = datetime.strptime(lecture.get("end_time", "00:00"), "%H:%M")
-                return (end_time - start_time).seconds / 3600
-
-            for lecture in scheduled_lectures:
-                try:
-                    scheduled_hours += _lec_hours(lecture)
-                except Exception:
-                    scheduled_hours += 1
-            
-            for lecture in executed_lectures:
-                try:
-                    actual_hours += _lec_hours(lecture)
-                except Exception:
-                    actual_hours += 1
-            
-            total_scheduled_hours += scheduled_hours
-            total_actual_hours += actual_hours
-            
-            courses_data.append({
-                "course_name": course["name"],
-                "course_code": course.get("code", ""),
-                "scheduled_lectures": len(scheduled_lectures),
-                "executed_lectures": len(executed_lectures),
-                "scheduled_hours": round(scheduled_hours, 2),
-                "actual_hours": round(actual_hours, 2)
-            })
-        
-        # الفرق = الساعات المنفذة - الساعات المطلوبة (حسب النصاب الأسبوعي)
-        difference_hours = round(total_actual_hours - required_hours, 2)
-        
-        result.append({
-            "teacher_id": teacher.get("teacher_id", ""),
-            "teacher_name": teacher.get("full_name", ""),
-            "department_id": teacher.get("department_id"),
-            "weekly_hours": weekly_hours,
-            "courses": courses_data,
-            "summary": {
-                "total_courses": len(courses_data),
-                "weekly_hours": weekly_hours,
-                "total_weeks": round(total_weeks, 1),
-                "required_hours": required_hours,
-                "total_scheduled_hours": round(total_scheduled_hours, 2),
-                "total_actual_hours": round(total_actual_hours, 2),
-                "difference_hours": difference_hours,
-                "completion_rate": round((total_actual_hours / required_hours) * 100, 2) if required_hours > 0 else 0
-            }
-        })
-    
-    return {
-        "period": {
-            "start_date": start.isoformat(),
-            "end_date": end.isoformat(),
-            "total_weeks": round((end - start).days / 7, 1)
-        },
-        "teachers": result,
-        "summary": {
-            "total_teachers": len(result),
-            "total_required_hours": round(sum(t["summary"]["required_hours"] for t in result), 2),
-            "total_scheduled_hours": round(sum(t["summary"]["total_scheduled_hours"] for t in result), 2),
-            "total_actual_hours": round(sum(t["summary"]["total_actual_hours"] for t in result), 2),
-            "total_difference_hours": round(sum(t["summary"]["difference_hours"] for t in result), 2)
-        }
-    }
 
 # ==================== Reports Export (PDF & Excel) ====================
 
@@ -13537,7 +13383,7 @@ async def export_teacher_workload_pdf(
     """📄 تصدير تقرير نصاب المدرسين إلى PDF احترافي (reportlab)"""
     from routes.teacher_workload_pdf import build_workload_pdf
     from routes.deps import export_filename, export_headers
-    report = await get_teacher_workload_report(teacher_id, start_date, end_date, current_user)
+    report = await get_teacher_workload_report(teacher_id, start_date, end_date, None, None, False, current_user)
     scope_label = ""
     if department_id:
         report["teachers"] = [t for t in report["teachers"] if t.get("department_id") == department_id]
@@ -13630,7 +13476,7 @@ async def export_teacher_workload_excel(
 
     if not months_to_export:
         # Sheet واحد للفترة كاملة
-        report = await get_teacher_workload_report(teacher_id, start_date, end_date, current_user)
+        report = await get_teacher_workload_report(teacher_id, start_date, end_date, None, None, False, current_user)
         data = teacher_rows(report["teachers"], department_id)
         if not data:
             data = [{"ملاحظة": "لا توجد بيانات"}]
@@ -13641,7 +13487,7 @@ async def export_teacher_workload_excel(
         # عدة Sheets - واحد لكل شهر
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             for s_str, e_str, label in months_to_export:
-                report = await get_teacher_workload_report(teacher_id, s_str, e_str, current_user)
+                report = await get_teacher_workload_report(teacher_id, s_str, e_str, None, None, False, current_user)
                 data = teacher_rows(report["teachers"], department_id)
                 if not data:
                     data = [{"ملاحظة": "لا توجد بيانات لهذا الشهر"}]
@@ -18387,6 +18233,7 @@ app.include_router(hr_letters_public_router, prefix="/api")
 app.include_router(hr_cards_router, prefix="/api")
 app.include_router(hr_cards_public_router, prefix="/api")
 app.include_router(hr_card_print_router, prefix="/api")
+app.include_router(teacher_overtime_router, prefix="/api")
 app.include_router(hr_router, prefix="/api")
 app.include_router(hr_leaves_router, prefix="/api")
 app.include_router(hr_attendance_router, prefix="/api")

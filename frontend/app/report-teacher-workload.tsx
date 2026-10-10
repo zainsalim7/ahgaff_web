@@ -6,14 +6,16 @@ import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { goBack } from '../src/utils/navigation';
-import api, { reportsAPI, teachersAPI, departmentsAPI } from '../src/services/api';
+import api, { teachersAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
+import { OvertimeSheet, lvl } from '../src/components/reports/OvertimeSheet';
+import { OvertimePolicyModal } from '../src/components/reports/OvertimePolicyModal';
 import { useAuth } from '../src/contexts/AuthContext';
 import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { DASH, NUM_FONT, dashStyles } from '../src/components/dashboard/dashTheme';
 
-interface Course { course_name: string; course_code: string; scheduled_lectures: number; executed_lectures: number; scheduled_hours: number; actual_hours: number }
-interface TeacherWL { teacher_id: string; teacher_name: string; department_id: string; weekly_hours: number; courses: Course[];
-  summary: { total_courses: number; weekly_hours: number; total_weeks: number; required_hours: number; total_scheduled_hours: number; total_actual_hours: number; difference_hours: number; completion_rate: number } }
+interface Course { course_name: string; course_code: string; level?: number; section?: string; weekly_hours?: number; expected_hours?: number; shortfall_hours?: number; completion_rate?: number; is_low?: boolean; note?: string; scheduled_lectures: number; executed_lectures: number; scheduled_hours: number; actual_hours: number }
+interface TeacherWL { teacher_id: string; teacher_db_id?: string; teacher_name: string; academic_title?: string; department_id: string; department_name?: string; faculty_id?: string; weekly_hours: number; courses: Course[];
+  summary: { total_courses: number; weekly_hours: number; total_weeks: number; required_hours: number; total_scheduled_hours: number; total_actual_hours: number; difference_hours: number; completion_rate: number; expected_hours?: number; shortfall_hours?: number; bonus_enabled?: boolean; bonus_hours?: number; hours_after_bonus?: number; overtime_hours?: number; hourly_rate?: number | null; overtime_amount?: number | null; currency?: string } }
 
 const iso = (d: Date) => d.toISOString().split('T')[0];
 const QUICK = [
@@ -22,17 +24,23 @@ const QUICK = [
   { key: 'prev', label: 'الشهر السابق', range: () => { const n = new Date(); return [iso(new Date(n.getFullYear(), n.getMonth() - 1, 1)), iso(new Date(n.getFullYear(), n.getMonth(), 0))]; } },
   { key: 'sem', label: 'آخر 4 أشهر', range: () => { const n = new Date(); return [iso(new Date(n.getFullYear(), n.getMonth() - 4, n.getDate())), iso(n)]; } },
 ];
-const rateColor = (r: number) => (r >= 90 ? DASH.green : r >= 70 ? DASH.orange : DASH.red);
+const rateColor = (r: number) => (r >= 90 ? DASH.green : r >= 75 ? DASH.orange : DASH.red);
 
 export default function TeacherWorkloadReport() {
   const { user } = useAuth();
   const isTeacher = user?.role === 'teacher';
+  const canPolicy = user?.role === 'admin' || (user?.permissions || []).includes('manage_settings') || (!!(user as any)?.faculty_id && (user?.permissions || []).includes('report_teacher_workload'));
   const { width } = useWindowDimensions();
   const compact = width < 900;
 
   const [teachers, setTeachers] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [fac, setFac] = useState('');
   const [dept, setDept] = useState('');
+  const [view, setView] = useState<'summary' | 'sheet'>('summary');
+  const [hideEmpty, setHideEmpty] = useState(true);
+  const [policyOpen, setPolicyOpen] = useState(false);
   const [teacherId, setTeacherId] = useState('');
   const [teacherQ, setTeacherQ] = useState('');
   const [showList, setShowList] = useState(false);
@@ -50,8 +58,8 @@ export default function TeacherWorkloadReport() {
 
   useEffect(() => {
     if (isTeacher) return;
-    Promise.all([teachersAPI.getAll(), departmentsAPI.getAll()]).then(([t, d]) => {
-      setTeachers(t.data || []); setDepartments(d.data || []);
+    Promise.all([teachersAPI.getAll(), departmentsAPI.getAll(), facultiesAPI.getAll()]).then(([t, d, f]) => {
+      setTeachers(t.data || []); setDepartments(d.data || []); setFaculties(f.data || []);
     }).catch(() => {});
   }, [isTeacher]);
 
@@ -59,27 +67,28 @@ export default function TeacherWorkloadReport() {
     const p: any = { start_date: from, end_date: to };
     if (teacherId) p.teacher_id = teacherId;
     if (dept && !isTeacher) p.department_id = dept;
+    if (fac && !isTeacher) p.faculty_id = fac;
+    if (hideEmpty && !isTeacher) p.hide_empty = true;
     return p;
-  }, [from, to, teacherId, dept, isTeacher]);
+  }, [from, to, teacherId, dept, fac, hideEmpty, isTeacher]);
 
   const run = useCallback(async () => {
     setLoading(true);
     try {
-      const r = await reportsAPI.getTeacherWorkload({ start_date: from, end_date: to, ...(teacherId ? { teacher_id: teacherId } : {}) });
-      let list: TeacherWL[] = r.data.teachers || [];
-      if (dept && !isTeacher) list = list.filter((t) => t.department_id === dept);
-      setData(list); setPeriod(r.data.period); setRan(true);
+      const r = await api.get('/reports/teacher-workload', { params });
+      setData(r.data.teachers || []); setPeriod(r.data.period); setRan(true);
     } catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل تنفيذ التقرير'); }
     finally { setLoading(false); }
-  }, [from, to, teacherId, dept, isTeacher]);
+  }, [params]);
 
   useEffect(() => { if (isTeacher) run(); }, [isTeacher, run]);
 
   const download = async (fmt: 'pdf' | 'excel') => {
     setExporting(fmt);
     try {
-      const res = await api.get(`/export/report/teacher-workload/${fmt}`, { params, responseType: 'blob' });
-      const name = filenameFromResponse(res, exportName(['تقرير نصاب المدرسين', from, to], fmt === 'pdf' ? 'pdf' : 'xlsx'));
+      const path = view === 'sheet' ? (fmt === 'pdf' ? 'sheet-pdf' : 'sheet-excel') : fmt;
+      const res = await api.get(`/export/report/teacher-workload/${path}`, { params, responseType: 'blob' });
+      const name = filenameFromResponse(res, exportName([view === 'sheet' ? 'كشف الساعات الإضافية' : 'تقرير نصاب المدرسين', from, to], fmt === 'pdf' ? 'pdf' : 'xlsx'));
       if (Platform.OS === 'web') {
         const url = window.URL.createObjectURL(new Blob([res.data])); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); window.URL.revokeObjectURL(url);
       } else {
@@ -96,7 +105,12 @@ export default function TeacherWorkloadReport() {
     const sch = data.reduce((s, t) => s + t.summary.total_scheduled_hours, 0);
     const lec = data.reduce((s, t) => s + t.courses.reduce((a, c) => a + c.scheduled_lectures, 0), 0);
     const exe = data.reduce((s, t) => s + t.courses.reduce((a, c) => a + c.executed_lectures, 0), 0);
-    return { req, act, sch, lec, exe, rate: req ? Math.round((act * 1000) / req) / 10 : 0, below: data.filter((t) => t.summary.completion_rate < 70).length };
+    const ot = data.reduce((s, t) => s + Math.max(0, t.summary.overtime_hours || 0), 0);
+    const sf = data.reduce((s, t) => s + (t.summary.shortfall_hours || 0), 0);
+    const amt = data.reduce((s, t) => s + (t.summary.overtime_amount || 0), 0);
+    const cur = data.find((t) => t.summary.overtime_amount)?.summary.currency || '';
+    const lowCourses = data.reduce((s, t) => s + t.courses.filter((c) => c.is_low).length, 0);
+    return { req, act, sch, lec, exe, ot, sf, amt, cur, lowCourses, rate: req ? Math.round((act * 1000) / req) / 10 : 0, below: data.filter((t) => t.summary.completion_rate < 75).length };
   }, [data]);
 
   const rows = useMemo(() => {
@@ -107,7 +121,8 @@ export default function TeacherWorkloadReport() {
   }, [data, search, sort]);
 
   const deptName = (id: string) => departments.find((d) => d.id === id)?.name || '';
-  const filteredTeachers = teachers.filter((t) => (!dept || t.department_id === dept) && (!teacherQ || t.full_name?.includes(teacherQ))).slice(0, 8);
+  const facDepts = departments.filter((d) => !fac || d.faculty_id === fac);
+  const filteredTeachers = teachers.filter((t) => (!dept || t.department_id === dept) && (!fac || t.faculty_id === fac || facDepts.some((d) => d.id === t.department_id)) && (!teacherQ || t.full_name?.includes(teacherQ))).slice(0, 8);
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -116,9 +131,17 @@ export default function TeacherWorkloadReport() {
           <View style={{ flex: 1 }}>
             <Text style={styles.kicker}>التقارير</Text>
             <Text style={styles.title}>تقرير نصاب المدرسين</Text>
-            <Text style={styles.subtitle}>المطلوب مقابل المنفَّذ فعلياً (المحاضرة تُعد منفَّذة عند تسجيل الحضور)</Text>
+            <Text style={styles.subtitle}>المطلوب مقابل المنفَّذ فعلياً (المحاضرة تُعد منفَّذة عند تسجيل الحضور) · كشف الساعات الإضافية</Text>
           </View>
           <View style={styles.heroActions}>
+            {!isTeacher && (
+              <View style={styles.viewToggle} testID="tw-view-toggle">
+                {([['summary', 'ملخص'], ['sheet', 'كشف الساعات الإضافية']] as const).map(([k, l]) => (
+                  <TouchableOpacity key={k} style={[styles.viewBtn, view === k && styles.viewBtnOn]} onPress={() => setView(k)} testID={`tw-view-${k}`}><Text style={[styles.viewText, view === k && { color: DASH.navy }]}>{l}</Text></TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {canPolicy && <TouchableOpacity style={styles.iconBtn} onPress={() => setPolicyOpen(true)} testID="tw-policy-btn"><Ionicons name="settings-outline" size={18} color="#fff" /></TouchableOpacity>}
             <TouchableOpacity style={styles.iconBtn} onPress={() => goBack()} testID="tw-back-btn"><Ionicons name="arrow-forward" size={18} color="#fff" /></TouchableOpacity>
             {ran && data.length > 0 && (
               <>
@@ -137,11 +160,20 @@ export default function TeacherWorkloadReport() {
           <View style={[dashStyles.card, { marginBottom: 14 }]} testID="tw-filters">
             <View style={[styles.filterRow, compact && { flexDirection: 'column' }]}>
               <View style={{ flex: 1 }}>
+                <Text style={styles.label}>الكلية</Text>
+                <View style={styles.pickerBox}>
+                  <Picker selectedValue={fac} onValueChange={(v) => { setFac(String(v)); setDept(''); setTeacherId(''); setTeacherQ(''); }} style={styles.picker} testID="tw-faculty-picker">
+                    <Picker.Item label="جميع الكليات" value="" />
+                    {faculties.map((f) => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                  </Picker>
+                </View>
+              </View>
+              <View style={{ flex: 1 }}>
                 <Text style={styles.label}>القسم</Text>
                 <View style={styles.pickerBox}>
                   <Picker selectedValue={dept} onValueChange={(v) => { setDept(String(v)); setTeacherId(''); setTeacherQ(''); }} style={styles.picker} testID="tw-dept-picker">
                     <Picker.Item label="جميع الأقسام" value="" />
-                    {departments.map((d) => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                    {facDepts.map((d) => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                   </Picker>
                 </View>
               </View>
@@ -177,6 +209,7 @@ export default function TeacherWorkloadReport() {
                 <Text style={styles.dateLbl}>إلى</Text>
                 {Platform.OS === 'web' ? <input type="date" value={to} onChange={(e: any) => { setTo(e.target.value); setQuick(''); }} style={dateInput as any} data-testid="tw-date-to" /> : <TextInput value={to} onChangeText={setTo} style={styles.dateNative} />}
               </View>
+              <TouchableOpacity style={[styles.chip, hideEmpty && styles.chipOn]} onPress={() => setHideEmpty(!hideEmpty)} testID="tw-hide-empty"><Text style={[styles.chipText, hideEmpty && styles.chipTextOn]}>{hideEmpty ? '✓ ' : ''}إخفاء من لا محاضرات لهم</Text></TouchableOpacity>
               <TouchableOpacity style={styles.runBtn} onPress={run} disabled={loading} testID="tw-run-btn">
                 {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="play" size={14} color="#fff" />}<Text style={styles.runText}>تنفيذ التقرير</Text>
               </TouchableOpacity>
@@ -193,7 +226,9 @@ export default function TeacherWorkloadReport() {
                 ['النصاب المطلوب', `${Math.round(totals.req * 10) / 10} س`, DASH.navy2, 'أسبوعي × الأسابيع'],
                 ['الساعات المنفَّذة', `${Math.round(totals.act * 10) / 10} س`, DASH.teal, `من ${Math.round(totals.sch * 10) / 10} س مجدولة`],
                 ['المحاضرات المنفَّذة', `${totals.exe}/${totals.lec}`, DASH.purple, 'منفَّذة / مجدولة'],
-                ['نسبة الإنجاز', `${totals.rate}%`, rateColor(totals.rate), totals.below ? `${totals.below} مدرس تحت 70%` : 'الجميع ≥ 70%'],
+                ['نسبة الإنجاز', `${totals.rate}%`, rateColor(totals.rate), totals.below ? `${totals.below} مدرس تحت 75%` : 'الجميع ≥ 75%'],
+                ['الساعات الإضافية', `${Math.round(totals.ot * 10) / 10} س`, DASH.green, totals.sf ? `نقص ${Math.round(totals.sf * 10) / 10} س · ${totals.lowCourses} مقرر تحت 75%` : 'بعد الإضافة − النصاب'],
+                ...(totals.amt ? [['المستحق المالي', `${totals.amt.toLocaleString('en')} ${totals.cur}`, DASH.gold, 'الساعات الإضافية × سعر الساعة']] : []),
               ].map(([l, v, c, sub]) => (
                 <View key={String(l)} style={[dashStyles.card, styles.kpi]}>
                   <View style={[styles.kpiBar, { backgroundColor: String(c) }]} />
@@ -204,6 +239,9 @@ export default function TeacherWorkloadReport() {
               ))}
             </View>
 
+            {view === 'sheet' ? (
+              <View style={dashStyles.card} testID="tw-sheet-card"><OvertimeSheet teachers={rows} period={period} threshold={75} /></View>
+            ) : (
             <View style={dashStyles.card} testID="tw-table">
               <View style={styles.tableHead}>
                 <View style={styles.sortRow}>
@@ -224,30 +262,34 @@ export default function TeacherWorkloadReport() {
                     <TouchableOpacity style={[styles.tMain, compact && { flexWrap: 'wrap' }]} onPress={() => setOpen({ ...open, [t.teacher_id + i]: !isOpen })} testID={`tw-row-toggle-${t.teacher_id}`}>
                       <View style={[styles.rank, { backgroundColor: rateColor(s.completion_rate) + '1a' }]}><Text style={[styles.rankText, NUM_FONT, { color: rateColor(s.completion_rate) }]}>{i + 1}</Text></View>
                       <View style={{ flex: 2, minWidth: 180 }}>
-                        <Text style={styles.tName}>{t.teacher_name}</Text>
-                        <Text style={styles.tSub}>{deptName(t.department_id) || '—'} · {s.total_courses} مقرر · نصاب {s.weekly_hours} س/أسبوع</Text>
+                        <Text style={styles.tName}>{t.academic_title ? `${t.academic_title} ` : ''}{t.teacher_name}</Text>
+                        <Text style={styles.tSub}>{t.department_name || deptName(t.department_id) || '—'} · {s.total_courses} مقرر · نصاب {s.weekly_hours} س/أسبوع{s.bonus_enabled ? ` · إضافة ${s.bonus_hours} س` : ''}</Text>
                       </View>
                       <View style={{ flex: 2, minWidth: 160 }}>
                         <View style={styles.track}><View style={[styles.fill, { width: `${Math.min(100, s.completion_rate)}%`, backgroundColor: rateColor(s.completion_rate) }]} /></View>
                         <Text style={[styles.tSub, NUM_FONT]}>{s.total_actual_hours} من {s.required_hours} ساعة مطلوبة · محاضرات {exe}/{lec}</Text>
                       </View>
-                      <View style={styles.cell}><Text style={[styles.cellVal, NUM_FONT, { color: s.difference_hours < 0 ? DASH.red : DASH.green }]}>{s.difference_hours > 0 ? '+' : ''}{s.difference_hours}</Text><Text style={styles.cellLbl}>الفرق (س)</Text></View>
+                      <View style={styles.cell}><Text style={[styles.cellVal, NUM_FONT, { color: (s.overtime_hours ?? s.difference_hours) < 0 ? DASH.red : DASH.green }]}>{(s.overtime_hours ?? s.difference_hours) > 0 ? '+' : ''}{s.overtime_hours ?? s.difference_hours}</Text><Text style={styles.cellLbl}>{s.bonus_enabled ? 'إضافية (س)' : 'الفرق (س)'}</Text></View>
+                      {s.overtime_amount != null && <View style={styles.cell}><Text style={[styles.cellVal, NUM_FONT, { color: DASH.gold, fontSize: 13 }]}>{Number(s.overtime_amount).toLocaleString('en')}</Text><Text style={styles.cellLbl}>المستحق {s.currency}</Text></View>}
                       <View style={styles.cell}><Text style={[styles.cellVal, NUM_FONT, { color: rateColor(s.completion_rate) }]}>{s.completion_rate}%</Text><Text style={styles.cellLbl}>الإنجاز</Text></View>
                       <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={DASH.muted} />
                     </TouchableOpacity>
                     {isOpen && (
                       <View style={styles.courses} testID={`tw-courses-${t.teacher_id}`}>
                         <View style={[styles.cRow, styles.cHead]}>
-                          {['المقرر', 'محاضرات مجدولة', 'منفَّذة', 'ساعات مجدولة', 'ساعات منفَّذة', 'التنفيذ'].map((h, k) => <Text key={h} style={[styles.cTd, k === 0 && styles.cName, styles.cTh]}>{h}</Text>)}
+                          {['المقرر', 'المستوى', 'س/أسبوع', 'محاضرات', 'الافتراضية', 'المنجزة', 'النقص', 'الإنجاز', 'ملاحظات'].map((h, k) => <Text key={h} style={[styles.cTd, (k === 0 || k === 8) && styles.cName, styles.cTh]}>{h}</Text>)}
                         </View>
                         {t.courses.length === 0 && <Text style={[styles.tSub, { padding: 8 }]}>لا مقررات مسندة في هذه الفترة</Text>}
                         {t.courses.map((c, k) => {
-                          const r = c.scheduled_lectures ? Math.round((c.executed_lectures * 1000) / c.scheduled_lectures) / 10 : 0;
+                          const r = c.completion_rate ?? (c.scheduled_lectures ? Math.round((c.executed_lectures * 1000) / c.scheduled_lectures) / 10 : 0);
                           return (
-                            <View key={k} style={styles.cRow}>
+                            <View key={k} style={[styles.cRow, c.is_low && { backgroundColor: '#fdf2f8' }]} testID={`tw-course-row-${t.teacher_db_id || t.teacher_id}-${k}`}>
                               <Text style={[styles.cTd, styles.cName]} numberOfLines={1}>{c.course_name} <Text style={styles.tSub}>{c.course_code}</Text></Text>
-                              {[c.scheduled_lectures, c.executed_lectures, c.scheduled_hours, c.actual_hours].map((v, j) => <Text key={j} style={[styles.cTd, NUM_FONT]}>{v}</Text>)}
+                              <Text style={styles.cTd}>{lvl(c)}</Text>
+                              {[c.weekly_hours, `${c.executed_lectures}/${c.scheduled_lectures}`, c.expected_hours, c.actual_hours].map((v, j) => <Text key={j} style={[styles.cTd, NUM_FONT]}>{v as any}</Text>)}
+                              <Text style={[styles.cTd, NUM_FONT, { color: (c.shortfall_hours || 0) > 0 ? DASH.red : '#334155' }]}>{c.shortfall_hours ?? ''}</Text>
                               <Text style={[styles.cTd, NUM_FONT, { color: rateColor(r), fontWeight: '800' }]}>{r}%</Text>
+                              <Text style={[styles.cTd, styles.cName, { fontWeight: '500', fontSize: 11, color: DASH.muted }]} numberOfLines={2}>{c.note || ''}</Text>
                             </View>
                           );
                         })}
@@ -257,9 +299,11 @@ export default function TeacherWorkloadReport() {
                 );
               })}
             </View>
+            )}
           </>
         )}
       </ScrollView>
+      <OvertimePolicyModal visible={policyOpen} onClose={() => setPolicyOpen(false)} onSaved={() => { if (ran) run(); }} />
     </SafeAreaView>
   );
 }
@@ -276,6 +320,10 @@ const styles = StyleSheet.create({
   heroActions: { flexDirection: 'row-reverse', gap: 8, alignItems: 'center' },
   iconBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center' },
   actBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 9, borderRadius: 10 },
+  viewToggle: { flexDirection: 'row-reverse', backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 10, padding: 3, gap: 2 },
+  viewBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  viewBtnOn: { backgroundColor: '#fff' },
+  viewText: { fontSize: 12, fontWeight: '800', color: '#fff' },
   actText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   filterRow: { flexDirection: 'row-reverse', gap: 12 },
   label: { fontSize: 12, fontWeight: '700', color: DASH.muted, textAlign: 'right', marginBottom: 4 },
