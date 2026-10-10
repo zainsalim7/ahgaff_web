@@ -121,7 +121,7 @@ from bidi.algorithm import get_display
 # استيراد النماذج من الملفات المنفصلة
 from models.permissions import (
     UserRole, Permission, DEFAULT_PERMISSIONS, ALL_PERMISSIONS, DASHBOARD_PERMISSIONS,
-    FULL_PERMISSION_MAPPING, ScopeType, user_has_permission, HR_ROLE_PRESETS
+    FULL_PERMISSION_MAPPING, ScopeType, user_has_permission, HR_ROLE_PRESETS, ADMIN_ROLE_PRESETS
 )
 from models.users import (
     UserBase, UserCreate, UserLogin, UserResponse, Token,
@@ -1531,7 +1531,7 @@ async def delete_user(user_id: str, current_user: dict = Depends(get_current_use
 @api_router.get("/admin/find-user-by-username/{username}")
 async def admin_find_user_by_username(username: str, current_user: dict = Depends(get_current_user)):
     """جلب مستخدم بـ username (للتشخيص). admin فقط."""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح — admin فقط")
     u = await db.users.find_one({"username": {"$regex": f"^{username}$", "$options": "i"}})
     if not u:
@@ -1558,7 +1558,7 @@ class AdminFixUserRequest(BaseModel):
 @api_router.post("/admin/fix-user")
 async def admin_fix_user(req: AdminFixUserRequest, current_user: dict = Depends(get_current_user)):
     """حذف أو إصلاح role لمستخدم لا يظهر في الواجهة. admin فقط."""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح — admin فقط")
 
     u = await db.users.find_one({"username": {"$regex": f"^{req.username}$", "$options": "i"}})
@@ -1770,7 +1770,7 @@ async def toggle_user_active(
     current_user: dict = Depends(get_current_user)
 ):
     """تفعيل/إيقاف المستخدم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+    if not has_permission(current_user, "users_toggle_active") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل حالة المستخدم")
     
     # التحقق من وجود المستخدم
@@ -1979,6 +1979,23 @@ async def create_hr_role_presets(current_user: dict = Depends(get_current_user))
     return {"created": created, "updated": updated, "message": f"تم إنشاء {len(created)} دور وتحديث {len(updated)} — أسندها للمستخدمين من إدارة المستخدمين"}
 
 
+@api_router.post("/roles/admin-presets")
+async def create_admin_role_presets(current_user: dict = Depends(get_current_user)):
+    """🧩 إنشاء/تحديث الأدوار الإدارية الجاهزة (قبول وتسجيل، جداول، بيانات، مدقق، مهندس نظام، بطاقات، مراسلات)"""
+    if not has_permission(current_user, "manage_roles"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    created, updated = [], []
+    for p in ADMIN_ROLE_PRESETS:
+        ex = await db.roles.find_one({"$or": [{"preset_key": p["key"]}, {"name": p["name"]}]})
+        if ex:
+            await db.roles.update_one({"_id": ex["_id"]}, {"$set": {"preset_key": p["key"], "description": p["description"], "permissions": p["permissions"]}})
+            updated.append(p["name"])
+        else:
+            await db.roles.insert_one({"name": p["name"], "description": p["description"], "permissions": p["permissions"], "is_system": False, "preset_key": p["key"], "created_at": get_yemen_time(), "created_by": current_user["id"]})
+            created.append(p["name"])
+    return {"created": created, "updated": updated, "message": f"تم إنشاء {len(created)} دور وتحديث {len(updated)} — أسندها للمستخدمين من إدارة المستخدمين"}
+
+
 @api_router.post("/roles/init")
 async def init_default_roles(current_user: dict = Depends(get_current_user)):
     """إنشاء الأدوار الافتراضية"""
@@ -2139,7 +2156,7 @@ async def assign_role_to_user(user_id: str, data: UserRoleUpdate, current_user: 
 @api_router.delete("/users/{user_id}/permissions/reset")
 async def reset_user_permissions(user_id: str, current_user: dict = Depends(get_current_user)):
     """إعادة تعيين صلاحيات المستخدم إلى الافتراضية حسب دوره"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+    if not has_permission(current_user, "manage_user_permissions") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     user = await db.users.find_one({"_id": ObjectId(user_id)})
@@ -2885,7 +2902,7 @@ async def create_manual_notification(
     """إنشاء إنذار/إشعار يدوي لطالب معين"""
     
     # التحقق من الصلاحيات - يجب أن يكون admin أو لديه صلاحية send_notifications
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+    if not has_permission(current_user, "send_notifications") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users")):
         user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
         user_permissions = user.get("permissions", []) if user else []
         
@@ -3471,7 +3488,7 @@ async def get_student_notifications(
     """جلب إشعارات طالب معين (للمدير أو من لديه صلاحية)"""
     
     # التحقق من الصلاحيات
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "view_attendance"):
+    if not has_permission(current_user, "view_student_notifications") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "view_attendance")):
         user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
         user_permissions = user.get("permissions", []) if user else []
         
@@ -3512,7 +3529,7 @@ async def delete_student_notification(
     لا يلمس endpoint المستلم (المستخدم لحذف إشعاراته الخاصة).
     """
     # نفس فحص الصلاحيات المستخدم في GET أعلاه + صلاحية SEND_NOTIFICATIONS
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "delete_student_notifications") and (current_user["role"] != UserRole.ADMIN):
         user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
         user_perms = (user_doc or {}).get("permissions", [])
         if Permission.SEND_NOTIFICATIONS not in user_perms:
@@ -3534,7 +3551,7 @@ async def get_students_unread_notifications_counts(
     
     يُرجع: {"counts": {student_id: count, ...}, "total": number}
     """
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "view_student_notifications") and (current_user["role"] != UserRole.ADMIN):
         user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
         user_perms = (user_doc or {}).get("permissions", [])
         if Permission.SEND_NOTIFICATIONS not in user_perms:
@@ -3567,7 +3584,7 @@ async def bulk_change_level(request: Request, current_user: dict = Depends(get_c
         - "set"   : تعيين شعبة موحّدة لجميع الطلاب (new_section)
         - "clear" : إزالة الشعبة من جميع الطلاب
     """
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_bulk_ops") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     student_ids = data.get("student_ids", [])
@@ -4028,7 +4045,7 @@ async def get_student_courses_admin(
 @api_router.post("/students/{student_id}/exclude-course/{course_id}")
 async def exclude_student_from_course(student_id: str, course_id: str, current_user: dict = Depends(get_current_user)):
     """🚫 استثناء الطالب من مقرر غير مطالب به: فصل تسجيله ومنع إعادة تسجيله تلقائياً (مزامنة/تسجيل تلقائي)"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_enrollments"):
+    if not has_permission(current_user, "students_exclude_course") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_enrollments")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
@@ -4050,7 +4067,7 @@ async def exclude_student_from_course(student_id: str, course_id: str, current_u
 @api_router.delete("/students/{student_id}/exclude-course/{course_id}")
 async def unexclude_student_from_course(student_id: str, course_id: str, current_user: dict = Depends(get_current_user)):
     """↩️ إلغاء استثناء الطالب من مقرر وإعادة تسجيله فيه"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_enrollments"):
+    if not has_permission(current_user, "students_exclude_course") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_enrollments")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
@@ -4131,7 +4148,7 @@ async def cleanup_orphan_enrollments(current_user: dict = Depends(get_current_us
     تنظيف التسجيلات (enrollments) التي تشير لطلاب محذوفين مسبقاً (ghost enrollments).
     يُصحّح أعداد الطلاب على بطاقات المقررات.
     """
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     # جلب جميع IDs الطلاب الموجودين فعلياً
@@ -4174,7 +4191,7 @@ async def cleanup_orphan_enrollments(current_user: dict = Depends(get_current_us
 
 @api_router.delete("/students/{student_id}")
 async def delete_student(student_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     student = await db.students.find_one({"_id": ObjectId(student_id)})
@@ -4207,7 +4224,7 @@ async def delete_student(student_id: str, current_user: dict = Depends(get_curre
 @api_router.get("/students/{student_id}/backup-info")
 async def get_student_backup_info(student_id: str, current_user: dict = Depends(get_current_user)):
     """معلومات الطالب قبل الحذف"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
@@ -4234,7 +4251,7 @@ async def get_student_backup_info(student_id: str, current_user: dict = Depends(
 @api_router.post("/students/{student_id}/safe-delete")
 async def safe_delete_student(student_id: str, current_user: dict = Depends(get_current_user)):
     """حذف آمن للطالب مع نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
@@ -4286,7 +4303,7 @@ async def safe_delete_student(student_id: str, current_user: dict = Depends(get_
 @api_router.post("/students/restore")
 async def restore_student(request: Request, current_user: dict = Depends(get_current_user)):
     """استعادة طالب من نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     if data.get("backup_type") != "student_backup":
@@ -4449,7 +4466,7 @@ async def update_student(student_id: str, data: StudentUpdate, current_user: dic
 @api_router.post("/students/{student_id}/activate")
 async def activate_student_account(student_id: str, current_user: dict = Depends(get_current_user)):
     """تفعيل حساب للطالب - الرقم الجامعي يكون اسم المستخدم وكلمة المرور الافتراضية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_toggle_active") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتفعيل حسابات الطلاب")
     
     # البحث عن الطالب
@@ -4507,7 +4524,7 @@ async def activate_student_account(student_id: str, current_user: dict = Depends
 @api_router.post("/students/{student_id}/deactivate")
 async def deactivate_student_account(student_id: str, current_user: dict = Depends(get_current_user)):
     """إلغاء تفعيل حساب الطالب"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_toggle_active") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     student = await db.students.find_one({"_id": ObjectId(student_id)})
@@ -4539,7 +4556,7 @@ class BulkGenderIn(BaseModel):
 @api_router.post("/students/bulk-set-gender")
 async def bulk_set_gender(data: BulkGenderIn, current_user: dict = Depends(get_current_user)):
     """♀♂ تعيين الجنس لمجموعة طلاب (محددين، أو قسم/كلية كاملة) — لتمييز صيغة الإفادات"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_bulk_ops") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     g = (data.gender or "").strip().lower()
     if g not in ("male", "female", ""):
@@ -4566,7 +4583,7 @@ async def bulk_set_gender(data: BulkGenderIn, current_user: dict = Depends(get_c
 @api_router.post("/students/bulk-activate")
 async def bulk_activate_students(current_user: dict = Depends(get_current_user)):
     """تفعيل حسابات جميع الطلاب دفعة واحدة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_bulk_ops") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب الطلاب الذين ليس لديهم حسابات
@@ -4631,7 +4648,7 @@ async def bulk_activate_students(current_user: dict = Depends(get_current_user))
 @api_router.post("/students/bulk-deactivate")
 async def bulk_deactivate_students(current_user: dict = Depends(get_current_user)):
     """إلغاء تفعيل حسابات جميع الطلاب دفعة واحدة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_bulk_ops") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب الطلاب الذين لديهم حسابات
@@ -4661,7 +4678,7 @@ async def bulk_deactivate_students(current_user: dict = Depends(get_current_user
 @api_router.post("/students/{student_id}/reset-password")
 async def reset_student_password(student_id: str, current_user: dict = Depends(get_current_user)):
     """إعادة تعيين كلمة مرور الطالب"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "students_reset_password") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     student = await db.students.find_one({"_id": ObjectId(student_id)})
@@ -5234,7 +5251,7 @@ async def update_teacher(teacher_id: str, request: Request, current_user: dict =
 @api_router.get("/teachers/{teacher_id}/backup-info")
 async def get_teacher_backup_info(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """معلومات المعلم قبل الحذف"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
     if not teacher:
@@ -5258,7 +5275,7 @@ async def get_teacher_backup_info(teacher_id: str, current_user: dict = Depends(
 @api_router.post("/teachers/{teacher_id}/safe-delete")
 async def safe_delete_teacher(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """حذف آمن للمعلم مع نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
     if not teacher:
@@ -5326,7 +5343,7 @@ async def _do_safe_delete_teacher(teacher: dict, current_user: dict):
 @api_router.post("/teachers/restore")
 async def restore_teacher(request: Request, current_user: dict = Depends(get_current_user)):
     """استعادة معلم من نسخة احتياطية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     if data.get("backup_type") != "teacher_backup":
@@ -5351,7 +5368,7 @@ async def restore_teacher(request: Request, current_user: dict = Depends(get_cur
 @api_router.delete("/teachers/{teacher_id}")
 async def delete_teacher(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """حذف معلم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
@@ -5381,7 +5398,7 @@ async def delete_teacher(teacher_id: str, current_user: dict = Depends(get_curre
 @api_router.post("/teachers/{teacher_id}/activate")
 async def activate_teacher_account(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """تفعيل حساب للمعلم - الرقم الوظيفي يكون اسم المستخدم وكلمة المرور الافتراضية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_toggle_active") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتفعيل حسابات المعلمين")
     
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
@@ -5426,7 +5443,7 @@ async def activate_teacher_account(teacher_id: str, current_user: dict = Depends
 @api_router.post("/teachers/{teacher_id}/deactivate")
 async def deactivate_teacher_account(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """إلغاء تفعيل حساب المعلم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_toggle_active") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
@@ -5447,7 +5464,7 @@ async def deactivate_teacher_account(teacher_id: str, current_user: dict = Depen
 @api_router.post("/teachers/{teacher_id}/reset-password")
 async def reset_teacher_password(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """إعادة تعيين كلمة مرور المعلم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_reset_password") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
@@ -5476,7 +5493,7 @@ async def reset_teacher_password(teacher_id: str, current_user: dict = Depends(g
 @api_router.post("/teachers/bulk-action")
 async def teachers_bulk_action(request: Request, current_user: dict = Depends(get_current_user)):
     """إجراء جماعي: activate / deactivate / reset_password / safe_delete / add_department"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_bulk_ops") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     action = data.get("action")
@@ -5567,7 +5584,7 @@ async def teachers_bulk_action(request: Request, current_user: dict = Depends(ge
 @api_router.post("/teachers/export-selected")
 async def export_selected_teachers(request: Request, current_user: dict = Depends(get_current_user)):
     """تصدير المدرسين المحددين إلى Excel"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_export") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     ids = [i for i in (data.get("teacher_ids") or []) if i]
@@ -5621,7 +5638,7 @@ async def export_selected_teachers(request: Request, current_user: dict = Depend
 @api_router.post("/teachers/export-selected/pdf")
 async def export_selected_teachers_pdf(request: Request, current_user: dict = Depends(get_current_user)):
     """تصدير المدرسين المحددين إلى PDF"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "teachers_export") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     ids = [i for i in (data.get("teacher_ids") or []) if i]
@@ -5778,7 +5795,7 @@ async def clone_course_section(
     """استنساخ مقرر بشعبة جديدة. يحافظ على نفس الكود الأم + يضيف لاحقة الشعبة.
     مثال: TFS201 (شعبة أ) → TFS201 (شعبة ب) - مقرر مستقل بمعلم وطلاب جدد.
     """
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "courses_clone_section") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح")
 
     new_section = (new_section or "").strip()
@@ -6695,7 +6712,7 @@ async def delete_course(course_id: str, current_user: dict = Depends(get_current
 @api_router.post("/enrollments/bulk-copy")
 async def bulk_copy_students(request: Request, current_user: dict = Depends(get_current_user)):
     """نسخ طلاب إلى عدة مقررات"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment"):
+    if not has_permission(current_user, "enrollments_bulk") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     student_ids = data.get("student_ids", [])
@@ -6788,7 +6805,7 @@ async def get_courses_of_students(request: Request, current_user: dict = Depends
 @api_router.post("/enrollments/bulk-move")
 async def bulk_move_students(request: Request, current_user: dict = Depends(get_current_user)):
     """نقل طلاب من مقرر إلى آخر"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment"):
+    if not has_permission(current_user, "enrollments_bulk") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     data = await request.json()
     student_ids = data.get("student_ids", [])
@@ -6871,7 +6888,7 @@ async def get_course_enrollments(course_id: str, current_user: dict = Depends(ge
 @api_router.post("/courses/{course_id}/auto-enroll")
 async def auto_enroll_matching_students(course_id: str, current_user: dict = Depends(get_current_user)):
     """تسجيل الطلاب المطابقين تلقائياً في المقرر بناءً على القسم والمستوى والشعبة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students"):
+    if not has_permission(current_user, "enrollments_auto") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
@@ -6918,7 +6935,7 @@ async def sync_students_enrollments(
     current_user: dict = Depends(get_current_user)
 ):
     """🔄 مزامنة تسجيلات الطلاب: إزالة تسجيلات الفصل النشط غير المطابقة لموقع الطالب الحالي + إضافة الناقصة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "enrollments_auto") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     from routes.deps import _sec_matches
     active = await db.semesters.find_one({"$or": [{"status": "active"}, {"is_active": True}]})
@@ -6978,7 +6995,7 @@ async def auto_enroll_all_courses(
     current_user: dict = Depends(get_current_user)
 ):
     """تسجيل تلقائي للطلاب في جميع المقررات المطابقة دفعة واحدة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "enrollments_auto") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course_query = {"is_active": True}
@@ -7316,7 +7333,7 @@ class ReassignHistoryRequest(BaseModel):
 @api_router.post("/lectures/reassign-history")
 async def reassign_lecture_history(data: ReassignHistoryRequest, current_user: dict = Depends(get_current_user)):
     """🧾 ختم محاضرات مقرر بأثر رجعي لمعلم (استرجاع نصاب معلم سابق بعد تغيير الإسناد) — للأدمن فقط."""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "lectures_reassign_history") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="هذه الأداة متاحة للإدارة العليا فقط")
     course = await db.courses.find_one({"_id": ObjectId(data.course_id)})
     if not course:
@@ -7930,7 +7947,7 @@ async def get_lesson_completion_comparison(course_id: str, current_user: dict = 
 async def preview_backfill_sections(current_user: dict = Depends(get_current_user)):
     """فحص المقررات التي اسمها يحتوي شعبة بين قوسين لكن حقل section فارغ.
     + يكتشف المقررات بدون شعبة في القاعدة لكن لها أخوات بنفس الاسم/المستوى/القسم بشُعب أ ب ج → يقترح الحرف التالي."""
-    if current_user.get("role") != UserRole.ADMIN:
+    if not has_permission(current_user, "system_diagnostics") and (current_user.get("role") != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="للمدير فقط")
     import re
     pattern = re.compile(r"\(([^)]+)\)\s*$")
@@ -8018,7 +8035,7 @@ async def backfill_sections(current_user: dict = Depends(get_current_user)):
     """تعبئة الشعبة من اسم المقرر أو من أخوته.
     - الأولوية للقوسين في الاسم
     - وإلا: اقتراح الحرف الناقص بناءً على أخوة المقرر"""
-    if current_user.get("role") != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user.get("role") != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="للمدير فقط")
     import re
     pattern = re.compile(r"\(([^)]+)\)\s*$")
@@ -9104,7 +9121,7 @@ async def generate_semester_lectures(
     current_user: dict = Depends(get_current_user)
 ):
     """توليد محاضرات الفصل الدراسي تلقائياً"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "generate_lectures"):
+    if not has_permission(current_user, "generate_lectures") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "generate_lectures")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من أن وقت النهاية بعد وقت البداية
@@ -9375,7 +9392,7 @@ async def generate_semester_lectures_advanced(
     current_user: dict = Depends(get_current_user)
 ):
     """توليد محاضرات الفصل الدراسي المتقدم - دعم أيام متعددة وأوقات متعددة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "generate_lectures") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(data.course_id)})
@@ -9748,7 +9765,7 @@ async def delete_lecture(
 @api_router.get("/admin/cleanup-orphan-attendance/preview")
 async def preview_orphan_attendance(current_user: dict = Depends(get_current_user)):
     """معاينة عدد السجلات اليتيمة قبل الحذف (آمن - لا يُغيّر شيئاً)"""
-    if current_user.get("role") != UserRole.ADMIN:
+    if not has_permission(current_user, "system_diagnostics") and (current_user.get("role") != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
     # IDs المحاضرات النشطة (سيتم الإبقاء على سجلاتها)
@@ -9827,7 +9844,7 @@ async def cleanup_orphan_attendance(current_user: dict = Depends(get_current_use
     3. سجلات بدون lecture_id لا توجد محاضرة نشطة لها بنفس course_id + date
     صلاحية المدير فقط.
     """
-    if current_user.get("role") != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user.get("role") != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
     # IDs المحاضرات النشطة + خريطة (course_id, date)
@@ -9904,7 +9921,7 @@ async def preview_ghost_completions(current_user: dict = Depends(get_current_use
     3) مواضيع مؤكدة يدوياً (confirmed=true) لا توجد لها أي محاضرة مكتملة بعنوان فعلي
        تربطها بنفس course_id (تأكيد يتيم).
     """
-    if current_user.get("role") != UserRole.ADMIN:
+    if not has_permission(current_user, "system_diagnostics") and (current_user.get("role") != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
     # 1) محاضرات COMPLETED بدون عنوان فعلي
@@ -9960,7 +9977,7 @@ async def preview_ghost_completions(current_user: dict = Depends(get_current_use
 @api_router.post("/admin/cleanup-ghost-completions")
 async def cleanup_ghost_completions(current_user: dict = Depends(get_current_user)):
     """تنظيف الإنجازات الوهمية وإعادة المحاضرات والمواضيع المؤكدة إلى وضعها الصحيح."""
-    if current_user.get("role") != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user.get("role") != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="هذه العملية لمدير النظام فقط")
 
     empty_title_query = {
@@ -13037,7 +13054,7 @@ async def get_teacher_attendance_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير حضور الأساتذة وتنفيذ المحاضرات (من حضر ونفّذ ومن غاب)."""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.VIEW_REPORTS):
+    if not has_permission(current_user, "report_teacher_attendance") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.VIEW_REPORTS)):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     return await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id)
 
@@ -13052,7 +13069,7 @@ async def export_teacher_attendance_excel(
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير تقرير حضور الأساتذة إلى Excel."""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.EXPORT_REPORTS):
+    if not has_permission(current_user, "report_teacher_attendance") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.EXPORT_REPORTS)):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     report = await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id)
 
@@ -13150,7 +13167,7 @@ async def export_teacher_attendance_pdf(
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير تقرير حضور الأساتذة إلى PDF."""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.EXPORT_REPORTS):
+    if not has_permission(current_user, "report_teacher_attendance") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, Permission.EXPORT_REPORTS)):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     report = await _build_teacher_attendance_report(start_date, end_date, department_id, faculty_id, teacher_id)
 
@@ -14197,7 +14214,7 @@ class ScheduleResponse(ScheduleBase):
 
 @api_router.post("/schedule", response_model=ScheduleResponse)
 async def create_schedule(schedule: ScheduleCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_schedule") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     schedule_dict = schedule.dict()
@@ -14247,7 +14264,7 @@ async def update_schedule(
     schedule: ScheduleCreate,
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_schedule") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     existing = await db.schedule.find_one({"_id": ObjectId(schedule_id)})
@@ -14268,7 +14285,7 @@ async def update_schedule(
 
 @api_router.delete("/schedule/{schedule_id}")
 async def delete_schedule(schedule_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_schedule") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     result = await db.schedule.delete_one({"_id": ObjectId(schedule_id)})
@@ -14680,7 +14697,7 @@ async def import_students_from_excel(
 @api_router.get("/template/teachers")
 async def get_teachers_template(current_user: dict = Depends(get_current_user)):
     """Download teachers import template"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers") and not has_permission(current_user, "import_data"):
+    if not has_permission(current_user, "import_data") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers") and not has_permission(current_user, "import_data")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     data = {
@@ -14708,7 +14725,7 @@ async def get_teachers_template(current_user: dict = Depends(get_current_user)):
 @api_router.get("/template/lectures")
 async def get_lectures_template(current_user: dict = Depends(get_current_user)):
     """تحميل نموذج استيراد المحاضرات"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "import_data"):
+    if not has_permission(current_user, "import_data") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "import_data")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     data = {
@@ -14740,7 +14757,7 @@ async def import_lectures_from_excel(
     current_user: dict = Depends(get_current_user)
 ):
     """استيراد محاضرات من ملف Excel - يولّد محاضرات أسبوعية تلقائياً"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "import_data"):
+    if not has_permission(current_user, "import_data") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_lectures") and not has_permission(current_user, "import_data")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     try:
@@ -14937,7 +14954,7 @@ async def import_lectures_from_excel(
 @api_router.get("/template/courses")
 async def get_courses_template(current_user: dict = Depends(get_current_user)):
     """Download courses import template"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "import_data"):
+    if not has_permission(current_user, "import_data") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "import_data")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     data = {
@@ -14968,7 +14985,7 @@ async def import_courses_from_excel(
     current_user: dict = Depends(get_current_user)
 ):
     """استيراد مقررات من ملف Excel"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "import_data"):
+    if not has_permission(current_user, "import_data") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "import_data")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     if not department_id:
@@ -15121,7 +15138,7 @@ async def import_teachers_from_excel(
     current_user: dict = Depends(get_current_user)
 ):
     """Import teachers from Excel file and auto-activate their accounts"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers") and not has_permission(current_user, "import_data"):
+    if not has_permission(current_user, "import_data") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers") and not has_permission(current_user, "import_data")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     if not department_id:
@@ -15241,7 +15258,7 @@ async def export_students_to_excel(
     current_user: dict = Depends(get_current_user)
 ):
     """Export students to Excel file - يدعم التصفية بالقسم/المستوى/الشعبة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "export_reports"):
+    if not has_permission(current_user, "export_students") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "export_reports")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     query: dict = {"is_active": True}
@@ -15623,7 +15640,7 @@ async def export_students_pdf(
     current_user: dict = Depends(get_current_user)
 ):
     """Export students list to PDF"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "export_reports"):
+    if not has_permission(current_user, "export_students") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students") and not has_permission(current_user, "export_reports")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     query = {"is_active": True}
@@ -16016,7 +16033,7 @@ async def get_all_semesters(
 @api_router.post("/semesters")
 async def create_semester(data: SemesterCreate, current_user: dict = Depends(get_current_user)):
     """إنشاء فصل دراسي جديد"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من عدم وجود فصل بنفس الاسم في نفس السنة
@@ -16065,7 +16082,7 @@ async def get_current_semester(current_user: dict = Depends(get_current_user)):
 @api_router.put("/semesters/{semester_id}")
 async def update_semester(semester_id: str, data: SemesterUpdate, current_user: dict = Depends(get_current_user)):
     """تحديث فصل دراسي"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -16103,7 +16120,7 @@ async def activate_semester(semester_id: str, auto_generate_from_curriculum: boo
     """تفعيل فصل دراسي (جعله الفصل الحالي)
     - إذا auto_generate_from_curriculum=true: يُولّد المقررات تلقائياً من الخطة الدراسية
     """
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -16238,7 +16255,7 @@ async def activate_semester(semester_id: str, auto_generate_from_curriculum: boo
 @api_router.post("/semesters/{semester_id}/close")
 async def close_semester(semester_id: str, current_user: dict = Depends(get_current_user)):
     """إغلاق فصل دراسي"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -16266,7 +16283,7 @@ async def archive_semester(semester_id: str, current_user: dict = Depends(get_cu
     - مع denormalized snapshot لأسماء الطلاب والمعلمين والأقسام وقت الأرشفة
     - يحذف العمليات التشغيلية فقط بعد النسخ (لا يلمس students/teachers/departments/faculties)
     """
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -16534,7 +16551,7 @@ async def restore_semester_from_archive(
     - الأسماء (students, teachers, departments, faculties) لم تُلمس أصلاً.
     صلاحية مطلوبة: admin أو manage_courses.
     """
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بالاستعادة")
 
     try:
@@ -16655,7 +16672,7 @@ async def get_semester_stats(semester_id: str, current_user: dict = Depends(get_
 @api_router.delete("/semesters/{semester_id}")
 async def delete_semester(semester_id: str, current_user: dict = Depends(get_current_user)):
     """حذف فصل دراسي (فقط إذا لم يكن له مقررات)"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_semesters") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     semester = await db.semesters.find_one({"_id": ObjectId(semester_id)})
@@ -16754,7 +16771,7 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
 @api_router.put("/settings")
 async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get_current_user)):
     """تحديث إعدادات النظام - للمدير فقط"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_settings") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الإعدادات")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
@@ -16771,7 +16788,7 @@ async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get
 @api_router.post("/settings/academic-years")
 async def add_academic_year(year: str = Body(..., embed=True), current_user: dict = Depends(get_current_user)):
     """إضافة سنة أكاديمية جديدة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_academic_years") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من صيغة السنة
@@ -16790,7 +16807,7 @@ async def add_academic_year(year: str = Body(..., embed=True), current_user: dic
 @api_router.delete("/settings/academic-years/{year}")
 async def delete_academic_year(year: str, current_user: dict = Depends(get_current_user)):
     """حذف سنة أكاديمية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses"):
+    if not has_permission(current_user, "manage_academic_years") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     await db.settings.update_one(
@@ -17000,8 +17017,8 @@ async def update_my_institution(data: dict = Body(...), current_user: dict = Dep
     """
     user = await db.users.find_one({"_id": ObjectId(current_user["id"])})
     
-    if current_user["role"] == UserRole.ADMIN:
-        # المدير يحدث بيانات الجامعة
+    if has_permission(current_user, "manage_institution"):
+        # المدير (أو من يملك صلاحية بيانات المؤسسة) يحدث بيانات الجامعة
         update_data = {k: v for k, v in data.items() if v is not None and k != "type"}
         update_data["updated_at"] = get_yemen_time()
         
@@ -17058,7 +17075,7 @@ async def get_available_permissions(current_user: dict = Depends(get_current_use
 @api_router.get("/users/{user_id}/permissions")
 async def get_user_permissions_endpoint_v2(user_id: str, current_user: dict = Depends(get_current_user)):
     """الحصول على صلاحيات مستخدم معين"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+    if not has_permission(current_user, "manage_user_permissions") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بعرض صلاحيات المستخدمين")
     
     user = await db.users.find_one({"_id": ObjectId(user_id)})
@@ -17103,7 +17120,7 @@ async def add_user_permission(
     current_user: dict = Depends(get_current_user)
 ):
     """إضافة صلاحية لمستخدم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+    if not has_permission(current_user, "manage_user_permissions") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الصلاحيات")
     
     user = await db.users.find_one({"_id": ObjectId(user_id)})
@@ -17155,7 +17172,7 @@ async def delete_user_permission(
     current_user: dict = Depends(get_current_user)
 ):
     """حذف صلاحية من مستخدم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+    if not has_permission(current_user, "manage_user_permissions") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بحذف الصلاحيات")
     
     result = await db.user_permissions.delete_one({
@@ -17175,7 +17192,7 @@ async def update_all_user_permissions(
     current_user: dict = Depends(get_current_user)
 ):
     """تحديث جميع صلاحيات المستخدم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+    if not has_permission(current_user, "manage_user_permissions") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الصلاحيات")
     
     user = await db.users.find_one({"_id": ObjectId(user_id)})
@@ -17278,7 +17295,7 @@ async def create_or_update_university(
     current_user: dict = Depends(get_current_user)
 ):
     """إنشاء أو تحديث بيانات الجامعة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_faculties"):
+    if not has_permission(current_user, "manage_institution") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_faculties")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل بيانات الجامعة")
     
     existing = await db.university.find_one()
@@ -17657,7 +17674,7 @@ async def delete_faculty(
 @api_router.post("/admin/fix-courses-semester")
 async def fix_courses_without_semester(current_user: dict = Depends(get_current_user)):
     """إصلاح المقررات التي ليس لها فصل دراسي بربطها بالفصل النشط"""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     settings = await db.settings.find_one({"_id": "system_settings"})
@@ -17684,7 +17701,7 @@ async def fix_courses_without_semester(current_user: dict = Depends(get_current_
 @api_router.post("/admin/fix-custom-roles")
 async def fix_custom_roles(current_user: dict = Depends(get_current_user)):
     """إصلاح المستخدمين الذين لديهم role فارغ وتحويلهم إلى custom"""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # إصلاح المستخدمين بدور فارغ
@@ -17702,7 +17719,7 @@ async def fix_custom_roles(current_user: dict = Depends(get_current_user)):
 @api_router.post("/admin/cleanup-duplicate-roles")
 async def cleanup_duplicate_roles(current_user: dict = Depends(get_current_user)):
     """حذف الأدوار المكررة - الإبقاء على الأقدم فقط"""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جمع كل الأدوار مع system_key
@@ -17748,7 +17765,7 @@ async def cleanup_duplicate_roles(current_user: dict = Depends(get_current_user)
 @api_router.post("/admin/fix-faculty-ids")
 async def fix_faculty_ids(current_user: dict = Depends(get_current_user)):
     """إصلاح الطلاب والمعلمين الذين ليس لديهم faculty_id"""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # بناء خريطة القسم → الكلية
@@ -17790,7 +17807,7 @@ async def fix_faculty_ids(current_user: dict = Depends(get_current_user)):
 @api_router.post("/admin/fix-student-sections")
 async def fix_student_sections(current_user: dict = Depends(get_current_user)):
     """إصلاح شعب الطلاب بناءً على تسجيلاتهم الحالية"""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # بناء خريطة المقررات (course_id → section)
@@ -17850,7 +17867,7 @@ async def get_activity_logs(
 ):
     """جلب سجلات الأنشطة"""
     # التحقق من الصلاحية
-    if current_user["role"] not in [UserRole.ADMIN, UserRole.UNIVERSITY_PRESIDENT, "dean", "department_head"]:
+    if not has_permission(current_user, "view_activity_logs") and (current_user["role"] not in [UserRole.ADMIN, UserRole.UNIVERSITY_PRESIDENT, "dean", "department_head"]):
         raise HTTPException(status_code=403, detail="غير مصرح لك بعرض سجلات الأنشطة")
     
     query = {}
@@ -17942,7 +17959,7 @@ async def delete_activity_logs(
     current_user: dict = Depends(get_current_user)
 ):
     """حذف سجلات النشاطات (مدير النظام فقط) — حسب الفلاتر أو الكل"""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "delete_activity_logs") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="حذف السجلات متاح لمدير النظام فقط")
     if not confirm:
         raise HTTPException(status_code=400, detail="يجب تأكيد الحذف (confirm=true)")
@@ -17977,7 +17994,7 @@ async def get_activity_logs_stats(
     current_user: dict = Depends(get_current_user)
 ):
     """إحصائيات سجلات الأنشطة"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_reports"):
+    if not has_permission(current_user, "view_activity_logs") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_reports")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بعرض الإحصائيات")
     
     query = {}
@@ -18052,7 +18069,7 @@ async def record_page_view(
 @api_router.get("/trash")
 async def get_trash_items(current_user: dict = Depends(get_current_user)):
     """عرض جميع العناصر في سلة المحذوفات"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "manage_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     now = get_yemen_time()
@@ -18081,7 +18098,7 @@ async def get_trash_items(current_user: dict = Depends(get_current_user)):
 @api_router.post("/trash/{trash_id}/restore")
 async def restore_trash_item(trash_id: str, current_user: dict = Depends(get_current_user)):
     """استعادة عنصر من سلة المحذوفات"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "manage_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     trash_item = await db.trash.find_one({"_id": ObjectId(trash_id)})
@@ -18098,7 +18115,7 @@ async def restore_trash_item(trash_id: str, current_user: dict = Depends(get_cur
 @api_router.delete("/trash/{trash_id}")
 async def permanent_delete_trash_item(trash_id: str, current_user: dict = Depends(get_current_user)):
     """حذف نهائي لعنصر من سلة المحذوفات"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "purge_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     result = await db.trash.delete_one({"_id": ObjectId(trash_id)})
@@ -18110,7 +18127,7 @@ async def permanent_delete_trash_item(trash_id: str, current_user: dict = Depend
 @api_router.delete("/trash")
 async def clear_all_trash(current_user: dict = Depends(get_current_user)):
     """تفريغ سلة المحذوفات بالكامل"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers"):
+    if not has_permission(current_user, "purge_trash") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "manage_students") and not has_permission(current_user, "manage_teachers")):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     result = await db.trash.delete_many({})
@@ -18120,7 +18137,7 @@ async def clear_all_trash(current_user: dict = Depends(get_current_user)):
 @api_router.get("/admin/diagnose-roles")
 async def diagnose_roles(current_user: dict = Depends(get_current_user)):
     """تشخيص شامل: يُظهر كل الأدوار، عدد المستخدمين، وأي تكرارات أو عدم تطابق."""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_diagnostics") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك — admin فقط")
     all_roles = await db.roles.find().to_list(1000)
     all_users = await db.users.find().to_list(2000)
@@ -18162,7 +18179,7 @@ async def diagnose_roles(current_user: dict = Depends(get_current_user)):
 @api_router.post("/admin/cleanup-duplicate-roles-now")
 async def cleanup_duplicate_roles_now(current_user: dict = Depends(get_current_user)):
     """يُشغل دمج الأدوار المكررة وإصلاح المستخدمين فوراً."""
-    if current_user["role"] != UserRole.ADMIN:
+    if not has_permission(current_user, "system_tools") and (current_user["role"] != UserRole.ADMIN):
         raise HTTPException(status_code=403, detail="غير مصرح لك — admin فقط")
     await cleanup_duplicate_roles_internal()
     await migrate_broken_user_roles()

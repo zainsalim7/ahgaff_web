@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity, export_stamp
+from .deps import has_permission, get_db, get_current_user, log_activity, export_stamp
 
 router = APIRouter()
 
@@ -115,7 +115,7 @@ async def _ensure_builtin_templates(db):
 
 
 def _can_issue(user: dict, faculty_id: str) -> bool:
-    if user.get("role") == "admin":
+    if user.get("role") == "admin" or has_permission(user, "issue_statements"):
         return True
     if user.get("role") in ("teacher", "student"):
         return False
@@ -235,7 +235,7 @@ async def read_verify_base(current_user: dict = Depends(get_current_user)):
 
 @router.put("/settings/verify-base-url")
 async def set_verify_base(payload: dict, current_user: dict = Depends(get_current_user)):
-    if current_user.get("role") != "admin":
+    if not has_permission(current_user, "manage_settings"):
         raise HTTPException(status_code=403, detail="هذا الإعداد للأدمن فقط")
     raw = (payload.get("value") or "").strip().rstrip("/")
     value = _sanitize_base_url(raw)

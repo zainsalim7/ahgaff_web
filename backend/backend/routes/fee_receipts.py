@@ -25,6 +25,10 @@ def can_manage_fees(user: dict) -> bool:
     return user.get("role") == "admin" or has_permission(user, "manage_fee_receipts")
 
 
+def can_view_fees(user: dict) -> bool:
+    return can_manage_fees(user) or has_permission(user, "view_fee_receipts")
+
+
 def is_admin(user: dict) -> bool:
     return user.get("role") == "admin"
 
@@ -137,7 +141,7 @@ class FeeTypeUpdate(BaseModel):
 async def list_fee_types(current_user: dict = Depends(get_current_user)):
     db = get_db()
     await _seed_types(db)
-    allowed = await _allowed_type_ids(db, current_user) if can_manage_fees(current_user) else None
+    allowed = await _allowed_type_ids(db, current_user) if can_view_fees(current_user) else None
     docs = await db.fee_types.find({"is_active": {"$ne": False}}).to_list(100)
     uids = {u for t in docs for u in (t.get("responsible_user_ids") or []) if ObjectId.is_valid(u)}
     unames = {str(u["_id"]): u.get("full_name") or u.get("username", "") for u in
@@ -361,7 +365,7 @@ async def list_receipts(status: Optional[str] = None, type_id: Optional[str] = N
                         department_id: Optional[str] = None, level: Optional[int] = None,
                         search: Optional[str] = None, sort: Optional[str] = "newest",
                         current_user: dict = Depends(get_current_user)):
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     year = await _academic_year(db)
@@ -428,7 +432,7 @@ async def receipt_image(receipt_id: str, current_user: dict = Depends(get_curren
     r = await db.fee_receipts.find_one({"_id": ObjectId(receipt_id)})
     if not r:
         raise HTTPException(status_code=404, detail="غير موجود")
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         student = await db.students.find_one({"user_id": current_user["id"]})
         if not student or str(student["_id"]) != r["student_id"]:
             raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -443,7 +447,7 @@ class RejectBody(BaseModel):
 
 
 async def _review(db, receipt_id, current_user, status, reason=""):
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     r = await db.fee_receipts.find_one({"_id": ObjectId(receipt_id)})
     if not r:
@@ -532,7 +536,7 @@ async def bulk_review(data: BulkReviewBody, current_user: dict = Depends(get_cur
 
 @router.get("/fees/stats")
 async def fee_stats(current_user: dict = Depends(get_current_user)):
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await _seed_types(db)
@@ -642,7 +646,7 @@ async def unpaid_students(type_id: str, department_id: Optional[str] = None, lev
                           section: Optional[str] = None, statement: Optional[str] = None,
                           current_user: dict = Depends(get_current_user)):
     """👥 طلاب النطاق غير الدافعين لنوع رسوم (لنافذة الدفع الجماعي)"""
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await _assert_type_allowed(db, current_user, type_id)
@@ -737,7 +741,7 @@ async def bulk_manual_payment(data: BulkManualPayment, current_user: dict = Depe
 @router.get("/fees/unpaid-export")
 async def export_unpaid(type_id: str, current_user: dict = Depends(get_current_user)):
     """📄 تصدير Excel بغير الدافعين لنوع رسوم (لتسليمه لإدارة المالية)"""
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await _assert_type_allowed(db, current_user, type_id)
@@ -851,7 +855,7 @@ async def renewal_status(data: RenewalStatusBody, current_user: dict = Depends(g
 @router.get("/fees/students/{student_id}/receipts")
 async def student_receipts(student_id: str, current_user: dict = Depends(get_current_user)):
     """💰 سجل سدادات طالب عبر كل الأعوام (للإدارة/المالية)"""
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     await _assert_in_scope(db, current_user, student_id)
@@ -877,7 +881,7 @@ async def payment_report(date_from: str, date_to: str, student_ids: Optional[str
                          current_user: dict = Depends(get_current_user)):
     """📊 تقرير سدادات طالب/عدة طلاب بين تاريخين (التاريخ الفعلي = تاريخ السند الورقي أو تاريخ الرفع)
     fmt: json | excel | pdf"""
-    if not can_manage_fees(current_user):
+    if not can_view_fees(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     q: dict = {}

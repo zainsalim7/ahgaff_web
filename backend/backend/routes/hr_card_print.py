@@ -8,8 +8,8 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, export_filename, export_headers
-from .hr_common import P_MANAGE, _can_view, _guard, _descendants, hr_scope_units, scope_filter, _now
+from .deps import get_db, get_current_user, export_filename, export_headers, has_permission
+from .hr_common import P_MANAGE, _guard_any, _can_view, _guard, _descendants, hr_scope_units, scope_filter, _now
 from .hr import CATEGORIES, STATUSES
 from .hr_cards import card_payload, _hr_card_settings, render_employee_png
 from .student_cards import (
@@ -186,7 +186,7 @@ async def _render_employee_png(db, emp: dict, base: str, s: dict) -> bytes:
 @router.post("/cards/batch-pdf")
 async def batch_pdf(data: HrBatchRequest, current_user: dict = Depends(get_current_user)):
     """🖨️ PDF بطاقات الموظفين: بطاقتان في كل ورقة A4 — يسجّل دفعة ويوسم الموظفين كمطبوعين (أو إعادة تنزيل دفعة سابقة)"""
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_print_cards")
     db = get_db()
     st = await _print_settings(db)
     orientation = data.orientation if data.orientation in ORIENTATIONS else "auto"
@@ -276,7 +276,7 @@ async def get_batch(batch_no: int, current_user: dict = Depends(get_current_user
 @router.post("/cards/batches/{batch_no}/reset")
 async def reset_batch_marks(batch_no: int, current_user: dict = Depends(get_current_user)):
     """↩️ إلغاء وسم «مطبوع» لموظفي دفعة (مثلاً تلفت الورقة) ليعودوا للظهور في الدفعات القادمة"""
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_print_cards")
     db = get_db()
     d = await db.hr_card_print_batches.find_one({"batch_no": batch_no})
     if not d:
@@ -323,7 +323,7 @@ async def print_report(org_unit_id: Optional[str] = None, category: Optional[str
 async def get_back_settings(current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
-    return {**await _back_settings(get_db()), "defaults": HR_DEFAULT_BACK, "can_edit": current_user.get("role") == "admin" or _guard_ok(current_user)}
+    return {**await _back_settings(get_db()), "defaults": HR_DEFAULT_BACK, "can_edit": has_permission(current_user, P_MANAGE) or has_permission(current_user, "hr_print_cards")}
 
 
 def _guard_ok(u: dict) -> bool:
@@ -335,7 +335,7 @@ def _guard_ok(u: dict) -> bool:
 
 @router.put("/cards/back-settings")
 async def put_back_settings(data: BackSettingsIn, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_print_cards")
     upd = {k: v for k, v in data.model_dump(exclude_none=True).items()}
     if "lines" in upd:
         upd["lines"] = [str(x).strip() for x in upd["lines"] if str(x).strip()][:10]
@@ -358,7 +358,7 @@ async def back_preview(current_user: dict = Depends(get_current_user)):
 @router.post("/cards/batch-back-pdf")
 async def batch_back_pdf(data: HrBackBatchRequest, current_user: dict = Depends(get_current_user)):
     """🔄 PDF خلفيات دفعة الموظفين — بطاقتان في كل ورقة بمواضع مستقلة تُحفظ"""
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_print_cards")
     db = get_db()
     back = await _back_settings(db)
     if not back.get("enabled"):

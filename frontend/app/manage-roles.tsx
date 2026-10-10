@@ -426,6 +426,22 @@ export default function ManageRolesScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* 🧩 الأدوار الإدارية الجاهزة */}
+      <View style={[styles.infoCard, { backgroundColor: '#e0f2fe', justifyContent: 'space-between' }]} testID="admin-presets-card">
+        <View style={{ flex: 1 }}>
+          <Text style={[styles.infoText, { fontWeight: '800', color: '#0c4a6e' }]}>الأدوار الإدارية الجاهزة (صلاحيات مفصّلة لكل مهمة)</Text>
+          <Text style={[styles.infoText, { fontSize: 11.5 }]}>مسؤول القبول والتسجيل · مسؤول الجداول والمحاضرات · مسؤول الاستيراد والبيانات · مدقق السجلات · مهندس نظام · مسؤول طباعة البطاقات · مسؤول المراسلات. يمكن تعديل صلاحياتها لاحقاً أو إسناد صلاحيات فردية لأي مستخدم.</Text>
+        </View>
+        <TouchableOpacity
+          onPress={async () => {
+            try { const r = await rolesAPI.createAdminPresets(); Alert.alert('تم', r.data.message); hasFetched.current = false; setRoles([]); fetchData(); }
+            catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل إنشاء الأدوار'); }
+          }}
+          style={{ backgroundColor: '#0369a1', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} data-testid="create-admin-presets-btn">
+          <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>إنشاء / تحديث</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Roles List */}
       <ScrollView 
         style={styles.scrollView}

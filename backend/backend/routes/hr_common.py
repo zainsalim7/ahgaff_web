@@ -56,6 +56,12 @@ def _guard(u: dict, perm: str):
         raise HTTPException(status_code=403, detail="ليست لديك صلاحية على شؤون الموظفين")
 
 
+def _guard_any(u: dict, *perms: str):
+    """يكفي امتلاك واحدة من الصلاحيات (الصلاحية الشاملة أو المفصّلة)"""
+    if not any(has_permission(u, p) for p in perms):
+        raise HTTPException(status_code=403, detail="ليست لديك صلاحية على هذه العملية")
+
+
 def parse_date(s: Optional[str], what: str = "التاريخ") -> date:
     try:
         return datetime.strptime((s or "")[:10], "%Y-%m-%d").date()

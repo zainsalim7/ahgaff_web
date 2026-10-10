@@ -155,8 +155,8 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-annual-report', label: 'التقرير السنوي HR', icon: 'stats-chart', path: '/hr-annual-report', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
   { id: 'hr-letters', label: 'الخطابات الرسمية', icon: 'document-text', path: '/hr-letters', permissions: [], forAll: true },
   { id: 'hr-profile-requests', label: 'طلبات تعديل البيانات', icon: 'create', path: '/hr-profile-requests', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
-  { id: 'hr-photo-approvals', label: 'اعتماد صور البطاقات', icon: 'images', path: '/hr-photo-approvals', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
-  { id: 'hr-card-print', label: 'طباعة بطاقات الموظفين', icon: 'print', path: '/hr-card-print', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
+  { id: 'hr-photo-approvals', label: 'اعتماد صور البطاقات', icon: 'images', path: '/hr-photo-approvals', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_approve_photos'] },
+  { id: 'hr-card-print', label: 'طباعة بطاقات الموظفين', icon: 'print', path: '/hr-card-print', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_print_cards'] },
   { id: 'hr-tasks', label: 'المهام', icon: 'checkbox', path: '/hr-tasks', permissions: [], forAll: true },
   { id: 'hr-appraisals', label: 'التقييم السنوي', icon: 'star', path: '/hr-appraisals', permissions: [], forAll: true },
   { id: 'hr-my-profile', label: 'ملفي الإداري', icon: 'person-circle', path: '/hr-my-profile', permissions: [], forAll: true },
@@ -174,15 +174,15 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', permissions: [], forAll: true },
 
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
-  { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: [], adminOnly: true },
+  { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
   { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', permissions: [], adminOnly: true },
   { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', permissions: [PERMISSIONS.MANAGE_ROLES] },
-  { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', permissions: [], adminOnly: true },
+  { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', permissions: ['view_activity_logs'] },
   // الأرشيف الدراسي
   { id: 'archives-divider', label: 'الأرشيف الدراسي', icon: 'archive', path: '', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
   { id: 'archives', label: 'الفصول المؤرشفة', icon: 'archive', path: '/archives', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
   { id: 'archive-search', label: 'البحث في الأرشيف', icon: 'search', path: '/archive-search', permissions: [PERMISSIONS.SEARCH_ARCHIVE] },
-  { id: 'trash', label: 'سلة المحذوفات', icon: 'trash', path: '/trash', permissions: [], adminOnly: true },
+  { id: 'trash', label: 'سلة المحذوفات', icon: 'trash', path: '/trash', permissions: ['manage_trash', 'purge_trash'] },
 ];
 
 interface SideMenuProps {

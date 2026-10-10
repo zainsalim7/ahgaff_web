@@ -159,6 +159,55 @@ class Permission:
     ISSUE_LETTERS = "issue_letters"                    # إصدار الخطابات الرسمية (السجل حسب النطاق)
     MANAGE_LETTER_SETTINGS = "manage_letter_settings"  # كليشة وقوالب الخطابات
 
+    # ====== 🧩 صلاحيات إدارية مفصّلة (كل مهمة إدارية لها صلاحية مستقلة قابلة للإسناد الفردي) ======
+    # 🏛️ الهيكل الأكاديمي
+    MANAGE_INSTITUTION = "manage_institution"          # بيانات الجامعة/المؤسسة
+    MANAGE_ACADEMIC_YEARS = "manage_academic_years"    # السنوات الأكاديمية
+    MANAGE_ROOMS = "manage_rooms"                      # القاعات
+    MANAGE_CALENDAR = "manage_calendar"                # التقويم الجامعي والعطل
+    # 👥 الطلاب — عمليات متقدمة
+    STUDENTS_SAFE_DELETE = "students_safe_delete"      # الحذف الآمن/الاستعادة/النسخة الاحتياطية
+    STUDENTS_TOGGLE_ACTIVE = "students_toggle_active"  # تفعيل/تعطيل طالب
+    STUDENTS_BULK_OPS = "students_bulk_ops"            # العمليات الجماعية (مستوى/جنس/تفعيل)
+    STUDENTS_RESET_PASSWORD = "students_reset_password"
+    STUDENTS_EXCLUDE_COURSE = "students_exclude_course"
+    STUDENTS_MANAGE_STATUS = "students_manage_status"  # حالة الطالب (انقطاع/فصل/تحويل)
+    VIEW_STUDENT_NOTIFICATIONS = "view_student_notifications"
+    DELETE_STUDENT_NOTIFICATIONS = "delete_student_notifications"
+    # 👨‍🏫 المعلمون — عمليات متقدمة
+    TEACHERS_SAFE_DELETE = "teachers_safe_delete"
+    TEACHERS_TOGGLE_ACTIVE = "teachers_toggle_active"
+    TEACHERS_RESET_PASSWORD = "teachers_reset_password"
+    TEACHERS_BULK_OPS = "teachers_bulk_ops"
+    TEACHERS_EXPORT = "teachers_export"
+    REPORT_TEACHER_ATTENDANCE = "report_teacher_attendance"
+    # 📚 المقررات والتسجيل
+    COURSES_CLONE_SECTION = "courses_clone_section"
+    ENROLLMENTS_AUTO = "enrollments_auto"              # التسجيل الآلي ومزامنة التسجيلات
+    ENROLLMENTS_BULK = "enrollments_bulk"              # نسخ/نقل تسجيلات جماعي
+    LECTURES_REASSIGN_HISTORY = "lectures_reassign_history"
+    LECTURES_PURGE = "lectures_purge"
+    # 📥 الاستيراد والتصدير
+    EXPORT_STUDENTS = "export_students"
+    # 👤 المستخدمون
+    MANAGE_USER_PERMISSIONS = "manage_user_permissions"
+    USERS_TOGGLE_ACTIVE = "users_toggle_active"
+    # 🗂️ السجلات والمحذوفات
+    VIEW_ACTIVITY_LOGS = "view_activity_logs"
+    DELETE_ACTIVITY_LOGS = "delete_activity_logs"
+    MANAGE_TRASH = "manage_trash"                      # عرض/استعادة
+    PURGE_TRASH = "purge_trash"                        # حذف نهائي
+    # 🛠️ أدوات الصيانة
+    SYSTEM_DIAGNOSTICS = "system_diagnostics"          # معاينة التشخيصات فقط
+    SYSTEM_TOOLS = "system_tools"                      # تنفيذ أدوات الإصلاح (مهندس نظام)
+    # 💰 المالية والشهادات
+    VIEW_FEE_RECEIPTS = "view_fee_receipts"
+    ISSUE_STATEMENTS = "issue_statements"
+    # 🏢 شؤون الموظفين — تفصيل أدق
+    HR_APPROVE_PHOTOS = "hr_approve_photos"
+    HR_PRINT_CARDS = "hr_print_cards"
+    HR_MANAGE_LOCATIONS = "hr_manage_locations"
+
 # الصلاحيات الافتراضية لكل دور
 DEFAULT_PERMISSIONS = {
     UserRole.ADMIN: [
@@ -346,8 +395,6 @@ ALL_PERMISSIONS = [
     {"key": Permission.DELETE_LECTURE, "label": "حذف محاضرة", "category": "المحاضرات", "hidden": True},
     {"key": Permission.OVERRIDE_LECTURE_STATUS, "label": "تغيير حالة المحاضرة", "category": "المحاضرات", "hidden": True},
     {"key": Permission.RESCHEDULE_LECTURE, "label": "إعادة جدولة المحاضرات", "category": "المحاضرات", "hidden": True},
-    {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات", "hidden": True},
-    {"key": Permission.MANAGE_SCHEDULE, "label": "إدارة كاملة للجداول الدراسية", "category": "الجداول الدراسية"},
     {"key": Permission.SHIFT_DAY, "label": "إزاحة اليوم الدراسي (تأخير/تقديم بداية اليوم لكل المحاضرات)", "category": "الجداول الدراسية"},
     {"key": Permission.HR_VIEW_EMPLOYEES, "label": "عرض سجل الموظفين والهيكل التنظيمي", "category": "شؤون الموظفين"},
     {"key": Permission.HR_MANAGE_EMPLOYEES, "label": "إدارة الموظفين (إضافة/تعديل/حذف/استيراد/إنشاء حسابات)", "category": "شؤون الموظفين"},
@@ -375,7 +422,6 @@ ALL_PERMISSIONS = [
     {"key": Permission.VIEW_REPORTS, "label": "عرض جميع التقارير", "category": "التقارير"},
     {"key": Permission.VIEW_STATISTICS, "label": "عرض الإحصائيات", "category": "التقارير"},
     {"key": Permission.EXPORT_REPORTS, "label": "تصدير التقارير", "category": "التقارير"},
-    {"key": Permission.IMPORT_DATA, "label": "استيراد البيانات", "category": "التقارير"},
     {"key": Permission.REPORT_ATTENDANCE_OVERVIEW, "label": "تقرير الحضور الشامل", "category": "التقارير الفردية"},
     {"key": Permission.REPORT_ABSENT_STUDENTS, "label": "تقرير الطلاب المتغيبين", "category": "التقارير الفردية"},
     {"key": Permission.REPORT_WARNINGS, "label": "تقرير الإنذارات والحرمان", "category": "التقارير الفردية"},
@@ -387,7 +433,6 @@ ALL_PERMISSIONS = [
     {"key": Permission.REPORT_LESSON_COMPLETION, "label": "تقرير إنجاز الدروس", "category": "التقارير الفردية"},
     {"key": Permission.MANAGE_ROLES, "label": "إدارة الأدوار", "category": "النظام"},
     {"key": Permission.MANAGE_SETTINGS, "label": "إدارة الإعدادات", "category": "النظام"},
-    {"key": Permission.MANAGE_SEMESTERS, "label": "إدارة الفصول الدراسية", "category": "النظام"},
     {"key": Permission.MIGRATE_COURSES, "label": "ترحيل المقررات لفصل جديد", "category": "المقررات"},
     {"key": Permission.MANAGE_TEACHING_LOAD, "label": "إدارة العبء التدريسي", "category": "العبء التدريسي"},
     {"key": Permission.VIEW_TEACHING_LOAD, "label": "عرض العبء التدريسي", "category": "العبء التدريسي"},
@@ -405,6 +450,47 @@ ALL_PERMISSIONS = [
     {"key": Permission.DASHBOARD_FINANCE, "label": "الإحصائيات المالية (تحتاج أيضاً صلاحية السندات)", "category": "لوحة القيادة"},
     {"key": Permission.DASHBOARD_HR, "label": "شؤون الموظفين (الأعداد، الدوام الإداري، الإجازات، المهام)", "category": "لوحة القيادة"},
     {"key": Permission.DASHBOARD_EXPORT, "label": "تصدير اللوحة PDF/Excel والملخصات الأسبوعية", "category": "لوحة القيادة"},
+    {"key": Permission.MANAGE_INSTITUTION, "label": "بيانات الجامعة والمؤسسة", "category": "الهيكل الأكاديمي"},
+    {"key": Permission.MANAGE_SEMESTERS, "label": "إدارة الفصول الدراسية (إنشاء/تفعيل/إغلاق/أرشفة)", "category": "الهيكل الأكاديمي"},
+    {"key": Permission.MANAGE_ACADEMIC_YEARS, "label": "السنوات الأكاديمية", "category": "الهيكل الأكاديمي"},
+    {"key": Permission.MANAGE_ROOMS, "label": "إدارة القاعات", "category": "الهيكل الأكاديمي"},
+    {"key": Permission.MANAGE_CALENDAR, "label": "التقويم الجامعي والعطل", "category": "الهيكل الأكاديمي"},
+    {"key": Permission.STUDENTS_SAFE_DELETE, "label": "الحذف الآمن للطلاب والاستعادة", "category": "الطلاب — عمليات متقدمة"},
+    {"key": Permission.STUDENTS_TOGGLE_ACTIVE, "label": "تفعيل/تعطيل طالب", "category": "الطلاب — عمليات متقدمة"},
+    {"key": Permission.STUDENTS_BULK_OPS, "label": "العمليات الجماعية على الطلاب (مستوى/جنس/تفعيل)", "category": "الطلاب — عمليات متقدمة"},
+    {"key": Permission.STUDENTS_RESET_PASSWORD, "label": "إعادة تعيين كلمة مرور طالب", "category": "الطلاب — عمليات متقدمة"},
+    {"key": Permission.STUDENTS_EXCLUDE_COURSE, "label": "استثناء طالب من مقرر", "category": "الطلاب — عمليات متقدمة"},
+    {"key": Permission.STUDENTS_MANAGE_STATUS, "label": "حالة الطالب (انقطاع/فصل) والتحويل بين الأقسام", "category": "الطلاب — عمليات متقدمة"},
+    {"key": Permission.VIEW_STUDENT_NOTIFICATIONS, "label": "عرض إشعارات الطلاب", "category": "الإشعارات"},
+    {"key": Permission.DELETE_STUDENT_NOTIFICATIONS, "label": "حذف إشعارات الطلاب", "category": "الإشعارات"},
+    {"key": Permission.TEACHERS_SAFE_DELETE, "label": "الحذف الآمن للمعلمين والاستعادة", "category": "المعلمون — عمليات متقدمة"},
+    {"key": Permission.TEACHERS_TOGGLE_ACTIVE, "label": "تفعيل/تعطيل معلم", "category": "المعلمون — عمليات متقدمة"},
+    {"key": Permission.TEACHERS_RESET_PASSWORD, "label": "إعادة تعيين كلمة مرور معلم", "category": "المعلمون — عمليات متقدمة"},
+    {"key": Permission.TEACHERS_BULK_OPS, "label": "العمليات الجماعية على المعلمين", "category": "المعلمون — عمليات متقدمة"},
+    {"key": Permission.TEACHERS_EXPORT, "label": "تصدير المعلمين المختارين (Excel/PDF)", "category": "المعلمون — عمليات متقدمة"},
+    {"key": Permission.REPORT_TEACHER_ATTENDANCE, "label": "تقرير حضور المعلمين", "category": "التقارير الفردية"},
+    {"key": Permission.COURSES_CLONE_SECTION, "label": "نسخ شعبة مقرر", "category": "المقررات"},
+    {"key": Permission.ENROLLMENTS_AUTO, "label": "التسجيل الآلي ومزامنة التسجيلات", "category": "التسجيل"},
+    {"key": Permission.ENROLLMENTS_BULK, "label": "نسخ/نقل التسجيلات جماعياً", "category": "التسجيل"},
+    {"key": Permission.GENERATE_LECTURES, "label": "توليد محاضرات الفصل الدراسي", "category": "المحاضرات والجدول"},
+    {"key": Permission.LECTURES_REASSIGN_HISTORY, "label": "إعادة إسناد تاريخ المحاضرات لمدرس آخر", "category": "المحاضرات والجدول"},
+    {"key": Permission.LECTURES_PURGE, "label": "حذف/تنظيف محاضرات (purge)", "category": "المحاضرات والجدول"},
+    {"key": Permission.MANAGE_SCHEDULE, "label": "إدارة الجدول اليومي (إنشاء/تعديل/حذف)", "category": "المحاضرات والجدول"},
+    {"key": Permission.IMPORT_DATA, "label": "استيراد البيانات (طلاب/معلمين/مقررات/محاضرات) وتنزيل القوالب", "category": "الاستيراد والتصدير"},
+    {"key": Permission.EXPORT_STUDENTS, "label": "تصدير سجلات الطلاب PDF/Excel", "category": "الاستيراد والتصدير"},
+    {"key": Permission.MANAGE_USER_PERMISSIONS, "label": "تعديل صلاحيات مستخدم (منح/سحب/إعادة ضبط)", "category": "المستخدمين"},
+    {"key": Permission.USERS_TOGGLE_ACTIVE, "label": "تفعيل/تعطيل حساب مستخدم", "category": "المستخدمين"},
+    {"key": Permission.VIEW_ACTIVITY_LOGS, "label": "عرض سجل النشاط وإحصائياته", "category": "السجلات والمحذوفات"},
+    {"key": Permission.DELETE_ACTIVITY_LOGS, "label": "حذف سجل النشاط", "category": "السجلات والمحذوفات"},
+    {"key": Permission.MANAGE_TRASH, "label": "سلة المحذوفات (عرض/استعادة)", "category": "السجلات والمحذوفات"},
+    {"key": Permission.PURGE_TRASH, "label": "تفريغ سلة المحذوفات (حذف نهائي)", "category": "السجلات والمحذوفات"},
+    {"key": Permission.SYSTEM_DIAGNOSTICS, "label": "عرض تشخيصات النظام (معاينة فقط)", "category": "أدوات الصيانة"},
+    {"key": Permission.SYSTEM_TOOLS, "label": "تنفيذ أدوات الإصلاح والصيانة (مهندس نظام)", "category": "أدوات الصيانة"},
+    {"key": Permission.VIEW_FEE_RECEIPTS, "label": "عرض السندات المالية (قراءة فقط)", "category": "المالية"},
+    {"key": Permission.ISSUE_STATEMENTS, "label": "إصدار الإفادات والشهادات", "category": "المالية"},
+    {"key": Permission.HR_APPROVE_PHOTOS, "label": "اعتماد صور بطاقات الموظفين", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_PRINT_CARDS, "label": "طباعة بطاقات الموظفين وتصميمها", "category": "شؤون الموظفين"},
+    {"key": Permission.HR_MANAGE_LOCATIONS, "label": "مواقع العمل والنطاق الجغرافي", "category": "شؤون الموظفين"},
 ]
 
 DASHBOARD_PERMISSIONS = [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_ATTENDANCE, Permission.DASHBOARD_TEACHERS,
@@ -438,6 +524,26 @@ HR_ROLE_PRESETS = [
      "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_HR]},
 ]
 
+# 🧩 أدوار إدارية جاهزة (تُنشأ بزر واحد من إدارة الأدوار)
+ADMIN_ROLE_PRESETS = [
+    {"key": "admissions_officer", "name": "مسؤول القبول والتسجيل", "description": "إدارة الطلاب والتسجيل والعمليات الجماعية والتسجيل الآلي وتصدير سجلات الطلاب وتقارير الطلاب",
+     "permissions": [Permission.MANAGE_STUDENTS, Permission.MANAGE_ENROLLMENTS, Permission.VIEW_COURSES, Permission.VIEW_LECTURES, Permission.VIEW_ATTENDANCE, Permission.IMPORT_DATA,
+                     Permission.EXPORT_REPORTS, Permission.REPORT_STUDENT, Permission.REPORT_ABSENT_STUDENTS, Permission.REPORT_WARNINGS, Permission.REPORT_ATTENDANCE_OVERVIEW, Permission.ISSUE_LETTERS]},
+    {"key": "schedule_officer", "name": "مسؤول الجداول والمحاضرات", "description": "الجدول الأسبوعي واليومي، توليد محاضرات الفصل، القاعات، التقويم، الفصول الدراسية، نسخ الشعب",
+     "permissions": [Permission.MANAGE_SCHEDULE, Permission.GENERATE_LECTURES, Permission.MANAGE_LECTURES, Permission.VIEW_COURSES, Permission.COURSES_CLONE_SECTION, Permission.MANAGE_ROOMS,
+                     Permission.MANAGE_CALENDAR, Permission.MANAGE_SEMESTERS, Permission.VIEW_TEACHERS, Permission.VIEW_TEACHING_LOAD, Permission.SHIFT_DAY]},
+    {"key": "data_officer", "name": "مسؤول الاستيراد والبيانات", "description": "استيراد الطلاب والمعلمين والمقررات والمحاضرات وتنزيل القوالب وتصدير السجلات",
+     "permissions": [Permission.IMPORT_DATA, Permission.EXPORT_STUDENTS, Permission.TEACHERS_EXPORT, Permission.VIEW_STUDENTS, Permission.VIEW_TEACHERS, Permission.VIEW_COURSES, Permission.EXPORT_REPORTS]},
+    {"key": "records_auditor", "name": "مدقق السجلات (اطّلاع)", "description": "عرض سجل النشاط وإحصائياته وسلة المحذوفات والتقارير دون أي تعديل",
+     "permissions": [Permission.VIEW_ACTIVITY_LOGS, Permission.MANAGE_TRASH, Permission.VIEW_REPORTS, Permission.EXPORT_REPORTS, Permission.VIEW_STUDENTS, Permission.VIEW_TEACHERS, Permission.VIEW_COURSES, Permission.SYSTEM_DIAGNOSTICS]},
+    {"key": "system_engineer", "name": "مهندس نظام", "description": "أدوات الإصلاح والصيانة والتشخيص، صلاحيات المستخدمين، حذف السجلات وتفريغ المحذوفات — للثقات فقط",
+     "permissions": [Permission.SYSTEM_TOOLS, Permission.SYSTEM_DIAGNOSTICS, Permission.MANAGE_USERS, Permission.MANAGE_USER_PERMISSIONS, Permission.DELETE_ACTIVITY_LOGS, Permission.PURGE_TRASH, Permission.MANAGE_TRASH, Permission.VIEW_ACTIVITY_LOGS, Permission.LECTURES_PURGE]},
+    {"key": "cards_officer", "name": "مسؤول طباعة البطاقات", "description": "طباعة بطاقات الطلاب والموظفين واعتماد صور البطاقات وتصميمها",
+     "permissions": [Permission.VIEW_STUDENTS, Permission.HR_VIEW_EMPLOYEES, Permission.HR_PRINT_CARDS, Permission.HR_APPROVE_PHOTOS, Permission.MANAGE_SETTINGS]},
+    {"key": "correspondence_officer", "name": "مسؤول المراسلات", "description": "إصدار الخطابات الرسمية وإدارة كليشتها وقوالبها، والمراسلات والتعاميم الإدارية",
+     "permissions": [Permission.ISSUE_LETTERS, Permission.MANAGE_LETTER_SETTINGS, Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_CORRESPONDENCE]},
+]
+
 FULL_PERMISSION_MAPPING = {
     Permission.MANAGE_DEPARTMENTS: [
         Permission.VIEW_DEPARTMENTS, Permission.ADD_DEPARTMENT, 
@@ -450,24 +556,33 @@ FULL_PERMISSION_MAPPING = {
         Permission.MANAGE_LECTURES, Permission.VIEW_LECTURES,
         Permission.ADD_LECTURE, Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
         Permission.OVERRIDE_LECTURE_STATUS, Permission.RESCHEDULE_LECTURE,
-        Permission.GENERATE_LECTURES
+        Permission.GENERATE_LECTURES, Permission.COURSES_CLONE_SECTION, Permission.ENROLLMENTS_AUTO,
+        Permission.MANAGE_SEMESTERS, Permission.MANAGE_ACADEMIC_YEARS, Permission.MANAGE_SCHEDULE, Permission.MANAGE_TRASH,
     ],
     Permission.MANAGE_STUDENTS: [
         Permission.VIEW_STUDENTS, Permission.ADD_STUDENT, 
-        Permission.EDIT_STUDENT, Permission.DELETE_STUDENT, Permission.IMPORT_STUDENTS
+        Permission.EDIT_STUDENT, Permission.DELETE_STUDENT, Permission.IMPORT_STUDENTS,
+        Permission.STUDENTS_SAFE_DELETE, Permission.STUDENTS_TOGGLE_ACTIVE, Permission.STUDENTS_BULK_OPS,
+        Permission.STUDENTS_RESET_PASSWORD, Permission.STUDENTS_EXCLUDE_COURSE, Permission.STUDENTS_MANAGE_STATUS,
+        Permission.VIEW_STUDENT_NOTIFICATIONS, Permission.EXPORT_STUDENTS,
     ],
     Permission.MANAGE_TEACHERS: [
         Permission.VIEW_TEACHERS, Permission.ADD_TEACHER, 
-        Permission.EDIT_TEACHER, Permission.DELETE_TEACHER
+        Permission.EDIT_TEACHER, Permission.DELETE_TEACHER,
+        Permission.TEACHERS_SAFE_DELETE, Permission.TEACHERS_TOGGLE_ACTIVE, Permission.TEACHERS_RESET_PASSWORD,
+        Permission.TEACHERS_BULK_OPS, Permission.TEACHERS_EXPORT,
     ],
     Permission.MANAGE_USERS: [
         Permission.VIEW_USERS, Permission.ADD_USER, 
-        Permission.EDIT_USER, Permission.DELETE_USER, Permission.RESET_PASSWORD
+        Permission.EDIT_USER, Permission.DELETE_USER, Permission.RESET_PASSWORD,
+        Permission.MANAGE_USER_PERMISSIONS, Permission.USERS_TOGGLE_ACTIVE,
     ],
-    Permission.MANAGE_FACULTIES: [
-        Permission.VIEW_FACULTIES, Permission.ADD_FACULTY, 
-        Permission.EDIT_FACULTY, Permission.DELETE_FACULTY
-    ],
+    Permission.MANAGE_FACULTIES: [Permission.VIEW_FACULTIES, Permission.ADD_FACULTY, Permission.EDIT_FACULTY, Permission.DELETE_FACULTY, Permission.MANAGE_INSTITUTION],
+    Permission.MANAGE_ENROLLMENTS: [Permission.VIEW_ENROLLMENTS, Permission.ADD_ENROLLMENT, Permission.DELETE_ENROLLMENT, Permission.ENROLLMENTS_AUTO, Permission.ENROLLMENTS_BULK],
+    Permission.MANAGE_FEE_RECEIPTS: [Permission.VIEW_FEE_RECEIPTS],
+    Permission.HR_MANAGE_EMPLOYEES: [Permission.HR_VIEW_EMPLOYEES, Permission.HR_APPROVE_PHOTOS, Permission.HR_PRINT_CARDS],
+    Permission.HR_MANAGE_ATTENDANCE: [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_LOCATIONS],
+    Permission.VIEW_REPORTS: [Permission.REPORT_TEACHER_ATTENDANCE, Permission.VIEW_ACTIVITY_LOGS],
     Permission.MANAGE_LECTURES: [
         Permission.VIEW_LECTURES, Permission.ADD_LECTURE, 
         Permission.EDIT_LECTURE, Permission.DELETE_LECTURE,
@@ -484,17 +599,10 @@ FULL_PERMISSION_MAPPING = {
         Permission.RECORD_ATTENDANCE, Permission.TAKE_ATTENDANCE,
         Permission.VIEW_ATTENDANCE, Permission.EDIT_ATTENDANCE
     ],
-    Permission.MANAGE_ENROLLMENTS: [
-        Permission.VIEW_ENROLLMENTS, Permission.ADD_ENROLLMENT, Permission.DELETE_ENROLLMENT
-    ],
     Permission.MANAGE_SCHEDULE: [
         Permission.VIEW_SCHEDULE
     ],
-    Permission.HR_MANAGE_EMPLOYEES: [
-        Permission.HR_VIEW_EMPLOYEES
-    ],
     Permission.HR_MANAGE_LEAVES: [Permission.HR_VIEW_EMPLOYEES],
-    Permission.HR_MANAGE_ATTENDANCE: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_WORK_SETTINGS: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_LEAVE_SETTINGS: [Permission.HR_VIEW_EMPLOYEES],
     Permission.HR_MANAGE_CORRESPONDENCE: [Permission.HR_VIEW_EMPLOYEES],

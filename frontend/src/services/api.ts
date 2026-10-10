@@ -939,6 +939,7 @@ export const rolesAPI = {
   delete: (roleId: string) => api.delete(`/roles/${roleId}`),
   initDefaults: () => api.post('/roles/init'),
   createHrPresets: () => api.post('/roles/hr-presets'),
+  createAdminPresets: () => api.post('/roles/admin-presets'),
 };
 
 // User Role Assignment (إسناد الأدوار للمستخدمين)

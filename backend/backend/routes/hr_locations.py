@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends, Query
 from pydantic import BaseModel
 
 from .deps import get_db, get_current_user, log_activity, has_permission
-from .hr_common import P_ATTEND, _now, _today, _oid, _ser, _guard, parse_date, find_my_employee, get_hr_settings, enrich_employee_refs
+from .hr_common import P_ATTEND, _guard_any, _now, _today, _oid, _ser, _guard, parse_date, find_my_employee, get_hr_settings, enrich_employee_refs
 
 router = APIRouter(prefix="/hr/locations", tags=["شؤون الموظفين - مواقع العمل"])
 
@@ -141,7 +141,7 @@ async def list_active(lat: Optional[float] = Query(None), lng: Optional[float] =
 
 @router.get("")
 async def list_locations(current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_ATTEND)
+    _guard_any(current_user, P_ATTEND, "hr_manage_locations")
     db = get_db()
     settings = await get_hr_settings(db)
     return {"locations": [_ser(l) for l in await db.hr_locations.find({}).sort("name", 1).to_list(200)], "geofence_required": bool(settings.get("geofence_required", True))}
@@ -149,7 +149,7 @@ async def list_locations(current_user: dict = Depends(get_current_user)):
 
 @router.post("")
 async def create_location(data: LocationIn, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_ATTEND)
+    _guard_any(current_user, P_ATTEND, "hr_manage_locations")
     _validate(data)
     db = get_db()
     doc = {**data.dict(), "name": data.name.strip(), "created_by_name": current_user.get("full_name", ""), "created_at": _now(), "updated_at": _now()}
@@ -160,7 +160,7 @@ async def create_location(data: LocationIn, current_user: dict = Depends(get_cur
 
 @router.put("/{loc_id}")
 async def update_location(loc_id: str, data: LocationIn, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_ATTEND)
+    _guard_any(current_user, P_ATTEND, "hr_manage_locations")
     _validate(data)
     db = get_db()
     oid = _oid(loc_id)
@@ -173,7 +173,7 @@ async def update_location(loc_id: str, data: LocationIn, current_user: dict = De
 
 @router.delete("/{loc_id}")
 async def delete_location(loc_id: str, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_ATTEND)
+    _guard_any(current_user, P_ATTEND, "hr_manage_locations")
     db = get_db()
     r = await db.hr_locations.delete_one({"_id": _oid(loc_id)})
     if not r.deleted_count:
@@ -191,7 +191,7 @@ def _admin(u: dict):
 
 @router.get("/exemptions")
 async def list_exemptions(current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_ATTEND)
+    _guard_any(current_user, P_ATTEND, "hr_manage_locations")
     db = get_db()
     labels = {"active": "ساري", "expired": "منتهٍ", "upcoming": "قادم"}
     rows = [{"employee_id": str(e["_id"]), "reason": e.get("geofence_exempt_reason", ""), "since": e.get("geofence_exempt_at", ""), "by_name": e.get("geofence_exempt_by_name", ""),
@@ -204,7 +204,7 @@ async def list_exemptions(current_user: dict = Depends(get_current_user)):
 
 @router.put("/exemptions/{employee_id}")
 async def set_exemption(employee_id: str, data: ExemptIn, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_ATTEND)
+    _guard_any(current_user, P_ATTEND, "hr_manage_locations")
     db = get_db()
     oid = _oid(employee_id, "معرّف الموظف")
     emp = await db.employees.find_one({"_id": oid}, {"full_name": 1})
@@ -231,7 +231,7 @@ async def set_exemption(employee_id: str, data: ExemptIn, current_user: dict = D
 
 @router.get("/report")
 async def locations_report(date: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_ATTEND)
+    _guard_any(current_user, P_ATTEND, "hr_manage_locations")
     db = get_db()
     from .hr_common import _today
     d = (date or _today())[:10]

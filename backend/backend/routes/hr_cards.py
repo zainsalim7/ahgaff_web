@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, 
 from fastapi.responses import Response
 
 from .deps import get_db, get_current_user, log_activity
-from .hr_common import P_MANAGE, YEMEN_TZ, _now, _oid, _ser, _can_view, _guard, find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids
+from .hr_common import _guard_any, P_MANAGE, YEMEN_TZ, _now, _oid, _ser, _can_view, _guard, find_my_employee, employee_user_ids, notify_users, hr_manager_user_ids
 from .statements import get_verify_base
 
 router = APIRouter(prefix="/hr", tags=["شؤون الموظفين - البطاقة الرقمية"])
@@ -226,7 +226,7 @@ async def hr_upload_photo(emp_id: str, file: UploadFile = File(...), current_use
 
 @router.post("/employees/{emp_id}/photo/approve")
 async def approve_photo(emp_id: str, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_approve_photos")
     db = get_db()
     emp = await db.employees.find_one({"_id": _oid(emp_id)})
     if not emp or not emp.get("pending_photo_path"):
@@ -240,7 +240,7 @@ async def approve_photo(emp_id: str, current_user: dict = Depends(get_current_us
 @router.post("/employees/{emp_id}/photo/reject")
 async def reject_photo(emp_id: str, current_user: dict = Depends(get_current_user)):
     """الرفض يفتح فرصة رفع جديدة تلقائياً"""
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_approve_photos")
     db = get_db()
     emp = await db.employees.find_one({"_id": _oid(emp_id)})
     if not emp:
@@ -254,7 +254,7 @@ async def reject_photo(emp_id: str, current_user: dict = Depends(get_current_use
 
 @router.post("/employees/{emp_id}/photo/allow-upload")
 async def allow_upload(emp_id: str, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_approve_photos")
     db = get_db()
     r = await db.employees.update_one({"_id": _oid(emp_id)}, {"$set": {"photo_upload_allowed": True}})
     if not r.matched_count:
@@ -264,7 +264,7 @@ async def allow_upload(emp_id: str, current_user: dict = Depends(get_current_use
 
 @router.delete("/employees/{emp_id}/photo")
 async def remove_photo(emp_id: str, current_user: dict = Depends(get_current_user)):
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_approve_photos")
     db = get_db()
     r = await db.employees.update_one({"_id": _oid(emp_id)}, {"$unset": {"photo_path": "", "photo_approved_at": "", "photo_approved_by": ""}, "$set": {"photo_upload_allowed": True}})
     if not r.matched_count:
@@ -275,7 +275,7 @@ async def remove_photo(emp_id: str, current_user: dict = Depends(get_current_use
 @router.post("/photos/bulk")
 async def bulk_photos(data: dict, current_user: dict = Depends(get_current_user)):
     """اعتماد/رفض جماعي للصور المعلّقة — body: {ids: [...], action: 'approve'|'reject'}"""
-    _guard(current_user, P_MANAGE)
+    _guard_any(current_user, P_MANAGE, "hr_approve_photos")
     db = get_db()
     ids = [i for i in (data.get("ids") or []) if ObjectId.is_valid(i)]
     action = data.get("action")
