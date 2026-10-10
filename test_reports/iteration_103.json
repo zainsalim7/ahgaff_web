@@ -1,0 +1,28 @@
+{
+  "summary": "Iteration 103: Verified multi-day holiday calendar events + overtime holiday deduction integration. 8/8 backend tests pass. Frontend calendar modal and workload sheet verified visually.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "OvertimeSheet.tsx (web)", "issue": "Sheet header line does not display holiday count (e.g. 'أيام الإجازات الرسمية: 2'). The Excel export correctly includes this text in row 2 header, but the on-screen header only shows period dates and total_weeks. Review request explicitly expected 'header line shows holiday count' in tw-view-sheet.", "selector": "[data-testid='overtime-sheet'] header div", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_holidays_overtime_iter103.py", "/app/test_reports/pytest/iter103.xml"],
+  "action_items": [
+    "Add holiday_days to OvertimeSheet.tsx header: when period.holiday_days > 0, render e.g. ` · أيام الإجازات الرسمية: {period.holiday_days}` next to عدد الأسابيع. The backend already returns period.holiday_days and holidays[]."
+  ],
+  "critical_code_review_comments": [
+    "calendar_events.py _check_end validates end-date format via _gregorian_to_hijri which raises 400 on invalid — good.",
+    "holiday_dates expands multi-day ranges correctly using date iteration.",
+    "RBAC: all write endpoints call _can_manage (manage_calendar permission); admin passes via has_permission."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "verified (modal end-date-input appears when إجازة selected; seeded range displayed as '2026-09-07 ← 2026-09-08'; sheet view shows 'إجازة رسمية 1.5 س (إجازة تجريبية)' notes for بلاغة-2 rows for أحمد بن سميط, and no holiday deduction for executed lecture of عبدالله باوزير)"},
+  "test_credentials": "admin/admin123, Salim/test1234 — all working",
+  "seed_data_creation": "None preserved; test created events are deleted at end of each test. Seeded holiday 'إجازة تجريبية' (2026-09-07→08) and seed_ot teachers were not modified.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression file: /app/backend/tests/test_holidays_overtime_iter103.py (uses REACT_APP_BACKEND_URL env). To re-run: export REACT_APP_BACKEND_URL=... && pytest backend/tests/test_holidays_overtime_iter103.py. Teachers field name is 'course_name' (not course_code) in the workload row response. Shortfall field is 'shortfall_hours'. Teacher list fields: 'teacher_name'/'courses'. Only remaining UI gap is holiday-count header on the on-screen sheet.",
+  "rca of the issue": "Missing holiday-count on sheet header: OvertimeSheet.tsx line 39 constructs the sub-header string from period.start_date/end_date/total_weeks only — ignores period.holiday_days. Fix: append ` · أيام الإجازات الرسمية: {period.holiday_days}` when > 0, matching Excel export format."
+}
