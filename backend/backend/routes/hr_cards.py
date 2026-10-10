@@ -94,7 +94,7 @@ async def card_payload(db, emp: dict, base_url: str = "") -> dict:
         "kind": kind, "kind_label": "بطاقة أكاديمية" if kind == "academic" else "بطاقة وظيفية",
         "employee_id": str(emp["_id"]), "full_name": emp.get("full_name", ""), "number": emp.get("employee_no", ""), "academic_no": tb.get("academic_no", ""),
         "title": (tb.get("academic_title") or emp.get("job_title") or "") if kind == "academic" else (emp.get("job_title") or ""),
-        "job_title": emp.get("job_title", ""), "academic_title": tb.get("academic_title", ""), "specialization": tb.get("specialization") or emp.get("specialization") or "",
+        "national_id": emp.get("national_id") or "", "job_title": emp.get("job_title", ""), "academic_title": tb.get("academic_title", ""), "specialization": tb.get("specialization") or emp.get("specialization") or "",
         "grade": emp.get("grade", ""), "category_label": CATEGORIES.get(emp.get("category"), ""),
         "faculty_name": tb.get("faculty_name") or chain["faculty_name"], "department_name": tb.get("department_name") or chain["department_name"], "org_unit_name": chain["org_unit_name"],
         "contract_type": emp.get("contract_type", ""), "contract_type_label": CONTRACT_TYPES.get(emp.get("contract_type"), ""), "hire_date": emp.get("hire_date"),

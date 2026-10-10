@@ -1288,7 +1288,10 @@ def _render_card_png(p: dict, photo_bytes: Optional[bytes], verify_url: str) -> 
     title_ar = p.get("title_ar") or ("بطاقة موظف" if p.get("kind") == "employee" else "بطاقة أكاديمية" if p.get("kind") == "academic" else "بطاقة طالب")
     title_en = "STAFF ID CARD" if is_emp else "STUDENT ID CARD"
     if is_emp:
-        rows = [(("رقم أكاديمي" if p.get("kind") == "academic" and p.get("academic_no") else "رقم وظيفي"), p.get("academic_no") or p.get("enrollment_no", ""))]
+        # رقم الهوية بدل الرقم الوظيفي (يعود للرقم الوظيفي إن لم تُدخل الهوية)
+        rows = [("رقم الهوية", p["national_id"])] if (p.get("national_id") or "").strip() else [("رقم وظيفي", p.get("enrollment_no", ""))]
+        if p.get("kind") == "academic" and (p.get("academic_no") or "").strip():
+            rows.append(("رقم أكاديمي", p["academic_no"]))
         if (p.get("job_title") or "").strip():
             rows.append(("المسمى", p["job_title"]))
         if (p.get("org_unit_name") or p.get("department_name") or "").strip():
