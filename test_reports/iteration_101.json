@@ -1,0 +1,34 @@
+{
+  "summary": "Full E2E validation of the Teacher Overtime Sheet (كشف الساعات الإضافية للأساتذة). Verified policy CRUD, computed values for seeded teachers (باوزير & بن سميط) against the exact expected numbers in the spec, bonus-enabled/disabled behavior, legacy fields, summary totals, sheet-pdf / sheet-excel exports (including two-sheet workbook with 'كشف الساعات الإضافية' + 'المستحقات المالية'), legacy pdf/excel endpoints, teacher scope, and the full UI flow (summary + sheet views + policy modal). 15/16 backend tests passed (1 skipped — the seeded test teacher account is not linked to a teacher record, which is pre-existing data, not a regression). All critical UI testids present and all interactions functional.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "report-teacher-workload (global)", "issues": ["Console warnings only (non-blocking): RN-Web deprecated 'shadow*' / 'pointerEvents' style props, Require cycle in HR EmployeeFormModal ↔ HrSelect, several 'Unknown event handler' warnings from Pressable/TouchableMixin. Not caused by this feature; pre-existing RN-Web noise."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_teacher_overtime.py",
+    "/app/test_reports/pytest/teacher_overtime.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "teacher_overtime.py: computed per-teacher fields are nested under teacher['summary'] rather than flat on the teacher object. The review request text implied flat fields (e.g. teacher.weekly_quota, teacher.bonus_hours). Current structure works and is internally consistent (frontend reads t.summary.*), but if any external consumer expects flat fields they will break. Consider duplicating a handful of top-level aliases (weekly_hours, required_hours, bonus_hours, overtime_hours, overtime_amount, hourly_rate) for forward compatibility.",
+    "GET /api/reports/teacher-workload for a teacher login whose account is not linked to a teachers document returns 404 with a clear Arabic message — fine, but worth documenting in the API spec so clients can distinguish 'no record' from auth errors.",
+    "Default policy state (bonus_enabled=False) means the seeded expectations only hold after enabling the faculty policy. Tests toggle this on at the start of TestReport. If main agent re-runs seed, remember to re-enable the policy (bonus_divisor=6, rates {'أستاذ مساعد':5000,'أستاذ مشارك':6000}) — this is the state the tests leave the DB in."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_teacher_overtime.py (new)"
+  ],
+  "success_rate": {"backend": "100% (15/15 executed, 1 skipped — unlinked teacher account)", "frontend": "100% (all testids & flows verified)"},
+  "test_credentials": "admin/admin123, teacher180156/teacher123 (teacher account not linked to a teachers record — scope test skipped)",
+  "seed_data_creation": "No new seed. Enabled the faculty overtime policy for faculty_id=698e4f9297fef774e66e93a4 via PUT /api/reports/teacher-workload/policy with bonus_enabled=true, bonus_divisor=6, rates={'أستاذ مساعد':5000,'أستاذ مشارك':6000}, currency='ر.ي' — this is the state the review spec requires and the tests leave it in that state.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test file: /app/backend/tests/test_teacher_overtime.py (pytest, uses mongosh to resolve seeded faculty_id). Faculty seed_ot:true → 698e4f9297fef774e66e93a4 (كلية الشريعة والقانون). Policy is left ENABLED after tests; TestPolicyToggleFlow verifies disable→restore sequence. On the UI, selects are native <select> inside the data-testid wrapper (e.g. '[data-testid=\"tw-faculty-picker\"] select'). Expected UI counts for seeded data: 13 teachers (tw-row-* = 26 because each teacher renders row + row-toggle), sheet-row-* = 29, sheet-overtime-* = 13, sheet-low-cell = 0 (no course <75% in seed).",
+  "rca of the issue": "N/A — no bugs identified in this iteration."
+}
