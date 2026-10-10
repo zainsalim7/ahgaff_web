@@ -228,6 +228,7 @@ from routes.hr_tasks import router as hr_tasks_router
 from routes.course_groups import router as course_groups_router
 from routes.hr_appraisals import router as hr_appraisals_router, public_router as hr_verify_router
 from routes.hr_cards import router as hr_cards_router, public_router as hr_cards_public_router
+from routes.hr_card_print import router as hr_card_print_router
 from routes.hr_letters import router as hr_letters_router, public_router as hr_letters_public_router
 from routes.hr_profile_requests import router as hr_profile_requests_router
 from routes.hr_locations import router as hr_locations_router
@@ -18385,6 +18386,7 @@ app.include_router(hr_letters_router, prefix="/api")
 app.include_router(hr_letters_public_router, prefix="/api")
 app.include_router(hr_cards_router, prefix="/api")
 app.include_router(hr_cards_public_router, prefix="/api")
+app.include_router(hr_card_print_router, prefix="/api")
 app.include_router(hr_router, prefix="/api")
 app.include_router(hr_leaves_router, prefix="/api")
 app.include_router(hr_attendance_router, prefix="/api")

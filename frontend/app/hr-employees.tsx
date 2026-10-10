@@ -112,6 +112,7 @@ export default function HrEmployees() {
             <button onClick={linkUnits} style={btn('#ede9fe', '#6d28d9')} data-testid="hr-link-units-btn">🔗 ربط المعلمين بوحداتهم</button>
             <button onClick={() => router.push('/hr-org-units')} style={btn('#f1f5f9', '#0f2440')} data-testid="hr-goto-org-btn">🏢 الهيكل التنظيمي</button>
             <button onClick={exportXlsx} disabled={exporting} style={btn('#1b5e20')} data-testid="hr-export-btn">{exporting ? '...' : '📊 تصدير Excel'}</button>
+            <button onClick={() => router.push(Object.keys(sel).length ? `/hr-card-print?ids=${Object.keys(sel).join(',')}` : '/hr-card-print')} style={btn('#e0f2f1', '#00796b')} data-testid="hr-print-cards-btn">{Object.keys(sel).length ? `🖨️ طباعة بطاقات المحددين (${Object.keys(sel).length})` : '🖨️ طباعة البطاقات'}</button>
           </div>
         )}
         {canManage && Object.keys(sel).length > 0 && <BulkToolbar ids={Object.keys(sel)} names={Object.values(sel)} meta={meta} units={units} onDone={load} onClear={() => setSel({})} />}

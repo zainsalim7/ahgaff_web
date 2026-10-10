@@ -5,24 +5,24 @@ import { inp } from '../hr/EmployeeFormModal';
 import { filenameFromResponse } from '../../utils/exportName';
 
 /** 🔄 خلفية البطاقة الموحدة: تعليمات قابلة للتحرير + معاينة بقالب الكلية المختارة */
-export const CardBackEditor: React.FC<{ facultyId: string; template: string }> = ({ facultyId, template }) => {
+export const CardBackEditor: React.FC<{ facultyId: string; template: string; basePath?: string; title?: string }> = ({ facultyId, template, basePath = '/cards', title }) => {
   const [d, setD] = useState<any>(null);
   const [linesText, setLinesText] = useState('');
   const [preview, setPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
-  const load = useCallback(async () => { try { const r = await api.get('/cards/back-settings'); setD(r.data); setLinesText((r.data.lines || []).join('\n')); } catch (e) { alertErr(e); } }, []);
+  const load = useCallback(async () => { try { const r = await api.get(`${basePath}/back-settings`); setD(r.data); setLinesText((r.data.lines || []).join('\n')); } catch (e) { alertErr(e); } }, [basePath]);
   useEffect(() => { load(); }, [load]);
   const refreshPreview = useCallback(async () => {
-    if (!facultyId) return;
-    try { const r = await api.get(`/cards/back-preview/${facultyId}`, { responseType: 'blob', params: { t: Date.now() } }); setPreview((p) => { if (p) URL.revokeObjectURL(p); return URL.createObjectURL(r.data); }); } catch { setPreview(''); }
-  }, [facultyId]);
+    if (!facultyId && basePath === '/cards') return;
+    try { const r = await api.get(basePath === '/cards' ? `/cards/back-preview/${facultyId}` : `${basePath}/back-preview`, { responseType: 'blob', params: { t: Date.now() } }); setPreview((p) => { if (p) URL.revokeObjectURL(p); return URL.createObjectURL(r.data); }); } catch { setPreview(''); }
+  }, [facultyId, basePath]);
   useEffect(() => { refreshPreview(); }, [refreshPreview, template]);
   if (!d) return null;
   const save = async () => {
     setSaving(true); setMsg('');
     try {
-      const r = await api.put('/cards/back-settings', { enabled: d.enabled, title: d.title, lines: linesText.split('\n').map((x) => x.trim()).filter(Boolean), footer_note: d.footer_note, show_contact: d.show_contact });
+      const r = await api.put(`${basePath}/back-settings`, { enabled: d.enabled, title: d.title, lines: linesText.split('\n').map((x) => x.trim()).filter(Boolean), footer_note: d.footer_note, show_contact: d.show_contact });
       setMsg(r.data.message); setD({ ...d, ...r.data }); refreshPreview();
     } catch (e) { alertErr(e); } finally { setSaving(false); }
   };
@@ -31,7 +31,7 @@ export const CardBackEditor: React.FC<{ facultyId: string; template: string }> =
   return (
     <div style={{ direction: 'rtl', marginTop: 18, borderTop: '2px dashed #e2e8f0', paddingTop: 14 }} data-testid="card-back-editor">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f2440', flex: 1 }}>🔄 خلفية البطاقة (موحدة لكل الكليات)</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f2440', flex: 1 }}>{title || '🔄 خلفية البطاقة (موحدة لكل الكليات)'}</div>
         <Badge color={d.enabled ? '#16a34a' : '#94a3b8'}>{d.enabled ? 'مفعّلة' : 'معطّلة'}</Badge>
       </div>
       <div style={{ fontSize: 12, color: '#64748b', margin: '4px 0 10px', lineHeight: 1.8 }}>تُطبع الخلفية بلون القالب المختار لكل كلية تلقائياً (الشريط، الخط، الاتجاه)، والتعليمات والتذييل موحّدة على مستوى الجامعة. بيانات التواصل (العنوان/الهاتف/الموقع) تُؤخذ من إعدادات الجامعة.</div>
@@ -64,11 +64,11 @@ export const CardBackEditor: React.FC<{ facultyId: string; template: string }> =
 };
 
 /** 🖨️ خلفيات الدفعة في نموذج الطباعة: مواضع مستقلة للخلفيتين + تنزيل PDF الخلفيات */
-export const BackPrintControls: React.FC<{ st: any; departmentId: string; orientation: string; lastBatchNo?: number | null; count: number }> = ({ st, departmentId, orientation, lastBatchNo, count }) => {
+export const BackPrintControls: React.FC<{ st: any; departmentId: string; orientation: string; lastBatchNo?: number | null; count: number; basePath?: string; ready?: boolean }> = ({ st, departmentId, orientation, lastBatchNo, count, basePath = '/cards', ready }) => {
   const [b, setB] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState('');
-  useEffect(() => { api.get('/cards/back-settings').then((r) => setB(r.data)).catch(() => setB(null)); }, []);
+  useEffect(() => { api.get(`${basePath}/back-settings`).then((r) => setB(r.data)).catch(() => setB(null)); }, [basePath]);
   if (!b) return null;
   const setNum = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setB({ ...b, [k]: e.target.value.replace(/[^0-9.]/g, '') });
   const download = async (batchNo?: number | null) => {
@@ -76,7 +76,7 @@ export const BackPrintControls: React.FC<{ st: any; departmentId: string; orient
     try {
       const settings: any = { card_w: parseFloat(st.card_w), card_h: parseFloat(st.card_h) };
       ['back1_x', 'back1_y', 'back2_x', 'back2_y'].forEach((k) => { settings[k] = parseFloat(b[k]); });
-      const res = await api.post('/cards/batch-back-pdf', batchNo ? { batch_no: batchNo, orientation, settings } : { department_id: departmentId, count, orientation, settings }, { responseType: 'blob', timeout: 300000 });
+      const res = await api.post(`${basePath}/batch-back-pdf`, batchNo ? { batch_no: batchNo, orientation, settings } : { department_id: departmentId, count, orientation, settings }, { responseType: 'blob', timeout: 300000 });
       const url = URL.createObjectURL(new Blob([res.data])); const a = document.createElement('a'); a.href = url; a.download = filenameFromResponse(res, 'خلفيات البطاقات.pdf'); a.click(); URL.revokeObjectURL(url);
       setMsg('✅ تم إنشاء ملف الخلفيات وحفظ مواضعها');
     } catch (e: any) {
@@ -105,7 +105,7 @@ export const BackPrintControls: React.FC<{ st: any; departmentId: string; orient
       {msg && <div style={{ fontSize: 12.5, color: msg.startsWith('✅') ? '#2e7d32' : '#c62828', marginBottom: 6 }} data-testid="print-back-msg">{msg}</div>}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
         {lastBatchNo ? <button onClick={() => download(lastBatchNo)} disabled={busy || !b.enabled} style={btn('#e65100')} data-testid="print-back-last-batch-btn">{busy ? '...' : `🔄 خلفيات الدفعة #${lastBatchNo}`}</button> : null}
-        <button onClick={() => download(null)} disabled={busy || !b.enabled || !departmentId || !count} style={btn(lastBatchNo ? '#fff3e0' : '#e65100', lastBatchNo ? '#e65100' : '#fff')} data-testid="print-back-count-btn">{busy ? '...' : `🔄 خلفيات لـ ${count || 0} بطاقة (التحديد الحالي)`}</button>
+        <button onClick={() => download(null)} disabled={busy || !b.enabled || (ready === undefined ? !departmentId : !ready) || !count} style={btn(lastBatchNo ? '#fff3e0' : '#e65100', lastBatchNo ? '#e65100' : '#fff')} data-testid="print-back-count-btn">{busy ? '...' : `🔄 خلفيات لـ ${count || 0} بطاقة (التحديد الحالي)`}</button>
       </div>
     </div>
   );

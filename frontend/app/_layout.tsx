@@ -200,6 +200,7 @@ export default function RootLayout() {
           <Stack.Screen name="hr-letters" options={{ title: 'الخطابات الرسمية' }} />
           <Stack.Screen name="hr-profile-requests" options={{ title: 'طلبات تعديل البيانات' }} />
           <Stack.Screen name="hr-photo-approvals" options={{ title: 'اعتماد صور البطاقات' }} />
+          <Stack.Screen name="hr-card-print" options={{ title: 'طباعة بطاقات الموظفين' }} />
           <Stack.Screen name="hr-locations" options={{ title: 'مواقع العمل والتحقق الجغرافي' }} />
           <Stack.Screen name="hr-presence-checks" options={{ title: 'تأكيد التواجد العشوائي' }} />
           <Stack.Screen name="hr-work-settings" options={{ title: 'إعدادات الدوام والفترات' }} />
