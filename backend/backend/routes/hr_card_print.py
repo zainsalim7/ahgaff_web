@@ -11,7 +11,7 @@ from bson import ObjectId
 from .deps import get_db, get_current_user, export_filename, export_headers
 from .hr_common import P_MANAGE, _can_view, _guard, _descendants, hr_scope_units, scope_filter, _now
 from .hr import CATEGORIES, STATUSES
-from .hr_cards import card_payload, _hr_card_settings
+from .hr_cards import card_payload, _hr_card_settings, render_employee_png
 from .student_cards import (
     DEFAULT_PRINT_SETTINGS, ORIENTATIONS, DEFAULT_CARD_FONT, DEFAULT_BACK_SETTINGS,
     _render_card_png, _render_card_back_png, BackSettingsIn,
@@ -180,18 +180,7 @@ def _rotate(png: bytes) -> bytes:
 
 
 async def _render_employee_png(db, emp: dict, base: str, s: dict) -> bytes:
-    p = await card_payload(db, emp, base)
-    payload = {**p, **s, "student_name": p["full_name"], "enrollment_no": p["number"],
-               "academic_year": f"{(p.get('issued_at') or '')[:4]}-{(p.get('valid_until') or '')[:4]}".strip("-"),
-               "level": 1, "section": "", "validity_text": f"سارية حتى {(p.get('valid_until') or '')[:10]}"}
-    photo_bytes = None
-    if emp.get("photo_path"):
-        try:
-            from services.storage_service import get_object
-            photo_bytes, _ = get_object(emp["photo_path"])
-        except Exception:
-            photo_bytes = None
-    return _render_card_png(payload, photo_bytes, p["verify_url"])
+    return await render_employee_png(db, emp, base, s)
 
 
 @router.post("/cards/batch-pdf")

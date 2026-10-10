@@ -340,14 +340,19 @@ async def _hr_card_settings(db) -> dict:
     return {"template": doc.get("template", "green"), "font": doc.get("font") or DEFAULT_CARD_FONT}
 
 
-async def _render_employee_card(db, emp: dict, base: str, fmt: str):
-    from .student_cards import _render_card_png, export_filename, export_headers
-    from fastapi.responses import StreamingResponse
-    import io
+def render_payload(p: dict, s: dict) -> dict:
+    """تحويل بيانات الموظف إلى حمولة الرسم — بطاقة موظف/أكاديمية (لا حقول طالب)"""
+    kind = "academic" if p.get("kind") == "academic" else "employee"
+    return {**p, **s, "kind": kind, "title_ar": p.get("kind_label") or ("بطاقة أكاديمية" if kind == "academic" else "بطاقة وظيفية"),
+            "student_name": p["full_name"], "enrollment_no": p["number"],
+            "academic_year": f"{(p.get('issued_at') or '')[:4]}-{(p.get('valid_until') or '')[:4]}".strip("-"),
+            "validity_text": f"سارية حتى {(p.get('valid_until') or '')[:10]}"}
+
+
+async def render_employee_png(db, emp: dict, base: str, s: Optional[dict] = None) -> bytes:
+    from .student_cards import _render_card_png
     p = await card_payload(db, emp, base)
-    s = await _hr_card_settings(db)
-    payload = {**p, **s, "student_name": p["full_name"], "enrollment_no": p["number"], "academic_year": f"{(p.get('issued_at') or '')[:4]}-{(p.get('valid_until') or '')[:4]}".strip("-"),
-               "level": 1, "section": "", "validity_text": f"سارية حتى {(p.get('valid_until') or '')[:10]}"}
+    s = s or await _hr_card_settings(db)
     photo_bytes = None
     if emp.get("photo_path"):
         try:
@@ -355,7 +360,16 @@ async def _render_employee_card(db, emp: dict, base: str, fmt: str):
             photo_bytes, _ = get_object(emp["photo_path"])
         except Exception:
             photo_bytes = None
-    png = _render_card_png(payload, photo_bytes, p["verify_url"])
+    return _render_card_png(render_payload(p, s), photo_bytes, p["verify_url"])
+
+
+async def _render_employee_card(db, emp: dict, base: str, fmt: str):
+    from .student_cards import export_filename, export_headers
+    from fastapi.responses import StreamingResponse
+    import io
+    p = await card_payload(db, emp, base)
+    s = await _hr_card_settings(db)
+    png = await render_employee_png(db, emp, base, s)
     label = ("بطاقة موظف", p["full_name"], p["number"])
     if fmt == "png":
         return StreamingResponse(io.BytesIO(png), media_type="image/png", headers=export_headers(export_filename(*label, ext="png")))
