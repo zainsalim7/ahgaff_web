@@ -30,14 +30,17 @@ async def seed():
                                                               "$set": {"faculty_id": dept["faculty_id"], "department_id": DEPT}}, upsert=True)
     courses = await db.courses.find({"department_id": DEPT, "is_active": True}).limit(2).to_list(2)
     assert len(courses) >= 2, "يلزم مقرران في القسم"
-    for c in courses:
-        await db.courses.update_one({"_id": c["_id"]}, {"$set": {"faculty_id": dept["faculty_id"]}})
+    # المقرر الأول للأستاذ 1 والثاني للأستاذ 2 (المحاضرات بلا teacher_id صريح كما في الواقع)
+    await db.courses.update_one({"_id": courses[0]["_id"]}, {"$set": {"faculty_id": dept["faculty_id"], "teacher_id": t1_id}})
+    await db.courses.update_one({"_id": courses[1]["_id"]}, {"$set": {"faculty_id": dept["faculty_id"], "teacher_id": t2_id}})
     today = datetime.utcnow()
     sat = today + timedelta(days=(5 - today.weekday()) % 7 + 7)
     mon = sat + timedelta(days=2)
     await db.lectures.delete_many({"swap_test": True})
-    la = {"course_id": str(courses[0]["_id"]), "course_name": courses[0]["name"], "teacher_id": t1_id, "teacher_name": t1.get("full_name"), "date": sat.strftime("%Y-%m-%d"), "start_time": "08:00", "end_time": "09:15", "status": "scheduled", "room": "قاعة اختبار", "swap_test": True, "created_at": datetime.utcnow().isoformat()}
-    lb = {"course_id": str(courses[1]["_id"]), "course_name": courses[1]["name"], "teacher_id": t2_id, "teacher_name": t2u.get("full_name"), "date": mon.strftime("%Y-%m-%d"), "start_time": "10:00", "end_time": "11:15", "status": "scheduled", "room": "قاعة اختبار", "swap_test": True, "created_at": datetime.utcnow().isoformat()}
+    sem = await db.semesters.find_one({"$or": [{"status": "active"}, {"is_active": True}]})
+    sem_fields = {"semester_id": str(sem["_id"]), "semester_name": sem.get("name", "")} if sem else {}
+    la = {**sem_fields, "course_id": str(courses[0]["_id"]), "course_name": courses[0]["name"], "date": sat.strftime("%Y-%m-%d"), "start_time": "08:00", "end_time": "09:15", "status": "scheduled", "room": "قاعة اختبار", "swap_test": True, "created_at": datetime.utcnow().isoformat()}
+    lb = {**sem_fields, "course_id": str(courses[1]["_id"]), "course_name": courses[1]["name"], "teacher_id": t2_id, "teacher_name": t2u.get("full_name"), "date": mon.strftime("%Y-%m-%d"), "start_time": "10:00", "end_time": "11:15", "status": "scheduled", "room": "قاعة اختبار", "swap_test": True, "created_at": datetime.utcnow().isoformat()}
     ra, rb = await db.lectures.insert_one(la), await db.lectures.insert_one(lb)
     return str(ra.inserted_id), str(rb.inserted_id), t1_id, t2_id, db
 
@@ -83,15 +86,25 @@ async def main():
     lst = requests.get(f"{API}/api/lecture-swaps", headers=HH).json()
     item = next(i for i in lst["items"] if i["id"] == sid)
     assert item["can_cancel"] and item["teacher_a_name"] and item["history"][0]["step"] == "apply", item
-    n = await db.notifications.count_documents({"type": "lecture_swap", "data.swap_id": sid})
+    n = await db.notifications.count_documents({"type": "lecture_swap", "swap_id": sid})
     print("✓ list ok, teacher notifications:", n)
+    # رؤية الأستاذين في تطبيق المحاضرات: A تظهر للبديل فقط
+    y, m = int(item["lecture_a"]["date"][:4]), int(item["lecture_a"]["date"][5:7])
+    H2 = login("9999", "teacher123")
+    mine1 = requests.get(f"{API}/api/lectures/month/{y}/{m}", headers=HT).json()
+    mine2 = requests.get(f"{API}/api/lectures/month/{y}/{m}", headers=H2).json()
+    ids1 = {l.get("id") for l in (mine1 if isinstance(mine1, list) else mine1.get("lectures", []))}
+    ids2 = {l.get("id") for l in (mine2 if isinstance(mine2, list) else mine2.get("lectures", []))}
+    assert la not in ids1 and la in ids2, ("A visible to:", la in ids1, la in ids2)
+    assert lb in ids1 and lb not in ids2, ("B visible to:", lb in ids1, lb in ids2)
+    print("✓ teacher views: A → substitute only, B → original only")
     # 4) الإلغاء والإرجاع
     r = requests.post(f"{API}/api/lecture-swaps/{sid}/cancel", json={"note": "اختبار"}, headers=HH)
     assert r.status_code == 200, r.text
     A = await db.lectures.find_one({"_id": ObjectId(la)})
     B = await db.lectures.find_one({"_id": ObjectId(lb)})
-    assert A["teacher_id"] == t1_id and "swap_id" not in A and B["teacher_id"] == t2_id, (A, B)
-    print("✓ cancel reverted both lectures")
+    assert A.get("teacher_id") is None and "swap_id" not in A and B["teacher_id"] == t2_id, (A, B)
+    print("✓ cancel reverted both lectures (A back to course teacher, no explicit teacher_id)")
     rep = requests.get(f"{API}/api/lecture-swaps/report", headers=HH).json()
     print("✓ report:", {k: rep[k] for k in ("total", "swaps", "covers")})
     await db.lectures.delete_many({"swap_test": True})

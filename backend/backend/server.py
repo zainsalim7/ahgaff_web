@@ -8170,7 +8170,7 @@ async def _attach_group_courses(lectures: list, course_map: dict, teacher_id: Op
     missing = set()
     for lec in lectures:
         lt = lec.get("teacher_id")
-        if lec.get("course_id") in course_map and lt and lt != teacher_id and lec.get("group"):
+        if lec.get("course_id") in course_map and lt and lt != teacher_id and (lec.get("group") or lec.get("swap_id")):
             continue
         out.append(lec)
         if lec.get("course_id") not in course_map:
@@ -10940,6 +10940,8 @@ async def record_attendance_session(
         teacher_record_id = user_doc.get("teacher_record_id") if user_doc else None
         # المقارنة بكلا المعرفين: user_id و teacher_record_id — أو مدرّس المجموعة المُسند للمحاضرة 👥
         _lec_teacher = lecture.get("teacher_id")
+        if lecture.get("swap_id") and _lec_teacher not in (current_user["id"], teacher_record_id):
+            raise HTTPException(status_code=403, detail=f"هذه المحاضرة أُسندت بالتبادل/الإنابة إلى أ. {lecture.get('teacher_name') or 'زميل آخر'} — هو من يسجّل حضورها")
         if course["teacher_id"] != current_user["id"] and course["teacher_id"] != teacher_record_id \
                 and _lec_teacher not in (current_user["id"], teacher_record_id):
             raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")

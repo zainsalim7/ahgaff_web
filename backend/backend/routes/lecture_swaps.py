@@ -80,10 +80,29 @@ async def _teacher_name(db, teacher_id: str) -> str:
     return (u or {}).get("full_name", "")
 
 
+async def _teacher_course_ids(db, teacher_id: str) -> List[str]:
+    return [str(c["_id"]) for c in await db.courses.find({"teacher_id": teacher_id, "is_active": {"$ne": False}}, {"_id": 1}).to_list(500)]
+
+
+async def _teacher_lectures_query(db, teacher_id: str) -> dict:
+    """محاضرات الأستاذ الفعلية: teacher_id صريح، أو محاضرات مقرراته التي لم تُسند لغيره (مجموعة/تبادل)"""
+    cids = await _teacher_course_ids(db, teacher_id)
+    return {"$or": [{"teacher_id": teacher_id}, {"course_id": {"$in": cids}, "teacher_id": {"$in": [None, teacher_id]}}]}
+
+
+async def _effective_teacher(db, lec: dict) -> Optional[str]:
+    if lec.get("teacher_id"):
+        return lec["teacher_id"]
+    c = await db.courses.find_one({"_id": _oid(lec.get("course_id"))}, {"teacher_id": 1}) if _oid(lec.get("course_id")) else None
+    return (c or {}).get("teacher_id") or None
+
+
 async def _busy(db, teacher_id: str, date: str, start: str, end: str, exclude_ids: List[str]) -> Optional[str]:
     """هل الأستاذ مشغول بمحاضرة أخرى تتقاطع زمنياً في هذا التاريخ؟ (الإجازات المعتمدة أيضاً)"""
-    q = {"teacher_id": teacher_id, "date": date, "status": {"$nin": ["cancelled", "deleted"]}, "_id": {"$nin": [_oid(x) for x in exclude_ids if _oid(x)]}}
-    async for l in db.lectures.find(q, {"start_time": 1, "end_time": 1, "course_name": 1}):
+    q = {**await _teacher_lectures_query(db, teacher_id), "date": date, "status": {"$nin": ["cancelled", "deleted"]}, "_id": {"$nin": [_oid(x) for x in exclude_ids if _oid(x)]}}
+    lecs = await db.lectures.find(q, {"start_time": 1, "end_time": 1, "course_name": 1, "course_id": 1}).to_list(50)
+    await _enrich_lectures(db, lecs)
+    for l in lecs:
         if (l.get("start_time") or "00:00") < (end or "23:59") and (l.get("end_time") or "23:59") > (start or "00:00"):
             return f"لديه محاضرة «{l.get('course_name', '')}» {l.get('start_time')}–{l.get('end_time')}"
     uids = await _teacher_user_ids(db, teacher_id)
@@ -157,13 +176,13 @@ async def teacher_lectures(teacher_id: str, date_from: Optional[str] = None, dat
     today = (_now() + timedelta(hours=3)).strftime("%Y-%m-%d")
     start = max(date_from or today, today)
     until = date_to or (_now() + timedelta(days=30)).strftime("%Y-%m-%d")
-    lecs = await db.lectures.find({"teacher_id": teacher_id, "status": "scheduled", "date": {"$gte": start, "$lte": until}}).sort([("date", 1), ("start_time", 1)]).to_list(300)
+    lecs = await db.lectures.find({**await _teacher_lectures_query(db, teacher_id), "status": "scheduled", "date": {"$gte": start, "$lte": until}}).sort([("date", 1), ("start_time", 1)]).to_list(300)
     await _enrich_lectures(db, lecs)
     out = []
     for l in lecs:
         past = _lec_dt(l) <= _now()
-        out.append({**_lec_view(l), "eligible": not past and not l.get("swap_id"), "reason": "سبق تبادلها" if l.get("swap_id") else ("انقضى موعدها" if past else "")})
-    return {"lectures": out, "settings": await get_settings(db)}
+        out.append({**_lec_view(l), "teacher_id": teacher_id, "eligible": not past and not l.get("swap_id"), "reason": "سبق تبادلها" if l.get("swap_id") else ("انقضى موعدها" if past else "")})
+    return {"lectures": out, "range": [start, until], "settings": await get_settings(db)}
 
 
 @router.get("/candidates")
@@ -183,7 +202,7 @@ async def candidates(lecture_id: str, type: str = "swap", current_user: dict = D
         tq["faculty_id"] = fac
     teachers = await db.teachers.find(tq, {"full_name": 1, "department_id": 1}).to_list(1000)
     ws, we = _week_range(lec["date"])
-    a_tid = lec.get("teacher_id")
+    a_tid = await _effective_teacher(db, lec)
     out = []
     for t in teachers:
         tid = str(t["_id"])
@@ -192,7 +211,7 @@ async def candidates(lecture_id: str, type: str = "swap", current_user: dict = D
         busy = await _busy(db, tid, lec["date"], lec.get("start_time"), lec.get("end_time"), [lecture_id])
         item = {"teacher_id": tid, "full_name": t.get("full_name"), "department_id": t.get("department_id"), "available": not busy, "busy_reason": busy, "swappable": []}
         if type == "swap" and not busy:
-            theirs = await db.lectures.find({"teacher_id": tid, "status": "scheduled", "date": {"$gte": ws, "$lte": we}, "swap_id": {"$exists": False}}).sort([("date", 1), ("start_time", 1)]).to_list(60)
+            theirs = await db.lectures.find({**await _teacher_lectures_query(db, tid), "status": "scheduled", "date": {"$gte": ws, "$lte": we}, "swap_id": {"$exists": False}}).sort([("date", 1), ("start_time", 1)]).to_list(60)
             await _enrich_lectures(db, theirs)
             for l in theirs:
                 if _lec_dt(l) <= _now():
@@ -217,27 +236,32 @@ async def _apply(db, swap: dict):
     """تطبيق التبادل على المحاضرتين: المنفّذ الفعلي يصبح teacher_id مع حفظ الأصل"""
     a, b = swap["lecture_a"], swap.get("lecture_b")
     sid = str(swap["_id"])
-    pairs = [(a, swap["teacher_b_id"], swap["teacher_b_name"])] + ([(b, swap["teacher_a_id"], swap["teacher_a_name"])] if b else [])
-    for lec, new_tid, new_name in pairs:
+    pairs = [(a, swap["teacher_a_id"], swap["teacher_a_name"], swap["teacher_b_id"], swap["teacher_b_name"])] + ([(b, swap["teacher_b_id"], swap["teacher_b_name"], swap["teacher_a_id"], swap["teacher_a_name"])] if b else [])
+    for lec, orig_tid, orig_name, new_tid, new_name in pairs:
         await db.lectures.update_one({"_id": _oid(lec["id"]), "status": "scheduled"}, {"$set": {
-            "original_teacher_id": lec["teacher_id"], "original_teacher_name": lec.get("teacher_name"), "teacher_id": new_tid, "teacher_name": new_name,
-            "swap_id": sid, "swap_type": swap["type"], "swapped_at": _now().isoformat()}})
+            "original_teacher_id": orig_tid, "original_teacher_name": orig_name, "had_explicit_teacher": bool(lec.get("teacher_id")),
+            "teacher_id": new_tid, "teacher_name": new_name, "swap_id": sid, "swap_type": swap["type"], "swapped_at": _now().isoformat()}})
 
 
 async def _revert(db, swap: dict):
     for lec in [swap["lecture_a"]] + ([swap["lecture_b"]] if swap.get("lecture_b") else []):
-        await db.lectures.update_one({"_id": _oid(lec["id"]), "swap_id": str(swap["_id"]), "status": "scheduled"},
-                                     {"$set": {"teacher_id": lec["teacher_id"], "teacher_name": lec.get("teacher_name")}, "$unset": {"original_teacher_id": "", "original_teacher_name": "", "swap_id": "", "swap_type": "", "swapped_at": ""}})
+        unset = {"original_teacher_id": "", "original_teacher_name": "", "had_explicit_teacher": "", "swap_id": "", "swap_type": "", "swapped_at": ""}
+        upd: dict = {"$unset": unset}
+        if lec.get("teacher_id"):
+            upd["$set"] = {"teacher_id": lec["teacher_id"], "teacher_name": lec.get("teacher_name")}
+        else:
+            unset.update({"teacher_id": "", "teacher_name": ""})
+        await db.lectures.update_one({"_id": _oid(lec["id"]), "swap_id": str(swap["_id"]), "status": "scheduled"}, upd)
 
 
 async def _notify_students(db, swap: dict):
-    for lec, new_name in [(swap["lecture_a"], swap["teacher_b_name"])] + ([(swap["lecture_b"], swap["teacher_a_name"])] if swap.get("lecture_b") else []):
+    for lec, old_name, new_name in [(swap["lecture_a"], swap["teacher_a_name"], swap["teacher_b_name"])] + ([(swap["lecture_b"], swap["teacher_b_name"], swap["teacher_a_name"])] if swap.get("lecture_b") else []):
         q = {"course_id": lec["course_id"]}
         if lec.get("group"):
             q["group"] = lec["group"]
         sids = [e["student_id"] for e in await db.enrollments.find(q, {"student_id": 1}).to_list(500)]
         uids = [s["user_id"] for s in await db.students.find({"_id": {"$in": [o for o in (_oid(s) for s in sids) if o]}, "user_id": {"$exists": True}}, {"user_id": 1}).to_list(500)]
-        await notify_users(db, uids, "تغيير أستاذ المحاضرة 🔁", f"محاضرة «{lec.get('course_name')}» يوم {lec['date']} {lec.get('start_time')} سينفّذها أ. {new_name} بدلاً من أ. {lec.get('teacher_name')}", "lecture_swap", {"lecture_id": lec["id"]})
+        await notify_users(db, uids, "تغيير أستاذ المحاضرة 🔁", f"محاضرة «{lec.get('course_name')}» يوم {lec['date']} {lec.get('start_time')} سينفّذها أ. {new_name} بدلاً من أ. {old_name}", "lecture_swap", {"lecture_id": lec["id"]})
 
 
 @router.post("")
@@ -251,7 +275,8 @@ async def create_swap(data: SwapIn, current_user: dict = Depends(get_current_use
     if data.type not in ("swap", "cover") or (data.type == "cover" and not st["allow_cover"]):
         raise HTTPException(status_code=400, detail="نوع العملية غير مسموح")
     lec_a = await db.lectures.find_one({"_id": _oid(data.lecture_a_id)}) if _oid(data.lecture_a_id) else None
-    if not lec_a or not lec_a.get("teacher_id"):
+    a_tid = await _effective_teacher(db, lec_a) if lec_a else None
+    if not lec_a or not a_tid:
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة أو بلا أستاذ مسند")
     course_a = await db.courses.find_one({"_id": _oid(lec_a["course_id"])}) or {}
     if not _in_scope(current_user, course_a):
@@ -264,7 +289,6 @@ async def create_swap(data: SwapIn, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=400, detail="يوجد تبادل قائم على هذه المحاضرة بالفعل")
     if _lec_dt(lec_a) <= _now():
         raise HTTPException(status_code=400, detail="انقضى موعد المحاضرة")
-    a_tid = lec_a["teacher_id"]
     cp = data.counterpart_teacher_id
     if cp == a_tid:
         raise HTTPException(status_code=400, detail="لا يمكن التبادل مع الأستاذ نفسه")
@@ -276,7 +300,7 @@ async def create_swap(data: SwapIn, current_user: dict = Depends(get_current_use
     lec_b = None
     if data.type == "swap":
         lec_b = await db.lectures.find_one({"_id": _oid(data.lecture_b_id)}) if _oid(data.lecture_b_id) else None
-        if not lec_b or lec_b.get("teacher_id") != cp or lec_b.get("status") != "scheduled":
+        if not lec_b or (await _effective_teacher(db, lec_b)) != cp or lec_b.get("status") != "scheduled":
             raise HTTPException(status_code=400, detail="محاضرة الأستاذ البديل غير صالحة للتبادل")
         if lec_b.get("swap_id"):
             raise HTTPException(status_code=400, detail="محاضرة الأستاذ البديل سبق تبادلها")

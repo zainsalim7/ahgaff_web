@@ -8,6 +8,35 @@ const STATUS: Record<string, [string, string]> = {
   approved: ['مطبّق', '#16a34a'], executed: ['نُفّذ', '#0f766e'], cancelled: ['ملغى', '#64748b'],
 };
 const lecTxt = (l: any) => l ? `${l.course_name || ''}${l.group_name ? ` (${l.group_name})` : ''} — ${l.date} ${l.start_time || ''}` : '';
+const norm = (s: string) => (s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase();
+const match = (name: string, q: string) => !q || norm(name).includes(norm(q));
+
+type PickItem = { id: string; label: string; disabled?: boolean; hint?: string };
+const TeacherPicker: React.FC<{ items: PickItem[]; value: string; onChange: (id: string) => void; placeholder: string; testID: string }> = ({ items, value, onChange, placeholder, testID }) => {
+  const [q, setQ] = useState('');
+  const [open, setOpen] = useState(false);
+  const selected = items.find((i) => i.id === value);
+  const list = items.filter((i) => match(i.label, q)).slice(0, 60);
+  return (
+    <div style={{ position: 'relative' }} data-testid={testID}>
+      <input value={open ? q : (selected?.label || '')} placeholder={placeholder}
+        onFocus={() => { setQ(''); setOpen(true); }} onBlur={() => setTimeout(() => setOpen(false), 150)}
+        onChange={(e: any) => { setQ(e.target.value); setOpen(true); }} style={{ ...inp, background: selected && !open ? '#ecfeff' : '#fff' }} data-testid={`${testID}-input`} />
+      {selected && !open && <button onMouseDown={(e) => { e.preventDefault(); onChange(''); }} style={{ position: 'absolute', left: 8, top: 8, border: 'none', background: 'none', cursor: 'pointer', color: '#64748b' }} data-testid={`${testID}-clear`}>✕</button>}
+      {open && (
+        <div style={{ position: 'absolute', top: '100%', right: 0, left: 0, zIndex: 50, background: '#fff', border: '1px solid #cbd5e1', borderRadius: 8, maxHeight: 240, overflowY: 'auto', boxShadow: '0 8px 24px rgba(15,36,64,0.15)' }} data-testid={`${testID}-list`}>
+          {list.length === 0 && <div style={{ padding: 10, fontSize: 12, color: '#64748b' }}>لا نتائج</div>}
+          {list.map((i) => (
+            <div key={i.id} onMouseDown={(e) => { e.preventDefault(); if (i.disabled) return; onChange(i.id); setOpen(false); }}
+              style={{ padding: '8px 10px', fontSize: 13, cursor: i.disabled ? 'not-allowed' : 'pointer', color: i.disabled ? '#94a3b8' : '#0f2440', background: i.id === value ? '#e0f2f1' : 'transparent', borderBottom: '1px solid #f1f5f9' }} data-testid={`${testID}-opt-${i.id}`}>
+              {i.disabled ? '✗ ' : ''}{i.label}{i.hint ? <span style={{ fontSize: 11, color: '#b91c1c' }}> — {i.hint}</span> : null}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function LectureSwapsScreen() {
   const [items, setItems] = useState<any[]>([]);
@@ -25,12 +54,8 @@ export default function LectureSwapsScreen() {
   const [filter, setFilter] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
-  const [qA, setQA] = useState('');
-  const [qB, setQB] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const norm = (s: string) => (s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase();
-  const match = (name: string, q: string) => !q || norm(name).includes(norm(q));
 
   const load = async () => {
     setLoading(true);
@@ -54,7 +79,7 @@ export default function LectureSwapsScreen() {
     api.get('/lecture-swaps/candidates', { params: { lecture_id: lectureA, type } }).then((r) => setCands(r.data)).catch((e) => setErr(e?.response?.data?.detail || 'تعذر جلب الأساتذة'));
   }, [lectureA, type]);
 
-  const resetForm = () => { setShowNew(false); setTeacherA(''); setLectureA(''); setReason(''); setErr(''); setQA(''); setQB(''); setDateFrom(''); setDateTo(''); };
+  const resetForm = () => { setShowNew(false); setTeacherA(''); setLectureA(''); setReason(''); setErr(''); setDateFrom(''); setDateTo(''); };
   const act = async (path: string, body: any, okMsg: string) => {
     setBusy(true); setErr('');
     try { await api.post(path, body); notify('تم ✅', okMsg); resetForm(); await load(); }
@@ -62,9 +87,8 @@ export default function LectureSwapsScreen() {
   };
   const selTeacher = cands?.teachers?.find((t: any) => t.teacher_id === cp);
   const canSubmit = !!lectureA && !!cp && (type === 'cover' || !!lectureB) && !busy;
-  const teachersA = teachers.filter((t: any) => match(t.full_name, qA));
-  const teachersB = (cands?.teachers || []).filter((t: any) => match(t.full_name, qB));
-  const searchStyle = { ...inp, marginBottom: 6, background: '#f8fafc' } as any;
+  const itemsA: PickItem[] = teachers.map((t: any) => ({ id: t.teacher_id, label: t.full_name }));
+  const itemsB: PickItem[] = (cands?.teachers || []).map((t: any) => ({ id: t.teacher_id, label: t.full_name, disabled: !t.available, hint: t.busy_reason || undefined }));
   const [qList, setQList] = useState('');
   const shown = items.filter((s) => match(`${s.teacher_a_name} ${s.teacher_b_name} ${s.lecture_a?.course_name || ''} ${s.lecture_b?.course_name || ''}`, qList));
 
@@ -105,12 +129,8 @@ export default function LectureSwapsScreen() {
             <button onClick={() => setType('swap')} style={btn(type === 'swap' ? '#00838f' : '#94a3b8')} data-testid="swap-type-swap">🔁 تبادل (محاضرة مقابل محاضرة)</button>
             <button onClick={() => setType('cover')} style={btn(type === 'cover' ? '#00838f' : '#94a3b8')} data-testid="swap-type-cover">🤝 إنابة (بدون مقابل)</button>
           </div>
-          <label style={lbl}>الأستاذ الأصلي</label>
-          <input value={qA} onChange={(e: any) => setQA(e.target.value)} placeholder="🔍 ابحث باسم الأستاذ…" style={searchStyle} data-testid="swap-search-a" />
-          <select value={teacherA} onChange={(e: any) => setTeacherA(e.target.value)} style={inp} data-testid="swap-teacher-a" size={qA ? Math.min(6, Math.max(2, teachersA.length + 1)) : undefined}>
-            <option value="">-- اختر الأستاذ ({teachersA.length}) --</option>
-            {teachersA.map((t: any) => <option key={t.teacher_id} value={t.teacher_id}>{t.full_name}</option>)}
-          </select>
+          <label style={lbl}>الأستاذ الأصلي ({teachers.length})</label>
+          <TeacherPicker items={itemsA} value={teacherA} onChange={setTeacherA} placeholder="🔍 اكتب اسم الأستاذ للبحث ثم اختر…" testID="swap-teacher-a" />
           {teacherA && (
             <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }} data-testid="swap-date-range">
               <label style={{ ...lbl, margin: 0 }}>📅 حصر المحاضرات بين</label>
@@ -124,7 +144,7 @@ export default function LectureSwapsScreen() {
           {lecsA && (
             <>
               <label style={{ ...lbl, marginTop: 10 }}>محاضرته التي سيتم {type === 'swap' ? 'تبادلها' : 'الإنابة عنها'} ({lecsA.lectures.length})</label>
-              {lecsA.lectures.length === 0 ? <div style={{ fontSize: 12, color: '#b91c1c' }}>لا توجد محاضرات مجدولة لهذا الأستاذ في هذه الفترة</div> : (
+              {lecsA.lectures.length === 0 ? <div style={{ fontSize: 12, color: '#b91c1c' }}>لا توجد محاضرات يومية مجدولة لهذا الأستاذ بين {lecsA.range?.[0]} و {lecsA.range?.[1]} — جرّب توسيع نطاق التاريخ أعلاه (التبادل يعمل على المحاضرات اليومية المولّدة، لا على الجدول الأسبوعي)</div> : (
                 <select value={lectureA} onChange={(e: any) => setLectureA(e.target.value)} style={inp} data-testid="swap-lecture-a">
                   <option value="">-- اختر المحاضرة --</option>
                   {lecsA.lectures.map((l: any) => <option key={l.id} value={l.id} disabled={!l.eligible}>{lecTxt(l)}{!l.eligible ? ` — ${l.reason}` : ''}</option>)}
@@ -134,12 +154,8 @@ export default function LectureSwapsScreen() {
           )}
           {cands && (
             <>
-              <label style={{ ...lbl, marginTop: 10 }}>الأستاذ البديل (الأسبوع {cands.week[0]} → {cands.week[1]}) — المتاحون وقت المحاضرة أولاً</label>
-              <input value={qB} onChange={(e: any) => setQB(e.target.value)} placeholder="🔍 ابحث باسم الأستاذ البديل…" style={searchStyle} data-testid="swap-search-b" />
-              <select value={cp} onChange={(e: any) => { setCp(e.target.value); setLectureB(''); }} style={inp} data-testid="swap-counterpart" size={qB ? Math.min(6, Math.max(2, teachersB.length + 1)) : undefined}>
-                <option value="">-- اختر الأستاذ البديل ({teachersB.length}) --</option>
-                {teachersB.map((t: any) => <option key={t.teacher_id} value={t.teacher_id} disabled={!t.available}>{t.available ? '✓ ' : '✗ '}{t.full_name}{!t.available ? ` — ${t.busy_reason}` : ''}</option>)}
-              </select>
+              <label style={{ ...lbl, marginTop: 10 }}>الأستاذ البديل (الأسبوع {cands.week[0]} → {cands.week[1]}) — المشغولون معطّلون مع السبب</label>
+              <TeacherPicker items={itemsB} value={cp} onChange={(id) => { setCp(id); setLectureB(''); }} placeholder="🔍 اكتب اسم الأستاذ البديل للبحث ثم اختر…" testID="swap-counterpart" />
               {type === 'swap' && selTeacher && (
                 <>
                   <label style={{ ...lbl, marginTop: 10 }}>محاضرة البديل التي سينفّذها الأستاذ الأصلي بالمقابل</label>
