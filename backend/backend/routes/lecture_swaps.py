@@ -150,13 +150,14 @@ async def teachers_in_scope(current_user: dict = Depends(get_current_user)):
 
 
 @router.get("/teacher-lectures")
-async def teacher_lectures(teacher_id: str, current_user: dict = Depends(get_current_user)):
-    """محاضرات الأستاذ المجدولة القادمة (30 يوماً) القابلة للتبادل/الإنابة"""
+async def teacher_lectures(teacher_id: str, date_from: Optional[str] = None, date_to: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """محاضرات الأستاذ المجدولة القادمة القابلة للتبادل/الإنابة (افتراضياً 30 يوماً، أو نطاق تاريخ محدد)"""
     _require_operator(current_user)
     db = get_db()
     today = (_now() + timedelta(hours=3)).strftime("%Y-%m-%d")
-    until = (_now() + timedelta(days=30)).strftime("%Y-%m-%d")
-    lecs = await db.lectures.find({"teacher_id": teacher_id, "status": "scheduled", "date": {"$gte": today, "$lte": until}}).sort([("date", 1), ("start_time", 1)]).to_list(300)
+    start = max(date_from or today, today)
+    until = date_to or (_now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    lecs = await db.lectures.find({"teacher_id": teacher_id, "status": "scheduled", "date": {"$gte": start, "$lte": until}}).sort([("date", 1), ("start_time", 1)]).to_list(300)
     await _enrich_lectures(db, lecs)
     out = []
     for l in lecs:

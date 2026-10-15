@@ -1014,3 +1014,4 @@
 - الإعدادات: enabled / allow_cover / notify_students.
 - الواجهة `lecture-swaps.tsx`: اختيار الأستاذ الأصلي → محاضرته → البديل → محاضرته (للتبادل) → «تطبيق الآن»، مع شريط خطأ داخل النافذة. SideMenu: أُزيل دور teacher.
 - اختبار: `python3 backend/tests/test_lecture_swaps_flow.py` (ALL OK).
+- 2026-10-15: بحث بالاسم (مع تطبيع الهمزة/التاء المربوطة) للأستاذ الأصلي والبديل وقائمة العمليات، حصر محاضرات الأستاذ بنطاق تاريخ (date_from/date_to في /teacher-lectures)، ونافذة التبادل لا تُغلق بالنقر خارجها (Modal: closeOnOverlay + تتبع mousedown لمنع الإغلاق بالسحب).

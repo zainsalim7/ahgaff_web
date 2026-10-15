@@ -62,10 +62,14 @@ export const CorrPage: React.FC<{ title: string; subtitle?: string; children: Re
   );
 };
 
-export const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode; width?: number; testID?: string }> = ({ title, onClose, children, width = 560, testID }) => (
+export const Modal: React.FC<{ title: string; onClose: () => void; children: React.ReactNode; width?: number; testID?: string; closeOnOverlay?: boolean }> = ({ title, onClose, children, width = 560, testID, closeOnOverlay = true }) => {
+  const downOnOverlay = React.useRef(false);
+  return (
   <Portal>
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,36,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }} onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} data-testid={testID || 'corr-modal'} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 20, width, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', direction: 'rtl' }}>
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(15,36,64,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 }}
+      onMouseDown={(e) => { downOnOverlay.current = e.target === e.currentTarget; }}
+      onClick={(e) => { if (closeOnOverlay && downOnOverlay.current && e.target === e.currentTarget) onClose(); downOnOverlay.current = false; }}>
+      <div data-testid={testID || 'corr-modal'} style={{ backgroundColor: '#fff', borderRadius: 14, padding: 20, width, maxWidth: '95vw', maxHeight: '90vh', overflowY: 'auto', direction: 'rtl' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <strong style={{ fontSize: 15, color: '#0f2440' }}>{title}</strong>
           <button onClick={onClose} style={{ border: 'none', background: 'none', fontSize: 18, cursor: 'pointer' }} data-testid="corr-modal-close">✕</button>
@@ -74,7 +78,8 @@ export const Modal: React.FC<{ title: string; onClose: () => void; children: Rea
       </div>
     </div>
   </Portal>
-);
+  );
+};
 
 export const Field: React.FC<{ label: string; children: React.ReactNode; style?: React.CSSProperties }> = ({ label, children, style }) => (
   <div style={{ marginBottom: 10, ...style }}><label style={lbl}>{label}</label>{children}</div>

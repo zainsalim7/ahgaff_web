@@ -25,6 +25,12 @@ export default function LectureSwapsScreen() {
   const [filter, setFilter] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [qA, setQA] = useState('');
+  const [qB, setQB] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const norm = (s: string) => (s || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').replace(/\s+/g, ' ').trim().toLowerCase();
+  const match = (name: string, q: string) => !q || norm(name).includes(norm(q));
 
   const load = async () => {
     setLoading(true);
@@ -37,15 +43,18 @@ export default function LectureSwapsScreen() {
   useEffect(() => {
     setLectureA(''); setLecsA(null);
     if (!teacherA) return;
-    api.get('/lecture-swaps/teacher-lectures', { params: { teacher_id: teacherA } }).then((r) => setLecsA(r.data)).catch((e) => setErr(e?.response?.data?.detail || 'تعذر جلب المحاضرات'));
-  }, [teacherA]);
+    const params: any = { teacher_id: teacherA };
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+    api.get('/lecture-swaps/teacher-lectures', { params }).then((r) => setLecsA(r.data)).catch((e) => setErr(e?.response?.data?.detail || 'تعذر جلب المحاضرات'));
+  }, [teacherA, dateFrom, dateTo]);
   useEffect(() => {
     setCp(''); setLectureB('');
     if (!lectureA) { setCands(null); return; }
     api.get('/lecture-swaps/candidates', { params: { lecture_id: lectureA, type } }).then((r) => setCands(r.data)).catch((e) => setErr(e?.response?.data?.detail || 'تعذر جلب الأساتذة'));
   }, [lectureA, type]);
 
-  const resetForm = () => { setShowNew(false); setTeacherA(''); setLectureA(''); setReason(''); setErr(''); };
+  const resetForm = () => { setShowNew(false); setTeacherA(''); setLectureA(''); setReason(''); setErr(''); setQA(''); setQB(''); setDateFrom(''); setDateTo(''); };
   const act = async (path: string, body: any, okMsg: string) => {
     setBusy(true); setErr('');
     try { await api.post(path, body); notify('تم ✅', okMsg); resetForm(); await load(); }
@@ -53,17 +62,23 @@ export default function LectureSwapsScreen() {
   };
   const selTeacher = cands?.teachers?.find((t: any) => t.teacher_id === cp);
   const canSubmit = !!lectureA && !!cp && (type === 'cover' || !!lectureB) && !busy;
+  const teachersA = teachers.filter((t: any) => match(t.full_name, qA));
+  const teachersB = (cands?.teachers || []).filter((t: any) => match(t.full_name, qB));
+  const searchStyle = { ...inp, marginBottom: 6, background: '#f8fafc' } as any;
+  const [qList, setQList] = useState('');
+  const shown = items.filter((s) => match(`${s.teacher_a_name} ${s.teacher_b_name} ${s.lecture_a?.course_name || ''} ${s.lecture_b?.course_name || ''}`, qList));
 
   return (
     <CorrPage title="🔁 تبادل / إنابة المحاضرات" subtitle="عملية إدارية: تختار محاضرة أستاذ وتسندها لزميل متاح (مقابل محاضرة له في الأسبوع نفسه، أو إنابة بلا مقابل). تُطبَّق فوراً ويُشعَر الأستاذان والطلاب." loading={loading} testID="lecture-swaps-page" hideNav
       actions={<button onClick={() => { setShowNew(true); setErr(''); }} style={btn('#00838f')} data-testid="swap-new-btn">＋ تبادل / إنابة جديدة</button>}>
-      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', direction: 'rtl' }}>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap', direction: 'rtl', alignItems: 'center' }}>
         {[['', 'الكل'], ['approved', 'المطبّقة (قادمة)'], ['executed', 'المنفّذة'], ['cancelled', 'الملغاة']].map(([v, l]) => (
           <button key={v} onClick={() => setFilter(v)} style={btn(filter === v ? '#1a2540' : '#94a3b8')} data-testid={`swap-filter-${v || 'all'}`}>{l}</button>
         ))}
+        <input value={qList} onChange={(e: any) => setQList(e.target.value)} placeholder="🔍 بحث باسم الأستاذ الأصلي أو البديل أو المقرر…" style={{ ...inp, flex: 1, minWidth: 220 }} data-testid="swap-list-search" />
       </div>
-      {items.length === 0 && <Empty text="لا توجد عمليات" />}
-      {items.map((s) => (
+      {shown.length === 0 && <Empty text={qList ? 'لا نتائج مطابقة للبحث' : 'لا توجد عمليات'} />}
+      {shown.map((s) => (
         <div key={s.id} style={card} data-testid={`swap-item-${s.id}`}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
             <Badge text={STATUS[s.status]?.[0] || s.status} color={STATUS[s.status]?.[1] || '#64748b'} testID={`swap-status-${s.id}`} />
@@ -84,21 +99,32 @@ export default function LectureSwapsScreen() {
       ))}
 
       {showNew && (
-        <Modal title="تبادل / إنابة محاضرة" onClose={resetForm} width={720} testID="swap-new-modal">
+        <Modal title="تبادل / إنابة محاضرة" onClose={resetForm} width={720} testID="swap-new-modal" closeOnOverlay={false}>
           {err ? <div style={{ background: '#d32f2f', color: '#fff', padding: '10px 12px', borderRadius: 8, marginBottom: 10, fontSize: 13, fontWeight: 700 }} data-testid="swap-error">{err}</div> : null}
           <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
             <button onClick={() => setType('swap')} style={btn(type === 'swap' ? '#00838f' : '#94a3b8')} data-testid="swap-type-swap">🔁 تبادل (محاضرة مقابل محاضرة)</button>
             <button onClick={() => setType('cover')} style={btn(type === 'cover' ? '#00838f' : '#94a3b8')} data-testid="swap-type-cover">🤝 إنابة (بدون مقابل)</button>
           </div>
           <label style={lbl}>الأستاذ الأصلي</label>
-          <select value={teacherA} onChange={(e: any) => setTeacherA(e.target.value)} style={inp} data-testid="swap-teacher-a">
-            <option value="">-- اختر الأستاذ --</option>
-            {teachers.map((t: any) => <option key={t.teacher_id} value={t.teacher_id}>{t.full_name}</option>)}
+          <input value={qA} onChange={(e: any) => setQA(e.target.value)} placeholder="🔍 ابحث باسم الأستاذ…" style={searchStyle} data-testid="swap-search-a" />
+          <select value={teacherA} onChange={(e: any) => setTeacherA(e.target.value)} style={inp} data-testid="swap-teacher-a" size={qA ? Math.min(6, Math.max(2, teachersA.length + 1)) : undefined}>
+            <option value="">-- اختر الأستاذ ({teachersA.length}) --</option>
+            {teachersA.map((t: any) => <option key={t.teacher_id} value={t.teacher_id}>{t.full_name}</option>)}
           </select>
+          {teacherA && (
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 10, flexWrap: 'wrap' }} data-testid="swap-date-range">
+              <label style={{ ...lbl, margin: 0 }}>📅 حصر المحاضرات بين</label>
+              <input type="date" value={dateFrom} onChange={(e: any) => setDateFrom(e.target.value)} style={{ ...inp, width: 'auto' }} data-testid="swap-date-from" />
+              <span style={{ fontSize: 12 }}>و</span>
+              <input type="date" value={dateTo} onChange={(e: any) => setDateTo(e.target.value)} style={{ ...inp, width: 'auto' }} data-testid="swap-date-to" />
+              {(dateFrom || dateTo) && <button onClick={() => { setDateFrom(''); setDateTo(''); }} style={btn('#94a3b8')} data-testid="swap-date-clear">مسح</button>}
+              <span style={{ fontSize: 11, color: '#64748b' }}>{!dateFrom && !dateTo ? '(افتراضياً: 30 يوماً القادمة)' : ''}</span>
+            </div>
+          )}
           {lecsA && (
             <>
-              <label style={{ ...lbl, marginTop: 10 }}>محاضرته التي سيتم {type === 'swap' ? 'تبادلها' : 'الإنابة عنها'} (القادمة خلال 30 يوماً)</label>
-              {lecsA.lectures.length === 0 ? <div style={{ fontSize: 12, color: '#b91c1c' }}>لا توجد محاضرات مجدولة قادمة لهذا الأستاذ</div> : (
+              <label style={{ ...lbl, marginTop: 10 }}>محاضرته التي سيتم {type === 'swap' ? 'تبادلها' : 'الإنابة عنها'} ({lecsA.lectures.length})</label>
+              {lecsA.lectures.length === 0 ? <div style={{ fontSize: 12, color: '#b91c1c' }}>لا توجد محاضرات مجدولة لهذا الأستاذ في هذه الفترة</div> : (
                 <select value={lectureA} onChange={(e: any) => setLectureA(e.target.value)} style={inp} data-testid="swap-lecture-a">
                   <option value="">-- اختر المحاضرة --</option>
                   {lecsA.lectures.map((l: any) => <option key={l.id} value={l.id} disabled={!l.eligible}>{lecTxt(l)}{!l.eligible ? ` — ${l.reason}` : ''}</option>)}
@@ -109,9 +135,10 @@ export default function LectureSwapsScreen() {
           {cands && (
             <>
               <label style={{ ...lbl, marginTop: 10 }}>الأستاذ البديل (الأسبوع {cands.week[0]} → {cands.week[1]}) — المتاحون وقت المحاضرة أولاً</label>
-              <select value={cp} onChange={(e: any) => { setCp(e.target.value); setLectureB(''); }} style={inp} data-testid="swap-counterpart">
-                <option value="">-- اختر الأستاذ البديل --</option>
-                {cands.teachers.map((t: any) => <option key={t.teacher_id} value={t.teacher_id} disabled={!t.available}>{t.available ? '✓ ' : '✗ '}{t.full_name}{!t.available ? ` — ${t.busy_reason}` : ''}</option>)}
+              <input value={qB} onChange={(e: any) => setQB(e.target.value)} placeholder="🔍 ابحث باسم الأستاذ البديل…" style={searchStyle} data-testid="swap-search-b" />
+              <select value={cp} onChange={(e: any) => { setCp(e.target.value); setLectureB(''); }} style={inp} data-testid="swap-counterpart" size={qB ? Math.min(6, Math.max(2, teachersB.length + 1)) : undefined}>
+                <option value="">-- اختر الأستاذ البديل ({teachersB.length}) --</option>
+                {teachersB.map((t: any) => <option key={t.teacher_id} value={t.teacher_id} disabled={!t.available}>{t.available ? '✓ ' : '✗ '}{t.full_name}{!t.available ? ` — ${t.busy_reason}` : ''}</option>)}
               </select>
               {type === 'swap' && selTeacher && (
                 <>
