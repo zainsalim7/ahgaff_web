@@ -23,7 +23,7 @@ DEFAULT_SETTINGS = {
     "correction_enabled": True, "correction_window_minutes": 10,
     "auto_checkout_enabled": True, "auto_checkout_after_minutes": 60,
     "auto_absent_enabled": True,
-    "device_binding_enabled": True,
+    "device_binding_enabled": True, "device_auto_request": True,
 }
 
 

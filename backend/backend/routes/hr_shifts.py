@@ -26,6 +26,7 @@ class GeneralIn(BaseModel):
     auto_checkout_after_minutes: int = 60
     auto_absent_enabled: bool = True
     device_binding_enabled: bool = True
+    device_auto_request: bool = True
 
 
 class ShiftIn(BaseModel):

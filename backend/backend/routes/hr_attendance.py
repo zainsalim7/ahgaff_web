@@ -711,7 +711,32 @@ async def my_attendance(month: Optional[str] = None, current_user: dict = Depend
 
 
 DEVICE_REJECT_MSG = "هذا الجهاز غير مسجّل لحسابك. أرسل طلب تغيير الجهاز من التطبيق أو راجع شؤون الموظفين"
+DEVICE_REJECT_AUTO_MSG = "هذا الجهاز غير مسجّل لحسابك — أُرسل تلقائياً طلب تغيير الجهاز إلى شؤون الموظفين، وسيُفعَّل جهازك فور الموافقة"
+DEVICE_REJECT_PENDING_MSG = "هذا الجهاز غير مسجّل لحسابك — طلب تغيير جهازك بانتظار موافقة شؤون الموظفين"
 DEVICE_ALERT_THROTTLE_MIN = 10
+
+
+async def _auto_device_request(db, emp: dict, did: str, dname: str, action: str, now: str) -> str:
+    """📱 عند الرفض: إنشاء طلب تغيير جهاز تلقائياً (أو تحديث الطلب المعلّق بآخر معرّف) → HR توافق بنقرة"""
+    eid = str(emp["_id"])
+    act = "تسجيل الحضور" if action == "check_in" else "تسجيل الانصراف"
+    reason = f"تلقائي: محاولة {act} من جهاز مختلف الساعة {now[11:16]}"
+    pending = await db.hr_device_requests.find_one({"employee_id": eid, "status": "pending"})
+    if pending:
+        if pending.get("new_device_id") != did:
+            await db.hr_device_requests.update_one({"_id": pending["_id"]}, {"$set": {"new_device_id": did, "new_device_name": dname, "updated_at": now, "last_attempt_at": now}, "$inc": {"attempts": 1}})
+        else:
+            await db.hr_device_requests.update_one({"_id": pending["_id"]}, {"$set": {"last_attempt_at": now}, "$inc": {"attempts": 1}})
+        return DEVICE_REJECT_PENDING_MSG
+    doc = {"employee_id": eid, "employee_name": emp.get("full_name", ""), "employee_no": emp.get("employee_no", ""), "old_device_id": emp.get("device_id"), "old_device_name": emp.get("device_name", ""),
+           "new_device_id": did, "new_device_name": dname, "reason": reason, "status": "pending", "source": "auto", "attempts": 1, "last_attempt_at": now, "created_at": now}
+    r = await db.hr_device_requests.insert_one(doc)
+    dev = f"{dname} ({did[:12]}…)" if dname else did
+    await notify_users(db, await hr_manager_user_ids(db, P_ATTEND), "📱 طلب تغيير جهاز (تلقائي) — محاولة تحضير من جهاز غير مسجّل",
+                       f"{emp.get('full_name', '')} ({emp.get('employee_no', '')}) حاول {act} الساعة {now[11:16]} من جهاز غير مسجّل: {dev} — أُنشئ طلب تغيير جهاز بانتظار موافقتك في «الأجهزة»",
+                       "hr_device", {"request_id": str(r.inserted_id), "employee_id": eid, "route": "/hr-attendance?tab=devices", "data": {"route": "/hr-attendance?tab=devices", "kind": "device_change_request"}})
+    await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_last_alert_at": now}})
+    return DEVICE_REJECT_AUTO_MSG
 
 
 async def _alert_hr_device_rejection(db, emp: dict, did: str, dname: str, action: str, now: str):
@@ -745,8 +770,14 @@ async def _device_check(db, emp: dict, geo: Optional[GeoIn], settings: dict, act
         emp["device_id"] = did
         return did
     if saved != did:
-        await db.employees.update_one({"_id": emp["_id"]}, {"$inc": {"device_rejections": 1}, "$set": {"device_last_rejection": {"device_id": did, "device_name": (geo.device_name or "")[:80], "at": now, "action": action}}})
-        await _alert_hr_device_rejection(db, emp, did, (geo.device_name or "")[:80], action, now)
+        dname = (geo.device_name or "")[:80]
+        await db.employees.update_one({"_id": emp["_id"]}, {"$inc": {"device_rejections": 1}, "$set": {"device_last_rejection": {"device_id": did, "device_name": dname, "at": now, "action": action}}})
+        if settings.get("device_auto_request", True):
+            msg = await _auto_device_request(db, emp, did, dname, action, now)
+            if msg == DEVICE_REJECT_PENDING_MSG:
+                await _alert_hr_device_rejection(db, emp, did, dname, action, now)
+            raise HTTPException(status_code=403, detail=msg)
+        await _alert_hr_device_rejection(db, emp, did, dname, action, now)
         raise HTTPException(status_code=403, detail=DEVICE_REJECT_MSG)
     await db.employees.update_one({"_id": emp["_id"]}, {"$set": {"device_last_seen_at": now}})
     return did

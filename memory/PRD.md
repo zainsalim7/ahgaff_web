@@ -1016,3 +1016,7 @@
 - اختبار: `python3 backend/tests/test_lecture_swaps_flow.py` (ALL OK).
 - 2026-10-15: بحث بالاسم (مع تطبيع الهمزة/التاء المربوطة) للأستاذ الأصلي والبديل وقائمة العمليات، حصر محاضرات الأستاذ بنطاق تاريخ (date_from/date_to في /teacher-lectures)، ونافذة التبادل لا تُغلق بالنقر خارجها (Modal: closeOnOverlay + تتبع mousedown لمنع الإغلاق بالسحب).
 - 2026-10-15 (إصلاح جوهري): المحاضرات اليومية غالباً بلا teacher_id صريح (الأستاذ يُستنتج من course.teacher_id) → أُضيف `_teacher_lectures_query/_effective_teacher` في lecture_swaps.py لحصر محاضرات الأستاذ وفحص الانشغال والتطبيق/الإرجاع (had_explicit_teacher). وفي server.py: `_attach_group_courses` يستبعد المحاضرة المبدَّلة من عرض الأستاذ الأصلي، وتسجيل الحضور للمحاضرة المبدَّلة مقصور على المنفّذ الفعلي. الواجهة: TeacherPicker (بحث تلقائي يُغلق عند الاختيار) بدل select.
+
+## 2026-10-15: 📱 طلب تغيير جهاز تلقائي عند رفض التحضير (الحضور الإداري) ✅
+- السبب الجذري لبلاغ المستخدم: تطبيق الموظفين (وكيل آخر) يرسل معرّف احتياطي عشوائي `DEV-…` غير محفوظ فيتغيّر بعد التحديث → رفض 403. وثيقة الإصلاح للوكيل: `memory/handoffs/EMPLOYEE_APP_DEVICE_ID_FIX.md` (Android ID / iOS IDFV + UUID في SecureStore).
+- تخفيف خادمي (`hr_attendance.py::_auto_device_request`): عند الرفض يُنشأ طلب `hr_device_requests` بـ `source:"auto"` (أو يُحدَّث المعلّق بآخر معرّف + `attempts`) ويُنبَّه HR؛ رسالتا 403 جديدتان. مفتاح إعدادات `device_auto_request` (افتراضي مفعّل) في hr_common/hr_shifts/WorkSettings. شارة «⚡ تلقائي» في DeviceRequests. اختبار: `memory/patches/test_device_auto_request.sh`.
