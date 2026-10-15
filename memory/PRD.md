@@ -1007,3 +1007,10 @@
 - `AddLectureModal.tsx`: شريط تنبيه داخل النافذة (أسفل العنوان) بدلاً من إشعارات الصفحة الخلفية/window.alert. خطأ = أحمر، تعارض 409 = برتقالي مع زرّي «متابعة رغم التعارض» (يعيد الحفظ بـ force=true) / «إلغاء».
 - `course-lectures.tsx`: `handleSaveLecture` صار يرمي الخطأ للنافذة؛ وشريط خطأ التوليد انتقل من أسفل النافذة إلى أعلاها (`genTopErrorBanner`).
 - testIDs: add-lecture-banner, add-lecture-force-btn, add-lecture-cancel-force-btn, add-lecture-save-btn, generate-error-box.
+
+## 2026-10-15: 🔁 التبادل/الإنابة صار عملية إدارية فقط ✅
+- بناءً على طلب المستخدم: الأستاذ لا يُنشئ ولا يرى الشاشة؛ المشغّلون: admin/dean/department_head/registrar/registration_manager (نطاق: القسم/الكلية/الكل).
+- `lecture_swaps.py` أُعيد بناؤه: GET /teachers، GET /teacher-lectures?teacher_id، GET /candidates، POST "" (يطبّق فوراً status=approved ويُشعر الأستاذين والطلاب)، POST /{id}/cancel (إرجاع)، GET /report. أُزيلت respond/decide والحد الشهري ومهلة الـ24 ساعة. الحقول: teacher_a_id/name، teacher_b_id/name، history[]. approved→executed تلقائياً بعد الموعد.
+- الإعدادات: enabled / allow_cover / notify_students.
+- الواجهة `lecture-swaps.tsx`: اختيار الأستاذ الأصلي → محاضرته → البديل → محاضرته (للتبادل) → «تطبيق الآن»، مع شريط خطأ داخل النافذة. SideMenu: أُزيل دور teacher.
+- اختبار: `python3 backend/tests/test_lecture_swaps_flow.py` (ALL OK).

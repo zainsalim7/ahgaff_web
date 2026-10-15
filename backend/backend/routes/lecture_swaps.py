@@ -1,4 +1,4 @@
-"""🔁 تبادل/إنابة محاضرة لمرة واحدة بين أستاذين — مسار: الطالب للطلب (أ) → موافقة الزميل (ب) → اعتماد رئيس القسم/العميد → تنفيذ"""
+"""🔁 تبادل/إنابة محاضرة لمرة واحدة بين أستاذين — عملية إدارية (التسجيل/رئيس القسم/العميد/الأدمن) تُطبَّق فوراً بلا موافقات"""
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
 
@@ -11,8 +11,8 @@ from .hr_common import notify_users
 from models.permissions import UserRole
 
 router = APIRouter(prefix="/lecture-swaps", tags=["تبادل المحاضرات"])
-DEFAULTS = {"enabled": True, "min_hours": 24, "monthly_limit": 3, "allow_cover": True, "require_head": True}
-HEAD_ROLES = {UserRole.ADMIN, "dean", "department_head"}
+DEFAULTS = {"enabled": True, "allow_cover": True, "notify_students": True}
+OPERATOR_ROLES = {UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD, UserRole.REGISTRAR, UserRole.REGISTRATION_MANAGER}
 
 
 def _now():
@@ -38,8 +38,30 @@ async def get_settings(db) -> dict:
     return {**DEFAULTS, **{k: doc[k] for k in DEFAULTS if k in doc}}
 
 
-def my_teacher_ids(user: dict) -> List[str]:
-    return [x for x in {user.get("teacher_record_id"), user["id"]} if x]
+def _require_operator(user: dict):
+    if user["role"] not in OPERATOR_ROLES:
+        raise HTTPException(status_code=403, detail="تبادل/إنابة المحاضرات عملية إدارية (التسجيل / رئيس القسم / العميد)")
+
+
+def _scope_query(user: dict, fac_key="faculty_id", dep_key="department_id") -> dict:
+    """نطاق المشغّل: رئيس القسم → قسمه، العميد/التسجيل بكلية → كليته، الأدمن → الكل"""
+    if user["role"] == UserRole.ADMIN:
+        return {}
+    if user["role"] == UserRole.DEPARTMENT_HEAD and user.get("department_id"):
+        return {dep_key: user["department_id"]}
+    if user.get("faculty_id"):
+        return {fac_key: user["faculty_id"]}
+    return {}
+
+
+def _in_scope(user: dict, course: dict) -> bool:
+    if user["role"] == UserRole.ADMIN:
+        return True
+    if user["role"] == UserRole.DEPARTMENT_HEAD and user.get("department_id"):
+        return course.get("department_id") == user["department_id"]
+    if user.get("faculty_id"):
+        return course.get("faculty_id") == user["faculty_id"]
+    return True
 
 
 async def _teacher_user_ids(db, teacher_id: str) -> List[str]:
@@ -73,22 +95,6 @@ async def _busy(db, teacher_id: str, date: str, start: str, end: str, exclude_id
     return None
 
 
-async def _month_count(db, teacher_id: str, date: str) -> int:
-    ym = date[:7]
-    return await db.lecture_swaps.count_documents({"$or": [{"requester_teacher_id": teacher_id}, {"counterpart_teacher_id": teacher_id}],
-                                                   "status": {"$in": ["pending_counterpart", "pending_head", "approved", "executed"]}, "month": ym})
-
-
-def _can_decide(user: dict, swap: dict) -> bool:
-    if user["role"] == UserRole.ADMIN:
-        return True
-    if user["role"] == "dean":
-        return not user.get("faculty_id") or user["faculty_id"] in {swap.get("faculty_id"), swap.get("faculty_id_b")}
-    if user["role"] == "department_head":
-        return user.get("department_id") in {swap.get("department_id"), swap.get("department_id_b")}
-    return False
-
-
 def _lec_view(l: dict) -> dict:
     return {"id": str(l["_id"]), "course_id": l.get("course_id"), "course_name": l.get("course_name"), "date": l.get("date"), "start_time": l.get("start_time"), "end_time": l.get("end_time"),
             "room": l.get("room"), "group": l.get("group"), "group_name": l.get("group_name"), "teacher_id": l.get("teacher_id"), "teacher_name": l.get("teacher_name"),
@@ -112,14 +118,13 @@ async def _enrich_lectures(db, lecs: List[dict]) -> List[dict]:
 # ---------------- الإعدادات ----------------
 class SettingsIn(BaseModel):
     enabled: Optional[bool] = None
-    min_hours: Optional[int] = None
-    monthly_limit: Optional[int] = None
     allow_cover: Optional[bool] = None
-    require_head: Optional[bool] = None
+    notify_students: Optional[bool] = None
 
 
 @router.get("/settings")
 async def read_settings(current_user: dict = Depends(get_current_user)):
+    _require_operator(current_user)
     return await get_settings(get_db())
 
 
@@ -133,42 +138,55 @@ async def update_settings(data: SettingsIn, current_user: dict = Depends(get_cur
     return await get_settings(get_db())
 
 
-# ---------------- محاضراتي القابلة للتبادل + المرشحون ----------------
-@router.get("/my-lectures")
-async def my_lectures(current_user: dict = Depends(get_current_user)):
-    """محاضرات الأستاذ المجدولة القادمة (أسبوعان) القابلة لطلب تبادل"""
+# ---------------- الأساتذة ومحاضراتهم + المرشحون ----------------
+@router.get("/teachers")
+async def teachers_in_scope(current_user: dict = Depends(get_current_user)):
+    """أساتذة نطاق المشغّل (لاختيار الأستاذ الأصلي)"""
+    _require_operator(current_user)
     db = get_db()
-    st = await get_settings(db)
+    q = {"is_active": {"$ne": False}, **_scope_query(current_user)}
+    rows = await db.teachers.find(q, {"full_name": 1, "department_id": 1, "faculty_id": 1}).sort("full_name", 1).to_list(2000)
+    return {"teachers": [{"teacher_id": str(t["_id"]), "full_name": t.get("full_name"), "department_id": t.get("department_id")} for t in rows]}
+
+
+@router.get("/teacher-lectures")
+async def teacher_lectures(teacher_id: str, current_user: dict = Depends(get_current_user)):
+    """محاضرات الأستاذ المجدولة القادمة (30 يوماً) القابلة للتبادل/الإنابة"""
+    _require_operator(current_user)
+    db = get_db()
     today = (_now() + timedelta(hours=3)).strftime("%Y-%m-%d")
-    until = (_now() + timedelta(days=14)).strftime("%Y-%m-%d")
-    lecs = await db.lectures.find({"teacher_id": {"$in": my_teacher_ids(current_user)}, "status": "scheduled", "date": {"$gte": today, "$lte": until}}).sort([("date", 1), ("start_time", 1)]).to_list(200)
+    until = (_now() + timedelta(days=30)).strftime("%Y-%m-%d")
+    lecs = await db.lectures.find({"teacher_id": teacher_id, "status": "scheduled", "date": {"$gte": today, "$lte": until}}).sort([("date", 1), ("start_time", 1)]).to_list(300)
     await _enrich_lectures(db, lecs)
     out = []
     for l in lecs:
-        hrs = (_lec_dt(l) - _now()).total_seconds() / 3600
-        out.append({**_lec_view(l), "eligible": hrs >= st["min_hours"] and not l.get("swap_id"), "reason": ("سبق تبادلها" if l.get("swap_id") else (f"أقل من {st['min_hours']} ساعة على موعدها" if hrs < st["min_hours"] else ""))})
-    return {"lectures": out, "month_used": await _month_count(db, my_teacher_ids(current_user)[0], today), "settings": st}
+        past = _lec_dt(l) <= _now()
+        out.append({**_lec_view(l), "eligible": not past and not l.get("swap_id"), "reason": "سبق تبادلها" if l.get("swap_id") else ("انقضى موعدها" if past else "")})
+    return {"lectures": out, "settings": await get_settings(db)}
 
 
 @router.get("/candidates")
 async def candidates(lecture_id: str, type: str = "swap", current_user: dict = Depends(get_current_user)):
-    """الزملاء المتاحون في وقت المحاضرة (نفس الكلية)، ولكل زميل محاضراته في الأسبوع نفسه التي يستطيع الطالب تنفيذها"""
+    """الزملاء المتاحون وقت المحاضرة (نفس الكلية)، ولكل زميل محاضراته في الأسبوع نفسه التي يستطيع الأستاذ الأصلي تنفيذها"""
+    _require_operator(current_user)
     db = get_db()
     lec = await db.lectures.find_one({"_id": _oid(lecture_id)}) if _oid(lecture_id) else None
-    if not lec or lec.get("teacher_id") not in my_teacher_ids(current_user):
-        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة أو ليست لك")
+    if not lec:
+        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     course = await db.courses.find_one({"_id": _oid(lec["course_id"])}) or {}
+    if not _in_scope(current_user, course):
+        raise HTTPException(status_code=403, detail="المحاضرة خارج نطاقك")
     fac = course.get("faculty_id")
     tq = {"is_active": {"$ne": False}}
     if fac:
         tq["faculty_id"] = fac
     teachers = await db.teachers.find(tq, {"full_name": 1, "department_id": 1}).to_list(1000)
     ws, we = _week_range(lec["date"])
-    my_ids = my_teacher_ids(current_user)
+    a_tid = lec.get("teacher_id")
     out = []
     for t in teachers:
         tid = str(t["_id"])
-        if tid in my_ids:
+        if tid == a_tid:
             continue
         busy = await _busy(db, tid, lec["date"], lec.get("start_time"), lec.get("end_time"), [lecture_id])
         item = {"teacher_id": tid, "full_name": t.get("full_name"), "department_id": t.get("department_id"), "available": not busy, "busy_reason": busy, "swappable": []}
@@ -176,18 +194,16 @@ async def candidates(lecture_id: str, type: str = "swap", current_user: dict = D
             theirs = await db.lectures.find({"teacher_id": tid, "status": "scheduled", "date": {"$gte": ws, "$lte": we}, "swap_id": {"$exists": False}}).sort([("date", 1), ("start_time", 1)]).to_list(60)
             await _enrich_lectures(db, theirs)
             for l in theirs:
-                if (_lec_dt(l) - _now()).total_seconds() < 3600:
+                if _lec_dt(l) <= _now():
                     continue
-                conflict = None
-                for mid in my_ids:
-                    conflict = conflict or await _busy(db, mid, l["date"], l.get("start_time"), l.get("end_time"), [str(l["_id"])])
+                conflict = await _busy(db, a_tid, l["date"], l.get("start_time"), l.get("end_time"), [str(l["_id"])])
                 item["swappable"].append({**_lec_view(l), "ok": not conflict, "conflict": conflict})
         out.append(item)
     out.sort(key=lambda x: (not x["available"], x["full_name"] or ""))
     return {"lecture": _lec_view(lec), "week": [ws, we], "teachers": out}
 
 
-# ---------------- الطلب ----------------
+# ---------------- التنفيذ ----------------
 class SwapIn(BaseModel):
     type: str = "swap"  # swap | cover
     lecture_a_id: str
@@ -196,122 +212,11 @@ class SwapIn(BaseModel):
     reason: str = ""
 
 
-@router.post("")
-async def create_swap(data: SwapIn, current_user: dict = Depends(get_current_user)):
-    db = get_db()
-    st = await get_settings(db)
-    if not st["enabled"]:
-        raise HTTPException(status_code=400, detail="ميزة تبادل المحاضرات معطّلة")
-    if data.type not in ("swap", "cover") or (data.type == "cover" and not st["allow_cover"]):
-        raise HTTPException(status_code=400, detail="نوع الطلب غير مسموح")
-    my_ids = my_teacher_ids(current_user)
-    lec_a = await db.lectures.find_one({"_id": _oid(data.lecture_a_id)}) if _oid(data.lecture_a_id) else None
-    if not lec_a or lec_a.get("teacher_id") not in my_ids:
-        raise HTTPException(status_code=404, detail="محاضرتك غير موجودة أو ليست مسندة إليك")
-    if lec_a.get("status") != "scheduled":
-        raise HTTPException(status_code=400, detail="المحاضرة ليست بحالة «مجدولة»")
-    if lec_a.get("swap_id"):
-        raise HTTPException(status_code=400, detail="هذه المحاضرة سبق تبادلها — التبادل مرة واحدة فقط")
-    ACTIVE = ["pending_counterpart", "pending_head", "approved"]
-    if await db.lecture_swaps.find_one({"status": {"$in": ACTIVE}, "$or": [{"lecture_a.id": data.lecture_a_id}, {"lecture_b.id": data.lecture_a_id}]}):
-        raise HTTPException(status_code=400, detail="يوجد طلب قائم على هذه المحاضرة بالفعل")
-    hrs = (_lec_dt(lec_a) - _now()).total_seconds() / 3600
-    if hrs < st["min_hours"]:
-        raise HTTPException(status_code=400, detail=f"يجب تقديم الطلب قبل المحاضرة بـ {st['min_hours']} ساعة على الأقل")
-    me_tid = lec_a["teacher_id"]
-    cp = data.counterpart_teacher_id
-    if cp in my_ids:
-        raise HTTPException(status_code=400, detail="لا يمكن التبادل مع نفسك")
-    if await _month_count(db, me_tid, lec_a["date"]) >= st["monthly_limit"]:
-        raise HTTPException(status_code=400, detail=f"بلغت الحد الشهري ({st['monthly_limit']} تبادلات/إنابات في الشهر)")
-    if await _month_count(db, cp, lec_a["date"]) >= st["monthly_limit"]:
-        raise HTTPException(status_code=400, detail=f"الزميل بلغ حده الشهري ({st['monthly_limit']})")
-    busy = await _busy(db, cp, lec_a["date"], lec_a.get("start_time"), lec_a.get("end_time"), [data.lecture_a_id])
-    if busy:
-        raise HTTPException(status_code=400, detail=f"الزميل غير متاح وقت محاضرتك: {busy}")
-    lec_b = None
-    if data.type == "swap":
-        lec_b = await db.lectures.find_one({"_id": _oid(data.lecture_b_id)}) if _oid(data.lecture_b_id) else None
-        if not lec_b or lec_b.get("teacher_id") != cp or lec_b.get("status") != "scheduled":
-            raise HTTPException(status_code=400, detail="محاضرة الزميل غير صالحة للتبادل")
-        if lec_b.get("swap_id"):
-            raise HTTPException(status_code=400, detail="محاضرة الزميل سبق تبادلها")
-        if await db.lecture_swaps.find_one({"status": {"$in": ACTIVE}, "$or": [{"lecture_a.id": data.lecture_b_id}, {"lecture_b.id": data.lecture_b_id}]}):
-            raise HTTPException(status_code=400, detail="يوجد طلب قائم على محاضرة الزميل بالفعل")
-        ws, we = _week_range(lec_a["date"])
-        if not (ws <= lec_b["date"] <= we):
-            raise HTTPException(status_code=400, detail="التبادل يكون داخل الأسبوع نفسه فقط")
-        if (_lec_dt(lec_b) - _now()).total_seconds() / 3600 < 1:
-            raise HTTPException(status_code=400, detail="محاضرة الزميل قريبة جداً أو انقضت")
-        mine_busy = await _busy(db, me_tid, lec_b["date"], lec_b.get("start_time"), lec_b.get("end_time"), [data.lecture_b_id])
-        if mine_busy:
-            raise HTTPException(status_code=400, detail=f"أنت غير متاح وقت محاضرة الزميل: {mine_busy}")
-    course_a = await db.courses.find_one({"_id": _oid(lec_a["course_id"])}) or {}
-    course_b = (await db.courses.find_one({"_id": _oid(lec_b["course_id"])}) or {}) if lec_b else {}
-    await _enrich_lectures(db, [lec_a] + ([lec_b] if lec_b else []))
-    doc = {
-        "type": data.type, "status": "pending_counterpart", "reason": (data.reason or "").strip()[:500],
-        "requester_teacher_id": me_tid, "requester_name": await _teacher_name(db, me_tid), "requester_user_id": current_user["id"],
-        "counterpart_teacher_id": cp, "counterpart_name": await _teacher_name(db, cp),
-        "lecture_a": _lec_view(lec_a), "lecture_b": _lec_view(lec_b) if lec_b else None,
-        "department_id": course_a.get("department_id"), "faculty_id": course_a.get("faculty_id"),
-        "department_id_b": course_b.get("department_id"), "faculty_id_b": course_b.get("faculty_id"),
-        "cross_department": bool(course_b) and course_b.get("department_id") != course_a.get("department_id"),
-        "month": lec_a["date"][:7], "approvals": [{"step": "request", "by": current_user["id"], "name": current_user.get("full_name"), "at": _now().isoformat()}],
-        "created_at": _now().isoformat(), "updated_at": _now().isoformat(),
-    }
-    res = await db.lecture_swaps.insert_one(doc)
-    sid = str(res.inserted_id)
-    kind = "تبادل" if data.type == "swap" else "إنابة"
-    await notify_users(db, await _teacher_user_ids(db, cp), f"طلب {kind} محاضرة 🔁", f"{doc['requester_name']} يطلب {kind}: «{lec_a.get('course_name')}» {lec_a['date']} {lec_a.get('start_time')} — افتح «تبادل المحاضرات» للرد", "lecture_swap", {"swap_id": sid})
-    await log_activity(current_user, "lecture_swap_request", "lecture_swap", sid, f"طلب {kind} محاضرة", {"lecture_a": data.lecture_a_id, "counterpart": cp})
-    created = await db.lecture_swaps.find_one({"_id": res.inserted_id})
-    return _swap_view(created)
-
-
-# ---------------- القوائم ----------------
-@router.get("")
-async def list_swaps(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    db = get_db()
-    q: dict = {}
-    my_ids = my_teacher_ids(current_user)
-    if current_user["role"] == UserRole.ADMIN:
-        pass
-    elif current_user["role"] == "dean" and current_user.get("faculty_id"):
-        q["$or"] = [{"faculty_id": current_user["faculty_id"]}, {"faculty_id_b": current_user["faculty_id"]}, {"requester_teacher_id": {"$in": my_ids}}, {"counterpart_teacher_id": {"$in": my_ids}}]
-    elif current_user["role"] == "department_head" and current_user.get("department_id"):
-        q["$or"] = [{"department_id": current_user["department_id"]}, {"department_id_b": current_user["department_id"]}, {"requester_teacher_id": {"$in": my_ids}}, {"counterpart_teacher_id": {"$in": my_ids}}]
-    else:
-        q["$or"] = [{"requester_teacher_id": {"$in": my_ids}}, {"counterpart_teacher_id": {"$in": my_ids}}]
-    if status:
-        q["status"] = {"$in": status.split(",")}
-    rows = await db.lecture_swaps.find(q).sort("created_at", -1).limit(300).to_list(300)
-    # ⏳ انتهاء صلاحية الطلبات المعلّقة التي فات موعد محاضرتها
-    now = _now()
-    out = []
-    for s in rows:
-        if s["status"] in ("pending_counterpart", "pending_head") and _lec_dt(s["lecture_a"]) <= now:
-            await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": "expired", "updated_at": now.isoformat()}})
-            s["status"] = "expired"
-        v = _swap_view(s)
-        v["can_respond"] = s["status"] == "pending_counterpart" and s["counterpart_teacher_id"] in my_ids
-        v["can_decide"] = s["status"] == "pending_head" and _can_decide(current_user, s)
-        v["can_cancel"] = s["status"] in ("pending_counterpart", "pending_head", "approved") and (s["requester_teacher_id"] in my_ids or s["counterpart_teacher_id"] in my_ids or _can_decide(current_user, s)) and _lec_dt(s["lecture_a"]) > now
-        out.append(v)
-    return {"items": out, "pending_decision": sum(1 for v in out if v["can_decide"]), "pending_response": sum(1 for v in out if v["can_respond"])}
-
-
-# ---------------- الرد والاعتماد والإلغاء ----------------
-class RespondIn(BaseModel):
-    accept: bool
-    note: str = ""
-
-
 async def _apply(db, swap: dict):
     """تطبيق التبادل على المحاضرتين: المنفّذ الفعلي يصبح teacher_id مع حفظ الأصل"""
     a, b = swap["lecture_a"], swap.get("lecture_b")
     sid = str(swap["_id"])
-    pairs = [(a, swap["counterpart_teacher_id"], swap["counterpart_name"])] + ([(b, swap["requester_teacher_id"], swap["requester_name"])] if b else [])
+    pairs = [(a, swap["teacher_b_id"], swap["teacher_b_name"])] + ([(b, swap["teacher_a_id"], swap["teacher_a_name"])] if b else [])
     for lec, new_tid, new_name in pairs:
         await db.lectures.update_one({"_id": _oid(lec["id"]), "status": "scheduled"}, {"$set": {
             "original_teacher_id": lec["teacher_id"], "original_teacher_name": lec.get("teacher_name"), "teacher_id": new_tid, "teacher_name": new_name,
@@ -324,17 +229,8 @@ async def _revert(db, swap: dict):
                                      {"$set": {"teacher_id": lec["teacher_id"], "teacher_name": lec.get("teacher_name")}, "$unset": {"original_teacher_id": "", "original_teacher_name": "", "swap_id": "", "swap_type": "", "swapped_at": ""}})
 
 
-async def _heads_user_ids(db, swap: dict) -> List[str]:
-    deps = [d for d in {swap.get("department_id"), swap.get("department_id_b")} if d]
-    heads = [str(u["_id"]) for u in await db.users.find({"role": "department_head", "department_id": {"$in": deps}, "is_active": {"$ne": False}}, {"_id": 1}).to_list(20)]
-    if swap.get("cross_department") or not heads:
-        facs = [f for f in {swap.get("faculty_id"), swap.get("faculty_id_b")} if f]
-        heads += [str(u["_id"]) for u in await db.users.find({"role": "dean", "faculty_id": {"$in": facs}, "is_active": {"$ne": False}}, {"_id": 1}).to_list(20)]
-    return heads
-
-
 async def _notify_students(db, swap: dict):
-    for lec, new_name in [(swap["lecture_a"], swap["counterpart_name"])] + ([(swap["lecture_b"], swap["requester_name"])] if swap.get("lecture_b") else []):
+    for lec, new_name in [(swap["lecture_a"], swap["teacher_b_name"])] + ([(swap["lecture_b"], swap["teacher_a_name"])] if swap.get("lecture_b") else []):
         q = {"course_id": lec["course_id"]}
         if lec.get("group"):
             q["group"] = lec["group"]
@@ -343,98 +239,153 @@ async def _notify_students(db, swap: dict):
         await notify_users(db, uids, "تغيير أستاذ المحاضرة 🔁", f"محاضرة «{lec.get('course_name')}» يوم {lec['date']} {lec.get('start_time')} سينفّذها أ. {new_name} بدلاً من أ. {lec.get('teacher_name')}", "lecture_swap", {"lecture_id": lec["id"]})
 
 
-@router.post("/{swap_id}/respond")
-async def respond(swap_id: str, data: RespondIn, current_user: dict = Depends(get_current_user)):
+@router.post("")
+async def create_swap(data: SwapIn, current_user: dict = Depends(get_current_user)):
+    """ينشئ التبادل/الإنابة ويطبّقه فوراً على المحاضرتين (عملية إدارية)"""
+    _require_operator(current_user)
     db = get_db()
-    s = await db.lecture_swaps.find_one({"_id": _oid(swap_id)}) if _oid(swap_id) else None
-    if not s or s["status"] != "pending_counterpart":
-        raise HTTPException(status_code=404, detail="الطلب غير موجود أو ليس بانتظار ردك")
-    if s["counterpart_teacher_id"] not in my_teacher_ids(current_user):
-        raise HTTPException(status_code=403, detail="هذا الطلب ليس موجهاً إليك")
     st = await get_settings(db)
-    step = {"step": "counterpart", "by": current_user["id"], "name": current_user.get("full_name"), "accept": data.accept, "note": data.note[:300], "at": _now().isoformat()}
-    kind = "تبادل" if s["type"] == "swap" else "إنابة"
-    if not data.accept:
-        await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": "rejected_counterpart", "updated_at": _now().isoformat()}, "$push": {"approvals": step}})
-        await notify_users(db, [s["requester_user_id"]], f"رفض طلب {kind} ❌", f"{s['counterpart_name']} اعتذر عن {kind} محاضرة «{s['lecture_a'].get('course_name')}»" + (f": {data.note}" if data.note else ""), "lecture_swap", {"swap_id": swap_id})
-        return {"ok": True, "status": "rejected_counterpart"}
-    needs_head = st["require_head"] or s.get("cross_department")
-    new_status = "pending_head" if needs_head else "approved"
-    await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": new_status, "updated_at": _now().isoformat()}, "$push": {"approvals": step}})
-    s = await db.lecture_swaps.find_one({"_id": s["_id"]})
-    if needs_head:
-        await notify_users(db, await _heads_user_ids(db, s), f"طلب {kind} محاضرة بانتظار اعتمادك 🔁", f"{s['requester_name']} ↔ {s['counterpart_name']}: «{s['lecture_a'].get('course_name')}» {s['lecture_a']['date']}", "lecture_swap", {"swap_id": swap_id})
-    else:
-        await _apply(db, s)
-        await _notify_students(db, s)
-    await notify_users(db, [s["requester_user_id"]], f"وافق الزميل على {kind} ✅", f"{s['counterpart_name']} وافق — {'بانتظار اعتماد رئيس القسم' if needs_head else 'تم التطبيق'}", "lecture_swap", {"swap_id": swap_id})
-    await log_activity(current_user, "lecture_swap_respond", "lecture_swap", swap_id, f"موافقة الزميل على {kind}", {})
-    return {"ok": True, "status": new_status}
+    if not st["enabled"]:
+        raise HTTPException(status_code=400, detail="ميزة تبادل المحاضرات معطّلة")
+    if data.type not in ("swap", "cover") or (data.type == "cover" and not st["allow_cover"]):
+        raise HTTPException(status_code=400, detail="نوع العملية غير مسموح")
+    lec_a = await db.lectures.find_one({"_id": _oid(data.lecture_a_id)}) if _oid(data.lecture_a_id) else None
+    if not lec_a or not lec_a.get("teacher_id"):
+        raise HTTPException(status_code=404, detail="المحاضرة غير موجودة أو بلا أستاذ مسند")
+    course_a = await db.courses.find_one({"_id": _oid(lec_a["course_id"])}) or {}
+    if not _in_scope(current_user, course_a):
+        raise HTTPException(status_code=403, detail="المحاضرة خارج نطاقك")
+    if lec_a.get("status") != "scheduled":
+        raise HTTPException(status_code=400, detail="المحاضرة ليست بحالة «مجدولة»")
+    if lec_a.get("swap_id"):
+        raise HTTPException(status_code=400, detail="هذه المحاضرة سبق تبادلها — التبادل مرة واحدة فقط")
+    if await db.lecture_swaps.find_one({"status": "approved", "$or": [{"lecture_a.id": data.lecture_a_id}, {"lecture_b.id": data.lecture_a_id}]}):
+        raise HTTPException(status_code=400, detail="يوجد تبادل قائم على هذه المحاضرة بالفعل")
+    if _lec_dt(lec_a) <= _now():
+        raise HTTPException(status_code=400, detail="انقضى موعد المحاضرة")
+    a_tid = lec_a["teacher_id"]
+    cp = data.counterpart_teacher_id
+    if cp == a_tid:
+        raise HTTPException(status_code=400, detail="لا يمكن التبادل مع الأستاذ نفسه")
+    if not await db.teachers.find_one({"_id": _oid(cp)}, {"_id": 1}):
+        raise HTTPException(status_code=404, detail="الأستاذ البديل غير موجود")
+    busy = await _busy(db, cp, lec_a["date"], lec_a.get("start_time"), lec_a.get("end_time"), [data.lecture_a_id])
+    if busy:
+        raise HTTPException(status_code=400, detail=f"الأستاذ البديل غير متاح وقت المحاضرة: {busy}")
+    lec_b = None
+    if data.type == "swap":
+        lec_b = await db.lectures.find_one({"_id": _oid(data.lecture_b_id)}) if _oid(data.lecture_b_id) else None
+        if not lec_b or lec_b.get("teacher_id") != cp or lec_b.get("status") != "scheduled":
+            raise HTTPException(status_code=400, detail="محاضرة الأستاذ البديل غير صالحة للتبادل")
+        if lec_b.get("swap_id"):
+            raise HTTPException(status_code=400, detail="محاضرة الأستاذ البديل سبق تبادلها")
+        if await db.lecture_swaps.find_one({"status": "approved", "$or": [{"lecture_a.id": data.lecture_b_id}, {"lecture_b.id": data.lecture_b_id}]}):
+            raise HTTPException(status_code=400, detail="يوجد تبادل قائم على محاضرة الأستاذ البديل بالفعل")
+        ws, we = _week_range(lec_a["date"])
+        if not (ws <= lec_b["date"] <= we):
+            raise HTTPException(status_code=400, detail="التبادل يكون داخل الأسبوع نفسه فقط")
+        if _lec_dt(lec_b) <= _now():
+            raise HTTPException(status_code=400, detail="انقضى موعد محاضرة الأستاذ البديل")
+        a_busy = await _busy(db, a_tid, lec_b["date"], lec_b.get("start_time"), lec_b.get("end_time"), [data.lecture_b_id])
+        if a_busy:
+            raise HTTPException(status_code=400, detail=f"الأستاذ الأصلي غير متاح وقت محاضرة البديل: {a_busy}")
+    course_b = (await db.courses.find_one({"_id": _oid(lec_b["course_id"])}) or {}) if lec_b else {}
+    await _enrich_lectures(db, [lec_a] + ([lec_b] if lec_b else []))
+    now = _now().isoformat()
+    doc = {
+        "type": data.type, "status": "approved", "reason": (data.reason or "").strip()[:500],
+        "teacher_a_id": a_tid, "teacher_a_name": await _teacher_name(db, a_tid),
+        "teacher_b_id": cp, "teacher_b_name": await _teacher_name(db, cp),
+        "lecture_a": _lec_view(lec_a), "lecture_b": _lec_view(lec_b) if lec_b else None,
+        "department_id": course_a.get("department_id"), "faculty_id": course_a.get("faculty_id"),
+        "department_id_b": course_b.get("department_id"), "faculty_id_b": course_b.get("faculty_id"),
+        "cross_department": bool(course_b) and course_b.get("department_id") != course_a.get("department_id"),
+        "month": lec_a["date"][:7],
+        "created_by": current_user["id"], "created_by_name": current_user.get("full_name"), "created_by_role": current_user["role"],
+        "history": [{"step": "apply", "by": current_user["id"], "name": current_user.get("full_name"), "role": current_user["role"], "at": now}],
+        "created_at": now, "updated_at": now,
+    }
+    res = await db.lecture_swaps.insert_one(doc)
+    doc["_id"] = res.inserted_id
+    sid = str(res.inserted_id)
+    await _apply(db, doc)
+    kind = "تبادل" if data.type == "swap" else "إنابة"
+    body = f"قررت الإدارة ({current_user.get('full_name')}) {kind} محاضرة «{lec_a.get('course_name')}» {lec_a['date']} {lec_a.get('start_time')}: ينفّذها أ. {doc['teacher_b_name']}"
+    if lec_b:
+        body += f"، ومحاضرة «{lec_b.get('course_name')}» {lec_b['date']} {lec_b.get('start_time')} ينفّذها أ. {doc['teacher_a_name']}"
+    if data.reason:
+        body += f" — السبب: {data.reason.strip()[:200]}"
+    both = list(set(await _teacher_user_ids(db, a_tid) + await _teacher_user_ids(db, cp)))
+    await notify_users(db, both, f"{kind} محاضرة 🔁", body, "lecture_swap", {"swap_id": sid})
+    if st["notify_students"]:
+        await _notify_students(db, doc)
+    await log_activity(current_user, "lecture_swap_apply", "lecture_swap", sid, f"{kind} محاضرة (إداري)", {"lecture_a": data.lecture_a_id, "lecture_b": data.lecture_b_id, "teacher_a": a_tid, "teacher_b": cp})
+    return _swap_view(await db.lecture_swaps.find_one({"_id": res.inserted_id}))
 
 
-@router.post("/{swap_id}/decide")
-async def decide(swap_id: str, data: RespondIn, current_user: dict = Depends(get_current_user)):
+# ---------------- القوائم ----------------
+@router.get("")
+async def list_swaps(status: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    _require_operator(current_user)
     db = get_db()
-    s = await db.lecture_swaps.find_one({"_id": _oid(swap_id)}) if _oid(swap_id) else None
-    if not s or s["status"] != "pending_head":
-        raise HTTPException(status_code=404, detail="الطلب غير موجود أو ليس بانتظار الاعتماد")
-    if not _can_decide(current_user, s):
-        raise HTTPException(status_code=403, detail="الاعتماد لرئيس القسم/العميد المعني")
-    if _lec_dt(s["lecture_a"]) <= _now():
-        raise HTTPException(status_code=400, detail="فات موعد المحاضرة — انتهت صلاحية الطلب")
-    step = {"step": "head", "by": current_user["id"], "name": current_user.get("full_name"), "role": current_user["role"], "accept": data.accept, "note": data.note[:300], "at": _now().isoformat()}
-    kind = "تبادل" if s["type"] == "swap" else "إنابة"
-    both = [s["requester_user_id"]] + await _teacher_user_ids(db, s["counterpart_teacher_id"])
-    if not data.accept:
-        await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": "rejected_head", "updated_at": _now().isoformat()}, "$push": {"approvals": step}})
-        await notify_users(db, both, f"رفض اعتماد {kind} ❌", f"{current_user.get('full_name')} رفض طلب {kind} «{s['lecture_a'].get('course_name')}»" + (f": {data.note}" if data.note else ""), "lecture_swap", {"swap_id": swap_id})
-        return {"ok": True, "status": "rejected_head"}
-    await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": "approved", "updated_at": _now().isoformat()}, "$push": {"approvals": step}})
-    s = await db.lecture_swaps.find_one({"_id": s["_id"]})
-    await _apply(db, s)
-    await _notify_students(db, s)
-    await notify_users(db, both, f"اعتماد {kind} المحاضرة ✅", f"تم اعتماد {kind} «{s['lecture_a'].get('course_name')}» {s['lecture_a']['date']} — ينفّذها أ. {s['counterpart_name']}" + (f"، و«{s['lecture_b'].get('course_name')}» {s['lecture_b']['date']} ينفّذها أ. {s['requester_name']}" if s.get("lecture_b") else ""), "lecture_swap", {"swap_id": swap_id})
-    await log_activity(current_user, "lecture_swap_approve", "lecture_swap", swap_id, f"اعتماد {kind} محاضرة", {})
-    return {"ok": True, "status": "approved"}
+    q: dict = {}
+    if current_user["role"] == UserRole.DEPARTMENT_HEAD and current_user.get("department_id"):
+        q["$or"] = [{"department_id": current_user["department_id"]}, {"department_id_b": current_user["department_id"]}]
+    elif current_user["role"] != UserRole.ADMIN and current_user.get("faculty_id"):
+        q["$or"] = [{"faculty_id": current_user["faculty_id"]}, {"faculty_id_b": current_user["faculty_id"]}]
+    if status:
+        q["status"] = {"$in": status.split(",")}
+    rows = await db.lecture_swaps.find(q).sort("created_at", -1).limit(300).to_list(300)
+    now = _now()
+    out = []
+    for s in rows:
+        if s["status"] == "approved" and _lec_dt(s["lecture_a"]) <= now and (not s.get("lecture_b") or _lec_dt(s["lecture_b"]) <= now):
+            await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": "executed", "updated_at": now.isoformat()}})
+            s["status"] = "executed"
+        v = _swap_view(s)
+        v["can_cancel"] = s["status"] == "approved" and _lec_dt(s["lecture_a"]) > now and (not s.get("lecture_b") or _lec_dt(s["lecture_b"]) > now)
+        out.append(v)
+    return {"items": out, "active": sum(1 for v in out if v["status"] == "approved")}
+
+
+class CancelIn(BaseModel):
+    note: str = ""
 
 
 @router.post("/{swap_id}/cancel")
-async def cancel(swap_id: str, data: RespondIn, current_user: dict = Depends(get_current_user)):
+async def cancel(swap_id: str, data: CancelIn, current_user: dict = Depends(get_current_user)):
+    """إلغاء قبل التنفيذ: تعود المحاضرتان لأصحابهما"""
+    _require_operator(current_user)
     db = get_db()
     s = await db.lecture_swaps.find_one({"_id": _oid(swap_id)}) if _oid(swap_id) else None
-    if not s or s["status"] not in ("pending_counterpart", "pending_head", "approved"):
-        raise HTTPException(status_code=404, detail="الطلب غير موجود أو لا يمكن إلغاؤه")
-    my_ids = my_teacher_ids(current_user)
-    if not (s["requester_teacher_id"] in my_ids or s["counterpart_teacher_id"] in my_ids or _can_decide(current_user, s)):
-        raise HTTPException(status_code=403, detail="غير مصرح")
+    if not s or s["status"] != "approved":
+        raise HTTPException(status_code=404, detail="العملية غير موجودة أو لا يمكن إلغاؤها")
     if _lec_dt(s["lecture_a"]) <= _now() or (s.get("lecture_b") and _lec_dt(s["lecture_b"]) <= _now()):
-        raise HTTPException(status_code=400, detail="لا يمكن الإلغاء بعد تنفيذ إحدى المحاضرتين")
-    if s["status"] == "approved":
-        await _revert(db, s)
-    await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": "cancelled", "updated_at": _now().isoformat()}, "$push": {"approvals": {"step": "cancel", "by": current_user["id"], "name": current_user.get("full_name"), "note": data.note[:300], "at": _now().isoformat()}}})
-    both = [s["requester_user_id"]] + await _teacher_user_ids(db, s["counterpart_teacher_id"])
-    await notify_users(db, both, "إلغاء تبادل محاضرة ↩️", f"{current_user.get('full_name')} ألغى طلب «{s['lecture_a'].get('course_name')}» {s['lecture_a']['date']}" + (f": {data.note}" if data.note else ""), "lecture_swap", {"swap_id": swap_id})
+        raise HTTPException(status_code=400, detail="لا يمكن الإلغاء بعد حلول موعد إحدى المحاضرتين")
+    await _revert(db, s)
+    await db.lecture_swaps.update_one({"_id": s["_id"]}, {"$set": {"status": "cancelled", "updated_at": _now().isoformat()}, "$push": {"history": {"step": "cancel", "by": current_user["id"], "name": current_user.get("full_name"), "role": current_user["role"], "note": data.note[:300], "at": _now().isoformat()}}})
+    both = list(set(await _teacher_user_ids(db, s["teacher_a_id"]) + await _teacher_user_ids(db, s["teacher_b_id"])))
+    await notify_users(db, both, "إلغاء تبادل محاضرة ↩️", f"{current_user.get('full_name')} ألغى تبادل «{s['lecture_a'].get('course_name')}» {s['lecture_a']['date']} — عادت المحاضرات لأصحابها" + (f": {data.note}" if data.note else ""), "lecture_swap", {"swap_id": swap_id})
     await log_activity(current_user, "lecture_swap_cancel", "lecture_swap", swap_id, "إلغاء تبادل محاضرة", {})
     return {"ok": True, "status": "cancelled"}
 
 
 @router.get("/report")
 async def report(month: Optional[str] = None, current_user: dict = Depends(get_current_user)):
-    """ملخص شهري: عدد التبادلات/الإنابات لكل أستاذ وقسم"""
-    if current_user["role"] not in HEAD_ROLES:
-        raise HTTPException(status_code=403, detail="غير مصرح")
+    """ملخص شهري: عدد التبادلات/الإنابات لكل أستاذ"""
+    _require_operator(current_user)
     db = get_db()
     q: dict = {"status": {"$in": ["approved", "executed"]}}
     if month:
         q["month"] = month
-    if current_user["role"] == "department_head" and current_user.get("department_id"):
+    if current_user["role"] == UserRole.DEPARTMENT_HEAD and current_user.get("department_id"):
         q["$or"] = [{"department_id": current_user["department_id"]}, {"department_id_b": current_user["department_id"]}]
-    elif current_user["role"] == "dean" and current_user.get("faculty_id"):
+    elif current_user["role"] != UserRole.ADMIN and current_user.get("faculty_id"):
         q["$or"] = [{"faculty_id": current_user["faculty_id"]}, {"faculty_id_b": current_user["faculty_id"]}]
     rows = await db.lecture_swaps.find(q).to_list(2000)
     per: dict = {}
     for s in rows:
-        for tid, name in ((s["requester_teacher_id"], s["requester_name"]), (s["counterpart_teacher_id"], s["counterpart_name"])):
+        for tid, name in ((s["teacher_a_id"], s["teacher_a_name"]), (s["teacher_b_id"], s["teacher_b_name"])):
             p = per.setdefault(tid, {"teacher_id": tid, "name": name, "swaps": 0, "covers": 0})
             p["swaps" if s["type"] == "swap" else "covers"] += 1
     return {"month": month, "total": len(rows), "swaps": sum(1 for s in rows if s["type"] == "swap"), "covers": sum(1 for s in rows if s["type"] == "cover"), "per_teacher": sorted(per.values(), key=lambda x: -(x["swaps"] + x["covers"]))}
