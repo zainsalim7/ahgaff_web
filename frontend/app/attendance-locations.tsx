@@ -29,6 +29,11 @@ export default function AttendanceLocationsPage() {
   const setLoc = (i: number, k: string, v: any) => setGeo({ ...geo, locations: geo.locations.map((l: any, j: number) => (j === i ? { ...l, [k]: v } : l)) });
   const teachers = useMemo(() => { const m = new Map<string, { name: string; outside: number; no_location: number }>(); data.items.forEach((it: any) => { const e = m.get(it.teacher_id || it.teacher_name) || { name: it.teacher_name || 'غير معيّن', outside: 0, no_location: 0 }; if (it.flag === 'outside') e.outside++; if (it.flag === 'no_location') e.no_location++; m.set(it.teacher_id || it.teacher_name, e); }); return Array.from(m.values()).filter((t) => t.outside + t.no_location > 0).sort((a, b) => b.outside - a.outside).slice(0, 8); }, [data]);
   const s = data.summary || {};
+  const [q, setQ] = useState('');
+  const [flagFilter, setFlagFilter] = useState<'' | 'outside' | 'no_location' | 'inside'>('');
+  const norm = (x: string) => (x || '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي').toLowerCase();
+  const shown = useMemo(() => data.items.filter((it: any) => (!flagFilter || it.flag === flagFilter) && (!q || norm(`${it.teacher_name} ${it.course_name}`).includes(norm(q)))), [data, q, flagFilter]);
+  const hasLocal = !!q || !!flagFilter;
 
   return (
     <CorrPage title="📍 مواقع تحضير المحاضرات" subtitle="المحاضرات التي حُضّرت خارج حدود الكلية أو بدون موقع (وضع التنبيه — لا يُمنع الحفظ). الموقع يُلتقط بصمت من هاتف الأستاذ وقت الحفظ حتى أوفلاين." testID="geo-page" hideNav
@@ -69,16 +74,26 @@ export default function AttendanceLocationsPage() {
           <label style={{ fontSize: 12.5, display: 'flex', gap: 6, alignItems: 'center', cursor: 'pointer', whiteSpace: 'nowrap' }}><input type="checkbox" checked={onlyFlagged} onChange={(e) => setOnlyFlagged(e.target.checked)} data-testid="geo-only-flagged" /> المخالفات فقط</label>
           <button onClick={load} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 10px', fontSize: 12 })} data-testid="geo-refresh">↻</button>
         </div>
-        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }} data-testid="geo-summary">
-          {([['outside', s.outside], ['no_location', s.no_location], ['inside', s.inside]] as const).map(([k, v]) => <div key={k} style={{ flex: 1, minWidth: 160, borderRadius: 12, padding: 12, background: FLAG[k].color + '12', border: `1.5px solid ${FLAG[k].color}44` }} data-testid={`geo-summary-${k}`}><div style={{ fontSize: 26, fontWeight: 900, color: FLAG[k].color }}>{v ?? 0}</div><div style={{ fontSize: 12.5, fontWeight: 700, color: '#334155' }}>{FLAG[k].label}</div></div>)}
+        <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 بحث باسم الأستاذ أو المقرر…" style={{ ...inp, flex: 1, minWidth: 220 }} data-testid="geo-search" />
+          {hasLocal && <button onClick={() => { setQ(''); setFlagFilter(''); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 10px', fontSize: 12 })} data-testid="geo-clear-local">✕ مسح الفلاتر</button>}
+          <span style={{ fontSize: 12, color: '#64748b' }} data-testid="geo-count">{hasLocal ? `${shown.length} من ${data.items.length}` : `${data.items.length} محاضرة`}</span>
         </div>
-        {teachers.length > 0 && <div style={{ marginTop: 10, fontSize: 12.5, color: '#475569' }} data-testid="geo-teachers"><b>الأكثر تكراراً:</b> {teachers.map((t) => `${t.name} (${t.outside} خارج${t.no_location ? ` · ${t.no_location} بدون موقع` : ''})`).join(' — ')}</div>}
+        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }} data-testid="geo-summary">
+          {([['outside', s.outside], ['no_location', s.no_location], ['inside', s.inside]] as const).map(([k, v]) => { const active = flagFilter === k; return (
+            <div key={k} role="button" onClick={() => setFlagFilter(active ? '' : k)} title={active ? 'إلغاء الفلترة' : `عرض ${FLAG[k].label} فقط`}
+              style={{ flex: 1, minWidth: 160, borderRadius: 12, padding: 12, cursor: 'pointer', userSelect: 'none', background: active ? FLAG[k].color : FLAG[k].color + '12', border: `1.5px solid ${active ? FLAG[k].color : FLAG[k].color + '44'}`, boxShadow: active ? `0 4px 14px ${FLAG[k].color}55` : 'none', transition: 'background-color .15s, box-shadow .15s' }} data-testid={`geo-summary-${k}`}>
+              <div style={{ fontSize: 26, fontWeight: 900, color: active ? '#fff' : FLAG[k].color }}>{v ?? 0}</div>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: active ? '#fff' : '#334155' }}>{FLAG[k].label}{active ? ' ✓' : ''}</div>
+            </div>); })}
+        </div>
+        {teachers.length > 0 && <div style={{ marginTop: 10, fontSize: 12.5, color: '#475569' }} data-testid="geo-teachers"><b>الأكثر تكراراً:</b> {teachers.map((t, i) => <React.Fragment key={t.name}>{i > 0 ? ' — ' : ' '}<a onClick={() => setQ(q === t.name ? '' : t.name)} style={{ cursor: 'pointer', color: q === t.name ? '#b91c1c' : '#1d4ed8', fontWeight: q === t.name ? 800 : 500 }} data-testid={`geo-teacher-link-${i}`}>{t.name}</a> ({t.outside} خارج{t.no_location ? ` · ${t.no_location} بدون موقع` : ''})</React.Fragment>)}</div>}
       </div>
       <div style={card} data-testid="geo-list">
-        {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>جاري التحميل…</div> : data.items.length === 0 ? <Empty text={onlyFlagged ? 'لا توجد محاضرات مخالفة في هذه الفترة ✅' : 'لا توجد محاضرات بموقع في هذه الفترة'} /> : (
+        {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>جاري التحميل…</div> : shown.length === 0 ? <Empty text={hasLocal ? 'لا نتائج مطابقة للفلاتر' : onlyFlagged ? 'لا توجد محاضرات مخالفة في هذه الفترة ✅' : 'لا توجد محاضرات بموقع في هذه الفترة'} /> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>{['التاريخ', 'الوقت', 'المقرر', 'الأستاذ', 'الحالة', 'المسافة', 'أقرب موقع', 'حالة الالتقاط', 'الدقة'].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{data.items.map((it: any) => { const f = FLAG[it.flag] || FLAG.inside; const loc = it.location || {}; return (
+            <tbody>{shown.map((it: any) => { const f = FLAG[it.flag] || FLAG.inside; const loc = it.location || {}; return (
               <tr key={it.lecture_id} data-testid={`geo-row-${it.lecture_id}`} style={it.flag === 'outside' ? { background: '#fff5f5' } : undefined}>
                 <td style={td}>{it.date}</td><td style={td}>{it.start_time}–{it.end_time}</td><td style={td}>{it.course_name}</td><td style={td}>{it.teacher_name || '—'}</td>
                 <td style={td}><Badge text={f.label} color={f.color} /></td>
