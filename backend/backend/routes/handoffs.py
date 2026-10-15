@@ -29,6 +29,7 @@ TITLES = {
     "EMPLOYEE_APP_GEOFENCING": "📍 التحقق الجغرافي للحضور (Geofencing)",
     "EMPLOYEE_APP_PRESENCE_SHIFTS": "🔔 تأكيد التواجد العشوائي + فترات الدوام المتعددة",
     "EMPLOYEE_APP_CORRECTION": "↩️ تصحيح الحضور/الانصراف + 🤖 الانصراف التلقائي",
+    "EMPLOYEE_APP_DEVICE_ID_FIX": "📱 إصلاح عاجل: معرّف الجهاز غير ثابت (DEV-…) يُفشل التحضير",
     "APPS_FORCE_UPDATE": "📲 التحديث الإجباري لتطبيقات الطالب والمعلم",
     "EXTERNAL_LMS_INTEGRATION": "🔗 تكامل نظام النتائج الخارجي (قراءة فقط)",
     "STUDENT_APP_ATTENDANCE_REPORT_TASK": "🎓 تطبيق الطالب — تقرير الحضور",
@@ -70,4 +71,9 @@ async def raw(name: str):
 async def doc(name: str):
     text = _file(name).read_text(encoding="utf-8")
     body = markdown.markdown(text, extensions=["tables", "fenced_code", "toc"])
-    return _page(TITLES.get(name, name), body)
+    raw_js = text.replace("\\", "\\\\").replace("`", "\\`").replace("${", "\\${")
+    toolbar = f"""<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+<button onclick="navigator.clipboard.writeText(RAW).then(()=>{{this.textContent='✅ تم النسخ';setTimeout(()=>this.textContent='📋 نسخ الوثيقة كاملة (Markdown)',2000)}})" style="background:#0f2440;color:#fff;border:none;border-radius:10px;padding:10px 16px;font-weight:800;cursor:pointer;font-family:inherit">📋 نسخ الوثيقة كاملة (Markdown)</button>
+<a href="/api/handoffs/{name}.md" style="background:#e2e8f0;color:#0f2440;border-radius:10px;padding:10px 16px;font-weight:800;text-decoration:none">📄 فتح النص الخام</a></div>
+<script>const RAW=`{raw_js}`;</script>"""
+    return _page(TITLES.get(name, name), toolbar + body)
