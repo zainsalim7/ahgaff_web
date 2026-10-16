@@ -36,8 +36,8 @@ steps:
       - '--timeout=300'
       - '--cpu-boost'
       - '--concurrency=80'
-      - '--set-env-vars=DB_NAME=ahgaff_attendance'
-      - '--update-secrets=MONGO_URL=mongo-url:latest,SECRET_KEY=jwt-secret:latest,ALLOWED_ORIGINS=allowed-origins:latest,FIREBASE_SERVICE_ACCOUNT_JSON=firebase-service-account:latest'
+      - '--set-env-vars=DB_NAME=ahgaff_attendance,PLATFORM_URL=https://platform.ahgaff.net'
+      - '--update-secrets=MONGO_URL=mongo-url:latest,SECRET_KEY=jwt-secret:latest,ALLOWED_ORIGINS=allowed-origins:latest,FIREBASE_SERVICE_ACCOUNT_JSON=firebase-service-account:latest,SSO_SHARED_SECRET=sso-shared-secret:latest'
 
 options:
   logging: CLOUD_LOGGING_ONLY
