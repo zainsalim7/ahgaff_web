@@ -30,6 +30,7 @@ TITLES = {
     "EMPLOYEE_APP_PRESENCE_SHIFTS": "🔔 تأكيد التواجد العشوائي + فترات الدوام المتعددة",
     "EMPLOYEE_APP_CORRECTION": "↩️ تصحيح الحضور/الانصراف + 🤖 الانصراف التلقائي",
     "EMPLOYEE_APP_DEVICE_ID_FIX": "📱 إصلاح عاجل: معرّف الجهاز غير ثابت (DEV-…) يُفشل التحضير",
+    "PLATFORM_SSO": "🔐 الدخول الموحّد (SSO) — تطبيق الأستاذ ⇄ منصة الأحقاف (المكتبة الرقمية)",
     "APPS_FORCE_UPDATE": "📲 التحديث الإجباري لتطبيقات الطالب والمعلم",
     "EXTERNAL_LMS_INTEGRATION": "🔗 تكامل نظام النتائج الخارجي (قراءة فقط)",
     "STUDENT_APP_ATTENDANCE_REPORT_TASK": "🎓 تطبيق الطالب — تقرير الحضور",

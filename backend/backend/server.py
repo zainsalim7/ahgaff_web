@@ -18294,6 +18294,10 @@ app.include_router(build_absence_justifications_router(db, get_current_user, _aj
 from geofence_attendance import build_router as build_geofence_router
 app.include_router(build_geofence_router(db, get_current_user), prefix="/api")
 
+# 🔐 الدخول الموحّد إلى منصة الأحقاف (المكتبة الرقمية)
+from sso_platform import build_router as build_sso_router
+app.include_router(build_sso_router(db, get_current_user), prefix="/api")
+
 app.include_router(auth_router, prefix="/api")
 app.include_router(users_router, prefix="/api")
 app.include_router(roles_router, prefix="/api")

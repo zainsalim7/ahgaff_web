@@ -1021,3 +1021,8 @@
 - السبب الجذري لبلاغ المستخدم: تطبيق الموظفين (وكيل آخر) يرسل معرّف احتياطي عشوائي `DEV-…` غير محفوظ فيتغيّر بعد التحديث → رفض 403. وثيقة الإصلاح للوكيل: `memory/handoffs/EMPLOYEE_APP_DEVICE_ID_FIX.md` (Android ID / iOS IDFV + UUID في SecureStore).
 - تخفيف خادمي (`hr_attendance.py::_auto_device_request`): عند الرفض يُنشأ طلب `hr_device_requests` بـ `source:"auto"` (أو يُحدَّث المعلّق بآخر معرّف + `attempts`) ويُنبَّه HR؛ رسالتا 403 جديدتان. مفتاح إعدادات `device_auto_request` (افتراضي مفعّل) في hr_common/hr_shifts/WorkSettings. شارة «⚡ تلقائي» في DeviceRequests. اختبار: `memory/patches/test_device_auto_request.sh`.
 - 2026-10-15: صفحة مواقع تحضير المحاضرات: بحث بالاسم/المقرر، مربعات الملخص قابلة للنقر كفلاتر حالة، أسماء «الأكثر تكراراً» قابلة للنقر، وعدّاد النتائج.
+
+## 2026-10-15: 🔐 SSO إلى منصة الأحقاف (المكتبة الرقمية) ✅
+- `backend/sso_platform.py` (مرجعي من المستخدم): `GET /api/sso/platform-token?redirect=` → JWT HS256 (iss api.ahgaff.net, aud platform.ahgaff.net, 180s, jti) + `sso_url`. الطلاب 403، بلا سر 503، redirect مقيّد.
+- `.env`: SSO_SHARED_SECRET (مزوَّد من المستخدم — يجب إضافته أيضاً في بيئة الإنتاج وفي منصة الأحقاف)، PLATFORM_URL.
+- وثيقة الطرف 2 (المنصة): `/api/handoffs/PLATFORM_SSO`.
