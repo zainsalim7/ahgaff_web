@@ -205,6 +205,7 @@ except Exception as e:
 
 # تهيئة قاعدة البيانات للـ routes
 from routes.deps import set_database, build_course_student_query
+from routes.staff_identity import assert_staff_unique, ensure_employee_file, sync_employee_from_teacher
 if db is not None:
     set_database(db)
 
@@ -4900,10 +4901,8 @@ async def create_teacher(request: Request, current_user: dict = Depends(get_curr
     
     teacher = TeacherCreate(**{k: v for k, v in body.items() if k in TeacherCreate.__fields__})
     
-    # التحقق من عدم تكرار الرقم الوظيفي
-    existing = await db.teachers.find_one({"teacher_id": teacher.teacher_id})
-    if existing:
-        raise HTTPException(status_code=400, detail="الرقم الوظيفي مستخدم مسبقاً")
+    # التحقق من عدم تكرار الرقم الوظيفي والجوال عبر المعلمين والموظفين معاً
+    await assert_staff_unique(db, employee_no=teacher.teacher_id, phone=teacher.phone)
     
     teacher_dict = teacher.dict()
     teacher_dict["created_at"] = get_yemen_time()
@@ -4921,6 +4920,8 @@ async def create_teacher(request: Request, current_user: dict = Depends(get_curr
     
     result = await db.teachers.insert_one(teacher_dict)
     teacher_dict["id"] = str(result.inserted_id)
+    # 🗂️ لكل أكاديمي ملف إداري تلقائياً
+    await ensure_employee_file(db, {**teacher_dict, "_id": result.inserted_id}, current_user.get("full_name", "تلقائي"))
     
     return teacher_dict
 
@@ -5202,10 +5203,9 @@ async def update_teacher(teacher_id: str, request: Request, current_user: dict =
     # 🔢 تغيير الرقم الوظيفي: فحص التكرار + تحديث اسم مستخدم حساب الدخول المرتبط
     new_tid = (update_data.get("teacher_id") or "").strip()
     old_tid = (teacher.get("teacher_id") or "").strip()
+    await assert_staff_unique(db, employee_no=new_tid if new_tid and new_tid != old_tid else None,
+                              phone=update_data.get("phone") if "phone" in update_data else None, exclude_teacher_id=teacher_id)
     if new_tid and new_tid != old_tid:
-        dup = await db.teachers.find_one({"teacher_id": new_tid, "_id": {"$ne": ObjectId(teacher_id)}})
-        if dup:
-            raise HTTPException(status_code=400, detail=f"الرقم الوظيفي {new_tid} مستخدم بالفعل للمعلم: {dup.get('full_name', '')}")
         dup_user = await db.users.find_one({"username": new_tid})
         if dup_user and str(dup_user.get("_id")) != str(teacher.get("user_id") or ""):
             raise HTTPException(status_code=400, detail=f"اسم المستخدم {new_tid} مستخدم بالفعل لحساب آخر")
@@ -5237,6 +5237,9 @@ async def update_teacher(teacher_id: str, request: Request, current_user: dict =
         await db.teachers.update_one({"_id": ObjectId(teacher_id)}, {"$set": update_data})
     
     updated = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
+    # 🗂️ مزامنة الملف الإداري (وإنشاؤه إن لم يوجد)
+    await ensure_employee_file(db, updated, current_user.get("full_name", "تلقائي"))
+    await sync_employee_from_teacher(db, teacher_id, update_data)
     return {
         "id": str(updated["_id"]),
         "teacher_id": updated.get("teacher_id", ""),
@@ -15266,6 +15269,12 @@ async def import_teachers_from_excel(
                 if existing:
                     errors.append(f"المعلم {tid} موجود مسبقاً")
                     continue
+                _ph = str(row.get('phone', '')).strip() if pd.notna(row.get('phone')) else None
+                try:
+                    await assert_staff_unique(db, employee_no=tid, phone=_ph)
+                except HTTPException as _ex:
+                    errors.append(f"الصف {index + 2}: {_ex.detail}")
+                    continue
                 
                 weekly_h = 12
                 try:
@@ -15292,6 +15301,7 @@ async def import_teachers_from_excel(
                 result = await db.teachers.insert_one(teacher_data)
                 teacher_obj_id = result.inserted_id
                 imported += 1
+                await ensure_employee_file(db, {**teacher_data, "_id": teacher_obj_id}, "استيراد المعلمين")
                 
                 # Auto-activate account: username = teacher_id, password = teacher_id
                 existing_user = await db.users.find_one({"username": tid})

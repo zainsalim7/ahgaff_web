@@ -1026,3 +1026,9 @@
 - `backend/sso_platform.py` (مرجعي من المستخدم): `GET /api/sso/platform-token?redirect=` → JWT HS256 (iss api.ahgaff.net, aud platform.ahgaff.net, 180s, jti) + `sso_url`. الطلاب 403، بلا سر 503، redirect مقيّد.
 - `.env`: SSO_SHARED_SECRET (مزوَّد من المستخدم — يجب إضافته أيضاً في بيئة الإنتاج وفي منصة الأحقاف)، PLATFORM_URL.
 - وثيقة الطرف 2 (المنصة): `/api/handoffs/PLATFORM_SSO`.
+
+## 2026-10-17: 🪪 هوية الكادر + بحث الموظفين ✅
+- `routes/staff_identity.py`: `assert_staff_unique` (الرقم الوظيفي والجوال فريدان عبر teachers.teacher_id/phone وemployees.employee_no/phone، مع استثناء المعلم وملفه الإداري المرتبط؛ مطابقة الجوال تتجاهل المسافات/الشرطات)، `ensure_employee_file` (ملف إداري تلقائي لكل أكاديمي، idempotent)، `sync_employee_from_teacher` (مزامنة الاسم/الجوال/البريد/الرقم/الحالة).
+- مُطبَّق في: POST/PUT /teachers، استيراد المعلمين Excel، POST/PUT /hr/employees، معاينة استيراد الموظفين (أخطاء صفوف)، وsync-teachers أعيد استخدامه للمساعد.
+- البحث الشامل: نوع `employees` (hr_view/manage_employees أو admin) بالاسم/الرقم الوظيفي/الجوال/الهوية/المسمى → `/hr-employees?employeeId=` يفتح البطاقة مباشرة. شريحة «موظفون» في GlobalSearch.
+- اختبار: `memory/patches/test_staff_identity.sh`.

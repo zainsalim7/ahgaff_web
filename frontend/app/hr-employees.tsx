@@ -18,7 +18,7 @@ const STATUS_COLOR: Record<string, string> = { active: '#16a34a', probation: '#f
 
 export default function HrEmployees() {
   const router = useRouter();
-  const sp = useLocalSearchParams<{ category?: string; org_unit_id?: string; status?: string }>();
+  const sp = useLocalSearchParams<{ category?: string; org_unit_id?: string; status?: string; employeeId?: string }>();
   const { hasPermission, user } = useAuth();
   const canManage = user?.role === 'admin' || hasPermission('hr_manage_employees');
   const [meta, setMeta] = useState<any>(null);
@@ -59,6 +59,7 @@ export default function HrEmployees() {
   const alertMsg = (e: any) => window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'حدث خطأ');
 
   const openDetail = async (id: string) => { try { setDetail((await hrAPI.employee(id)).data); } catch (e) { alertMsg(e); } };
+  useEffect(() => { if (sp.employeeId) openDetail(String(sp.employeeId)); }, [sp.employeeId]);
   const linkUnits = async () => { const force = window.confirm('ربط المعلمين بوحدات أقسامهم/كلياتهم.\n«موافق» = إعادة الربط للجميع وفق بيانات المعلم · «إلغاء» = ربط من لا وحدة له فقط'); try { const r = await hrAPI.linkUnits(force); window.alert(r.data.message + (r.data.unresolved?.length ? '\n\nبلا وحدة: ' + r.data.unresolved.map((u: any) => `${u.name} (${u.reason})`).join('، ') : '')); load(); } catch (e) { alertMsg(e); } };
   const syncTeachers = async () => { if (!window.confirm('إنشاء ملف إداري لكل معلم ليس له ملف؟')) return; try { const r = await hrAPI.syncTeachers(); window.alert(r.data.message); load(); } catch (e) { alertMsg(e); } };
   const createAccount = (emp: any) => setAcct({ emp, mode: 'create' });

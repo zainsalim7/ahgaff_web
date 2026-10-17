@@ -48,6 +48,7 @@ interface Props {
 const CATEGORY_LABELS: Record<string, { label: string; color: string; icon: any }> = {
   students: { label: 'الطلاب', color: '#1565c0', icon: 'people' },
   teachers: { label: 'المعلمون', color: '#6a1b9a', icon: 'school' },
+  employees: { label: 'الموظفون', color: '#00695c', icon: 'briefcase' },
   courses: { label: 'المقررات', color: '#2e7d32', icon: 'book' },
   departments: { label: 'الأقسام', color: '#ef6c00', icon: 'grid' },
   faculties: { label: 'الكليات', color: '#c62828', icon: 'business' },
@@ -58,6 +59,7 @@ const TYPE_FILTERS = [
   { value: 'all', label: 'الكل', icon: 'apps' },
   { value: 'students', label: 'طلاب', icon: 'people' },
   { value: 'teachers', label: 'معلمون', icon: 'school' },
+  { value: 'employees', label: 'موظفون', icon: 'briefcase' },
   { value: 'courses', label: 'مقررات', icon: 'book' },
   { value: 'departments', label: 'أقسام', icon: 'grid' },
   { value: 'faculties', label: 'كليات', icon: 'business' },
@@ -133,7 +135,7 @@ export default function GlobalSearch({ visible, onClose }: Props) {
               style={styles.searchInput}
               value={query}
               onChangeText={setQuery}
-              placeholder="ابحث عن طالب، معلم، مقرر، قسم..."
+              placeholder="ابحث عن طالب، معلم، موظف، مقرر، قسم..."
               placeholderTextColor="#aaa"
               testID="global-search-input"
               autoCorrect={false}
@@ -190,7 +192,7 @@ export default function GlobalSearch({ visible, onClose }: Props) {
                 <Ionicons name="bulb-outline" size={32} color="#bbb" />
                 <Text style={styles.hintTitle}>ابدأ الكتابة للبحث</Text>
                 <Text style={styles.hintText}>
-                  ابحث عن أي طالب أو معلم أو مقرر أو قسم في النظام بسرعة
+                  ابحث عن أي طالب أو معلم أو موظف أو مقرر أو قسم في النظام بسرعة
                 </Text>
               </View>
             )}

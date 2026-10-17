@@ -104,7 +104,7 @@ async def global_search(
 
     requested_types = {
         t.strip().lower()
-        for t in (types or "students,teachers,courses,departments,faculties,lectures").split(",")
+        for t in (types or "students,teachers,employees,courses,departments,faculties,lectures").split(",")
         if t.strip()
     }
 
@@ -560,5 +560,35 @@ async def global_search(
             if items:
                 results["lectures"] = items
                 total += len(items)
+
+    # =========================================
+    # 7) الموظفون (سجل شؤون الموظفين) — لمن يملك صلاحية HR
+    # =========================================
+    can_search_employees = is_admin or has_any_permission(current_user, ["hr_view_employees", "hr_manage_employees"])
+    if "employees" in requested_types and can_search_employees:
+        eq = {"$or": [{"full_name": regex}, {"employee_no": code_regex}, {"phone": code_regex}, {"national_id": code_regex}, {"job_title": regex}]}
+        emps = await db.employees.find(eq, {"full_name": 1, "employee_no": 1, "job_title": 1, "category": 1, "status": 1, "org_unit_id": 1, "teacher_id": 1, "phone": 1}).limit(limit_per_type).to_list(limit_per_type)
+        unit_ids = {e.get("org_unit_id") for e in emps if e.get("org_unit_id") and ObjectId.is_valid(e.get("org_unit_id"))}
+        units = {str(u["_id"]): u.get("name", "") for u in await db.org_units.find({"_id": {"$in": [ObjectId(x) for x in unit_ids]}}, {"name": 1}).to_list(100)} if unit_ids else {}
+        cat_label = {"academic": "أكاديمي", "administrative": "إداري", "technical": "فني", "service": "خدمات"}
+        st_label = {"active": "على رأس العمل", "on_leave": "في إجازة", "suspended": "موقوف", "terminated": "منتهي", "retired": "متقاعد"}
+        items = []
+        for e in emps:
+            parts = [f"الرقم الوظيفي: {e.get('employee_no', '')}"]
+            if e.get("job_title"):
+                parts.append(e["job_title"])
+            if e.get("category"):
+                parts.append(cat_label.get(e["category"], e["category"]))
+            if units.get(e.get("org_unit_id")):
+                parts.append(units[e["org_unit_id"]])
+            if e.get("phone"):
+                parts.append(e["phone"])
+            if e.get("status"):
+                parts.append(f"الحالة: {st_label.get(e['status'], e['status'])}")
+            items.append({"id": str(e["_id"]), "title": e.get("full_name", ""), "subtitle": " · ".join(parts),
+                          "route": f"/hr-employees?employeeId={str(e['_id'])}", "type": "employee", "icon": "briefcase"})
+        if items:
+            results["employees"] = items
+            total += len(items)
 
     return {"query": q_clean, "results": results, "total": total}

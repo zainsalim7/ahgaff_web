@@ -12,6 +12,7 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user, has_permission, log_activity, get_password_hash
 from .hr_common import _today, hr_scope_units, scope_filter, assert_in_scope, scope_summary
+from .staff_identity import assert_staff_unique, ensure_employee_file
 
 router = APIRouter(prefix="/hr", tags=["شؤون الموظفين"])
 YEMEN_TZ = timezone(timedelta(hours=3))
@@ -516,6 +517,7 @@ async def create_employee(data: EmployeeIn, current_user: dict = Depends(get_cur
         await assert_in_scope(db, current_user, unit_id=data.org_unit_id)
     if await db.employees.find_one({"employee_no": data.employee_no.strip()}):
         raise HTTPException(status_code=400, detail="الرقم الوظيفي مستخدم لموظف آخر")
+    await assert_staff_unique(db, employee_no=data.employee_no, phone=data.phone, exclude_teacher_id=data.teacher_id)
     if data.teacher_id and await db.employees.find_one({"teacher_id": data.teacher_id}):
         raise HTTPException(status_code=400, detail="هذا المعلم مرتبط بملف إداري آخر")
     doc = {**data.dict(), "employee_no": data.employee_no.strip(), "full_name": data.full_name.strip(), "user_id": None, "created_at": _now(), "created_by_name": current_user.get("full_name", "")}
@@ -543,6 +545,7 @@ async def update_employee(emp_id: str, data: EmployeeIn, current_user: dict = De
     dup = await db.employees.find_one({"employee_no": data.employee_no.strip(), "_id": {"$ne": oid}})
     if dup:
         raise HTTPException(status_code=400, detail="الرقم الوظيفي مستخدم لموظف آخر")
+    await assert_staff_unique(db, employee_no=data.employee_no, phone=data.phone, exclude_employee_id=emp_id)
     if data.manager_employee_id == emp_id:
         raise HTTPException(status_code=400, detail="لا يمكن أن يكون الموظف مديراً لنفسه")
     upd = {**data.dict(), "employee_no": data.employee_no.strip(), "full_name": data.full_name.strip(), "updated_at": _now()}
@@ -627,26 +630,11 @@ async def sync_teachers(current_user: dict = Depends(get_current_user)):
     """🔄 إنشاء ملف إداري لكل معلم موجود ليس له ملف (idempotent)"""
     _guard(current_user, P_MANAGE)
     db = get_db()
-    linked = {e["teacher_id"] for e in await db.employees.find({"teacher_id": {"$ne": None}}, {"teacher_id": 1}).to_list(10000)}
     created = 0
     async for t in db.teachers.find({}):
-        tid = str(t["_id"])
-        if tid in linked:
-            continue
-        unit = await db.org_units.find_one({"type": "department", "department_id": str(t.get("department_id") or "")}, {"_id": 1})
-        emp_no = (t.get("teacher_id") or f"T-{tid[-6:]}").strip()
-        if await db.employees.find_one({"employee_no": emp_no}):
-            emp_no = f"{emp_no}-T"
-        await db.employees.insert_one({
-            "employee_no": emp_no, "full_name": t.get("full_name", ""), "category": "academic", "job_title": t.get("academic_rank") or t.get("title") or "عضو هيئة تدريس",
-            "grade": "", "org_unit_id": str(unit["_id"]) if unit else None, "manager_employee_id": None, "contract_type": "permanent",
-            "hire_date": None, "contract_end_date": None, "status": "active" if t.get("is_active", True) else "ended",
-            "gender": t.get("gender", ""), "nationality": "", "national_id": "", "id_expiry_date": None, "birth_date": None,
-            "phone": t.get("phone", ""), "email": t.get("email", ""), "address": "", "emergency_contact": "", "qualification": t.get("qualification", ""),
-            "specialization": t.get("specialization", ""), "notes": "", "teacher_id": tid, "user_id": t.get("user_id"),
-            "created_at": _now(), "created_by_name": "مزامنة المعلمين",
-        })
-        created += 1
+        before = await db.employees.count_documents({"teacher_id": str(t["_id"])})
+        await ensure_employee_file(db, t, "مزامنة المعلمين")
+        created += 0 if before else 1
     rl = await relink_teacher_units(db)
     await log_activity(current_user, "hr_sync_teachers", "employee", None, "مزامنة المعلمين", {"created": created, "linked": rl["linked"]})
     return {"created": created, "linked": rl["linked"], "unresolved": rl["unresolved"], "message": f"تم إنشاء {created} ملفاً إدارياً للمعلمين" + (f" وربط {rl['linked']} بوحداتهم" if rl["linked"] else "") + (f" · {len(rl['unresolved'])} بلا وحدة" if rl["unresolved"] else "")}
@@ -784,7 +772,7 @@ async def _parse_import(db, file: UploadFile, create_units: bool = True):
     cat_rev.update({"إداري": "administrative", "أكاديمي": "academic", "معلم": "academic", "فني": "technical", "خدمات": "service"})
     ct_rev.update({"مؤقت": "contract", "عقد": "contract", "دوام جزئي": "part_time"})
     existing_nos = {e["employee_no"]: str(e["_id"]) for e in await db.employees.find({}, {"employee_no": 1}).to_list(50000)}
-    out, seen = [], set()
+    out, seen, seen_phones = [], set(), set()
 
     def _d(v):
         if v in (None, ""):
@@ -828,6 +816,16 @@ async def _parse_import(db, file: UploadFile, create_units: bool = True):
         for f in ("hire_date", "contract_end_date", "id_expiry_date", "birth_date"):
             dates[f] = _d(rec.get(f))
             if dates[f] == "INVALID": errs.append(f"تاريخ غير صحيح في {dict(IMPORT_COLUMNS)[f]}")
+        # 🪪 تفرّد الرقم الوظيفي والجوال عبر المعلمين والموظفين (الموظف الموجود بنفس الرقم يُحدَّث لا يُكرَّر)
+        try:
+            await assert_staff_unique(db, employee_no=no if not existing_nos.get(no) else None, phone=rec.get("phone"), exclude_employee_id=existing_nos.get(no))
+        except HTTPException as ex:
+            errs.append(str(ex.detail))
+        ph_n = re.sub(r"[\s\-()]", "", rec.get("phone", ""))
+        if ph_n:
+            if ph_n in seen_phones:
+                errs.append("رقم جوال مكرر داخل الملف")
+            seen_phones.add(ph_n)
         out.append({"row": idx, "errors": errs, "exists": no in existing_nos, "existing_id": existing_nos.get(no), "data": {
             "employee_no": no, "full_name": name, "category": cat or "administrative", "job_title": rec.get("job_title", ""), "grade": rec.get("grade", ""),
             "org_unit_id": unit_id, "org_unit_name": rec.get("org_unit", ""), "new_unit_key": unit_key, "contract_type": ct or "permanent", "status": st or "active", **dates,
