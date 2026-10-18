@@ -12589,6 +12589,19 @@ async def get_teacher_delays_report(
     courses_map = {str(c["_id"]): c for c in await db.courses.find({"_id": {"$in": [ObjectId(c) for c in course_ids]}}).to_list(None)} if course_ids else {}
     fac_depts = {str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(None)} if faculty_id else None
     filter_teacher_id = teacher_id
+    # 🔎 مصدر بدء التحضير: أول عملية تحضير لكل محاضرة (من سجّل؟ أوفلاين؟) + حد التأخير للكلية لتفسير التأخيرات الكبيرة
+    first_ops: dict = {}
+    lec_ids = [str(lec["_id"]) for lec in lectures]
+    async for op in db.attendance_operations.find({"lecture_id": {"$in": lec_ids}}, {"lecture_id": 1, "user_id": 1, "user_name": 1, "offline_recorded_at": 1, "recorded_at": 1}).sort("recorded_at", 1):
+        first_ops.setdefault(op["lecture_id"], op)
+    fac_delay_cache: dict = {}
+
+    async def _max_delay_for(dept_id):
+        if dept_id not in fac_delay_cache:
+            dept = await db.departments.find_one({"_id": ObjectId(dept_id)}, {"faculty_id": 1}) if ObjectId.is_valid(dept_id or "") else None
+            fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])}, {"max_attendance_delay_minutes": 1}) if dept and ObjectId.is_valid(dept.get("faculty_id") or "") else None
+            fac_delay_cache[dept_id] = int((fac or {}).get("max_attendance_delay_minutes") or 30)
+        return fac_delay_cache[dept_id]
     
     # تجميع التأخيرات حسب المعلم
     teacher_delays = {}
@@ -12659,10 +12672,25 @@ async def get_teacher_delays_report(
             entry["total_delay_minutes"] += delay_minutes
             if delay_minutes > entry["max_delay_minutes"]:
                 entry["max_delay_minutes"] = delay_minutes
+            op = first_ops.get(str(lec["_id"])) or {}
+            max_delay = await _max_delay_for(course.get("department_id"))
+            recorded_by_other = bool(op.get("user_id")) and op.get("user_id") not in (teacher_id, str((await db.teachers.find_one({"_id": ObjectId(teacher_id)}, {"user_id": 1}) or {}).get("user_id") or "")) if ObjectId.is_valid(teacher_id) else False
+            if op.get("offline_recorded_at"):
+                source, source_label = "offline", "مزامنة أوفلاين (وقت الجهاز)"
+            elif recorded_by_other:
+                source, source_label = "other_user", f"سجّله {op.get('user_name') or 'مستخدم آخر'} (صلاحية تعديل)"
+            elif delay_minutes > max_delay:
+                source, source_label = "late_by_permission", f"تجاوز حد التأخير ({max_delay} د) — فُتح بصلاحية تعديل الحضور"
+            else:
+                source, source_label = "normal", ""
             entry["delays"].append({
                 "date": lec["date"],
                 "course_id": str(course["_id"]),
                 "course_name": course["name"],
+                "source": source,
+                "source_label": source_label,
+                "recorded_by_name": op.get("user_name", ""),
+                "exceeds_limit": delay_minutes > max_delay,
                 "start_time": lec["start_time"],
                 "started_at": started_at.strftime("%H:%M") if hasattr(started_at, 'strftime') else str(started_at),
                 "delay_minutes": delay_minutes
@@ -12710,10 +12738,10 @@ async def export_teacher_delays_pdf(
     for i, t in enumerate(teachers, 1):
         pct = round(t["delayed_lectures"] * 100 / t["total_lectures"], 1) if t.get("total_lectures") else 0
         rows.append([i, t["teacher_name"], t.get("employee_id", ""), t["total_lectures"], t["delayed_lectures"], f"{pct}%", t["avg_delay_minutes"], t["max_delay_minutes"]])
-    detail = [["المعلم", "المقرر", "التاريخ", "الوقت المحدد", "بدء التحضير", "التأخير (د)"]]
+    detail = [["المعلم", "المقرر", "التاريخ", "الوقت المحدد", "بدء التحضير", "التأخير (د)", "ملاحظة"]]
     for t in teachers:
         for d in t.get("delays", []):
-            detail.append([t["teacher_name"], d.get("course_name", ""), d.get("date", ""), d.get("start_time", ""), d.get("started_at", ""), d.get("delay_minutes", 0)])
+            detail.append([t["teacher_name"], d.get("course_name", ""), d.get("date", ""), d.get("start_time", ""), d.get("started_at", ""), d.get("delay_minutes", 0), d.get("source_label", "")])
     period = f"{start_date or 'البداية'} → {end_date or 'اليوم'}"
     buf = build_report_pdf(
         "تقرير تأخر المعلمين", f"الفترة: {period}" + (f"   |   القسم: {scope}" if scope else ""),
@@ -12939,7 +12967,7 @@ async def export_teacher_delays_report(
         ws.cell(row=detail_row, column=1).font = Font(bold=True, size=12)
         
         detail_row += 1
-        detail_headers = ['المعلم', 'المقرر', 'التاريخ', 'وقت البدء المحدد', 'وقت البدء الفعلي', 'التأخير (دقيقة)']
+        detail_headers = ['المعلم', 'المقرر', 'التاريخ', 'وقت البدء المحدد', 'وقت البدء الفعلي', 'التأخير (دقيقة)', 'ملاحظة / المصدر']
         for col, h in enumerate(detail_headers, 1):
             cell = ws.cell(row=detail_row, column=col, value=h)
             cell.fill = PatternFill(start_color='FF9800', end_color='FF9800', fill_type='solid')
@@ -12954,6 +12982,7 @@ async def export_teacher_delays_report(
                 ws.cell(row=detail_row, column=4, value=d['start_time'])
                 ws.cell(row=detail_row, column=5, value=d['started_at'])
                 ws.cell(row=detail_row, column=6, value=d['delay_minutes'])
+                ws.cell(row=detail_row, column=7, value=d.get('source_label', ''))
                 detail_row += 1
     
     # ضبط عرض الأعمدة

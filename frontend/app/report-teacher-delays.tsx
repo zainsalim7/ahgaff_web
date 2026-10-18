@@ -8,7 +8,7 @@ import { ReportHero, ReportEmpty, downloadReport, reportPage } from '../src/comp
 import { HrSelect } from '../src/components/hr/HrSelect';
 import { btn } from '../src/components/hr/ui';
 
-interface Delay { date: string; course_id?: string; course_name: string; start_time: string; started_at: string; delay_minutes: number }
+interface Delay { date: string; course_id?: string; course_name: string; start_time: string; started_at: string; delay_minutes: number; source?: string; source_label?: string; recorded_by_name?: string; exceeds_limit?: boolean }
 interface TeacherDelay { teacher_id: string; teacher_name: string; employee_id: string; total_lectures: number; delayed_lectures: number; total_delay_minutes: number; avg_delay_minutes: number; max_delay_minutes: number; delays: Delay[] }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -161,10 +161,11 @@ export default function TeacherDelaysReport() {
                           {open && t.delays.length > 0 && (
                             <tr data-testid={`teacher-delay-details-${t.employee_id}`}><td colSpan={10} style={{ padding: '4px 24px 10px', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                                <thead><tr>{['التاريخ', 'المقرر', 'الموعد', 'بدء التحضير', 'التأخر'].map((h) => <th key={h} style={{ ...th, background: 'transparent', fontSize: 11.5, padding: '4px 8px' }}>{h}</th>)}</tr></thead>
+                                <thead><tr>{['التاريخ', 'المقرر', 'الموعد', 'بدء التحضير', 'التأخر', 'ملاحظة / المصدر'].map((h) => <th key={h} style={{ ...th, background: 'transparent', fontSize: 11.5, padding: '4px 8px' }}>{h}</th>)}</tr></thead>
                                 <tbody>{[...t.delays].sort((a, b) => (a.date < b.date ? 1 : -1)).map((d, j) => (
                                   <tr key={j}><td style={{ ...td, fontSize: 12 }}>{d.date}</td><td style={{ ...td, fontSize: 12 }}>{d.course_name}</td><td style={{ ...td, fontSize: 12, direction: 'ltr' }}>{d.start_time}</td><td style={{ ...td, fontSize: 12, direction: 'ltr' }}>{d.started_at}</td>
-                                    <td style={{ ...td, fontSize: 12 }}><span style={{ background: delayColor(d.delay_minutes) + '18', color: delayColor(d.delay_minutes), fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>{d.delay_minutes} د</span></td></tr>
+                                    <td style={{ ...td, fontSize: 12 }}><span style={{ background: delayColor(d.delay_minutes) + '18', color: delayColor(d.delay_minutes), fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>{d.delay_minutes} د</span></td>
+                                    <td style={{ ...td, fontSize: 11.5, color: d.source === 'offline' ? '#0e7490' : d.source === 'other_user' ? '#6a1b9a' : d.exceeds_limit ? '#b45309' : '#94a3b8' }} data-testid={`delay-source-${t.employee_id}-${j}`}>{d.source_label || (d.recorded_by_name ? `سجّله ${d.recorded_by_name}` : '—')}</td></tr>
                                 ))}</tbody>
                               </table>
                             </td></tr>
