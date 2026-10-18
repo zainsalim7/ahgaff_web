@@ -8885,6 +8885,40 @@ async def check_teacher_lecture_conflict(course_id: str, date: str, start_time: 
     return None
 
 
+async def check_students_lecture_conflict(course_id: str, date: str, start_time: str, end_time: str, group: str = None, exclude_lecture_id: str = None):
+    """👥 تعارض الطلاب: مقرر آخر لنفس (القسم/المستوى/الشعبة) بوقت متداخل.
+    مجموعتان من مقررين مختلفين تتوازيان فقط إذا لم يتشارك طلابهما (أو تحذير إن لم يُوزَّع الطلاب بعد)."""
+    course = await db.courses.find_one({"_id": ObjectId(course_id)}) if ObjectId.is_valid(course_id) else None
+    if not course or not course.get("department_id") or not course.get("level"):
+        return None
+    sib_q = {"department_id": course["department_id"], "level": course["level"], "_id": {"$ne": course["_id"]}, "is_active": {"$ne": False}}
+    if course.get("section"):
+        sib_q["$or"] = [{"section": course["section"]}, {"section": {"$in": [None, ""]}}]
+    sibling_ids = {str(c["_id"]): c for c in await db.courses.find(sib_q, {"name": 1, "section": 1}).to_list(500)}
+    if not sibling_ids:
+        return None
+    q = {"course_id": {"$in": list(sibling_ids)}, "date": date, "status": {"$ne": LectureStatus.CANCELLED}}
+    if exclude_lecture_id:
+        q["_id"] = {"$ne": ObjectId(exclude_lecture_id)}
+    for lec in await db.lectures.find(q).to_list(500):
+        ex_s, ex_e = lec.get("start_time", ""), lec.get("end_time", "")
+        if not (ex_s and ex_e and start_time and end_time and start_time < ex_e and end_time > ex_s):
+            continue
+        other = sibling_ids[lec["course_id"]]
+        oname = other.get("name", "") + (f" — مجموعة {lec['group']}" if lec.get("group") else "")
+        if group and lec.get("group"):
+            a = {e["student_id"] async for e in db.enrollments.find({"course_id": course_id, "group": group}, {"student_id": 1})}
+            b = {e["student_id"] async for e in db.enrollments.find({"course_id": lec["course_id"], "group": lec["group"]}, {"student_id": 1})}
+            if not a or not b:
+                return {"type": "warning", "message": f"تنبيه: محاضرة «{oname}» في نفس الوقت ({ex_s}–{ex_e}) ولم يُوزَّع الطلاب على المجموعات بعد فلا يمكن التأكد من عدم تشاركهم. هل تريد المتابعة؟"}
+            shared = a & b
+            if not shared:
+                continue
+            return {"type": "warning", "message": f"تنبيه: {len(shared)} طالباً مشتركاً بين مجموعتك ومجموعة «{oname}» في نفس الوقت ({ex_s}–{ex_e}). هل تريد المتابعة؟"}
+        return {"type": "warning", "message": f"تنبيه: طلاب هذا المستوى لديهم محاضرة «{oname}» في نفس الوقت يوم {date} ({ex_s}–{ex_e}). هل تريد المتابعة؟"}
+    return None
+
+
 async def check_room_lecture_conflict(course_id: str, room: str, date: str, start_time: str, end_time: str, exclude_lecture_id: str = None, group: str = None):
     """🏛️ فحص تعارض القاعة - هل القاعة محجوزة لمحاضرة أخرى في نفس الوقت؟
     - معلم مختلف أو مقرر مختلف → خطأ صارم (لا يمكن تجاوزه)
@@ -9074,6 +9108,11 @@ async def create_lecture(
     pref_conflict = await check_teacher_preferences_conflict(data.course_id, data.date, data.start_time, data.end_time)
     if pref_conflict:
         raise HTTPException(status_code=400, detail=pref_conflict)
+
+    # 👥 تعارض طلاب المستوى/الشعبة مع مقرر آخر في نفس الوقت (قابل للتجاوز بـ force بعد التأكيد)
+    students_conflict = await check_students_lecture_conflict(data.course_id, data.date, data.start_time, data.end_time, group=group_key)
+    if students_conflict and not data.force:
+        raise HTTPException(status_code=409, detail=students_conflict["message"])
     
     lecture = {
         "course_id": data.course_id,
@@ -18966,13 +19005,14 @@ async def _ensure_weekly_schedule_unique_indexes(db):
                     f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
                 )
 
-        # (c) نفس الشعبة في نفس اليوم/الفترة
+        # (c) نفس الشعبة في نفس اليوم/الفترة — الخانات الكاملة فقط (بلا مجموعة)؛ خانات المجموعات تُقارَن مع المقرر
         pipe = [
             {"$group": {
                 "_id": {
                     "dept": "$department_id", "lvl": "$level",
                     "sec": {"$ifNull": ["$section", ""]},
                     "g": {"$ifNull": ["$group", ""]},
+                    "c": {"$cond": [{"$in": [{"$ifNull": ["$group", ""]}, ["", None]]}, "", "$course_id"]},
                     "d": "$day", "s": "$slot_number",
                 },
                 "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
@@ -19017,19 +19057,27 @@ async def _ensure_weekly_schedule_unique_indexes(db):
             partialFilterExpression={"room_id": {"$exists": True, "$type": "string"}},
             name="uniq_room_day_slot",
         )
-        # 👥 يتضمن المجموعة ليمكن لمجموعتين من نفس المقرر مشاركة نفس الفترة
+        # 👥 فهرسان: (1) الخانات الكاملة (بلا مجموعة) فريدة لكل شعبة/فترة، (2) خانات المجموعات فريدة لكل (مقرر، مجموعة)
+        # حتى يمكن لمقررين مختلفين بمجموعتين (ولو بنفس مفتاح المجموعة) مشاركة الفترة نفسها بعد التحقق من عدم تشارك الطلاب
         try:
             _ws_idx = await db.weekly_schedule.index_information()
             _ws_old = _ws_idx.get("uniq_section_day_slot")
-            if _ws_old and [k for k, _ in _ws_old.get("key", [])] != ["department_id", "level", "section", "day", "slot_number", "group"]:
+            if _ws_old and [k for k, _ in _ws_old.get("key", [])] != ["department_id", "level", "section", "day", "slot_number"]:
                 await db.weekly_schedule.drop_index("uniq_section_day_slot")
         except Exception as _e:
             logging.warning(f"[weekly_schedule index] drop old failed: {_e}")
+        await db.weekly_schedule.update_many({"$or": [{"group": {"$exists": False}}, {"group": ""}]}, {"$set": {"group": None}})
         await db.weekly_schedule.create_index(
-            [("department_id", 1), ("level", 1), ("section", 1), ("day", 1), ("slot_number", 1), ("group", 1)],
+            [("department_id", 1), ("level", 1), ("section", 1), ("day", 1), ("slot_number", 1)],
             unique=True,
-            partialFilterExpression={"department_id": {"$exists": True, "$type": "string"}},
+            partialFilterExpression={"department_id": {"$exists": True, "$type": "string"}, "group": {"$type": "null"}},
             name="uniq_section_day_slot",
+        )
+        await db.weekly_schedule.create_index(
+            [("department_id", 1), ("level", 1), ("section", 1), ("day", 1), ("slot_number", 1), ("course_id", 1), ("group", 1)],
+            unique=True,
+            partialFilterExpression={"department_id": {"$exists": True, "$type": "string"}, "group": {"$type": "string"}},
+            name="uniq_section_day_slot_group",
         )
     except Exception as e:
         logging.warning(f"[weekly_schedule unique indexes] failed: {e}")

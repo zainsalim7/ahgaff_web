@@ -12,7 +12,7 @@ from bson import ObjectId
 from pymongo.errors import DuplicateKeyError
 
 from .deps import get_db, get_current_user, log_activity, export_stamp
-from .weekly_schedule import can_manage_schedule, _is_period_unavailable, _build_master_data, _sync_future_lectures, _resolve_day_times, _sync_course_shared_links, _master_course_color, _master_text_color, _grouped_cells_overlap
+from .weekly_schedule import can_manage_schedule, _is_period_unavailable, _build_master_data, _sync_future_lectures, _resolve_day_times, _sync_course_shared_links, _master_course_color, _master_text_color, _grouped_cells_overlap, UNVERIFIED_OVERLAP
 
 router = APIRouter(tags=["استيراد الجدول الأسبوعي"])
 
@@ -1019,7 +1019,9 @@ async def import_master_schedule(
                 if a["course_id"] == b["course_id"]:
                     continue
                 _ov = await _grouped_cells_overlap(db, a["course_id"], a["group"], {"course_id": b["course_id"], "group": b["group"]})
-                if _ov:
+                if _ov == UNVERIFIED_OVERLAP:
+                    grouped_msgs.append(f"⚠️ {a['_loc']} + '{b['_course_name']}' (مجموعة {b['group']}): لم يُوزَّع الطلاب على المجموعات بعد — تعذّر التأكد من عدم التشارك؛ وزّع الطلاب ثم راجع فحص التعارضات")
+                elif _ov:
                     conflicts.append(f"{a['_loc']} + '{b['_course_name']}' (مجموعة {b['group']}): {_ov} — وحّد توزيع المجموعات بين المقررين من شاشة المجموعات")
         if _grouped and not _whole:
             grouped_msgs.append(f"👥 {_grouped[0]['day']} الفترة {_grouped[0]['slot_number']} (م{_grouped[0]['level']}{'/' + _grouped[0]['section'] if _grouped[0].get('section') else ''}): "

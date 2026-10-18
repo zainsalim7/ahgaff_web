@@ -144,13 +144,18 @@ async def _group_students(db, course_id: str, group: str) -> set:
     return {e["student_id"] async for e in db.enrollments.find({"course_id": course_id, "group": group}, {"student_id": 1})}
 
 
+UNVERIFIED_OVERLAP = "unverified"
+
+
 async def _grouped_cells_overlap(db, course_id: str, group: str, other: dict) -> Optional[str]:
     """👥 خليتان بمجموعتين لمقررين مختلفين في نفس الفترة: مسموح فقط إذا لم يشترك أي طالب بين المجموعتين.
-    يعيد None إن لم يوجد تداخل، أو رسالة التعارض."""
+    يعيد None إن لم يوجد تداخل، أو UNVERIFIED_OVERLAP إن لم يُوزَّع الطلاب بعد (لا يمكن التحقق)، أو رسالة التعارض."""
     if not group or not other.get("group") or other.get("course_id") == course_id:
         return "conflict"
     a = await _group_students(db, course_id, group)
     b = await _group_students(db, other["course_id"], other["group"])
+    if not a or not b:
+        return UNVERIFIED_OVERLAP
     shared = a & b
     if not shared:
         return None
@@ -1110,7 +1115,7 @@ async def get_schedule_conflicts(
                         if a.get("course_id") == b.get("course_id"):
                             if a.get("group") == b.get("group"):
                                 bad.update({i, j})
-                        elif await _grouped_cells_overlap(db, a.get("course_id"), a.get("group"), b):
+                        elif (await _grouped_cells_overlap(db, a.get("course_id"), a.get("group"), b)) not in (None, UNVERIFIED_OVERLAP):
                             bad.update({i, j})
                 conflicts = [grouped[k] for k in sorted(bad)]
             if len(conflicts) > 1:
@@ -1271,6 +1276,7 @@ async def create_schedule_slot(
         raise HTTPException(status_code=400, detail="لا يمكن دمج شعب مع فترة مجموعة")
 
     # 1. تعارض الشعبة (لكل هدف) — مجموعتان مختلفتان لنفس المقرر يمكن أن تتوازيا
+    warnings: list = []
     for dep, lvl, sec in targets:
         _sec_q = {
             "department_id": dep,
@@ -1286,6 +1292,10 @@ async def create_schedule_slot(
             if slot_group and existing_section.get("course_id") != data.course_id and existing_section.get("group"):
                 _ov = await _grouped_cells_overlap(db, data.course_id, slot_group, existing_section)
                 if _ov is None:
+                    continue
+                if _ov == UNVERIFIED_OVERLAP:
+                    _oc = await db.courses.find_one({"_id": ObjectId(existing_section["course_id"])}, {"name": 1}) if ObjectId.is_valid(existing_section.get("course_id", "")) else None
+                    warnings.append(f"⚠️ لم يُوزَّع الطلاب على المجموعات بعد — تعذّر التأكد من عدم تشارك طلاب مجموعتك مع «{(_oc or {}).get('name', '')}» (مجموعة {existing_section.get('group')}) في هذه الفترة. وزّع الطلاب ثم راجع «فحص التعارضات»")
                     continue
             c = await db.courses.find_one({"_id": ObjectId(existing_section["course_id"])})
             _g = existing_section.get("group")
@@ -1379,6 +1389,8 @@ async def create_schedule_slot(
     _tch = []
     shifted = await _resolve_day_times(db, data.faculty_id, data.day, changes_out=_tch)
     msg += _shift_summary(shifted)
+    if warnings:
+        msg += " " + " ".join(warnings)
     # 🔔 إشعار المعلمين الذين أُزيحت أوقاتهم بسبب الخانة الجديدة
     await notify_time_shifts(db, _tch, exclude_slot_ids={inserted_id},
                              exclude_merge_group_ids={merge_gid} if merge_gid else None)
@@ -1460,7 +1472,7 @@ async def update_schedule_slot(
             "slot_number": check_slot,
         }).to_list(20):
             if _chk_group and section_busy.get("course_id") != _chk_course and section_busy.get("group"):
-                if await _grouped_cells_overlap(db, _chk_course, _chk_group, section_busy) is None:
+                if (await _grouped_cells_overlap(db, _chk_course, _chk_group, section_busy)) in (None, UNVERIFIED_OVERLAP):
                     continue
             raise HTTPException(status_code=409, detail="تعارض: يوجد محاضرة أخرى لنفس الشعبة في هذه الفترة")
 
@@ -5435,7 +5447,7 @@ async def _check_slot_placement(db, slot: dict, target_day: str, target_slot: in
         "slot_number": target_slot,
     }).to_list(20):
         if slot.get("group") and section_busy.get("group") and (section_busy.get("course_id") != slot.get("course_id") or section_busy.get("group") != slot.get("group")):
-            if section_busy.get("course_id") == slot.get("course_id") or await _grouped_cells_overlap(db, slot.get("course_id"), slot.get("group"), section_busy) is None:
+            if section_busy.get("course_id") == slot.get("course_id") or (await _grouped_cells_overlap(db, slot.get("course_id"), slot.get("group"), section_busy)) in (None, UNVERIFIED_OVERLAP):
                 continue
         c = await db.courses.find_one({"_id": ObjectId(section_busy["course_id"])}) if section_busy.get("course_id") else None
         conflicts.append(f"تعارض شعبة: يوجد مقرر '{(c or {}).get('name', '')}' لنفس الشعبة في هذه الفترة")
