@@ -11,6 +11,23 @@ import { btn } from '../src/components/hr/ui';
 interface Delay { date: string; course_id?: string; course_name: string; start_time: string; started_at: string; delay_minutes: number }
 interface TeacherDelay { teacher_id: string; teacher_name: string; employee_id: string; total_lectures: number; delayed_lectures: number; total_delay_minutes: number; avg_delay_minutes: number; max_delay_minutes: number; delays: Delay[] }
 
+const pad = (n: number) => String(n).padStart(2, '0');
+const iso = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const isoDate = (v?: string | null) => {
+  if (!v) return '';
+  let m = v.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (m) return `${m[1]}-${pad(+m[2])}-${pad(+m[3])}`;
+  m = v.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
+  return m ? `${m[3]}-${pad(+m[2])}-${pad(+m[1])}` : '';
+};
+const weekRange = (offset: number) => { const t = new Date(); const dow = (t.getDay() + 1) % 7; const sat = new Date(t); sat.setDate(t.getDate() - dow + offset * 7); const thu = new Date(sat); thu.setDate(sat.getDate() + 5); return [iso(sat), iso(thu)]; };
+const presets: { key: string; label: string; range: () => string[] }[] = [
+  { key: 'week', label: 'هذا الأسبوع', range: () => weekRange(0) },
+  { key: 'lastweek', label: 'الأسبوع الماضي', range: () => weekRange(-1) },
+  { key: 'month', label: 'هذا الشهر', range: () => { const t = new Date(); return [iso(new Date(t.getFullYear(), t.getMonth(), 1)), iso(t)]; } },
+  { key: 'd30', label: 'آخر 30 يوماً', range: () => { const t = new Date(); const s = new Date(t); s.setDate(t.getDate() - 29); return [iso(s), iso(t)]; } },
+];
+const dateInp: React.CSSProperties = { padding: '7px 8px', borderRadius: 8, border: '1px solid #dde3ec', fontSize: 12.5, fontFamily: 'inherit', background: '#fff', direction: 'ltr', width: 140 };
 const delayColor = (m: number) => (m === 0 ? '#16a34a' : m <= 5 ? '#d97706' : m <= 15 ? '#dc2626' : '#7f1d1d');
 const th: React.CSSProperties = { padding: '7px 8px', fontSize: 12, fontWeight: 800, color: '#0f2440', background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'right', whiteSpace: 'nowrap' };
 const td: React.CSSProperties = { padding: '6px 8px', fontSize: 12.5, borderBottom: '1px solid #f1f5f9', textAlign: 'right', verticalAlign: 'middle' };
@@ -28,16 +45,18 @@ export default function TeacherDelaysReport() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [allTeachers, setAllTeachers] = useState<any[]>([]);
-  const [f, setF] = useState({ faculty_id: '', department_id: '', course_id: '', teacher_id: '' });
+  const [f, setF] = useState({ faculty_id: '', department_id: '', course_id: '', teacher_id: '', start_date: '', end_date: '' });
+  const [semesters, setSemesters] = useState<any[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
+  const [ran, setRan] = useState<{ start_date?: string; end_date?: string }>({});
   const [onlyDelayed, setOnlyDelayed] = useState(false);
   const [exportingFmt, setExportingFmt] = useState<'' | 'pdf' | 'excel'>('');
 
   useEffect(() => {
     (async () => {
       try {
-        const [fa, de, co, te] = await Promise.all([api.get('/faculties'), departmentsAPI.getAll(), api.get('/courses', { params: { all_semesters: true, fields: 'name,code,department_id,teacher_id,teacher_name' } }), api.get('/teachers')]);
-        setFaculties(fa.data || []); setDepartments(de.data || []); setCourses(co.data || []); setAllTeachers(te.data || []);
+        const [fa, de, co, te, se] = await Promise.all([api.get('/faculties'), departmentsAPI.getAll(), api.get('/courses', { params: { all_semesters: true, fields: 'name,code,department_id,teacher_id,teacher_name' } }), api.get('/teachers'), api.get('/semesters').catch(() => ({ data: [] }))]);
+        setFaculties(fa.data || []); setDepartments(de.data || []); setCourses(co.data || []); setAllTeachers(te.data || []); setSemesters((se.data || []).filter((x: any) => isoDate(x.start_date) && isoDate(x.end_date)));
       } catch (e) { console.error(e); }
     })();
   }, []);
@@ -56,13 +75,13 @@ export default function TeacherDelaysReport() {
     setExecuting(true);
     try {
       const r = await api.get('/reports/teacher-delays', { params: params() });
-      setTeachers(r.data.teachers || []); setSummary(r.data.summary || {}); setHasRun(true); setExpanded(null);
+      setTeachers(r.data.teachers || []); setSummary(r.data.summary || {}); setHasRun(true); setExpanded(null); setRan({ start_date: f.start_date, end_date: f.end_date });
     } catch (e) { console.error(e); } finally { setExecuting(false); }
-  }, [params]);
+  }, [params, f.start_date, f.end_date]);
 
   const handleExport = async (fmt: 'pdf' | 'excel') => {
     setExportingFmt(fmt);
-    const scope = [faculties.find((x) => x.id === f.faculty_id)?.name, departments.find((x) => x.id === f.department_id)?.name, courses.find((x) => x.id === f.course_id)?.name, allTeachers.find((x) => x.id === f.teacher_id)?.full_name].filter(Boolean).join(' - ');
+    const scope = [f.start_date || f.end_date ? `${f.start_date || '…'} → ${f.end_date || '…'}` : undefined, faculties.find((x) => x.id === f.faculty_id)?.name, departments.find((x) => x.id === f.department_id)?.name, courses.find((x) => x.id === f.course_id)?.name, allTeachers.find((x) => x.id === f.teacher_id)?.full_name].filter(Boolean).join(' - ');
     await downloadReport(fmt === 'pdf' ? '/reports/teacher-delays/export-pdf' : '/reports/teacher-delays/export', params(), ['تقرير تأخر المعلمين', scope || undefined], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExportingFmt('');
   };
@@ -81,14 +100,24 @@ export default function TeacherDelaysReport() {
         <ReportHero title="تقرير تأخر المعلمين" subtitle="الفرق بين وقت بداية المحاضرة المجدول ووقت بدء تسجيل الحضور" onBack={() => router.back()} canExport={hasPermission('export_reports')} onPdf={() => handleExport('pdf')} onExcel={() => handleExport('excel')} exporting={exportingFmt} testID="teacher-delays-hero" />
         <View style={[reportPage.card, { padding: 10, marginBottom: 10 }]} testID="teacher-delays-filters">
           <div style={{ direction: 'rtl', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-            <HrSelect value={f.faculty_id} onChange={(v) => setF({ faculty_id: v, department_id: '', course_id: '', teacher_id: '' })} options={faculties.map((x) => ({ value: x.id, label: x.name }))} placeholder="كل الكليات" style={{ minWidth: 180, flex: 1 }} testID="td-faculty" />
+            <HrSelect value={f.faculty_id} onChange={(v) => setF({ ...f, faculty_id: v, department_id: '', course_id: '', teacher_id: '' })} options={faculties.map((x) => ({ value: x.id, label: x.name }))} placeholder="كل الكليات" style={{ minWidth: 180, flex: 1 }} testID="td-faculty" />
             <HrSelect value={f.department_id} onChange={(v) => setF({ ...f, department_id: v, course_id: '', teacher_id: '' })} options={depts.map((x) => ({ value: x.id, label: x.name }))} placeholder="كل الأقسام" style={{ minWidth: 180, flex: 1 }} testID="td-dept" />
             <HrSelect value={f.teacher_id} onChange={(v) => setF({ ...f, teacher_id: v, course_id: '' })} options={teacherOpts.map((x) => ({ value: x.id, label: x.full_name, sub: x.teacher_id }))} placeholder="كل الأساتذة" searchable style={{ minWidth: 200, flex: 1 }} testID="td-teacher" />
             <HrSelect value={f.course_id} onChange={(v) => setF({ ...f, course_id: v })} options={courseOpts.map((x) => ({ value: x.id, label: x.name, sub: x.teacher_name || x.code }))} placeholder="كل المقررات" searchable style={{ minWidth: 200, flex: 1 }} testID="td-course" />
             <button onClick={fetchData} disabled={executing} style={btn('#1565c0', '#fff', { padding: '8px 18px', whiteSpace: 'nowrap' })} data-testid="run-report-btn">{executing ? 'جاري التنفيذ…' : hasRun ? '▶ إعادة التنفيذ' : '▶ تنفيذ التقرير'}</button>
           </div>
+          <div style={{ direction: 'rtl', display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center', marginTop: 8 }} data-testid="td-date-row">
+            <span style={{ fontSize: 12, color: '#64748b', fontWeight: 700 }}>📅 الفترة:</span>
+            <input type="date" value={f.start_date} onChange={(e) => setF({ ...f, start_date: e.target.value })} style={dateInp} data-testid="td-date-from" />
+            <span style={{ fontSize: 12, color: '#94a3b8' }}>إلى</span>
+            <input type="date" value={f.end_date} onChange={(e) => setF({ ...f, end_date: e.target.value })} style={dateInp} data-testid="td-date-to" />
+            {presets.map((p) => { const [a, b] = p.range(); const on = f.start_date === a && f.end_date === b; return <button key={p.key} onClick={() => setF({ ...f, start_date: a, end_date: b })} style={btn(on ? '#0f2440' : '#f1f5f9', on ? '#fff' : '#0f2440', { padding: '5px 10px', fontSize: 11.5 })} data-testid={`td-preset-${p.key}`}>{p.label}</button>; })}
+            {semesters.map((sm) => { const a = isoDate(sm.start_date), b = isoDate(sm.end_date); const on = f.start_date === a && f.end_date === b; return <button key={sm.id} onClick={() => setF({ ...f, start_date: a, end_date: b })} style={btn(on ? '#6a1b9a' : '#f3e5f5', on ? '#fff' : '#6a1b9a', { padding: '5px 10px', fontSize: 11.5 })} data-testid={`td-preset-sem-${sm.id}`}>🎓 {sm.name} {sm.academic_year}</button>; })}
+            {(f.start_date || f.end_date) && <button onClick={() => setF({ ...f, start_date: '', end_date: '' })} style={btn('#fff', '#dc2626', { padding: '5px 10px', fontSize: 11.5, border: '1px solid #fecaca' })} data-testid="td-date-clear">✕ كل الفترات</button>}
+          </div>
           {hasRun && (
             <div style={{ direction: 'rtl', display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }} data-testid="teacher-delays-kpis">
+              {(ran.start_date || ran.end_date) && kpi('الفترة', `${ran.start_date || '…'} → ${ran.end_date || '…'}`, '#475569', false, undefined, 'td-kpi-period')}
               {kpi('المعلمون', summary.total_teachers, '#1565c0', !onlyDelayed, () => setOnlyDelayed(false), 'td-kpi-all')}
               {kpi('معلمون تأخروا', summary.total_delayed_teachers, '#d97706', onlyDelayed, () => setOnlyDelayed(true), 'td-kpi-delayed')}
               {kpi('حالات التأخر', summary.total_delay_incidents, '#dc2626', false, undefined, 'td-kpi-incidents')}
