@@ -1,5 +1,6 @@
 """🖨️ طباعة بطاقات الموظفين دفعة واحدة — بنفس أسلوب بطاقات الطلاب (دفعات، خلفيات، سجل، تقرير)"""
 import io
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional, List
 
@@ -8,10 +9,10 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, export_filename, export_headers, has_permission
+from .deps import get_db, get_current_user, export_filename, export_headers, has_permission, log_activity
 from .hr_common import P_MANAGE, _guard_any, _can_view, _guard, _descendants, hr_scope_units, scope_filter, _now
 from .hr import CATEGORIES, STATUSES
-from .hr_cards import card_payload, _hr_card_settings, render_employee_png
+from .hr_cards import card_payload, _hr_card_settings, render_employee_png, render_payload
 from .student_cards import (
     DEFAULT_PRINT_SETTINGS, ORIENTATIONS, DEFAULT_CARD_FONT, DEFAULT_BACK_SETTINGS,
     _render_card_png, _render_card_back_png, BackSettingsIn,
@@ -181,6 +182,181 @@ def _rotate(png: bytes) -> bytes:
 
 async def _render_employee_png(db, emp: dict, base: str, s: dict) -> bytes:
     return await render_employee_png(db, emp, base, s)
+
+
+async def _render_employee_jpeg(db, emp: dict, base: str, s: dict, rotate: bool) -> bytes:
+    """بطاقة موظف → JPEG جاهز للـPDF (الرسم في thread حتى لا يُحجب الخادم)"""
+    from services.storage_service import get_object
+    from PIL import Image as PILImage
+    p = await card_payload(db, emp, base)
+    loop = asyncio.get_event_loop()
+    photo_bytes = None
+    if emp.get("photo_path"):
+        try:
+            photo_bytes, _ = await loop.run_in_executor(None, get_object, emp["photo_path"])
+        except Exception:
+            photo_bytes = None
+    payload = render_payload(p, s)
+
+    def _draw():
+        png = _render_card_png(payload, photo_bytes, p["verify_url"])
+        im = PILImage.open(io.BytesIO(png)).convert("RGB")
+        if rotate:
+            im = im.rotate(90, expand=True)
+        b = io.BytesIO(); im.save(b, format="JPEG", quality=88)
+        return b.getvalue()
+    return await loop.run_in_executor(None, _draw)
+
+
+def _compose_pdf_jpegs(jpegs: List[bytes], st: dict, out_portrait: bool) -> bytes:
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib.units import mm
+    from reportlab.pdfgen import canvas as pdfcanvas
+    from reportlab.lib.utils import ImageReader
+    W, H = A4
+    cw, ch = (st["card_h"] * mm, st["card_w"] * mm) if out_portrait else (st["card_w"] * mm, st["card_h"] * mm)
+    positions = [(st["card1_x"] * mm, st["card1_y"] * mm), (st["card2_x"] * mm, st["card2_y"] * mm)]
+    buf = io.BytesIO()
+    c = pdfcanvas.Canvas(buf, pagesize=A4)
+    for i in range(0, len(jpegs), 2):
+        for j, jpg in enumerate(jpegs[i:i + 2]):
+            x, y_top = positions[j]
+            c.drawImage(ImageReader(io.BytesIO(jpg)), x, H - y_top - ch, cw, ch)
+        c.showPage()
+    c.save()
+    return buf.getvalue()
+
+
+async def _resolve_hr_batch(db, current_user: dict, data: HrBatchRequest):
+    """الموظفون النهائيون للدفعة + إعدادات الطباعة (مشترك بين PDF المباشر والمهمة المرحلية)"""
+    st = await _print_settings(db)
+    orientation = data.orientation if data.orientation in ORIENTATIONS else "auto"
+    if data.settings:
+        for k in DEFAULT_PRINT_SETTINGS:
+            if k in data.settings:
+                try:
+                    st[k] = float(data.settings[k])
+                except (TypeError, ValueError):
+                    pass
+        await db.card_print_settings.update_one({"_id": PRINT_SETTINGS_ID}, {"$set": {**{k: st[k] for k in DEFAULT_PRINT_SETTINGS}, "orientation": orientation}}, upsert=True)
+    reprint = None
+    if data.reprint_batch_no:
+        reprint = await db.hr_card_print_batches.find_one({"batch_no": int(data.reprint_batch_no)})
+        if not reprint:
+            raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+        ids = [ObjectId(x) for x in reprint.get("employee_ids", []) if ObjectId.is_valid(x)]
+        emps = await db.employees.find({"_id": {"$in": ids}}).to_list(5000)
+        order = {x: i for i, x in enumerate(reprint.get("employee_ids", []))}
+        emps.sort(key=lambda e: order.get(str(e["_id"]), 0))
+        names = await _unit_names(db, {e.get("org_unit_id") for e in emps})
+        for e in emps:
+            e["_unit_name"] = names.get(e.get("org_unit_id") or "", "")
+    else:
+        emps_all = await _candidates(db, current_user, data)
+        _rows, emps, _summary = _apply_filters(emps_all, data)
+    if not emps:
+        raise HTTPException(status_code=400, detail="لا يوجد موظفون للطباعة بعد تطبيق الفلاتر")
+    s = await _hr_card_settings(db)
+    template_portrait = s["template"] != "horizontal"
+    out_portrait = template_portrait if orientation == "auto" else orientation == "portrait"
+    return emps, st, s, orientation, out_portrait, template_portrait != out_portrait, reprint
+
+
+async def _register_hr_batch(db, current_user: dict, data: HrBatchRequest, emps: List[dict], st: dict, orientation: str) -> int:
+    last = await db.hr_card_print_batches.find_one({}, sort=[("batch_no", -1)])
+    batch_no = int((last or {}).get("batch_no", 0)) + 1
+    now = datetime.now(timezone.utc).isoformat()
+    unit_name = ""
+    if data.org_unit_id and ObjectId.is_valid(data.org_unit_id):
+        unit_name = ((await db.org_units.find_one({"_id": ObjectId(data.org_unit_id)})) or {}).get("name", "")
+    await db.hr_card_print_batches.insert_one({
+        "batch_no": batch_no, "created_at": now,
+        "by_user_id": str(current_user.get("_id") or current_user.get("id", "")), "by_name": current_user.get("full_name", ""),
+        "mode": "ids" if data.employee_ids else "filter", "org_unit_id": data.org_unit_id, "unit_name": unit_name or ("موظفون محددون" if data.employee_ids else "كل الوحدات"),
+        "category": data.category, "category_label": CATEGORIES.get(data.category or "", "الكل"), "status": data.status,
+        "count": len(emps), "pages": (len(emps) + 1) // 2, "orientation": orientation, "settings": {k: st[k] for k in DEFAULT_PRINT_SETTINGS},
+        "employee_ids": [str(e["_id"]) for e in emps],
+        "employees": [{"id": str(e["_id"]), "full_name": e.get("full_name", ""), "number": e.get("employee_no", ""), "unit_name": e.get("_unit_name", ""), "job_title": e.get("job_title", "")} for e in emps],
+    })
+    await db.employees.update_many({"_id": {"$in": [e["_id"] for e in emps]}},
+                                   {"$set": {"card_printed_at": now, "card_print_batch_no": batch_no}, "$inc": {"card_print_count": 1}})
+    return batch_no
+
+
+# ==================== 🧩 مهمة طباعة مرحلية (للدفعات الكبيرة) ====================
+JOB_STEP = 8
+
+
+@router.post("/cards/print-jobs")
+async def create_hr_print_job(data: HrBatchRequest, current_user: dict = Depends(get_current_user)):
+    _guard_any(current_user, P_MANAGE, "hr_print_cards")
+    db = get_db()
+    emps, st, _s, orientation, out_portrait, rotate, reprint = await _resolve_hr_batch(db, current_user, data)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {"status": "running", "created_at": now, "updated_at": now, "by_user_id": str(current_user.get("_id") or current_user.get("id", "")),
+           "total": len(emps), "done": 0, "employee_ids": [str(e["_id"]) for e in emps], "request": data.model_dump(),
+           "st": {k: st[k] for k in DEFAULT_PRINT_SETTINGS}, "orientation": orientation, "out_portrait": out_portrait, "rotate": rotate,
+           "reprint_batch_no": (reprint or {}).get("batch_no")}
+    r = await db.hr_card_print_jobs.insert_one(doc)
+    return {"job_id": str(r.inserted_id), "total": len(emps), "step": JOB_STEP}
+
+
+@router.post("/cards/print-jobs/{job_id}/step")
+async def hr_print_job_step(job_id: str, current_user: dict = Depends(get_current_user)):
+    _guard_any(current_user, P_MANAGE, "hr_print_cards")
+    db = get_db()
+    job = await db.hr_card_print_jobs.find_one({"_id": ObjectId(job_id)}) if ObjectId.is_valid(job_id) else None
+    if not job or job.get("by_user_id") != str(current_user.get("_id") or current_user.get("id", "")):
+        raise HTTPException(status_code=404, detail="مهمة الطباعة غير موجودة")
+    if job["status"] == "ready":
+        return {"status": "ready", "done": job["done"], "total": job["total"], "batch_no": job.get("batch_no")}
+    ids = job["employee_ids"][job["done"]:job["done"] + JOB_STEP]
+    emps = await db.employees.find({"_id": {"$in": [ObjectId(x) for x in ids]}}).to_list(JOB_STEP)
+    emps.sort(key=lambda e: ids.index(str(e["_id"])))
+    s = await _hr_card_settings(db)
+    base = (job["request"].get("base_url") or "").rstrip("/")
+    for idx, e in enumerate(emps, start=job["done"]):
+        jpg = await _render_employee_jpeg(db, e, base, s, job["rotate"])
+        await db.hr_card_print_job_pages.update_one({"job_id": job_id, "idx": idx}, {"$set": {"data": jpg}}, upsert=True)
+    done = job["done"] + len(ids)
+    await db.hr_card_print_jobs.update_one({"_id": job["_id"]}, {"$set": {"done": done, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if done < job["total"]:
+        return {"status": "running", "done": done, "total": job["total"]}
+    pages = await db.hr_card_print_job_pages.find({"job_id": job_id}).sort("idx", 1).to_list(5000)
+    pdf = await asyncio.get_event_loop().run_in_executor(None, _compose_pdf_jpegs, [bytes(p["data"]) for p in pages], job["st"], job["out_portrait"])
+    from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+    fs = AsyncIOMotorGridFSBucket(db, bucket_name="hr_card_print_files")
+    file_id = await fs.upload_from_stream(f"hr_cards_{job_id}.pdf", pdf, metadata={"job_id": job_id})
+    batch_no = job.get("reprint_batch_no")
+    if not batch_no:
+        all_emps = await db.employees.find({"_id": {"$in": [ObjectId(x) for x in job["employee_ids"]]}}).to_list(5000)
+        names = await _unit_names(db, {e.get("org_unit_id") for e in all_emps})
+        for e in all_emps:
+            e["_unit_name"] = names.get(e.get("org_unit_id") or "", "")
+        all_emps.sort(key=lambda e: job["employee_ids"].index(str(e["_id"])))
+        batch_no = await _register_hr_batch(db, current_user, HrBatchRequest(**job["request"]), all_emps, job["st"], job["orientation"])
+        await log_activity(current_user, "hr_cards_batch_print", "hr_card_print_batches", str(batch_no), f"دفعة طباعة بطاقات موظفين #{batch_no}", {"count": job["total"]})
+    await db.hr_card_print_job_pages.delete_many({"job_id": job_id})
+    await db.hr_card_print_jobs.update_one({"_id": job["_id"]}, {"$set": {"status": "ready", "file_id": file_id, "batch_no": batch_no, "size": len(pdf), "is_reprint": bool(job.get("reprint_batch_no"))}})
+    return {"status": "ready", "done": done, "total": job["total"], "batch_no": batch_no, "size": len(pdf)}
+
+
+@router.get("/cards/print-jobs/{job_id}/download")
+async def hr_print_job_download(job_id: str, current_user: dict = Depends(get_current_user)):
+    _guard_any(current_user, P_MANAGE, "hr_print_cards")
+    db = get_db()
+    job = await db.hr_card_print_jobs.find_one({"_id": ObjectId(job_id)}) if ObjectId.is_valid(job_id) else None
+    if not job or job.get("by_user_id") != str(current_user.get("_id") or current_user.get("id", "")):
+        raise HTTPException(status_code=404, detail="مهمة الطباعة غير موجودة")
+    if job["status"] != "ready":
+        raise HTTPException(status_code=400, detail="الملف لم يكتمل بعد")
+    from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+    fs = AsyncIOMotorGridFSBucket(db, bucket_name="hr_card_print_files")
+    pdf = await (await fs.open_download_stream(job["file_id"])).read()
+    label = f"إعادة تنزيل دفعة {job['batch_no']}" if job.get("is_reprint") else f"دفعة {job['batch_no']}"
+    headers = export_headers(export_filename("بطاقات الموظفين", label, f"{job['total']} بطاقة", ext="pdf"))
+    headers["X-Batch-No"] = str(job["batch_no"]); headers["X-Batch-Count"] = str(job["total"])
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers=headers)
 
 
 @router.post("/cards/batch-pdf")

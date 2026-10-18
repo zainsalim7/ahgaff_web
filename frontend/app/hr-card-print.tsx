@@ -38,6 +38,7 @@ export default function HrCardPrint() {
   const [batchKey, setBatchKey] = useState(0);
   const [lastBatchNo, setLastBatchNo] = useState<number | null>(null);
   const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const [msg, setMsg] = useState('');
 
   useEffect(() => {
@@ -69,7 +70,12 @@ export default function HrCardPrint() {
     setDownloading(true); setMsg('');
     try {
       const settings: any = {}; Object.keys(DEFAULTS).forEach((k) => { settings[k] = parseFloat(st[k]) || DEFAULTS[k]; });
-      const res = await api.post('/hr/cards/batch-pdf', { ...body, base_url: window.location.origin, orientation, settings, exclude_printed: pf.excludePrinted, only_with_photo: pf.onlyWithPhoto, exclude_ids: pf.excludeIds }, { responseType: 'blob', timeout: 300000 });
+      // 🧩 مهمة مرحلية: بناء البطاقات على دفعات صغيرة ثم تنزيل الملف (لا تفشل مع الأعداد الكبيرة)
+      const job = (await api.post('/hr/cards/print-jobs', { ...body, base_url: window.location.origin, orientation, settings, exclude_printed: pf.excludePrinted, only_with_photo: pf.onlyWithPhoto, exclude_ids: pf.excludeIds })).data;
+      setProgress({ done: 0, total: job.total });
+      let stp: any = { status: 'running' };
+      while (stp.status !== 'ready') { stp = (await api.post(`/hr/cards/print-jobs/${job.job_id}/step`, {}, { timeout: 120000 })).data; setProgress({ done: stp.done, total: stp.total }); }
+      const res = await api.get(`/hr/cards/print-jobs/${job.job_id}/download`, { responseType: 'blob', timeout: 300000 });
       const url = URL.createObjectURL(new Blob([res.data])); const a = document.createElement('a'); a.href = url; a.download = filenameFromResponse(res, 'بطاقات الموظفين.pdf'); a.click(); URL.revokeObjectURL(url);
       const bn = res.headers?.['x-batch-no']; const bc = res.headers?.['x-batch-count'];
       setMsg(bn ? `✅ تم إنشاء الملف — سُجّلت الدفعة #${bn} (${bc} بطاقة) ووُسم الموظفون كمطبوعين، ولن يتكرروا في الدفعات القادمة` : '✅ تم إنشاء الملف');
@@ -80,7 +86,7 @@ export default function HrCardPrint() {
       let detail = e?.response?.data?.detail;
       if (e?.response?.data instanceof Blob) { try { detail = JSON.parse(await e.response.data.text()).detail; } catch { /* ignore */ } }
       setMsg(detail || 'فشل إنشاء الملف');
-    } finally { setDownloading(false); }
+    } finally { setDownloading(false); setProgress(null); }
   }, [body, st, orientation, pf]);
 
   const numField = (label: string, k: string) => (
@@ -133,7 +139,7 @@ export default function HrCardPrint() {
 
               {msg ? <div style={{ fontSize: 12.5, color: msg.startsWith('✅') ? '#2e7d32' : '#c62828', margin: '10px 0 4px', lineHeight: 1.7 }} data-testid="hr-print-msg">{msg}</div> : null}
               <button onClick={download} disabled={!canDownload} style={btn('#00796b', '#fff', { width: '100%', marginTop: 10, padding: '12px', fontSize: 14, opacity: canDownload ? 1 : 0.55 })} data-testid="hr-batch-print-download-btn">
-                {downloading ? 'جارٍ إنشاء الملف...' : summary ? `🖨️ تنزيل PDF للطباعة (${summary.included} بطاقة → ${summary.pages} ورقة)` : '🖨️ تنزيل PDF للطباعة'}
+                {downloading ? (progress ? `جارٍ بناء البطاقات ${progress.done}/${progress.total}…` : 'جارٍ إنشاء الملف...') : summary ? `🖨️ تنزيل PDF للطباعة (${summary.included} بطاقة → ${summary.pages} ورقة)` : '🖨️ تنزيل PDF للطباعة'}
               </button>
               {!canManage && <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 6 }}>الطباعة متاحة لمن يملك صلاحية إدارة الموظفين</div>}
 

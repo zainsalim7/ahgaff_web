@@ -72,15 +72,11 @@ export const PrintBatchesHistory: React.FC<{ refreshKey: number; reportParams: a
   const redownload = async (b: any) => {
     setBusy(b.batch_no);
     try {
-      if (kind.basePath === '/cards') {
-        // 🧩 إعادة التنزيل عبر مهمة مرحلية (تعمل مع الدفعات الكبيرة)
-        const job = (await api.post('/cards/print-jobs', { reprint_batch_no: b.batch_no, orientation: b.orientation || 'auto', base_url: window.location.origin })).data;
-        let st: any = { status: 'running' };
-        while (st.status !== 'ready') { st = (await api.post(`/cards/print-jobs/${job.job_id}/step`, {}, { timeout: 120000 })).data; setBusy(`${b.batch_no}:${st.done}/${st.total}`); }
-        await dl(await api.get(`/cards/print-jobs/${job.job_id}/download`, { responseType: 'blob', timeout: 300000 }), `${kind.fileLabel} - دفعة ${b.batch_no}.pdf`);
-      } else {
-        await dl(await api.post(`${kind.basePath}/batch-pdf`, { reprint_batch_no: b.batch_no, orientation: b.orientation || 'auto', base_url: window.location.origin }, { responseType: 'blob', timeout: 300000 }), `${kind.fileLabel} - دفعة ${b.batch_no}.pdf`);
-      }
+      // 🧩 إعادة التنزيل عبر مهمة مرحلية (طلاب وموظفون — تعمل مع الدفعات الكبيرة)
+      const job = (await api.post(`${kind.basePath}/print-jobs`, { reprint_batch_no: b.batch_no, orientation: b.orientation || 'auto', base_url: window.location.origin })).data;
+      let st: any = { status: 'running' };
+      while (st.status !== 'ready') { st = (await api.post(`${kind.basePath}/print-jobs/${job.job_id}/step`, {}, { timeout: 120000 })).data; setBusy(`${b.batch_no}:${st.done}/${st.total}`); }
+      await dl(await api.get(`${kind.basePath}/print-jobs/${job.job_id}/download`, { responseType: 'blob', timeout: 300000 }), `${kind.fileLabel} - دفعة ${b.batch_no}.pdf`);
     } catch (e) { alertErr(e); } finally { setBusy(null); }
   };
   const reload = async () => setItems((await api.get(`${kind.basePath}/batches`)).data.items || []);

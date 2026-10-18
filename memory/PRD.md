@@ -1038,3 +1038,4 @@
 - الدفعات: `DELETE /cards/batches/{no}?restore=true` (يعيد الطلاب للمطلوب طباعته) / `restore=false` (حذف السجل فقط)، `DELETE /cards/batches` (تنظيف السجل، أدمن). أزرار في PrintBatchesHistory.
 - الخلفية: `card_settings._id=back_faculty_{fid}` مع `enabled_override` تُغطّي `back_global`؛ GET/PUT/DELETE `/cards/back-settings?faculty_id=`؛ المعاينة وPDF الخلفيات يستخدمان خلفية الكلية. CardBack.tsx: تبديل «خلفية هذه الكلية / العامة» + تخصيص/عودة.
 - اختبار: `memory/patches/test_card_print_jobs.sh`. ملاحظة: بطاقات الموظفين (hr_card_print) ما زالت بالمسار المباشر.
+- 2026-10-18: بطاقات الموظفين انتقلت للمسار المرحلي: `POST /hr/cards/print-jobs` → `/step` (8/خطوة، في thread) → GridFS `hr_card_print_files` → `/download`؛ إعادة التنزيل من السجل عبر المهمة أيضاً (الطلاب والموظفون). `/hr/cards/batch-pdf` بقي للتوافق.
