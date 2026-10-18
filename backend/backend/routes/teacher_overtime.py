@@ -204,7 +204,12 @@ def report_totals(result: list) -> dict:
     }
 
 
-async def compute_workload(db, teachers: List[dict], start: datetime, end: datetime, hide_empty: bool = False, only_overtime: bool = False, exclude_ids: Optional[set] = None) -> dict:
+def parse_course_ids(course_ids: Optional[str]) -> Optional[set]:
+    ids = {x.strip() for x in (course_ids or "").split(",") if x.strip()}
+    return ids or None
+
+
+async def compute_workload(db, teachers: List[dict], start: datetime, end: datetime, hide_empty: bool = False, only_overtime: bool = False, exclude_ids: Optional[set] = None, course_ids: Optional[set] = None) -> dict:
     """يعيد نفس بنية /reports/teacher-workload القديمة + أعمدة كشف الساعات الإضافية"""
     from .calendar_events import holiday_dates
     policies = await load_policies(db)
@@ -226,17 +231,22 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         pol = policy_for(policies, faculty_id)
 
         courses = await db.courses.find({"teacher_id": tid, "is_active": True}).to_list(100)
-        if sem_id:
+        if course_ids:
+            # مقررات مختارة صراحةً: تُؤخذ كما هي بغض النظر عن فصل الفترة
+            courses = await db.courses.find({"_id": {"$in": [ObjectId(c) for c in course_ids if ObjectId.is_valid(c)]}, "teacher_id": tid}).to_list(100)
+        elif sem_id:
             # نطاق الفصل: مقررات فصل الفترة فقط (المقررات بلا فصل تبقى)
             courses = [c for c in courses if not c.get("semester_id") or str(c.get("semester_id")) == sem_id]
         cur_ids = {str(c["_id"]) for c in courses}
         for hc in await db.lectures.distinct("course_id", {"teacher_id": tid, "date": {"$gte": start_str, "$lte": end_str}}):
-            if hc not in cur_ids and ObjectId.is_valid(hc):
+            if hc not in cur_ids and ObjectId.is_valid(hc) and (not course_ids or hc in course_ids):
                 cdoc = await db.courses.find_one({"_id": ObjectId(hc)})
                 if cdoc:
                     cdoc["_hist_only"] = True
                     courses.append(cdoc)
 
+        if course_ids:
+            courses = [c for c in courses if str(c["_id"]) in course_ids]
         total_scheduled = total_actual = total_expected = total_shortfall = total_excused = 0.0
         courses_data = []
         for course in courses:
@@ -314,6 +324,10 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 required_hours = round(weekly_hours * effective_weeks, 2)
                 teacher_note = (f"بداية المحاضرات {teacher_first.strftime('%Y-%m-%d')} (الأسبوع {teacher_start_week})"
                                 f" · النصاب محسوب من {effective_weeks} أسابيع بدل {total_weeks}")
+        if course_ids:
+            # نصاب مقررات مختارة: المطلوب = الافتراضية (الأسبوعي للمقرر × أسابيعه) للمقررات المختارة فقط
+            required_hours = round(total_expected, 2)
+            teacher_note = (teacher_note + " · " if teacher_note else "") + f"نصاب {len(courses_data)} مقرر مختار (المطلوب = الساعات الافتراضية للمقررات المختارة)"
         bonus_enabled = bool(pol.get("bonus_enabled"))
         divisor = float(pol.get("bonus_divisor") or 6)
         bonus_hours = round(total_actual / divisor, 2) if bonus_enabled else 0.0
@@ -331,7 +345,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
             "summary": {
                 "total_courses": len(courses_data), "weekly_hours": weekly_hours, "total_weeks": total_weeks,
                 "effective_weeks": effective_weeks, "start_week": teacher_start_week, "late_start": teacher_start_week > 1,
-                "first_lecture_date": teacher_first.strftime("%Y-%m-%d") if teacher_first else None, "note": teacher_note,
+                "first_lecture_date": teacher_first.strftime("%Y-%m-%d") if teacher_first else None, "note": teacher_note, "course_filter": bool(course_ids),
                 "holiday_hours": round(sum(c["holiday_hours"] for c in courses_data), 2),
                 "required_hours": required_hours, "total_scheduled_hours": round(total_scheduled, 2), "total_actual_hours": round(total_actual, 2),
                 "difference_hours": round(total_actual - required_hours, 2),
@@ -626,11 +640,11 @@ async def _issuer(db, current_user: dict) -> str:
 
 @router.get("/export/report/teacher-workload/sheet-pdf")
 async def export_sheet_pdf(teacher_id: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None,
-                           faculty_id: Optional[str] = None, department_id: Optional[str] = None, hide_empty: bool = False, only_overtime: bool = False, current_user: dict = Depends(get_current_user)):
+                           faculty_id: Optional[str] = None, department_id: Optional[str] = None, hide_empty: bool = False, only_overtime: bool = False, course_ids: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """📄 كشف الساعات الإضافية — PDF أفقي بشكل الكشف الرسمي"""
     db = get_db()
     start, end = parse_period(start_date, end_date)
-    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id), start, end, hide_empty, only_overtime)
+    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id), start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids))
     buf = build_sheet_pdf(report, await _issuer(db, current_user), current_user.get("full_name", ""))
     fname = export_filename("كشف الساعات الإضافية للأساتذة", f"{start.strftime('%Y-%m-%d')} الى {end.strftime('%Y-%m-%d')}", ext="pdf")
     return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(fname))
@@ -638,11 +652,11 @@ async def export_sheet_pdf(teacher_id: Optional[str] = None, start_date: Optiona
 
 @router.get("/export/report/teacher-workload/sheet-excel")
 async def export_sheet_excel(teacher_id: Optional[str] = None, start_date: Optional[str] = None, end_date: Optional[str] = None,
-                             faculty_id: Optional[str] = None, department_id: Optional[str] = None, hide_empty: bool = False, only_overtime: bool = False, current_user: dict = Depends(get_current_user)):
+                             faculty_id: Optional[str] = None, department_id: Optional[str] = None, hide_empty: bool = False, only_overtime: bool = False, course_ids: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """📊 كشف الساعات الإضافية — Excel (+ ورقة المستحقات المالية عند وجود سعر ساعة)"""
     db = get_db()
     start, end = parse_period(start_date, end_date)
-    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id), start, end, hide_empty, only_overtime)
+    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id), start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids))
     out = build_sheet_excel(report, await _issuer(db, current_user))
     fname = export_filename("كشف الساعات الإضافية للأساتذة", f"{start.strftime('%Y-%m-%d')} الى {end.strftime('%Y-%m-%d')}", ext="xlsx")
     return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(fname))

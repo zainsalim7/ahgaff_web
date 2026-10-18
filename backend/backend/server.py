@@ -13417,13 +13417,14 @@ async def get_teacher_workload_report(
     department_id: Optional[str] = None,
     hide_empty: bool = False,
     only_overtime: bool = False,
+    course_ids: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """تقرير نصاب المدرس + كشف الساعات الإضافية — الحساب في routes/teacher_overtime.py"""
-    from routes.teacher_overtime import compute_workload, select_teachers, parse_period
+    """تقرير نصاب المدرس + كشف الساعات الإضافية — الحساب في routes/teacher_overtime.py (course_ids: مقررات مختارة مفصولة بفواصل)"""
+    from routes.teacher_overtime import compute_workload, select_teachers, parse_period, parse_course_ids
     start, end = parse_period(start_date, end_date)
     teachers = await select_teachers(db, current_user, teacher_id, faculty_id, department_id)
-    return await compute_workload(db, teachers, start, end, hide_empty, only_overtime)
+    return await compute_workload(db, teachers, start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids))
 
 
 # ==================== Reports Export (PDF & Excel) ====================
@@ -13528,12 +13529,13 @@ async def export_teacher_workload_pdf(
     faculty_id: Optional[str] = None,
     hide_empty: bool = False,
     only_overtime: bool = False,
+    course_ids: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """📄 تصدير تقرير نصاب المدرسين إلى PDF احترافي (reportlab)"""
     from routes.teacher_workload_pdf import build_workload_pdf
     from routes.deps import export_filename, export_headers
-    report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, hide_empty, only_overtime, current_user)
+    report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, hide_empty, only_overtime, course_ids, current_user)
     scope_label = ""
     if department_id:
         report["teachers"] = [t for t in report["teachers"] if t.get("department_id") == department_id]
@@ -13564,6 +13566,7 @@ async def export_teacher_workload_excel(
     faculty_id: Optional[str] = None,
     hide_empty: bool = False,
     only_overtime: bool = False,
+    course_ids: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير تقرير نصاب المدرسين إلى Excel
@@ -13629,7 +13632,7 @@ async def export_teacher_workload_excel(
 
     if not months_to_export:
         # Sheet واحد للفترة كاملة
-        report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, hide_empty, only_overtime, current_user)
+        report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, hide_empty, only_overtime, course_ids, current_user)
         data = teacher_rows(report["teachers"], department_id)
         if not data:
             data = [{"ملاحظة": "لا توجد بيانات"}]
@@ -13640,7 +13643,7 @@ async def export_teacher_workload_excel(
         # عدة Sheets - واحد لكل شهر
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             for s_str, e_str, label in months_to_export:
-                report = await get_teacher_workload_report(teacher_id, s_str, e_str, faculty_id, None, hide_empty, only_overtime, current_user)
+                report = await get_teacher_workload_report(teacher_id, s_str, e_str, faculty_id, None, hide_empty, only_overtime, course_ids, current_user)
                 data = teacher_rows(report["teachers"], department_id)
                 if not data:
                     data = [{"ملاحظة": "لا توجد بيانات لهذا الشهر"}]

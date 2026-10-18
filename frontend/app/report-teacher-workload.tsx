@@ -50,6 +50,13 @@ export default function TeacherWorkloadReport() {
   };
   const [policyOpen, setPolicyOpen] = useState(false);
   const [teacherId, setTeacherId] = useState('');
+  const [teacherCourses, setTeacherCourses] = useState<any[]>([]);
+  const [courseIds, setCourseIds] = useState<string[]>([]);
+  useEffect(() => {
+    setCourseIds([]);
+    if (!teacherId) { setTeacherCourses([]); return; }
+    api.get('/courses', { params: { teacher_id: teacherId, all_semesters: true, fields: 'name,code,level,section,semester_name' } }).then((r) => setTeacherCourses(r.data || [])).catch(() => setTeacherCourses([]));
+  }, [teacherId]);
   const [teacherQ, setTeacherQ] = useState('');
   const [showList, setShowList] = useState(false);
   const [quick, setQuick] = useState('month');
@@ -74,12 +81,13 @@ export default function TeacherWorkloadReport() {
   const params = useMemo(() => {
     const p: any = { start_date: from, end_date: to };
     if (teacherId) p.teacher_id = teacherId;
+    if (teacherId && courseIds.length) p.course_ids = courseIds.join(',');
     if (dept && !isTeacher) p.department_id = dept;
     if (fac && !isTeacher) p.faculty_id = fac;
     if (hideEmpty && !isTeacher) p.hide_empty = true;
     if (onlyOvertime && !isTeacher) p.only_overtime = true;
     return p;
-  }, [from, to, teacherId, dept, fac, hideEmpty, onlyOvertime, isTeacher]);
+  }, [from, to, teacherId, courseIds, dept, fac, hideEmpty, onlyOvertime, isTeacher]);
 
   const run = useCallback(async () => {
     setLoading(true);
@@ -208,6 +216,19 @@ export default function TeacherWorkloadReport() {
                 )}
               </View>
             </View>
+            {!!teacherId && teacherCourses.length > 0 && (
+              <View style={styles.courseBox} testID="tw-course-filter">
+                <Text style={styles.courseLbl}>📚 نصاب على مقررات محددة {courseIds.length ? `(${courseIds.length} من ${teacherCourses.length})` : '— كل مقررات المدرس'}</Text>
+                <View style={styles.chips}>
+                  <TouchableOpacity style={[styles.chip, !courseIds.length && styles.chipOn]} onPress={() => setCourseIds([])} testID="tw-course-all"><Text style={[styles.chipText, !courseIds.length && styles.chipTextOn]}>كل المقررات</Text></TouchableOpacity>
+                  {teacherCourses.map((c) => { const on = courseIds.includes(c.id); return (
+                    <TouchableOpacity key={c.id} style={[styles.chip, on && styles.chipCourseOn]} onPress={() => setCourseIds(on ? courseIds.filter((x) => x !== c.id) : [...courseIds, c.id])} testID={`tw-course-${c.id}`}>
+                      <Text style={[styles.chipText, on && styles.chipTextOn]}>{on ? '✓ ' : ''}{c.name}{c.level ? ` · م${c.level}` : ''}{c.section ? `/${c.section}` : ''}{c.semester_name ? ` · ${c.semester_name}` : ''}</Text>
+                    </TouchableOpacity>); })}
+                </View>
+                {courseIds.length > 0 && <Text style={styles.courseHint}>النصاب المطلوب سيُحسب من الساعات الافتراضية للمقررات المختارة فقط (أسبوعي المقرر × أسابيعه)</Text>}
+              </View>
+            )}
             <View style={[styles.chips, { zIndex: 1 }]}>
               {QUICK.map((q) => (
                 <TouchableOpacity key={q.key} style={[styles.chip, quick === q.key && styles.chipOn]} onPress={() => { const [a, b] = q.range(); setFrom(a); setTo(b); setQuick(q.key); }} testID={`tw-quick-${q.key}`}>
@@ -235,7 +256,7 @@ export default function TeacherWorkloadReport() {
             <View style={styles.kpis} testID="tw-summary">
               {[
                 ['المدرسون', data.length, DASH.blue, `${period ? period.total_weeks : ''} أسبوع`],
-                ['النصاب المطلوب', `${Math.round(totals.req * 10) / 10} س`, DASH.navy2, lateTeachers.length ? (data.length === 1 ? `من بداية المحاضرات · ${lateTeachers[0].summary.effective_weeks} أسابيع بدل ${period?.total_weeks}` : `${lateTeachers.length} مدرس بدأت محاضراته بعد بداية الفترة`) : 'أسبوعي × الأسابيع الكاملة (حد قاطع)'],
+                ['النصاب المطلوب', `${Math.round(totals.req * 10) / 10} س`, DASH.navy2, data.some((t) => t.summary.course_filter) ? `نصاب ${data[0]?.courses.length || 0} مقرر مختار — الافتراضية للمقررات المختارة` : lateTeachers.length ? (data.length === 1 ? `من بداية المحاضرات · ${lateTeachers[0].summary.effective_weeks} أسابيع بدل ${period?.total_weeks}` : `${lateTeachers.length} مدرس بدأت محاضراته بعد بداية الفترة`) : 'أسبوعي × الأسابيع الكاملة (حد قاطع)'],
                 ['الساعات المنفَّذة', `${Math.round(totals.act * 10) / 10} س`, DASH.teal, `من ${Math.round(totals.sch * 10) / 10} س مجدولة`],
                 ['المحاضرات المنفَّذة', `${totals.exe}/${totals.lec}`, DASH.purple, 'منفَّذة / مجدولة'],
                 ['نسبة الإنجاز', `${totals.rate}%`, rateColor(totals.rate), totals.below ? `${totals.below} مدرس تحت 75%` : 'الجميع ≥ 75%'],
@@ -353,6 +374,10 @@ const styles = StyleSheet.create({
   viewText: { fontSize: 12, fontWeight: '800', color: '#fff' },
   actText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   filterRow: { flexDirection: 'row-reverse', gap: 12 },
+  courseBox: { backgroundColor: '#f5f3ff', borderWidth: 1, borderColor: '#ddd6fe', borderRadius: 10, padding: 10, marginTop: 10 },
+  courseLbl: { fontSize: 12.5, fontWeight: '800', color: '#4c1d95', textAlign: 'right', marginBottom: 6 },
+  courseHint: { fontSize: 11, color: '#6d28d9', textAlign: 'right', marginTop: 6 },
+  chipCourseOn: { backgroundColor: '#6d28d9', borderColor: '#6d28d9' },
   label: { fontSize: 12, fontWeight: '700', color: DASH.muted, textAlign: 'right', marginBottom: 4 },
   pickerBox: { borderWidth: 1, borderColor: DASH.line, borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
   picker: { height: 40, textAlign: 'right' as any, borderWidth: 0, backgroundColor: 'transparent', fontSize: 13 } as any,
