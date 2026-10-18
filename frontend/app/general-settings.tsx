@@ -178,6 +178,7 @@ export default function GeneralSettingsScreen() {
     max_absence_percent: number;
     attendance_duration_minutes: number;
     max_attendance_delay_minutes: number;
+    excuse_window_days: number;
     primary_color: string;
     secondary_color: string;
     phone: string;
@@ -191,6 +192,7 @@ export default function GeneralSettingsScreen() {
     max_absence_percent: 25,
     attendance_duration_minutes: 15,
     max_attendance_delay_minutes: 30,
+    excuse_window_days: 3,
     primary_color: '#1565c0',
     secondary_color: '#ff9800',
     phone: '',
@@ -1106,6 +1108,7 @@ export default function GeneralSettingsScreen() {
           max_absence_percent: data.max_absence_percent || 25,
           attendance_duration_minutes: data.attendance_duration_minutes || 15,
           max_attendance_delay_minutes: data.max_attendance_delay_minutes || 30,
+          excuse_window_days: data.excuse_window_days || 3,
           primary_color: data.primary_color || '#1565c0',
           secondary_color: data.secondary_color || '#ff9800',
           phone: data.phone || '',
@@ -1297,6 +1300,21 @@ export default function GeneralSettingsScreen() {
                       styles.optionText,
                       facultySettings.max_attendance_delay_minutes === min && styles.optionTextActive
                     ]}>{min} د</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={[styles.label, { marginTop: 20, color: '#6a1b9a' }]}>مهلة تبرير الغياب من تطبيق الطالب (أيام)</Text>
+              <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>يستطيع الطالب تقديم عذر عن غياب محاضرة خلال هذه المدة من تاريخها</Text>
+              <View style={styles.optionsRow}>
+                {[1, 2, 3, 5, 7, 14].map(d => (
+                  <TouchableOpacity
+                    key={d}
+                    testID={`faculty-excuse-window-${d}`}
+                    style={[styles.optionBtn, facultySettings.excuse_window_days === d && styles.optionBtnActive]}
+                    onPress={() => setFacultySettings({ ...facultySettings, excuse_window_days: d })}
+                  >
+                    <Text style={[styles.optionText, facultySettings.excuse_window_days === d && styles.optionTextActive]}>{d} يوم</Text>
                   </TouchableOpacity>
                 ))}
               </View>

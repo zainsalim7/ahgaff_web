@@ -38,6 +38,17 @@ export const ExcuseDetail: React.FC<{ sel: any; token: string; onDecided: () => 
       </div>
       <label style={{ ...lbl, marginTop: 10 }}>الوصف</label>
       <div style={{ background: '#f8fafc', borderRadius: 8, padding: 10, fontSize: 13, whiteSpace: 'pre-wrap' }} data-testid="se-detail-desc">{sel.description || '—'}</div>
+      {(sel.items || []).length > 0 && (
+        <div style={{ marginTop: 10 }} data-testid="se-detail-items">
+          <label style={lbl}>📱 الغيابات المطلوب تبريرها من التطبيق ({sel.items.length})</label>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
+            <thead><tr><th style={th}>المقرر</th><th style={th}>التاريخ</th><th style={th}>الوقت</th></tr></thead>
+            <tbody>{sel.items.map((it: any) => (
+              <tr key={it.record_id} data-testid={`se-item-${it.record_id}`}><td style={td}>{it.course_name || it.course_id}</td><td style={td}>{it.date}</td><td style={td}>{it.start_time || '—'}</td></tr>
+            ))}</tbody>
+          </table>
+        </div>
+      )}
       <label style={{ ...lbl, marginTop: 10 }}>المستندات ({(sel.attachments || []).length})</label>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         {(sel.attachments || []).map((a: any) => (

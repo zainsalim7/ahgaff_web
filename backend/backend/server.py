@@ -252,6 +252,7 @@ from routes.hr_presence import router as hr_presence_router, presence_check_loop
 from routes.hr_shifts import router as hr_shifts_router
 from routes.app_versions import router as app_versions_router
 from routes.default_credentials import router as default_credentials_router
+from routes.absence_excuses import router as absence_excuses_router
 from routes.hr_documents import router as hr_documents_router
 from routes.hr_home import router as hr_home_router
 from routes.hr_leave_types import router as hr_leave_types_router
@@ -17652,6 +17653,10 @@ async def get_faculty(faculty_id: str, current_user: dict = Depends(get_current_
         "sections": faculty.get("sections", ["أ", "ب", "ج"]),
         "attendance_late_minutes": faculty.get("attendance_late_minutes", 15),
         "max_absence_percent": faculty.get("max_absence_percent", 25),
+        "max_unexcused_percent": faculty.get("max_unexcused_percent", 10),
+        "attendance_duration_minutes": faculty.get("attendance_duration_minutes", 15),
+        "max_attendance_delay_minutes": faculty.get("max_attendance_delay_minutes", 30),
+        "excuse_window_days": faculty.get("excuse_window_days", 3),
         "primary_color": faculty.get("primary_color", "#1565c0"),
         "secondary_color": faculty.get("secondary_color", "#ff9800"),
         # معلومات التواصل
@@ -17678,7 +17683,7 @@ async def update_faculty_settings(
     allowed_fields = [
         "levels_count", "sections", "attendance_late_minutes", "max_absence_percent",
         "primary_color", "secondary_color", "phone", "whatsapp", "email",
-        "attendance_duration_minutes", "max_attendance_delay_minutes", "max_unexcused_percent"
+        "attendance_duration_minutes", "max_attendance_delay_minutes", "max_unexcused_percent", "excuse_window_days"
     ]
     
     update_data = {k: v for k, v in data.items() if k in allowed_fields and v is not None}
@@ -18398,6 +18403,7 @@ app.include_router(course_groups_tools_router, prefix="/api")
 app.include_router(assistant_router, prefix="/api")
 app.include_router(course_groups_router, prefix="/api")
 app.include_router(student_excuses_router, prefix="/api")
+app.include_router(absence_excuses_router, prefix="/api")
 from routes.lecture_swaps import router as lecture_swaps_router  # noqa: E402
 app.include_router(lecture_swaps_router, prefix="/api")
 app.include_router(hr_appraisals_router, prefix="/api")

@@ -189,7 +189,8 @@ async def notify_users(db, user_ids: Iterable[str], title: str, message: str, nt
         from services.firebase_service import send_notification_to_many
         tokens = [d["token"] for d in await db.fcm_tokens.find({"user_id": {"$in": uids}}).to_list(2000) if d.get("token")]
         if tokens:
-            await send_notification_to_many(tokens, title, message)
+            push_data = {k: str(v) for k, v in ((extra or {}).get("data") or {}).items() if v is not None}
+            await send_notification_to_many(tokens, title, message, push_data or None)
     except Exception as e:
         logging.error(f"HR notify error: {e}")
 

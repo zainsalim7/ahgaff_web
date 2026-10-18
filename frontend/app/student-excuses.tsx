@@ -53,7 +53,7 @@ export default function StudentExcusesPage() {
                 <td style={{ ...td, fontWeight: 800 }}>{it.ref_no}</td>
                 <td style={td}>{it.student?.full_name}<div style={{ fontSize: 10.5, color: '#64748b' }}>{it.student?.student_id} · م{it.student?.level}/{it.student?.section}</div></td>
                 <td style={td}>{it.department_name || '—'}</td><td style={td}>{it.excuse_type_label}</td>
-                <td style={td}>{it.from_date} → {it.to_date}<div style={{ fontSize: 10.5, color: '#64748b' }}>{it.days} يوم{it.course_name ? ` · ${it.course_name}` : ''}</div></td>
+                <td style={td}>{it.from_date} → {it.to_date}<div style={{ fontSize: 10.5, color: '#64748b' }}>{(it.items || []).length ? `📱 ${it.items.length} غياب من التطبيق` : `${it.days} يوم`}{it.course_name ? ` · ${it.course_name}` : ''}</div></td>
                 <td style={td}>{it.route_label}</td><td style={td}>{(it.attachments || []).length}</td><td style={td}>{fmt(it.created_at)}</td>
                 <td style={td}><Badge text={STATUS_LABEL[it.status]} color={STATUS_COLOR[it.status]} /></td>
                 <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => open(it)} style={btn(it.can_decide ? '#0f2440' : '#64748b', { padding: '5px 10px', fontSize: 12 })} data-testid={`se-open-${it.id}`}>{it.can_decide ? 'مراجعة' : 'التفاصيل'}</button></td>

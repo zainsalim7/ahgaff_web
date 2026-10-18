@@ -95,6 +95,7 @@ def serialize(d: dict) -> dict:
         "decision_note": d.get("decision_note", ""), "decided_by_name": d.get("decided_by_name"), "decided_at": d.get("decided_at"),
         "board_session_no": d.get("board_session_no"), "board_session_date": d.get("board_session_date"),
         "applied": d.get("applied"), "history": d.get("history", []),
+        "source": d.get("source", "web"), "items": d.get("items", []),
         "created_at": d.get("created_at"), "updated_at": d.get("updated_at"),
     }
 
@@ -141,6 +142,8 @@ def _covers(doc: dict, enr: dict, lec: dict) -> bool:
 async def apply_excuse(db, doc: dict) -> dict:
     """تحويل غياب الطالب في المحاضرات المنفَّذة ضمن الفترة إلى «بعذر» (ويُنشأ سجل إن كان مفقوداً)"""
     sid = doc["student_db_id"]
+    if doc.get("items"):
+        return await _apply_items(db, doc)
     enrs = {e["course_id"]: e async for e in db.enrollments.find({"student_id": sid}, {"course_id": 1, "group": 1})}
     if not enrs:
         return {"lectures": 0, "updated": 0, "created": 0, "courses": []}
@@ -166,6 +169,20 @@ async def apply_excuse(db, doc: dict) -> dict:
     return {"lectures": len(lecs), "updated": updated, "created": created, "courses": [names.get(c, c) for c in courses], "applied_at": now.isoformat()}
 
 
+async def _apply_items(db, doc: dict) -> dict:
+    """طلب من التطبيق: تحويل سجلات الغياب المختارة تحديداً إلى «بعذر»"""
+    updated, courses = 0, set()
+    for it in doc["items"]:
+        if not ObjectId.is_valid(it.get("record_id") or ""):
+            continue
+        r = await db.attendance.update_one({"_id": ObjectId(it["record_id"]), "student_id": doc["student_db_id"], "status": {"$ne": "present"}},
+                                           {"$set": {"status": "excused", "excuse_id": str(doc["_id"]), "prev_status": "absent"}})
+        if r.modified_count:
+            updated += 1
+            courses.add(it.get("course_name") or it.get("course_id") or "")
+    return {"lectures": len(doc["items"]), "updated": updated, "created": 0, "courses": sorted(c for c in courses if c), "applied_at": _now().isoformat()}
+
+
 async def excused_students_for_lecture(db, lecture: dict) -> set:
     """طلاب لديهم عذر معتمد يغطي تاريخ المحاضرة — يُستخدم عند التحضير لتسجيلهم «بعذر» تلقائياً"""
     q = {"status": "approved", "from_date": {"$lte": lecture["date"]}, "to_date": {"$gte": lecture["date"]},
@@ -182,10 +199,13 @@ async def _reviewer_ids(db, doc: dict) -> List[str]:
     return ids + await hr_manager_user_ids(db, Permission.MANAGE_STUDENT_EXCUSES)
 
 
-async def _notify_student(db, doc: dict, title: str, msg: str):
+async def _notify_student(db, doc: dict, title: str, msg: str, decision: bool = False):
     st = await db.students.find_one({"_id": ObjectId(doc["student_db_id"])}, {"user_id": 1})
     if st and st.get("user_id"):
-        await notify_users(db, [st["user_id"]], title, msg, "student_excuse", {"data": {"type": "student_excuse", "id": str(doc["_id"])}})
+        data = {"type": "student_excuse", "id": str(doc["_id"]), "route": "/absence-excuse"}
+        if decision:
+            data["kind"] = "absence_excuse_decision"
+        await notify_users(db, [st["user_id"]], title, msg, "student_excuse", {"data": data})
 
 
 # ---------------- meta ----------------
@@ -440,6 +460,12 @@ async def decide(excuse_id: str, request: Request, current_user: dict = Depends(
     msg = f"الطلب {doc['ref_no']} ({doc['from_date']} → {doc['to_date']}): {STATUS[decision]}" + (f" — {note}" if note else "")
     if decision == "approved" and upd["applied"]["lectures"]:
         msg += f" — حُوّل غيابك في {upd['applied']['updated'] + upd['applied']['created']} محاضرة إلى «بعذر»"
-    await _notify_student(db, doc, titles[decision], msg)
+    if doc.get("items"):
+        names = "، ".join(sorted({i.get("course_name") or "" for i in doc["items"]} - {""}))
+        if decision == "approved":
+            titles["approved"], msg = "✅ تم قبول تبرير الغياب", f"تم قبول عذرك عن {len(doc['items'])} غياب ({names}) وتحويلها إلى «معذور»"
+        elif decision == "rejected":
+            titles["rejected"], msg = "❌ تم رفض تبرير الغياب", f"عذرك عن ({names}) مرفوض — السبب: {note}"
+    await _notify_student(db, doc, titles[decision], msg, decision=True)
     await log_activity(current_user, f"student_excuse_{decision}", "student_excuse", excuse_id, doc["ref_no"], {"student": doc.get("student_name")})
     return {"message": f"تم تسجيل القرار: {STATUS[decision]}", "applied": upd.get("applied")}
