@@ -8,7 +8,7 @@ import { reportsAPI, coursesAPI, departmentsAPI, facultiesAPI } from '../src/ser
 import { useAuth } from '../src/contexts/AuthContext';
 import { formatGregorianDate } from '../src/utils/dateUtils';
 import { CourseFilter } from '../src/components/CourseFilter';
-import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 export default function CourseDetailedReport() {
   const params = useLocalSearchParams();
@@ -155,52 +155,24 @@ export default function CourseDetailedReport() {
           </View>
 
           {tab === 'students' && (
-            <View style={reportPage.card}>
-              {(reportData.students || []).length === 0 && <Text style={styles.emptyInline}>لا يوجد طلاب مسجلون</Text>}
-              {(reportData.students || []).map((student: any, index: number) => (
-                <View key={index} style={styles.studentRow} testID={`course-student-${index}`}>
-                  <View style={styles.studentRank}><Text style={styles.rankText}>{index + 1}</Text></View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.studentName}>{student.student_name}</Text>
-                    <Text style={styles.studentId}>{student.student_id}</Text>
-                  </View>
-                  <View style={styles.miniStats}>
-                    <Text style={[styles.miniStat, { color: '#16a34a' }]}>{student.present} ح</Text>
-                    <Text style={[styles.miniStat, { color: '#f97316' }]}>{student.late} م</Text>
-                    <Text style={[styles.miniStat, { color: '#dc2626' }]}>{student.absent} غ</Text>
-                  </View>
-                  <View style={[styles.rateBadge, { backgroundColor: rateColor(student.attendance_rate) + '18' }]}>
-                    <Text style={[styles.rateText, { color: rateColor(student.attendance_rate) }]}>{student.attendance_rate}%</Text>
-                  </View>
-                </View>
-              ))}
-            </View>
+            <DenseTable testID="course-students" head={['#', 'الطالب', 'رقم القيد', 'حاضر', 'متأخر', 'غائب', 'نسبة الحضور']}
+              align={['center', 'right', 'right', 'center', 'center', 'center', 'right']} rowTestID={(i) => `course-student-${i}`} emptyText="لا يوجد طلاب مسجلون"
+              rows={(reportData.students || []).map((st: any, i: number) => [i + 1, <b style={{ color: '#0f2440' }}>{st.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{st.student_id}</span>,
+                <Pill color="#16a34a">{st.present}</Pill>, <Pill color="#f59e0b">{st.late}</Pill>, <Pill color="#dc2626">{st.absent}</Pill>, <Bar pct={st.attendance_rate} color={rateColor(st.attendance_rate)} />])}
+              footer={`${(reportData.students || []).length} طالب`} />
           )}
 
           {tab === 'lectures' && (
-            <View style={reportPage.card}>
-              {(reportData.lectures || []).length === 0 && <Text style={styles.emptyInline}>لا توجد محاضرات</Text>}
-              {(reportData.lectures || []).map((lecture: any, index: number) => (
-                <View key={index} style={[styles.lectureRow, lecture.status === 'absent' && { backgroundColor: '#fff8f0' }]} testID={`course-lecture-${index}`}>
-                  <View style={styles.lectureDate}>
-                    <Text style={styles.lectureDateText}>{lecture.date ? formatGregorianDate(new Date(lecture.date), { includeYear: false, includeWeekday: false }) : '—'}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.lectureTime}>{lecture.start_time}</Text>
-                    <Text style={styles.lectureStats}>{lecture.status === 'absent' ? 'لم تنعقد (غياب المدرّس)' : `${lecture.present_count}/${lecture.total_students} حاضر`}</Text>
-                    {lecture.location_flag === 'outside' && <Text style={{ fontSize: 11, color: '#b91c1c', fontWeight: '700', marginTop: 2 }} testID={`course-lecture-${index}-geo`}>📍 حُضّرت خارج النطاق{lecture.location_distance_m ? ` (${Math.round(lecture.location_distance_m) >= 1000 ? `${(lecture.location_distance_m / 1000).toFixed(1)} كم` : `${Math.round(lecture.location_distance_m)} م`})` : ''}</Text>}
-                    {lecture.location_flag === 'no_location' && <Text style={{ fontSize: 11, color: '#92400e', fontWeight: '700', marginTop: 2 }} testID={`course-lecture-${index}-geo`}>📍 بدون موقع</Text>}
-                  </View>
-                  {lecture.status === 'absent' ? (
-                    <View style={[styles.rateBadge, { backgroundColor: '#fff3e0' }]}><Text style={[styles.rateText, { color: '#e65100' }]}>غياب</Text></View>
-                  ) : (
-                    <View style={[styles.rateBadge, { backgroundColor: rateColor(lecture.attendance_rate, 80, 60) + '18' }]}>
-                      <Text style={[styles.rateText, { color: rateColor(lecture.attendance_rate, 80, 60) }]}>{lecture.attendance_rate}%</Text>
-                    </View>
-                  )}
-                </View>
-              ))}
-            </View>
+            <DenseTable testID="course-lectures" head={['#', 'التاريخ', 'الوقت', 'الحضور', 'الموقع', 'النسبة']}
+              align={['center', 'right', 'center', 'right', 'right', 'right']} rowTestID={(i) => `course-lecture-${i}`} emptyText="لا توجد محاضرات"
+              rows={(reportData.lectures || []).map((l: any, i: number) => [i + 1,
+                <b style={{ color: '#1565c0' }}>{l.date ? formatGregorianDate(new Date(l.date), { includeYear: false, includeWeekday: true }) : '—'}</b>,
+                <span style={{ direction: 'ltr', display: 'inline-block' }}>{l.start_time}</span>,
+                l.status === 'absent' ? <Pill color="#e65100">لم تنعقد (غياب المدرّس)</Pill> : <span>{l.present_count}/{l.total_students} حاضر</span>,
+                l.location_flag === 'outside' ? <span style={{ fontSize: 11.5, color: '#b91c1c', fontWeight: 700 }} data-testid={`course-lecture-${i}-geo`}>📍 خارج النطاق{l.location_distance_m ? ` (${Math.round(l.location_distance_m) >= 1000 ? `${(l.location_distance_m / 1000).toFixed(1)} كم` : `${Math.round(l.location_distance_m)} م`})` : ''}</span>
+                  : l.location_flag === 'no_location' ? <span style={{ fontSize: 11.5, color: '#92400e', fontWeight: 700 }} data-testid={`course-lecture-${i}-geo`}>📍 بدون موقع</span> : <span style={{ color: '#94a3b8' }}>—</span>,
+                l.status === 'absent' ? <Pill color="#e65100">غياب</Pill> : <Bar pct={l.attendance_rate} color={rateColor(l.attendance_rate, 80, 60)} />])}
+              footer={`${(reportData.lectures || []).length} محاضرة`} />
           )}
         </>)}
       </ScrollView>
@@ -210,8 +182,8 @@ export default function CourseDetailedReport() {
 
 const styles = StyleSheet.create({
   retryBtn: { marginTop: 16, backgroundColor: '#1565c0', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
-  tabsContainer: { flexDirection: 'row', gap: 10, marginBottom: 12 },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0' },
+  tabsContainer: { flexDirection: 'row-reverse', gap: 6, marginBottom: 8 },
+  tab: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#fff', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, borderWidth: 1, borderColor: '#e2e8f0' },
   tabActive: { backgroundColor: '#0f2440', borderColor: '#0f2440' },
   tabText: { fontSize: 13, fontWeight: '700', color: '#555' },
   tabTextActive: { color: '#fff' },

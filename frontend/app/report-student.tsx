@@ -3,6 +3,7 @@ import { StudentDetailedReport } from '../src/components/StudentDetailedReport';
 import api from '../src/services/api';
 import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import React, { useState, useEffect, useCallback } from 'react';
+import { ReportKpis, DenseTable, Pill, Bar, rateColor } from '../src/components/reports/ReportShell';
 import {
   View,
   Text,
@@ -540,104 +541,22 @@ export default function StudentReport() {
               </View>
             </View>
 
-            {/* ملخص الحضور */}
-            <View style={styles.summaryCard}>
-              <Text style={styles.sectionTitle}>ملخص الحضور العام</Text>
-              <View style={styles.summaryGrid}>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryValue}>{studentData.summary?.total_courses || 0}</Text>
-                  <Text style={styles.summaryLabel}>مقرر</Text>
-                </View>
-                <View style={styles.summaryItem}>
-                  <Text style={styles.summaryValue}>{studentData.summary?.total_lectures || 0}</Text>
-                  <Text style={styles.summaryLabel}>محاضرة</Text>
-                </View>
-                <View style={[styles.summaryItem, styles.summarySuccess]}>
-                  <Text style={styles.summaryValue}>{studentData.summary?.total_present || 0}</Text>
-                  <Text style={styles.summaryLabel}>حاضر</Text>
-                </View>
-                <View style={[styles.summaryItem, styles.summaryDanger]}>
-                  <Text style={styles.summaryValue}>{studentData.summary?.total_absent || 0}</Text>
-                  <Text style={styles.summaryLabel}>غائب</Text>
-                </View>
-              </View>
-              
-              {/* نسبة الحضور الإجمالية */}
-              <View style={styles.overallRate}>
-                <Text style={styles.overallLabel}>نسبة الحضور الإجمالية</Text>
-                <View style={styles.rateCircle}>
-                  <Text style={[
-                    styles.rateValue,
-                    (studentData.summary?.overall_attendance_rate || 0) >= 75 ? styles.rateGood :
-                    (studentData.summary?.overall_attendance_rate || 0) >= 50 ? styles.rateMedium : styles.rateLow
-                  ]}>
-                    {studentData.summary?.overall_attendance_rate || 0}%
-                  </Text>
-                </View>
-              </View>
-            </View>
+            {/* ملخص الحضور — رقائق مضغوطة */}
+            {(() => { const sm = studentData.summary || {}; const r = sm.overall_attendance_rate || 0; return (
+              <ReportKpis testID="student-summary" items={[
+                { label: 'المقررات', value: sm.total_courses || 0, color: '#1565c0', icon: 'book' },
+                { label: 'المحاضرات', value: sm.total_lectures || 0, color: '#0f2440', icon: 'calendar' },
+                { label: 'حاضر', value: sm.total_present || 0, color: '#16a34a', icon: 'checkmark-circle' },
+                { label: 'غائب', value: sm.total_absent || 0, color: '#dc2626', icon: 'close-circle' },
+                { label: 'نسبة الحضور الإجمالية', value: `${r}%`, color: rateColor(r, 75, 50), icon: 'stats-chart' },
+              ]} />); })()}
 
-            {/* تفاصيل المقررات */}
-            <Text style={styles.sectionTitle}>تفاصيل المقررات ({studentData.courses?.length || 0})</Text>
-            
-            {(!studentData.courses || studentData.courses.length === 0) ? (
-              <View style={styles.emptyCard}>
-                <Ionicons name="book-outline" size={48} color="#ccc" />
-                <Text style={styles.emptyText}>لا توجد مقررات مسجلة</Text>
-              </View>
-            ) : (
-              studentData.courses.map((course: any, index: number) => (
-                <View key={index} style={styles.courseCard}>
-                  <View style={styles.courseHeader}>
-                    <View style={styles.courseInfo}>
-                      <Text style={styles.courseName}>{course.course_name}</Text>
-                      <Text style={styles.courseCode}>{course.course_code}</Text>
-                    </View>
-                    <View style={[
-                      styles.rateBadge,
-                      course.attendance_rate >= 75 ? styles.rateBadgeGood :
-                      course.attendance_rate >= 50 ? styles.rateBadgeMedium : styles.rateBadgeLow
-                    ]}>
-                      <Text style={styles.rateBadgeText}>{course.attendance_rate}%</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.courseStats}>
-                    <View style={styles.courseStat}>
-                      <Text style={styles.courseStatValue}>{course.total_lectures}</Text>
-                      <Text style={styles.courseStatLabel}>محاضرة</Text>
-                    </View>
-                    <View style={styles.courseStat}>
-                      <View style={[styles.statDot, { backgroundColor: '#4caf50' }]} />
-                      <Text style={styles.courseStatValue}>{course.present}</Text>
-                      <Text style={styles.courseStatLabel}>حاضر</Text>
-                    </View>
-                    <View style={styles.courseStat}>
-                      <View style={[styles.statDot, { backgroundColor: '#f44336' }]} />
-                      <Text style={styles.courseStatValue}>{course.absent}</Text>
-                      <Text style={styles.courseStatLabel}>غائب</Text>
-                    </View>
-                    <View style={styles.courseStat}>
-                      <View style={[styles.statDot, { backgroundColor: '#ff9800' }]} />
-                      <Text style={styles.courseStatValue}>{course.late}</Text>
-                      <Text style={styles.courseStatLabel}>متأخر</Text>
-                    </View>
-                  </View>
-
-                  {/* شريط التقدم */}
-                  <View style={styles.progressBar}>
-                    <View 
-                      style={[
-                        styles.progressFill,
-                        { width: `${course.attendance_rate}%` },
-                        course.attendance_rate >= 75 ? styles.progressGood :
-                        course.attendance_rate >= 50 ? styles.progressMedium : styles.progressLow
-                      ]} 
-                    />
-                  </View>
-                </View>
-              ))
-            )}
+            {/* تفاصيل المقررات — جدول كثيف */}
+            <DenseTable testID="student-courses" head={['#', 'المقرر', 'الرمز', 'المحاضرات', 'حاضر', 'غائب', 'متأخر', 'نسبة الحضور']}
+              align={['center', 'right', 'right', 'center', 'center', 'center', 'center', 'right']} emptyText="لا توجد مقررات مسجلة" rowTestID={(i) => `student-course-${i}`}
+              rows={(studentData.courses || []).map((c: any, i: number) => [i + 1, <b style={{ color: '#0f2440' }}>{c.course_name}</b>, <span style={{ color: '#64748b' }}>{c.course_code}</span>, c.total_lectures,
+                <Pill color="#16a34a">{c.present}</Pill>, <Pill color="#dc2626">{c.absent}</Pill>, <Pill color="#f59e0b">{c.late}</Pill>, <Bar pct={c.attendance_rate} color={rateColor(c.attendance_rate, 75, 50)} />])}
+              footer={`${(studentData.courses || []).length} مقرر`} />
           </>
         )}
 

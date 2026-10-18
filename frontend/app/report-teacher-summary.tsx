@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { reportsAPI, teachersAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
-import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 interface CourseSummary {
   course_id: string; course_name: string; course_code: string; department_name: string; level: string; section: string;
@@ -183,52 +183,26 @@ export default function ReportTeacherSummary() {
             { label: 'نسبة الحضور', value: `${report.summary.overall_attendance_rate}%`, color: rateColor(report.summary.overall_attendance_rate), icon: 'stats-chart', sub: `${report.summary.total_present} حاضر · ${report.summary.total_late} متأخر · ${report.summary.total_absent} غائب` },
           ]} />
 
-          <View style={styles.breakdownCard} testID="attendance-breakdown">
-            <Text style={styles.sectionTitle}>توزيع الحضور الإجمالي</Text>
-            <View style={styles.breakdownRow}>
-              {([['حاضر', report.summary.total_present, '#16a34a'], ['غائب', report.summary.total_absent, '#dc2626'], ['متأخر', report.summary.total_late, '#f97316']] as const).map(([l, v, c]) => (
-                <View key={l} style={styles.breakdownItem}>
-                  <View style={[styles.breakdownDot, { backgroundColor: c }]} />
-                  <Text style={styles.breakdownLabel}>{l}</Text>
-                  <Text style={[styles.breakdownValue, { color: c }]}>{v}</Text>
-                </View>
-              ))}
-            </View>
-            {(() => { const tot = report.summary.total_present + report.summary.total_absent + report.summary.total_late; return tot > 0 ? (
+          {(() => { const tot = report.summary.total_present + report.summary.total_absent + report.summary.total_late; return tot > 0 ? (
+            <View style={styles.stackWrap} testID="attendance-breakdown">
               <View style={styles.stackBar}>
                 <View style={{ flex: report.summary.total_present, backgroundColor: '#16a34a' }} />
                 <View style={{ flex: report.summary.total_late, backgroundColor: '#f97316' }} />
                 <View style={{ flex: report.summary.total_absent, backgroundColor: '#dc2626' }} />
               </View>
-            ) : null; })()}
-          </View>
+              <Text style={styles.stackLbl}>توزيع الحضور: <Text style={{ color: '#16a34a', fontWeight: '800' }}>{report.summary.total_present} حاضر</Text> · <Text style={{ color: '#f97316', fontWeight: '800' }}>{report.summary.total_late} متأخر</Text> · <Text style={{ color: '#dc2626', fontWeight: '800' }}>{report.summary.total_absent} غائب</Text></Text>
+            </View>
+          ) : null; })()}
 
-          <Text style={styles.sectionTitle}>المقررات ({report.courses.length})</Text>
-          {report.courses.map((course, idx) => (
-            <TouchableOpacity key={course.course_id} style={styles.courseCard} onPress={() => router.push(`/report-course?courseId=${course.course_id}`)} testID={`course-card-${idx}`}>
-              <View style={[styles.rateStripe, { backgroundColor: rateColor(course.attendance_rate) }]} />
-              <View style={styles.courseHeader}>
-                <View style={styles.courseNameRow}>
-                  <Text style={styles.courseIndex}>{idx + 1}</Text>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.courseName}>{course.course_name}</Text>
-                    <Text style={styles.courseCode}>{course.course_code}{course.department_name ? `  ·  ${course.department_name}` : ''}{course.level ? ` - م${course.level}` : ''}{course.section ? ` (${course.section})` : ''}</Text>
-                  </View>
-                </View>
-                <View style={[styles.rateBadge, { backgroundColor: rateColor(course.attendance_rate) + '18' }]}>
-                  <Text style={[styles.rateText, { color: rateColor(course.attendance_rate) }]}>{course.attendance_rate}%</Text>
-                </View>
-              </View>
-              <View style={styles.courseStats}>
-                <View style={styles.courseStat}><Ionicons name="people-outline" size={14} color="#666" /><Text style={styles.courseStatText}>{course.students_count} طالب</Text></View>
-                <View style={styles.courseStat}><Ionicons name="calendar-outline" size={14} color="#666" /><Text style={styles.courseStatText}>{course.held_lectures}/{course.total_lectures} محاضرة</Text></View>
-                <View style={styles.courseStat} testID={`course-completion-${idx}`}><Ionicons name="speedometer-outline" size={14} color="#0e7490" /><Text style={[styles.courseStatText, { color: '#0e7490', fontWeight: '700' }]}>إنجاز {course.completion_rate}%</Text></View>
-                <View style={styles.courseStat}><Ionicons name="checkmark-circle-outline" size={14} color="#16a34a" /><Text style={styles.courseStatText}>{course.present_count}</Text></View>
-                <View style={styles.courseStat}><Ionicons name="time-outline" size={14} color="#f97316" /><Text style={styles.courseStatText}>{course.late_count}</Text></View>
-                <View style={styles.courseStat}><Ionicons name="close-circle-outline" size={14} color="#dc2626" /><Text style={styles.courseStatText}>{course.absent_count}</Text></View>
-              </View>
-            </TouchableOpacity>
-          ))}
+          <DenseTable testID="teacher-courses" head={['#', 'المقرر', 'الرمز / القسم / المستوى', 'الطلاب', 'المحاضرات', 'الإنجاز', 'حاضر', 'متأخر', 'غائب', 'نسبة الحضور', '']}
+            align={['center', 'right', 'right', 'center', 'center', 'right', 'center', 'center', 'center', 'right', 'center']}
+            keys={report.courses.map((c) => c.course_id)} rowTestID={(i) => `course-card-${i}`} onRowClick={(i) => router.push(`/report-course?courseId=${report.courses[i].course_id}`)}
+            rows={report.courses.map((c, i) => [i + 1, <b style={{ color: '#0f2440' }}>{c.course_name}</b>,
+              <span style={{ color: '#64748b', fontSize: 11.5 }}>{c.course_code}{c.department_name ? ` · ${c.department_name}` : ''}{c.level ? ` · م${c.level}` : ''}{c.section ? ` (${c.section})` : ''}</span>,
+              c.students_count, <span>{c.held_lectures}/{c.total_lectures}</span>, <span data-testid={`course-completion-${i}`}><Bar pct={c.completion_rate} color="#0e7490" /></span>,
+              <Pill color="#16a34a">{c.present_count}</Pill>, <Pill color="#f59e0b">{c.late_count}</Pill>, <Pill color="#dc2626">{c.absent_count}</Pill>,
+              <Bar pct={c.attendance_rate} color={rateColor(c.attendance_rate)} />, <span style={{ color: '#1565c0', fontSize: 11.5 }}>تفاصيل ‹</span>])}
+            footer={`${report.courses.length} مقرر · اضغط على الصف لفتح تقرير المقرر`} />
         </>)}
       </ScrollView>
     </SafeAreaView>
@@ -243,7 +217,8 @@ const styles = StyleSheet.create({
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fafafa' },
   teacherOption: { paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
   sectionTitle: { fontSize: 14, fontWeight: '800', color: '#0f2440', textAlign: 'right', marginBottom: 8 },
-  breakdownCard: { ...reportPage.card },
+  stackWrap: { marginBottom: 10 },
+  stackLbl: { fontSize: 11.5, color: '#64748b', textAlign: 'right', marginTop: 4 },
   breakdownRow: { flexDirection: 'row', justifyContent: 'space-around', marginBottom: 10 },
   breakdownItem: { alignItems: 'center', gap: 4 },
   breakdownDot: { width: 10, height: 10, borderRadius: 5 },

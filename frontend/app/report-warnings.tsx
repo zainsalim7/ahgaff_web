@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { reportsAPI, departmentsAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
-import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 export default function WarningsReport() {
   const { hasPermission } = useAuth();
@@ -137,34 +137,19 @@ export default function WarningsReport() {
 
           {currentList.length === 0 ? (
             <ReportEmpty text={activeTab === 'warnings' ? 'لا يوجد إنذارات' : 'لا يوجد محرومون'} icon="checkmark-circle-outline" />
-          ) : currentList.map((item, index) => (
-            <View key={index} style={[styles.studentCard, activeTab === 'deprivations' && styles.studentCardDanger]} testID={`warning-row-${index}`}>
-              <View style={styles.studentHeader}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.studentName}>{item.student_name}</Text>
-                  <Text style={styles.studentId}>{item.student_id}</Text>
-                </View>
-                <View style={[styles.statusBadge, item.status === 'محروم' ? styles.statusDanger : styles.statusWarning]}>
-                  <Text style={[styles.statusText, { color: item.status === 'محروم' ? '#dc2626' : '#c2410c' }]}>{item.status}</Text>
-                </View>
-              </View>
-              <View style={styles.courseInfo}>
-                <Ionicons name="book-outline" size={16} color="#666" />
-                <Text style={styles.courseName}>{item.course_name}</Text>
-                <Text style={styles.courseCode}>({item.course_code})</Text>
-              </View>
-              <View style={styles.statsRow}>
-                <View style={styles.statItem}><Text style={styles.statValue}>{item.total_lectures}</Text><Text style={styles.statLabel}>منفَّذة ({item.executed_hours} س)</Text></View>
-                <View style={styles.statItem}><Text style={[styles.statValue, { color: item.exceeded_unexcused ? '#dc2626' : '#111827' }]}>{item.pct_unexcused}%</Text><Text style={styles.statLabel}>بلا عذر ({item.unexcused_hours} س)</Text></View>
-                <View style={styles.statItem}><Text style={[styles.statValue, { color: item.exceeded_total ? '#dc2626' : '#111827' }]}>{item.pct_total}%</Text><Text style={styles.statLabel}>الإجمالي (بعذر {item.excused_hours} س)</Text></View>
-                <View style={styles.statItem}>
-                  <Text style={[styles.statValue, { color: item.remaining_allowed > 0 ? '#16a34a' : '#dc2626' }]}>{item.remaining_allowed}</Text>
-                  <Text style={styles.statLabel}>س متبقية بلا عذر</Text>
-                </View>
-              </View>
-              {item.early && <Text style={{ fontSize: 11, color: '#64748b', textAlign: 'right', marginTop: 4 }}>مؤشر مبكر — محاضرات منفَّذة قليلة</Text>}
-            </View>
-          ))}
+          ) : (
+            <DenseTable testID="warnings" head={['#', 'الطالب', 'رقم القيد', 'المقرر', 'منفَّذة', 'بلا عذر', 'الإجمالي', 'متبقٍ بلا عذر', 'الحالة']}
+              align={['center', 'right', 'right', 'right', 'center', 'center', 'center', 'center', 'center']}
+              rowTestID={(i) => `warning-row-${i}`}
+              rows={currentList.map((item, i) => [i + 1, <b style={{ color: '#0f2440' }}>{item.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{item.student_id}</span>,
+                <span>{item.course_name} <span style={{ color: '#94a3b8', fontSize: 11 }}>({item.course_code})</span>{item.early ? <div style={{ fontSize: 10.5, color: '#64748b' }}>مؤشر مبكر — محاضرات منفَّذة قليلة</div> : null}</span>,
+                <span>{item.total_lectures} <span style={{ color: '#94a3b8', fontSize: 11 }}>({item.executed_hours} س)</span></span>,
+                <Pill color={item.exceeded_unexcused ? '#dc2626' : '#0f2440'}>{item.pct_unexcused}% · {item.unexcused_hours} س</Pill>,
+                <Pill color={item.exceeded_total ? '#dc2626' : '#0f2440'}>{item.pct_total}% · بعذر {item.excused_hours} س</Pill>,
+                <Pill color={item.remaining_allowed > 0 ? '#16a34a' : '#dc2626'}>{item.remaining_allowed} س</Pill>,
+                <Pill color={item.status === 'محروم' ? '#dc2626' : '#c2410c'}>{item.status}</Pill>])}
+              footer={`${currentList.length} حالة`} />
+          )}
         </>)}
       </ScrollView>
     </SafeAreaView>
@@ -177,8 +162,8 @@ const styles = StyleSheet.create({
   chipRow: { flexDirection: 'row-reverse', gap: 6 },
   chip: { paddingHorizontal: 12, paddingVertical: 10, borderRadius: 10, backgroundColor: '#f1f5f9', borderWidth: 1, borderColor: '#e2e8f0' },
   chipText: { fontSize: 12, color: '#666', fontWeight: '600' },
-  tabsContainer: { flexDirection: 'row', backgroundColor: '#fff', borderRadius: 12, padding: 4, marginBottom: 12, borderWidth: 1, borderColor: '#e6ebf2' },
-  tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 11, borderRadius: 10, gap: 6 },
+  tabsContainer: { flexDirection: 'row-reverse', backgroundColor: '#fff', borderRadius: 10, padding: 3, marginBottom: 8, borderWidth: 1, borderColor: '#e6ebf2', alignSelf: 'flex-end' },
+  tab: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 6, paddingHorizontal: 14, borderRadius: 8, gap: 6 },
   tabActive: { backgroundColor: '#fff3e0' },
   tabActiveDanger: { backgroundColor: '#ffebee' },
   tabText: { fontSize: 13, color: '#999', fontWeight: '600' },

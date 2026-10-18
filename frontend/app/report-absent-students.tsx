@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { reportsAPI, departmentsAPI, coursesAPI, facultiesAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { CourseFilter } from '../src/components/CourseFilter';
-import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 export default function AbsentStudentsReport() {
   const router = useRouter();
@@ -141,73 +141,26 @@ export default function AbsentStudentsReport() {
 
         {hasRun && !executing && students.length === 0 && <ReportEmpty text="لا يوجد طلاب متغيبون بهذه النسبة" icon="checkmark-circle-outline" />}
 
-        {hasRun && !executing && students.map((student, index) => {
-          const isOpen = !!expanded[index];
-          const color = rateColor(student.absence_rate);
-          return (
-            <View key={index} style={[styles.studentCard, { borderRightColor: color }]} testID={`student-row-${index}`}>
-              <TouchableOpacity onPress={() => toggleExpand(index)} activeOpacity={0.7}>
-                <View style={styles.studentHeader}>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.studentName}>{student.student_name}</Text>
-                    <View style={styles.metaRow}>
-                      <Text style={styles.metaItem}>{student.student_id}</Text>
-                      {student.department_name ? <Text style={styles.metaDot}>•</Text> : null}
-                      {student.department_name ? <Text style={styles.metaItem}>{student.department_name}</Text> : null}
-                      {student.level ? <Text style={styles.metaDot}>•</Text> : null}
-                      {student.level ? <Text style={styles.metaItem}>م{student.level}{student.section ? ` (${student.section})` : ''}</Text> : null}
-                    </View>
-                  </View>
-                  <View style={[styles.rateBadge, { backgroundColor: color + '18' }]}>
-                    <Text style={[styles.rateText, { color }]}>{student.absence_rate}%</Text>
-                  </View>
-                </View>
-
-                <View style={styles.courseRow}>
-                  <Ionicons name="book-outline" size={14} color="#666" />
-                  <Text style={styles.courseName} numberOfLines={1}>{student.course_name}</Text>
-                  <Text style={styles.courseCode}>({student.course_code})</Text>
-                </View>
-
-                <View style={styles.statsRow}>
-                  <View style={styles.statItem}><Text style={[styles.statValue, { color: '#dc2626' }]}>{student.absent_count}</Text><Text style={styles.statLabel}>غياب</Text></View>
-                  <View style={styles.statItem}><Text style={[styles.statValue, { color: '#f57c00' }]}>{student.late_count ?? 0}</Text><Text style={styles.statLabel}>تأخير</Text></View>
-                  <View style={styles.statItem}><Text style={[styles.statValue, { color: '#2e7d32' }]}>{student.present_count ?? (student.total_lectures - student.absent_count)}</Text><Text style={styles.statLabel}>حضور</Text></View>
-                  <View style={styles.statItem}><Text style={styles.statValue}>{student.total_lectures}</Text><Text style={styles.statLabel}>الإجمالي</Text></View>
-                </View>
-
-                <View style={styles.progressBar}>
-                  <View style={[styles.progressFill, { width: `${100 - student.absence_rate}%`, backgroundColor: color }]} />
-                </View>
-
-                <View style={styles.expandHint}>
-                  <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={14} color="#999" />
-                  <Text style={styles.expandHintText}>{isOpen ? 'إخفاء التفاصيل' : 'عرض المزيد من التفاصيل'}</Text>
-                </View>
-              </TouchableOpacity>
-
-              {isOpen && (
-                <View style={styles.detailsBox}>
-                  {student.student_phone ? (
-                    <View style={styles.detailRow}><Ionicons name="call-outline" size={14} color="#1565c0" /><Text style={styles.detailLabel}>الهاتف:</Text><Text style={styles.detailValue}>{student.student_phone}</Text></View>
-                  ) : null}
-                  {student.last_absent_date ? (
-                    <View style={styles.detailRow}><Ionicons name="calendar-outline" size={14} color="#e53935" /><Text style={styles.detailLabel}>آخر غياب:</Text><Text style={styles.detailValue}>{student.last_absent_date}</Text></View>
-                  ) : null}
-                  <View style={styles.detailRow}>
-                    <Ionicons name="trending-up-outline" size={14} color="#2e7d32" />
-                    <Text style={styles.detailLabel}>نسبة الحضور:</Text>
-                    <Text style={[styles.detailValue, { color: '#2e7d32', fontWeight: '700' }]}>{student.presence_rate ?? (100 - student.absence_rate)}%</Text>
-                  </View>
-                  <TouchableOpacity style={styles.viewFullBtn} onPress={() => router.push(`/report-student?id=${student.student_id}`)} testID={`view-full-${index}`}>
-                    <Ionicons name="person-circle-outline" size={16} color="#1565c0" />
-                    <Text style={styles.viewFullText}>عرض تقرير الطالب الكامل</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-          );
-        })}
+        {hasRun && !executing && students.length > 0 && (
+          <DenseTable testID="absent-students" head={['#', 'الطالب', 'رقم القيد', 'القسم / المستوى', 'المقرر', 'غياب', 'تأخير', 'حضور', 'الإجمالي', 'نسبة الغياب', '']}
+            align={['center', 'right', 'right', 'right', 'right', 'center', 'center', 'center', 'center', 'right', 'center']}
+            rowTestID={(i) => `student-row-${i}`} onRowClick={(i) => toggleExpand(i)}
+            rows={students.map((st, i) => [i + 1, <b style={{ color: '#0f2440' }}>{st.student_name}</b>, <span style={{ color: '#64748b', direction: 'ltr' }}>{st.student_id}</span>,
+              <span style={{ color: '#475569', fontSize: 12 }}>{st.department_name || '—'}{st.level ? ` · م${st.level}${st.section ? ` (${st.section})` : ''}` : ''}</span>,
+              <span>{st.course_name} <span style={{ color: '#94a3b8', fontSize: 11 }}>({st.course_code})</span></span>,
+              <Pill color="#dc2626">{st.absent_count}</Pill>, <Pill color="#f59e0b">{st.late_count ?? 0}</Pill>, <Pill color="#16a34a">{st.present_count ?? (st.total_lectures - st.absent_count)}</Pill>, st.total_lectures,
+              <Bar pct={st.absence_rate} color={rateColor(st.absence_rate)} />,
+              <span style={{ color: '#1565c0', fontSize: 11.5 }}>{expanded[i] ? '▲' : '▼'}</span>])}
+            expand={(i) => expanded[i] ? (
+              <div style={{ display: 'flex', gap: 18, alignItems: 'center', flexWrap: 'wrap', fontSize: 12, color: '#475569', padding: '4px 0' }}>
+                {students[i].student_phone ? <span>📞 الهاتف: <b style={{ direction: 'ltr', display: 'inline-block' }}>{students[i].student_phone}</b></span> : null}
+                {students[i].last_absent_date ? <span>📅 آخر غياب: <b>{students[i].last_absent_date}</b></span> : null}
+                <span>📈 نسبة الحضور: <b style={{ color: '#2e7d32' }}>{students[i].presence_rate ?? (100 - students[i].absence_rate)}%</b></span>
+                <button onClick={(e) => { e.stopPropagation(); router.push(`/report-student?id=${students[i].student_id}`); }} data-testid={`view-full-${i}`} style={{ marginRight: 'auto', background: '#e3f2fd', color: '#1565c0', border: 'none', borderRadius: 6, padding: '4px 10px', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>عرض تقرير الطالب الكامل ‹</button>
+              </div>
+            ) : null}
+            footer={`${students.length} حالة · اضغط على الصف لعرض التفاصيل`} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -217,7 +170,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
   thresholdBtns: { flexDirection: 'row-reverse', gap: 6 },
-  thresholdBtn: { flex: 1, paddingVertical: 10, backgroundColor: '#f1f5f9', borderRadius: 10, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  thresholdBtn: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f1f5f9', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
   thresholdBtnActive: { backgroundColor: '#ffebee', borderColor: '#dc2626' },
   thresholdBtnText: { fontSize: 13, color: '#666', fontWeight: '600' },
   thresholdBtnTextActive: { color: '#dc2626', fontWeight: '800' },

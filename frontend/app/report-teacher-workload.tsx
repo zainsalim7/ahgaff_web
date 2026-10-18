@@ -13,10 +13,11 @@ import { RaiseLetterBar } from '../src/components/reports/RaiseLetterBar';
 import { useAuth } from '../src/contexts/AuthContext';
 import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { DASH, NUM_FONT, dashStyles } from '../src/components/dashboard/dashTheme';
+import { ReportKpis } from '../src/components/reports/ReportShell';
 
 interface Course { course_name: string; course_code: string; level?: number; section?: string; weekly_hours?: number; expected_hours?: number; shortfall_hours?: number; completion_rate?: number; is_low?: boolean; note?: string; scheduled_lectures: number; executed_lectures: number; scheduled_hours: number; actual_hours: number }
 interface TeacherWL { teacher_id: string; teacher_db_id?: string; teacher_name: string; academic_title?: string; department_id: string; department_name?: string; faculty_id?: string; weekly_hours: number; courses: Course[];
-  summary: { total_courses: number; weekly_hours: number; total_weeks: number; required_hours: number; total_scheduled_hours: number; total_actual_hours: number; difference_hours: number; completion_rate: number; expected_hours?: number; shortfall_hours?: number; bonus_enabled?: boolean; bonus_hours?: number; hours_after_bonus?: number; overtime_hours?: number; hourly_rate?: number | null; overtime_amount?: number | null; currency?: string; late_start?: boolean; effective_weeks?: number; start_week?: number; first_lecture_date?: string | null; holiday_hours?: number; note?: string } }
+  summary: { total_courses: number; weekly_hours: number; total_weeks: number; required_hours: number; total_scheduled_hours: number; total_actual_hours: number; difference_hours: number; completion_rate: number; expected_hours?: number; shortfall_hours?: number; bonus_enabled?: boolean; bonus_hours?: number; hours_after_bonus?: number; overtime_hours?: number; hourly_rate?: number | null; overtime_amount?: number | null; currency?: string; late_start?: boolean; effective_weeks?: number; start_week?: number; first_lecture_date?: string | null; holiday_hours?: number; note?: string; course_filter?: boolean } }
 
 const iso = (d: Date) => d.toISOString().split('T')[0];
 const QUICK = [
@@ -253,8 +254,8 @@ export default function TeacherWorkloadReport() {
         {loading && !ran && <ActivityIndicator color={DASH.navy} style={{ marginTop: 30 }} />}
         {ran && (
           <>
-            <View style={styles.kpis} testID="tw-summary">
-              {[
+            <View testID="tw-summary">
+              <ReportKpis items={([
                 ['المدرسون', data.length, DASH.blue, `${period ? period.total_weeks : ''} أسبوع`],
                 ['النصاب المطلوب', `${Math.round(totals.req * 10) / 10} س`, DASH.navy2, data.some((t) => t.summary.course_filter) ? `نصاب ${data[0]?.courses.length || 0} مقرر مختار — الافتراضية للمقررات المختارة` : lateTeachers.length ? (data.length === 1 ? `من بداية المحاضرات · ${lateTeachers[0].summary.effective_weeks} أسابيع بدل ${period?.total_weeks}` : `${lateTeachers.length} مدرس بدأت محاضراته بعد بداية الفترة`) : 'أسبوعي × الأسابيع الكاملة (حد قاطع)'],
                 ['الساعات المنفَّذة', `${Math.round(totals.act * 10) / 10} س`, DASH.teal, `من ${Math.round(totals.sch * 10) / 10} س مجدولة`],
@@ -262,14 +263,7 @@ export default function TeacherWorkloadReport() {
                 ['نسبة الإنجاز', `${totals.rate}%`, rateColor(totals.rate), totals.below ? `${totals.below} مدرس تحت 75%` : 'الجميع ≥ 75%'],
                 ['الساعات الإضافية', `${Math.round(totals.ot * 10) / 10} س`, DASH.green, totals.sf ? `نقص ${Math.round(totals.sf * 10) / 10} س · ${totals.lowCourses} مقرر تحت 75%` : (data.some((t) => t.summary.bonus_enabled) ? 'بعد الإضافة − النصاب' : 'المنجز − النصاب')],
                 ...(totals.amt ? [['المستحق المالي', `${totals.amt.toLocaleString('en')} ${totals.cur}`, DASH.gold, 'الساعات الإضافية × سعر الساعة']] : []),
-              ].map(([l, v, c, sub]) => (
-                <View key={String(l)} style={[dashStyles.card, styles.kpi]}>
-                  <View style={[styles.kpiBar, { backgroundColor: String(c) }]} />
-                  <Text style={styles.kpiLbl}>{l}</Text>
-                  <Text style={[styles.kpiVal, NUM_FONT, { color: String(c) }]}>{v as any}</Text>
-                  <Text style={styles.kpiSub}>{sub}</Text>
-                </View>
-              ))}
+              ] as [string, string | number, string, string | undefined][]).map(([l, v, c, sub]) => ({ label: String(l), value: v as any, color: String(c), sub }))} />
             </View>
             {lateTeachers.length > 0 && (
               <View style={styles.lateBox} testID="tw-late-start-note">

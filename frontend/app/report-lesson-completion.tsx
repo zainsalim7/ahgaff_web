@@ -15,7 +15,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
-import { ReportHero, ReportKpis, ReportFilters, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportKpis, ReportFilters, DenseTable, Pill, Bar, reportPage } from '../src/components/reports/ReportShell';
+
+const actBtn = (bg: string, color: string): React.CSSProperties => ({ background: bg, color, border: 'none', borderRadius: 6, padding: '3px 8px', fontSize: 11.5, fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' });
 import api, { departmentsAPI } from '../src/services/api';
 
 interface CourseCompletion {
@@ -62,6 +64,7 @@ interface ComparisonData {
 
 export default function LessonCompletionReport() {
   const router = useRouter();
+  const [openRow, setOpenRow] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<CourseCompletion[]>([]);
@@ -361,112 +364,28 @@ export default function LessonCompletionReport() {
           { label: 'متوسط الإنجاز', value: `${avgCompletion}%`, color: avgCompletion >= 75 ? '#16a34a' : avgCompletion >= 50 ? '#f97316' : '#dc2626', icon: 'speedometer' },
         ]} />
 
-        {/* قائمة المقررات */}
-        {data.map((course) => (
-          <View key={course.course_id} style={styles.courseCard}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.courseName}>{course.course_name}</Text>
-                <Text style={styles.courseCode}>{course.course_code} - {course.teacher_name}</Text>
-              </View>
-              {course.has_plan && (
-                <View style={{ flexDirection: 'row', gap: 6 }}>
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#ede7f6', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
-                    onPress={() => openComparison(course.course_id)}
-                  >
-                    <Text style={{ color: '#673ab7', fontSize: 12, fontWeight: '600' }}>📊 مقارنة</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={{ backgroundColor: '#e8f5e9', paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8 }}
-                    onPress={() => viewPlan(course.course_id, course.course_name)}
-                  >
-                    <Text style={{ color: '#4caf50', fontSize: 12, fontWeight: '600' }}>عرض الخطة</Text>
-                  </TouchableOpacity>
-                </View>
-              )}
-            </View>
-
-            {/* الدروس المنجزة فعلاً */}
-            {course.completed_lessons && course.completed_lessons.length > 0 && (
-              <View style={{ marginTop: 10, backgroundColor: '#f9fafb', padding: 10, borderRadius: 8 }}>
-                <Text style={{ fontSize: 12, fontWeight: '700', color: '#1565c0', marginBottom: 6, textAlign: 'right' }}>
-                  ✍️ الدروس المنجزة (حسب عناوين الأستاذ):
-                </Text>
-                {course.completed_lessons.slice(0, 5).map((ls, i) => (
-                  <View key={i} style={{ flexDirection: 'row', gap: 6, marginBottom: 3, alignItems: 'flex-start' }}>
-                    <Ionicons name={ls.plan_topic_id ? 'checkmark-circle' : 'ellipse-outline'} size={14} color={ls.plan_topic_id ? '#4caf50' : '#ff9800'} />
-                    <Text style={{ flex: 1, fontSize: 12, color: '#333', textAlign: 'right' }}>
-                      <Text style={{ color: '#666', fontSize: 11 }}>{ls.date} • </Text>
-                      {ls.lesson_title}
-                    </Text>
-                  </View>
-                ))}
-                {course.completed_lessons.length > 5 && (
-                  <Text style={{ fontSize: 11, color: '#888', marginTop: 4, textAlign: 'center' }}>
-                    ...و {course.completed_lessons.length - 5} درس آخر (اضغط «مقارنة»)
-                  </Text>
-                )}
-              </View>
-            )}
-            
-            {/* شريط التقدم */}
-            <View style={{ marginTop: 12 }}>
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 4 }}>
-                <Text style={{ fontSize: 12, color: '#888' }}>نسبة الإنجاز</Text>
-                <Text style={{ fontSize: 13, fontWeight: '700', color: getProgressColor(course.completion_percent) }}>
-                  {course.completion_percent}%
-                </Text>
-              </View>
-              <View style={{ height: 8, backgroundColor: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
-                <View style={{
-                  height: '100%',
-                  width: `${Math.min(course.completion_percent, 100)}%`,
-                  backgroundColor: getProgressColor(course.completion_percent),
-                  borderRadius: 4,
-                }} />
-              </View>
-            </View>
-
-            {/* تفاصيل */}
-            <View style={{ flexDirection: 'row', marginTop: 12, gap: 8, flexWrap: 'wrap' }}>
-              <View style={styles.detailBadge}>
-                <Ionicons name="list" size={14} color="#1565c0" />
-                <Text style={styles.detailText}>مخطط: {course.planned_topics}</Text>
-              </View>
-              <View style={styles.detailBadge}>
-                <Ionicons name="checkmark-circle" size={14} color="#4caf50" />
-                <Text style={styles.detailText}>
-                  منجز: {course.topics_completed ?? course.lessons_with_title}
-                </Text>
-              </View>
-              {(course.topics_manually_confirmed ?? 0) > 0 && (
-                <View style={[styles.detailBadge, { backgroundColor: '#e3f2fd' }]}>
-                  <Ionicons name="hand-right" size={14} color="#1565c0" />
-                  <Text style={[styles.detailText, { color: '#1565c0' }]}>
-                    مؤكَّد يدوياً: {course.topics_manually_confirmed}
-                  </Text>
-                </View>
-              )}
-              <View style={styles.detailBadge}>
-                <Ionicons name="school" size={14} color="#ff9800" />
-                <Text style={styles.detailText}>محاضرات: {course.completed_lectures}/{course.total_lectures}</Text>
-              </View>
-              {course.lessons_without_title > 0 && (
-                <View style={[styles.detailBadge, { backgroundColor: '#ffebee' }]}>
-                  <Ionicons name="alert-circle" size={14} color="#f44336" />
-                  <Text style={[styles.detailText, { color: '#f44336' }]}>بدون عنوان: {course.lessons_without_title}</Text>
-                </View>
-              )}
-              {!course.has_plan && (
-                <View style={[styles.detailBadge, { backgroundColor: '#fff3e0' }]}>
-                  <Ionicons name="warning" size={14} color="#ff9800" />
-                  <Text style={[styles.detailText, { color: '#ff9800' }]}>لا يوجد خطة</Text>
-                </View>
-              )}
-            </View>
-          </View>
-        ))}
+        {/* قائمة المقررات — جدول كثيف مع صف قابل للتوسيع للدروس المنجزة */}
+        {data.length > 0 && (
+          <DenseTable testID="lesson-completion" head={['#', 'المقرر', 'الأستاذ', 'الخطة', 'مخطط', 'منجز', 'محاضرات', 'نسبة الإنجاز', 'إجراءات']}
+            align={['center', 'right', 'right', 'center', 'center', 'center', 'center', 'right', 'center']}
+            keys={data.map((c) => c.course_id)} rowTestID={(i) => `lc-row-${data[i].course_id}`} onRowClick={(i) => setOpenRow(openRow === data[i].course_id ? null : data[i].course_id)}
+            rows={data.map((c, i) => [i + 1, <b style={{ color: '#0f2440' }}>{c.course_name} <span style={{ color: '#94a3b8', fontWeight: 400, fontSize: 11 }}>{c.course_code}</span></b>, c.teacher_name,
+              c.has_plan ? <Pill color="#16a34a">خطة</Pill> : <Pill color="#f97316">لا يوجد خطة</Pill>, c.planned_topics,
+              <span>{c.topics_completed ?? c.lessons_with_title}{(c.topics_manually_confirmed ?? 0) > 0 ? <span style={{ color: '#1565c0', fontSize: 10.5 }}> (يدوي {c.topics_manually_confirmed})</span> : null}{c.lessons_without_title > 0 ? <span style={{ color: '#f44336', fontSize: 10.5 }}> · بلا عنوان {c.lessons_without_title}</span> : null}</span>,
+              <span>{c.completed_lectures}/{c.total_lectures}</span>, <Bar pct={c.completion_percent} color={getProgressColor(c.completion_percent)} />,
+              c.has_plan ? <span style={{ display: 'inline-flex', gap: 4 }} onClick={(e) => e.stopPropagation()}>
+                <button onClick={() => openComparison(c.course_id)} style={actBtn('#ede7f6', '#673ab7')} data-testid={`lc-compare-${c.course_id}`}>📊 مقارنة</button>
+                <button onClick={() => viewPlan(c.course_id, c.course_name)} style={actBtn('#e8f5e9', '#2e7d32')} data-testid={`lc-plan-${c.course_id}`}>عرض الخطة</button>
+              </span> : <span style={{ color: '#cbd5e1' }}>—</span>])}
+            expand={(i) => { const c = data[i]; if (openRow !== c.course_id) return null; const ls = c.completed_lessons || []; return ls.length === 0 ? <span style={{ fontSize: 12, color: '#94a3b8' }}>لا دروس منجزة بعناوين بعد</span> : (
+              <div style={{ fontSize: 12, color: '#334155' }}>
+                <div style={{ fontWeight: 700, color: '#1565c0', marginBottom: 4 }}>✍️ الدروس المنجزة (حسب عناوين الأستاذ) — {ls.length}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '2px 16px' }}>
+                  {ls.map((l, j) => <div key={j}><span style={{ color: l.plan_topic_id ? '#4caf50' : '#ff9800' }}>{l.plan_topic_id ? '✔' : '○'}</span> <span style={{ color: '#94a3b8', fontSize: 11 }}>{l.date}</span> · {l.lesson_title}</div>)}
+                </div>
+              </div>); }}
+            footer={`${data.length} مقرر · اضغط على الصف لعرض الدروس المنجزة`} />
+        )}
 
         {data.length === 0 && (
           <View style={{ alignItems: 'center', padding: 40 }}>

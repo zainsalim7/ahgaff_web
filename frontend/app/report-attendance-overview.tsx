@@ -7,7 +7,7 @@ import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import { reportsAPI, departmentsAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
-import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 export default function AttendanceOverviewReport() {
   const router = useRouter();
@@ -138,31 +138,16 @@ export default function AttendanceOverviewReport() {
         {executing && !refreshing && <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 30 }} />}
         {hasRun && !executing && sortedCourses.length === 0 && <ReportEmpty text="لا توجد بيانات" />}
 
-        {hasRun && !executing && sortedCourses.map((course, index) => (
-          <TouchableOpacity key={index} style={styles.courseCard} onPress={() => router.push(`/report-course?id=${course.course_id}`)} testID={`overview-course-${course.course_id}`}>
-            <View style={[styles.rateStripe, { backgroundColor: rateColor(course.attendance_rate) }]} />
-            <View style={styles.courseHeader}>
-              <View style={styles.courseInfo}>
-                <Text style={styles.courseName}>{course.course_name}</Text>
-                <Text style={styles.courseCode}>{course.course_code}</Text>
-                {!!course.teacher_name && (
-                  <Text style={styles.teacherName}><Ionicons name="person-outline" size={12} color="#666" /> {course.teacher_name}</Text>
-                )}
-              </View>
-              <View style={[styles.rateBadge, { backgroundColor: rateColor(course.attendance_rate) + '18' }]}>
-                <Text style={[styles.rateText, { color: rateColor(course.attendance_rate) }]}>{course.attendance_rate}%</Text>
-              </View>
-            </View>
-            <View style={styles.statsRow}>
-              <View style={styles.statItem}><View style={[styles.statDot, { backgroundColor: '#4caf50' }]} /><Text style={styles.statText}>{course.present_count} حاضر</Text></View>
-              <View style={styles.statItem}><View style={[styles.statDot, { backgroundColor: '#f44336' }]} /><Text style={styles.statText}>{course.absent_count} غائب</Text></View>
-              <View style={styles.statItem}><View style={[styles.statDot, { backgroundColor: '#ff9800' }]} /><Text style={styles.statText}>{course.late_count} متأخر</Text></View>
-            </View>
-            <View style={styles.progressBar}>
-              <View style={[styles.progressFill, { width: `${course.attendance_rate}%`, backgroundColor: rateColor(course.attendance_rate) }]} />
-            </View>
-          </TouchableOpacity>
-        ))}
+        {hasRun && !executing && sortedCourses.length > 0 && (
+          <DenseTable testID="overview" head={['#', 'المقرر', 'الرمز', 'المدرس', 'حاضر', 'غائب', 'متأخر', 'نسبة الحضور', '']}
+            align={['center', 'right', 'right', 'right', 'center', 'center', 'center', 'right', 'center']}
+            keys={sortedCourses.map((c) => c.course_id)} rowTestID={(i) => `overview-course-${sortedCourses[i].course_id}`}
+            onRowClick={(i) => router.push(`/report-course?id=${sortedCourses[i].course_id}`)}
+            rows={sortedCourses.map((c, i) => [i + 1, <b style={{ color: '#0f2440' }}>{c.course_name}</b>, <span style={{ color: '#64748b' }}>{c.course_code}</span>, c.teacher_name || '—',
+              <Pill color="#16a34a">{c.present_count}</Pill>, <Pill color="#dc2626">{c.absent_count}</Pill>, <Pill color="#f59e0b">{c.late_count}</Pill>,
+              <Bar pct={c.attendance_rate} color={rateColor(c.attendance_rate)} />, <span style={{ color: '#1565c0', fontSize: 11.5 }}>تفاصيل ‹</span>])}
+            footer={`${sortedCourses.length} مقرر · اضغط على الصف لفتح تقرير المقرر`} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );

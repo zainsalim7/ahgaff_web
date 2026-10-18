@@ -7,7 +7,7 @@ import { Picker } from '@react-native-picker/picker';
 import { reportsAPI, departmentsAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { formatGregorianDate, WEEKDAYS_AR } from '../src/utils/dateUtils';
-import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
 const todayStr = () => new Date().toISOString().split('T')[0];
 
@@ -105,14 +105,14 @@ export default function DailyReport() {
         />
 
         <ReportFilters onRun={runReport} running={executing} hasRun={hasRun}>
-          <View style={{ flex: 2, minWidth: 300 }}>
+          <View style={{ minWidth: 300 }}>
             <Text style={reportPage.label}>التاريخ</Text>
             <View style={styles.dateRow}>
               <TouchableOpacity style={styles.dateBtn} onPress={() => changeDate(-1)} testID="date-prev-btn"><Ionicons name="chevron-forward" size={20} color="#1565c0" /></TouchableOpacity>
               {Platform.OS === 'web' ? (
                 // @ts-ignore
                 <input type="date" value={selectedDate} data-testid="daily-date-input" onChange={(e: any) => e.target.value && setSelectedDate(e.target.value)}
-                  style={{ flex: 1, padding: 9, borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 13, fontFamily: 'inherit', textAlign: 'center' }} />
+                  style={{ flex: 1, padding: 6, borderRadius: 8, border: '1px solid #e2e8f0', fontSize: 13, fontFamily: 'inherit', textAlign: 'center' }} />
               ) : (
                 <TextInput style={styles.dateInput} value={selectedDate} onChangeText={setSelectedDate} placeholder="YYYY-MM-DD" testID="daily-date-input" />
               )}
@@ -148,37 +148,16 @@ export default function DailyReport() {
           ]} />
         )}
 
-        {hasRun && !executing && (
-          <Text style={styles.sectionTitle}>المحاضرات ({lectures.length})</Text>
-        )}
         {hasRun && !executing && lectures.length === 0 && <ReportEmpty text="لا توجد محاضرات في هذا اليوم" icon="calendar-outline" />}
-
-        {hasRun && !executing && lectures.map((lecture, index) => (
-          <View key={index} style={styles.lectureCard} testID={`daily-lecture-${index}`}>
-            <View style={[styles.rateStripe, { backgroundColor: rateColor(lecture.attendance_rate) }]} />
-            <View style={styles.lectureHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.lectureName}>{lecture.course_name}</Text>
-                <Text style={styles.lectureCode}>{lecture.course_code}</Text>
-              </View>
-              <View style={styles.lectureTime}>
-                <Ionicons name="time-outline" size={14} color="#666" />
-                <Text style={styles.timeText}>{lecture.start_time} - {lecture.end_time}</Text>
-              </View>
-            </View>
-            <View style={styles.lectureStats}>
-              <View style={styles.statItem}><View style={[styles.statDot, { backgroundColor: '#4caf50' }]} /><Text style={styles.statText}>{lecture.present} حاضر</Text></View>
-              <View style={styles.statItem}><View style={[styles.statDot, { backgroundColor: '#f44336' }]} /><Text style={styles.statText}>{lecture.absent} غائب</Text></View>
-              <View style={styles.statItem}><View style={[styles.statDot, { backgroundColor: '#ff9800' }]} /><Text style={styles.statText}>{lecture.late} متأخر</Text></View>
-            </View>
-            <View style={styles.progressContainer}>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, { width: `${lecture.attendance_rate}%`, backgroundColor: rateColor(lecture.attendance_rate) }]} />
-              </View>
-              <Text style={[styles.progressText, { color: rateColor(lecture.attendance_rate) }]}>{lecture.attendance_rate}%</Text>
-            </View>
-          </View>
-        ))}
+        {hasRun && !executing && lectures.length > 0 && (
+          <DenseTable testID="daily" head={['#', 'المقرر', 'الرمز', 'الوقت', 'حاضر', 'غائب', 'متأخر', 'نسبة الحضور']}
+            align={['center', 'right', 'right', 'center', 'center', 'center', 'center', 'right']} rowTestID={(i) => `daily-lecture-${i}`}
+            rows={lectures.map((l, i) => [i + 1, <b style={{ color: '#0f2440' }}>{l.course_name}</b>, <span style={{ color: '#64748b' }}>{l.course_code}</span>,
+              <span style={{ direction: 'ltr', display: 'inline-block', color: '#475569' }}>{l.start_time} - {l.end_time}</span>,
+              <Pill color="#16a34a">{l.present}</Pill>, <Pill color="#dc2626">{l.absent}</Pill>, <Pill color="#f59e0b">{l.late}</Pill>,
+              <Bar pct={l.attendance_rate} color={rateColor(l.attendance_rate)} />])}
+            footer={`${lectures.length} محاضرة`} />
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -188,9 +167,9 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
   dateRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6 },
-  dateBtn: { width: 38, height: 38, borderRadius: 10, backgroundColor: '#e3f2fd', alignItems: 'center', justifyContent: 'center' },
-  dateInput: { flex: 1, height: 38, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, textAlign: 'center', backgroundColor: '#fff' },
-  todayBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 12, height: 38, borderRadius: 10, borderWidth: 1, borderColor: '#1565c0' },
+  dateBtn: { width: 34, height: 34, borderRadius: 10, backgroundColor: '#e3f2fd', alignItems: 'center', justifyContent: 'center' },
+  dateInput: { flex: 1, height: 34, borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, textAlign: 'center', backgroundColor: '#fff' },
+  todayBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, paddingHorizontal: 10, height: 34, borderRadius: 8, borderWidth: 1, borderColor: '#1565c0' },
   todayBtnActive: { backgroundColor: '#1565c0' },
   todayBtnText: { fontSize: 12, color: '#1565c0', fontWeight: '700' },
   dateHint: { fontSize: 11, color: '#64748b', textAlign: 'right', marginTop: 6 },
