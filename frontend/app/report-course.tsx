@@ -105,7 +105,7 @@ export default function CourseDetailedReport() {
 
         {loading ? <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 30 }} /> : (
           <ReportFilters onRun={fetchReport} running={executing} hasRun={hasRun} disabled={!selectedCourse} runLabel={!selectedCourse ? 'اختر المقرر ثم نفّذ' : undefined}>
-            <View style={{ width: '100%' }}>
+            <View style={{ flex: 1, minWidth: 560 }}>
               <CourseFilter
                 faculties={faculties}
                 departments={departments}

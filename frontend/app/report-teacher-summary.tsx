@@ -1,6 +1,6 @@
 import { goBack } from '../src/utils/navigation';
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, RefreshControl, TextInput, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -133,7 +133,7 @@ export default function ReportTeacherSummary() {
 
         {isAdmin && (
           <ReportFilters onRun={runReport} running={executing} hasRun={hasRun} disabled={!selectedTeacher} runLabel={!selectedTeacher ? 'اختر المعلم ثم نفّذ' : undefined} testID="teacher-selector">
-            <View style={{ width: '100%' }}>
+            <View style={{ flex: 1, minWidth: 280, maxWidth: 520, position: 'relative', zIndex: 50 }}>
               <Text style={reportPage.label}>المعلم</Text>
               <TouchableOpacity onPress={() => setShowTeacherList(!showTeacherList)} style={styles.teacherInput} testID="teacher-input">
                 <Ionicons name="person-outline" size={16} color="#666" />
@@ -212,8 +212,8 @@ export default function ReportTeacherSummary() {
 const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
-  teacherInput: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 10, paddingHorizontal: 10, height: 40 },
-  teacherList: { marginTop: 8, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', maxHeight: 280 },
+  teacherInput: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#fff', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 8, paddingHorizontal: 10, height: 36 },
+  teacherList: { position: 'absolute', top: 60, left: 0, right: 0, zIndex: 100, backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e2e8f0', maxHeight: 280, ...(Platform.OS === 'web' ? { boxShadow: '0 8px 24px rgba(0,0,0,0.12)' } as any : {}) },
   searchRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 10, paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: '#eee', backgroundColor: '#fafafa' },
   teacherOption: { paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5' },
   sectionTitle: { fontSize: 14, fontWeight: '800', color: '#0f2440', textAlign: 'right', marginBottom: 8 },

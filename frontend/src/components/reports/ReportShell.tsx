@@ -172,7 +172,7 @@ const styles = StyleSheet.create({
   kpiLbl: { fontSize: 12, color: DASH.muted, fontWeight: '600' },
   kpiVal: { fontSize: 15, fontWeight: '800' },
   kpiSub: { fontSize: 11, color: '#94a3b8' },
-  filters: { marginBottom: 10, padding: 10 },
+  filters: { marginBottom: 10, padding: 10, zIndex: 20, position: 'relative', overflow: 'visible' },
   filterBody: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' },
   runBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: DASH.blue, paddingVertical: 9, paddingHorizontal: 16, borderRadius: 8 },
   runText: { color: '#fff', fontWeight: '800', fontSize: 12.5 },

@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
@@ -189,6 +189,12 @@ export default function StudentReport() {
     : filteredStudents;
 
   // جلب تقرير الطالب
+  const { id: paramId } = useLocalSearchParams<{ id?: string }>();
+  useEffect(() => {
+    if (paramId && !isStudent) { setSelectedStudent(String(paramId)); fetchStudentReport(String(paramId)); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramId]);
+
   const fetchStudentReport = async (studentId: string) => {
     if (!studentId) {
       setStudentData(null);
@@ -198,7 +204,7 @@ export default function StudentReport() {
     setLoading(true);
     try {
       const [reportRes, detRes] = await Promise.all([
-        reportsAPI.getStudentReport(studentId),
+        reportsAPI.getStudentReport(studentId).catch(() => ({ data: null })),
         api.get(`/reports/student/${studentId}/detailed`),
       ]);
       setStudentData(reportRes.data);
@@ -349,7 +355,7 @@ export default function StudentReport() {
         />
       </View>
 
-      <ScrollView style={styles.scrollView}>
+      <ScrollView style={styles.scrollView} contentContainerStyle={styles.content}>
         {/* الفلاتر - تظهر فقط لغير الطلاب */}
         {!isStudent && (
         <View style={styles.filtersCard}>
@@ -370,7 +376,7 @@ export default function StudentReport() {
           {loadingFilters ? (
             <ActivityIndicator size="small" color="#9c27b0" style={{ marginVertical: 20 }} />
           ) : (
-            <>
+            <View style={styles.filtersRowWrap}>
               {/* فلتر القسم */}
               <View style={styles.filterRow}>
                 <Text style={styles.filterLabel}>القسم</Text>
@@ -474,13 +480,13 @@ export default function StudentReport() {
                   </Text>
                 )}
               </View>
-            </>
+            </View>
           )}
 
           {/* زر التنفيذ - للأدمن فقط */}
           {!isStudent && (
             <TouchableOpacity
-              style={[{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#9c27b0', paddingVertical: 10, borderRadius: 8, marginTop: 8 }, (loading || !selectedStudent) && { opacity: 0.6 }]}
+              style={[{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#1565c0', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 8, marginTop: 8, alignSelf: 'flex-start' }, (loading || !selectedStudent) && { opacity: 0.6 }]}
               onPress={runReport}
               disabled={loading || !selectedStudent}
               testID="run-report-btn"
@@ -606,6 +612,7 @@ const styles = StyleSheet.create({
     flex: 1,
     padding: 16,
   },
+  content: { maxWidth: 1400, width: '100%', alignSelf: 'center' },
   loadingFullScreen: {
     flex: 1,
     justifyContent: 'center',
@@ -615,9 +622,12 @@ const styles = StyleSheet.create({
   filtersCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
+    padding: 10,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#e6ebf2',
   },
+  filtersRowWrap: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, alignItems: 'flex-end' },
   filterHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -642,20 +652,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   filterRow: {
-    marginBottom: 12,
+    flex: 1,
+    minWidth: 200,
   },
   filterLabel: {
-    fontSize: 14,
+    fontSize: 11.5,
     color: '#666',
     marginBottom: 6,
   },
   pickerWrapper: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: '#fff', borderWidth: 1, borderColor: '#dde3ec',
     borderRadius: 8,
     overflow: 'hidden',
   },
   picker: {
-    height: 50,
+    height: 36,
   },
   loadingContainer: {
     alignItems: 'center',

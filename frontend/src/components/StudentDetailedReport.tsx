@@ -12,7 +12,7 @@ const Chip = ({ label, value, testID }: { label: string; value: any; testID?: st
   <View style={s.chip} testID={testID}><Text style={s.chipTxt}>{label}: <Text style={{ color: C.blue }}>{value || '—'}</Text></Text></View>
 );
 const Stat = ({ v, l, bg, fg, testID }: { v: any; l: string; bg: string; fg: string; testID: string }) => (
-  <View style={[s.stat, { backgroundColor: bg }]} testID={testID}><Text style={[s.statV, { color: fg }]}>{v}</Text><Text style={[s.statL, { color: fg }]}>{l}</Text></View>
+  <View style={[s.stat, { backgroundColor: bg, borderColor: fg }]} testID={testID}><Text style={[s.statL, { color: fg }]}>{l}</Text><Text style={[s.statV, { color: fg }]}>{v}</Text></View>
 );
 const Pill = ({ txt, bg, fg }: { txt: string; bg: string; fg: string }) => (
   <View style={[s.pill, { backgroundColor: bg }]}><Text style={[s.pillTxt, { color: fg }]}>{txt}</Text></View>
@@ -215,7 +215,7 @@ export const StudentDetailedReport = ({ data, mode = 'detailed', compact = false
 
 const COLW = [{ width: 32 }, { width: 90 }, { width: 70 }, { width: 100 }, { width: 80 }, { flex: 1, minWidth: 120 }, { width: 120 }, { width: 110 }];
 const s = StyleSheet.create({
-  card: { backgroundColor: '#fff', borderRadius: 14, padding: 16, marginHorizontal: 16, marginBottom: 14, ...(Platform.OS === 'web' ? { boxShadow: '0 2px 8px rgba(0,0,0,.05)' } as any : {}) },
+  card: { backgroundColor: '#fff', borderRadius: 14, padding: 14, marginHorizontal: 0, marginBottom: 10, ...(Platform.OS === 'web' ? { boxShadow: '0 2px 8px rgba(0,0,0,.05)' } as any : {}) },
   hdr: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, borderBottomWidth: 2, borderBottomColor: C.blue, paddingBottom: 14, flexWrap: 'wrap' },
   avatar: { width: 60, height: 60, borderRadius: 30, backgroundColor: '#e3f2fd', alignItems: 'center', justifyContent: 'center' },
   avatarTxt: { fontSize: 26, fontWeight: '900', color: C.blue },
@@ -229,10 +229,10 @@ const s = StyleSheet.create({
   chipTxt: { fontSize: 12, fontWeight: '700', color: '#37474f' },
   semTitle: { fontSize: 13, fontWeight: '800', color: '#1a2540' },
   semTxt: { fontSize: 12, color: C.grey, marginTop: 2 },
-  stats: { flexDirection: 'row-reverse', gap: 10, marginTop: 16, flexWrap: 'wrap' },
-  stat: { flex: 1, minWidth: 120, borderRadius: 12, padding: 12, alignItems: 'center' },
-  statV: { fontSize: 24, fontWeight: '900' },
-  statL: { fontSize: 11, fontWeight: '700', marginTop: 2 },
+  stats: { flexDirection: 'row-reverse', gap: 6, marginTop: 10, flexWrap: 'wrap' },
+  stat: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, borderRadius: 8, paddingVertical: 5, paddingHorizontal: 10, borderWidth: 1.5 },
+  statV: { fontSize: 15, fontWeight: '900' },
+  statL: { fontSize: 12, fontWeight: '600' },
   bar: { height: 10, backgroundColor: '#eceff1', borderRadius: 6, overflow: 'hidden', marginTop: 14, flexDirection: 'row-reverse' },
   barFill: { height: '100%', borderRadius: 6 },
   barLbl: { fontSize: 11, color: C.grey },

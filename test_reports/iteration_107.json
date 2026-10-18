@@ -1,0 +1,58 @@
+{
+  "summary": "Frontend-only regression test of the compact redesign on 12 report pages (admin/admin123, 1920x800, web preview). 11 of 12 pages work: compact chips, single-row filters and HTML DenseTable all render and behave correctly. One CRITICAL interaction bug: on /report-teacher-attendance the teacher suggestion dropdown cannot be clicked with a real mouse. Also /report-student (admin view) still shows big cards and is not compact, and 3 pages have the run button wrapping onto its own line. No runtime/page errors on any report page.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/reports/absent-students", "issue": "Returns students=[] at every threshold (15/25/35/50), but /api/reports/warnings returns 4 deprivations at 100% unexcused absence. The data does not match between the two reports. The absent-students table UI was checked with a mocked API response instead."},
+      {"endpoint": "/api/reports/attendance-overview + /api/reports/course", "issue": "All 35 courses show present=0 and rate=0%. But /report-daily for 2026-04-14 shows lecture TEST180156 13:58 with 7 present and 7 absent, and report-course lists the same 14-Apr lectures as 'لم تنعقد (غياب المدرس)'. The reports disagree about the same lectures. Daily KPI shows 50% while the row bar shows 33% for 7/7. This is probably existing backend logic, not caused by the UI refactor."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "report-teacher-attendance teacher suggestions dropdown", "issue": "The dropdown looks like it sits on top, but a real mouse click on a suggestion is captured by the element below it: [data-testid=report-kpis] after a run, and the empty-state card before a run. So the teacher cannot be selected (no selected-teacher-chip). Root cause: RN-web gives every View position:relative and z-index:0. The zIndex:50 on the teacher field is therefore trapped inside the ReportFilters card (z-index 0), and sibling elements later in the DOM paint and hit-test above it. Verified fix: setting z-index:20 on [data-testid=report-filters] in the page made the mouse click select the teacher and show the chip. Suggested change: add zIndex: 20 (plus position: 'relative') to styles.filters in ReportShell.tsx.", "selector": "[data-testid^=teacher-suggestion-]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "absent-students -> view-full-N -> /report-student?id=<student_id>", "issue": "report-student.tsx never reads useLocalSearchParams, so the student is not preloaded and the user lands on an empty picker. This was already the case before this change.", "affected_selectors": ["[data-testid^=view-full-]"]}
+    ],
+    "design_issues": [
+      {"screen": "/report-student (admin)", "issues": ["The filter card is full screen width (x=13..1541) while the hero is limited to maxWidth 1400 (x=226..1342), so the two are misaligned.", "Filters are stacked vertically: 3 full-width selects plus a search box and a full-width purple run button. Not compact, and not using ReportFilters.", "Admin/staff see StudentDetailedReport with BIG KPI cards (المقررات/المحاضرات/حاضر/غائب/متأخر). The new compact student-summary chips and student-courses-table only appear in the classic fallback (student role, or when the detailed report fails), so the compact design is effectively not applied for admins."]},
+      {"screen": "/report-course, /report-absent-students, /report-teacher-summary", "issues": ["The run-report-btn wraps onto its own row under the filters instead of sitting inline. The fields (flex:1 pickers / full-width teacher selector) take the whole row. Absent-students also puts the threshold buttons on a second row. The filter card is about 135-200px tall instead of a single compact row (compare overview, warnings, daily and teacher-attendance, which are inline)."]},
+      {"screen": "/report-lesson-completion comparison modal", "issue_note": "Minor", "issues": ["The 'الأسبوع' column header wraps into 'الأسبو / ع'."]}
+    ]
+  },
+  "passed_checks": [
+    "Login admin/admin123",
+    "attendance-overview: run -> overview-table with 35 overview-course-* rows; report-kpis chips; run button inline; table 1366px fits its container, RTL; row click -> /report-course?id=...",
+    "warnings: run -> KPI chips; tab-deprivations shows 4 warning-row-N; tab-warnings shows 0 rows (no data), switching works",
+    "daily: prev/next/today buttons change the date correctly; 2026-04-14 -> daily-table with 3 rows plus KPI chips",
+    "absent-students: threshold-15/25/35/50 buttons work; real data empty (ReportEmpty shown); with mocked data the row renders, click expands view-full-0, second click collapses, view-full navigates",
+    "report-course?id=698f671431cfba92c49a550d: auto-runs; KPI chips; tab-students 21 rows / tab-lectures 7 rows; tabs switch",
+    "teacher-summary: select teacher via teacher-input/teacher-search-input/teacher-option; run -> teacher-courses-table 1 row; row click -> /report-course?courseId=...; attendance-breakdown missing because all counts are 0 (acceptable); inline dropdown still works after a run",
+    "teacher-attendance: dates 2026-01-01..2026-06-30; KPI chips (26 lectures); teacher-att-table 4 rows; row click shows nested lectures table; tab-by-lecture lecture-att-table 26 rows; clear-teacher-btn clears the chip",
+    "lesson-completion: department + course selects -> lesson-completion-table, lc-row expand/collapse; lc-compare and lc-plan open their modals without toggling the row",
+    "teacher-workload: tw-summary renders as compact chips (98px tall); tw-table 5 rows",
+    "teacher-delays regression: run -> teacher-delays-table renders",
+    "No pageerror/runtime errors on any report page. Only console noise: RN-web 'Unknown event handler property onResponder*' warnings, plus 'Unexpected text node: .' on the login/home page, which is not a report page"
+  ],
+  "test_report_links": [],
+  "action_items": [
+    "HIGH: Fix the overlay on the teacher-attendance suggestion dropdown: add zIndex: 20 (and position: 'relative') to styles.filters (ReportFilters card) in ReportShell.tsx. Verified in the browser.",
+    "Make /report-student compact for admins: put the filters in ReportFilters inside the reportPage.content maxWidth container, and use ReportKpis/DenseTable in StudentDetailedReport (or the summary) instead of big cards",
+    "Keep run-report-btn inline on report-course, report-absent-students and report-teacher-summary (give fields a fixed/min width instead of flex:1 spanning the row, or put the threshold buttons in the same row)",
+    "Optional: make report-student read ?id= so absent-students 'view-full' preloads the student",
+    "Optional (backend): check why absent-students returns empty while warnings/deprivations has 100%-absent students, and why overview/course show 0 attendance while daily shows 7 present"
+  ],
+  "critical_code_review_comments": [
+    "DenseTable uses raw <div>/<table> inside RN View. Fine on web, but it will crash on native iOS/Android if these report pages are ever rendered natively. Add a Platform.OS guard or a native fallback.",
+    "report-student.tsx (891 lines) and report-lesson-completion.tsx (687 lines) are very large; consider splitting them.",
+    "report-attendance-overview and report-daily define a local rateColor that shadows the exported ReportShell.rateColor with different thresholds (80/60 vs 90/75), so colours are inconsistent between reports."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "~88% (11/12 pages fully functional; 1 critical click-blocking bug, plus design gaps on report-student and 3 pages with a wrapped run button)"},
+  "test_credentials": "admin/admin123 from /app/memory/test_credentials.md. Student login 1001/test1234 did not log in during the test (stayed on /login), so the student-role path of report-student was not verified.",
+  "seed_data_creation": "None. absent-students was tested with a Playwright route mock (no DB writes).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Useful IDs: dept الشريعة والقانون=698e500997fef774e66e93a8, course TEST180156=698f671431cfba92c49a550d (has a plan, so lc-compare/lc-plan show). Teacher 'أستاذ اختبار 180156' has data in 2026-04. daily date 2026-04-14 has 3 lectures. Use page.mouse.click at bounding-box coordinates to detect overlay interception (Playwright's locator.click reports which element intercepts). RN-web Picker = <select>, so select_option works.",
+  "rca of the issue": "teacher-attendance dropdown: react-native-web applies z-index:0 + position:relative to every View, creating a stacking context per View. The suggestionsBox (absolute, zIndex 100) inside the field (zIndex 50) is confined to the ReportFilters card's stacking context (z-index 0). Siblings rendered after the card (ReportKpis / ReportEmpty / tabs) have the same z-index and come later in the DOM, so they sit above the dropdown for hit-testing. They are transparent, which is why the dropdown still looks fine. Fix: raise the ReportFilters card's zIndex."
+}

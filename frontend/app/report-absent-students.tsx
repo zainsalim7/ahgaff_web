@@ -102,7 +102,7 @@ export default function AbsentStudentsReport() {
         />
 
         <ReportFilters onRun={runReport} running={executing} hasRun={hasRun}>
-          <View style={{ width: '100%' }}>
+          <View style={{ flex: 1, minWidth: 560 }}>
             <CourseFilter
               faculties={faculties}
               departments={departments}
@@ -116,7 +116,7 @@ export default function AbsentStudentsReport() {
               required={false}
             />
           </View>
-          <View style={{ width: '100%' }}>
+          <View>
             <Text style={reportPage.label}>الحد الأدنى لنسبة الغياب</Text>
             <View style={styles.thresholdBtns}>
               {[15, 25, 35, 50].map(rate => (
@@ -170,7 +170,7 @@ const styles = StyleSheet.create({
   loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 10, fontSize: 16, color: '#666' },
   thresholdBtns: { flexDirection: 'row-reverse', gap: 6 },
-  thresholdBtn: { paddingVertical: 8, paddingHorizontal: 12, backgroundColor: '#f1f5f9', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
+  thresholdBtn: { height: 36, justifyContent: 'center', paddingHorizontal: 12, backgroundColor: '#f1f5f9', borderRadius: 8, alignItems: 'center', borderWidth: 1, borderColor: '#e2e8f0' },
   thresholdBtnActive: { backgroundColor: '#ffebee', borderColor: '#dc2626' },
   thresholdBtnText: { fontSize: 13, color: '#666', fontWeight: '600' },
   thresholdBtnTextActive: { color: '#dc2626', fontWeight: '800' },
