@@ -12563,6 +12563,8 @@ async def get_teacher_delays_report(
     end_date: str = None,
     department_id: str = None,
     faculty_id: str = None,
+    course_id: str = None,
+    teacher_id: str = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير تأخر المعلمين في بدء التحضير"""
@@ -12580,26 +12582,30 @@ async def get_teacher_delays_report(
         else:
             query["date"] = {"$lte": end_date}
     
-    lectures = await db.lectures.find(query).to_list(1000)
+    if course_id:
+        query["course_id"] = course_id
+    lectures = await db.lectures.find(query).to_list(5000)
+    course_ids = {lec.get("course_id") for lec in lectures if ObjectId.is_valid(lec.get("course_id") or "")}
+    courses_map = {str(c["_id"]): c for c in await db.courses.find({"_id": {"$in": [ObjectId(c) for c in course_ids]}}).to_list(None)} if course_ids else {}
+    fac_depts = {str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(None)} if faculty_id else None
+    filter_teacher_id = teacher_id
     
     # تجميع التأخيرات حسب المعلم
     teacher_delays = {}
     
     for lec in lectures:
-        course = await db.courses.find_one({"_id": ObjectId(lec["course_id"])})
+        course = courses_map.get(lec.get("course_id") or "")
         if not course:
             continue
         
         # فلتر القسم/الكلية
         if department_id and course.get("department_id") != department_id:
             continue
-        if faculty_id:
-            dept = await db.departments.find_one({"_id": ObjectId(course.get("department_id", ""))})
-            if not dept or dept.get("faculty_id") != faculty_id:
-                continue
+        if fac_depts is not None and course.get("department_id") not in fac_depts:
+            continue
         
         teacher_id = course.get("teacher_id")
-        if not teacher_id:
+        if not teacher_id or (filter_teacher_id and teacher_id != filter_teacher_id):
             continue
         
         # حساب التأخير
@@ -12655,6 +12661,7 @@ async def get_teacher_delays_report(
                 entry["max_delay_minutes"] = delay_minutes
             entry["delays"].append({
                 "date": lec["date"],
+                "course_id": str(course["_id"]),
                 "course_name": course["name"],
                 "start_time": lec["start_time"],
                 "started_at": started_at.strftime("%H:%M") if hasattr(started_at, 'strftime') else str(started_at),
@@ -12684,6 +12691,8 @@ async def export_teacher_delays_pdf(
     end_date: str = None,
     department_id: str = None,
     faculty_id: str = None,
+    course_id: str = None,
+    teacher_id: str = None,
     current_user: dict = Depends(get_current_user)
 ):
     """📄 تقرير تأخر المعلمين PDF احترافي"""
@@ -12691,7 +12700,7 @@ async def export_teacher_delays_pdf(
         raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
     from routes.report_pdf import build_report_pdf
     from routes.deps import export_filename, export_headers
-    report = await get_teacher_delays_report(start_date, end_date, department_id, faculty_id, current_user)
+    report = await get_teacher_delays_report(start_date, end_date, department_id, faculty_id, course_id, teacher_id, current_user)
     teachers, s = report["teachers"], report["summary"]
     scope = ""
     if department_id and ObjectId.is_valid(department_id):
@@ -12866,6 +12875,8 @@ async def export_teacher_delays_report(
     end_date: str = None,
     department_id: str = None,
     faculty_id: str = None,
+    course_id: str = None,
+    teacher_id: str = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير تقرير تأخر المعلمين إلى Excel"""
@@ -12873,7 +12884,7 @@ async def export_teacher_delays_report(
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية")
     
     # استخدام نفس البيانات
-    report = await get_teacher_delays_report(start_date, end_date, department_id, faculty_id, current_user)
+    report = await get_teacher_delays_report(start_date, end_date, department_id, faculty_id, course_id, teacher_id, current_user)
     
     import openpyxl
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side

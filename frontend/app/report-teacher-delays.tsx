@@ -1,261 +1,155 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, FlatList, ActivityIndicator, Platform, ScrollView } from 'react-native';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, ActivityIndicator, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker';
 import { useRouter } from 'expo-router';
 import api, { departmentsAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
-import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { ReportHero, ReportEmpty, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import { HrSelect } from '../src/components/hr/HrSelect';
+import { btn } from '../src/components/hr/ui';
 
-interface TeacherDelay {
-  teacher_id: string;
-  teacher_name: string;
-  employee_id: string;
-  total_lectures: number;
-  delayed_lectures: number;
-  total_delay_minutes: number;
-  avg_delay_minutes: number;
-  max_delay_minutes: number;
-  delays: Array<{
-    date: string;
-    course_name: string;
-    start_time: string;
-    started_at: string;
-    delay_minutes: number;
-  }>;
-}
+interface Delay { date: string; course_id?: string; course_name: string; start_time: string; started_at: string; delay_minutes: number }
+interface TeacherDelay { teacher_id: string; teacher_name: string; employee_id: string; total_lectures: number; delayed_lectures: number; total_delay_minutes: number; avg_delay_minutes: number; max_delay_minutes: number; delays: Delay[] }
 
+const delayColor = (m: number) => (m === 0 ? '#16a34a' : m <= 5 ? '#d97706' : m <= 15 ? '#dc2626' : '#7f1d1d');
+const th: React.CSSProperties = { padding: '7px 8px', fontSize: 12, fontWeight: 800, color: '#0f2440', background: '#f8fafc', borderBottom: '2px solid #e2e8f0', textAlign: 'right', whiteSpace: 'nowrap' };
+const td: React.CSSProperties = { padding: '6px 8px', fontSize: 12.5, borderBottom: '1px solid #f1f5f9', textAlign: 'right', verticalAlign: 'middle' };
+const num: React.CSSProperties = { ...td, textAlign: 'center', fontVariantNumeric: 'tabular-nums' };
+
+/** 🕒 تقرير تأخر المعلمين — فلاتر كلية/قسم/مقرر/أستاذ + جدول كثيف قابل للتوسيع */
 export default function TeacherDelaysReport() {
   const router = useRouter();
   const { hasPermission } = useAuth();
-  const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const [hasRun, setHasRun] = useState(false);
   const [teachers, setTeachers] = useState<TeacherDelay[]>([]);
   const [summary, setSummary] = useState({ total_teachers: 0, total_delayed_teachers: 0, total_delay_incidents: 0 });
+  const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const [filterDept, setFilterDept] = useState('');
-  const [expandedTeacher, setExpandedTeacher] = useState<string | null>(null);
-  const [exporting, setExporting] = useState(false);
+  const [courses, setCourses] = useState<any[]>([]);
+  const [allTeachers, setAllTeachers] = useState<any[]>([]);
+  const [f, setF] = useState({ faculty_id: '', department_id: '', course_id: '', teacher_id: '' });
+  const [expanded, setExpanded] = useState<string | null>(null);
+  const [onlyDelayed, setOnlyDelayed] = useState(false);
+  const [exportingFmt, setExportingFmt] = useState<'' | 'pdf' | 'excel'>('');
 
-  // تحميل الأقسام فقط
   useEffect(() => {
     (async () => {
       try {
-        const dRes = await departmentsAPI.getAll();
-        setDepartments(dRes.data || []);
+        const [fa, de, co, te] = await Promise.all([api.get('/faculties'), departmentsAPI.getAll(), api.get('/courses', { params: { all_semesters: true, fields: 'name,code,department_id,teacher_id,teacher_name' } }), api.get('/teachers')]);
+        setFaculties(fa.data || []); setDepartments(de.data || []); setCourses(co.data || []); setAllTeachers(te.data || []);
       } catch (e) { console.error(e); }
-      finally { setLoading(false); }
     })();
   }, []);
 
+  const depts = useMemo(() => departments.filter((d) => !f.faculty_id || d.faculty_id === f.faculty_id), [departments, f.faculty_id]);
+  const deptIds = useMemo(() => new Set(depts.map((d) => d.id)), [depts]);
+  const courseOpts = useMemo(() => courses.filter((c) => (f.department_id ? c.department_id === f.department_id : !f.faculty_id || deptIds.has(c.department_id)) && (!f.teacher_id || c.teacher_id === f.teacher_id)), [courses, f.department_id, f.faculty_id, f.teacher_id, deptIds]);
+  const teacherOpts = useMemo(() => {
+    const scoped = courses.filter((c) => (f.department_id ? c.department_id === f.department_id : !f.faculty_id || deptIds.has(c.department_id)));
+    const ids = new Set(scoped.map((c) => c.teacher_id).filter(Boolean));
+    return allTeachers.filter((t) => (!f.faculty_id && !f.department_id) || ids.has(t.id));
+  }, [allTeachers, courses, f.faculty_id, f.department_id, deptIds]);
+
+  const params = useCallback(() => Object.fromEntries(Object.entries(f).filter(([, v]) => v)), [f]);
   const fetchData = useCallback(async () => {
     setExecuting(true);
     try {
-      const params = new URLSearchParams();
-      if (filterDept) params.append('department_id', filterDept);
-      const reportRes = await api.get(`/reports/teacher-delays?${params.toString()}`);
-      setTeachers(reportRes.data.teachers || []);
-      setSummary(reportRes.data.summary || {});
-      setHasRun(true);
-    } catch (error) {
-      console.error('Error:', error);
-    } finally {
-      setExecuting(false);
-    }
-  }, [filterDept]);
+      const r = await api.get('/reports/teacher-delays', { params: params() });
+      setTeachers(r.data.teachers || []); setSummary(r.data.summary || {}); setHasRun(true); setExpanded(null);
+    } catch (e) { console.error(e); } finally { setExecuting(false); }
+  }, [params]);
 
-  const [exportingFmt, setExportingFmt] = useState<'' | 'pdf' | 'excel'>('');
-  const handleExport = async (fmt: 'pdf' | 'excel' = 'excel') => {
-    setExporting(true); setExportingFmt(fmt);
-    const params: any = {}; if (filterDept) params.department_id = filterDept;
-    const deptName = departments.find(d => d.id === filterDept)?.name;
-    await downloadReport(fmt === 'pdf' ? '/reports/teacher-delays/export-pdf' : '/reports/teacher-delays/export', params, ['تقرير تأخر المعلمين', deptName], fmt === 'pdf' ? 'pdf' : 'xlsx');
-    setExporting(false); setExportingFmt('');
+  const handleExport = async (fmt: 'pdf' | 'excel') => {
+    setExportingFmt(fmt);
+    const scope = [faculties.find((x) => x.id === f.faculty_id)?.name, departments.find((x) => x.id === f.department_id)?.name, courses.find((x) => x.id === f.course_id)?.name, allTeachers.find((x) => x.id === f.teacher_id)?.full_name].filter(Boolean).join(' - ');
+    await downloadReport(fmt === 'pdf' ? '/reports/teacher-delays/export-pdf' : '/reports/teacher-delays/export', params(), ['تقرير تأخر المعلمين', scope || undefined], fmt === 'pdf' ? 'pdf' : 'xlsx');
+    setExportingFmt('');
   };
 
-  const getDelayColor = (minutes: number) => {
-    if (minutes === 0) return '#4caf50';
-    if (minutes <= 5) return '#ff9800';
-    if (minutes <= 15) return '#f44336';
-    return '#b71c1c';
-  };
-
-  const renderTeacher = ({ item }: { item: TeacherDelay }) => {
-    const isExpanded = expandedTeacher === item.teacher_id;
-    const delayPercent = item.total_lectures > 0 ? Math.round((item.delayed_lectures / item.total_lectures) * 100) : 0;
-    
-    return (
-      <View style={styles.card}>
-        <TouchableOpacity 
-          style={styles.cardHeader}
-          onPress={() => setExpandedTeacher(isExpanded ? null : item.teacher_id)}
-          data-testid={`teacher-delay-${item.employee_id}`}
-        >
-          <View style={styles.teacherInfo}>
-            <View style={styles.avatarCircle}>
-              <Ionicons name="person" size={20} color="#fff" />
-            </View>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.teacherName}>{item.teacher_name}</Text>
-              <Text style={styles.employeeId}>{item.employee_id}</Text>
-            </View>
-          </View>
-          
-          <View style={styles.statsRow}>
-            <View style={styles.statItem}>
-              <Text style={styles.statValue}>{item.total_lectures}</Text>
-              <Text style={styles.statLabel}>محاضرة</Text>
-            </View>
-            <View style={[styles.statItem, { backgroundColor: item.delayed_lectures > 0 ? '#ffebee' : '#e8f5e9' }]}>
-              <Text style={[styles.statValue, { color: item.delayed_lectures > 0 ? '#f44336' : '#4caf50' }]}>
-                {item.delayed_lectures}
-              </Text>
-              <Text style={styles.statLabel}>تأخر</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: getDelayColor(item.avg_delay_minutes) }]}>
-                {item.avg_delay_minutes}
-              </Text>
-              <Text style={styles.statLabel}>متوسط (د)</Text>
-            </View>
-            <View style={styles.statItem}>
-              <Text style={[styles.statValue, { color: getDelayColor(item.max_delay_minutes) }]}>
-                {item.max_delay_minutes}
-              </Text>
-              <Text style={styles.statLabel}>أقصى (د)</Text>
-            </View>
-          </View>
-          
-          {/* شريط نسبة التأخر */}
-          <View style={styles.progressBar}>
-            <View style={[styles.progressFill, { width: `${delayPercent}%`, backgroundColor: getDelayColor(item.avg_delay_minutes) }]} />
-          </View>
-          <Text style={styles.progressText}>نسبة التأخر: {delayPercent}%</Text>
-          
-          <Ionicons name={isExpanded ? 'chevron-up' : 'chevron-down'} size={20} color="#999" />
-        </TouchableOpacity>
-        
-        {isExpanded && item.delays.length > 0 && (
-          <View style={styles.detailsContainer}>
-            <Text style={styles.detailsTitle}>تفاصيل التأخيرات</Text>
-            {item.delays.map((d, i) => (
-              <View key={i} style={styles.delayRow}>
-                <View style={{ flex: 1 }}>
-                  <Text style={styles.delayCourseName}>{d.course_name}</Text>
-                  <Text style={styles.delayDate}>{d.date}</Text>
-                </View>
-                <View style={styles.delayTimeInfo}>
-                  <Text style={styles.delayTimeLabel}>المحدد: {d.start_time}</Text>
-                  <Text style={styles.delayTimeLabel}>الفعلي: {d.started_at}</Text>
-                </View>
-                <View style={[styles.delayBadge, { backgroundColor: getDelayColor(d.delay_minutes) + '20' }]}>
-                  <Text style={[styles.delayBadgeText, { color: getDelayColor(d.delay_minutes) }]}>
-                    {d.delay_minutes} د
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
-        
-        {isExpanded && item.delays.length === 0 && (
-          <View style={styles.detailsContainer}>
-            <Text style={{ textAlign: 'center', color: '#4caf50', padding: 12 }}>لا يوجد تأخيرات</Text>
-          </View>
-        )}
-      </View>
-    );
-  };
+  const rows = onlyDelayed ? teachers.filter((t) => t.delayed_lectures > 0) : teachers;
+  const totalMinutes = teachers.reduce((a, t) => a + t.total_delay_minutes, 0);
+  const kpi = (label: string, value: number | string, color: string, active?: boolean, onClick?: () => void, testID?: string) => (
+    <div onClick={onClick} data-testid={testID} style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 10px', borderRadius: 8, border: `1.5px solid ${color}`, background: active ? color : '#fff', color: active ? '#fff' : color, fontSize: 12, fontWeight: 700, cursor: onClick ? 'pointer' : 'default', whiteSpace: 'nowrap' }}>
+      <span style={{ fontWeight: 400, color: active ? '#fff' : '#64748b' }}>{label}</span><span style={{ fontSize: 15, fontWeight: 800 }}>{value}</span>
+    </div>
+  );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={reportPage.content}>
-      <ReportHero
-        title="تقرير تأخر المعلمين"
-        subtitle="الفرق بين وقت بداية المحاضرة المجدول ووقت بدء تسجيل الحضور"
-        onBack={() => router.back()}
-        canExport={hasPermission('export_reports')}
-        onPdf={() => handleExport('pdf')}
-        onExcel={() => handleExport('excel')}
-        exporting={exporting ? exportingFmt : ''}
-        testID="teacher-delays-hero"
-      />
-      <ReportKpis items={[
-        { label: 'المعلمون', value: summary.total_teachers, color: '#1565c0', icon: 'people' },
-        { label: 'معلمون تأخروا', value: summary.total_delayed_teachers, color: '#f97316', icon: 'warning', sub: summary.total_teachers ? `${Math.round((summary.total_delayed_teachers * 100) / summary.total_teachers)}% من المعلمين` : undefined },
-        { label: 'حالات التأخر', value: summary.total_delay_incidents, color: '#dc2626', icon: 'time' },
-      ]} />
-      <ReportFilters onRun={fetchData} running={executing} hasRun={hasRun}>
-        <View style={{ flex: 1, minWidth: 220 }}>
-          <Text style={reportPage.label}>القسم</Text>
-          <View style={reportPage.pickerBox}>
-            <Picker selectedValue={filterDept} onValueChange={setFilterDept} style={reportPage.picker}>
-              <Picker.Item label="جميع الأقسام" value="" />
-              {departments.map(d => (
-                <Picker.Item key={d.id} label={d.name} value={d.id} />
-              ))}
-            </Picker>
-          </View>
+    <SafeAreaView style={reportPage.container}>
+      <ScrollView contentContainerStyle={reportPage.content}>
+        <ReportHero title="تقرير تأخر المعلمين" subtitle="الفرق بين وقت بداية المحاضرة المجدول ووقت بدء تسجيل الحضور" onBack={() => router.back()} canExport={hasPermission('export_reports')} onPdf={() => handleExport('pdf')} onExcel={() => handleExport('excel')} exporting={exportingFmt} testID="teacher-delays-hero" />
+        <View style={[reportPage.card, { padding: 10, marginBottom: 10 }]} testID="teacher-delays-filters">
+          <div style={{ direction: 'rtl', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+            <HrSelect value={f.faculty_id} onChange={(v) => setF({ faculty_id: v, department_id: '', course_id: '', teacher_id: '' })} options={faculties.map((x) => ({ value: x.id, label: x.name }))} placeholder="كل الكليات" style={{ minWidth: 180, flex: 1 }} testID="td-faculty" />
+            <HrSelect value={f.department_id} onChange={(v) => setF({ ...f, department_id: v, course_id: '', teacher_id: '' })} options={depts.map((x) => ({ value: x.id, label: x.name }))} placeholder="كل الأقسام" style={{ minWidth: 180, flex: 1 }} testID="td-dept" />
+            <HrSelect value={f.teacher_id} onChange={(v) => setF({ ...f, teacher_id: v, course_id: '' })} options={teacherOpts.map((x) => ({ value: x.id, label: x.full_name, sub: x.teacher_id }))} placeholder="كل الأساتذة" searchable style={{ minWidth: 200, flex: 1 }} testID="td-teacher" />
+            <HrSelect value={f.course_id} onChange={(v) => setF({ ...f, course_id: v })} options={courseOpts.map((x) => ({ value: x.id, label: x.name, sub: x.teacher_name || x.code }))} placeholder="كل المقررات" searchable style={{ minWidth: 200, flex: 1 }} testID="td-course" />
+            <button onClick={fetchData} disabled={executing} style={btn('#1565c0', '#fff', { padding: '8px 18px', whiteSpace: 'nowrap' })} data-testid="run-report-btn">{executing ? 'جاري التنفيذ…' : hasRun ? '▶ إعادة التنفيذ' : '▶ تنفيذ التقرير'}</button>
+          </div>
+          {hasRun && (
+            <div style={{ direction: 'rtl', display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }} data-testid="teacher-delays-kpis">
+              {kpi('المعلمون', summary.total_teachers, '#1565c0', !onlyDelayed, () => setOnlyDelayed(false), 'td-kpi-all')}
+              {kpi('معلمون تأخروا', summary.total_delayed_teachers, '#d97706', onlyDelayed, () => setOnlyDelayed(true), 'td-kpi-delayed')}
+              {kpi('حالات التأخر', summary.total_delay_incidents, '#dc2626', false, undefined, 'td-kpi-incidents')}
+              {kpi('إجمالي دقائق التأخر', totalMinutes, '#6a1b9a', false, undefined, 'td-kpi-minutes')}
+              {kpi('نسبة المتأخرين', summary.total_teachers ? `${Math.round((summary.total_delayed_teachers * 100) / summary.total_teachers)}%` : '0%', '#0f2440', false, undefined, 'td-kpi-pct')}
+            </div>
+          )}
         </View>
-      </ReportFilters>
-      </View>
 
-      {/* القائمة */}
-      {loading || executing ? (
-        <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 40 }} />
-      ) : !hasRun ? (
-        <View style={reportPage.content}><ReportEmpty text="اضغط «تنفيذ التقرير» لعرض البيانات" icon="information-circle-outline" /></View>
-      ) : teachers.length === 0 ? (
-        <View style={reportPage.content}><ReportEmpty text="لا توجد بيانات تأخر — سيظهر التقرير عندما يبدأ المعلمون بالتحضير" icon="checkmark-circle-outline" /></View>
-      ) : (
-        <FlatList
-          data={teachers}
-          keyExtractor={item => item.teacher_id}
-          renderItem={renderTeacher}
-          contentContainerStyle={[reportPage.content, { paddingTop: 0 }]}
-        />
-      )}
+        {executing ? <ActivityIndicator size="large" color="#1565c0" style={{ marginTop: 30 }} />
+          : !hasRun ? <ReportEmpty text="اختر الفلاتر ثم اضغط «تنفيذ التقرير»" icon="information-circle-outline" />
+          : rows.length === 0 ? <ReportEmpty text="لا توجد بيانات تأخر ضمن هذه الفلاتر — سيظهر التقرير عندما يبدأ المعلمون بالتحضير" icon="checkmark-circle-outline" />
+          : (
+            <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]} testID="teacher-delays-table-card">
+              <div style={{ direction: 'rtl', overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse' }} data-testid="teacher-delays-table">
+                  <thead><tr>
+                    <th style={{ ...th, width: 36 }}>#</th><th style={th}>المعلم</th><th style={th}>الرقم الوظيفي</th>
+                    <th style={{ ...th, textAlign: 'center' }}>المحاضرات</th><th style={{ ...th, textAlign: 'center' }}>متأخرة</th><th style={{ ...th, minWidth: 140 }}>نسبة التأخر</th>
+                    <th style={{ ...th, textAlign: 'center' }}>إجمالي (د)</th><th style={{ ...th, textAlign: 'center' }}>متوسط (د)</th><th style={{ ...th, textAlign: 'center' }}>أقصى (د)</th><th style={{ ...th, width: 90 }}>التفاصيل</th>
+                  </tr></thead>
+                  <tbody>
+                    {rows.map((t, i) => {
+                      const pct = t.total_lectures ? Math.round((t.delayed_lectures * 100) / t.total_lectures) : 0;
+                      const open = expanded === t.teacher_id;
+                      const c = delayColor(t.avg_delay_minutes);
+                      return (
+                        <React.Fragment key={t.teacher_id}>
+                          <tr style={{ background: open ? '#f8fafc' : undefined, cursor: 'pointer' }} onClick={() => setExpanded(open ? null : t.teacher_id)} data-testid={`teacher-delay-${t.employee_id}`}>
+                            <td style={num}>{i + 1}</td>
+                            <td style={{ ...td, fontWeight: 700, color: '#0f2440' }}>{t.teacher_name}</td>
+                            <td style={{ ...td, color: '#64748b', direction: 'ltr', textAlign: 'right' }}>{t.employee_id}</td>
+                            <td style={num}>{t.total_lectures}</td>
+                            <td style={{ ...num, fontWeight: 800, color: t.delayed_lectures ? '#dc2626' : '#16a34a' }}>{t.delayed_lectures}</td>
+                            <td style={td}><div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><div style={{ flex: 1, height: 6, background: '#e2e8f0', borderRadius: 3, overflow: 'hidden' }}><div style={{ width: `${pct}%`, height: 6, background: c }} /></div><span style={{ fontSize: 11.5, color: c, fontWeight: 700, minWidth: 32 }}>{pct}%</span></div></td>
+                            <td style={{ ...num, fontWeight: 700 }}>{t.total_delay_minutes}</td>
+                            <td style={{ ...num, color: c, fontWeight: 700 }}>{t.avg_delay_minutes}</td>
+                            <td style={{ ...num, color: delayColor(t.max_delay_minutes), fontWeight: 700 }}>{t.max_delay_minutes}</td>
+                            <td style={{ ...td, color: '#1565c0', fontSize: 11.5, whiteSpace: 'nowrap' }}>{t.delays.length ? (open ? '▲ إخفاء' : `▼ ${t.delays.length} تأخر`) : <span style={{ color: '#16a34a' }}>✓ منضبط</span>}</td>
+                          </tr>
+                          {open && t.delays.length > 0 && (
+                            <tr data-testid={`teacher-delay-details-${t.employee_id}`}><td colSpan={10} style={{ padding: '4px 24px 10px', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                                <thead><tr>{['التاريخ', 'المقرر', 'الموعد', 'بدء التحضير', 'التأخر'].map((h) => <th key={h} style={{ ...th, background: 'transparent', fontSize: 11.5, padding: '4px 8px' }}>{h}</th>)}</tr></thead>
+                                <tbody>{[...t.delays].sort((a, b) => (a.date < b.date ? 1 : -1)).map((d, j) => (
+                                  <tr key={j}><td style={{ ...td, fontSize: 12 }}>{d.date}</td><td style={{ ...td, fontSize: 12 }}>{d.course_name}</td><td style={{ ...td, fontSize: 12, direction: 'ltr' }}>{d.start_time}</td><td style={{ ...td, fontSize: 12, direction: 'ltr' }}>{d.started_at}</td>
+                                    <td style={{ ...td, fontSize: 12 }}><span style={{ background: delayColor(d.delay_minutes) + '18', color: delayColor(d.delay_minutes), fontWeight: 800, padding: '2px 8px', borderRadius: 6 }}>{d.delay_minutes} د</span></td></tr>
+                                ))}</tbody>
+                              </table>
+                            </td></tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <Text style={{ fontSize: 11, color: '#94a3b8', textAlign: 'right', padding: 8 }}>{rows.length} معلم · اضغط على الصف لعرض تفاصيل التأخيرات</Text>
+            </View>
+          )}
+      </ScrollView>
     </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f4f6fa' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: '#e0e0e0' },
-  backBtn: { padding: 4, marginRight: 12 },
-  headerTitle: { flex: 1, fontSize: 18, fontWeight: '700', color: '#333' },
-  exportBtn: { backgroundColor: '#1565c0', padding: 10, borderRadius: 10 },
-  summaryRow: { flexDirection: 'row', padding: 16, gap: 10 },
-  summaryCard: { flex: 1, padding: 14, borderRadius: 12, alignItems: 'center', gap: 4 },
-  summaryValue: { fontSize: 22, fontWeight: '800', color: '#333' },
-  summaryLabel: { fontSize: 12, color: '#666' },
-  filterRow: { paddingHorizontal: 16, paddingBottom: 8 },
-  picker: { backgroundColor: '#fff', borderRadius: 10, borderWidth: 1, borderColor: '#e0e0e0' },
-  card: { backgroundColor: '#fff', borderRadius: 14, marginBottom: 12, overflow: 'hidden', elevation: 2 },
-  cardHeader: { padding: 16 },
-  teacherInfo: { flexDirection: 'row', alignItems: 'center', marginBottom: 12, gap: 10 },
-  avatarCircle: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#1565c0', justifyContent: 'center', alignItems: 'center' },
-  teacherName: { fontSize: 16, fontWeight: '700', color: '#333' },
-  employeeId: { fontSize: 13, color: '#888' },
-  statsRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
-  statItem: { flex: 1, backgroundColor: '#f8f9fa', padding: 8, borderRadius: 8, alignItems: 'center' },
-  statValue: { fontSize: 18, fontWeight: '800', color: '#333' },
-  statLabel: { fontSize: 11, color: '#888', marginTop: 2 },
-  progressBar: { height: 6, backgroundColor: '#e0e0e0', borderRadius: 3, marginBottom: 4 },
-  progressFill: { height: 6, borderRadius: 3 },
-  progressText: { fontSize: 11, color: '#999', textAlign: 'left' },
-  detailsContainer: { borderTopWidth: 1, borderTopColor: '#f0f0f0', padding: 12 },
-  detailsTitle: { fontSize: 14, fontWeight: '700', color: '#555', marginBottom: 10 },
-  delayRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#f5f5f5', gap: 8 },
-  delayCourseName: { fontSize: 14, fontWeight: '600', color: '#333' },
-  delayDate: { fontSize: 12, color: '#999' },
-  delayTimeInfo: { alignItems: 'flex-end' },
-  delayTimeLabel: { fontSize: 12, color: '#666' },
-  delayBadge: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, minWidth: 50, alignItems: 'center' },
-  delayBadgeText: { fontSize: 14, fontWeight: '800' },
-  emptyState: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 40 },
-  emptyText: { fontSize: 18, fontWeight: '700', color: '#333', marginTop: 16 },
-  emptySubtext: { fontSize: 14, color: '#999', marginTop: 8, textAlign: 'center' },
-});
