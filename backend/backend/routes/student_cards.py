@@ -3,6 +3,7 @@
 """
 import io
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -18,6 +19,8 @@ router = APIRouter()
 
 TEMPLATES = ("green", "dark", "horizontal", "official", "custom")
 CARD_SCALE = 3  # دقة ثلاثية للطباعة (1920×3030 ≈ 570 DPI على 85.6 مم)
+MAX_BATCH = 400  # أقصى عدد بطاقات في الدفعة الواحدة
+DIRECT_PDF_MAX = 40  # فوق هذا العدد تُستخدم مهمة الطباعة المرحلية
 
 # 🔤 خطوط البطاقة: (ملف الخط، محاور الخط المتغير [slnt, wght] أو [wght]) — كلها عريضة للطباعة
 CARD_FONTS = {
@@ -607,10 +610,8 @@ async def batch_preview(data: BatchPrintRequest, current_user: dict = Depends(ge
                                       "excluded_manual": sum(1 for r in rows if r["reason"] == "مستبعد يدوياً")}}
 
 
-@router.post("/cards/batch-pdf")
-async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depends(get_current_user)):
-    """PDF واحد: بطاقتان في كل ورقة A4 بمواضع قابلة للضبط (ملم) — حسب القسم أو طلاب محددين."""
-    db = get_db()
+async def _prepare_batch(db, data: "BatchPrintRequest", current_user: dict) -> dict:
+    """تجهيز دفعة الطباعة (مشترك بين PDF المباشر ومهمة الطباعة المرحلية): الطلاب بعد الفلاتر + إعدادات القوالب"""
     if data.reprint_batch_no:
         rb = await db.card_print_batches.find_one({"batch_no": int(data.reprint_batch_no)})
         if not rb:
@@ -618,9 +619,10 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
         data.student_ids = rb.get("student_ids") or []
     ids_mode = bool(data.student_ids)
     dept = None
+    tpl_map: dict = {}
     if ids_mode:
         oids = []
-        for i in (data.student_ids or [])[:250]:
+        for i in (data.student_ids or [])[:MAX_BATCH]:
             try:
                 oids.append(ObjectId(str(i)))
             except Exception:
@@ -628,7 +630,6 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
         students = [s async for s in db.students.find({"_id": {"$in": oids}}).sort("full_name", 1)]
         if not students:
             raise HTTPException(status_code=404, detail="لا يوجد طلاب مطابقون")
-        tpl_map = {}
         for s in students:
             fid_s, fac_name_s, dept_name_s = await _resolve_faculty(db, s)
             if not _can_manage(current_user, fid_s):
@@ -638,7 +639,6 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
             s["_fid"], s["_fac_name"], s["_dept_name"] = fid_s, fac_name_s, dept_name_s
         fid = students[0].get("_fid", "")
         tpl_settings = tpl_map.get(fid, {})
-        tpl = tpl_settings.get("template", "green")
     else:
         if not data.department_id:
             raise HTTPException(status_code=400, detail="اختر القسم أو حدد طلاباً")
@@ -652,7 +652,6 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
         if not _can_manage(current_user, fid):
             raise HTTPException(status_code=403, detail="غير مصرح لك")
 
-    # حفظ إعدادات المواضع للاستخدام القادم
     orientation = data.orientation if data.orientation in ORIENTATIONS else "auto"
     st = {**DEFAULT_PRINT_SETTINGS}
     if data.settings:
@@ -672,15 +671,12 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
         students = [s async for s in db.students.find(q).sort("full_name", 1)]
         if not students:
             raise HTTPException(status_code=404, detail="لا يوجد طلاب مطابقون")
-        if len(students) > 250:
-            raise HTTPException(status_code=400, detail="العدد يتجاوز 250 طالباً — قسّم الطلبات حسب المستوى (الدقة العالية تجعل الملف كبيراً)")
+        if len(students) > MAX_BATCH:
+            raise HTTPException(status_code=400, detail=f"العدد يتجاوز {MAX_BATCH} طالباً — قسّم الطلبات حسب المستوى أو الشعبة")
 
-    # 🖨️ تتبّع الدفعات: استبعاد المطبوعين سابقاً / بلا صورة / المستبعدين يدوياً (إلا في إعادة تنزيل دفعة سابقة)
     reprint = None
     if data.reprint_batch_no:
         reprint = await db.card_print_batches.find_one({"batch_no": int(data.reprint_batch_no)})
-        if not reprint:
-            raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
     else:
         excluded = {str(x) for x in (data.exclude_ids or [])}
         flagged = [(s, _print_flags(s, data.exclude_printed, data.only_with_photo, excluded)) for s in students]
@@ -694,105 +690,211 @@ async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depend
     faculty_name = (faculty or {}).get("name", "")
     if not ids_mode:
         tpl_settings = await db.card_settings.find_one({"_id": f"faculty_{fid}"}) or {}
-        tpl = tpl_settings.get("template", "green")
-    year = await _active_academic_year(db)
-    base = (await get_verify_base(db)) or (data.base_url or "").rstrip("/")
+    tpl = tpl_settings.get("template", "green")
+    return {"students": students, "ids_mode": ids_mode, "dept": dept, "fid": fid, "faculty_name": faculty_name, "tpl_map": tpl_map,
+            "tpl_settings": tpl_settings, "tpl": tpl, "st": st, "orientation": orientation, "reprint": reprint}
 
-    from services.storage_service import get_object
 
-    def make_payload(s, card):
-        s_settings = (tpl_map.get(s.get("_fid"), {}) if ids_mode else tpl_settings) or {}
-        s_tpl = s_settings.get("template", "green")
-        return {
-            "student_name": s.get("full_name", ""),
-            "enrollment_no": s.get("student_id", ""),
-            "reference_number": s.get("reference_number", ""),
-            "nationality": s.get("nationality") or "يمني",
-            "level": s.get("level") or 1,
-            "section": s.get("section", ""),
-            "department_name": s.get("_dept_name", "") if ids_mode else dept.get("name", ""),
-            "faculty_name": s.get("_fac_name", "") if ids_mode else faculty_name,
-            "academic_year": card["academic_year"],
-            "template": s_tpl,
-            "font": s_settings.get("font") or DEFAULT_CARD_FONT,
-            "custom_bg_base64": s_settings.get("custom_bg_base64", ""),
-            "custom_layout": s_settings.get("custom_layout") or {},
-            "custom_orientation": s_settings.get("custom_orientation", "portrait"),
-            "show_section": s_settings.get("show_section", True),
-        }
+def _student_payload(s: dict, card: dict, ctx: dict) -> dict:
+    s_settings = (ctx["tpl_map"].get(s.get("_fid"), {}) if ctx["ids_mode"] else ctx["tpl_settings"]) or {}
+    return {
+        "student_name": s.get("full_name", ""),
+        "enrollment_no": s.get("student_id", ""),
+        "reference_number": s.get("reference_number", ""),
+        "nationality": s.get("nationality") or "يمني",
+        "level": s.get("level") or 1,
+        "section": s.get("section", ""),
+        "department_name": s.get("_dept_name", "") if ctx["ids_mode"] else (ctx["dept"] or {}).get("name", ""),
+        "faculty_name": s.get("_fac_name", "") if ctx["ids_mode"] else ctx["faculty_name"],
+        "academic_year": card["academic_year"],
+        "template": s_settings.get("template", "green"),
+        "font": s_settings.get("font") or DEFAULT_CARD_FONT,
+        "custom_bg_base64": s_settings.get("custom_bg_base64", ""),
+        "custom_layout": s_settings.get("custom_layout") or {},
+        "custom_orientation": s_settings.get("custom_orientation", "portrait"),
+        "show_section": s_settings.get("show_section", True),
+    }
 
-    pngs = []
-    for s in students:
-        card = await _ensure_card(db, s)
-        verify_url = f"{base}/verify-card?token={card['token']}" if base else card["token"]
-        photo_bytes = None
-        if s.get("photo_path"):
-            try:
-                photo_bytes, _ct = get_object(s["photo_path"])
-            except Exception:
-                photo_bytes = None
-        payload = make_payload(s, card)
-        pngs.append((_render_card_png(payload, photo_bytes, verify_url), _payload_portrait(payload)))
 
+def _out_portrait(ctx: dict) -> bool:
+    template_portrait = _payload_portrait({"template": ctx["tpl"], "custom_orientation": (ctx["tpl_settings"] or {}).get("custom_orientation", "portrait")})
+    return template_portrait if ctx["orientation"] == "auto" else ctx["orientation"] == "portrait"
+
+
+def _render_student_jpeg(payload: dict, photo_bytes, verify_url: str, out_portrait: bool) -> bytes:
+    """بطاقة واحدة → JPEG جاهز للـPDF (مع التدوير إن لزم) — دالة متزامنة تُنفَّذ في thread"""
+    from PIL import Image as PILImage
+    png = _render_card_png(payload, photo_bytes, verify_url)
+    im = PILImage.open(io.BytesIO(png)).convert("RGB")
+    if _payload_portrait(payload) != out_portrait:
+        im = im.rotate(90, expand=True)
+    b = io.BytesIO(); im.save(b, format="JPEG", quality=88)
+    return b.getvalue()
+
+
+def _compose_cards_pdf(jpegs: list, st: dict, out_portrait: bool) -> bytes:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas as pdfcanvas
     from reportlab.lib.utils import ImageReader
-
     W, H = A4
-    # اتجاه الإخراج: auto = حسب القالب، أو فرض عمودي/أفقي مع تدوير البطاقة عند الحاجة
-    template_portrait = _payload_portrait({"template": tpl, "custom_orientation": (tpl_settings or {}).get("custom_orientation", "portrait")})
-    if orientation == "auto":
-        out_portrait = template_portrait
-    else:
-        out_portrait = orientation == "portrait"
-    from PIL import Image as PILImage
-    final_pngs = []
-    for png, tp in pngs:
-        if tp != out_portrait:
-            im = PILImage.open(io.BytesIO(png)).rotate(90, expand=True)
-            b = io.BytesIO()
-            im.save(b, format="PNG")
-            png = b.getvalue()
-        final_pngs.append(png)
-    pngs = final_pngs
-    if out_portrait:
-        cw, ch = st["card_h"] * mm, st["card_w"] * mm
-    else:
-        cw, ch = st["card_w"] * mm, st["card_h"] * mm
+    cw, ch = (st["card_h"] * mm, st["card_w"] * mm) if out_portrait else (st["card_w"] * mm, st["card_h"] * mm)
     positions = [(st["card1_x"] * mm, st["card1_y"] * mm), (st["card2_x"] * mm, st["card2_y"] * mm)]
     buf = io.BytesIO()
     c = pdfcanvas.Canvas(buf, pagesize=A4)
-    def _jpg(png):
-        # JPEG بجودة عالية داخل PDF: يحافظ على الدقة الثلاثية مع حجم ملف معقول
-        im = PILImage.open(io.BytesIO(png)).convert("RGB")
-        b = io.BytesIO(); im.save(b, format="JPEG", quality=88); return b.getvalue()
-    for i in range(0, len(pngs), 2):
-        for j, png in enumerate(pngs[i:i + 2]):
+    for i in range(0, len(jpegs), 2):
+        for j, jpg in enumerate(jpegs[i:i + 2]):
             x, y_top = positions[j]
-            c.drawImage(ImageReader(io.BytesIO(_jpg(png))), x, H - y_top - ch, cw, ch)
+            c.drawImage(ImageReader(io.BytesIO(jpg)), x, H - y_top - ch, cw, ch)
         c.showPage()
     c.save()
+    return buf.getvalue()
 
-    if reprint:
-        return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
-                                 headers=export_headers(export_filename("بطاقات الطلاب", f"إعادة تنزيل دفعة {reprint['batch_no']}", f"{len(pngs)} بطاقة", ext="pdf")))
 
-    # 🖨️ تسجيل الدفعة ووسم الطلاب كمطبوعين (تنزيل PDF = طباعة)
+async def _register_batch(db, ctx: dict, data: "BatchPrintRequest", current_user: dict) -> int:
+    """تسجيل الدفعة ووسم الطلاب كمطبوعين"""
+    students, dept, ids_mode = ctx["students"], ctx["dept"], ctx["ids_mode"]
     last = await db.card_print_batches.find_one({}, sort=[("batch_no", -1)])
     batch_no = int((last or {}).get("batch_no", 0)) + 1
     now = datetime.now(timezone.utc).isoformat()
     await db.card_print_batches.insert_one({
         "batch_no": batch_no, "created_at": now, "by_user_id": str(current_user.get("_id") or current_user.get("id", "")), "by_name": current_user.get("full_name", ""),
         "mode": "ids" if ids_mode else "department", "department_id": data.department_id if not ids_mode else None, "department_name": (dept or {}).get("name", "") if not ids_mode else "طلاب محددون",
-        "faculty_name": faculty_name if not ids_mode else (students[0].get("_fac_name", "") if students else ""), "level": data.level, "section": data.section,
-        "count": len(students), "pages": (len(students) + 1) // 2, "orientation": orientation, "settings": st,
+        "faculty_name": ctx["faculty_name"] if not ids_mode else (students[0].get("_fac_name", "") if students else ""), "level": data.level, "section": data.section,
+        "count": len(students), "pages": (len(students) + 1) // 2, "orientation": ctx["orientation"], "settings": ctx["st"],
         "student_ids": [str(s["_id"]) for s in students], "students": [{"id": str(s["_id"]), "full_name": s.get("full_name", ""), "student_id": s.get("student_id", ""), "level": s.get("level"), "section": s.get("section", "")} for s in students],
     })
     await db.students.update_many({"_id": {"$in": [s["_id"] for s in students]}}, {"$set": {"card_printed_at": now, "card_print_batch_no": batch_no}, "$inc": {"card_print_count": 1}})
     await log_activity(current_user, "cards_batch_print", "card_print_batches", str(batch_no), f"دفعة طباعة بطاقات #{batch_no}", {"count": len(students), "department": (dept or {}).get("name", "")})
-    return StreamingResponse(io.BytesIO(buf.getvalue()), media_type="application/pdf",
-                             headers={**export_headers(export_filename("بطاقات الطلاب", f"دفعة {batch_no}", f"{len(pngs)} بطاقة", ext="pdf")), "X-Batch-No": str(batch_no), "X-Batch-Count": str(len(pngs))})
+    return batch_no
+
+
+@router.post("/cards/batch-pdf")
+async def batch_print_cards(data: BatchPrintRequest, current_user: dict = Depends(get_current_user)):
+    """PDF واحد: بطاقتان في كل ورقة A4 بمواضع قابلة للضبط (ملم) — حسب القسم أو طلاب محددين. (للدفعات الكبيرة استخدم مهمة الطباعة المرحلية /cards/print-jobs)"""
+    db = get_db()
+    ctx = await _prepare_batch(db, data, current_user)
+    students, st, reprint = ctx["students"], ctx["st"], ctx["reprint"]
+    if len(students) > DIRECT_PDF_MAX and not reprint:
+        raise HTTPException(status_code=400, detail=f"الدفعة كبيرة ({len(students)} بطاقة) — استخدم زر الطباعة المرحلية الذي يبني الملف على مراحل")
+    base = (await get_verify_base(db)) or (data.base_url or "").rstrip("/")
+    from services.storage_service import get_object
+    out_portrait = _out_portrait(ctx)
+    loop = asyncio.get_event_loop()
+    jpegs = []
+    for s in students:
+        card = await _ensure_card(db, s)
+        verify_url = f"{base}/verify-card?token={card['token']}" if base else card["token"]
+        photo_bytes = None
+        if s.get("photo_path"):
+            try:
+                photo_bytes, _ct = await loop.run_in_executor(None, get_object, s["photo_path"])
+            except Exception:
+                photo_bytes = None
+        payload = _student_payload(s, card, ctx)
+        jpegs.append(await loop.run_in_executor(None, _render_student_jpeg, payload, photo_bytes, verify_url, out_portrait))
+    pdf = await loop.run_in_executor(None, _compose_cards_pdf, jpegs, st, out_portrait)
+
+    if reprint:
+        return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
+                                 headers=export_headers(export_filename("بطاقات الطلاب", f"إعادة تنزيل دفعة {reprint['batch_no']}", f"{len(jpegs)} بطاقة", ext="pdf")))
+    batch_no = await _register_batch(db, ctx, data, current_user)
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
+                             headers={**export_headers(export_filename("بطاقات الطلاب", f"دفعة {batch_no}", f"{len(jpegs)} بطاقة", ext="pdf")), "X-Batch-No": str(batch_no), "X-Batch-Count": str(len(jpegs))})
+
+
+# ==================== 🧩 مهمة طباعة مرحلية (للدفعات الكبيرة: لا مهلة ولا ضغط ذاكرة) ====================
+JOB_STEP = 8
+
+
+@router.post("/cards/print-jobs")
+async def create_print_job(data: BatchPrintRequest, current_user: dict = Depends(get_current_user)):
+    """ينشئ مهمة طباعة: يثبّت قائمة الطلاب والإعدادات، ثم يستدعي العميل /step حتى الاكتمال"""
+    db = get_db()
+    ctx = await _prepare_batch(db, data, current_user)
+    now = datetime.now(timezone.utc).isoformat()
+    doc = {
+        "status": "running", "created_at": now, "updated_at": now, "by_user_id": str(current_user.get("_id") or current_user.get("id", "")),
+        "total": len(ctx["students"]), "done": 0, "student_ids": [str(s["_id"]) for s in ctx["students"]],
+        "request": data.model_dump(), "out_portrait": _out_portrait(ctx), "st": ctx["st"], "reprint_batch_no": (ctx["reprint"] or {}).get("batch_no"),
+    }
+    r = await db.card_print_jobs.insert_one(doc)
+    return {"job_id": str(r.inserted_id), "total": doc["total"], "step": JOB_STEP}
+
+
+@router.post("/cards/print-jobs/{job_id}/step")
+async def print_job_step(job_id: str, current_user: dict = Depends(get_current_user)):
+    """يرسم الدفعة التالية من البطاقات (JOB_STEP) ويخزّنها، وعند الاكتمال يركّب الـPDF ويسجّل الدفعة"""
+    db = get_db()
+    job = await db.card_print_jobs.find_one({"_id": ObjectId(job_id)}) if ObjectId.is_valid(job_id) else None
+    if not job or job.get("by_user_id") != str(current_user.get("_id") or current_user.get("id", "")):
+        raise HTTPException(status_code=404, detail="مهمة الطباعة غير موجودة")
+    if job["status"] == "ready":
+        return {"status": "ready", "done": job["done"], "total": job["total"], "batch_no": job.get("batch_no")}
+    if job["status"] != "running":
+        raise HTTPException(status_code=400, detail=job.get("error") or "المهمة متوقفة")
+    data = BatchPrintRequest(**job["request"])
+    # قائمة ثابتة (الطلاب المثبّتون في المهمة) حتى لا تتغيّر الدفعة بين الخطوات
+    data.student_ids = job["student_ids"]; data.department_id = None; data.exclude_printed = False; data.only_with_photo = False; data.exclude_ids = []; data.reprint_batch_no = None
+    ctx = await _prepare_batch(db, data, current_user)
+    order = {sid: i for i, sid in enumerate(job["student_ids"])}
+    students = sorted(ctx["students"], key=lambda s: order.get(str(s["_id"]), 0))
+    chunk = students[job["done"]:job["done"] + JOB_STEP]
+    base = (await get_verify_base(db)) or (job["request"].get("base_url") or "").rstrip("/")
+    from services.storage_service import get_object
+    loop = asyncio.get_event_loop()
+    out_portrait = job["out_portrait"]
+    for idx, s in enumerate(chunk, start=job["done"]):
+        card = await _ensure_card(db, s)
+        verify_url = f"{base}/verify-card?token={card['token']}" if base else card["token"]
+        photo_bytes = None
+        if s.get("photo_path"):
+            try:
+                photo_bytes, _ct = await loop.run_in_executor(None, get_object, s["photo_path"])
+            except Exception:
+                photo_bytes = None
+        jpg = await loop.run_in_executor(None, _render_student_jpeg, _student_payload(s, card, ctx), photo_bytes, verify_url, out_portrait)
+        await db.card_print_job_pages.update_one({"job_id": job_id, "idx": idx}, {"$set": {"data": jpg}}, upsert=True)
+    done = job["done"] + len(chunk)
+    await db.card_print_jobs.update_one({"_id": job["_id"]}, {"$set": {"done": done, "updated_at": datetime.now(timezone.utc).isoformat()}})
+    if done < job["total"]:
+        return {"status": "running", "done": done, "total": job["total"]}
+    # الاكتمال: تركيب الـPDF من الصفحات المخزّنة وحفظه في GridFS
+    pages = await db.card_print_job_pages.find({"job_id": job_id}).sort("idx", 1).to_list(MAX_BATCH + 10)
+    pdf = await loop.run_in_executor(None, _compose_cards_pdf, [bytes(p["data"]) for p in pages], job["st"], out_portrait)
+    from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+    fs = AsyncIOMotorGridFSBucket(db, bucket_name="card_print_files")
+    file_id = await fs.upload_from_stream(f"cards_{job_id}.pdf", pdf, metadata={"job_id": job_id})
+    batch_no = job.get("reprint_batch_no")
+    if not batch_no:
+        # الدفعة الأصلية: نعيد بناء السياق الأصلي لتسجيلها بنفس بيانات القسم/المستوى
+        orig = BatchPrintRequest(**job["request"]); orig.reprint_batch_no = None
+        reg_ctx = {**ctx, "students": students, "ids_mode": bool(orig.student_ids)}
+        if not reg_ctx["ids_mode"] and orig.department_id and ObjectId.is_valid(orig.department_id):
+            reg_ctx["dept"] = await db.departments.find_one({"_id": ObjectId(orig.department_id)})
+            fac = await db.faculties.find_one({"_id": ObjectId((reg_ctx["dept"] or {}).get("faculty_id", ""))}) if ObjectId.is_valid((reg_ctx["dept"] or {}).get("faculty_id", "")) else None
+            reg_ctx["faculty_name"] = (fac or {}).get("name", "")
+        batch_no = await _register_batch(db, reg_ctx, orig, current_user)
+    await db.card_print_job_pages.delete_many({"job_id": job_id})
+    await db.card_print_jobs.update_one({"_id": job["_id"]}, {"$set": {"status": "ready", "file_id": file_id, "batch_no": batch_no, "size": len(pdf), "is_reprint": bool(job.get("reprint_batch_no"))}})
+    return {"status": "ready", "done": done, "total": job["total"], "batch_no": batch_no, "size": len(pdf)}
+
+
+@router.get("/cards/print-jobs/{job_id}/download")
+async def print_job_download(job_id: str, current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    job = await db.card_print_jobs.find_one({"_id": ObjectId(job_id)}) if ObjectId.is_valid(job_id) else None
+    if not job or job.get("by_user_id") != str(current_user.get("_id") or current_user.get("id", "")):
+        raise HTTPException(status_code=404, detail="مهمة الطباعة غير موجودة")
+    if job["status"] != "ready":
+        raise HTTPException(status_code=400, detail="الملف لم يكتمل بعد")
+    from motor.motor_asyncio import AsyncIOMotorGridFSBucket
+    fs = AsyncIOMotorGridFSBucket(db, bucket_name="card_print_files")
+    stream = await fs.open_download_stream(job["file_id"])
+    pdf = await stream.read()
+    label = f"إعادة تنزيل دفعة {job['batch_no']}" if job.get("is_reprint") else f"دفعة {job['batch_no']}"
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf",
+                             headers={**export_headers(export_filename("بطاقات الطلاب", label, f"{job['total']} بطاقة", ext="pdf")), "X-Batch-No": str(job["batch_no"]), "X-Batch-Count": str(job["total"])})
 
 
 @router.get("/cards/batches")
@@ -814,6 +916,36 @@ async def get_print_batch(batch_no: int, current_user: dict = Depends(get_curren
         raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
     b["id"] = str(b.pop("_id"))
     return b
+
+
+@router.delete("/cards/batches/{batch_no}")
+async def delete_print_batch(batch_no: int, restore: bool = True, current_user: dict = Depends(get_current_user)):
+    """🗑️ حذف دفعة من السجل — restore=true يعيد طلابها إلى قائمة «المطلوب طباعته» (يُلغى وسم مطبوع)"""
+    db = get_db()
+    if current_user.get("role") in ("teacher", "student"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    b = await db.card_print_batches.find_one({"batch_no": batch_no})
+    if not b:
+        raise HTTPException(status_code=404, detail="الدفعة غير موجودة")
+    restored = 0
+    if restore:
+        ids = [ObjectId(x) for x in b.get("student_ids", []) if ObjectId.is_valid(x)]
+        r = await db.students.update_many({"_id": {"$in": ids}, "card_print_batch_no": batch_no}, {"$unset": {"card_printed_at": "", "card_print_batch_no": ""}})
+        restored = r.modified_count
+    await db.card_print_batches.delete_one({"_id": b["_id"]})
+    await log_activity(current_user, "cards_batch_delete", "card_print_batches", str(batch_no), f"حذف دفعة طباعة #{batch_no}", {"restored": restored})
+    return {"message": f"حُذفت الدفعة #{batch_no}" + (f" وأُعيد {restored} طالباً إلى قائمة المطلوب طباعته" if restore else ""), "restored": restored}
+
+
+@router.delete("/cards/batches")
+async def clear_print_batches(current_user: dict = Depends(get_current_user)):
+    """🧹 تنظيف سجل الدفعات بعد اكتمال الطباعة — يحذف السجلات فقط ويُبقي وسم «مطبوع» على الطلاب"""
+    db = get_db()
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="تنظيف السجل متاح لمدير النظام فقط")
+    r = await db.card_print_batches.delete_many({})
+    await log_activity(current_user, "cards_batches_clear", "card_print_batches", "all", "تنظيف سجل دفعات الطباعة", {"deleted": r.deleted_count})
+    return {"message": f"تم تنظيف السجل ({r.deleted_count} دفعة) — وسم الطباعة على الطلاب محفوظ", "deleted": r.deleted_count}
 
 
 @router.get("/cards/print-report")
@@ -886,27 +1018,46 @@ class BackSettingsIn(BaseModel):
     back2_y: Optional[float] = None
 
 
-async def _back_settings(db) -> dict:
+async def _back_settings(db, faculty_id: Optional[str] = None) -> dict:
+    """خلفية البطاقة: الإعداد العام للجامعة، ويُغطّيه إعداد الكلية إن فعّلته (العنوان/التعليمات/التذييل)"""
     doc = await db.card_settings.find_one({"_id": "back_global"}) or {}
-    return {**DEFAULT_BACK_SETTINGS, **{k: v for k, v in doc.items() if k != "_id"}}
+    out = {**DEFAULT_BACK_SETTINGS, **{k: v for k, v in doc.items() if k != "_id"}, "faculty_override": False}
+    if faculty_id:
+        fdoc = await db.card_settings.find_one({"_id": f"back_faculty_{faculty_id}"}) or {}
+        if fdoc.get("enabled_override"):
+            out.update({k: v for k, v in fdoc.items() if k in ("title", "lines", "footer_note", "show_contact", "enabled")})
+            out["faculty_override"] = True
+    return out
 
 
 @router.get("/cards/back-settings")
-async def get_back_settings(current_user: dict = Depends(get_current_user)):
+async def get_back_settings(faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     if current_user.get("role") in ("teacher", "student"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    return {**await _back_settings(get_db()), "defaults": DEFAULT_BACK_SETTINGS, "can_edit": current_user.get("role") == "admin"}
+    db = get_db()
+    g = await _back_settings(db)
+    out = {**await _back_settings(db, faculty_id), "defaults": DEFAULT_BACK_SETTINGS, "global": {k: g[k] for k in ("title", "lines", "footer_note", "show_contact", "enabled")},
+           "can_edit": current_user.get("role") == "admin", "can_edit_faculty": bool(faculty_id) and _can_manage(current_user, faculty_id)}
+    return out
 
 
 @router.put("/cards/back-settings")
-async def put_back_settings(data: BackSettingsIn, current_user: dict = Depends(get_current_user)):
-    """تحرير التعليمات الموحدة لخلفية البطاقة (مدير النظام)"""
-    if current_user.get("role") != "admin":
-        raise HTTPException(status_code=403, detail="تحرير خلفية البطاقة متاح لمدير النظام فقط")
+async def put_back_settings(data: BackSettingsIn, faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """تحرير خلفية البطاقة: عامة (مدير النظام) أو مخصّصة لكلية (?faculty_id= — مسؤول الكلية) تُغطّي العامة"""
     db = get_db()
     lines = [str(x).strip() for x in (data.lines or []) if str(x).strip()][:10]
     if not lines:
         raise HTTPException(status_code=400, detail="أضف بنداً واحداً على الأقل")
+    if faculty_id:
+        if not _can_manage(current_user, faculty_id):
+            raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل خلفية بطاقات هذه الكلية")
+        upd = {"enabled_override": True, "enabled": bool(data.enabled), "title": (data.title or "").strip() or DEFAULT_BACK_SETTINGS["title"], "lines": lines,
+               "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact), "updated_at": datetime.now(timezone.utc).isoformat()}
+        await db.card_settings.update_one({"_id": f"back_faculty_{faculty_id}"}, {"$set": upd}, upsert=True)
+        await log_activity(current_user, "card_back_settings_update", "card_settings", f"back_faculty_{faculty_id}", "تحديث خلفية بطاقة الكلية", {"lines": len(lines)})
+        return {"message": "تم حفظ خلفية بطاقة الكلية (تُغطّي الإعداد العام)", **await _back_settings(db, faculty_id)}
+    if current_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="تحرير الخلفية العامة متاح لمدير النظام فقط — اختر كلية لتخصيص خلفيتها")
     upd = {"enabled": bool(data.enabled), "title": (data.title or "").strip() or DEFAULT_BACK_SETTINGS["title"], "lines": lines, "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact)}
     for k in ("back1_x", "back1_y", "back2_x", "back2_y"):
         v = getattr(data, k)
@@ -915,6 +1066,16 @@ async def put_back_settings(data: BackSettingsIn, current_user: dict = Depends(g
     await db.card_settings.update_one({"_id": "back_global"}, {"$set": upd}, upsert=True)
     await log_activity(current_user, "card_back_settings_update", "card_settings", "back_global", "تحديث خلفية البطاقة", {"lines": len(lines)})
     return {"message": "تم حفظ إعدادات خلفية البطاقة", **await _back_settings(db)}
+
+
+@router.delete("/cards/back-settings")
+async def reset_faculty_back_settings(faculty_id: str, current_user: dict = Depends(get_current_user)):
+    """↩️ إلغاء تخصيص خلفية الكلية والعودة للإعداد العام"""
+    if not _can_manage(current_user, faculty_id):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    await db.card_settings.delete_one({"_id": f"back_faculty_{faculty_id}"})
+    return {"message": "عادت خلفية بطاقات الكلية إلى الإعداد العام", **await _back_settings(db, faculty_id)}
 
 
 def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bool, uni: dict) -> bytes:
@@ -1042,7 +1203,7 @@ async def back_preview(faculty_id: str, current_user: dict = Depends(get_current
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     tpl_settings = await db.card_settings.find_one({"_id": f"faculty_{faculty_id}"}) or {}
-    back = await _back_settings(db)
+    back = await _back_settings(db, faculty_id)
     uni = await db.university.find_one({}) or {}
     portrait = _payload_portrait({"template": tpl_settings.get("template", "green"), "custom_orientation": tpl_settings.get("custom_orientation", "portrait")})
     png = _render_card_back_png(back, tpl_settings.get("template", "green"), tpl_settings.get("font") or DEFAULT_CARD_FONT, portrait, uni)
@@ -1063,9 +1224,6 @@ async def batch_back_pdf(data: BackBatchRequest, current_user: dict = Depends(ge
     db = get_db()
     if current_user.get("role") in ("teacher", "student"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
-    back = await _back_settings(db)
-    if not back.get("enabled"):
-        raise HTTPException(status_code=400, detail="خلفية البطاقة معطّلة من الإعدادات")
     if data.batch_no:
         b = await db.card_print_batches.find_one({"batch_no": int(data.batch_no)})
         if not b:
@@ -1087,6 +1245,9 @@ async def batch_back_pdf(data: BackBatchRequest, current_user: dict = Depends(ge
         dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
         fid = (dept or {}).get("faculty_id", "")
     tpl_settings = (await db.card_settings.find_one({"_id": f"faculty_{fid}"}) if fid else None) or {}
+    back = await _back_settings(db, fid or None)
+    if not back.get("enabled"):
+        raise HTTPException(status_code=400, detail="خلفية البطاقة معطّلة من الإعدادات")
     tpl = tpl_settings.get("template", "green")
     template_portrait = _payload_portrait({"template": tpl, "custom_orientation": tpl_settings.get("custom_orientation", "portrait")})
     orientation = data.orientation if data.orientation in ORIENTATIONS else "auto"

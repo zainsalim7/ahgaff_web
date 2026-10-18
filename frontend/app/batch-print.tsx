@@ -11,6 +11,7 @@ import { useLocalSearchParams } from 'expo-router';
 import api from '../src/services/api';
 import { PrintBatchPreview, PrintBatchesHistory, PrintFilters } from '../src/components/cards/PrintBatches';
 import { BackPrintControls } from '../src/components/cards/CardBack';
+import { useAuth } from '../src/contexts/AuthContext';
 
 // معاينة A4 مصغّرة: 210×297مم → مقياس
 const SCALE = 1.35;
@@ -20,6 +21,7 @@ const A4H = 297 * SCALE;
 const DEFAULTS = { card_w: 85.6, card_h: 54, card1_x: 62, card1_y: 40, card2_x: 62, card2_y: 180 };
 
 export default function BatchPrintScreen() {
+  const { user } = useAuth();
   const { ids } = useLocalSearchParams<{ ids?: string }>();
   const selIds = typeof ids === 'string' && ids.length > 0 ? ids.split(',').filter(Boolean) : [];
   const idsMode = selIds.length > 0;
@@ -89,14 +91,27 @@ export default function BatchPrintScreen() {
     setSt((p: any) => ({ ...p, [key]: v }));
   };
 
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const saveBlob = (res: any) => {
+    if (Platform.OS !== 'web') return;
+    const url = window.URL.createObjectURL(new Blob([res.data]));
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filenameFromResponse(res, exportName(['بطاقات الطلاب'], 'pdf'));
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+
   const download = async () => {
     setDownloading(true);
     setMsg('');
+    setProgress(null);
     try {
       const settings: any = {};
       Object.keys(DEFAULTS).forEach((k) => { settings[k] = parseFloat(st[k]) || (DEFAULTS as any)[k]; });
       const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
-      const res = await api.post('/cards/batch-pdf', {
+      const body = {
         ...(idsMode
           ? { student_ids: selIds }
           : { department_id: departmentId, level: level ? parseInt(level, 10) : undefined }),
@@ -106,15 +121,17 @@ export default function BatchPrintScreen() {
         exclude_printed: pf.excludePrinted,
         only_with_photo: pf.onlyWithPhoto,
         exclude_ids: pf.excludeIds,
-      }, { responseType: 'blob', timeout: 300000 });
-      if (Platform.OS === 'web') {
-        const url = window.URL.createObjectURL(new Blob([res.data]));
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filenameFromResponse(res, exportName(['بطاقات الطلاب'], 'pdf'));
-        a.click();
-        window.URL.revokeObjectURL(url);
+      };
+      // 🧩 مهمة مرحلية: تُبنى البطاقات على دفعات صغيرة (لا مهلة ولا فشل مع الأعداد الكبيرة) ثم يُنزَّل الملف
+      const job = (await api.post('/cards/print-jobs', body)).data;
+      setProgress({ done: 0, total: job.total });
+      let stepRes: any = { status: 'running' };
+      while (stepRes.status !== 'ready') {
+        stepRes = (await api.post(`/cards/print-jobs/${job.job_id}/step`, {}, { timeout: 120000 })).data;
+        setProgress({ done: stepRes.done, total: stepRes.total });
       }
+      const res = await api.get(`/cards/print-jobs/${job.job_id}/download`, { responseType: 'blob', timeout: 300000 });
+      saveBlob(res);
       const bn = res.headers?.['x-batch-no']; const bc = res.headers?.['x-batch-count'];
       setMsg(bn ? `✅ تم إنشاء الملف — سُجّلت الدفعة #${bn} (${bc} بطاقة) ووُسم الطلاب كمطبوعين، ولن يتكرروا في الدفعات القادمة` : '✅ تم إنشاء الملف وحفظ إعدادات المواضع');
       setPf((p) => ({ ...p, excludeIds: [] }));
@@ -125,9 +142,10 @@ export default function BatchPrintScreen() {
       if (e?.response?.data instanceof Blob) {
         try { detail = JSON.parse(await e.response.data.text()).detail; } catch {}
       }
-      setMsg(detail || 'فشل إنشاء الملف');
+      setMsg(detail || (e?.code === 'ECONNABORTED' ? 'انقطع الاتصال أثناء البناء — أعد المحاولة، ستستكمل المهمة من حيث توقفت' : 'فشل إنشاء الملف'));
     } finally {
       setDownloading(false);
+      setProgress(null);
     }
   };
 
@@ -252,10 +270,10 @@ export default function BatchPrintScreen() {
               testID="batch-print-download-btn"
             >
               {downloading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="print" size={17} color="#fff" />}
-              <Text style={styles.dlBtnText}>{downloading ? 'جارٍ إنشاء الملف...' : batchSummary ? `تنزيل PDF للطباعة (${batchSummary.included} بطاقة)` : 'تنزيل PDF للطباعة'}</Text>
+              <Text style={styles.dlBtnText}>{downloading ? (progress ? `جارٍ بناء البطاقات ${progress.done}/${progress.total}…` : 'جارٍ إنشاء الملف...') : batchSummary ? `تنزيل PDF للطباعة (${batchSummary.included} بطاقة)` : 'تنزيل PDF للطباعة'}</Text>
             </TouchableOpacity>
             {Platform.OS === 'web' && <BackPrintControls st={st} departmentId={idsMode ? '' : departmentId} orientation={orientation} lastBatchNo={lastBatchNo} count={batchSummary ? batchSummary.included : (count?.count || 0)} />}
-            {Platform.OS === 'web' && <PrintBatchesHistory refreshKey={batchKey} reportParams={idsMode ? {} : { department_id: departmentId, level: level ? parseInt(level, 10) : undefined }} />}
+            {Platform.OS === 'web' && <PrintBatchesHistory refreshKey={batchKey} canClear={user?.role === 'admin'} onChanged={() => setBatchKey((k) => k + 1)} reportParams={idsMode ? {} : { department_id: departmentId, level: level ? parseInt(level, 10) : undefined }} />}
           </View>
 
           {/* ===== معاينة A4 ===== */}

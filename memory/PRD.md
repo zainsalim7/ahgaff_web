@@ -1032,3 +1032,9 @@
 - مُطبَّق في: POST/PUT /teachers، استيراد المعلمين Excel، POST/PUT /hr/employees، معاينة استيراد الموظفين (أخطاء صفوف)، وsync-teachers أعيد استخدامه للمساعد.
 - البحث الشامل: نوع `employees` (hr_view/manage_employees أو admin) بالاسم/الرقم الوظيفي/الجوال/الهوية/المسمى → `/hr-employees?employeeId=` يفتح البطاقة مباشرة. شريحة «موظفون» في GlobalSearch.
 - اختبار: `memory/patches/test_staff_identity.sh`.
+
+## 2026-10-18: 🖨️ طباعة بطاقات الطلاب — مهمة مرحلية + إدارة الدفعات + خلفية لكل كلية ✅
+- السبب الجذري لفشل الدفعات الكبيرة: توليد كل البطاقات (0.3s+جلب صورة لكل بطاقة، متزامن يحجب الحدث) في طلب واحد → مهلة/ذاكرة. الحل: `POST /cards/print-jobs` → `POST /cards/print-jobs/{id}/step` (8 بطاقات/خطوة، في thread، الصفحات في `card_print_job_pages`) → عند الاكتمال PDF في GridFS (`card_print_files`) + تسجيل الدفعة → `GET /cards/print-jobs/{id}/download`. الواجهة تعرض التقدم n/m. `/cards/batch-pdf` بقي للدفعات ≤40 (وإعادة تنزيل HR). MAX_BATCH=400.
+- الدفعات: `DELETE /cards/batches/{no}?restore=true` (يعيد الطلاب للمطلوب طباعته) / `restore=false` (حذف السجل فقط)، `DELETE /cards/batches` (تنظيف السجل، أدمن). أزرار في PrintBatchesHistory.
+- الخلفية: `card_settings._id=back_faculty_{fid}` مع `enabled_override` تُغطّي `back_global`؛ GET/PUT/DELETE `/cards/back-settings?faculty_id=`؛ المعاينة وPDF الخلفيات يستخدمان خلفية الكلية. CardBack.tsx: تبديل «خلفية هذه الكلية / العامة» + تخصيص/عودة.
+- اختبار: `memory/patches/test_card_print_jobs.sh`. ملاحظة: بطاقات الموظفين (hr_card_print) ما زالت بالمسار المباشر.

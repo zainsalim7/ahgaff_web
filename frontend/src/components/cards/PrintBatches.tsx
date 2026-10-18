@@ -64,12 +64,37 @@ export const PrintBatchPreview: React.FC<{ body: any; filters: PrintFilters; onC
 };
 
 /** 📚 الدفعات السابقة: إعادة تنزيل + تقرير Excel */
-export const PrintBatchesHistory: React.FC<{ refreshKey: number; reportParams: any; kind?: PrintKind; reportEnabled?: boolean; onReset?: (b: any) => Promise<void> }> = ({ refreshKey, reportParams, kind = STUDENT_KIND, reportEnabled, onReset }) => {
+export const PrintBatchesHistory: React.FC<{ refreshKey: number; reportParams: any; kind?: PrintKind; reportEnabled?: boolean; onReset?: (b: any) => Promise<void>; onChanged?: () => void; canClear?: boolean }> = ({ refreshKey, reportParams, kind = STUDENT_KIND, reportEnabled, onReset, onChanged, canClear }) => {
   const [items, setItems] = useState<any[]>([]);
   const [busy, setBusy] = useState<number | string | null>(null);
   useEffect(() => { api.get(`${kind.basePath}/batches`).then((r) => setItems(r.data.items || [])).catch(() => setItems([])); }, [refreshKey, kind.basePath]);
   const dl = async (res: any, fallback: string) => { const url = URL.createObjectURL(new Blob([res.data])); const a = document.createElement('a'); a.href = url; a.download = filenameFromResponse(res, fallback); a.click(); URL.revokeObjectURL(url); };
-  const redownload = async (b: any) => { setBusy(b.batch_no); try { await dl(await api.post(`${kind.basePath}/batch-pdf`, { reprint_batch_no: b.batch_no, orientation: b.orientation || 'auto', base_url: window.location.origin }, { responseType: 'blob', timeout: 300000 }), `${kind.fileLabel} - دفعة ${b.batch_no}.pdf`); } catch (e) { alertErr(e); } finally { setBusy(null); } };
+  const redownload = async (b: any) => {
+    setBusy(b.batch_no);
+    try {
+      if (kind.basePath === '/cards') {
+        // 🧩 إعادة التنزيل عبر مهمة مرحلية (تعمل مع الدفعات الكبيرة)
+        const job = (await api.post('/cards/print-jobs', { reprint_batch_no: b.batch_no, orientation: b.orientation || 'auto', base_url: window.location.origin })).data;
+        let st: any = { status: 'running' };
+        while (st.status !== 'ready') { st = (await api.post(`/cards/print-jobs/${job.job_id}/step`, {}, { timeout: 120000 })).data; setBusy(`${b.batch_no}:${st.done}/${st.total}`); }
+        await dl(await api.get(`/cards/print-jobs/${job.job_id}/download`, { responseType: 'blob', timeout: 300000 }), `${kind.fileLabel} - دفعة ${b.batch_no}.pdf`);
+      } else {
+        await dl(await api.post(`${kind.basePath}/batch-pdf`, { reprint_batch_no: b.batch_no, orientation: b.orientation || 'auto', base_url: window.location.origin }, { responseType: 'blob', timeout: 300000 }), `${kind.fileLabel} - دفعة ${b.batch_no}.pdf`);
+      }
+    } catch (e) { alertErr(e); } finally { setBusy(null); }
+  };
+  const reload = async () => setItems((await api.get(`${kind.basePath}/batches`)).data.items || []);
+  const remove = async (b: any, restore: boolean) => {
+    const q = restore ? `حذف الدفعة #${b.batch_no} وإعادة ${b.count} ${kind.entityPlural} إلى قائمة «المطلوب طباعته»؟` : `حذف الدفعة #${b.batch_no} من السجل فقط (يبقى وسم «مطبوع»)؟`;
+    if (!window.confirm(q)) return;
+    setBusy(`d${b.batch_no}`);
+    try { const r = await api.delete(`${kind.basePath}/batches/${b.batch_no}`, { params: { restore } }); if (r.data?.message) window.alert(r.data.message); await reload(); onChanged?.(); } catch (e) { alertErr(e); } finally { setBusy(null); }
+  };
+  const clearAll = async () => {
+    if (!window.confirm(`تنظيف سجل الدفعات (${items.length}) بعد اكتمال الطباعة؟ تُحذف السجلات فقط ويبقى وسم «مطبوع» على ${kind.entityPlural}.`)) return;
+    setBusy('clear');
+    try { const r = await api.delete(`${kind.basePath}/batches`); window.alert(r.data?.message || 'تم'); await reload(); onChanged?.(); } catch (e) { alertErr(e); } finally { setBusy(null); }
+  };
   const backs = async (b: any) => { setBusy(`b${b.batch_no}`); try { await dl(await api.post(`${kind.basePath}/batch-back-pdf`, { batch_no: b.batch_no, orientation: b.orientation || 'auto' }, { responseType: 'blob', timeout: 300000 }), `خلفيات دفعة ${b.batch_no}.pdf`); } catch (e) { alertErr(e); } finally { setBusy(null); } };
   const report = async () => { setBusy('report'); try { await dl(await api.get(`${kind.basePath}/print-report`, { params: reportParams, responseType: 'blob' }), 'تقرير طباعة البطاقات.xlsx'); } catch (e) { alertErr(e); } finally { setBusy(null); } };
   return (
@@ -77,6 +102,7 @@ export const PrintBatchesHistory: React.FC<{ refreshKey: number; reportParams: a
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
         <div style={{ fontSize: 13, fontWeight: 800, color: '#0f2440', flex: 1 }}>📚 الدفعات السابقة ({items.length})</div>
         <button onClick={report} disabled={busy === 'report' || (reportEnabled === undefined ? (!reportParams.department_id && !reportParams.faculty_id) : !reportEnabled)} style={btn('#1b5e20', '#fff', { padding: '5px 10px', fontSize: 11.5 })} data-testid="print-report-btn">📥 تقرير حالة الطباعة (Excel)</button>
+        {canClear && items.length > 0 && kind.basePath === '/cards' && <button onClick={clearAll} disabled={busy === 'clear'} style={btn('#fee2e2', '#b91c1c', { padding: '5px 10px', fontSize: 11.5 })} title="بعد اكتمال كل الطباعات: يحذف السجلات ويُبقي وسم مطبوع" data-testid="print-batches-clear-btn">🧹 تنظيف السجل</button>}
       </div>
       {items.length === 0 ? <div style={{ fontSize: 12, color: '#94a3b8' }}>لا توجد دفعات بعد — أول تنزيل PDF يُسجَّل كدفعة #1</div> : (
         <div style={{ maxHeight: 220, overflowY: 'auto' }}>
@@ -90,7 +116,7 @@ export const PrintBatchesHistory: React.FC<{ refreshKey: number; reportParams: a
                   {kind.histCols(b).map((v, i) => <td key={i} style={{ ...td, padding: '5px 6px', fontSize: 12 }}>{v}</td>)}
                   <td style={{ ...td, padding: '5px 6px', fontSize: 12 }}>{b.count} ({b.pages} ورقة)</td>
                   <td style={{ ...td, padding: '5px 6px', fontSize: 11.5 }}>{b.by_name}</td>
-                  <td style={{ ...td, padding: '5px 6px' }}><button onClick={() => redownload(b)} disabled={busy === b.batch_no} style={btn('#e3f2fd', '#1565c0', { padding: '4px 10px', fontSize: 11.5 })} data-testid={`print-batch-redl-${b.batch_no}`}>{busy === b.batch_no ? '...' : '⬇️ إعادة تنزيل'}</button> <button onClick={() => backs(b)} disabled={busy === `b${b.batch_no}`} style={btn('#fff3e0', '#e65100', { padding: '4px 10px', fontSize: 11.5 })} data-testid={`print-batch-back-${b.batch_no}`}>{busy === `b${b.batch_no}` ? '...' : '🔄 خلفيات'}</button>{onReset && !b.reset_at && <> <button onClick={async () => { if (!window.confirm(`إلغاء وسم «مطبوع» عن موظفي الدفعة #${b.batch_no}؟ سيعودون للظهور في الدفعات القادمة.`)) return; setBusy(`r${b.batch_no}`); try { await onReset(b); setItems((await api.get(`${kind.basePath}/batches`)).data.items || []); } catch (e) { alertErr(e); } finally { setBusy(null); } }} disabled={busy === `r${b.batch_no}`} style={btn('#f1f5f9', '#475569', { padding: '4px 10px', fontSize: 11.5 })} data-testid={`print-batch-reset-${b.batch_no}`}>{busy === `r${b.batch_no}` ? '...' : '↩️ إلغاء الوسم'}</button></>}{b.reset_at && <Badge color="#94a3b8">أُلغي الوسم</Badge>}</td>
+                  <td style={{ ...td, padding: '5px 6px', minWidth: 150 }}><div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}><button onClick={() => redownload(b)} disabled={busy === b.batch_no} style={btn('#e3f2fd', '#1565c0', { padding: '4px 10px', fontSize: 11.5, whiteSpace: 'nowrap' })} data-testid={`print-batch-redl-${b.batch_no}`}>{typeof busy === 'string' && busy.startsWith(`${b.batch_no}:`) ? busy.split(':')[1] : busy === b.batch_no ? '...' : '⬇️ إعادة تنزيل'}</button> <button onClick={() => backs(b)} disabled={busy === `b${b.batch_no}`} style={btn('#fff3e0', '#e65100', { padding: '4px 10px', fontSize: 11.5, whiteSpace: 'nowrap' })} data-testid={`print-batch-back-${b.batch_no}`}>{busy === `b${b.batch_no}` ? '...' : '🔄 خلفيات'}</button>{onReset && !b.reset_at && <> <button onClick={async () => { if (!window.confirm(`إلغاء وسم «مطبوع» عن موظفي الدفعة #${b.batch_no}؟ سيعودون للظهور في الدفعات القادمة.`)) return; setBusy(`r${b.batch_no}`); try { await onReset(b); setItems((await api.get(`${kind.basePath}/batches`)).data.items || []); } catch (e) { alertErr(e); } finally { setBusy(null); } }} disabled={busy === `r${b.batch_no}`} style={btn('#f1f5f9', '#475569', { padding: '4px 10px', fontSize: 11.5 })} data-testid={`print-batch-reset-${b.batch_no}`}>{busy === `r${b.batch_no}` ? '...' : '↩️ إلغاء الوسم'}</button></>}{b.reset_at && <Badge color="#94a3b8">أُلغي الوسم</Badge>}{kind.basePath === '/cards' && <> <button onClick={() => remove(b, true)} disabled={busy === `d${b.batch_no}`} style={btn('#fff7ed', '#c2410c', { padding: '4px 10px', fontSize: 11.5, whiteSpace: 'nowrap' })} title="حذف الدفعة وإعادة طلابها إلى قائمة المطلوب طباعته" data-testid={`print-batch-restore-${b.batch_no}`}>{busy === `d${b.batch_no}` ? '...' : '↩️ حذف وإعادة للمطلوب'}</button> <button onClick={() => remove(b, false)} disabled={busy === `d${b.batch_no}`} style={btn('#f1f5f9', '#475569', { padding: '4px 10px', fontSize: 11.5 })} title="حذف من السجل فقط" data-testid={`print-batch-delete-${b.batch_no}`}>🗑️</button></>}</div></td>
                 </tr>))}
             </tbody>
           </table>

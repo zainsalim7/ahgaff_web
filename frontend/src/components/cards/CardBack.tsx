@@ -11,7 +11,9 @@ export const CardBackEditor: React.FC<{ facultyId: string; template: string; bas
   const [preview, setPreview] = useState('');
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState('');
-  const load = useCallback(async () => { try { const r = await api.get(`${basePath}/back-settings`); setD(r.data); setLinesText((r.data.lines || []).join('\n')); } catch (e) { alertErr(e); } }, [basePath]);
+  const isStudents = basePath === '/cards';
+  const [scope, setScope] = useState<'faculty' | 'global'>('faculty');
+  const load = useCallback(async () => { try { const r = await api.get(`${basePath}/back-settings`, { params: isStudents && facultyId ? { faculty_id: facultyId } : {} }); setD(r.data); setLinesText((r.data.lines || []).join('\n')); setScope(r.data.faculty_override ? 'faculty' : (r.data.can_edit ? 'global' : 'faculty')); } catch (e) { alertErr(e); } }, [basePath, facultyId, isStudents]);
   useEffect(() => { load(); }, [load]);
   const refreshPreview = useCallback(async () => {
     if (!facultyId && basePath === '/cards') return;
@@ -19,38 +21,55 @@ export const CardBackEditor: React.FC<{ facultyId: string; template: string; bas
   }, [facultyId, basePath]);
   useEffect(() => { refreshPreview(); }, [refreshPreview, template]);
   if (!d) return null;
+  const perFaculty = isStudents && !!facultyId && scope === 'faculty';
+  const canEdit = perFaculty ? !!d?.can_edit_faculty : !!d?.can_edit;
   const save = async () => {
     setSaving(true); setMsg('');
     try {
-      const r = await api.put(`${basePath}/back-settings`, { enabled: d.enabled, title: d.title, lines: linesText.split('\n').map((x) => x.trim()).filter(Boolean), footer_note: d.footer_note, show_contact: d.show_contact });
+      const r = await api.put(`${basePath}/back-settings`, { enabled: d.enabled, title: d.title, lines: linesText.split('\n').map((x) => x.trim()).filter(Boolean), footer_note: d.footer_note, show_contact: d.show_contact }, { params: perFaculty ? { faculty_id: facultyId } : {} });
       setMsg(r.data.message); setD({ ...d, ...r.data }); refreshPreview();
     } catch (e) { alertErr(e); } finally { setSaving(false); }
   };
+  const useGlobal = async () => {
+    if (!window.confirm('إلغاء تخصيص خلفية هذه الكلية والعودة إلى الخلفية العامة؟')) return;
+    setSaving(true); setMsg('');
+    try { const r = await api.delete(`${basePath}/back-settings`, { params: { faculty_id: facultyId } }); setMsg(r.data.message); setD({ ...d, ...r.data }); setLinesText((r.data.lines || []).join('\n')); refreshPreview(); } catch (e) { alertErr(e); } finally { setSaving(false); }
+  };
+  const startCustomize = () => { if (d.global) { setD({ ...d, title: d.global.title, footer_note: d.global.footer_note, show_contact: d.global.show_contact, enabled: d.global.enabled }); setLinesText((d.global.lines || []).join('\n')); } setScope('faculty'); };
   const reset = () => { if (!window.confirm('استعادة التعليمات الافتراضية؟')) return; setD({ ...d, title: d.defaults.title, footer_note: '' }); setLinesText(d.defaults.lines.join('\n')); };
   const lineCount = linesText.split('\n').filter((x) => x.trim()).length;
   return (
     <div style={{ direction: 'rtl', marginTop: 18, borderTop: '2px dashed #e2e8f0', paddingTop: 14 }} data-testid="card-back-editor">
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f2440', flex: 1 }}>{title || '🔄 خلفية البطاقة (موحدة لكل الكليات)'}</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: '#0f2440', flex: 1 }}>{title || (isStudents ? '🔄 خلفية البطاقة' : '🔄 خلفية البطاقة')}</div>
+        {isStudents && facultyId && <Badge color={d.faculty_override ? '#6a1b9a' : '#64748b'} testID="card-back-scope-badge">{d.faculty_override ? '🎓 مخصّصة لهذه الكلية' : '🏛️ تستخدم الخلفية العامة'}</Badge>}
         <Badge color={d.enabled ? '#16a34a' : '#94a3b8'}>{d.enabled ? 'مفعّلة' : 'معطّلة'}</Badge>
       </div>
-      <div style={{ fontSize: 12, color: '#64748b', margin: '4px 0 10px', lineHeight: 1.8 }}>تُطبع الخلفية بلون القالب المختار لكل كلية تلقائياً (الشريط، الخط، الاتجاه)، والتعليمات والتذييل موحّدة على مستوى الجامعة. بيانات التواصل (العنوان/الهاتف/الموقع) تُؤخذ من إعدادات الجامعة.</div>
+      {isStudents && facultyId && (
+        <div style={{ display: 'flex', gap: 6, margin: '6px 0 8px', flexWrap: 'wrap' }} data-testid="card-back-scope">
+          <button onClick={() => setScope('faculty')} style={btn(scope === 'faculty' ? '#6a1b9a' : '#f3e5f5', scope === 'faculty' ? '#fff' : '#6a1b9a', { padding: '4px 12px', fontSize: 12 })} data-testid="card-back-scope-faculty">🎓 خلفية هذه الكلية</button>
+          {d.can_edit && <button onClick={() => { setScope('global'); if (d.global) { setD({ ...d, ...d.global }); setLinesText((d.global.lines || []).join('\n')); } }} style={btn(scope === 'global' ? '#0f2440' : '#f1f5f9', scope === 'global' ? '#fff' : '#0f2440', { padding: '4px 12px', fontSize: 12 })} data-testid="card-back-scope-global">🏛️ الخلفية العامة للجامعة</button>}
+          {perFaculty && !d.faculty_override && d.can_edit_faculty && <button onClick={startCustomize} style={btn('#ede7f6', '#4527a0', { padding: '4px 12px', fontSize: 12 })} data-testid="card-back-customize">✏️ تخصيص لهذه الكلية</button>}
+          {perFaculty && d.faculty_override && d.can_edit_faculty && <button onClick={useGlobal} disabled={saving} style={btn('#f1f5f9', '#475569', { padding: '4px 12px', fontSize: 12 })} data-testid="card-back-use-global">↩️ العودة للخلفية العامة</button>}
+        </div>
+      )}
+      <div style={{ fontSize: 12, color: '#64748b', margin: '4px 0 10px', lineHeight: 1.8 }}>{isStudents ? 'لكل كلية خلفيتها الخاصة (العنوان والتعليمات والتذييل) تُغطّي الخلفية العامة للجامعة؛ وإن لم تُخصَّص تُستخدم العامة. اللون والخط والاتجاه من قالب الكلية، وبيانات التواصل من إعدادات الجامعة.' : 'تُطبع الخلفية بلون القالب المختار تلقائياً، وبيانات التواصل (العنوان/الهاتف/الموقع) تُؤخذ من إعدادات الجامعة.'}</div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         <div>
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer', marginBottom: 8 }}><input type="checkbox" checked={!!d.enabled} disabled={!d.can_edit} onChange={(e) => setD({ ...d, enabled: e.target.checked })} data-testid="card-back-enabled" /> تفعيل طباعة الخلفية</label>
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer', marginBottom: 8 }}><input type="checkbox" checked={!!d.enabled} disabled={!canEdit} onChange={(e) => setD({ ...d, enabled: e.target.checked })} data-testid="card-back-enabled" /> تفعيل طباعة الخلفية</label>
           <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 3 }}>العنوان</div>
-          <input value={d.title || ''} disabled={!d.can_edit} onChange={(e) => setD({ ...d, title: e.target.value })} style={{ ...inp, marginBottom: 8 }} data-testid="card-back-title" />
+          <input value={d.title || ''} disabled={!canEdit} onChange={(e) => setD({ ...d, title: e.target.value })} style={{ ...inp, marginBottom: 8 }} data-testid="card-back-title" />
           <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 3 }}>بنود التعليمات (سطر لكل بند — حتى 10، الترقيم تلقائي) <Badge color="#1565c0">{lineCount}</Badge></div>
-          <textarea value={linesText} disabled={!d.can_edit} onChange={(e) => setLinesText(e.target.value)} rows={9} style={{ ...inp, resize: 'vertical', lineHeight: 1.8, fontFamily: 'inherit', marginBottom: 8 }} data-testid="card-back-lines" />
+          <textarea value={linesText} disabled={!canEdit} onChange={(e) => setLinesText(e.target.value)} rows={9} style={{ ...inp, resize: 'vertical', lineHeight: 1.8, fontFamily: 'inherit', marginBottom: 8 }} data-testid="card-back-lines" />
           <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 3 }}>سطر ختامي في التذييل (اختياري)</div>
-          <input value={d.footer_note || ''} disabled={!d.can_edit} onChange={(e) => setD({ ...d, footer_note: e.target.value })} placeholder="مثال: عمادة شؤون الطلاب" style={{ ...inp, marginBottom: 8 }} data-testid="card-back-footer" />
-          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}><input type="checkbox" checked={!!d.show_contact} disabled={!d.can_edit} onChange={(e) => setD({ ...d, show_contact: e.target.checked })} data-testid="card-back-contact" /> إظهار بيانات تواصل الجامعة في التذييل</label>
-          {d.can_edit ? (
+          <input value={d.footer_note || ''} disabled={!canEdit} onChange={(e) => setD({ ...d, footer_note: e.target.value })} placeholder="مثال: عمادة شؤون الطلاب" style={{ ...inp, marginBottom: 8 }} data-testid="card-back-footer" />
+          <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 12.5, cursor: 'pointer' }}><input type="checkbox" checked={!!d.show_contact} disabled={!canEdit} onChange={(e) => setD({ ...d, show_contact: e.target.checked })} data-testid="card-back-contact" /> إظهار بيانات تواصل الجامعة في التذييل</label>
+          {canEdit ? (
             <div style={{ display: 'flex', gap: 6, marginTop: 10 }}>
-              <button onClick={save} disabled={saving} style={btn('#00796b')} data-testid="card-back-save">{saving ? '...' : '💾 حفظ الخلفية'}</button>
+              <button onClick={save} disabled={saving} style={btn('#00796b')} data-testid="card-back-save">{saving ? '...' : perFaculty ? '💾 حفظ خلفية الكلية' : '💾 حفظ الخلفية العامة'}</button>
               <button onClick={reset} style={btn('#f1f5f9', '#475569')} data-testid="card-back-reset">استعادة الافتراضي</button>
             </div>
-          ) : <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 8 }}>تحرير الخلفية متاح لمدير النظام فقط</div>}
+          ) : <div style={{ fontSize: 11.5, color: '#b45309', marginTop: 8 }}>{perFaculty ? 'تحرير خلفية الكلية متاح لمسؤول الكلية أو مدير النظام' : 'تحرير الخلفية العامة متاح لمدير النظام فقط'}</div>}
           {msg && <div style={{ fontSize: 12.5, color: '#2e7d32', marginTop: 6 }} data-testid="card-back-msg">{msg}</div>}
         </div>
         <div style={{ textAlign: 'center' }}>
