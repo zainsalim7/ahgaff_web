@@ -133,7 +133,7 @@ export default function ReportTeacherSummary() {
 
         {isAdmin && (
           <ReportFilters onRun={runReport} running={executing} hasRun={hasRun} disabled={!selectedTeacher} runLabel={!selectedTeacher ? 'اختر المعلم ثم نفّذ' : undefined} testID="teacher-selector">
-            <View style={{ flex: 1, minWidth: 280, maxWidth: 520, position: 'relative', zIndex: 50 }}>
+            <View style={{ flex: 1, minWidth: 280, position: 'relative', zIndex: 50 }}>
               <Text style={reportPage.label}>المعلم</Text>
               <TouchableOpacity onPress={() => setShowTeacherList(!showTeacherList)} style={styles.teacherInput} testID="teacher-input">
                 <Ionicons name="person-outline" size={16} color="#666" />

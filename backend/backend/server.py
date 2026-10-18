@@ -12016,7 +12016,7 @@ async def get_student_attendance_report(
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب الطالب
-    student = await db.students.find_one({"_id": ObjectId(student_id)})
+    student = await db.students.find_one({"_id": ObjectId(student_id)}) if ObjectId.is_valid(student_id) else None
     if not student:
         # محاولة البحث برقم القيد
         student = await db.students.find_one({"student_id": student_id})

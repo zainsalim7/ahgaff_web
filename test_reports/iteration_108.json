@@ -1,0 +1,55 @@
+{
+  "summary": "Regression run after the iteration_107 fixes. All 4 issues from iteration_107 are confirmed fixed: (a) teacher suggestion in /report-teacher-attendance can be clicked with a real mouse and the chip appears; (b) the run button is on the same row on /report-course, /report-absent-students and /report-teacher-summary; (c) /report-student?id= loads the student automatically; (d) StudentDetailedReport stats are chips. Backend: test_absence_excuses_app.py 23/23 passed. test_two_groups_same_cell.py ALL OK. New pytest test_iter108_reports_defcreds.py: 17/18 passed. The one failure is a pre-existing bug: GET /api/reports/student/<student_no> returns 500. Frontend: all requested flows were tested (admin, plus student and teacher views via an injected token, because web login is blocked for these roles with 403 'app only'). Everything works. Remaining issues: the /report-student admin filters are still not on one row, plus a few minor items.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/reports/student/{student_id}", "issue": "Returns 500 (bson InvalidId) when called with a student number such as '1001'. server.py:12019 calls ObjectId(student_id) before the student_id fallback. /report-student?id=<student_no> calls this endpoint on every preload, so backend.err.log fills with tracebacks and the browser console shows a 500. Fix: `student = await db.students.find_one({'_id': ObjectId(student_id)}) if ObjectId.is_valid(student_id) else None`."},
+      {"endpoint": "GET /api/reports/teacher-workload", "issue": "Not a bug, but the review request is inaccurate: course_filter is in teachers[i].summary.course_filter, not in the top-level summary. The values are correct: 2 courses, required_hours 45, course_filter true."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "/report-student?id=<student_no> preload (admin)", "issue": "The detailed report loads correctly, but the student picker still shows 'اختر طالب (91 طالب)'. The picker values are DB ids and the param is a student number, so the picker does not show the selected student. The hero subtitle stays generic until the user presses run.", "affected_selectors": ["[data-testid=student-picker]"]}
+    ],
+    "design_issues": [
+      {"screen": "/report-student (admin)", "issues": ["Filters are still NOT on one row. There are 3 rows: the search input (y=332), then the dept/course/student selects (y=384), then the run button on its own row (y=429). This page does not use ReportFilters like the other report pages.", "The filter card and detailed card are wider than the hero (x=213..1355 vs the hero's 226..1342), so they do not line up.", "Console warning 'Unexpected text node: . A text node cannot be a child of a <View>' appears 4 times when the detailed report renders. A stray '.' string is being rendered inside a View, in StudentDetailedReport or report-student."]},
+      {"screen": "/report-teacher-summary", "issues": ["The run button is on the same row, but it sits right next to the teacher input in the middle of the card (x=954). On the other report pages it is aligned to the far left, so the page looks inconsistent."]},
+      {"screen": "/report-teacher-delays", "issues": ["The KPI chips are rendered inside the filters card instead of below it like on the other ReportShell pages (minor)."]},
+      {"screen": "/report-student (STUDENT role) vs admin", "issues": ["Student 1001 sees 'المقررات 12' in the classic view, while the admin detailed view for the same student shows 'المقررات 10'. The course counts are inconsistent between the two code paths."]}
+    ]
+  },
+  "passed_flows": [
+    "report-teacher-attendance: typed 'حسن'; real mouse click on teacher-suggestion selects the teacher and selected-teacher-chip appears; clear works; run for 2026-01-01..06-30 gives 4 teacher rows and KPI chips; clicking a row expands a nested table; tab-by-lecture shows lecture-att-table with 26 rows",
+    "report-course: run button y-overlaps all 3 CourseFilter pickers; faculty -> department -> course (TEST180156) -> run gives students table (21 rows) and lectures tab (7 rows); ?courseId= preload works",
+    "report-absent-students: run is inline with the filters. Real data has no students above 15%, so the request was rewritten to min_absence_rate=0 to test the UI: 21 student-row-N; row expands; view-full-0 goes to /report-student?id=1001 and student-detailed-report is visible without pressing run; sr-* chips render",
+    "report-teacher-summary: the dropdown is position:absolute (empty-state did not move); selecting حسن صالح works; run gives teacher-courses-table (6 rows); row click goes to /report-course?courseId=...",
+    "report-student (admin): pick a student and run; the detailed view renders with compact chips (each 41px high) and no page errors",
+    "student role (token injected): /report-student shows hero, student-summary chips and student-courses table; home loads; no runtime errors",
+    "Smoke: attendance-overview (35 rows), warnings (KPIs + empty state + deprivations tab 4), daily 2026-04-14 (3 rows), lesson-completion (run is disabled until a selection, by design), teacher-workload (KPIs + teacher list, teacher selection works with mouse down/up), teacher-delays (1 row): no page errors and no API errors >= 400",
+    "default-credentials: students 92 / teachers 15 / employees 18 rows with summary chips; export downloads xlsx; teacher: not in the menu DOM, direct route redirects to /no-permission, API returns 403",
+    "card-settings back editor: contact fields toggle with the checkbox; save returns PUT 200 with message; preview blob image loads (1920x3030); values persist after reload (test data was reverted afterwards)",
+    "general-settings: faculty-excuse-window-{1,2,3,5,7,14} shown; set 7 then save (PUT 200), and after reload 7 is active; restored to 3"
+  ],
+  "test_report_links": ["/app/backend/tests/test_iter108_reports_defcreds.py", "/app/backend/tests/test_absence_excuses_app.py", "/app/backend/tests/test_two_groups_same_cell.py", "/app/test_reports/pytest/iter108.xml"],
+  "action_items": [
+    "Fix GET /api/reports/student/{id}: guard ObjectId(student_id) with ObjectId.is_valid so a student number falls back without a 500 (server.py ~12019).",
+    "Make the /report-student admin filters compact: use ReportFilters (search, dept, course and student on one row with the inline run button) and match the hero maxWidth/margins.",
+    "When preloading with ?id=<student_no>, map the number to the student's DB id so the picker shows the selected student.",
+    "Find the stray '.' text node rendered inside a <View> in the StudentDetailedReport/report-student render.",
+    "Optional: align the teacher-summary run button to the row end; move the teacher-delays KPIs out of the filter card; make the course counts consistent (12 vs 10) between the student classic view and the admin detailed view."
+  ],
+  "critical_code_review_comments": [
+    "notify_users (hr_common.py) correctly stringifies extra.data and passes it as FCM/Expo data. Note that the whole `extra` dict (including 'data') is also spread into the notification document, which is fine but stores push data in Mongo too.",
+    "server.py is very large (>13k lines). New endpoints should keep going into routes/* modules, as default_credentials and absence_excuses already do.",
+    "report-student.tsx is 903 lines and keeps two code paths (classic vs detailed). Consider removing the legacy getStudentReport call for admins, since it only produces 500s."
+  ],
+  "updated_files": ["/app/backend/tests/test_iter108_reports_defcreds.py"],
+  "success_rate": {"backend": "94% (17/18 new pytest; 23/23 absence excuses; two-groups ALL OK)", "frontend": "92% (all requested flows functional; /report-student admin layout still not compact)"},
+  "test_credentials": "admin/admin123 works on web. Student 1001/test1234 and teacher180156/teacher123 are rejected with 403 'app only' when logging in from the browser (Origin header), so tests used tokens from curl injected into localStorage.",
+  "seed_data_creation": "None kept. Card back contact fields and the faculty excuse_window_days were changed and then reverted (contact fields emptied, excuse window back to 3).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "There are no absences >= 15% in the data, so the absent-students UI can only be tested by rewriting the request (page.route) to min_absence_rate=0&course_id=698f671431cfba92c49a550d. Student and teacher web login are blocked, so get a token with curl (no Origin header) and set localStorage token/user. The CourseFilter pickers are custom modals: click [data-testid=course-filter-X], then [data-testid^=course-filter-X-option-]. The teacher-workload run button is tw-run-btn, not run-report-btn. The general-settings faculty select is the <select> containing the option '-- اختر كلية --'.",
+  "rca of the issue": "/api/reports/student/1001 500: get_student_attendance_report calls ObjectId(student_id) without is_valid. bson raises InvalidId before the `student_id` fallback is reached. report-student.tsx line 207 calls reportsAPI.getStudentReport(studentId) with the URL param (a student number) on preload, so the error happens on every visit."
+}

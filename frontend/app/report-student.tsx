@@ -194,6 +194,12 @@ export default function StudentReport() {
     if (paramId && !isStudent) { setSelectedStudent(String(paramId)); fetchStudentReport(String(paramId)); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [paramId]);
+  useEffect(() => {
+    if (!paramId || !students.length) return;
+    const match = students.find((st: any) => st.id === String(paramId) || String(st.student_id) === String(paramId));
+    if (match && match.id !== selectedStudent) setSelectedStudent(match.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paramId, students]);
 
   const fetchStudentReport = async (studentId: string) => {
     if (!studentId) {
@@ -424,14 +430,13 @@ export default function StudentReport() {
                 </View>
               </View>
 
-              {/* قائمة الطلاب */}
+              {/* 🔍 بحث بالاسم أو رقم القيد */}
               <View style={styles.filterRow}>
-                <Text style={styles.filterLabel}>الطالب</Text>
-                {/* 🔍 بحث بالاسم أو رقم القيد */}
-                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 8, borderWidth: 1, borderColor: '#e0e0e0', paddingHorizontal: 10, marginBottom: 8 }}>
+                <Text style={styles.filterLabel}>بحث</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: '#dde3ec', paddingHorizontal: 10, height: 36 }}>
                   <Ionicons name="search" size={16} color="#9c27b0" />
                   <TextInput
-                    style={{ flex: 1, paddingVertical: 8, paddingHorizontal: 8, fontSize: 14, color: '#333', textAlign: 'right' }}
+                    style={{ flex: 1, paddingHorizontal: 8, fontSize: 12.5, color: '#333', textAlign: 'right' }}
                     value={studentSearch}
                     onChangeText={(text) => {
                       setStudentSearch(text);
@@ -457,6 +462,11 @@ export default function StudentReport() {
                     </TouchableOpacity>
                   )}
                 </View>
+              </View>
+
+              {/* قائمة الطلاب */}
+              <View style={styles.filterRow}>
+                <Text style={styles.filterLabel}>الطالب</Text>
                 <View style={styles.pickerWrapper}>
                   <Picker
                     selectedValue={selectedStudent}
@@ -480,29 +490,20 @@ export default function StudentReport() {
                   </Text>
                 )}
               </View>
-            </View>
-          )}
 
-          {/* زر التنفيذ - للأدمن فقط */}
-          {!isStudent && (
-            <TouchableOpacity
-              style={[{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#1565c0', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 8, marginTop: 8, alignSelf: 'flex-start' }, (loading || !selectedStudent) && { opacity: 0.6 }]}
-              onPress={runReport}
-              disabled={loading || !selectedStudent}
-              testID="run-report-btn"
-            >
-              {loading ? (
-                <>
-                  <ActivityIndicator size="small" color="#fff" />
-                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>جاري التنفيذ...</Text>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="play" size={16} color="#fff" />
-                  <Text style={{ color: '#fff', fontSize: 14, fontWeight: '700' }}>{studentData ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
-                </>
+              {/* زر التنفيذ - للأدمن فقط */}
+              {!isStudent && (
+                <TouchableOpacity
+                  style={[{ flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 6, backgroundColor: '#1565c0', paddingHorizontal: 16, borderRadius: 8, height: 36, alignSelf: 'flex-end', marginRight: 'auto' as any }, (loading || !selectedStudent) && { opacity: 0.6 }]}
+                  onPress={runReport}
+                  disabled={loading || !selectedStudent}
+                  testID="run-report-btn"
+                >
+                  {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="play" size={14} color="#fff" />}
+                  <Text style={{ color: '#fff', fontSize: 12.5, fontWeight: '800' }}>{loading ? 'جاري التنفيذ...' : studentData || detailed ? 'إعادة التنفيذ' : 'تنفيذ التقرير'}</Text>
+                </TouchableOpacity>
               )}
-            </TouchableOpacity>
+            </View>
           )}
         </View>
         )}
@@ -518,7 +519,7 @@ export default function StudentReport() {
         {/* التقرير المفصّل الجديد (الإدارة) */}
         {!isStudent && detailed && !loading && (
           <>
-            <View style={{ flexDirection: 'row-reverse', gap: 8, marginHorizontal: 16, marginBottom: 12 }} testID="sr-mode-switch">
+            <View style={{ flexDirection: 'row-reverse', gap: 8, marginBottom: 10 }} testID="sr-mode-switch">
               {([['detailed', '📋 التقرير المفصّل'], ['summary', '📊 التقرير المختصر (جدول واحد)']] as const).map(([k, label]) => (
                 <TouchableOpacity key={k} onPress={() => setReportMode(k)} testID={`sr-mode-${k}`}
                   style={{ backgroundColor: reportMode === k ? '#1565c0' : '#fff', borderRadius: 20, paddingVertical: 8, paddingHorizontal: 16, borderWidth: 1, borderColor: '#1565c0' }}>
@@ -610,9 +611,8 @@ const styles = StyleSheet.create({
   },
   scrollView: {
     flex: 1,
-    padding: 16,
   },
-  content: { maxWidth: 1400, width: '100%', alignSelf: 'center' },
+  content: { paddingHorizontal: 16, paddingBottom: 40, maxWidth: 1400, width: '100%', alignSelf: 'center' },
   loadingFullScreen: {
     flex: 1,
     justifyContent: 'center',
