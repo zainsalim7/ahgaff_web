@@ -183,6 +183,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'assistant-settings', label: 'مرشد الأحقاف (الذكاء الاصطناعي) 🤖', icon: 'sparkles', path: '/assistant-settings', permissions: [], roles: ['admin'] },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
   { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', permissions: [], adminOnly: true },
+  { id: 'default-credentials', label: 'بيانات الدخول الافتراضية 🔑', icon: 'key', path: '/default-credentials', permissions: [], adminOnly: true },
   { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', permissions: [PERMISSIONS.MANAGE_ROLES] },
   { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', permissions: ['view_activity_logs'] },
   // الأرشيف الدراسي

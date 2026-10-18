@@ -210,6 +210,7 @@ export default function RootLayout() {
           <Stack.Screen name="hr-work-settings" options={{ title: 'إعدادات الدوام والفترات' }} />
           <Stack.Screen name="hr-leave-settings" options={{ title: 'إعدادات الإجازات' }} />
           <Stack.Screen name="app-versions" options={{ title: 'إعدادات تحديث التطبيقات' }} />
+          <Stack.Screen name="default-credentials" options={{ title: 'بيانات الدخول الافتراضية' }} />
           <Stack.Screen name="hr-annual-report" options={{ title: 'التقرير السنوي لشؤون الموظفين' }} />
           <Stack.Screen name="report-teacher-summary" options={{ title: 'ملخص المعلم' }} />
           <Stack.Screen name="report-teacher-attendance" options={{ title: 'حضور الأساتذة' }} />

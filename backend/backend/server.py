@@ -251,6 +251,7 @@ from routes.hr_locations import router as hr_locations_router
 from routes.hr_presence import router as hr_presence_router, presence_check_loop
 from routes.hr_shifts import router as hr_shifts_router
 from routes.app_versions import router as app_versions_router
+from routes.default_credentials import router as default_credentials_router
 from routes.hr_documents import router as hr_documents_router
 from routes.hr_home import router as hr_home_router
 from routes.hr_leave_types import router as hr_leave_types_router
@@ -18379,6 +18380,7 @@ app.include_router(hr_locations_router, prefix="/api")
 app.include_router(hr_presence_router, prefix="/api")
 app.include_router(hr_shifts_router, prefix="/api")
 app.include_router(app_versions_router, prefix="/api")
+app.include_router(default_credentials_router, prefix="/api")
 app.include_router(hr_letters_router, prefix="/api")
 app.include_router(hr_letters_public_router, prefix="/api")
 app.include_router(hr_cards_router, prefix="/api")
