@@ -1012,20 +1012,26 @@ class BackSettingsIn(BaseModel):
     lines: Optional[list] = None
     footer_note: Optional[str] = ""
     show_contact: Optional[bool] = True
+    contact_address: Optional[str] = ""
+    contact_phone: Optional[str] = ""
+    contact_website: Optional[str] = ""
     back1_x: Optional[float] = None
     back1_y: Optional[float] = None
     back2_x: Optional[float] = None
     back2_y: Optional[float] = None
 
 
+BACK_OVERRIDE_KEYS = ("title", "lines", "footer_note", "show_contact", "enabled", "contact_address", "contact_phone", "contact_website")
+
+
 async def _back_settings(db, faculty_id: Optional[str] = None) -> dict:
-    """خلفية البطاقة: الإعداد العام للجامعة، ويُغطّيه إعداد الكلية إن فعّلته (العنوان/التعليمات/التذييل)"""
+    """خلفية البطاقة: الإعداد العام للجامعة، ويُغطّيه إعداد الكلية إن فعّلته (العنوان/التعليمات/التذييل/بيانات التواصل)"""
     doc = await db.card_settings.find_one({"_id": "back_global"}) or {}
     out = {**DEFAULT_BACK_SETTINGS, **{k: v for k, v in doc.items() if k != "_id"}, "faculty_override": False}
     if faculty_id:
         fdoc = await db.card_settings.find_one({"_id": f"back_faculty_{faculty_id}"}) or {}
         if fdoc.get("enabled_override"):
-            out.update({k: v for k, v in fdoc.items() if k in ("title", "lines", "footer_note", "show_contact", "enabled")})
+            out.update({k: v for k, v in fdoc.items() if k in BACK_OVERRIDE_KEYS})
             out["faculty_override"] = True
     return out
 
@@ -1036,7 +1042,9 @@ async def get_back_settings(faculty_id: Optional[str] = None, current_user: dict
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
     g = await _back_settings(db)
-    out = {**await _back_settings(db, faculty_id), "defaults": DEFAULT_BACK_SETTINGS, "global": {k: g[k] for k in ("title", "lines", "footer_note", "show_contact", "enabled")},
+    uni = await db.university.find_one({}, {"address": 1, "phone": 1, "website": 1}) or {}
+    out = {**await _back_settings(db, faculty_id), "defaults": DEFAULT_BACK_SETTINGS, "global": {k: g.get(k) for k in BACK_OVERRIDE_KEYS},
+           "university_contact": {"address": uni.get("address", ""), "phone": uni.get("phone", ""), "website": uni.get("website", "")},
            "can_edit": current_user.get("role") == "admin", "can_edit_faculty": bool(faculty_id) and _can_manage(current_user, faculty_id)}
     return out
 
@@ -1052,13 +1060,16 @@ async def put_back_settings(data: BackSettingsIn, faculty_id: Optional[str] = No
         if not _can_manage(current_user, faculty_id):
             raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل خلفية بطاقات هذه الكلية")
         upd = {"enabled_override": True, "enabled": bool(data.enabled), "title": (data.title or "").strip() or DEFAULT_BACK_SETTINGS["title"], "lines": lines,
-               "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact), "updated_at": datetime.now(timezone.utc).isoformat()}
+               "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact),
+               "contact_address": (data.contact_address or "").strip()[:160], "contact_phone": (data.contact_phone or "").strip()[:60], "contact_website": (data.contact_website or "").strip()[:120],
+               "updated_at": datetime.now(timezone.utc).isoformat()}
         await db.card_settings.update_one({"_id": f"back_faculty_{faculty_id}"}, {"$set": upd}, upsert=True)
         await log_activity(current_user, "card_back_settings_update", "card_settings", f"back_faculty_{faculty_id}", "تحديث خلفية بطاقة الكلية", {"lines": len(lines)})
         return {"message": "تم حفظ خلفية بطاقة الكلية (تُغطّي الإعداد العام)", **await _back_settings(db, faculty_id)}
     if current_user.get("role") != "admin":
         raise HTTPException(status_code=403, detail="تحرير الخلفية العامة متاح لمدير النظام فقط — اختر كلية لتخصيص خلفيتها")
-    upd = {"enabled": bool(data.enabled), "title": (data.title or "").strip() or DEFAULT_BACK_SETTINGS["title"], "lines": lines, "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact)}
+    upd = {"enabled": bool(data.enabled), "title": (data.title or "").strip() or DEFAULT_BACK_SETTINGS["title"], "lines": lines, "footer_note": (data.footer_note or "").strip()[:300], "show_contact": bool(data.show_contact),
+           "contact_address": (data.contact_address or "").strip()[:160], "contact_phone": (data.contact_phone or "").strip()[:60], "contact_website": (data.contact_website or "").strip()[:120]}
     for k in ("back1_x", "back1_y", "back2_x", "back2_y"):
         v = getattr(data, k)
         if v is not None:
@@ -1175,7 +1186,8 @@ def _render_card_back_png(back: dict, template: str, font_key: str, portrait: bo
     fy = H - foot_h + 16
     f_small = F(21 if portrait else 19)
     if back.get("show_contact", True):
-        contact = [str(x) for x in [(uni or {}).get("address")] if x] + [f"\u202a{x}\u202c" for x in [(uni or {}).get("phone"), (uni or {}).get("website")] if x]
+        src = back if any(back.get(k) for k in ("contact_address", "contact_phone", "contact_website")) else {"contact_address": (uni or {}).get("address"), "contact_phone": (uni or {}).get("phone"), "contact_website": (uni or {}).get("website")}
+        contact = [str(x) for x in [src.get("contact_address")] if x] + [f"\u202a{x}\u202c" for x in [src.get("contact_phone"), src.get("contact_website")] if x]
         # بيانات التواصل في سطر أفقي واحد مفصولة بنقطة (وتلتفّ لسطر ثانٍ إن طالت)
         line, rows_ = "", []
         for c in contact[:3]:
