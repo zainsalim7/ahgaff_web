@@ -410,4 +410,6 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         c.restoreState()
     footer()
     c.showPage(); c.save()
-    return buf.getvalue()
+    from services.pdf_pages import decorate_multipage
+    return decorate_multipage(buf.getvalue(), ref=str(s.get("number_display") or ""), date=issued.replace("-", "/") + "م" if issued else "",
+                              verify=s.get("verify_url") or "", header_y_mm=f("header_bottom") + 5, footer_y_mm=24.5, margin_mm=f("margin_side"))

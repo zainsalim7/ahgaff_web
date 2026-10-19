@@ -157,4 +157,6 @@ def build_letter_pdf(letter: dict, settings: dict, verify_url: str) -> bytes:
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=A4, leftMargin=side, rightMargin=side, topMargin=top, bottomMargin=bottom + 14 * mm,
                       title=f"{title} - {snap.get('name', '')}", author="Al-Ahgaff University").build(el, onFirstPage=on_page, onLaterPages=on_page)
-    return buf.getvalue()
+    from services.pdf_pages import decorate_multipage
+    # HR: الـQR يتكرر أصلاً في كل صفحة عبر on_page → ترقيم + «تابع/يُتبع» فقط
+    return decorate_multipage(buf.getvalue(), ref=str(ref), date=str(date), mini_qr=False, header_y_mm=top / mm - 4, footer_y_mm=bottom / mm + 12, margin_mm=side / mm)
