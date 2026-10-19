@@ -25,6 +25,9 @@ export const ExcuseDetail: React.FC<{ sel: any; token: string; onDecided: () => 
 
   return (
     <div style={{ direction: 'rtl' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
+        <a href={`${base}/student-excuses/${sel.id}/form-pdf?token=${encodeURIComponent(token)}`} target="_blank" rel="noreferrer" style={{ ...btn('#b91c1c', { padding: '6px 12px', fontSize: 12.5 }), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }} data-testid="se-form-pdf">📄 استمارة PDF رسمية (مع صورة العذر)</a>
+      </div>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, fontSize: 13 }}>
         <div><label style={lbl}>الحالة</label><Badge text={STATUS_LABEL[sel.status]} color={STATUS_COLOR[sel.status]} testID="se-detail-status" /></div>
         <div><label style={lbl}>المسار</label><b data-testid="se-detail-route">{ROUTE_LABEL[sel.route]}</b></div>

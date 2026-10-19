@@ -359,6 +359,54 @@ async def download_attachment(excuse_id: str, idx: int, request: Request, token:
                              headers={"Content-Disposition": f"inline; filename*=UTF-8''{quote(att['name'])}"})
 
 
+@router.get("/{excuse_id}/form-pdf")
+async def excuse_form_pdf(excuse_id: str, request: Request, token: Optional[str] = None):
+    """📄 استمارة العذر الرسمية PDF (بيانات، غيابات، توجيه، قرار، توقيعات، صورة العذر)"""
+    from .excuse_form_pdf import build_excuse_form_pdf
+    from .deps import export_filename, export_headers, get_current_user_from_token
+    db = get_db()
+    auth = request.headers.get("authorization", "")
+    raw = auth[7:] if auth.lower().startswith("bearer ") else token
+    user = await get_current_user_from_token(raw) if raw else None
+    if not user:
+        raise HTTPException(status_code=401, detail="غير مصرح")
+    doc = await db.student_excuses.find_one({"_id": _oid(excuse_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    st = await _student_for(db, user, None) if user["role"] == UserRole.STUDENT else None
+    if not (st and str(st["_id"]) == doc["student_db_id"]) and not (_can_manage(user) and _in_scope(user, doc)):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    student = await db.students.find_one({"_id": ObjectId(doc["student_db_id"])}, {"phone": 1, "reference_number": 1}) or {}
+    images = []
+    for a in doc.get("attachments", []):
+        try:
+            content, ctype = storage_service.get_object(a["path"])
+            images.append((content, a.get("mime") or ctype, a.get("name", "")))
+        except Exception:
+            images.append((b"", "", a.get("name", "")))
+    if doc.get("items"):
+        head, rows = ["#", "المقرر", "التاريخ", "الوقت"], [[str(i + 1), it.get("course_name", ""), it.get("date", ""), it.get("start_time") or "—"] for i, it in enumerate(doc["items"])]
+    else:
+        head, rows = ["من تاريخ", "إلى تاريخ", "عدد الأيام", "المقرر"], [[doc.get("from_date", ""), doc.get("to_date", ""), str(doc.get("days", "")), doc.get("course_name") or "كل المقررات"]]
+    route = doc.get("route")
+    reviewer = {"registration": "مدير التسجيل / شؤون الطلاب", "dean": "عميد الكلية", "board": "مجلس الكلية"}.get(route, "")
+    decided = doc.get("status") if doc.get("status") in ("approved", "rejected", "needs_info") else None
+    board = f" — جلسة رقم {doc.get('board_session_no')} بتاريخ {doc.get('board_session_date')}" if doc.get("board_session_no") else ""
+    form = {
+        "kind_title": "استمارة طلب عذر غياب طالب", "university": "جامعة الأحقاف", "faculty": doc.get("faculty_name"), "department": doc.get("department_name"),
+        "ref_no": doc.get("ref_no"), "status_label": STATUS.get(doc.get("status"), doc.get("status")), "created_at": doc.get("created_at"),
+        "applicant": [("اسم الطالب", doc.get("student_name")), ("رقم القيد", doc.get("student_no")), ("الكلية", doc.get("faculty_name")), ("القسم", doc.get("department_name")),
+                      ("المستوى / الشعبة", f"{doc.get('level') or '—'} / {doc.get('section') or '—'}"), ("الهاتف", student.get("phone") or "—"),
+                      ("مقدّم الطلب", f"{doc.get('submitted_by_name') or ''} ({'من التطبيق' if doc.get('source') == 'app' else 'نيابةً عن الطالب' if doc.get('submitted_by_role') != 'student' else 'الطالب'})"), ("الرقم المرجعي", student.get("reference_number") or "—")],
+        "absences_head": head, "absences": rows, "description": doc.get("description"), "excuse_type_label": EXCUSE_TYPES.get(doc.get("excuse_type"), doc.get("excuse_type")),
+        "attachments_count": len(doc.get("attachments", [])), "route_label": ROUTES.get(route, route), "reviewer_label": reviewer,
+        "decision": decided, "decision_note": (doc.get("decision_note") or "") + board, "decided_by": doc.get("decided_by_name"), "decided_at": doc.get("decided_at"),
+        "signatures": ["الطالب / مقدّم الطلب", "مدير التسجيل", "عميد الكلية"] if route != "board" else ["الطالب / مقدّم الطلب", "عميد الكلية", "رئيس مجلس الكلية"],
+    }
+    pdf = build_excuse_form_pdf(form, images)
+    return StreamingResponse(iter([pdf]), media_type="application/pdf", headers=export_headers(export_filename("استمارة عذر غياب", doc.get("student_name", ""), doc.get("ref_no", ""), ext="pdf")))
+
+
 # ---------------- reviewers ----------------
 
 @router.get("")

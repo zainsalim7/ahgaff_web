@@ -381,6 +381,45 @@ def build_router(db, get_current_user, send_push_many=None, user_from_token=None
         headers = {"Content-Disposition": f"inline; filename*=UTF-8''{quote(att['name'])}"}
         return StreamingResponse(iter([content]), media_type=att.get("mime", "application/octet-stream"), headers=headers)
     # ---------------- Reviewer endpoints ----------------
+    @router.get("/{request_id}/form-pdf")
+    async def form_pdf(request_id: str, request: Request, token: Optional[str] = None):
+        """📄 استمارة تبرير غياب الأستاذ PDF (بيانات، محاضرات، توجيه، قرار، توقيعات، صورة العذر)"""
+        from routes.excuse_form_pdf import build_excuse_form_pdf
+        from routes.deps import export_filename, export_headers
+        auth = request.headers.get("authorization", "")
+        raw = auth[7:] if auth.lower().startswith("bearer ") else token
+        current_user = await user_from_token(raw) if raw and user_from_token else None
+        if not current_user:
+            raise HTTPException(status_code=401, detail="غير مصرح")
+        doc = await db.absence_justifications.find_one({"_id": ObjectId(request_id)})
+        if not doc or not await can_view(doc, current_user):
+            raise HTTPException(status_code=404, detail="الطلب غير موجود")
+        images = []
+        for a in doc.get("attachments", []):
+            try:
+                stream = await fs.open_download_stream(ObjectId(a["id"]))
+                images.append((await stream.read(), a.get("mime", ""), a.get("name", "")))
+            except Exception:
+                images.append((b"", "", a.get("name", "")))
+        teacher = await db.teachers.find_one({"_id": ObjectId(doc["teacher_record_id"])}, {"teacher_id": 1, "phone": 1}) if ObjectId.is_valid(doc.get("teacher_record_id") or "") else None
+        fac = await db.faculties.find_one({"_id": ObjectId(doc["faculty_id"])}, {"name": 1}) if ObjectId.is_valid(doc.get("faculty_id") or "") else None
+        rows = [[str(i + 1), l.get("course_name", ""), l.get("date", ""), f"{l.get('start_time') or ''}{(' - ' + l['end_time']) if l.get('end_time') else ''}", l.get("group") or "—"] for i, l in enumerate(doc.get("lectures", []))]
+        decided = doc.get("status") if doc.get("status") in ("approved", "rejected", "needs_info") else None
+        form = {
+            "kind_title": "استمارة تبرير غياب أستاذ عن محاضرة", "university": "جامعة الأحقاف", "faculty": (fac or {}).get("name"), "department": doc.get("department_name"),
+            "ref_no": doc.get("ref_no"), "status_label": REQUEST_STATUS_LABELS.get(doc.get("status"), doc.get("status")), "created_at": doc.get("created_at"),
+            "applicant": [("اسم الأستاذ", doc.get("teacher_name")), ("الرقم الوظيفي", (teacher or {}).get("teacher_id") or "—"), ("الكلية", (fac or {}).get("name") or "—"), ("القسم", doc.get("department_name")),
+                          ("الهاتف", (teacher or {}).get("phone") or "—"), ("إعادة تقديم", "نعم — بعد رفض سابق" if doc.get("resubmit_count") else "لا")],
+            "absences_head": ["#", "المقرر", "التاريخ", "الوقت", "المجموعة"], "absences": rows, "description": doc.get("description"),
+            "excuse_type_label": EXCUSE_TYPES.get(doc.get("excuse_type"), doc.get("excuse_type")), "attachments_count": len(doc.get("attachments", [])),
+            "route_label": "رئيس القسم ثم عميد الكلية", "reviewer_label": "رئيس القسم المختص / عميد الكلية",
+            "decision": decided, "decision_note": doc.get("decision_note") or "", "decided_by": doc.get("decided_by_name"), "decided_at": doc.get("decided_at"),
+            "signatures": ["الأستاذ مقدّم الطلب", "رئيس القسم", "عميد الكلية"],
+            "extra_notes": ["عند القبول تتحول المحاضرات المذكورة إلى «غائب بعذر» تلقائياً في النظام."],
+        }
+        pdf = build_excuse_form_pdf(form, images)
+        return StreamingResponse(iter([pdf]), media_type="application/pdf", headers=export_headers(export_filename("استمارة تبرير غياب أستاذ", doc.get("teacher_name", ""), doc.get("ref_no", ""), ext="pdf")))
+
     @router.get("")
     async def list_requests(status: Optional[str] = None, department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
         if current_user["role"] not in REVIEWER_ROLES:

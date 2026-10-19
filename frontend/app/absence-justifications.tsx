@@ -63,6 +63,9 @@ export default function AbsenceJustificationsPage() {
 
       {sel && (
         <Modal title={`طلب ${sel.ref_no} — ${sel.teacher_name}`} onClose={() => setSel(null)} width={820} testID="aj-detail">
+          <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8, direction: 'rtl' }}>
+            <a href={`${base}/absence-justifications/${sel.id}/form-pdf?token=${encodeURIComponent(token)}`} target="_blank" rel="noreferrer" style={{ ...btn('#b91c1c', { padding: '6px 12px', fontSize: 12.5 }), textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }} data-testid="aj-form-pdf">📄 استمارة PDF رسمية (مع صورة العذر)</a>
+          </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, fontSize: 13, direction: 'rtl' }}>
             <div><label style={lbl}>الحالة</label><Badge text={STATUS_LABEL[sel.status] || sel.status_label} color={STATUS_COLOR[sel.status] || '#64748b'} testID="aj-detail-status" /></div>
             <div><label style={lbl}>القسم</label>{sel.department_name || '—'}</div>
