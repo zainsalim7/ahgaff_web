@@ -560,8 +560,10 @@ def build_sheet_pdf(report: dict, issuer: str, generated_by: str) -> io.BytesIO:
                         + (f"  |  أُصدر بواسطة: {generated_by}" if generated_by else "") + f"  |  {datetime.now().strftime('%Y-%m-%d %H:%M')}", 150), st_small)]
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=landscape(A4), rightMargin=8 * mm, leftMargin=8 * mm, topMargin=8 * mm, bottomMargin=8 * mm, title="كشف الساعات الإضافية").build(el)
-    buf.seek(0)
-    return buf
+    from services.pdf_pages import number_pages
+    out = io.BytesIO(number_pages(buf.getvalue(), title="كشف الساعات الإضافية للأساتذة"))
+    out.seek(0)
+    return out
 
 
 def build_sheet_excel(report: dict, issuer: str) -> io.BytesIO:

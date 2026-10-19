@@ -19,6 +19,39 @@ def _ar(t) -> str:
     return get_display(arabic_reshaper.reshape(str(t or "")))
 
 
+def number_pages(pdf: bytes, title: str = "", footer_y_mm: float = 5.5, margin_mm: float = 12, only_multi: bool = True) -> bytes:
+    """للتقارير والكشوف: «n/N» أسفل الوسط + عنوان مختصر يمين الذيل، فقط إن زادت الصفحات عن 1 (افتراضياً)"""
+    from pypdf import PdfReader, PdfWriter
+    from reportlab.pdfgen import canvas
+    from reportlab.lib.units import mm
+
+    reader = PdfReader(io.BytesIO(pdf))
+    n = len(reader.pages)
+    if n <= 1 and only_multi:
+        return pdf
+    _fonts()
+    writer = PdfWriter()
+    for i, page in enumerate(reader.pages):
+        W, H = float(page.mediabox.width), float(page.mediabox.height)
+        ob = io.BytesIO(); c = canvas.Canvas(ob, pagesize=(W, H))
+        c.setFillColorRGB(0.42, 0.45, 0.5)
+        c.setFont("Amiri-Bold", 9); c.drawCentredString(W / 2, footer_y_mm * mm, f"{i + 1}/{n}")
+        if title:
+            c.setFont("Amiri", 8); c.drawRightString(W - margin_mm * mm, footer_y_mm * mm, _ar(title))
+        if i < n - 1:
+            c.setFont("Amiri", 8); c.drawString(margin_mm * mm, footer_y_mm * mm, _ar("يُتبع…"))
+        c.showPage(); c.save(); ob.seek(0)
+        page.merge_page(PdfReader(ob).pages[0])
+        writer.add_page(page)
+    out = io.BytesIO(); writer.write(out)
+    return out.getvalue()
+
+
+def number_pages_buf(buf: io.BytesIO, title: str = "", **kw) -> io.BytesIO:
+    out = io.BytesIO(number_pages(buf.getvalue(), title, **kw)); out.seek(0)
+    return out
+
+
 def decorate_multipage(pdf: bytes, *, ref: str = "", date: str = "", verify: str = "", mini_qr: bool = True, continuation: bool = True,
                        header_y_mm: float = 48, footer_y_mm: float = 24.5, margin_mm: float = 20, skip_qr_on_last: bool = True) -> bytes:
     """يرجع الـPDF كما هو إن كان صفحة واحدة؛ وإلا يضيف لكل صفحة: الرقم «n/N» أسفل الوسط، و«تابع الخطاب رقم … — بتاريخ …» تحت الكليشة

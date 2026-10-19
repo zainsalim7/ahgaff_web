@@ -73,5 +73,7 @@ def build_report_pdf(title: str, subtitle: str = "", kpis=None, sections=None, f
         el += [Spacer(1, 6 * mm), Paragraph(ar((footer or "") + (f"  |  أُصدر بواسطة: {generated_by}" if generated_by else "")), st_small)]
     buf = io.BytesIO()
     SimpleDocTemplate(buf, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm, title=title).build(el)
-    buf.seek(0)
-    return buf
+    from services.pdf_pages import number_pages
+    out = io.BytesIO(number_pages(buf.getvalue(), title=title))
+    out.seek(0)
+    return out
