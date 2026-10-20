@@ -399,8 +399,9 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
 
     qr = qrcode.make(s.get("verify_url") or s.get("verify_token", "") or "DRAFT", box_size=4, border=1)
     qb = io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)
-    c.drawImage(ImageReader(qb), W - 48 * mm, 30 * mm, 26 * mm, 26 * mm)
-    c.setFont("Helvetica", 8); c.drawCentredString(W - 35 * mm, 26 * mm, "Scan to verify")
+    qr_y = max(30 * mm, y - 36 * mm)  # 📍 يلتصق بنهاية المتن إن كانت الصفحة شبه فارغة (بدل ثبوته بفراغ كبير أسفلها)، ولا ينزل عن 30مم فوق الذيل
+    c.drawImage(ImageReader(qb), W - 48 * mm, qr_y, 26 * mm, 26 * mm)
+    c.setFont("Helvetica", 8); c.drawCentredString(W - 35 * mm, qr_y - 4 * mm, "Scan to verify")
     if draft:
         c.saveState()
         c.setFillColorRGB(0.85, 0.15, 0.15, alpha=0.13)
