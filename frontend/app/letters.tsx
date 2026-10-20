@@ -75,8 +75,8 @@ export default function LettersPage() {
   }, [lhId, tplId, tab]); // eslint-disable-line react-hooks/exhaustive-deps
   const saveSectionsAsLetterheadDefault = async () => {
     try {
-      // 🖋️ لا نحفظ ما جاء من القالب (تحية/موضوع/مستلم) كافتراضي للكليشة — فقط تعديلات المستخدم الفعلية (secOverrides) فوق افتراضي الكليشة الحالي (بلا قالب)
-      const { data } = await api.get('/letters/section-defaults', { params: { letterhead_id: lhId } });
+      // 🖋️ الأساس: ما هو محفوظ فعلاً في الكليشة (بلا افتراضيات نظام/قالب) + تعديلات المستخدم الفعلية فقط فوقها
+      const { data } = await api.get(`/letterheads/${lhId}`);
       const toSave = { ...(data.sections || {}), ...secOverrides };
       await api.patch(`/letterheads/${lhId}/sections`, { sections: toSave });
       const r2 = await api.get('/letters/section-defaults', { params: { letterhead_id: lhId, template_id: tplId || undefined } });
@@ -357,8 +357,8 @@ export default function LettersPage() {
         <div style={card} data-testid="letter-templates">
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><b>قوالب الخطابات ({templates.length})</b>{canEdit && <button onClick={() => { setErr(''); setTform({ name: '', subject: '', body: '', signatory_name: settings?.default_signatory_name || '', signatory_title: settings?.default_signatory_title || '', concerns: 'none', is_active: true }); }} style={btn('#16a34a')} data-testid="letter-template-add">+ قالب</button>}</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['القالب', 'الموضوع', 'يخص', 'الموقِّع', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title || (t.signatory_position_id ? '🖋️ من دليل المناصب' : '—')}</td><td style={{ ...td, whiteSpace: 'nowrap' }}>{canEdit ? (<><button onClick={() => { setErr(''); setTform(t); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })}>حذف</button></>) : <button onClick={() => { pickTpl(t.id); setTab('issue'); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-use-${t.id}`}>استخدام</button>}</td></tr>)}</tbody></table>
-          {tform && <Modal title={tform.id ? 'تعديل قالب' : 'قالب جديد'} onClose={() => setTform(null)} width={720} testID="letter-template-modal">
+            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title || (t.signatory_position_id ? '🖋️ من دليل المناصب' : '—')}</td><td style={{ ...td, whiteSpace: 'nowrap' }}>{canEdit ? (<><button onClick={() => { setErr(''); setTform(t); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-delete-${t.id}`}>حذف</button></>) : <button onClick={() => { pickTpl(t.id); setTab('issue'); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-use-${t.id}`}>استخدام</button>}</td></tr>)}</tbody></table>
+          {tform && <Modal title={tform.id ? 'تعديل قالب' : 'قالب جديد'} onClose={() => { setTform(null); setErr(''); }} width={720} testID="letter-template-modal">
             {!!err && <div style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 10 }} data-testid="letter-template-modal-error">{err}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="اسم القالب *"><input style={inp} value={tform.name} onChange={(e) => setTform({ ...tform, name: e.target.value })} data-testid="lt-name" /></Field>
@@ -370,7 +370,7 @@ export default function LettersPage() {
             </div>
             <Field label="الموقِّع (المرسِل)"><SignatoryPicker value={{ position_id: tform.signatory_position_id || '', name: tform.signatory_name || '', title: tform.signatory_title || '' }} onChange={(v) => setTform((f: any) => ({ ...f, signatory_position_id: v.position_id, signatory_name: v.name, signatory_title: v.title }))} defaultLabel="الافتراضي من الكليشة (يُحدَّد عند الإصدار)" hint="اختر منصباً من الدليل أو أدخل الاسم والصفة يدوياً." testID="lt-signatory" /></Field>
             <Field label="المتن * — منسّق، والمتغيرات تُدرج بنقرة عند المؤشر"><StatementBodyEditor value={tform.body || ''} onChange={(h) => setTform((f: any) => ({ ...f, body: h }))} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={180} testID="lt-body" /></Field>
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><button onClick={saveTpl} style={btn('#16a34a')} data-testid="lt-save">حفظ</button><button onClick={() => setTform(null)} style={btn('#f1f5f9', { color: '#0f2440' })}>إلغاء</button></div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><button onClick={saveTpl} style={btn('#16a34a')} data-testid="lt-save">حفظ</button><button onClick={() => { setTform(null); setErr(''); }} style={btn('#f1f5f9', { color: '#0f2440' })}>إلغاء</button></div>
           </Modal>}
         </div>
       )}
@@ -419,7 +419,7 @@ export default function LettersPage() {
                   <button onClick={() => dlDocx(l.id, `خطاب ${l.number_display}`)} style={btn('#eff6ff', { color: '#1d4ed8', padding: '5px 10px', fontSize: 12 })} title="تصدير Word قابل للتحرير" data-testid={`letter-docx-${l.id}`}>Word</button>{' '}
                   <button onClick={() => dlPdf(l.id, `خطاب ${l.number_display}`, false)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} title="PDF بلا كليشة — للطباعة على ورق مطبوع مسبقاً" data-testid={`letter-pdf-plain-${l.id}`}>🖨️ بلا كليشة</button>{' '}
                   {canEdit && <><button onClick={async () => { const { data } = await api.get(`/letters/${l.id}`); saveAsTemplate(data); }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '5px 10px', fontSize: 12 })} title="حفظ هذا الخطاب كقالب" data-testid={`letter-template-from-${l.id}`}>⭐ قالب</button>{' '}</>}
-                  <button onClick={async () => { await api.post(`/letters/${l.id}/${l.is_revoked ? 'restore' : 'revoke'}`); loadLog(); }} style={btn('#f1f5f9', { color: l.is_revoked ? '#16a34a' : '#b91c1c', padding: '5px 10px', fontSize: 12 })}>{l.is_revoked ? 'استرجاع' : 'إلغاء'}</button>
+                  <button onClick={async () => { await api.post(`/letters/${l.id}/${l.is_revoked ? 'restore' : 'revoke'}`); loadLog(); }} style={btn('#f1f5f9', { color: l.is_revoked ? '#16a34a' : '#b91c1c', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-revoke-restore-${l.id}`}>{l.is_revoked ? 'استرجاع' : 'إلغاء'}</button>
                 </>)}
               </td></tr>)}</tbody></table>
           </div>

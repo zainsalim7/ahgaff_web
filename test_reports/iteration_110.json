@@ -1,0 +1,37 @@
+{
+  "summary": "إعادة اختبار وحدة الخطابات بعد إصلاحات iteration_109. كل الإصلاحات المطلوبة تعمل: (1) الخطاب الطويل: 45 فقرة تنتج 5 صفحات، و40 فقرة تنتج 4 صفحات. كل الفقرات P00..P44 موجودة (تحقّقنا بعلامات لاتينية داخل كل فقرة وعبر get_text('words')، وبعرض الصفحات صوراً). لا يدخل أي نص منطقة الذيل، فأسفل آخر سطر عند y≈686pt والحد 689pt. الترقيم 1/5 حتى 5/5 صحيح، و'يتبع…' وترويسة 'تابع الخطاب رقم…' تظهران. (2) PUT وDELETE على /letter-templates/notanid يُرجعان 404 'القالب غير موجود'. (3) البحث بالرقم المعكوس '62/خ/32' يُرجع الخطاب '23/خ/26' عبر API والواجهة، ونص لا يطابق شيئاً يُرجع 0. (4) خطأ الاسم المكرر يظهر داخل النافذة (letter-template-modal-error) فوق كل العناصر، ويُمسح عند فتح نافذة جديدة وبعد الحفظ الناجح. (5) 'حفظ كافتراضي للكليشة' مع قالب تحيته 'TPL_GREET_LEAK': عدّلنا التوقيع فقط، فبقيت تحية الكليشة 'السلام عليكم…' وتحدّث التوقيع. (6) العرض السريع يفتح فوراً مع 'جاري التحميل…' (أبطأنا الطلب 1.5 ثانية لرؤيتها) ثم يعرض البيانات، والتاريخ 2026-10-20 بـ dir=ltr. لا رجوع في: المسودة ثم PDF، والاعتماد ثم Word، والإلغاء والاسترجاع، وكشف الساعات الإضافية PDF، وتقرير HR السنوي PDF. نجحت 28/28 من اختبارات pytest.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PATCH /api/letterheads/{id}/sections (عبر saveSectionsAsLetterheadDefault)", "issue": "الحفظ يدمج كل القيم الفعلية من GET /letters/section-defaults، بما فيها افتراضيات النظام للمستلم والتحية والموضوع والخاتمة، مع التعديلات. النتيجة نسخة مجمّدة من كل الأقسام داخل الكليشة، فلن تصلها تغييرات افتراضيات النظام لاحقاً. الأفضل حفظ الأقسام المخزّنة فعلاً في الكليشة (GET /letterheads/{id}).sections مع secOverrides فقط."},
+      {"endpoint": "tests/test_letters_log_templates_qr_pdf.py::TestFinalizeRevoke", "issue": "اختبار الرجوع يعتمد خطاباً حقيقياً فيستهلك رقماً تسلسلياً من 'الترقيم العام' في كل تشغيل (24/خ/26 هذه المرة، وقبله 23/خ/26) ويترك خطاباً ملغى باسم TEST_. يُفضَّل سلسلة ترقيم خاصة بالاختبار."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Template modal", "issue": "err مشترك بين النافذة والصفحة: رسالة الاسم المكرر تظهر داخل النافذة وفي شريط الصفحة خلفها معاً. وعند إغلاق النافذة بـ إلغاء أو ✕ تبقى رسالة الصفحة حتى فتح نافذة جديدة.", "selector": "[data-testid='letter-template-modal-error']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/letters سجل الخطابات + محرر الأقسام", "issues": ["حقول التاريخ (من/إلى تاريخ، وإدراج تاريخ في المحرر) تستخدم منتقي المتصفح الأصلي mm/dd/yyyy بدل منتقٍ عربي موحّد", "زر 'حذف' القالب وزر 'إلغاء/استرجاع' في السجل بلا data-testid"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_iter110_fixes.py", "/app/backend/tests/test_letters_log_templates_qr_pdf.py", "/app/backend/tests/long_letter_visual_check.py", "/app/test_reports/pytest/pytest_iter110.xml"],
+  "action_items": [
+    "اختياري: في saveSectionsAsLetterheadDefault استخدام (GET /letterheads/{lhId}).sections بدل section-defaults كأساس للدمج حتى لا تُجمَّد افتراضيات النظام في الكليشة",
+    "اختياري: فصل حالة الخطأ في نافذة القالب (tplErr) عن err الصفحة، أو مسحها عند الإغلاق",
+    "اختياري: إضافة data-testid لزرّي حذف القالب وإلغاء/استرجاع الخطاب"
+  ],
+  "critical_code_review_comments": [
+    "إصلاح ensure_y(space, cur) صحيح: draw_rich يمرّر y الحالية، ولا يوجد مستدعٍ آخر لـ draw_rich بدالة ensure ذات وسيط واحد (statements.py لا يمرّر ensure)",
+    "letters.tsx: عند فتح مسودة (loadDraft) تُحمَّل d.inputs.sections كاملة في secOverrides، فإن احتوت أقسام القالب ثم ضغط المستخدم 'حفظ كافتراضي للكليشة' قد يعود التسرّب في هذا المسار. لم يُختبر.",
+    "handleSec في LetterSectionsEditor يضيف تعديل layout متزامناً (المحاذاة والحجم) عند تحرير التوقيع، فيظهر العدّاد '(2 تعديل)' لتعديل واحد. هذا سلوك مقبول لكنه قد يربك المستخدم"
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_iter110_fixes.py", "/app/backend/tests/long_letter_visual_check.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "قوالب TEST_leak_tpl وTEST_unique_tpl_ui110: أُنشئت ثم حُذفت. 'الكليشة العامة' 6ac66145ff8dc59d8f539a1c: عُدّلت أثناء اختبار الواجهة ثم أُعيدت إلى sections: {}. اختبار الرجوع أنشأ خطاباً ملغى TEST_اعتماد_تجريبي برقم 24/خ/26.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "شغّل: REACT_APP_BACKEND_URL=... pytest backend/tests/test_letters_iter110_fixes.py backend/tests/test_letters_log_templates_qr_pdf.py. للتحقق البصري من الخطاب الطويل: python3 backend/tests/long_letter_visual_check.py 45، يحفظ الصور في /tmp/longpdf ويطبع الفقرات المفقودة. كل فقرة تحمل علامة P00..P44 قابلة للاستخراج. تسجيل الدخول في الواجهة: أول input ثم input[type=password] ثم النص 'تسجيل الدخول'. محرر الأقسام: [data-testid='letter-layout-<key>'] .ProseMirror. اختيار القالب: select[data-testid='letter-template'].",
+  "test_credentials": "admin/admin123"
+}
