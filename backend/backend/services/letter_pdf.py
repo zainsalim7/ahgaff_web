@@ -226,9 +226,10 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     c.setFillColorRGB(0, 0, 0)
 
     y = H - f("start_y") * mm
+    BOTTOM_SAFE = 54 * mm  # 📏 الحد الأدنى المسموح به فوق الذيل — صفحة جديدة فقط عند الاقتراب الفعلي منه (لا حجز زائد)
     def ensure(space):
         nonlocal y
-        if y - space < 60 * mm:
+        if y - space < BOTTOM_SAFE:
             footer(); c.showPage(); header(); y = H - (f("header_bottom") + 13) * mm
 
     def ensure_y(space):
@@ -371,7 +372,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     if "{جدول_الأسماء}" not in body and has_table and s.get("auto_table", True):
         y -= f("gap_table_before") * mm; draw_table(s["table"]); y -= f("gap_table_after") * mm
     y -= f("gap_closing") * mm
-    ensure(8 * mm)  # 📏 سطر الخاتمة نفسه فقط — التوقيع والـQR يتكيّفان لاحقاً مع ما تبقّى من المساحة (لا يُحجز لهما فراغ إضافي مسبقاً)
+    ensure(4 * mm)  # 📏 سطر الخاتمة نفسه فقط — التوقيع والـQR يتكيّفان لاحقاً مع ما تبقّى من المساحة (لا يُحجز لهما فراغ إضافي مسبقاً)
     if "closing" in secs:
         rich_sec("closing", LM, RM, default_size=BODY)
     elif L.get("show_closing"):
