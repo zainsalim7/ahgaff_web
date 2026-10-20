@@ -59,6 +59,9 @@ DEFAULT_LAYOUT = {
     "gap_closing": 4,         # قبل الخاتمة
     "gap_signature": 16,      # بين الخاتمة والتوقيع
     "watermark": "",
+    "qr_enabled": True,       # 🔳 إظهار/إخفاء رمز التحقق
+    "qr_size": 26,            # حجم رمز التحقق (مم) — بجانب التوقيع
+    "qr_style": "normal",     # normal: بجانب التوقيع | footer: صغير في الذيل (لا يأخذ حيزاً من المتن)
 }
 
 
@@ -398,11 +401,25 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
             c.drawImage(sig_img, sig_cx - 19 * mm, y - 20 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); name_y = y - 25 * mm
         c.setFont(rt_font(sfam, bool(L.get("signature_name_bold", False))), f("signature_name_font")); c.drawCentredString(sig_cx, name_y, rt_fit(ar(sig_name), sfam, bool(L.get("signature_name_bold", False))))
 
-    qr = qrcode.make(s.get("verify_url") or s.get("verify_token", "") or "DRAFT", box_size=4, border=1)
-    qb = io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)
-    qr_y = max(30 * mm, y - 36 * mm)  # 📍 يلتصق بنهاية المتن إن كانت الصفحة شبه فارغة (بدل ثبوته بفراغ كبير أسفلها)، ولا ينزل عن 30مم فوق الذيل
-    c.drawImage(ImageReader(qb), W - 48 * mm, qr_y, 26 * mm, 26 * mm)
-    c.setFont("Helvetica", 8); c.drawCentredString(W - 35 * mm, qr_y - 4 * mm, "Scan to verify")
+    qr_enabled = bool(L.get("qr_enabled", True))
+    qr_style = str(L.get("qr_style") or "normal")
+    if qr_enabled:
+        qr = qrcode.make(s.get("verify_url") or s.get("verify_token", "") or "DRAFT", box_size=4, border=1)
+        qb = io.BytesIO(); qr.save(qb, format="PNG"); qb.seek(0)
+        qr_img = ImageReader(qb)
+        if qr_style == "footer":
+            qsz = min(f("qr_size") * mm, 14 * mm)  # 🔳 صغير وثابت أعلى الذيل مباشرة — لا يأخذ حيّزاً من المتن
+            fx, fy = LM, 24 * mm
+            c.drawImage(qr_img, fx, fy, qsz, qsz)
+            c.setFillColorRGB(0.42, 0.45, 0.5); c.setFont("Helvetica", 6.5)
+            c.drawString(fx + qsz + 2 * mm, fy + qsz / 2 - 2, "Scan to verify")
+            c.setFillColorRGB(0, 0, 0)
+        else:
+            qr_size = f("qr_size") * mm
+            qr_y = max(30 * mm, y - 36 * mm)  # 📍 يلتصق بنهاية المتن إن كانت الصفحة شبه فارغة (بدل ثبوته بفراغ كبير أسفلها)، ولا ينزل عن 30مم فوق الذيل
+            qx = RM - 4 * mm - qr_size
+            c.drawImage(qr_img, qx, qr_y, qr_size, qr_size)
+            c.setFont("Helvetica", 8); c.drawCentredString(qx + qr_size / 2, qr_y - 4 * mm, "Scan to verify")
     if draft:
         c.saveState()
         c.setFillColorRGB(0.85, 0.15, 0.15, alpha=0.13)
@@ -414,4 +431,4 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     c.showPage(); c.save()
     from services.pdf_pages import decorate_multipage
     return decorate_multipage(buf.getvalue(), ref=str(s.get("number_display") or ""), date=issued.replace("-", "/") + "م" if issued else "",
-                              verify=s.get("verify_url") or "", header_y_mm=f("header_bottom") + 5, footer_y_mm=24.5, margin_mm=f("margin_side"))
+                              verify=s.get("verify_url") or "", mini_qr=qr_enabled, header_y_mm=f("header_bottom") + 5, footer_y_mm=24.5, margin_mm=f("margin_side"))

@@ -111,6 +111,30 @@ export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onRe
                 </label>
               ))}
             </div>
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontWeight: 800, color: '#0f2440', marginBottom: 4 }}>🔳 رمز التحقق (QR)</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px' }}><span style={{ color: '#334155' }}>الإظهار</span>
+                  <select value={L.qr_enabled === false ? '0' : '1'} onChange={(e) => setL('qr_enabled', e.target.value === '1')} style={{ padding: '3px 6px', borderRadius: 6, border: '1px solid #dde3ec', fontSize: 12 }} data-testid={`${testID}-qr-enabled`}>
+                    <option value="1">ظاهر</option>
+                    <option value="0">مخفي</option>
+                  </select>
+                </label>
+                {L.qr_enabled !== false && (
+                  <>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '2px 6px' }}><span style={{ color: '#334155' }}>الموضع</span>
+                      <select value={String(L.qr_style || 'normal')} onChange={(e) => setL('qr_style', e.target.value)} style={{ padding: '3px 6px', borderRadius: 6, border: '1px solid #dde3ec', fontSize: 12 }} data-testid={`${testID}-qr-style`}>
+                        <option value="normal">بجانب التوقيع</option>
+                        <option value="footer">صغير في الذيل (لا يأخذ حيّزاً)</option>
+                      </select>
+                    </label>
+                    <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '2px 6px' }}><span style={{ color: '#334155' }}>الحجم (مم)</span>
+                      <input type="number" min={10} max={32} step={1} value={Number(L.qr_size ?? 26)} onChange={(e) => setL('qr_size', Number(e.target.value))} style={numInp} data-testid={`${testID}-qr-size`} />
+                    </label>
+                  </>
+                )}
+              </div>
+            </div>
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 6 }}>
               <button type="button" onClick={() => onLayoutChange({})} style={{ padding: '3px 10px', borderRadius: 6, border: '1px solid #dde3ec', background: '#fff', cursor: 'pointer', fontSize: 11.5 }} data-testid={`${testID}-layout-reset`}>↺ استعادة القيم الافتراضية</button>
             </div>
