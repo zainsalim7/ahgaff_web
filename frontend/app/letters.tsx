@@ -134,8 +134,10 @@ export default function LettersPage() {
     if (!name) return;
     const kinds = new Set((src?.people || people).map((p: any) => p.kind));
     const concerns = (src?.people || people).length > 1 ? 'many' : kinds.size === 1 ? [...kinds][0] : 'none';
+    // 🖋️ الخاتمة والتوقيع هوية الكليشة دائماً — لا تُجمَّد داخل القالب (وإلا تجاهلت أي تحديث لاحق على الكليشة)
+    const { closing: _c, signature: _s, ...tplSecs } = src ? (src.inputs?.sections || src.sections || {}) : sections;
     try {
-      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src ? (src.signatory_position_id ? '' : src.signatory_name) : sig.name, signatory_title: src ? (src.signatory_position_id ? '' : src.signatory_title) : sig.title, signatory_position_id: src ? (src.signatory_position_id || '') : sig.position_id, letterhead_id: src ? (src.letterhead_id || '') : lhId, series_id: src ? (src.series_id || '') : seriesId, sections: src ? (src.inputs?.sections || src.sections || {}) : sections, concerns, is_active: true });
+      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src ? (src.signatory_position_id ? '' : src.signatory_name) : sig.name, signatory_title: src ? (src.signatory_position_id ? '' : src.signatory_title) : sig.title, signatory_position_id: src ? (src.signatory_position_id || '') : sig.position_id, letterhead_id: src ? (src.letterhead_id || '') : lhId, series_id: src ? (src.series_id || '') : seriesId, sections: tplSecs, concerns, is_active: true });
       loadAll(); window.alert(`✅ حُفظ القالب «${name}» — سيظهر في قائمة القوالب`);
     } catch (e) { setErr(errOf(e, 'فشل حفظ القالب')); }
   };

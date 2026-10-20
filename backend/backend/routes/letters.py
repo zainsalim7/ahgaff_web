@@ -420,13 +420,16 @@ async def _compose(db, data: IssueIn, settings: dict) -> dict:
             "inputs": {"body": data.body, "people": data.people, "recipient": data.recipient or {}, "subject": data.subject or "", "template_id": data.template_id, "sections": raw_secs or {}, "extra_vars": data.extra_vars or {}}}
 
 
+LETTERHEAD_ONLY_SECTIONS = {"closing", "signature"}  # 🖋️ هوية الكليشة (الخاتمة والتوقيع) — دائماً من الكليشة، لا يجمّدها أي قالب
+
+
 async def _effective_sections(db, lh: dict, template_id: Optional[str] = None) -> dict:
-    """✍️ أقسام الخطاب الفعلية: النظام ← الكليشة ← القالب (القالب يتقدم)"""
+    """✍️ أقسام الخطاب الفعلية: النظام ← الكليشة ← القالب (القالب يتقدم، عدا الخاتمة والتوقيع فمن الكليشة دائماً)"""
     out = dict(DEFAULT_SECTIONS)
     out.update({k: v for k, v in (lh.get("sections") or {}).items() if k in SECTION_KEYS and v})
     if template_id and ObjectId.is_valid(template_id):
         t = await db.letter_templates.find_one({"_id": ObjectId(template_id)}, {"sections": 1})
-        out.update({k: v for k, v in ((t or {}).get("sections") or {}).items() if k in SECTION_KEYS and v})
+        out.update({k: v for k, v in ((t or {}).get("sections") or {}).items() if k in SECTION_KEYS and v and k not in LETTERHEAD_ONLY_SECTIONS})
     return out
 
 
