@@ -181,14 +181,20 @@ async def create_template(data: LetterTemplate, current_user: dict = Depends(get
     _guard_settings(current_user)
     if not data.name.strip() or not data.body.strip():
         raise HTTPException(status_code=400, detail="اسم القالب والمتن مطلوبان")
-    r = await get_db().letter_templates.insert_one({**data.dict(), "created_at": datetime.now(timezone.utc).isoformat(), "created_by": current_user.get("id")})
+    db = get_db()
+    if await db.letter_templates.find_one({"name": {"$regex": f"^{re.escape(data.name.strip())}$", "$options": "i"}, "is_active": {"$ne": False}}):
+        raise HTTPException(status_code=400, detail="يوجد قالب آخر بهذا الاسم — اختر اسماً مختلفاً")
+    r = await db.letter_templates.insert_one({**data.dict(), "created_at": datetime.now(timezone.utc).isoformat(), "created_by": current_user.get("id")})
     return {"id": str(r.inserted_id)}
 
 
 @router.put("/letter-templates/{tid}")
 async def update_template(tid: str, data: LetterTemplate, current_user: dict = Depends(get_current_user)):
     _guard_settings(current_user)
-    await get_db().letter_templates.update_one({"_id": ObjectId(tid)}, {"$set": data.dict()})
+    db = get_db()
+    if await db.letter_templates.find_one({"_id": {"$ne": ObjectId(tid)}, "name": {"$regex": f"^{re.escape(data.name.strip())}$", "$options": "i"}, "is_active": {"$ne": False}}):
+        raise HTTPException(status_code=400, detail="يوجد قالب آخر بهذا الاسم — اختر اسماً مختلفاً")
+    await db.letter_templates.update_one({"_id": ObjectId(tid)}, {"$set": data.dict()})
     return {"ok": True}
 
 

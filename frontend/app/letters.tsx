@@ -59,6 +59,8 @@ export default function LettersPage() {
   const [tform, setTform] = useState<any | null>(null);
   const [log, setLog] = useState<any[]>([]); const [logQ, setLogQ] = useState(''); const [logStatus, setLogStatus] = useState('');
   const [logF, setLogF] = useState({ subject: '', recipient: '', template_id: '', date_from: '', date_to: '' });
+  const [quickView, setQuickView] = useState<any>(null); const [quickViewBusy, setQuickViewBusy] = useState(false);
+  const openQuickView = async (lid: string) => { setQuickViewBusy(true); try { const { data } = await api.get(`/letters/${lid}`); setQuickView(data); } catch (e) { setErr(errOf(e, 'تعذر عرض الخطاب')); } finally { setQuickViewBusy(false); } };
 
   const loadAll = () => {
     api.get('/letter-templates').then((r) => setTemplates(r.data)).catch(() => {});
@@ -363,23 +365,37 @@ export default function LettersPage() {
 
       {tab === 'log' && (
         <div style={card} data-testid="letters-log">
-          <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
-            <input style={{ ...inp, flex: 1 }} placeholder="بحث عام: الرقم / الموضوع / المرسَل إليه / الاسم / القالب…" value={logQ} onChange={(e) => setLogQ(e.target.value)} data-testid="letters-log-search" />
-            <select style={{ ...inp, width: 'auto' }} value={logStatus} onChange={(e) => setLogStatus(e.target.value)} data-testid="letters-log-status"><option value="">كل الحالات</option><option value="issued">الصادرة (سارية)</option><option value="draft">المسودات</option><option value="revoked">الملغاة</option></select>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+            <div><b style={{ fontSize: 15, color: '#0f2440' }}>🗂 سجل الخطابات</b><span style={{ fontSize: 11.5, color: '#94a3b8', marginRight: 8 }}>أرشيف كل الخطابات والمسودات — النطاق حسب صلاحيتك ودورك</span></div>
+            <div style={{ fontSize: 12.5, color: '#475569', fontWeight: 700 }} data-testid="letters-log-count">{log.length} خطاب{log.length >= 300 ? ' (أول 300 — ضيّق الفلاتر)' : ''}</div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1.3fr 1.3fr 1fr auto auto auto', gap: 8, marginBottom: 10, alignItems: 'center' }} data-testid="letters-log-filters">
-            <input style={inp} placeholder="الموضوع يحتوي…" value={logF.subject} onChange={(e) => setLogF({ ...logF, subject: e.target.value })} data-testid="letters-log-subject" />
-            <input style={inp} list="log-recips" placeholder="المرسَل إليه (اختر أو اكتب)…" value={logF.recipient} onChange={(e) => { const hit = recips.find((r) => `${r.title} — ${r.name}` === e.target.value); setLogF({ ...logF, recipient: hit ? hit.id : e.target.value }); }} data-testid="letters-log-recipient" />
-            <datalist id="log-recips">{recips.map((r) => <option key={r.id} value={`${r.title} — ${r.name}`} />)}</datalist>
-            <select style={inp} value={logF.template_id} onChange={(e) => setLogF({ ...logF, template_id: e.target.value })} data-testid="letters-log-template"><option value="">كل القوالب</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
-            <label style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>من <input type="date" style={{ ...inp, width: 'auto', padding: '6px 8px' }} value={logF.date_from} onChange={(e) => setLogF({ ...logF, date_from: e.target.value })} data-testid="letters-log-from" /></label>
-            <label style={{ fontSize: 12, color: '#475569', whiteSpace: 'nowrap' }}>إلى <input type="date" style={{ ...inp, width: 'auto', padding: '6px 8px' }} value={logF.date_to} onChange={(e) => setLogF({ ...logF, date_to: e.target.value })} data-testid="letters-log-to" /></label>
-            <button onClick={() => { setLogQ(''); setLogStatus(''); setLogF({ subject: '', recipient: '', template_id: '', date_from: '', date_to: '' }); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 10px', fontSize: 12 })} data-testid="letters-log-clear">↺ مسح</button>
+          <div style={{ position: 'relative', marginBottom: 10 }}>
+            <input style={{ ...inp, padding: '11px 14px 11px 14px', fontSize: 14, fontWeight: 600 }} placeholder="🔎 الانتقال السريع: رقم الخطاب / الموضوع / المرسَل إليه / الاسم / القالب…" value={logQ} onChange={(e) => setLogQ(e.target.value)} data-testid="letters-log-search" autoFocus />
           </div>
-          <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }} data-testid="letters-log-count">{log.length} خطاب{log.length >= 300 ? ' (أول 300 — ضيّق الفلاتر)' : ''}</div>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['الرقم', 'التاريخ', 'الموضوع', 'إلى', 'الأسماء', 'الحالة', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined}><td style={{ ...td, fontWeight: 800 }}>{l.number_display}{l.series_name ? <div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }} title={`الكليشة: ${l.letterhead_name || ''}`}>{l.series_name}{l.letterhead_name ? ` · ${l.letterhead_name}` : ''}</div> : null}{l.batch_id ? <div style={{ fontSize: 10, color: '#c2410c', fontWeight: 700 }} title="ضمن إصدار جماعي — خطاب لكل شخص">👥 {l.batch_index}/{l.batch_total}</div> : null}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="ملغى" color="#b91c1c" /> : <Badge text="ساري" color="#16a34a" />}</td>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }} data-testid="letters-log-status-chips">
+            {([['', 'الكل'], ['issued', '✅ سارية'], ['draft', '📝 مسودات'], ['revoked', '🚫 ملغاة']] as const).map(([v, l]) => (
+              <button key={v} onClick={() => setLogStatus(v)} style={btn(logStatus === v ? '#0f2440' : '#f1f5f9', { color: logStatus === v ? '#fff' : '#334155', padding: '6px 14px', fontSize: 12.5, borderRadius: 999 })} data-testid={`letters-log-status-${v || 'all'}`}>{l}</button>
+            ))}
+          </div>
+          <div style={{ border: '1px solid #e6eaf0', borderRadius: 10, padding: 10, marginBottom: 10, background: '#fafbfc' }} data-testid="letters-log-filters">
+            <div style={{ fontSize: 11.5, fontWeight: 800, color: '#64748b', marginBottom: 8 }}>تصفية متقدمة</div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: 10 }}>
+              <Field label="الموضوع يحتوي"><input style={inp} value={logF.subject} onChange={(e) => setLogF({ ...logF, subject: e.target.value })} data-testid="letters-log-subject" /></Field>
+              <Field label="المرسَل إليه">
+                <input style={inp} list="log-recips" placeholder="اختر أو اكتب…" value={logF.recipient} onChange={(e) => { const hit = recips.find((r) => `${r.title} — ${r.name}` === e.target.value); setLogF({ ...logF, recipient: hit ? hit.id : e.target.value }); }} data-testid="letters-log-recipient" />
+                <datalist id="log-recips">{recips.map((r) => <option key={r.id} value={`${r.title} — ${r.name}`} />)}</datalist>
+              </Field>
+              <Field label="القالب"><select style={inp} value={logF.template_id} onChange={(e) => setLogF({ ...logF, template_id: e.target.value })} data-testid="letters-log-template"><option value="">كل القوالب</option>{templates.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select></Field>
+              <Field label="من تاريخ"><input type="date" style={inp} value={logF.date_from} onChange={(e) => setLogF({ ...logF, date_from: e.target.value })} data-testid="letters-log-from" /></Field>
+              <Field label="إلى تاريخ"><input type="date" style={inp} value={logF.date_to} onChange={(e) => setLogF({ ...logF, date_to: e.target.value })} data-testid="letters-log-to" /></Field>
+              <Field label="‌"><button onClick={() => { setLogQ(''); setLogStatus(''); setLogF({ subject: '', recipient: '', template_id: '', date_from: '', date_to: '' }); }} style={btn('#f1f5f9', { color: '#0f2440', width: '100%' })} data-testid="letters-log-clear">↺ مسح كل الفلاتر</button></Field>
+            </div>
+          </div>
+          <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['الرقم', 'التاريخ', 'الموضوع', 'إلى', 'الأسماء', 'الحالة', ''].map((h, i) => <th key={i} style={{ ...th, position: 'sticky', top: 0, zIndex: 1 }}>{h}</th>)}</tr></thead>
+            <tbody>{log.map((l) => <tr key={l.id} data-testid={`letter-row-${l.id}`} style={l.status === 'draft' ? { background: '#fffbeb' } : undefined} onMouseEnter={(e) => (e.currentTarget.style.background = l.status === 'draft' ? '#fef3c7' : '#f8fafc')} onMouseLeave={(e) => (e.currentTarget.style.background = l.status === 'draft' ? '#fffbeb' : '')}><td style={{ ...td, fontWeight: 800, cursor: 'pointer' }} onClick={() => openQuickView(l.id)} title="عرض سريع">{l.number_display}{l.series_name ? <div style={{ fontSize: 10, color: '#64748b', fontWeight: 400 }} title={`الكليشة: ${l.letterhead_name || ''}`}>{l.series_name}{l.letterhead_name ? ` · ${l.letterhead_name}` : ''}</div> : null}{l.batch_id ? <div style={{ fontSize: 10, color: '#c2410c', fontWeight: 700 }} title="ضمن إصدار جماعي — خطاب لكل شخص">👥 {l.batch_index}/{l.batch_total}</div> : null}{l.draft_number ? <div style={{ fontSize: 10, color: '#94a3b8', fontWeight: 600 }}>من {l.draft_number}</div> : null}</td><td style={td}>{(l.issued_at || '').slice(0, 10)}</td><td style={td}>{l.subject || <span style={{ color: '#94a3b8' }}>بلا موضوع</span>}</td><td style={td}>{l.recipient?.title || l.recipient?.name || '—'}</td><td style={td}>{(l.people || []).map((p: any) => p.name).join('، ') || '—'}</td><td style={td}>{l.status === 'draft' ? <Badge text="📝 مسودة" color="#d97706" /> : l.is_revoked ? <Badge text="🚫 ملغى" color="#b91c1c" /> : <Badge text="✅ ساري" color="#16a34a" />}</td>
               <td style={{ ...td, whiteSpace: 'nowrap' }}>
+                <button onClick={() => openQuickView(l.id)} style={btn('#eef3f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} title="عرض سريع بلا تنزيل" data-testid={`letter-quickview-${l.id}`}>👁️</button>{' '}
                 {l.status === 'draft' ? (<>
                   <button onClick={() => loadDraft(l.id)} style={btn('#0f2440', { padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-edit-${l.id}`}>تعديل</button>{' '}
                   <button onClick={() => dlPdf(l.id, `مسودة ${l.number_display}`)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-draft-pdf-${l.id}`}>PDF</button>{' '}
@@ -394,7 +410,29 @@ export default function LettersPage() {
                   <button onClick={async () => { await api.post(`/letters/${l.id}/${l.is_revoked ? 'restore' : 'revoke'}`); loadLog(); }} style={btn('#f1f5f9', { color: l.is_revoked ? '#16a34a' : '#b91c1c', padding: '5px 10px', fontSize: 12 })}>{l.is_revoked ? 'استرجاع' : 'إلغاء'}</button>
                 </>)}
               </td></tr>)}</tbody></table>
-          {log.length === 0 && <div style={{ color: '#94a3b8', padding: 16, textAlign: 'center' }}>لا توجد خطابات</div>}
+          </div>
+          {log.length === 0 && <div style={{ color: '#94a3b8', padding: 16, textAlign: 'center' }}>لا توجد خطابات ضمن نطاق صلاحيتك تطابق الفلاتر الحالية</div>}
+          {quickView && (
+            <Modal title={`عرض سريع — ${quickView.number_display || ''}`} onClose={() => setQuickView(null)} width={640} testID="letter-quickview-modal">
+              {quickViewBusy ? <div style={{ color: '#94a3b8', padding: 20, textAlign: 'center' }}>جاري التحميل…</div> : (
+                <div style={{ fontSize: 13, lineHeight: 1.9 }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><b style={{ fontSize: 15 }}>{quickView.subject || 'بلا موضوع'}</b>{quickView.status === 'draft' ? <Badge text="📝 مسودة" color="#d97706" /> : quickView.is_revoked ? <Badge text="🚫 ملغى" color="#b91c1c" /> : <Badge text="✅ ساري" color="#16a34a" />}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, color: '#334155' }}>
+                    <div><b>التاريخ:</b> {(quickView.issued_at || '').slice(0, 10) || '—'}</div>
+                    <div><b>الكليشة/السلسلة:</b> {quickView.letterhead_name || '—'} {quickView.series_name ? `· ${quickView.series_name}` : ''}</div>
+                    <div><b>المرسَل إليه:</b> {quickView.recipient?.title || ''} {quickView.recipient?.name || '—'}</div>
+                    <div><b>الموقِّع:</b> {quickView.signatory_title || ''} {quickView.signatory_name || '—'}</div>
+                  </div>
+                  {!!(quickView.people || []).length && <div style={{ marginTop: 8 }}><b>الأسماء ({quickView.people.length}):</b> {quickView.people.map((p: any) => p.name).join('، ')}</div>}
+                  <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
+                    <button onClick={() => dlPdf(quickView.id, `خطاب ${quickView.number_display}`)} style={btn('#0f2440', { padding: '7px 14px', fontSize: 12.5 })} data-testid="letter-quickview-pdf">📄 PDF</button>
+                    {quickView.status !== 'draft' && <button onClick={() => dlDocx(quickView.id, `خطاب ${quickView.number_display}`)} style={btn('#eff6ff', { color: '#1d4ed8', padding: '7px 14px', fontSize: 12.5 })} data-testid="letter-quickview-docx">📝 Word</button>}
+                    {quickView.status === 'draft' && <button onClick={() => { setQuickView(null); loadDraft(quickView.id); }} style={btn('#16a34a', { padding: '7px 14px', fontSize: 12.5 })} data-testid="letter-quickview-edit">✏️ تعديل المسودة</button>}
+                  </div>
+                </div>
+              )}
+            </Modal>
+          )}
         </div>
       )}
 
