@@ -272,7 +272,7 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
         for li, (line, lw) in enumerate(lines):
             size = max(w["size"] for w in line)
             if ensure:
-                ny = ensure(size * leading)
+                ny = ensure(size * leading, y)
                 if ny is not None:
                     y = ny
             y -= size * leading

@@ -191,6 +191,8 @@ async def create_template(data: LetterTemplate, current_user: dict = Depends(get
 @router.put("/letter-templates/{tid}")
 async def update_template(tid: str, data: LetterTemplate, current_user: dict = Depends(get_current_user)):
     _guard_settings(current_user)
+    if not ObjectId.is_valid(tid):
+        raise HTTPException(status_code=404, detail="القالب غير موجود")
     db = get_db()
     if await db.letter_templates.find_one({"_id": {"$ne": ObjectId(tid)}, "name": {"$regex": f"^{re.escape(data.name.strip())}$", "$options": "i"}, "is_active": {"$ne": False}}):
         raise HTTPException(status_code=400, detail="يوجد قالب آخر بهذا الاسم — اختر اسماً مختلفاً")
@@ -201,6 +203,8 @@ async def update_template(tid: str, data: LetterTemplate, current_user: dict = D
 @router.delete("/letter-templates/{tid}")
 async def delete_template(tid: str, current_user: dict = Depends(get_current_user)):
     _guard_settings(current_user)
+    if not ObjectId.is_valid(tid):
+        raise HTTPException(status_code=404, detail="القالب غير موجود")
     await get_db().letter_templates.update_one({"_id": ObjectId(tid)}, {"$set": {"is_active": False}})
     return {"ok": True}
 
@@ -668,6 +672,9 @@ async def list_letters(q: Optional[str] = None, subject: Optional[str] = None, r
     if q:
         rx = {"$regex": re.escape(q), "$options": "i"}
         query["$or"] = [{"subject": rx}, {"number_display": rx}, {"recipient.name": rx}, {"recipient.title": rx}, {"recipient.organization": rx}, {"people.name": rx}, {"template_name": rx}]
+        q_rev = q[::-1]
+        if q_rev != q:  # 🔁 الرقم قد يُكتب كما يظهر بصرياً (معكوساً بسبب اتجاه RTL) لا كما هو مخزَّن فعلياً
+            query["$or"].append({"number_display": {"$regex": re.escape(q_rev), "$options": "i"}})
     if subject:
         query["subject"] = {"$regex": re.escape(subject), "$options": "i"}
     if recipient:

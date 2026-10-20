@@ -59,8 +59,8 @@ export default function LettersPage() {
   const [tform, setTform] = useState<any | null>(null);
   const [log, setLog] = useState<any[]>([]); const [logQ, setLogQ] = useState(''); const [logStatus, setLogStatus] = useState('');
   const [logF, setLogF] = useState({ subject: '', recipient: '', template_id: '', date_from: '', date_to: '' });
-  const [quickView, setQuickView] = useState<any>(null); const [quickViewBusy, setQuickViewBusy] = useState(false);
-  const openQuickView = async (lid: string) => { setQuickViewBusy(true); try { const { data } = await api.get(`/letters/${lid}`); setQuickView(data); } catch (e) { setErr(errOf(e, 'تعذر عرض الخطاب')); } finally { setQuickViewBusy(false); } };
+  const [quickView, setQuickView] = useState<any>(null); const [quickViewOpen, setQuickViewOpen] = useState(false); const [quickViewBusy, setQuickViewBusy] = useState(false);
+  const openQuickView = async (lid: string) => { setQuickViewOpen(true); setQuickViewBusy(true); setQuickView(null); try { const { data } = await api.get(`/letters/${lid}`); setQuickView(data); } catch (e) { setErr(errOf(e, 'تعذر عرض الخطاب')); setQuickViewOpen(false); } finally { setQuickViewBusy(false); } };
 
   const loadAll = () => {
     api.get('/letter-templates').then((r) => setTemplates(r.data)).catch(() => {});
@@ -73,6 +73,17 @@ export default function LettersPage() {
     if (!lhId || tab !== 'issue') return;
     api.get('/letters/section-defaults', { params: { letterhead_id: lhId, template_id: tplId || undefined } }).then((r) => setSecDefaults(r.data.sections || {})).catch(() => {});
   }, [lhId, tplId, tab]); // eslint-disable-line react-hooks/exhaustive-deps
+  const saveSectionsAsLetterheadDefault = async () => {
+    try {
+      // 🖋️ لا نحفظ ما جاء من القالب (تحية/موضوع/مستلم) كافتراضي للكليشة — فقط تعديلات المستخدم الفعلية (secOverrides) فوق افتراضي الكليشة الحالي (بلا قالب)
+      const { data } = await api.get('/letters/section-defaults', { params: { letterhead_id: lhId } });
+      const toSave = { ...(data.sections || {}), ...secOverrides };
+      await api.patch(`/letterheads/${lhId}/sections`, { sections: toSave });
+      const r2 = await api.get('/letters/section-defaults', { params: { letterhead_id: lhId, template_id: tplId || undefined } });
+      setSecDefaults(r2.data.sections || {}); setSecOverrides({});
+      window.alert('حُفظ التنسيق كافتراضي لهذه الكليشة — سيُطبَّق على كل خطاباتها');
+    } catch (e: any) { window.alert(e?.response?.data?.detail || 'فشل الحفظ'); }
+  };
   const loadLhSeries = () => {
     api.get('/letterheads').then((r) => { setLetterheads(r.data); setLhId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
     api.get('/letter-series').then((r) => { setSeriesList(r.data); setSeriesId((cur) => cur && r.data.some((x: any) => x.id === cur) ? cur : (r.data.find((x: any) => x.is_default) || r.data[0])?.id || ''); }).catch(() => {});
@@ -189,12 +200,12 @@ export default function LettersPage() {
     try { const r = await api.post(`/letters/${l.id}/finalize`, null, { params: { base_url: window.location.origin } }); const pdf = await api.get(`/letters/${r.data.id}/pdf`, { responseType: 'blob' }); downloadBlob(pdf.data, `خطاب ${r.data.number}.pdf`, 'application/pdf'); loadLog(); }
     catch (e) { setErr(errOf(e, 'فشل الاعتماد')); }
   };
-  const saveTpl = async () => { try { if (tform.id) await api.put(`/letter-templates/${tform.id}`, tform); else await api.post('/letter-templates', tform); setTform(null); loadAll(); } catch (e) { setErr(errOf(e, 'فشل الحفظ')); } };
+  const saveTpl = async () => { setErr(''); try { if (tform.id) await api.put(`/letter-templates/${tform.id}`, tform); else await api.post('/letter-templates', tform); setTform(null); loadAll(); } catch (e) { setErr(errOf(e, 'فشل الحفظ')); } };
   const vars = settings?.variables || [];
 
   return (
     <CorrPage title="الخطابات الرسمية" subtitle="مثل الإفادات تماماً: اختر القالب → حدّد المرسَل إليه والأسماء → إصدار وتنزيل PDF برقم تسلسلي ورمز QR" testID="letters-page" hideNav
-      actions={<div style={{ display: 'flex', gap: 6 }}><button onClick={() => router.push('/letter-new' as any)} style={btn('#f59e0b', { color: '#1f2937' })} data-testid="letters-quick-new-btn" title="إصدار سريع من قالب: المطلوب فقط → معاينة → رقم">⚡ رسالة جديدة</button>{([['issue', '✉️ إصدار خطاب'], ['templates', '📋 القوالب'], ['log', '🗂 سجل الخطابات'], ['settings', '📄 الكليشات والترقيم']] as const).map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k ? '#0f2440' : '#f1f5f9', { color: tab === k ? '#fff' : '#0f2440' })} data-testid={`letters-tab-${k}`}>{l}</button>)}</div>}>
+      actions={<div style={{ display: 'flex', gap: 6 }}><button onClick={() => router.push('/letter-new' as any)} style={btn('#f59e0b', { color: '#1f2937' })} data-testid="letters-quick-new-btn" title="إصدار سريع من قالب: المطلوب فقط → معاينة → رقم">⚡ رسالة جديدة</button>{([['issue', '✉️ إصدار خطاب'], ['templates', '📋 القوالب'], ['log', '🗂 سجل الخطابات'], ['settings', '📄 الكليشات والترقيم']] as const).map(([k, l]) => <button key={k} onClick={() => setTab(k)} style={btn(tab === k ? '#1d4ed8' : '#f1f5f9', { color: tab === k ? '#fff' : '#0f2440' })} data-testid={`letters-tab-${k}`}>{l}</button>)}</div>}>
       {!!err && <div style={{ ...card, color: '#b91c1c' }} data-testid="letters-error">{err}</div>}
 
       {tab === 'issue' && (
@@ -279,7 +290,7 @@ export default function LettersPage() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 14, alignItems: 'start' }}>
                   <LetterSectionsEditor sections={sections} onChange={(k, h) => setSecOverrides((x) => ({ ...x, [k]: h }))} onReset={() => { setSecOverrides({}); setLayout({}); }} hasTable={people.length > 0}
                     layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} testID="letter-layout"
-                    actions={letterheads.find((x) => x.id === lhId)?.can_edit && <button type="button" onClick={async () => { try { await api.patch(`/letterheads/${lhId}/sections`, { sections }); setSecDefaults(sections); setSecOverrides({}); window.alert('حُفظ التنسيق كافتراضي لهذه الكليشة — سيُطبَّق على كل خطاباتها'); } catch (e: any) { window.alert(e?.response?.data?.detail || 'فشل الحفظ'); } }} style={btn('#f5f3ff', { color: '#6d28d9', padding: '4px 10px', fontSize: 12 })} data-testid="letter-sections-save-lh" title="يصبح هذا التنسيق افتراضياً لكل خطابات هذه الكليشة">💾 حفظ كافتراضي للكليشة</button>} />
+                    actions={letterheads.find((x) => x.id === lhId)?.can_edit && <button type="button" onClick={saveSectionsAsLetterheadDefault} style={btn('#f5f3ff', { color: '#6d28d9', padding: '4px 10px', fontSize: 12 })} data-testid="letter-sections-save-lh" title="يصبح هذا التنسيق افتراضياً لكل خطابات هذه الكليشة">💾 حفظ كافتراضي للكليشة</button>} />
                   <div style={{ position: 'sticky', top: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة الحقيقية {previewBusy ? '⏳' : ''}</div>
                     {previewImg ? <img src={previewImg} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="letter-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري توليد المعاينة…</div>}
@@ -344,10 +355,11 @@ export default function LettersPage() {
 
       {tab === 'templates' && (
         <div style={card} data-testid="letter-templates">
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><b>قوالب الخطابات ({templates.length})</b>{canEdit && <button onClick={() => setTform({ name: '', subject: '', body: '', signatory_name: settings?.default_signatory_name || '', signatory_title: settings?.default_signatory_title || '', concerns: 'none', is_active: true })} style={btn('#16a34a')} data-testid="letter-template-add">+ قالب</button>}</div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}><b>قوالب الخطابات ({templates.length})</b>{canEdit && <button onClick={() => { setErr(''); setTform({ name: '', subject: '', body: '', signatory_name: settings?.default_signatory_name || '', signatory_title: settings?.default_signatory_title || '', concerns: 'none', is_active: true }); }} style={btn('#16a34a')} data-testid="letter-template-add">+ قالب</button>}</div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}><thead><tr>{['القالب', 'الموضوع', 'يخص', 'الموقِّع', ''].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title || (t.signatory_position_id ? '🖋️ من دليل المناصب' : '—')}</td><td style={{ ...td, whiteSpace: 'nowrap' }}>{canEdit ? (<><button onClick={() => setTform(t)} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })}>حذف</button></>) : <button onClick={() => { pickTpl(t.id); setTab('issue'); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-use-${t.id}`}>استخدام</button>}</td></tr>)}</tbody></table>
+            <tbody>{templates.map((t) => <tr key={t.id}><td style={{ ...td, fontWeight: 800 }}>{t.name}</td><td style={td}>{t.subject}</td><td style={td}>{{ none: 'عام', student: 'طالب', employee: 'موظف', teacher: 'مدرّس', many: 'عدة أسماء' }[t.concerns as string] || 'عام'}</td><td style={td}>{t.signatory_title || (t.signatory_position_id ? '🖋️ من دليل المناصب' : '—')}</td><td style={{ ...td, whiteSpace: 'nowrap' }}>{canEdit ? (<><button onClick={() => { setErr(''); setTform(t); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-edit-${t.id}`}>تعديل</button> <button onClick={async () => { if (window.confirm('حذف القالب؟')) { await api.delete(`/letter-templates/${t.id}`); loadAll(); } }} style={btn('#fee2e2', { color: '#b91c1c', padding: '5px 10px', fontSize: 12 })}>حذف</button></>) : <button onClick={() => { pickTpl(t.id); setTab('issue'); }} style={btn('#f1f5f9', { color: '#0f2440', padding: '5px 10px', fontSize: 12 })} data-testid={`letter-template-use-${t.id}`}>استخدام</button>}</td></tr>)}</tbody></table>
           {tform && <Modal title={tform.id ? 'تعديل قالب' : 'قالب جديد'} onClose={() => setTform(null)} width={720} testID="letter-template-modal">
+            {!!err && <div style={{ background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', borderRadius: 8, padding: '8px 12px', fontSize: 13, marginBottom: 10 }} data-testid="letter-template-modal-error">{err}</div>}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
               <Field label="اسم القالب *"><input style={inp} value={tform.name} onChange={(e) => setTform({ ...tform, name: e.target.value })} data-testid="lt-name" /></Field>
               <Field label="الموضوع الافتراضي"><input style={inp} value={tform.subject} onChange={(e) => setTform({ ...tform, subject: e.target.value })} data-testid="lt-subject" /></Field>
@@ -412,13 +424,13 @@ export default function LettersPage() {
               </td></tr>)}</tbody></table>
           </div>
           {log.length === 0 && <div style={{ color: '#94a3b8', padding: 16, textAlign: 'center' }}>لا توجد خطابات ضمن نطاق صلاحيتك تطابق الفلاتر الحالية</div>}
-          {quickView && (
-            <Modal title={`عرض سريع — ${quickView.number_display || ''}`} onClose={() => setQuickView(null)} width={640} testID="letter-quickview-modal">
-              {quickViewBusy ? <div style={{ color: '#94a3b8', padding: 20, textAlign: 'center' }}>جاري التحميل…</div> : (
+          {quickViewOpen && (
+            <Modal title={`عرض سريع — ${quickView?.number_display || ''}`} onClose={() => { setQuickViewOpen(false); setQuickView(null); }} width={640} testID="letter-quickview-modal">
+              {quickViewBusy || !quickView ? <div style={{ color: '#94a3b8', padding: 20, textAlign: 'center' }} data-testid="letter-quickview-loading">جاري التحميل…</div> : (
                 <div style={{ fontSize: 13, lineHeight: 1.9 }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}><b style={{ fontSize: 15 }}>{quickView.subject || 'بلا موضوع'}</b>{quickView.status === 'draft' ? <Badge text="📝 مسودة" color="#d97706" /> : quickView.is_revoked ? <Badge text="🚫 ملغى" color="#b91c1c" /> : <Badge text="✅ ساري" color="#16a34a" />}</div>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, color: '#334155' }}>
-                    <div><b>التاريخ:</b> {(quickView.issued_at || '').slice(0, 10) || '—'}</div>
+                    <div><b>التاريخ:</b> <span dir="ltr" style={{ unicodeBidi: 'isolate' }}>{(quickView.issued_at || '').slice(0, 10) || '—'}</span></div>
                     <div><b>الكليشة/السلسلة:</b> {quickView.letterhead_name || '—'} {quickView.series_name ? `· ${quickView.series_name}` : ''}</div>
                     <div><b>المرسَل إليه:</b> {quickView.recipient?.title || ''} {quickView.recipient?.name || '—'}</div>
                     <div><b>الموقِّع:</b> {quickView.signatory_title || ''} {quickView.signatory_name || '—'}</div>
@@ -427,7 +439,7 @@ export default function LettersPage() {
                   <div style={{ display: 'flex', gap: 6, marginTop: 14 }}>
                     <button onClick={() => dlPdf(quickView.id, `خطاب ${quickView.number_display}`)} style={btn('#0f2440', { padding: '7px 14px', fontSize: 12.5 })} data-testid="letter-quickview-pdf">📄 PDF</button>
                     {quickView.status !== 'draft' && <button onClick={() => dlDocx(quickView.id, `خطاب ${quickView.number_display}`)} style={btn('#eff6ff', { color: '#1d4ed8', padding: '7px 14px', fontSize: 12.5 })} data-testid="letter-quickview-docx">📝 Word</button>}
-                    {quickView.status === 'draft' && <button onClick={() => { setQuickView(null); loadDraft(quickView.id); }} style={btn('#16a34a', { padding: '7px 14px', fontSize: 12.5 })} data-testid="letter-quickview-edit">✏️ تعديل المسودة</button>}
+                    {quickView.status === 'draft' && <button onClick={() => { setQuickViewOpen(false); setQuickView(null); loadDraft(quickView.id); }} style={btn('#16a34a', { padding: '7px 14px', fontSize: 12.5 })} data-testid="letter-quickview-edit">✏️ تعديل المسودة</button>}
                   </div>
                 </div>
               )}

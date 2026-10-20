@@ -129,8 +129,9 @@ export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onRe
                       </select>
                     </label>
                     <label style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 6, padding: '2px 6px' }}><span style={{ color: '#334155' }}>الحجم (مم)</span>
-                      <input type="number" min={10} max={32} step={1} value={Number(L.qr_size ?? 26)} onChange={(e) => setL('qr_size', Number(e.target.value))} style={numInp} data-testid={`${testID}-qr-size`} />
+                      <input type="number" min={10} max={String(L.qr_style || 'normal') === 'footer' ? 14 : 32} step={1} value={Number(L.qr_size ?? 26)} onChange={(e) => setL('qr_size', Number(e.target.value))} style={numInp} data-testid={`${testID}-qr-size`} />
                     </label>
+                    {String(L.qr_style || 'normal') === 'footer' && <span style={{ fontSize: 10.5, color: '#94a3b8' }}>الحد الأقصى 14مم في وضع الذيل</span>}
                   </>
                 )}
               </div>

@@ -235,8 +235,10 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         if y - space < BOTTOM_SAFE:
             footer(); c.showPage(); header(); y = H - (f("header_bottom") + 13) * mm
 
-    def ensure_y(space):
+    def ensure_y(space, cur=None):
         nonlocal y
+        if cur is not None:
+            y = cur  # 🔄 مزامنة y الخارجية مع موضع الرسم الفعلي داخل draw_rich (كانت تُقارَن بقيمة قديمة فلا تنتقل الفقرات الطويلة لصفحة جديدة أبداً)
         before = y
         ensure(space)
         return y if y != before else None
