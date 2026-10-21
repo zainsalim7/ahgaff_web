@@ -207,9 +207,14 @@ def _slots_conflict(a: dict, b: dict) -> bool:
         return False
     if (a.get("department_id"), a.get("level"), a.get("section") or "") == \
        (b.get("department_id"), b.get("level"), b.get("section") or ""):
+        _diff_course = a.get("course_id") != b.get("course_id")
+        _diff_teacher = a.get("teacher_id") and b.get("teacher_id") and a.get("teacher_id") != b.get("teacher_id")
+        _diff_room = a.get("room_id") and b.get("room_id") and a.get("room_id") != b.get("room_id")
         # 👥 مجموعتان مختلفتان من نفس المقرر لا تتشاركان الطلاب
-        if a.get("group") and b.get("group") and (a.get("course_id") != b.get("course_id") or a.get("group") != b.get("group")):
+        if a.get("group") and b.get("group") and (_diff_course or a.get("group") != b.get("group")):
             pass  # مجموعتان (من نفس المقرر أو مقررين مختلفين) — تم التحقق من عدم تشارك الطلاب عند الإنشاء
+        elif _diff_course and _diff_teacher and _diff_room:
+            pass  # 🆕 مقرران مختلفان بمعلم وقاعة مختلفين تماماً — مجموعتان موازيتان فعلياً، لا تعارض
         else:
             return True
     if a.get("teacher_id") and a.get("teacher_id") == b.get("teacher_id"):
@@ -1101,23 +1106,25 @@ async def get_schedule_conflicts(
         for (dept_id, lv, sec), members in section_groups.items():
             if len(members) < 2:
                 continue
-            # 👥 المجموعات: مجموعات مختلفة من نفس المقرر لا تتعارض؛ مجموعات مقررين مختلفين تتعارض فقط إن تشاركتا طلاباً
-            whole = [m for m in members if not m.get("group")]
-            grouped = [m for m in members if m.get("group")]
-            conflicts = list(whole) if len(whole) > 1 or (whole and grouped) else []
-            if whole and grouped:
-                conflicts.extend(grouped)
-            elif len(grouped) > 1:
-                bad: set = set()
-                for i in range(len(grouped)):
-                    for j in range(i + 1, len(grouped)):
-                        a, b = grouped[i], grouped[j]
-                        if a.get("course_id") == b.get("course_id"):
-                            if a.get("group") == b.get("group"):
-                                bad.update({i, j})
-                        elif (await _grouped_cells_overlap(db, a.get("course_id"), a.get("group"), b)) not in (None, UNVERIFIED_OVERLAP):
+            # 👥 المجموعات: نفس المقرر بنفس المجموعة يتعارض؛ مقرران مختلفان بمعلم وقاعة مختلفين تماماً (موازيان) لا يتعارضان
+            bad: set = set()
+            for i in range(len(members)):
+                for j in range(i + 1, len(members)):
+                    a, b = members[i], members[j]
+                    if a.get("course_id") == b.get("course_id"):
+                        if (a.get("group") or "") == (b.get("group") or ""):
                             bad.update({i, j})
-                conflicts = [grouped[k] for k in sorted(bad)]
+                        continue
+                    _diff_teacher = a.get("teacher_id") and b.get("teacher_id") and a.get("teacher_id") != b.get("teacher_id")
+                    _diff_room = a.get("room_id") and b.get("room_id") and a.get("room_id") != b.get("room_id")
+                    if _diff_teacher and _diff_room:
+                        continue  # 🆕 مجموعتان موازيتان من مقررين مختلفين — لا تعارض
+                    if a.get("group") and b.get("group"):
+                        if (await _grouped_cells_overlap(db, a.get("course_id"), a.get("group"), b)) not in (None, UNVERIFIED_OVERLAP):
+                            bad.update({i, j})
+                        continue
+                    bad.update({i, j})
+            conflicts = [members[k] for k in sorted(bad)]
             if len(conflicts) > 1:
                 ids = [str(c["_id"]) for c in conflicts]
                 conflicting_slot_ids.update(ids)
@@ -1446,11 +1453,14 @@ async def update_schedule_slot(
     # 👥 المجموعة: "" تعني إزالة
     if "group" in update or "slot_type" in update or "course_id" in update:
         _g_in = update.get("group", existing.get("group") or "")
-        _gk, _gn = await _validate_slot_group(db, update.get("course_id", existing.get("course_id")), _g_in, update.get("slot_type", existing.get("slot_type")))
-        update["group"] = _gk or None
-        update["group_name"] = _gn or None
-        if _gk and existing.get("merge_group_id"):
-            raise HTTPException(status_code=400, detail="لا يمكن تعيين مجموعة لفترة مشتركة بين شعب")
+        if "group" not in update and str(existing.get("group") or "").startswith("auto-"):
+            pass  # 🆕 مجموعة موازية مُولَّدة تلقائياً — تُحفَظ كما هي عند تعديل حقول أخرى (لا تُعرَّف ضمن مجموعات المقرر فلا تمرّ بالتحقق)
+        else:
+            _gk, _gn = await _validate_slot_group(db, update.get("course_id", existing.get("course_id")), _g_in, update.get("slot_type", existing.get("slot_type")))
+            update["group"] = _gk or None
+            update["group_name"] = _gn or None
+            if _gk and existing.get("merge_group_id"):
+                raise HTTPException(status_code=400, detail="لا يمكن تعيين مجموعة لفترة مشتركة بين شعب")
     if not update and not clear_duration and not clear_pin:
         raise HTTPException(status_code=400, detail="لا توجد بيانات")
 
@@ -1485,7 +1495,7 @@ async def update_schedule_slot(
                 if (await _grouped_cells_overlap(db, _chk_course, _chk_group, section_busy)) in (None, UNVERIFIED_OVERLAP):
                     continue
             # 🆕 مقرر مختلف بمعلم وقاعة مختلفين عن الجديدة وبلا مجموعة محدَّدة: على الأغلب مجموعتان موازيتان — نسمح ونولّد مفتاح مجموعة تلقائياً
-            if section_busy.get("course_id") != _chk_course and check_teacher and section_busy.get("teacher_id") != check_teacher and check_room and section_busy.get("room_id") and section_busy.get("room_id") != check_room:
+            elif section_busy.get("course_id") != _chk_course and check_teacher and section_busy.get("teacher_id") != check_teacher and check_room and section_busy.get("room_id") and section_busy.get("room_id") != check_room:
                 if not _chk_group:
                     update["group"] = f"auto-{(check_teacher or '')[-8:]}"
                 continue
@@ -5461,9 +5471,13 @@ async def _check_slot_placement(db, slot: dict, target_day: str, target_slot: in
         "day": target_day,
         "slot_number": target_slot,
     }).to_list(20):
-        if slot.get("group") and section_busy.get("group") and (section_busy.get("course_id") != slot.get("course_id") or section_busy.get("group") != slot.get("group")):
+        _diff_course = section_busy.get("course_id") != slot.get("course_id")
+        if slot.get("group") and section_busy.get("group") and (_diff_course or section_busy.get("group") != slot.get("group")):
             if section_busy.get("course_id") == slot.get("course_id") or (await _grouped_cells_overlap(db, slot.get("course_id"), slot.get("group"), section_busy)) in (None, UNVERIFIED_OVERLAP):
                 continue
+        # 🆕 مقرر مختلف بمعلم وقاعة مختلفين تماماً — مجموعتان موازيتان فعلياً، لا تعارض
+        elif _diff_course and slot.get("teacher_id") and section_busy.get("teacher_id") and section_busy.get("teacher_id") != slot.get("teacher_id") and slot.get("room_id") and section_busy.get("room_id") and section_busy.get("room_id") != slot.get("room_id"):
+            continue
         c = await db.courses.find_one({"_id": ObjectId(section_busy["course_id"])}) if section_busy.get("course_id") else None
         conflicts.append(f"تعارض شعبة: يوجد مقرر '{(c or {}).get('name', '')}' لنفس الشعبة في هذه الفترة")
         break
@@ -5538,11 +5552,18 @@ async def move_schedule_slot(
     if conflicts:
         raise HTTPException(status_code=409, detail={"message": "يوجد تعارضات", "conflicts": list(dict.fromkeys(conflicts))})
 
+    _set = {"day": data.target_day, "slot_number": data.target_slot_number}
+    if not slot.get("group"):
+        _nb = await db.weekly_schedule.find_one({
+            "_id": {"$nin": [g["_id"] for g in group]}, "department_id": slot.get("department_id"), "level": slot.get("level"),
+            "section": slot.get("section", ""), "day": data.target_day, "slot_number": data.target_slot_number, "group": None,
+        })
+        if _nb and _nb.get("course_id") != slot.get("course_id"):
+            _set["group"] = f"auto-{(slot.get('teacher_id') or '')[-8:]}"  # 🆕 تفادي تعارض وهمي بفهرس الخانة الفارغة مع مجموعة موازية بلا مجموعة محدَّدة
     try:
         await db.weekly_schedule.update_many(
             {"_id": {"$in": [g["_id"] for g in group]}},
-            {"$set": {"day": data.target_day, "slot_number": data.target_slot_number},
-             "$unset": {"pinned_start_time": ""}}
+            {"$set": _set, "$unset": {"pinned_start_time": ""}}
         )
     except DuplicateKeyError:
         raise HTTPException(status_code=409, detail={"message": "تعارض في الجدول (مرفوض من قاعدة البيانات)", "conflicts": ["تعارض فريد في قاعدة البيانات"]})

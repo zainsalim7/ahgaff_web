@@ -1301,7 +1301,7 @@ export default function WeeklySchedulePage() {
                                   )}
                                   <div style={{ fontSize: 12, fontWeight: 600, color: '#333', textAlign: 'right' }}>
                                     {item.course_name}
-                                    {item.group ? (
+                                    {item.group && !String(item.group).startsWith('auto-') ? (
                                       <span data-testid={`group-badge-${item.id}`} style={{ fontSize: 9, color: '#fff', fontWeight: 800, backgroundColor: '#6a1b9a', borderRadius: 4, padding: '1px 4px', marginRight: 4 }}>👥 {item.group_name || `مجموعة ${item.group}`}</span>
                                     ) : null}
                                     {(item.slot_type === 'practical') && (

@@ -1,0 +1,44 @@
+{
+  "summary": "اختبار باك إند لتخفيف «تعارض الشعبة» (مقرران مختلفان بمعلم/قاعة مختلفين بنفس الخلية). 16 اختباراً: 12 نجح / 4 فشل. نجح: POST لمقرر ثانٍ (وثالث) بمعلم/قاعة مختلفين → 200 + تحذير ⚠️ + group='auto-<آخر 8 من teacher_id>' (تحقق مباشر من Mongo)، رفض نفس المعلم 409، رفض نفس القاعة 409، رفض نفس المقرر مرتين بلا مجموعة 409، مجموعتان صريحتان لنفس المقرر تعملان ونفس المجموعة مرتين تُرفض، PUT {group:''} يعيد توليد auto-group، CRUD عادي سليم، وصفحة /weekly-schedule تفتح بلا أخطاء JS. فشل: (1) محلّل الأوقات يُزيح المقرر الموازي بعد الأول (08:00→09:30)، فهو ليس موازياً فعلياً؛ (2) نقطة /conflicts ما زالت تعدّ الزوج تعارض شعبة؛ (3) نقل الفترات عبر /move-slot غير مخفّف؛ (4) تعديل slot_type/course لفترة auto-group يُرجع 400. ملاحظة: نموذج PUT ليس فيه day/slot_number، فسيناريو «نقل عبر PUT» المذكور في الطلب غير ممكن أصلاً، والنقل يتم عبر /move-slot.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/weekly-schedule → _resolve_day_times / _slots_conflict (weekly_schedule.py:204-219)", "issue": "الفترة الموازية الثانية تُزاح زمنياً. في الاختبار: A (group=None) تبقى 08:00، وB (group=auto-xxx) تصبح computed_start_time=09:30 وcomputed_end_time=11:00، وتظهر في shifted[]. السبب: _slots_conflict لا يتجاوز تعارض الشعبة إلا إذا كان لكلتا الفترتين group (السطر 211)، وA قيمتها None فيرجع True ويرتّبها المحلّل بالتتابع. النتيجة أن المحاضرات المولّدة لاحقاً ستكون بوقت خاطئ ويُرسل للمعلم إشعار إزاحة.", "priority": "CRITICAL"},
+      {"endpoint": "GET /api/weekly-schedule/conflicts (حوالي السطر 1105)", "issue": "الزوج الموازي يظهر كتعارض شعبة (section_conflicts) لأن المنطق يعتبر وجود فترة بلا مجموعة مع فترة بمجموعة تعارضاً (whole and grouped). الفحص الذي يقترحه التحذير نفسه («راجع فحص التعارضات») يُظهر إذن تعارضاً وهمياً.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/weekly-schedule/move-slot (_check_slot_placement السطر 5447)", "issue": "التخفيف غير مطبّق هنا. نقل مقرر B (معلم2/قاعة2) إلى خلية فيها A (معلم1/قاعة1) → 409 'تعارض شعبة'. هذا يعني أن من ينقل فترة B بعيداً ثم يعيدها لا يستطيع ذلك، لأن A قيمتها group=None. الأمر نفسه محتمل في swap-slots وauto-generate (لم تُختبر)."},
+      {"endpoint": "PUT /api/weekly-schedule/{id}", "issue": "عند إرسال slot_type أو course_id لفترة group='auto-xxx' يُرجع 400 'المجموعة غير معرّفة في هذا المقرر'، لأن _validate_slot_group يتحقق من مفتاح auto كأنه مجموعة حقيقية في course.groups. هذا يكسر زر تبديل نظري/عملي في MasterScheduleView.tsx:852."},
+      {"endpoint": "PUT /api/weekly-schedule/{id} (السطر 1484-1491)", "issue": "عدم اتساق مع POST: إن كان للفترة group صريح وطلاب المجموعتين متداخلون فعلاً (_ov تداخل حقيقي)، يسقط التنفيذ إلى شرط المعلم/القاعة المختلفين ويسمح بالحفظ. في POST يمنع elif هذا. لم يُختبر عملياً، بل من مراجعة الكود."},
+      {"endpoint": "PUT /api/weekly-schedule/{id}", "issue": "ScheduleSlotUpdate لا يقبل day/slot_number، فكود التخفيف داخل PUT لا يُفعَّل إلا بتغيير group/department/level/section."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "weekly-schedule.tsx group badge (السطر 1305)", "issue": "الفترات ذات auto-group ستُعرض بشارة '👥 مجموعة auto-1a2b3c4d' لأن group_name=None. تحتاج إخفاء الشارة أو تسمية مناسبة مثل «موازٍ». من مراجعة الكود فقط.", "selector": "[data-testid^='group-badge-']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_weekly_schedule_parallel_relax.py", "/app/test_reports/pytest/pytest_parallel_relax.xml"],
+  "action_items": [
+    "إصلاح _slots_conflict: اعتبار مقررين مختلفين بنفس الشعبة غير متعارضين إن كان لأحدهما على الأقل group يبدأ بـ 'auto-' (أو أي group مع اختلاف المقرر)، مع الإبقاء على فحص المعلم/القاعة. هذا يمنع إزاحة الوقت",
+    "تحديث /weekly-schedule/conflicts لاستثناء الزوج (whole + auto-group لمقرر مختلف بمعلم/قاعة مختلفين)",
+    "تطبيق نفس التخفيف في _check_slot_placement (move-slot) ومراجعة swap-slots وauto-generate",
+    "في PUT: تجاوز _validate_slot_group عندما تكون المجموعة الحالية تبدأ بـ 'auto-' (الإبقاء عليها كما هي)",
+    "في PUT: جعل منطق _grouped_cells_overlap مطابقاً لـ POST (elif) حتى لا يُسمح بتداخل طلاب حقيقي",
+    "الواجهة: إخفاء أو تسمية شارة المجموعة لقيم auto-*"
+  ],
+  "critical_code_review_comments": [
+    "مفتاح auto-group مخزَّن في الحقل group نفسه، فكل كود يفترض أن group مفتاح حقيقي في course.groups يتأثر: _validate_slot_group وتوليد المحاضرات (lectures.group) وفلترة الحضور حسب المجموعة. يُنصح بحقل مستقل (مثل parallel_key) أو تمييز 'auto-' في كل هذه المواضع",
+    "weekly_schedule.py يتجاوز 6300 سطر، ويُنصح بتقسيمه",
+    "منطق تعارض الشعبة مكرر في create وupdate و_check_slot_placement و_slots_conflict و/conflicts بشروط مختلفة، وهذا سبب عدم الاتساق الحالي. يُنصح بدالة موحدة"
+  ],
+  "updated_files": ["/app/backend/tests/test_weekly_schedule_parallel_relax.py"],
+  "success_rate": {"backend": "75% (12/16)", "frontend": "تحقق دخان فقط: الصفحة تفتح بلا أخطاء"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "يُنشئ ملف الاختبار مؤقتاً 3 معلمين (TEST_معلم*) و3 قاعات (TEST_قاعة*) و4 مقررات (TESTPAR*) بالقسم 698e500997fef774e66e93a8 م1 شعبة أ، وفترات يوم الجمعة. كلها تُحذف في teardown (تحقق: 0 متبقٍ)",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "شغّل: python -m pytest /app/backend/tests/test_weekly_schedule_parallel_relax.py -v. الاختبارات الأربعة الفاشلة (move-slot وslot_type على auto وإزاحة الوقت و/conflicts) يجب أن تنجح بعد الإصلاح. يوم الجمعة مستخدم لأنه بلا فترات حقيقية.",
+  "rca of the issue": "خُفّف فحص تعارض الشعبة في POST وPUT فقط، بينما توجد 3 مواضع أخرى تحسب تعارض الشعبة وكلها تشترط group غير فارغ لكلا الطرفين أو تعتبر (بلا مجموعة + بمجموعة) تعارضاً: _slots_conflict (يستخدمه محلّل الأوقات وcompact-chain) و/conflicts و_check_slot_placement. للتكرار: أنشئ A(t1,r1) ثم B(t2,r2) بنفس الخلية؛ تحصل B على computed_start_time=09:30 ويُعلَّم الزوج في /conflicts."
+}
