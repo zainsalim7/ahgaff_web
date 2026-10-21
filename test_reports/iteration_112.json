@@ -1,0 +1,47 @@
+{
+  "summary": "Phase 3 testing (cancellation reason classification college/non_college + Prep Leave Periods + absence engine + teacher overtime). Backend: 15 pytest cases, 12 pass. Admin flows all work: /status and PUT /lectures/{id} persist cancellation_reason_type, reset to scheduled clears it, absent never persists it, an invalid value returns 400, the overtime report adds college_cancel_hours (shortfall 1.5 -> 0.5 with the note 'إلغاء بسبب الكلية', while non_college leaves shortfall unchanged), prep-leave CRUD and validation (400s, 404) work, and the absence engine drops executed lectures inside a course- or department-scope prep period (executed_hours goes back to baseline). The 3 failures share one root cause: the TEACHER role effectively has override_lecture_status, so a teacher can classify cancellations and can create/delete university-wide prep-leave periods. Frontend: the cancel modal works end to end on /schedule (badge 'بسبب الكلية' shown, DB persisted) and on /course-lectures. The /prep-leave-periods screen works (dashboard entry, add all/course scope, delete), but the date text inputs lose focus on every keystroke.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/lectures/{id} (teacher)", "issue": "cancellation_reason_type is NOT stripped for teachers. The teacher's default permissions include MANAGE_LECTURES, which FULL_PERMISSION_MAPPING expands to OVERRIDE_LECTURE_STATUS, so has_permission(teacher, OVERRIDE_LECTURE_STATUS) is True. Reproduced: teacher180156 cancelled a lecture with type 'college' and it was persisted. Teachers can therefore wipe their own overtime shortfall.", "priority": "HIGH"},
+      {"endpoint": "POST/DELETE /api/prep-leave-periods (teacher)", "issue": "Teacher gets 200 (expected 403) and can create or delete university-wide (scope=all) prep-leave periods. These forgive student absences for everyone. Same root cause: _can_manage() falls back to has_permission(OVERRIDE_LECTURE_STATUS). Student is correctly blocked with 403.", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/lectures/{id}/status (teacher)", "issue": "Teacher gets 200 on the override-status endpoint and can change the status of lectures in courses they don't own. teacher180156 changed a lecture of course 6ace901a… whose teacher is 698e533b…. This is not new to this phase but is now more impactful because of the college classification."},
+      {"endpoint": "PUT /api/lectures/{id}", "issue": "Two gaps: (1) cancellation_reason_type is only validated when status=cancelled. An admin sending it without a status (or with status=completed) persists any arbitrary or invalid value. (2) Setting status=absent only pops the field from the payload and does not clear an existing value ($set None), unlike /status. A lecture that was 'cancelled/college' and is then marked absent keeps 'college' in the DB."},
+      {"endpoint": "teacher_overtime.compute_workload", "issue": "college_cancel_hours are added to actual_hours/total_actual. This raises overtime_hours, bonus_hours and the overtime pay amount, not just removing the shortfall. If every lecture in the period is college-cancelled, expected=0 but actual=hours, so completion is 100% and the hours become paid overtime. If a college-cancelled lecture falls on an official holiday date, it can also be counted twice (holiday_hours + college_cancel_hours). Consider capping at expected, or reducing expected instead of inflating actual."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "prep-leave-periods.tsx DateField", "issue": "DateField is declared inside the component body, so it remounts on every render. Typing in the text field loses focus after each keystroke: typing '2031-05-01' char-by-char leaves only '2'. The native date input next to it still works. Fix: move DateField outside the component or inline the JSX.", "selector": "[data-testid='form-from-input'], [data-testid='form-to-input']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Teacher UI permissions", "issue": "schedule.tsx canClassifyCancellation includes 'manage_lectures', and SideMenu shows 'إجازة التحضير' for 'manage_lectures'. Teachers therefore see the classification chips and the prep-leave menu entry. Align with the intended admin/dean/dept-head-only rule.", "affected_selectors": ["[data-testid='cancel-reason-college-chip']"]}
+    ],
+    "design_issues": [
+      {"screen": "/prep-leave-periods add modal", "issues": ["Each date shows both a YYYY-MM-DD text box and a browser-default <input type=date> (two inputs per date, redundant). Use a single shadcn-style/custom date picker.", "Modal stretches full width on desktop instead of a centered card (maxWidth)", "The course picker lists courses from all semesters, so two 'دراسات حضرموت' entries appear. Filter by active semester or show the semester name."]},
+      {"screen": "/course-lectures list", "issues": ["Cancelled lectures do not show the 'بسبب الكلية/غير الكلية' badge (only /schedule shows it)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_phase3_cancel_type_prep_leave.py", "/app/test_reports/pytest/pytest_phase3.xml"],
+  "action_items": [
+    "Restrict cancellation classification and prep-leave management to admin/dean/department_head. Don't rely on OVERRIDE_LECTURE_STATUS alone, because the teacher role gets it via MANAGE_LECTURES expansion. E.g. in PUT /lectures/{id}: if current_user.role == teacher, pop cancellation_reason_type. In prep_leave._can_manage, exclude teachers or use a dedicated permission.",
+    "Fix prep-leave-periods.tsx DateField focus loss (hoist the component outside the render function)",
+    "PUT /lectures/{id}: validate cancellation_reason_type for any status. Only persist it when status=cancelled. On status=absent, explicitly $set it to None.",
+    "Revisit the overtime calculation so college_cancel_hours do not inflate overtime pay or bonus, and do not double count with holidays",
+    "Frontend: hide the classification chips and the prep-leave menu entry from teachers (schedule.tsx canClassifyCancellation, SideMenu permissions)"
+  ],
+  "critical_code_review_comments": [
+    "prep_leave._can_manage: has_permission(OVERRIDE_LECTURE_STATUS) is True for teachers (MANAGE_LECTURES expansion), which is a security hole",
+    "server.py PUT /lectures/{id}: there is no ownership check for teachers on any lecture (pre-existing)",
+    "absence_engine.prep_excluded_dates expands each period day by day into a set. This is fine for short periods, but a large accidental range (years) is expanded with no cap. Consider comparing date strings against ranges instead.",
+    "prep_leave POST does not validate that scope_id exists (course/department/faculty) and does not check that a department head stays within their own department scope"
+  ],
+  "updated_files": ["/app/frontend/app/course-lectures.tsx (added testID lecture-menu-btn-{id} and cancel-lecture-menu-item)", "/app/backend/tests/test_phase3_cancel_type_prep_leave.py"],
+  "success_rate": {"backend": "80% (12/15)", "frontend": "90%"},
+  "test_credentials": "admin/admin123, teacher180156/teacher123, student 1001/test1234 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Temporary TEST_ lectures (room TEST_ROOM/TEST_UI/TEST_UI2) and TEST_ prep periods were created and all cleaned up. The pre-existing prep period 2026-08-01..03 scope=all (reason 'اختبار', created by main agent) was left untouched. Note that it affects absence for all students in that range.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_phase3_cancel_type_prep_leave.py -v. The 3 expected failures (teacher_forbidden_status_endpoint, teacher_type_stripped, teacher_student_forbidden) should pass once teachers are restricted. test_teacher_forbidden_status_endpoint asserts 403 for teachers on /status, which is pre-existing behaviour; drop it if the product allows teachers to use that endpoint. Test course: 6ace901ad7775476ff611baf (active semester, student 999 db id 69b2e7bdb318756c5856f466). GET /lectures/{course_id} is filtered by the course's semester and paginated (use per_page=1000). Past-date lectures can't be created via the API, so the engine test patches the date directly in Mongo. Login UI: fill the placeholder inputs, then click the text 'تسجيل الدخول' (.last)."
+}

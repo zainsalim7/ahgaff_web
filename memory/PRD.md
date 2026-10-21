@@ -68,3 +68,12 @@
 - Admin: admin / admin123
 - Student: 1001 / test1234
 - Teacher: teacher180156 / teacher123
+
+## Phase 3 (DONE — 2026-08-21)
+- Lecture cancellation classification: `cancellation_reason_type` ('college'|'non_college') on lectures, settable ONLY when status→cancelled (not absent), ONLY by admin/dean/department_head (role-based, teachers always stripped). Endpoints: PUT /api/lectures/{id}/status and PUT /api/lectures/{id}.
+- Effect: 'college' reason reduces the course's expected hours in teacher_overtime.py (no shortfall, no overtime inflation); 'non_college' behaves as before.
+- New "إجازة التحضير" (Preparation Leave) feature: admin/dean/department_head manually declare date-range periods (scope: all/faculty/department/course) via new `prep_leave_periods` collection + `/api/prep-leave-periods` CRUD (routes/prep_leave.py) + frontend screen `/prep-leave-periods`. Lectures inside an active matching period are excluded from `services/absence_engine.course_profiles` (both numerator/denominator) for ALL students — forgiving absence, not tied to exams automatically.
+- UI: new shared `CancelLectureModal` component used in schedule.tsx and course-lectures.tsx; cancellation_reason_type badge shown on both screens; admin menu + side menu entries restricted via `roles` field (admin/dean/department_head only).
+- Tested via testing_agent (iteration_112): 14/15 pytest cases pass (tests/test_phase3_cancel_type_prep_leave.py). Remaining 1 failure is pre-existing unrelated behavior (teacher access to /status endpoint, not in scope).
+
+## Next: Phase 4 — Faculty Board (مجلس الكلية) module for deprivation decisions.

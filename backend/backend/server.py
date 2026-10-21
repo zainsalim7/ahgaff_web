@@ -9166,6 +9166,9 @@ async def update_lecture_status(lecture_id: str, request: Request, current_user:
     new_status = data.get("status")
     cancellation_reason = (data.get("cancellation_reason") or "").strip()
     cancellation_reason_type = data.get("cancellation_reason_type") or None
+    # 🏛️ تصنيف الإلغاء محصور بـ Admin/العميد/رئيس القسم فقط (ليس المعلم رغم امتلاكه صلاحية override عبر manage_lectures)
+    if current_user.get("role") not in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD):
+        cancellation_reason_type = None
     if cancellation_reason_type not in (None, CancellationReasonType.COLLEGE, CancellationReasonType.NON_COLLEGE):
         raise HTTPException(status_code=400, detail="تصنيف سبب الإلغاء غير صالح")
     valid = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.CANCELLED, LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED]
@@ -9699,9 +9702,11 @@ async def update_lecture(
     
     update_data = {k: v for k, v in data.dict().items() if v is not None and k != "apply_to_shared"}
 
-    # 🏛️ تصنيف الإلغاء (بسبب الكلية/غير الكلية) — فقط لمن يملك صلاحية تغيير حالة المحاضرة، وفقط عند الإلغاء
-    if "cancellation_reason_type" in update_data and not has_permission(current_user, Permission.OVERRIDE_LECTURE_STATUS):
+    # 🏛️ تصنيف الإلغاء (بسبب الكلية/غير الكلية) — محصور بـ Admin/العميد/رئيس القسم فقط
+    if "cancellation_reason_type" in update_data and current_user.get("role") not in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD):
         update_data.pop("cancellation_reason_type", None)
+    if update_data.get("cancellation_reason_type") not in (None, CancellationReasonType.COLLEGE, CancellationReasonType.NON_COLLEGE):
+        raise HTTPException(status_code=400, detail="تصنيف سبب الإلغاء غير صالح")
 
     # 👥 تغيير/إزالة مجموعة المحاضرة (للمدير أو من يملك صلاحية إدارة المحاضرات)
     _eff_group = lecture.get("group") or ""
@@ -9790,7 +9795,7 @@ async def update_lecture(
             if update_data.get("cancellation_reason_type") not in (None, CancellationReasonType.COLLEGE, CancellationReasonType.NON_COLLEGE):
                 raise HTTPException(status_code=400, detail="تصنيف سبب الإلغاء غير صالح")
         else:
-            update_data.pop("cancellation_reason_type", None)
+            update_data["cancellation_reason_type"] = None
     elif new_status == LectureStatus.SCHEDULED:
         update_data["cancellation_reason_type"] = None
 

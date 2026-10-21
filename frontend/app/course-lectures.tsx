@@ -719,7 +719,7 @@ export default function CourseLecturesScreen() {
 
   const [cancelModal, setCancelModal] = useState<{ lectureId: string; applyShared: boolean } | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
-  const canClassifyCancellation = user?.role === 'admin' || hasPermission(PERMISSIONS.OVERRIDE_LECTURE_STATUS);
+  const canClassifyCancellation = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head';
 
   const handleCancelLecture = async (lectureId: string) => {
     // 🔗 محاضرة مشتركة؟ اسأل عن تطبيق الإلغاء على كل الشعب
@@ -969,6 +969,7 @@ export default function CourseLecturesScreen() {
             style={styles.dotsBtn}
             onPress={() => setOpenMenuId(openMenuId === item.id ? null : item.id)}
             accessibilityLabel="العمليات"
+            testID={`lecture-menu-btn-${item.id}`}
           >
             <Ionicons name="ellipsis-vertical" size={16} color="#5b6678" />
           </TouchableOpacity>
@@ -978,6 +979,11 @@ export default function CourseLecturesScreen() {
         <View dataSet={{ responsive: "lecture-status-abs" }} style={[styles.statusBadgeAbs, { backgroundColor: statusInfo.color }]}>
           <Text style={styles.statusBadgeAbsText}>{statusInfo.label}</Text>
         </View>
+        {item.status === 'cancelled' && item.cancellation_reason_type && (
+          <View style={[styles.cancelTypeBadge, { backgroundColor: item.cancellation_reason_type === 'college' ? '#00838f' : '#e65100' }]} testID={`cancel-reason-type-${item.id}`}>
+            <Text style={styles.statusBadgeAbsText}>{item.cancellation_reason_type === 'college' ? 'بسبب الكلية' : 'غير الكلية'}</Text>
+          </View>
+        )}
       </CardWrapper>
     );
   };
@@ -1350,7 +1356,7 @@ export default function CourseLecturesScreen() {
                     </TouchableOpacity>
                   )}
                   {canManageLectures && lec.status === 'scheduled' && (
-                    <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleCancelLecture(lec.id); }}>
+                    <TouchableOpacity style={styles.menuItem} testID="cancel-lecture-menu-item" onPress={() => { setOpenMenuId(null); handleCancelLecture(lec.id); }}>
                       <Ionicons name="close-circle-outline" size={18} color="#f57c00" />
                       <Text style={styles.menuText}>إلغاء المحاضرة</Text>
                     </TouchableOpacity>
@@ -2089,6 +2095,7 @@ const styles = StyleSheet.create({
   dotsBtn: { width: 32, height: 32, borderRadius: 6, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#e3e7ee', backgroundColor: '#fff' },
 
   statusBadgeAbs: { position: 'absolute', top: 12, left: 16, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
+  cancelTypeBadge: { position: 'absolute', top: 40, left: 16, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10 },
   statusBadgeAbsText: { fontSize: 10, color: '#fff', fontWeight: '700' },
 
   tableCard: { backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6' },

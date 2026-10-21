@@ -199,7 +199,7 @@ export default function ScheduleScreen() {
 
   const [cancelModal, setCancelModal] = useState<{ lectureId: string } | null>(null);
   const [cancelLoading, setCancelLoading] = useState(false);
-  const canClassifyCancellation = user?.role === 'admin' || user?.permissions?.includes('override_lecture_status') || user?.permissions?.includes('manage_lectures');
+  const canClassifyCancellation = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head';
 
   const confirmCancelLecture = async (reasonType: 'college' | 'non_college' | null, reasonText: string) => {
     if (!cancelModal) return;

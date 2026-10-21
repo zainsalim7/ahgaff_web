@@ -6,8 +6,8 @@ from bson import ObjectId
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from .deps import get_current_user, get_db, has_permission, log_activity
-from models.permissions import Permission, UserRole
+from .deps import get_current_user, get_db, log_activity
+from models.permissions import UserRole
 
 router = APIRouter(prefix="/prep-leave-periods", tags=["إجازة التحضير"])
 YEMEN_TZ = timezone(timedelta(hours=3))
@@ -20,7 +20,7 @@ def _now() -> datetime:
 
 
 def _can_manage(user: dict) -> bool:
-    return user.get("role") in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD) or has_permission(user, Permission.OVERRIDE_LECTURE_STATUS)
+    return user.get("role") in (UserRole.ADMIN, UserRole.DEAN, UserRole.DEPARTMENT_HEAD)
 
 
 class PrepPeriodCreate(BaseModel):

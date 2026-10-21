@@ -55,8 +55,29 @@ const askConfirm = async (title: string, msg: string): Promise<boolean> => {
   });
 };
 
+const DateField = ({ value, onChange, testID }: { value: string; onChange: (v: string) => void; testID: string }) => (
+  Platform.OS === 'web' ? (
+    <input
+      type="date"
+      value={value}
+      onChange={(e: any) => onChange(e.target.value)}
+      data-testid={testID}
+      style={{ padding: 10, borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 14, width: '100%', direction: 'ltr' } as any}
+    />
+  ) : (
+    <TextInput
+      style={styles.input}
+      value={value}
+      onChangeText={onChange}
+      placeholder="YYYY-MM-DD"
+      placeholderTextColor="#aaa"
+      testID={testID}
+    />
+  )
+);
+
 export default function PrepLeavePeriodsScreen() {
-  const { user, hasPermission } = useAuth();
+  const { user } = useAuth();
   const [items, setItems] = useState<PrepPeriod[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,7 +93,7 @@ export default function PrepLeavePeriodsScreen() {
   const [formScopeId, setFormScopeId] = useState('');
   const [formReason, setFormReason] = useState('');
 
-  const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head' || hasPermission('override_lecture_status');
+  const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head';
 
   const fetchItems = useCallback(async () => {
     setLoading(true);
@@ -95,10 +116,18 @@ export default function PrepLeavePeriodsScreen() {
     void fetchItems();
     api.get('/faculties').then((r) => setFaculties((r.data || []).map((f: any) => ({ id: f.id, name: f.name })))).catch(() => {});
     api.get('/departments').then((r) => setDepartments((r.data || []).map((d: any) => ({ id: d.id, name: d.name })))).catch(() => {});
-    api.get('/courses').then((r) => {
+    api.get('/semesters/current').then((sr) => {
+      const semId = sr?.data?.id;
+      return api.get('/courses', semId ? { params: { semester_id: semId } } : undefined);
+    }).then((r) => {
       const list = Array.isArray(r.data) ? r.data : (r.data?.items || []);
       setCourses(list.map((c: any) => ({ id: c.id, name: `${c.name}${c.code ? ` (${c.code})` : ''}` })));
-    }).catch(() => {});
+    }).catch(() => {
+      api.get('/courses').then((r) => {
+        const list = Array.isArray(r.data) ? r.data : (r.data?.items || []);
+        setCourses(list.map((c: any) => ({ id: c.id, name: `${c.name}${c.code ? ` (${c.code})` : ''}` })));
+      }).catch(() => {});
+    });
   }, [user, canManage, fetchItems]);
 
   const resetForm = () => {
@@ -165,26 +194,7 @@ export default function PrepLeavePeriodsScreen() {
     }
   };
 
-  const DateField = ({ value, onChange, testID }: { value: string; onChange: (v: string) => void; testID: string }) => (
-    <>
-      <TextInput
-        style={styles.input}
-        value={value}
-        onChangeText={onChange}
-        placeholder="YYYY-MM-DD"
-        placeholderTextColor="#aaa"
-        testID={testID}
-      />
-      {Platform.OS === 'web' && (
-        <input
-          type="date"
-          value={value}
-          onChange={(e: any) => onChange(e.target.value)}
-          style={{ marginTop: 6, padding: 10, borderRadius: 8, border: '1px solid #e0e0e0', fontSize: 14, width: '100%', direction: 'ltr' } as any}
-        />
-      )}
-    </>
-  );
+
 
   return (
     <>
@@ -335,8 +345,8 @@ const styles = StyleSheet.create({
   cardReason: { fontSize: 11, color: '#666', marginTop: 2, textAlign: 'right' },
   cardMeta: { fontSize: 10, color: '#999', marginTop: 2, textAlign: 'right' },
   iconBtn: { padding: 6 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', padding: 16 },
-  modal: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden' },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 16 },
+  modal: { backgroundColor: '#fff', borderRadius: 12, overflow: 'hidden', width: '94%', maxWidth: 460, alignSelf: 'center' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 14, borderBottomWidth: 1, borderBottomColor: '#eee' },
   modalTitle: { fontSize: 16, fontWeight: '700', color: '#7c3aed' },
   formGroup: { padding: 14, paddingBottom: 0 },

@@ -296,14 +296,15 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 day_hours = await _course_day_hours(db, cid, lectures, weekly)
                 holiday_hours, holiday_names = _holiday_deduction(holidays, day_hours, first, end, executed_dates)
             taught_hours = actual_hours
-            actual_hours = round(actual_hours + holiday_hours + college_cancel_hours, 2)
-            expected = round(max(0.0, weekly * course_weeks - excused_hours), 2)
+            actual_hours = round(actual_hours + holiday_hours, 2)
+            # 🏛️ إلغاء بسبب الكلية: يُخصم من الافتراضية (لا يُعد نقصاً) دون إضافته لساعات المدرّس المنفَّذة — لا يُحتسب إضافياً ولا يُضاعَف مع الإجازات الرسمية
+            expected = round(max(0.0, weekly * course_weeks - excused_hours - college_cancel_hours), 2)
             if excused_hours:
                 notes.append(f"غياب بعذر {excused_hours:g} س (خُصم من الافتراضية)")
             if holiday_hours:
                 notes.append(f"إجازة رسمية {holiday_hours:g} س محتسبة ({'، '.join(holiday_names)})")
             if college_cancel_hours:
-                notes.append(f"إلغاء بسبب الكلية {college_cancel_hours:g} س محتسبة (لا تُعد نقصاً)")
+                notes.append(f"إلغاء بسبب الكلية {college_cancel_hours:g} س (خُصم من الافتراضية — لا يُعد نقصاً)")
             shortfall = round(max(0.0, expected - actual_hours), 2)
             rate = round(actual_hours / expected * 100) if expected > 0 else (100 if actual_hours > 0 else 0)
 

@@ -34,6 +34,7 @@ interface ToolItem {
   adminOnly?: boolean;
   teacherOnly?: boolean;
   forAll?: boolean;
+  roles?: string[]; // يظهر لهذه الأدوار فقط
 }
 
 interface Section {
@@ -130,7 +131,7 @@ const SECTIONS: Section[] = [
         color: '#7c3aed',
         bg: '#ede9fe',
         route: '/prep-leave-periods',
-        permissions: [PERMISSIONS.OVERRIDE_LECTURE_STATUS, PERMISSIONS.MANAGE_LECTURES],
+        roles: ['admin', 'dean', 'department_head'],
       },
       {
         id: 'availability-report',
@@ -436,6 +437,7 @@ export default function BasicSettingsScreen() {
 
   const canSeeItem = (item: ToolItem): boolean => {
     if (item.forAll) return true;
+    if (item.roles) return item.roles.includes(user?.role || '');
     if (item.adminOnly) return !!isAdmin;
     if (item.teacherOnly) return !!isAdmin || !!isTeacher;
     if (isAdmin) return true;
