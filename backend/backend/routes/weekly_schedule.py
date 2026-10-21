@@ -1277,6 +1277,7 @@ async def create_schedule_slot(
 
     # 1. تعارض الشعبة (لكل هدف) — مجموعتان مختلفتان لنفس المقرر يمكن أن تتوازيا
     warnings: list = []
+    _auto_parallel = False  # 🆕 وُجد مقرر مختلف بمعلم/قاعة مختلفين بلا مجموعة محدَّدة — نولّد مفتاح مجموعة تلقائياً لتفادي تعارض وهمي بفهرس الخانة الفارغة
     for dep, lvl, sec in targets:
         _sec_q = {
             "department_id": dep,
@@ -1288,8 +1289,9 @@ async def create_schedule_slot(
         if slot_group:
             _sec_q["$or"] = [{"group": {"$in": [None, ""]}}, {"group": slot_group}, {"course_id": {"$ne": data.course_id}}]
         for existing_section in await db.weekly_schedule.find(_sec_q).to_list(20):
+            _diff_course = existing_section.get("course_id") != data.course_id
             # 👥 مقرر آخر بمجموعة في نفس الفترة: مسموح إذا لم يشترك طلاب المجموعتين
-            if slot_group and existing_section.get("course_id") != data.course_id and existing_section.get("group"):
+            if slot_group and _diff_course and existing_section.get("group"):
                 _ov = await _grouped_cells_overlap(db, data.course_id, slot_group, existing_section)
                 if _ov is None:
                     continue
@@ -1297,6 +1299,12 @@ async def create_schedule_slot(
                     _oc = await db.courses.find_one({"_id": ObjectId(existing_section["course_id"])}, {"name": 1}) if ObjectId.is_valid(existing_section.get("course_id", "")) else None
                     warnings.append(f"⚠️ لم يُوزَّع الطلاب على المجموعات بعد — تعذّر التأكد من عدم تشارك طلاب مجموعتك مع «{(_oc or {}).get('name', '')}» (مجموعة {existing_section.get('group')}) في هذه الفترة. وزّع الطلاب ثم راجع «فحص التعارضات»")
                     continue
+            # 🆕 مقرر مختلف تماماً بمعلم وقاعة مختلفين عن الجديدة: على الأغلب مجموعتان موازيتان من نفس الشعبة لم تُحدَّد مجموعتهما صراحة — تحذير لا تعارض قاطع
+            elif _diff_course and data.teacher_id and existing_section.get("teacher_id") != data.teacher_id and data.room_id and existing_section.get("room_id") and existing_section.get("room_id") != data.room_id:
+                _oc = await db.courses.find_one({"_id": ObjectId(existing_section["course_id"])}, {"name": 1}) if ObjectId.is_valid(existing_section.get("course_id", "")) else None
+                warnings.append(f"⚠️ يوجد مقرر آخر «{(_oc or {}).get('name', '')}» في نفس الشعبة والفترة بمعلم وقاعة مختلفين — إن كان لمجموعة طلابية مختلفة فلا تعارض، وإلا راجع الجدول")
+                _auto_parallel = True
+                continue
             c = await db.courses.find_one({"_id": ObjectId(existing_section["course_id"])})
             _g = existing_section.get("group")
             conflicts.append(f"تعارض شعبة: يوجد مقرر '{c.get('name', '')}'{f' (مجموعة {_g})' if _g else ''} للمستوى {lvl}{f' شعبة {sec}' if sec else ''} في هذه الفترة")
@@ -1344,6 +1352,8 @@ async def create_schedule_slot(
 
     base = data.dict()
     base.pop("merge_with", None)
+    if _auto_parallel and not slot_group:
+        slot_group = f"auto-{(data.teacher_id or '')[-8:]}"  # 🆕 تفادي تعارض وهمي بفهرس الخانة الفارغة بين مقررين موازيين بلا مجموعة محدَّدة
     base["group"] = slot_group or None
     base["group_name"] = slot_group_name or None
     base["created_at"] = datetime.now(timezone.utc)
@@ -1474,6 +1484,11 @@ async def update_schedule_slot(
             if _chk_group and section_busy.get("course_id") != _chk_course and section_busy.get("group"):
                 if (await _grouped_cells_overlap(db, _chk_course, _chk_group, section_busy)) in (None, UNVERIFIED_OVERLAP):
                     continue
+            # 🆕 مقرر مختلف بمعلم وقاعة مختلفين عن الجديدة وبلا مجموعة محدَّدة: على الأغلب مجموعتان موازيتان — نسمح ونولّد مفتاح مجموعة تلقائياً
+            if section_busy.get("course_id") != _chk_course and check_teacher and section_busy.get("teacher_id") != check_teacher and check_room and section_busy.get("room_id") and section_busy.get("room_id") != check_room:
+                if not _chk_group:
+                    update["group"] = f"auto-{(check_teacher or '')[-8:]}"
+                continue
             raise HTTPException(status_code=409, detail="تعارض: يوجد محاضرة أخرى لنفس الشعبة في هذه الفترة")
 
     if check_teacher and any(k in update for k in ("teacher_id", "day", "slot_number")):
