@@ -142,7 +142,7 @@ async def build_student_report(db, student_id: str) -> dict:
         courses_out.append({
             "course_id": cid, "course_name": course.get("name", ""), "course_code": course.get("code", ""),
             "teacher_name": teacher_name, "total_lectures": len(lectures), **st,
-            "attendance_rate": rate, "warning": pr["status"] in ("warning", "danger", "candidate"), "lectures": rows,
+            "attendance_rate": rate, "warning": pr["status"] in ("warning", "danger", "candidate", "deprived"), "lectures": rows,
             "rule": {k: pr[k] for k in ("executed_hours", "unexcused_hours", "excused_hours", "pct_unexcused", "pct_total", "limit_unexcused", "limit_total", "status", "status_ar", "early")},
         })
     courses_out.sort(key=lambda c: c["course_name"])

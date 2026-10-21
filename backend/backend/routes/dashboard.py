@@ -132,7 +132,7 @@ async def get_student_dashboard(current_user: dict = Depends(get_current_user)):
             "late_count": 0,
             "excused_count": pr["excused_hours"],
             "attendance_rate": pr["attendance_rate"],
-            "status": "danger" if pr["status"] in ("danger", "candidate") else ("warning" if pr["status"] == "warning" else "excellent"),
+            "status": "danger" if pr["status"] in ("danger", "candidate", "deprived") else ("warning" if pr["status"] == "warning" else "excellent"),
             **{k: pr[k] for k in ("executed_hours", "unexcused_hours", "excused_hours", "pct_unexcused", "pct_total", "limit_unexcused", "limit_total",
                                   "remaining_unexcused_hours", "remaining_total_hours", "early", "status_ar")},
             "rule_status": pr["status"],

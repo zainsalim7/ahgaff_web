@@ -1,0 +1,45 @@
+{
+  "summary": "Phase 4 Faculty Board (مجلس الكلية) tested end-to-end. Backend: 11/11 pytest pass (role gate 403 for teacher+student on all 9 endpoints, candidates, sessions validation/list, decision validation 400/404, course-scope de-dup, status override deprived/exempted via /api/reports/student/{id}/detailed, course-scope precedence over general, delete->revert to candidate, bulk session decisions, minutes+letter PDFs valid %PDF). A real candidate was seeded (2 completed lectures + absent records for student 1001 in test course RST-C1) and cleaned up afterwards. Frontend: found and FIXED 2 bugs in faculty-board.tsx (screen loaded no data after in-app navigation post-login; stale session decisions cache). After fixes, full UI flow passes: menu entry -> screen, course filter, refresh, checkbox/bulk bar, single + bulk decision modal (reason required alert, scope/decision chips, session picker), standalone decisions list, letter PDF download, delete with confirm, create session (validation alert + success), expand session shows its decisions, minutes PDF download. Teacher/student do not see the entry; direct URL shows 'غير مصرح' alert. Remaining HIGH issue: dean/department_head are not scoped to their faculty/department.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/faculty-board/candidates, POST /api/faculty-board/decisions, /sessions/{id}/decisions, GET /decisions, DELETE /decisions/{id}", "issue": "No organisational scoping for dean/department_head. Verified: Saeed (department_head of dept 698e501d97fef774e66e93a9, كلية البنات) sees candidate in course 'مقرر اختبار الاستعادة' of dept 698e500997fef774e66e93a8 (الشريعة والقانون) and can issue/delete decisions for any student university-wide. Candidates/decisions should be restricted to the user's faculty_ids/department_ids (admin unrestricted).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/faculty-board/sessions", "issue": "No endpoint to edit/delete a session (sessions created by mistake cannot be removed)."},
+      {"endpoint": "routes/student_report.py", "issue": "'warning' flag is computed as status in (warning, danger, candidate) so a 'deprived' student now has warning=false — deprived should probably still be flagged."},
+      {"endpoint": "GET /api/faculty-board/candidates", "issue": "N+1: _student_info() queried per candidate and course_profiles per course (up to 300) — fine now (0.1s) but will slow with real data."},
+      {"endpoint": "POST /api/faculty-board/sessions/{id}/decisions", "issue": "Bulk with scope=general for the same student across several selected courses creates/deletes repeatedly (last wins) and snapshot pct is taken from an arbitrary course; consider dedup by student for general scope."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "faculty-board.tsx (FIXED by testing agent)", "issue": "Used useAuth() (AuthContext) whose user is null after a fresh login (login.tsx only calls authStore.setAuth). Result: after login and in-app navigation, useEffect returned early -> no candidates/sessions/courses fetched; empty state shown and course picker empty until manual refresh. Fixed by falling back to useAuthStore user. NOTE: same pattern exists in prep-leave-periods.tsx, backfill-sections.tsx, batch-print.tsx, letters.tsx, notifications.tsx, report-teacher-workload.tsx, send-department-results.tsx etc. — main agent should audit.", "selector": "[data-testid=faculty-board-screen]", "priority": "HIGH"},
+      {"component": "faculty-board.tsx sessions tab (FIXED by testing agent)", "issue": "expandSession cached decisions per session; after adding decisions to a session that had been expanded once, it kept showing 'لا قرارات في هذه الجلسة' while header said '1 قرار'. Fixed: always refetch on expand and reset cache/expanded on fetchSessions.", "selector": "[data-testid^=session-]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "faculty-board", "issues": ["Session date uses native browser <input type=date> rather than app date picker component", "Unauthorized users visiting /faculty-board directly get an alert but the screen shell (tabs, create-session button) still renders — should redirect/return early", "Candidate card: checkbox far left and decide button far right; acceptable in RTL but candidate row has wide empty middle on desktop"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_phase4_faculty_board.py", "/app/backend/tests/fb_seed.py", "/app/test_reports/pytest/pytest_phase4.xml"],
+  "action_items": [
+    "Add faculty/department scoping for dean & department_head in all faculty-board endpoints (candidates, decisions create/list/delete, PDFs)",
+    "Audit other screens using useAuth().user from AuthContext (null after fresh login) — same bug as faculty-board (e.g. prep-leave-periods.tsx)",
+    "Consider session delete/edit endpoint and early-return/redirect for unauthorized users on the screen",
+    "Treat 'deprived' as warning in student_report warning flag"
+  ],
+  "critical_code_review_comments": [
+    "_can_decide() is role-based (admin/dean/department_head) — Phase 3 permission-leak bug did NOT recur; teacher & student get 403 on all 9 endpoints",
+    "Missing org scoping (see critical)",
+    "_save_decision uses delete_many+insert_one (non-atomic) — acceptable but a concurrent double-submit could create duplicates; consider a unique index on (student_id, scope, course_id) or upsert",
+    "Decision with scope=general but course_id supplied: course is looked up for snapshot but stored course_id=None — OK, but session_id is not validated in bulk items override (fine since forced to path id)"
+  ],
+  "updated_files": ["/app/frontend/app/faculty-board.tsx", "/app/backend/tests/test_phase4_faculty_board.py", "/app/backend/tests/fb_seed.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% after 2 fixes applied by testing agent"},
+  "test_credentials": "admin/admin123, Saeed/test1234 (department_head), teacher180156/teacher123, 1001/test1234. Teacher & student accounts are app-only on web (login 403 from browser) — inject token into localStorage for UI checks.",
+  "seed_data_creation": "Temporary: 2 completed lectures (room TEST_FB_*) + absent attendance for student 698e57518cfb2f14627a285e in course 6ab3a8ad447a8c2cd67c801c; all cleaned up. faculty_board_decisions/sessions collections empty at end.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/test_phase4_faculty_board.py (self-seeding + cleanup). For UI, run `python3 /app/backend/tests/fb_seed.py seed` before and `... clean` after; admin login via clicking 'تسجيل الدخول' (Enter key does not submit). Retest org scoping once main agent adds it (Saeed should NOT see RST-C1 candidate).",
+  "rca of the issue": "Empty faculty-board after login: AuthProvider.user is only populated from AsyncStorage on app mount; login.tsx writes to zustand authStore and never calls AuthContext.login, so screens reading useAuth().user see null until full reload; the screen's useEffect `if (!user) return;` skipped all fetches. Repro: fresh login -> الإعدادات الأساسية -> مجلس الكلية -> empty list & course picker only 'كل المقررات' (refresh button works). Mitigation applied: `const user = ctxUser || useAuthStore(s=>s.user)`."
+}

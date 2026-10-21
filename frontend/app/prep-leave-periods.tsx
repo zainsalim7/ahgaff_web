@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { useAuthStore } from '../src/store/authStore';
 
 interface PrepPeriod {
   id: string;
@@ -77,7 +78,9 @@ const DateField = ({ value, onChange, testID }: { value: string; onChange: (v: s
 );
 
 export default function PrepLeavePeriodsScreen() {
-  const { user } = useAuth();
+  const { user: ctxUser } = useAuth();
+  const storeUser = useAuthStore((s) => s.user);
+  const user: any = ctxUser || storeUser;
   const [items, setItems] = useState<PrepPeriod[]>([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);

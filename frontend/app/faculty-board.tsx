@@ -17,6 +17,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
+import { useAuthStore } from '../src/store/authStore';
 import { downloadBlob } from '../src/utils/exportName';
 
 interface Candidate {
@@ -62,7 +63,9 @@ const DateField = ({ value, onChange, testID }: { value: string; onChange: (v: s
 );
 
 export default function FacultyBoardScreen() {
-  const { user } = useAuth();
+  const { user: ctxUser } = useAuth();
+  const storeUser = useAuthStore((s) => s.user);
+  const user: any = ctxUser || storeUser;
   const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head';
 
   const [view, setView] = useState<'candidates' | 'sessions'>('candidates');
@@ -118,6 +121,8 @@ export default function FacultyBoardScreen() {
         api.get('/faculty-board/decisions'),
       ]);
       setSessions(sr.data.items || []);
+      setSessionDecisions({});
+      setExpandedSession(null);
       setStandaloneDecisions((dr.data.items || []).filter((d: Decision) => !d.session_id));
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'تعذر جلب الجلسات');
@@ -216,7 +221,7 @@ export default function FacultyBoardScreen() {
   const expandSession = async (sessionId: string) => {
     if (expandedSession === sessionId) { setExpandedSession(null); return; }
     setExpandedSession(sessionId);
-    if (!sessionDecisions[sessionId]) {
+    {
       try {
         const r = await api.get('/faculty-board/decisions', { params: { session_id: sessionId } });
         setSessionDecisions((p) => ({ ...p, [sessionId]: r.data.items || [] }));
@@ -255,6 +260,17 @@ export default function FacultyBoardScreen() {
     }
   };
 
+  const deleteSession = async (s: BoardSession) => {
+    const ok = await askConfirm('حذف الجلسة', `حذف جلسة رقم ${s.meeting_number}؟`);
+    if (!ok) return;
+    try {
+      await api.delete(`/faculty-board/sessions/${s.id}`);
+      await fetchSessions();
+    } catch (e: any) {
+      showAlert('خطأ', e?.response?.data?.detail || 'فشل حذف الجلسة');
+    }
+  };
+
   const DecisionRow = ({ d }: { d: Decision }) => (
     <View style={styles.decisionRow} testID={`decision-row-${d.id}`}>
       <View style={[styles.decisionBadge, { backgroundColor: d.decision === 'deprived' ? '#b91c1c' : '#0f766e' }]}>
@@ -277,6 +293,14 @@ export default function FacultyBoardScreen() {
   return (
     <>
       <Stack.Screen options={{ title: 'مجلس الكلية', headerBackTitle: 'رجوع' }} />
+      {!canManage ? (
+        <SafeAreaView style={styles.container} edges={['bottom']} testID="faculty-board-screen">
+          <View style={styles.empty}>
+            <Ionicons name="lock-closed-outline" size={48} color="#bbb" />
+            <Text style={styles.emptyText}>هذه الصفحة مخصّصة للإدارة فقط</Text>
+          </View>
+        </SafeAreaView>
+      ) : (
       <SafeAreaView style={styles.container} edges={['bottom']} testID="faculty-board-screen">
         <View style={styles.headerCard}>
           <Ionicons name="shield-checkmark" size={28} color="#fff" />
@@ -373,6 +397,11 @@ export default function FacultyBoardScreen() {
                     <TouchableOpacity onPress={() => downloadMinutes(s)} style={styles.iconBtn} testID={`session-minutes-pdf-${s.id}`}>
                       <Ionicons name="print-outline" size={20} color="#0f2440" />
                     </TouchableOpacity>
+                    {s.decisions_count === 0 && (
+                      <TouchableOpacity onPress={() => deleteSession(s)} style={styles.iconBtn} testID={`session-delete-${s.id}`}>
+                        <Ionicons name="trash-outline" size={20} color="#c62828" />
+                      </TouchableOpacity>
+                    )}
                     <Ionicons name={expandedSession === s.id ? 'chevron-up' : 'chevron-down'} size={18} color="#666" />
                   </TouchableOpacity>
                   {expandedSession === s.id && (
@@ -487,6 +516,7 @@ export default function FacultyBoardScreen() {
           </View>
         </Modal>
       </SafeAreaView>
+      )}
     </>
   );
 }

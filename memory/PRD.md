@@ -77,3 +77,15 @@
 - Tested via testing_agent (iteration_112): 14/15 pytest cases pass (tests/test_phase3_cancel_type_prep_leave.py). Remaining 1 failure is pre-existing unrelated behavior (teacher access to /status endpoint, not in scope).
 
 ## Next: Phase 4 — Faculty Board (مجلس الكلية) module for deprivation decisions.
+
+## Phase 4 (DONE — 2026-08-21)
+- New `faculty_board_decisions` + `faculty_board_sessions` collections, router `routes/faculty_board.py` (prefix /faculty-board): candidates list (students with status='candidate'), session CRUD (create/list/delete), decision CRUD (create/bulk-create/list/delete), 2 PDF endpoints (session minutes + individual notice) via existing `routes/report_pdf.py build_report_pdf()`.
+- `services/absence_engine.course_profiles()` now overrides computed status to 'deprived'/'exempted' + attaches `board_decision` info when a matching decision exists (course-scope wins over general-scope). Deleting a decision reverts the student to the naturally computed status.
+- Decision scope: per-course OR general (per-student, all courses); can be standalone or grouped into a session (meeting_number+date+title).
+- Permission: role-based only (admin/dean/department_head) — explicitly avoided the Phase 3 permission-leak bug (has_permission(OVERRIDE_LECTURE_STATUS) is true for teachers via MANAGE_LECTURES expansion).
+- Org scoping added: dean/department_head restricted to their own faculty/department via `get_scope_filter()` (existing codebase helper) on candidates, decision create/list/delete; admin unrestricted.
+- Frontend: new screen `/faculty-board` (2 tabs: candidates / sessions), menu entries in admin.tsx + SideMenu.tsx gated via `roles` field.
+- Fixed `student_report.py`/`dashboard.py` to flag 'deprived' status as warning/danger (was only candidate/danger/warning before).
+- Tested via testing_agent (iteration_113): 11/11 pytest pass, frontend 100% after 2 bugs fixed (useAuth() null-after-login pattern — also backfilled in prep-leave-periods.tsx; stale session-decisions cache). Org-scoping fix manually verified via curl after test (403 confirmed for out-of-scope course/student).
+
+## Next: Phase 5 — Final cleanup and documentation; AI Assistant Phase C (write actions with preview/confirm); Date Picker Arabic localization.
