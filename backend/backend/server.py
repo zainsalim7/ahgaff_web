@@ -138,7 +138,7 @@ from models.teachers import TeacherBase, TeacherCreate, TeacherUpdate, TeacherRe
 from models.courses import CourseBase, CourseCreate, CourseResponse, AttendanceStatus
 from models.lectures import (
     LectureStatus, ACTIVE_LECTURE_STATUSES,
-    LectureCreate, LectureUpdate, LectureResponse, GenerateLecturesRequest
+    LectureCreate, LectureUpdate, LectureResponse, GenerateLecturesRequest, CancellationReasonType
 )
 from models.attendance import (
     AttendanceRecord, AttendanceSessionCreate, AttendanceResponse,
@@ -273,6 +273,7 @@ from routes.dashboard import router as dashboard_router
 from routes.management_dashboard import router as management_dashboard_router
 from routes.weekly_digest import router as weekly_digest_router, weekly_digest_loop
 from routes.calendar_events import router as calendar_router
+from routes.prep_leave import router as prep_leave_router
 from routes.global_search import router as global_search_router
 from routes.entity_details import router as entity_details_router
 from routes.archives import router as archives_router
@@ -8437,6 +8438,8 @@ async def get_all_schedule_lectures(
             "day_shift_cancelled": bool(lecture.get("day_shift_cancelled")),
             "credited_minutes": lecture.get("credited_minutes") or 0,
             "cancel_reason": lecture.get("cancel_reason", ""),
+            "cancellation_reason": lecture.get("cancellation_reason", ""),
+            "cancellation_reason_type": lecture.get("cancellation_reason_type"),
             "attendance_taken": str(lecture["_id"]) in _taken_ids,
             "teacher_name": teacher_map.get(str(course.get("teacher_id", "")), ""),
             "created_at": lecture.get("created_at", "")
@@ -8732,6 +8735,7 @@ async def get_course_lectures(
             "time_locked": bool(lecture.get("time_locked")),
             "time_locked_by_name": lecture.get("time_locked_by_name"),
             "cancellation_reason": lecture.get("cancellation_reason"),
+            "cancellation_reason_type": lecture.get("cancellation_reason_type"),
             "cancelled_at": lecture.get("cancelled_at"),
             "cancelled_by_name": lecture.get("cancelled_by_name"),
         })
@@ -9161,6 +9165,9 @@ async def update_lecture_status(lecture_id: str, request: Request, current_user:
     data = await request.json()
     new_status = data.get("status")
     cancellation_reason = (data.get("cancellation_reason") or "").strip()
+    cancellation_reason_type = data.get("cancellation_reason_type") or None
+    if cancellation_reason_type not in (None, CancellationReasonType.COLLEGE, CancellationReasonType.NON_COLLEGE):
+        raise HTTPException(status_code=400, detail="تصنيف سبب الإلغاء غير صالح")
     valid = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED, LectureStatus.CANCELLED, LectureStatus.ABSENT, LectureStatus.ABSENT_EXCUSED]
     valid_labels = {LectureStatus.SCHEDULED: "مجدولة", LectureStatus.COMPLETED: "منعقدة", LectureStatus.CANCELLED: "ملغاة", LectureStatus.ABSENT: "غائب", LectureStatus.ABSENT_EXCUSED: "غائب بعذر"}
     if new_status not in valid:
@@ -9179,9 +9186,15 @@ async def update_lecture_status(lecture_id: str, request: Request, current_user:
         update_fields["cancelled_at"] = get_yemen_time()
         update_fields["cancelled_by"] = current_user["id"]
         update_fields["cancelled_by_name"] = current_user.get("full_name", "")
+        # 🏛️ تصنيف الإلغاء (بسبب الكلية/غير الكلية) — فقط عند «ملغاة» وليس «غياب الأستاذ»
+        if new_status == LectureStatus.CANCELLED:
+            update_fields["cancellation_reason_type"] = cancellation_reason_type
+        else:
+            update_fields["cancellation_reason_type"] = None
     elif new_status == LectureStatus.SCHEDULED:
         # عند إعادة المحاضرة لمجدولة، أزل بيانات الإلغاء
         update_fields["cancellation_reason"] = ""
+        update_fields["cancellation_reason_type"] = None
         update_fields["cancelled_at"] = None
         update_fields["cancelled_by"] = None
         update_fields["cancelled_by_name"] = ""
@@ -9201,6 +9214,7 @@ async def update_lecture_status(lecture_id: str, request: Request, current_user:
             "old_status": lecture.get("status", ""),
             "new_status": new_status,
             "cancellation_reason": cancellation_reason or None,
+            "cancellation_reason_type": cancellation_reason_type,
             "shared_sections": len(siblings) or None,
         },
     )
@@ -9685,6 +9699,10 @@ async def update_lecture(
     
     update_data = {k: v for k, v in data.dict().items() if v is not None and k != "apply_to_shared"}
 
+    # 🏛️ تصنيف الإلغاء (بسبب الكلية/غير الكلية) — فقط لمن يملك صلاحية تغيير حالة المحاضرة، وفقط عند الإلغاء
+    if "cancellation_reason_type" in update_data and not has_permission(current_user, Permission.OVERRIDE_LECTURE_STATUS):
+        update_data.pop("cancellation_reason_type", None)
+
     # 👥 تغيير/إزالة مجموعة المحاضرة (للمدير أو من يملك صلاحية إدارة المحاضرات)
     _eff_group = lecture.get("group") or ""
     _eff_group_teacher = None
@@ -9767,6 +9785,14 @@ async def update_lecture(
             update_data["cancelled_at"] = get_yemen_time()
             update_data["cancelled_by"] = current_user["id"]
             update_data["cancelled_by_name"] = current_user.get("full_name", "")
+        # 🏛️ تصنيف الإلغاء (بسبب الكلية/غير الكلية) — فقط عند «ملغاة» وليس «غياب الأستاذ»
+        if new_status == LectureStatus.CANCELLED:
+            if update_data.get("cancellation_reason_type") not in (None, CancellationReasonType.COLLEGE, CancellationReasonType.NON_COLLEGE):
+                raise HTTPException(status_code=400, detail="تصنيف سبب الإلغاء غير صالح")
+        else:
+            update_data.pop("cancellation_reason_type", None)
+    elif new_status == LectureStatus.SCHEDULED:
+        update_data["cancellation_reason_type"] = None
 
     # 🔧 إصلاح "ghost completion": عند مسح عنوان الدرس، نُلغي إنجاز المحاضرة
     # حتى لا يبقى محسوباً ضمن نسبة الإنجاز رغم عدم وجود درس فعلاً
@@ -9804,7 +9830,7 @@ async def update_lecture(
     # 🔗 إلغاء/إعادة تفعيل محاضرة مشتركة يسري على الشعب الأخرى (فقط حقول الحالة والسبب)
     siblings = []
     if new_status in (LectureStatus.CANCELLED, LectureStatus.ABSENT, LectureStatus.SCHEDULED) and data.apply_to_shared is not False:
-        _shared_set = {k: v for k, v in update_data.items() if k in ("status", "cancellation_reason", "cancelled_at", "cancelled_by", "cancelled_by_name")}
+        _shared_set = {k: v for k, v in update_data.items() if k in ("status", "cancellation_reason", "cancellation_reason_type", "cancelled_at", "cancelled_by", "cancelled_by_name")}
         if _shared_set:
             siblings = await _find_sibling_lectures(lecture)
             for sib in siblings:
@@ -18471,6 +18497,7 @@ app.include_router(dashboard_router, prefix="/api")
 app.include_router(management_dashboard_router, prefix="/api")
 app.include_router(weekly_digest_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
+app.include_router(prep_leave_router, prefix="/api")
 app.include_router(global_search_router, prefix="/api")
 app.include_router(alumni_router, prefix="/api")
 app.include_router(entity_details_router, prefix="/api")

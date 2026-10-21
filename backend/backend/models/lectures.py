@@ -15,6 +15,13 @@ class LectureStatus:
 # المحاضرات الفعّالة فقط - غياب الأستاذ والملغاة لا تُحسب على الطالب
 ACTIVE_LECTURE_STATUSES = [LectureStatus.SCHEDULED, LectureStatus.COMPLETED]
 
+class CancellationReasonType:
+    """تصنيف سبب إلغاء المحاضرة (المرحلة 3) — يُستخدم فقط عند status=cancelled"""
+    COLLEGE = "college"          # بسبب الكلية (عطلة/قرار إداري/فعالية جامعية) — لا يُحتسب نقصاً ولا يتطلب تعويضاً إلزامياً
+    NON_COLLEGE = "non_college"  # غير الكلية (ظروف المعلم/أخرى) — يبقى كما كان (نقص يتطلب تعويضاً)
+
+CANCELLATION_REASON_TYPES_AR = {CancellationReasonType.COLLEGE: "بسبب الكلية", CancellationReasonType.NON_COLLEGE: "غير الكلية"}
+
 class LectureCreate(BaseModel):
     course_id: str
     date: str
@@ -33,6 +40,7 @@ class LectureUpdate(BaseModel):
     status: Optional[str] = None
     notes: Optional[str] = None
     cancellation_reason: Optional[str] = None  # سبب الإلغاء (يُستخدم عند تحويل الحالة إلى cancelled)
+    cancellation_reason_type: Optional[str] = None  # تصنيف الإلغاء: college | non_college (فقط عند cancelled)
     apply_to_shared: Optional[bool] = None  # 🔗 تطبيق الإلغاء/التفعيل على الشعب المشتركة (افتراضياً نعم)
     reschedule_note: Optional[str] = None  # ملاحظة عند إعادة الجدولة (اختياري)
     lesson_title: Optional[str] = None  # عنوان الدرس المُنجز (لربط الخطة الدراسية)

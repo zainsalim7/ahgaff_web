@@ -7,7 +7,7 @@
 - «تجاوز» = أكبر من (وليس يساوي). لا حالة «متأخر» (تُعامل حضوراً). السجل المفقود في محاضرة منفَّذة = غياب بلا عذر (إلا إن سبقت المحاضرة تاريخ تسجيل الطالب).
 - قبل تنفيذ MIN_EXECUTED محاضرات تُعرض النسب بعلامة «مؤشر مبكر».
 """
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Dict, List, Optional
 from bson import ObjectId
 
@@ -82,11 +82,40 @@ async def executed_lectures(db, course_id: str) -> List[dict]:
     return await db.lectures.find({"course_id": course_id, "status": "completed"}, {"date": 1, "start_time": 1, "end_time": 1, "credited_minutes": 1}).to_list(2000)
 
 
+async def prep_excluded_dates(db, course: dict) -> set:
+    """📅 أيام «إجازة التحضير» المُعلَنة يدوياً قبيل الاختبارات — تُستبعد محاضراتها من احتساب الغياب لهذا المقرر."""
+    cid = str(course["_id"])
+    dep_id = course.get("department_id")
+    fac_id = course.get("faculty_id")
+    if not fac_id and dep_id and ObjectId.is_valid(dep_id):
+        dep = await db.departments.find_one({"_id": ObjectId(dep_id)}, {"faculty_id": 1})
+        fac_id = (dep or {}).get("faculty_id")
+    ors = [{"scope": "all"}, {"scope": "course", "scope_id": cid}]
+    if dep_id:
+        ors.append({"scope": "department", "scope_id": dep_id})
+    if fac_id:
+        ors.append({"scope": "faculty", "scope_id": fac_id})
+    out = set()
+    async for p in db.prep_leave_periods.find({"$or": ors}):
+        try:
+            d = datetime.strptime(p["date_from"], "%Y-%m-%d").date()
+            last = datetime.strptime(p["date_to"], "%Y-%m-%d").date()
+        except Exception:
+            continue
+        while d <= last:
+            out.add(d.strftime("%Y-%m-%d"))
+            d += timedelta(days=1)
+    return out
+
+
 async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = None, limits: Optional[dict] = None) -> Dict[str, dict]:
     """{student_db_id: profile} لكل طلاب المقرر (أو قائمة محددة) — استعلامان فقط"""
     cid = str(course["_id"])
     limits = limits or await course_limits(db, course)
     lecs = await executed_lectures(db, cid)
+    excluded_dates = await prep_excluded_dates(db, course)
+    if excluded_dates:
+        lecs = [l for l in lecs if str(l.get("date", ""))[:10] not in excluded_dates]
     if student_ids is None:
         student_ids = [e["student_id"] async for e in db.enrollments.find({"course_id": cid}, {"student_id": 1}) if e.get("student_id")]
     enrolled_at = {e["student_id"]: e.get("enrolled_at") async for e in db.enrollments.find({"course_id": cid, "student_id": {"$in": student_ids}}, {"student_id": 1, "enrolled_at": 1})}

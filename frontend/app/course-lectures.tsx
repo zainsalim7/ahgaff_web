@@ -23,6 +23,7 @@ import { LoadingScreen } from '../src/components/LoadingScreen';
 import AddLectureModal, { LectureFormData } from '../src/components/AddLectureModal';
 import RoomPicker from '../src/components/RoomPicker';
 import { TimeRangeSummary } from '../src/components/TimeRangeSummary';
+import CancelLectureModal from '../src/components/CancelLectureModal';
 import { suggestEndTime } from '../src/utils/timeFormat';
 import { useAuthStore } from '../src/store/authStore';
 import { CourseTabBar } from '../src/components/CourseTabBar';
@@ -49,6 +50,7 @@ interface Lecture {
   last_rescheduled_at?: string | null;
   rescheduled_by_name?: string | null;
   cancellation_reason?: string | null;
+  cancellation_reason_type?: string | null;
   cancelled_at?: string | null;
   cancelled_by_name?: string | null;
 }
@@ -715,8 +717,11 @@ export default function CourseLecturesScreen() {
     }
   };
 
+  const [cancelModal, setCancelModal] = useState<{ lectureId: string; applyShared: boolean } | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const canClassifyCancellation = user?.role === 'admin' || hasPermission(PERMISSIONS.OVERRIDE_LECTURE_STATUS);
+
   const handleCancelLecture = async (lectureId: string) => {
-    let reason = '';
     // 🔗 محاضرة مشتركة؟ اسأل عن تطبيق الإلغاء على كل الشعب
     let applyShared = false;
     try {
@@ -731,32 +736,24 @@ export default function CourseLecturesScreen() {
         ]));
       }
     } catch { /* تجاهل — يُعامل كمحاضرة عادية */ }
-    if (Platform.OS === 'web') {
-      const r = window.prompt('أدخل سبب إلغاء المحاضرة (سيظهر في التقارير):', '');
-      if (r === null) return; // المستخدم ضغط إلغاء
-      reason = r.trim();
-    } else {
-      // على الموبايل نستخدم نافذة تأكيد بسيطة
-      const ok = await new Promise<boolean>((resolve) => {
-        Alert.alert(
-          'إلغاء المحاضرة',
-          'هل أنت متأكد من إلغاء هذه المحاضرة؟ يمكنك إضافة السبب من تعديل المحاضرة لاحقاً.',
-          [
-            { text: 'تراجع', style: 'cancel', onPress: () => resolve(false) },
-            { text: 'تأكيد الإلغاء', style: 'destructive', onPress: () => resolve(true) },
-          ],
-        );
-      });
-      if (!ok) return;
-    }
+    setCancelModal({ lectureId, applyShared });
+  };
+
+  const confirmCancelLecture = async (reasonType: 'college' | 'non_college' | null, reasonText: string) => {
+    if (!cancelModal) return;
+    setCancelLoading(true);
     try {
-      const payload: any = { status: 'cancelled', apply_to_shared: applyShared };
-      if (reason) payload.cancellation_reason = reason;
-      const cr = await lecturesAPI.update(lectureId, payload);
+      const payload: any = { status: 'cancelled', apply_to_shared: cancelModal.applyShared };
+      if (reasonText) payload.cancellation_reason = reasonText;
+      if (reasonType) payload.cancellation_reason_type = reasonType;
+      const cr = await lecturesAPI.update(cancelModal.lectureId, payload);
+      setCancelModal(null);
       showNotification('success', cr?.data?.message || 'تم إلغاء المحاضرة');
       fetchData(1);
     } catch (error: any) {
       showNotification('error', 'فشل في إلغاء المحاضرة');
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -1996,6 +1993,13 @@ export default function CourseLecturesScreen() {
           </View>
         </Modal>
       )}
+      <CancelLectureModal
+        visible={!!cancelModal}
+        canClassify={canClassifyCancellation}
+        loading={cancelLoading}
+        onClose={() => setCancelModal(null)}
+        onConfirm={confirmCancelLecture}
+      />
     </>
   );
 }

@@ -257,6 +257,13 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 "$and": [{"$or": [{"date": {"$gte": start_str, "$lte": end_str}}, {"date": {"$gte": start, "$lte": end}}]}, {"$or": attr}],
                 "is_cancelled": {"$ne": True}, "status": {"$ne": LectureStatus.CANCELLED},
             }).to_list(1000)
+            # 🏛️ محاضرات أُلغيت «بسبب الكلية» (المرحلة 3) — لا تُحتسب نقصاً ولا تتطلب تعويضاً إلزامياً (مثل الإجازة الرسمية)
+            college_cancelled = await db.lectures.find({
+                "course_id": cid,
+                "$and": [{"$or": [{"date": {"$gte": start_str, "$lte": end_str}}, {"date": {"$gte": start, "$lte": end}}]}, {"$or": attr}],
+                "status": LectureStatus.CANCELLED, "cancellation_reason_type": "college",
+            }).to_list(1000)
+            college_cancel_hours = round(sum(_lec_hours(l) for l in college_cancelled), 2)
             lec_ids = [str(l["_id"]) for l in lectures]
             executed_ids = set(await db.attendance.distinct("lecture_id", {"lecture_id": {"$in": lec_ids}})) if lec_ids else set()
             # محاضرات تقع في إجازة رسمية ولم تُنفَّذ تُستبعد من المجدولة (لا تُعد نقصاً)
@@ -289,12 +296,14 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 day_hours = await _course_day_hours(db, cid, lectures, weekly)
                 holiday_hours, holiday_names = _holiday_deduction(holidays, day_hours, first, end, executed_dates)
             taught_hours = actual_hours
-            actual_hours = round(actual_hours + holiday_hours, 2)
+            actual_hours = round(actual_hours + holiday_hours + college_cancel_hours, 2)
             expected = round(max(0.0, weekly * course_weeks - excused_hours), 2)
             if excused_hours:
                 notes.append(f"غياب بعذر {excused_hours:g} س (خُصم من الافتراضية)")
             if holiday_hours:
                 notes.append(f"إجازة رسمية {holiday_hours:g} س محتسبة ({'، '.join(holiday_names)})")
+            if college_cancel_hours:
+                notes.append(f"إلغاء بسبب الكلية {college_cancel_hours:g} س محتسبة (لا تُعد نقصاً)")
             shortfall = round(max(0.0, expected - actual_hours), 2)
             rate = round(actual_hours / expected * 100) if expected > 0 else (100 if actual_hours > 0 else 0)
 
@@ -308,7 +317,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 "start_week": start_week, "late_start": start_week > 1,
                 "scheduled_lectures": len(lectures), "executed_lectures": len(executed), "excused_lectures": len(excused),
                 "scheduled_hours": scheduled_hours, "actual_hours": actual_hours, "taught_hours": taught_hours, "excused_hours": excused_hours,
-                "expected_hours": expected, "holiday_hours": holiday_hours, "shortfall_hours": shortfall, "completion_rate": rate, "is_low": expected > 0 and rate < LOW_RATE_THRESHOLD,
+                "expected_hours": expected, "holiday_hours": holiday_hours, "college_cancel_hours": college_cancel_hours, "shortfall_hours": shortfall, "completion_rate": rate, "is_low": expected > 0 and rate < LOW_RATE_THRESHOLD,
                 "note": "، ".join(notes),
             })
 

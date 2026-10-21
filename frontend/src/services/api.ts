@@ -929,8 +929,8 @@ export const lecturesAPI = {
   update: (lectureId: string, data: any) => 
     api.put(`/lectures/${lectureId}`, data),
   
-  updateStatus: (lectureId: string, status: string) =>
-    api.put(`/lectures/${lectureId}/status`, { status }),
+  updateStatus: (lectureId: string, status: string, extra?: { cancellation_reason?: string; cancellation_reason_type?: string | null }) =>
+    api.put(`/lectures/${lectureId}/status`, { status, ...(extra || {}) }),
   
   delete: (lectureId: string) => 
     api.delete(`/lectures/${lectureId}`),

@@ -123,6 +123,16 @@ const SECTIONS: Section[] = [
         forAll: true,
       },
       {
+        id: 'prep-leave-periods',
+        label: 'إجازة التحضير',
+        description: 'إعفاء غياب الطلاب خلال أيام تحضيرية قبيل الاختبارات',
+        icon: 'book',
+        color: '#7c3aed',
+        bg: '#ede9fe',
+        route: '/prep-leave-periods',
+        permissions: [PERMISSIONS.OVERRIDE_LECTURE_STATUS, PERMISSIONS.MANAGE_LECTURES],
+      },
+      {
         id: 'availability-report',
         label: 'تقرير توفّر القاعات',
         description: 'متابعة شواغر القاعات والأوقات',

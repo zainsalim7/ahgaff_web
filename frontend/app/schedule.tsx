@@ -12,6 +12,7 @@ import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import api from '../src/services/api';
 import { DayShiftModal } from '../src/components/DayShiftModal';
+import CancelLectureModal from '../src/components/CancelLectureModal';
 
 const DAYS_AR: Record<number, string> = {
   0: 'الأحد', 1: 'الإثنين', 2: 'الثلاثاء', 3: 'الأربعاء',
@@ -193,16 +194,27 @@ export default function ScheduleScreen() {
   };
 
   const handleCancelLecture = async (lectureId: string) => {
-    if (Platform.OS === 'web') {
-      if (!window.confirm('هل أنت متأكد من إلغاء هذه المحاضرة؟')) return;
-      try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchLectures(selectedDate); } catch { window.alert('فشل في الإلغاء'); }
-    } else {
-      Alert.alert('إلغاء المحاضرة', 'هل أنت متأكد؟', [
-        { text: 'تراجع', style: 'cancel' },
-        { text: 'إلغاء المحاضرة', style: 'destructive', onPress: async () => {
-          try { await lecturesAPI.updateStatus(lectureId, 'cancelled'); fetchLectures(selectedDate); } catch { Alert.alert('خطأ', 'فشل'); }
-        }},
-      ]);
+    setCancelModal({ lectureId });
+  };
+
+  const [cancelModal, setCancelModal] = useState<{ lectureId: string } | null>(null);
+  const [cancelLoading, setCancelLoading] = useState(false);
+  const canClassifyCancellation = user?.role === 'admin' || user?.permissions?.includes('override_lecture_status') || user?.permissions?.includes('manage_lectures');
+
+  const confirmCancelLecture = async (reasonType: 'college' | 'non_college' | null, reasonText: string) => {
+    if (!cancelModal) return;
+    setCancelLoading(true);
+    try {
+      await lecturesAPI.updateStatus(cancelModal.lectureId, 'cancelled', {
+        cancellation_reason: reasonText || undefined,
+        cancellation_reason_type: reasonType || undefined,
+      });
+      setCancelModal(null);
+      fetchLectures(selectedDate);
+    } catch {
+      window.alert ? window.alert('فشل في الإلغاء') : Alert.alert('خطأ', 'فشل في الإلغاء');
+    } finally {
+      setCancelLoading(false);
     }
   };
 
@@ -347,9 +359,16 @@ export default function ScheduleScreen() {
           {item.room ? <View style={n.meta}><Ionicons name="location-outline" size={12} color="#8a95a8" /><Text style={n.metaText}>قاعة {item.room}</Text></View> : null}
         </View>
         ) : null}
-        {(item.group || item.day_shift_cancelled || item.day_shifted || typeof item.attendance_count !== 'undefined') && (
+        {(item.group || item.day_shift_cancelled || item.day_shifted || item.cancellation_reason_type || typeof item.attendance_count !== 'undefined') && (
           <View style={n.chipRow}>
             {item.group ? <View style={[n.chip, { backgroundColor: '#e0f2f1' }]} testID={`schedule-group-${item.id}`}><Text style={[n.chipText, { color: '#00695c' }]}>👥 {item.group_name || `مجموعة ${item.group}`}</Text></View> : null}
+            {item.status === 'cancelled' && item.cancellation_reason_type ? (
+              <View style={[n.chip, { backgroundColor: item.cancellation_reason_type === 'college' ? '#e0f7fa' : '#fff3e0' }]} testID={`cancel-reason-type-${item.id}`}>
+                <Text style={[n.chipText, { color: item.cancellation_reason_type === 'college' ? '#00838f' : '#e65100' }]}>
+                  {item.cancellation_reason_type === 'college' ? 'بسبب الكلية' : 'غير الكلية'}
+                </Text>
+              </View>
+            ) : null}
             {item.day_shift_cancelled ? <View style={[n.chip, { backgroundColor: '#fce4ec' }]} testID={`shift-cancelled-badge-${item.id}`}><Text style={[n.chipText, { color: '#ad1457' }]}>ملغاة بالإزاحة</Text></View>
               : item.day_shifted ? <View style={[n.chip, { backgroundColor: '#ede7f6' }]} testID={`shift-badge-${item.id}`}><Text style={[n.chipText, { color: '#5e35b1' }]}>{item.credited_minutes ? `إزاحة (تُحسب ${item.credited_minutes} د)` : 'إزاحة'}</Text></View> : null}
             {typeof item.attendance_count !== 'undefined' && (
@@ -603,6 +622,13 @@ export default function ScheduleScreen() {
       {Platform.OS === 'web' && (
         <DayShiftModal open={shiftModal} onClose={() => setShiftModal(false)} initialDate={selectedDate} onApplied={() => { fetchLectures(selectedDate); fetchDayShifts(selectedDate); }} />
       )}
+      <CancelLectureModal
+        visible={!!cancelModal}
+        canClassify={!!canClassifyCancellation}
+        loading={cancelLoading}
+        onClose={() => setCancelModal(null)}
+        onConfirm={confirmCancelLecture}
+      />
       {purgeModal && Platform.OS === 'web' && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
