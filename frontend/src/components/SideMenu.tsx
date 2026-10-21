@@ -181,6 +181,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
   { id: 'university-calendar', label: 'التقويم الجامعي والعطل', icon: 'calendar', path: '/university-calendar', permissions: ['manage_calendar'] },
   { id: 'prep-leave-periods', label: 'إجازة التحضير', icon: 'book', path: '/prep-leave-periods', permissions: [], roles: ['admin', 'dean', 'department_head'] },
+  { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', path: '/faculty-board', permissions: [], roles: ['admin', 'dean', 'department_head'] },
   { id: 'assistant-settings', label: 'مرشد الأحقاف (الذكاء الاصطناعي) 🤖', icon: 'sparkles', path: '/assistant-settings', permissions: [], roles: ['admin'] },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
   { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', permissions: [], adminOnly: true },

@@ -134,6 +134,16 @@ const SECTIONS: Section[] = [
         roles: ['admin', 'dean', 'department_head'],
       },
       {
+        id: 'faculty-board',
+        label: 'مجلس الكلية',
+        description: 'مراجعة المرشّحين للحرمان واتخاذ قرارات المجلس',
+        icon: 'shield-checkmark',
+        color: '#831843',
+        bg: '#fce7f3',
+        route: '/faculty-board',
+        roles: ['admin', 'dean', 'department_head'],
+      },
+      {
         id: 'availability-report',
         label: 'تقرير توفّر القاعات',
         description: 'متابعة شواغر القاعات والأوقات',

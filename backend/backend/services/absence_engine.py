@@ -108,6 +108,18 @@ async def prep_excluded_dates(db, course: dict) -> set:
     return out
 
 
+async def board_decisions_map(db, cid: str, student_ids: List[str]) -> Dict[str, dict]:
+    """🏛️ آخر قرار نافذ لكل طالب (مجلس الكلية) — عام يُستبدل بقرار خاص بالمقرر إن وُجد"""
+    if not student_ids:
+        return {}
+    out: Dict[str, dict] = {}
+    async for d in db.faculty_board_decisions.find({"student_id": {"$in": student_ids}, "scope": "general"}):
+        out[d["student_id"]] = d
+    async for d in db.faculty_board_decisions.find({"student_id": {"$in": student_ids}, "scope": "course", "course_id": cid}):
+        out[d["student_id"]] = d
+    return out
+
+
 async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = None, limits: Optional[dict] = None) -> Dict[str, dict]:
     """{student_db_id: profile} لكل طلاب المقرر (أو قائمة محددة) — استعلامان فقط"""
     cid = str(course["_id"])
@@ -119,6 +131,7 @@ async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = N
     if student_ids is None:
         student_ids = [e["student_id"] async for e in db.enrollments.find({"course_id": cid}, {"student_id": 1}) if e.get("student_id")]
     enrolled_at = {e["student_id"]: e.get("enrolled_at") async for e in db.enrollments.find({"course_id": cid, "student_id": {"$in": student_ids}}, {"student_id": 1, "enrolled_at": 1})}
+    decisions = await board_decisions_map(db, cid, student_ids)
     hours = {str(l["_id"]): lecture_hours(l) for l in lecs}
     dates = {str(l["_id"]): l.get("date", "") for l in lecs}
     recs: Dict[str, Dict[str, str]] = {sid: {} for sid in student_ids}
@@ -139,7 +152,16 @@ async def course_profiles(db, course: dict, student_ids: Optional[List[str]] = N
                 unexc += h
             elif st == "excused":
                 exc += h
-        out[sid] = classify(unexc, exc, exec_h, int(exec_n), limits)
+        prof = classify(unexc, exc, exec_h, int(exec_n), limits)
+        dec = decisions.get(sid)
+        if dec:
+            prof["status"] = dec["decision"]
+            prof["status_ar"] = STATUS_AR[dec["decision"]]
+            prof["board_decision"] = {
+                "id": str(dec["_id"]), "scope": dec.get("scope"), "reason": dec.get("reason", ""),
+                "decided_by_name": dec.get("decided_by_name", ""), "decided_at": dec.get("created_at"),
+            }
+        out[sid] = prof
     return out
 
 

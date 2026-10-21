@@ -274,6 +274,7 @@ from routes.management_dashboard import router as management_dashboard_router
 from routes.weekly_digest import router as weekly_digest_router, weekly_digest_loop
 from routes.calendar_events import router as calendar_router
 from routes.prep_leave import router as prep_leave_router
+from routes.faculty_board import router as faculty_board_router
 from routes.global_search import router as global_search_router
 from routes.entity_details import router as entity_details_router
 from routes.archives import router as archives_router
@@ -18503,6 +18504,7 @@ app.include_router(management_dashboard_router, prefix="/api")
 app.include_router(weekly_digest_router, prefix="/api")
 app.include_router(calendar_router, prefix="/api")
 app.include_router(prep_leave_router, prefix="/api")
+app.include_router(faculty_board_router, prefix="/api")
 app.include_router(global_search_router, prefix="/api")
 app.include_router(alumni_router, prefix="/api")
 app.include_router(entity_details_router, prefix="/api")
