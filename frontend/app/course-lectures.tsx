@@ -284,6 +284,7 @@ export default function CourseLecturesScreen() {
   const [generateGroup, setGenerateGroup] = useState('');
   const [generating, setGenerating] = useState(false);
   const [generateError, setGenerateError] = useState('');
+  const [generateDuplicates, setGenerateDuplicates] = useState<any[]>([]);
   const [genHolidays, setGenHolidays] = useState<string[]>([]);
   const [genHolidayInput, setGenHolidayInput] = useState('');
   const [genPreview, setGenPreview] = useState<any>(null);
@@ -423,6 +424,7 @@ export default function CourseLecturesScreen() {
     setGenerateRoom('');
     setGenerateGroup('');
     setGenerateError('');
+    setGenerateDuplicates([]);
     setForceMovedAway(false);
     setDayConfigs(DAYS.map(d => ({
       day: d.id,
@@ -626,6 +628,7 @@ export default function CourseLecturesScreen() {
   // توليد المحاضرات (dryRun = معاينة فقط دون إنشاء)
   const handleGenerateLectures = async (dryRun: boolean) => {
     setGenerateError('');
+    setGenerateDuplicates([]);
 
     if (!tempStartDate || !tempEndDate) {
       setGenerateError('الرجاء اختيار تاريخ البداية والنهاية');
@@ -691,8 +694,10 @@ export default function CourseLecturesScreen() {
       setGenPreview(null);
       fetchData(1);
     } catch (error: any) {
-      const message = error.response?.data?.detail || 'فشل في توليد المحاضرات';
+      const detail = error.response?.data?.detail;
+      const message = (detail && typeof detail === 'object' ? detail.message : detail) || 'فشل في توليد المحاضرات';
       setGenerateError(message);
+      setGenerateDuplicates((detail && typeof detail === 'object' && detail.duplicates) || []);
     } finally {
       setGenerating(false);
     }
@@ -1406,10 +1411,20 @@ export default function CourseLecturesScreen() {
             </View>
 
             {generateError ? (
-              <TouchableOpacity onPress={() => setGenerateError('')} style={styles.genTopErrorBanner} testID="generate-error-box">
+              <TouchableOpacity onPress={() => { setGenerateError(''); setGenerateDuplicates([]); }} style={styles.genTopErrorBanner} testID="generate-error-box">
                 <Ionicons name="alert-circle" size={20} color="#fff" />
                 <Text style={styles.genTopErrorText}>{generateError}</Text>
                 <Ionicons name="close" size={18} color="#fff" />
+              </TouchableOpacity>
+            ) : null}
+            {generateDuplicates.length > 0 ? (
+              <TouchableOpacity
+                style={styles.genDupFixBtn}
+                testID="go-to-duplicate-merge-tool"
+                onPress={() => { setShowGenerateModal(false); router.push('/duplicate-courses'); }}
+              >
+                <Ionicons name="git-merge-outline" size={16} color="#fff" />
+                <Text style={styles.genDupFixBtnText}>🔀 فتح أداة دمج المقررات المكررة لحلّ السبب الحقيقي</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -2632,6 +2647,24 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'right',
     lineHeight: 20,
+  },
+  genDupFixBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#d84315',
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingVertical: 11,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+  },
+  genDupFixBtnText: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '800',
+    textAlign: 'center',
   },
   genErrorText: {
     color: '#c62828',

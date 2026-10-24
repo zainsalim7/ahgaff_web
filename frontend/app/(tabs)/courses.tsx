@@ -1722,6 +1722,10 @@ export default function AddCourseScreen() {
                 <Ionicons name="pulse-outline" size={18} color="#00695c" />
                 <Text style={styles.menuText}>فحص سلامة المشاركات</Text>
               </TouchableOpacity>
+              <TouchableOpacity style={styles.menuItem} testID="duplicate-courses-tool-btn" onPress={() => { setOpenMenuId(null); router.push('/duplicate-courses'); }}>
+                <Ionicons name="git-merge-outline" size={18} color="#d84315" />
+                <Text style={styles.menuText}>🔀 دمج المقررات المكررة</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.menuItem} onPress={() => { setOpenMenuId(null); handleRestore(); }} disabled={restoring}>
                 <Ionicons name="refresh-outline" size={18} color="#1565c0" />
                 <Text style={styles.menuText}>{restoring ? 'جاري...' : 'استعادة'}</Text>
