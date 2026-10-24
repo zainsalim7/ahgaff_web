@@ -1778,9 +1778,8 @@ async def merge_duplicate_courses(
     data: MergeCoursesRequest,
     current_user: dict = Depends(get_current_user),
 ):
-    """🔀 دمج مقرر مكرر في الأصلي: نقل الخانات/المحاضرات/التسجيلات/الأعباء ثم بناء روابط المشاركة"""
-    if not can_manage_schedule(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    """🛑 مُعطَّل: تبيَّن أن المقررات المتشابهة بالاسم ليست مكرَّرة بل شُعب/مستويات/فصول مستقلة حقيقية — الدمج يفقد بيانات حقيقية"""
+    raise HTTPException(status_code=410, detail="🛑 هذه الأداة مُعطَّلة نهائياً: المقررات المتشابهة بالاسم في النظام هي شُعب ومستويات مختلفة حقيقية، وليست تكراراً — دمجها يفقد بيانات حقيقية (أساتذة/خانات/تسجيلات مستقلة)")
     if data.keep_course_id == data.remove_course_id:
         raise HTTPException(status_code=400, detail="لا يمكن دمج المقرر مع نفسه")
     db = get_db()
