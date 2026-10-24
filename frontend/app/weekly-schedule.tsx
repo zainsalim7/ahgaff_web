@@ -752,12 +752,18 @@ export default function WeeklySchedulePage() {
 
   // Build grid: day -> slot_number -> items[]
   const grid: Record<string, Record<number, any[]>> = {};
+  const customCells: Record<string, any[]> = {};
   for (const day of DAYS) {
     grid[day] = {};
+    customCells[day] = [];
     for (const ts of timeSlots) { grid[day][ts.slot_number] = []; }
   }
   const seenMerge = new Set<string>();
   for (const s of schedule) {
+    if (s.custom_slot) {
+      if (customCells[s.day]) customCells[s.day].push(s);
+      continue;
+    }
     if (grid[s.day] && grid[s.day][s.slot_number]) {
       // 🔗 وضع المعلم: دمج أعضاء المجموعة المشتركة في صندوق واحد بدل التكرار
       if (viewMode === 'teacher' && s.merge_group_id) {
@@ -768,6 +774,7 @@ export default function WeeklySchedulePage() {
       grid[s.day][s.slot_number].push(s);
     }
   }
+  const hasCustomCells = Object.values(customCells).some((arr) => arr.length > 0);
 
   const TABS = [
     { key: 'schedule', label: 'الجدول', icon: 'calendar' },
@@ -1246,6 +1253,11 @@ export default function WeeklySchedulePage() {
                           {ts.name}<br/><span style={{ fontSize: 10, opacity: 0.8 }}>{ts.start_time}-{ts.end_time}</span>
                         </th>
                       ))}
+                      {hasCustomCells && (
+                        <th data-testid="custom-slots-column-header" style={{ padding: 10, color: '#fff', fontSize: 12, fontWeight: 600, borderLeft: '1px solid rgba(255,255,255,0.2)', textAlign: 'center', backgroundColor: '#e65100' }}>
+                          ⏱ أوقات مستقلة<br/><span style={{ fontSize: 10, opacity: 0.85 }}>خارج الفترات القياسية</span>
+                        </th>
+                      )}
                     </tr>
                   </thead>
                   <tbody>
@@ -1336,6 +1348,24 @@ export default function WeeklySchedulePage() {
                             </td>
                           );
                         })}
+                        {hasCustomCells && (
+                          <td data-testid={`custom-slots-cell-${day}`} style={{ padding: 4, borderLeft: '1px solid #eee', verticalAlign: 'top', minWidth: 140, backgroundColor: '#fff8f0' }}>
+                            {(customCells[day] || []).map((item: any) => (
+                              <div key={item.id} data-testid={`custom-slot-item-${item.id}`} style={{
+                                backgroundColor: '#fff3e0', border: '1px solid #ffb74d', borderRadius: 8, padding: 6, marginBottom: 4, position: 'relative',
+                              }}>
+                                <div style={{ fontSize: 10, color: '#e65100', fontWeight: 800, textAlign: 'right' }}>
+                                  ⏱ {item.actual_start_time} - {item.actual_end_time}
+                                </div>
+                                <div style={{ fontSize: 12, fontWeight: 600, color: '#333', textAlign: 'right' }}>{item.course_name}</div>
+                                <div style={{ fontSize: 10, color: '#666', textAlign: 'right' }}>{item.course_code}</div>
+                                <div style={{ fontSize: 10, color: '#1565c0', textAlign: 'right' }}>{item.teacher_name}</div>
+                                <div style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{item.room_name} | {item.department_name} م{item.level}{item.section ? ` ${item.section}` : ''}</div>
+                                <button onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>
+                              </div>
+                            ))}
+                          </td>
+                        )}
                       </tr>
                       );
                     })}

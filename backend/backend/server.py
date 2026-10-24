@@ -9337,15 +9337,22 @@ def _hhmm_minutes(t: str) -> int:
         return -1
 
 
-def _nearest_time_slot(time_slots: list, start_time: str, end_time: str = "") -> dict:
-    """أقرب فترة معرّفة لوقت المحاضرة: التي يقع وقت البداية داخلها أولاً، وإلا الأقرب بداية"""
-    st = _hhmm_minutes(start_time)
-    if st < 0 or not time_slots:
-        return None
-    inside = [ts for ts in time_slots if _hhmm_minutes(ts.get("start_time")) <= st < _hhmm_minutes(ts.get("end_time"))]
-    if inside:
-        return inside[0]
-    return min(time_slots, key=lambda ts: abs(_hhmm_minutes(ts.get("start_time")) - st))
+def _ranges_overlap(s1: str, e1: str, s2: str, e2: str) -> bool:
+    """هل يتداخل مجالا وقت زمنياً؟"""
+    a1, b1, a2, b2 = _hhmm_minutes(s1), _hhmm_minutes(e1), _hhmm_minutes(s2), _hhmm_minutes(e2)
+    if min(a1, b1, a2, b2) < 0:
+        return False
+    return a1 < b2 and b1 > a2
+
+
+def _cell_time_range(cell: dict, slot_by_number: dict) -> tuple:
+    """🕐 المجال الزمني الحقيقي لخلية الجدول الأسبوعي: وقتها المستقل إن كانت خانة مستقلة، وإلا وقت فترتها القياسية"""
+    if cell.get("custom_slot"):
+        return cell.get("actual_start_time", ""), cell.get("actual_end_time", "")
+    ts = slot_by_number.get(cell.get("slot_number"))
+    if ts:
+        return ts.get("start_time", ""), ts.get("end_time", "")
+    return cell.get("actual_start_time", ""), cell.get("actual_end_time", "")
 
 
 async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequest", current_user: dict, group: str = "", group_def: dict = None):
@@ -9380,6 +9387,8 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
         else:
             notes.append(f"القاعة '{data.room}' غير مسجلة في الكلية — أُدرجت الخلايا بدون قاعة")
 
+    slot_by_number = {ts.get("slot_number"): ts for ts in time_slots}
+
     for day_config in data.schedule:
         ar_day = _EN_TO_AR_DAY.get(day_config.day.lower(), "")
         for slot in day_config.slots:
@@ -9388,24 +9397,23 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                 notes.append(f"{loc} يوم غير معروف — لم يُدرج في الجدول الأسبوعي")
                 continue
             ts = slot_by_start.get(slot.start_time)
-            approx_note = ""
-            if not ts:
-                # 🎯 لا تطابق تاماً → أقرب فترة معرّفة (الفترة التي يقع فيها وقت البداية، وإلا أقرب بداية)
-                ts = _nearest_time_slot(time_slots, slot.start_time, slot.end_time)
-                if not ts:
-                    notes.append(f"{loc} لا توجد فترات معرّفة في إعدادات الكلية — لم يُدرج في الجدول الأسبوعي")
-                    continue
-                approx_note = f"{loc} ⚠️ الوقت لا يطابق فترة معرّفة — أُدرج في أقرب فترة: الفترة {ts.get('slot_number')} ({ts.get('start_time')}–{ts.get('end_time')})"
+            custom = not bool(ts)
+            # 🔢 خانة مستقلة: رقم فترة سالب فريد مشتق من الوقت (لا يتصادم مع أرقام الفترات القياسية 1..n ولا مع خانة مستقلة بوقت مختلف)
+            sn = ts.get("slot_number") if ts else -(_hhmm_minutes(slot.start_time) + 1)
+            real_start, real_end = (ts.get("start_time"), ts.get("end_time")) if ts else (slot.start_time, slot.end_time)
             if working_days and ar_day not in working_days:
                 notes.append(f"{loc} اليوم ليس من أيام عمل الكلية — لم يُدرج في الجدول الأسبوعي")
                 continue
-            sn = ts.get("slot_number")
 
-            cells = await db.weekly_schedule.find({
-                "department_id": dept_id, "level": level, "section": section, "day": ar_day, "slot_number": sn,
-            }).to_list(20)
+            # 🎯 خانة مستقلة بوقتها الدقيق (لا تطابق أي فترة قياسية) — بلا إزاحة ولا تقريب، تُفحص تعارضاتها بالتداخل الزمني الحقيقي
+            day_cells = await db.weekly_schedule.find({
+                "department_id": dept_id, "level": level, "section": section, "day": ar_day,
+            }).to_list(200)
             blocked = False
-            for cell in cells:
+            for cell in day_cells:
+                c_start, c_end = _cell_time_range(cell, slot_by_number)
+                if not _ranges_overlap(real_start, real_end, c_start, c_end):
+                    continue
                 if cell.get("course_id") == cid and (cell.get("group") or "") == group:
                     existing += 1
                     blocked = True
@@ -9424,16 +9432,22 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
             if blocked:
                 continue
             if teacher_id:
-                busy = await db.weekly_schedule.find_one({"teacher_id": teacher_id, "day": ar_day, "slot_number": sn})
-                if busy:
-                    notes.append(f"{loc} الأستاذ لديه محاضرة أخرى في الجدول الأسبوعي بنفس الوقت — لم تُدرج")
-                    continue
+                for cell in await db.weekly_schedule.find({"teacher_id": teacher_id, "day": ar_day}).to_list(200):
+                    c_start, c_end = _cell_time_range(cell, slot_by_number)
+                    if _ranges_overlap(real_start, real_end, c_start, c_end):
+                        notes.append(f"{loc} الأستاذ لديه محاضرة أخرى في الجدول الأسبوعي بنفس الوقت — لم تُدرج")
+                        blocked = True
+                        break
+            if blocked:
+                continue
             use_room = room_id
             if room_id:
-                r_busy = await db.weekly_schedule.find_one({"room_id": room_id, "day": ar_day, "slot_number": sn})
-                if r_busy:
-                    notes.append(f"{loc} القاعة مشغولة في الجدول الأسبوعي بنفس الوقت — أُدرجت الخلية بدون قاعة")
-                    use_room = ""
+                for cell in await db.weekly_schedule.find({"room_id": room_id, "day": ar_day}).to_list(200):
+                    c_start, c_end = _cell_time_range(cell, slot_by_number)
+                    if _ranges_overlap(real_start, real_end, c_start, c_end):
+                        notes.append(f"{loc} القاعة مشغولة في الجدول الأسبوعي بنفس الوقت — أُدرجت الخلية بدون قاعة")
+                        use_room = ""
+                        break
             try:
                 doc = {
                     "faculty_id": fac_id, "department_id": dept_id, "level": level, "section": section,
@@ -9442,10 +9456,11 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                     "created_at": datetime.now(timezone.utc), "created_by": current_user.get("id", ""),
                     "created_from_lectures": True,
                 }
-                if approx_note:
-                    doc["approx_time"] = True
+                if custom:
+                    doc["custom_slot"] = True
                     doc["actual_start_time"] = slot.start_time
                     doc["actual_end_time"] = slot.end_time
+                    notes.append(f"{loc} ℹ️ خانة مستقلة بوقتها الدقيق {slot.start_time}–{slot.end_time} (لا تطابق فترة قياسية) — أُدرجت كما هي بلا إزاحة")
                 if teacher_id:
                     doc["teacher_id"] = teacher_id
                 if group:
@@ -9453,8 +9468,6 @@ async def _reflect_recurring_to_weekly(course: dict, data: "GenerateSemesterRequ
                     doc["group_name"] = group_name
                 await db.weekly_schedule.insert_one(doc)
                 created += 1
-                if approx_note:
-                    notes.append(approx_note)
             except DuplicateKeyError:
                 notes.append(f"{loc} تعارض فريد في الجدول الأسبوعي — لم تُدرج")
     return created, existing, notes
@@ -9545,6 +9558,10 @@ async def generate_semester_lectures_advanced(
         if not gen_group_def:
             raise HTTPException(status_code=400, detail="المجموعة غير معرّفة في هذا المقرر")
     gen_group_teacher = (gen_group_def or {}).get("teacher_id") or None
+
+    # 🛑 منع التوليد كلياً قبل إسناد أستاذ للمقرر (أو للمجموعة المحدَّدة) — لا يمكن إنشاء محاضرات بلا أستاذ مسؤول عنها
+    if not gen_group_teacher and not course.get("teacher_id"):
+        raise HTTPException(status_code=400, detail="🛑 لا يمكن توليد محاضرات لمقرر لم يُسنَد له أستاذ بعد — أسنِد أستاذاً للمقرر أولاً")
 
     # 🛑 حظر التوليد في وقت مشغول بالجدول الأسبوعي (العرض الشامل) لنفس الشعبة
     occ = await _weekly_occupancy_conflicts(course, data)
