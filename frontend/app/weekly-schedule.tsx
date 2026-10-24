@@ -430,7 +430,11 @@ export default function WeeklySchedulePage() {
     try {
       await scheduleAPI.deleteSlot(id);
       loadSchedule();
-    } catch {}
+    } catch (e: any) {
+      const msg = e?.response?.data?.detail || 'فشل الحذف';
+      if (Platform.OS === 'web') window.alert(typeof msg === 'string' ? msg : 'فشل الحذف');
+      else Alert.alert('خطأ', typeof msg === 'string' ? msg : 'فشل الحذف');
+    }
   };
 
   const handleClearSchedule = async () => {
@@ -775,6 +779,9 @@ export default function WeeklySchedulePage() {
     }
   }
   const hasCustomCells = Object.values(customCells).some((arr) => arr.length > 0);
+  for (const day of DAYS) {
+    customCells[day].sort((a, b) => String(a.actual_start_time || '').localeCompare(String(b.actual_start_time || '')));
+  }
 
   const TABS = [
     { key: 'schedule', label: 'الجدول', icon: 'calendar' },
@@ -1360,8 +1367,8 @@ export default function WeeklySchedulePage() {
                                 <div style={{ fontSize: 12, fontWeight: 600, color: '#333', textAlign: 'right' }}>{item.course_name}</div>
                                 <div style={{ fontSize: 10, color: '#666', textAlign: 'right' }}>{item.course_code}</div>
                                 <div style={{ fontSize: 10, color: '#1565c0', textAlign: 'right' }}>{item.teacher_name}</div>
-                                <div style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{item.room_name} | {item.department_name} م{item.level}{item.section ? ` ${item.section}` : ''}</div>
-                                <button onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>
+                                <div style={{ fontSize: 10, color: '#888', textAlign: 'right' }}>{[item.room_name, `${item.department_name} م${item.level}${item.section ? ` ${item.section}` : ''}`].filter(Boolean).join(' | ')}</div>
+                                <button data-testid={`custom-slot-delete-${item.id}`} onClick={() => handleDeleteSlot(item.id)} style={{ position: 'absolute', top: 2, left: 2, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#e53935' }}>x</button>
                               </div>
                             ))}
                           </td>

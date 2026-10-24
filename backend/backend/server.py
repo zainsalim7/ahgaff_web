@@ -9487,7 +9487,8 @@ async def _weekly_occupancy_conflicts(course: dict, data: "GenerateSemesterReque
     if not dept_id or not fac_id:
         return {"conflicts": conflicts, "duplicates": list(duplicates.values())}
     settings = await db.schedule_settings.find_one({"_id": f"faculty_{fac_id}"}) or await db.schedule_settings.find_one({"_id": "global"})
-    slot_by_start = {ts.get("start_time"): ts for ts in (settings or {}).get("time_slots", [])}
+    time_slots = (settings or {}).get("time_slots", [])
+    slot_by_number = {ts.get("slot_number"): ts for ts in time_slots}
     cid = str(course["_id"])
     own_name = (course.get("name") or "").strip()
     level = course.get("level") or 1
@@ -9497,14 +9498,14 @@ async def _weekly_occupancy_conflicts(course: dict, data: "GenerateSemesterReque
         if not ar_day:
             continue
         for slot in day_config.slots:
-            ts = slot_by_start.get(slot.start_time)
-            if not ts:
-                continue
             _gen_grp = (getattr(data, "group", None) or "").strip()
-            for cell in await db.weekly_schedule.find({
-                "department_id": dept_id, "level": level, "section": section,
-                "day": ar_day, "slot_number": ts.get("slot_number"),
-            }).to_list(20):
+            day_cells = await db.weekly_schedule.find({
+                "department_id": dept_id, "level": level, "section": section, "day": ar_day,
+            }).to_list(200)
+            for cell in day_cells:
+                c_start, c_end = _cell_time_range(cell, slot_by_number)
+                if not _ranges_overlap(slot.start_time, slot.end_time, c_start, c_end):
+                    continue
                 if cell.get("course_id") == cid:
                     continue
                 # 👥 خلية مجموعة لمقرر آخر لا تشغل الفترة إذا كان التوليد لمجموعة أيضاً

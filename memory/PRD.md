@@ -36,6 +36,22 @@
 في الاستجابة، ثم الدمج عبر `merge-duplicates`، ثم التأكد أن `dry_run` أصبح ناجحاً بلا تعارض.
 `testing_agent` (iteration_114): Backend 7/7 pytest pass، Frontend 3/3 flows pass.
 
+## جلسة 24 أكتوبر 2026 (تابع) — منع التوليد بلا أستاذ + خانات مستقلة بالوقت الدقيق
+
+بناءً على سؤالي المستخدم:
+1. **منع كلي**: `POST /lectures/generate-semester` يرفض الآن (400) أي توليد لمقرر بلا `teacher_id` (ولا مجموعة لها `teacher_id` خاص).
+2. **بلا إزاحة/تقريب**: أُزيلت آلية "أقرب فترة" (`_nearest_time_slot` حُذفت). الوقت الذي لا يطابق فترة قياسية يُدرَج الآن في `weekly_schedule` كخانة **مستقلة** (`custom_slot: true`, `slot_number` سالب فريد مشتق من الوقت, `actual_start_time/actual_end_time` = الوقت المطلوب تماماً) — بلا أي تغيير في الوقت. محاضرة `lectures` نفسها كانت ولا تزال تُنشأ دوماً بالوقت الدقيق المطلوب.
+3. **فحص تعارض حقيقي بالتداخل الزمني** (overlap) بدل تطابق `slot_number` فقط — في كل من: الفحص المسبق (`_weekly_occupancy_conflicts`) وانعكاس الخلايا (`_reflect_recurring_to_weekly`) وفحص تعارض الأستاذ/القاعة.
+4. `GET /weekly-schedule` يُرجع الآن `custom_slot/actual_start_time/actual_end_time`.
+5. صفحة `weekly-schedule.tsx`: عمود جديد "⏱ أوقات مستقلة" يظهر فقط عند وجود خلايا مستقلة، يعرضها بوقتها الدقيق (مرتبة زمنياً)، مع تصحيح رسالة الخطأ عند الحذف.
+6. `course-lectures.tsx`: ملاحظات "ℹ️" (معلوماتية) تُعرض منفصلة عن تحذيرات "⚠️" الحقيقية في إشعار نجاح التوليد.
+
+**الاختبار**: `testing_agent` (iteration_115): Backend 13/13 pytest pass (ملف `/app/backend/tests/test_generate_custom_slots_and_teacher_block.py`، قابل لإعادة التشغيل ذاتي التنظيف)، Frontend جميع التدفقات المطلوبة ناجحة. تم إصلاح الفجوة التي رصدها المراجع (الفحص المسبق لم يكن يستخدم overlap) بعد التقرير، وأُعيد تشغيل الاختبارات (13/13 ناجحة).
+
+**Backlog من مراجعة iteration_115 (لم يُنفَّذ بعد، نطاق أوسع من الطلب الحالي):**
+- أدوات الجدول اليدوية الأخرى (`POST/PUT /weekly-schedule`، `weekly-schedule/conflicts`، `weekly-schedule/generate-lectures`، `weekly-schedule/resync-lecture-times`) لا تزال تتعامل مع `slot_number` فقط ولا تَعي الخلايا المستقلة (custom_slot) — تحتاج تحديثاً مماثلاً إن احتاج المستخدم إدارة يدوية للخانات المستقلة.
+- تحذير مبكر في واجهة توليد المحاضرات (`course-lectures.tsx`) عند اختيار مقرر بلا أستاذ، بدل الانتظار حتى الضغط على "معاينة".
+
 ## Known remaining minor items (Optional, from iteration_114)
 - دمج 3+ نسخ: لو فشل دمج منتصف الحلقة، قد تبقى القائمة غير محدَّثة فوراً (تمت معالجتها جزئياً: تحديث عند الخطأ أيضاً).
 - Faculty Board PDF generation (P2) still pending.

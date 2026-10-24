@@ -1,0 +1,44 @@
+{
+  "summary": "Tested the generate-semester changes: (1) generation is now blocked when the course has no teacher, (2) times that match no standard period become independent weekly cells at their exact time (custom_slot, negative slot_number), (3) conflicts are now checked by real time overlap for the section, teacher and room, (4) GET /weekly-schedule returns the new fields, and (5) the frontend shows the new '⏱ أوقات مستقلة' column and the blocking message. Backend: 13/13 pytest tests pass against the public URL, using isolated TEST_ seed data (departments, teachers, courses and a room created in the DB and cleaned up afterwards). Frontend: all requested flows verified in Playwright.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/lectures/generate-semester (_weekly_occupancy_conflicts pre-check)", "issue": "Inconsistent handling. The pre-check still matches slot_number exactly and skips custom times. Result: a standard slot that lands on another standard cell is rejected with 409 and no lectures are created. But a standard slot that overlaps another course's custom cell (or a custom time that overlaps a standard cell) returns 200: the lectures ARE created and the overlap only shows up as a weekly_notes entry ('الخلية مشغولة ...'). Verified: D at 08:00 Thursday vs C's custom 08:30-09:00 gave 200 and lectures_created=1. Decide whether custom-time overlaps should also be rejected with 409."},
+      {"endpoint": "POST /api/weekly-schedule (manual add/edit) and the conflicts endpoint (by_time grouping ~line 1099)", "issue": "These still detect conflicts by exact (day, slot_number) only. Manually adding a standard cell that overlaps an existing custom cell (or one with a negative slot number) for the same section, teacher or room will not be detected. Overlap detection only lives in _reflect_recurring_to_weekly."},
+      {"endpoint": "POST /api/weekly-schedule/generate-lectures and /weekly-schedule/resync-lecture-times", "issue": "Both get times from slot_times[slot_number], so custom cells (negative slot_number) give an empty start time and are silently skipped. Lectures are never generated or resynced from custom cells. They should use actual_start_time/actual_end_time when custom_slot is true."},
+      {"endpoint": "_reflect_recurring_to_weekly teacher/room busy checks", "issue": "When checking the teacher's or room's other cells (which may belong to another faculty), _cell_time_range resolves standard cells with the CURRENT faculty's time_slots map. If faculties have different period times, overlaps can be computed wrongly."},
+      {"endpoint": "_reflect_recurring_to_weekly section check", "issue": "If the same course and group already has a cell at a DIFFERENT but overlapping time, it is counted as 'existing' (weekly_cells_existing++) with no note. That silently hides a real time mismatch."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "course-lectures generate success notification", "issue": "Every weekly_notes entry is shown under '⚠️ الجدول الأسبوعي:' and the notification type becomes 'warning', including the purely informational 'ℹ️ خانة مستقلة ...' note. This contradicts the intent that a custom slot is normal and not a warning. Treat ℹ️ notes as info or success.", "affected_selectors": ["notification banner"]}
+    ],
+    "design_issues": [
+      {"screen": "weekly-schedule custom slots column", "issues": ["Custom items within a day appear in insertion order, not by time (Wednesday showed 20:10 before 07:00). Sort customCells[day] by actual_start_time.", "The room line shows a dangling ' | dept' separator when the cell has no room."]},
+      {"screen": "course-lectures generate modal", "issues": ["The teacher-required block only appears after the user fills the whole form and clicks معاينة. Consider disabling the 'توليد تلقائي' button or warning upfront when the course has no teacher_id and no group teachers.", "The sticky red error banner slightly overlaps the room picker area."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_generate_custom_slots_and_teacher_block.py", "/app/backend/tests/seed_ui_custom_slots.py", "/app/test_reports/pytest/pytest_iter115.xml"],
+  "action_items": [
+    "Use the same overlap logic in _weekly_occupancy_conflicts, manual POST/PUT /weekly-schedule and the conflicts report, so custom cells participate in conflict detection everywhere",
+    "Make /weekly-schedule/generate-lectures and resync-lecture-times use actual_start_time/actual_end_time for custom_slot cells (currently skipped silently)",
+    "Show 'ℹ️' weekly notes as info, not '⚠️' warning, in the course-lectures success notification",
+    "Sort custom items by actual_start_time in the custom-slots column",
+    "(Optional UX) Disable or warn on 'توليد تلقائي' upfront for courses without a teacher"
+  ],
+  "critical_code_review_comments": [
+    "server.py ~9403: for custom slots real_end = slot.end_time; end<=start validation happens later in the main loop (it raises 400 before reflection), so this is OK",
+    "Busy checks query up to 200 cells per teacher/room/day and resolve every cell with the local faculty's slot map; this can be wrong across faculties",
+    "weekly-schedule.tsx handleDeleteSlot swallows errors (catch {}); the user gets no feedback if a delete fails",
+    "server.py is 19k+ lines; the generate/reflect logic should move to its own module"
+  ],
+  "updated_files": ["/app/frontend/app/weekly-schedule.tsx (added data-testid custom-slot-delete-${id} to the custom item delete button)", "/app/backend/tests/test_generate_custom_slots_and_teacher_block.py", "/app/backend/tests/seed_ui_custom_slots.py"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% of requested flows (minor UX notes)"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "All TEST_ data (departments, teachers, courses, room, lectures, weekly cells) was created directly in MongoDB and cleaned up. Also deleted E1's 2 orphan lectures for course 698f0000d803b27aab0120af (2026-12-01 09:17 and 2026-12-02 20:10). After cleanup no custom_slot cells remain in the DB.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: pytest /app/backend/tests/test_generate_custom_slots_and_teacher_block.py (self-seeding and self-cleaning, dates 2027-03-01..07, level 9/8 TEST depts in faculty كلية البنات 698e4fb497fef774e66e93a6, global slots 08:00/09:45/11:30/13:15/15:00). For UI: python3 /app/backend/tests/seed_ui_custom_slots.py seed, then on /weekly-schedule select faculty 'كلية البنات ' (the TEST dept does not appear in the dept dropdown because it was inserted directly; the faculty-wide view shows the column). Run 'clean' afterwards. Login via /login with placeholders. In the course-lectures modal: fill the 2 date inputs inside generate-lectures-modal, select the room via select[data-testid=generate-room-picker], use role=switch nth(4) for Wednesday, then generate-preview-btn."
+}

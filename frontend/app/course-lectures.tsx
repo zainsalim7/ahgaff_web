@@ -679,13 +679,16 @@ export default function CourseLecturesScreen() {
       const wsCreated = response.data.weekly_cells_created || 0;
       const wsExisting = response.data.weekly_cells_existing || 0;
       const wsNotes: string[] = response.data.weekly_notes || [];
+      const infoNotes = wsNotes.filter((n) => n.includes('ℹ️'));
+      const warnNotes = wsNotes.filter((n) => !n.includes('ℹ️'));
       let msg = `تم توليد ${count} محاضرة بنجاح`;
       if (skipped > 0) msg += `\n(تم تخطي ${skipped} محاضرة بسبب تعارض)`;
       if (holidaysCount > 0) msg += `\n🏖️ استُثني ${holidaysCount} يوم عطلة`;
       if (wsCreated > 0) msg += `\n🗓️ أُدرج ${wsCreated} موعد في الجدول الأسبوعي (العرض الشامل)`;
       if (wsExisting > 0) msg += `\n🗓️ ${wsExisting} موعد مدرج مسبقاً في الجدول الأسبوعي`;
-      if (wsNotes.length > 0) msg += `\n⚠️ الجدول الأسبوعي:\n• ${wsNotes.join('\n• ')}`;
-      if (skipped > 0 || wsNotes.length > 0) {
+      if (infoNotes.length > 0) msg += `\nℹ️ ${infoNotes.join('\n• ')}`;
+      if (warnNotes.length > 0) msg += `\n⚠️ الجدول الأسبوعي:\n• ${warnNotes.join('\n• ')}`;
+      if (skipped > 0 || warnNotes.length > 0) {
         showNotification('warning', msg);
       } else {
         showNotification('success', msg);
