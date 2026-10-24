@@ -923,6 +923,7 @@ export const lecturesAPI = {
     holidays?: string[];
     dry_run?: boolean;
     group?: string;
+    force_moved_away?: boolean;
   }) =>
     api.post('/lectures/generate-semester', data),
   

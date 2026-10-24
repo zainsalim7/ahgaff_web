@@ -287,6 +287,7 @@ export default function CourseLecturesScreen() {
   const [genHolidays, setGenHolidays] = useState<string[]>([]);
   const [genHolidayInput, setGenHolidayInput] = useState('');
   const [genPreview, setGenPreview] = useState<any>(null);
+  const [forceMovedAway, setForceMovedAway] = useState(false);
   const [dayConfigs, setDayConfigs] = useState<DayScheduleConfig[]>(
     DAYS.map(d => ({
       day: d.id,
@@ -422,6 +423,7 @@ export default function CourseLecturesScreen() {
     setGenerateRoom('');
     setGenerateGroup('');
     setGenerateError('');
+    setForceMovedAway(false);
     setDayConfigs(DAYS.map(d => ({
       day: d.id,
       enabled: false,
@@ -660,6 +662,7 @@ export default function CourseLecturesScreen() {
         end_date: tempEndDate,
         holidays: genHolidays,
         dry_run: dryRun,
+        force_moved_away: forceMovedAway,
       });
 
       if (dryRun) {
@@ -1734,6 +1737,26 @@ export default function CourseLecturesScreen() {
                     {genPreview.conflicts_skipped > 0 ? `\n⚠️ ستُتخطى بسبب تعارض: ${genPreview.conflicts_skipped}` : ''}
                     {genPreview.holidays_count > 0 ? `\n🏖️ عطلات مستثناة: ${genPreview.holidays_count} يوم` : ''}
                   </Text>
+                  {Array.isArray(genPreview.skip_details) && genPreview.skip_details.length > 0 && (
+                    <View style={styles.genSkipDetailsBox} testID="generate-skip-details">
+                      <Text style={styles.genSkipDetailsTitle}>تفاصيل الأيام المتخطّاة:</Text>
+                      {genPreview.skip_details.map((d: any, i: number) => (
+                        <Text key={i} style={styles.genSkipDetailLine} testID={`skip-detail-${i}`}>• {d.reason}</Text>
+                      ))}
+                    </View>
+                  )}
+                  {genPreview.has_moved_away && !forceMovedAway && (
+                    <TouchableOpacity
+                      style={styles.genForceMovedBtn}
+                      onPress={() => { setForceMovedAway(true); setGenPreview(null); }}
+                      testID="force-moved-away-btn"
+                    >
+                      <Text style={styles.genForceMovedBtnText}>🔓 تجاوز وإعادة الإنشاء رغم النقل السابق</Text>
+                    </TouchableOpacity>
+                  )}
+                  {forceMovedAway && (
+                    <Text style={styles.genForceMovedActiveHint}>⚠️ سيتم تجاهل حظر "موعد سبق النقل منه" — اضغط معاينة لتحديث الأرقام</Text>
+                  )}
                 </View>
               ) : null}
               <View style={{ flexDirection: 'row-reverse', gap: 8, width: '100%' }}>
@@ -2637,6 +2660,47 @@ const styles = StyleSheet.create({
     color: '#004d40',
     lineHeight: 20,
     textAlign: 'right',
+  },
+  genSkipDetailsBox: {
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#80cbc4',
+  },
+  genSkipDetailsTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#b45309',
+    marginBottom: 4,
+    textAlign: 'right',
+  },
+  genSkipDetailLine: {
+    fontSize: 11,
+    color: '#7c2d12',
+    textAlign: 'right',
+    marginBottom: 3,
+    lineHeight: 16,
+  },
+  genForceMovedBtn: {
+    marginTop: 8,
+    backgroundColor: '#fef3c7',
+    borderWidth: 1,
+    borderColor: '#d97706',
+    borderRadius: 8,
+    padding: 9,
+    alignItems: 'center',
+  },
+  genForceMovedBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#92400e',
+  },
+  genForceMovedActiveHint: {
+    marginTop: 8,
+    fontSize: 11,
+    color: '#92400e',
+    textAlign: 'right',
+    fontWeight: '600',
   },
   genCancelBtn: {
     flex: 1,

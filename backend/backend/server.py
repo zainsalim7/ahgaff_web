@@ -9321,6 +9321,7 @@ class GenerateSemesterRequest(BaseModel):
     holidays: List[str] = []
     dry_run: bool = False
     group: Optional[str] = None  # 👥 توليد لمجموعة محددة داخل المقرر
+    force_moved_away: bool = False  # 🔓 تجاوز حظر "موعد سبق النقل منه" وإعادة الإنشاء فيه رغم ذلك
 
 _EN_TO_AR_DAY = {
     "saturday": "السبت", "sunday": "الأحد", "monday": "الاثنين",
@@ -9554,11 +9555,13 @@ async def generate_semester_lectures_advanced(
     already_exist = 0
     holiday_set = set(data.holidays or [])
     holiday_dates_skipped = set()
+    skip_details = []  # 📋 سبب دقيق لكل يوم مُتخطّى (تظهر في المعاينة)
     
     for day_config in data.schedule:
         target_weekday = day_name_to_weekday.get(day_config.day.lower())
         if target_weekday is None:
             continue
+        ar_day_label = _EN_TO_AR_DAY.get(day_config.day.lower(), day_config.day)
         
         # التحقق من أوقات الفترات
         for slot in day_config.slots:
@@ -9580,6 +9583,7 @@ async def generate_semester_lectures_advanced(
                 continue
             # إضافة محاضرة لكل فترة زمنية في هذا اليوم
             for slot in day_config.slots:
+                loc = f"{ar_day_label} {date_str} ({slot.start_time}-{slot.end_time})"
                 if data.dry_run:
                     exists = await db.lectures.find_one({
                         "course_id": data.course_id,
@@ -9594,27 +9598,31 @@ async def generate_semester_lectures_advanced(
                 conflict = await check_teacher_lecture_conflict(data.course_id, date_str, slot.start_time, slot.end_time, allow_same_course=True, group=gen_group or None, teacher_override=gen_group_teacher)
                 if conflict and conflict["type"] == "error":
                     conflicts_skipped += 1
+                    skip_details.append({"date": date_str, "day": ar_day_label, "reason_code": "teacher_conflict", "reason": f"{loc}: تعارض مع محاضرة أخرى للأستاذ — {conflict.get('message', '')}"})
                     continue
                 room_conflict = await check_room_lecture_conflict(data.course_id, data.room or "", date_str, slot.start_time, slot.end_time, group=gen_group or None)
                 if room_conflict and room_conflict["type"] == "error":
                     conflicts_skipped += 1
+                    skip_details.append({"date": date_str, "day": ar_day_label, "reason_code": "room_conflict", "reason": f"{loc}: القاعة محجوزة لمحاضرة أخرى — {room_conflict.get('message', '')}"})
                     continue
                 # 🎯 فحص تفضيلات المدرّس
                 pref_conflict = await check_teacher_preferences_conflict(data.course_id, date_str, slot.start_time, slot.end_time)
                 if pref_conflict:
                     conflicts_skipped += 1
+                    skip_details.append({"date": date_str, "day": ar_day_label, "reason_code": "teacher_preference", "reason": f"{loc}: يتعارض مع تفضيلات الأستاذ — {pref_conflict.get('message', '') if isinstance(pref_conflict, dict) else pref_conflict}"})
                     continue
                 # 🔧 لا تُعِد إنشاء محاضرة في موعد نُقلت منه محاضرة بإعادة الجدولة
-                # (وإلا زاد عدد المحاضرات عند إعادة التوليد بعد أي إعادة جدولة)
+                # (وإلا زاد عدد المحاضرات عند إعادة التوليد بعد أي إعادة جدولة) — إلا إذا طلب المستخدم التجاوز صراحةً
                 moved_away = await db.lectures.find_one({
                     "course_id": data.course_id,
                     "$or": [
                         {"original_date": date_str},
                         {"last_rescheduled_from": date_str},
                     ],
-                }, {"_id": 1})
-                if moved_away:
+                }, {"_id": 1, "date": 1})
+                if moved_away and not data.force_moved_away:
                     conflicts_skipped += 1
+                    skip_details.append({"date": date_str, "day": ar_day_label, "reason_code": "moved_away", "reason": f"{loc}: هذا الموعد سبق أن نُقلت منه محاضرة بإعادة الجدولة إلى تاريخ آخر — لم تُعَد إنشاؤها لمنع الازدواج"})
                     continue
                 
                 if data.dry_run:
@@ -9642,6 +9650,7 @@ async def generate_semester_lectures_advanced(
                     lectures_created += 1
                 except DuplicateKeyError:
                     conflicts_skipped += 1
+                    skip_details.append({"date": date_str, "day": ar_day_label, "reason_code": "duplicate", "reason": f"{loc}: محاضرة بنفس الموعد موجودة بالفعل"})
             
             current += timedelta(days=7)
     
@@ -9652,6 +9661,8 @@ async def generate_semester_lectures_advanced(
             "already_exist": already_exist,
             "conflicts_skipped": conflicts_skipped,
             "holidays_count": len(holiday_dates_skipped),
+            "skip_details": skip_details,
+            "has_moved_away": any(d["reason_code"] == "moved_away" for d in skip_details),
         }
 
     # إرسال تنبيه عند إنشاء محاضرات الفصل
