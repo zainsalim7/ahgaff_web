@@ -28,6 +28,16 @@ def can_manage_schedule(user: dict) -> bool:
     return False
 
 
+def _user_faculty_scope(user: dict):
+    """نطاق الكلية المسموح به: None = بلا قيد (أدمن/صلاحية شاملة)، وإلا مجموعة معرّفات الكليات"""
+    if user.get("role") == "admin" or has_permission(user, Permission.MANAGE_SETTINGS):
+        return None
+    ids = set(user.get("faculty_ids") or [])
+    if user.get("faculty_id"):
+        ids.add(user["faculty_id"])
+    return ids
+
+
 # ===== Models =====
 
 class RoomCreate(BaseModel):
@@ -1778,6 +1788,9 @@ async def merge_duplicate_courses(
         raise HTTPException(status_code=400, detail="معرف مقرر غير صالح")
     if not keep or not remove:
         raise HTTPException(status_code=404, detail="أحد المقررين غير موجود")
+    scope = _user_faculty_scope(current_user)
+    if scope is not None and (keep.get("faculty_id") not in scope or remove.get("faculty_id") not in scope):
+        raise HTTPException(status_code=403, detail="لا يمكنك دمج مقررات خارج نطاق كليتك")
 
     async def _move(coll: str, dup_keys: list) -> int:
         """نقل مراجع مقرر مع معالجة التكرارات: عند وجود مفاتيح تكرار نمرّ سجلاً بسجل"""
@@ -1842,22 +1855,31 @@ async def get_duplicate_candidates(
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
+    scope = _user_faculty_scope(current_user)
     groups: dict = {}
     dep_names = {str(d["_id"]): d.get("name", "") for d in await db.departments.find({}).to_list(500)}
+    sem_names = {str(s["_id"]): s.get("name", "") for s in await db.semesters.find({}).to_list(200)}
     async for c in db.courses.find({"is_active": True}):
         if faculty_id and c.get("faculty_id") and c.get("faculty_id") != faculty_id:
             continue
+        if scope is not None and c.get("faculty_id") not in scope:
+            continue
         key = str(c.get("name", "")).strip()
+        sem_id = str(c.get("semester_id", "") or "")
         groups.setdefault(key, []).append({
             "id": str(c["_id"]),
             "department_id": c.get("department_id", ""),
             "department_name": dep_names.get(c.get("department_id", ""), ""),
             "level": c.get("level"),
+            "section": c.get("section", "") or "",
+            "code": c.get("code", "") or "",
             "semester_id": c.get("semester_id"),
+            "semester_name": sem_names.get(sem_id, ""),
             "teacher_id": c.get("teacher_id"),
             "slots": await db.weekly_schedule.count_documents({"course_id": str(c["_id"])}),
         })
     return {"duplicates": [{"name": k, "courses": v} for k, v in groups.items() if len(v) > 1]}
+
 
 
 @router.get("/courses/{course_id}/shared-details")

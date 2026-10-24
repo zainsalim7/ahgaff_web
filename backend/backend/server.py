@@ -9501,15 +9501,23 @@ async def _weekly_occupancy_conflicts(course: dict, data: "GenerateSemesterReque
                 other_name = (other or {}).get("name", "آخر")
                 other_teacher = await db.teachers.find_one({"_id": ObjectId(other["teacher_id"])}) if (other or {}).get("teacher_id") and ObjectId.is_valid(other.get("teacher_id", "")) else None
                 teacher_txt = f" — أستاذ: {other_teacher.get('full_name')}" if other_teacher else ""
-                # 🔎 هل هذا تعارض حقيقي أم "مقرر مكرر" بنفس الاسم/القسم/المستوى/الفصل بمعرّف آخر في قاعدة البيانات؟
-                is_dup = bool(own_name) and other_name.strip() == own_name and (other or {}).get("department_id") == dept_id and ((other or {}).get("level") or 1) == level and ((other or {}).get("section") or "") == section
+                # 🔎 هل هذا تعارض حقيقي أم "مقرر مكرر" بنفس الاسم/القسم/المستوى/الفصل/الفصل الدراسي بمعرّف آخر في قاعدة البيانات؟
+                own_sem = str(course.get("semester_id", "") or "")
+                other_sem = str((other or {}).get("semester_id", "") or "")
+                is_dup = (
+                    bool(own_name) and other_name.strip() == own_name
+                    and (other or {}).get("department_id") == dept_id
+                    and ((other or {}).get("level") or 1) == level
+                    and ((other or {}).get("section") or "") == section
+                    and other_sem == own_sem
+                )
                 if is_dup:
                     duplicates[cell["course_id"]] = {
                         "duplicate_course_id": cell["course_id"], "duplicate_course_name": other_name,
                         "duplicate_teacher_name": (other_teacher or {}).get("full_name", ""),
                         "this_course_id": cid, "this_course_name": own_name,
                     }
-                    conflicts.append(f"{ar_day} {slot.start_time}: مشغول بـ «{other_name}»{teacher_txt} — ⚠️ هذا على الأرجح نفس المقرر مكرر بسجل منفصل في قاعدة البيانات (نفس القسم/المستوى/الشعبة)، وليس تعارضاً حقيقياً. استخدم «دمج المقررات المكررة» لحلّه نهائياً")
+                    conflicts.append(f"{ar_day} {slot.start_time}: مشغول بـ «{other_name}»{teacher_txt} — ⚠️ مقرر مكرر بسجل منفصل، وليس تعارضاً حقيقياً")
                 else:
                     conflicts.append(f"{ar_day} {slot.start_time}: مشغول بمقرر «{other_name}»{teacher_txt} في الجدول الأسبوعي")
                 break

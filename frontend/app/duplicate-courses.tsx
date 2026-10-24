@@ -21,7 +21,10 @@ interface DupCourse {
   department_id: string;
   department_name: string;
   level: number | null;
+  section?: string;
+  code?: string;
   semester_id?: string | null;
+  semester_name?: string;
   teacher_id?: string | null;
   slots: number;
 }
@@ -50,7 +53,7 @@ export default function DuplicateCoursesScreen() {
   const { user: ctxUser } = useAuth();
   const storeUser = useAuthStore((s) => s.user);
   const user: any = ctxUser || storeUser;
-  const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head';
+  const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head' || (user?.permissions || []).includes('manage_courses') || (user?.permissions || []).includes('manage_settings');
 
   const [loading, setLoading] = useState(false);
   const [groups, setGroups] = useState<DupGroup[]>([]);
@@ -111,10 +114,25 @@ export default function DuplicateCoursesScreen() {
       await fetchData();
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'فشل الدمج');
+      await fetchData();
     } finally {
       setMerging(null);
     }
   };
+
+  if (user && !canManage) {
+    return (
+      <>
+        <Stack.Screen options={{ title: 'دمج المقررات المكررة', headerBackTitle: 'رجوع' }} />
+        <SafeAreaView style={styles.container} edges={['bottom']} testID="duplicate-courses-unauthorized">
+          <View style={styles.empty}>
+            <Ionicons name="lock-closed-outline" size={48} color="#c62828" />
+            <Text style={[styles.emptyText, { color: '#c62828' }]}>هذه الصفحة للإدارة فقط</Text>
+          </View>
+        </SafeAreaView>
+      </>
+    );
+  }
 
   return (
     <>
@@ -151,6 +169,12 @@ export default function DuplicateCoursesScreen() {
                   <Text style={styles.groupTitle}>{g.name}</Text>
                   <View style={styles.countBadge}><Text style={styles.countBadgeText}>{g.courses.length} نُسخ</Text></View>
                 </View>
+                {new Set(g.courses.map((c) => c.semester_id || '')).size > 1 && (
+                  <View style={styles.semWarnBox} testID={`dup-group-${gi}-semester-warning`}>
+                    <Ionicons name="warning" size={14} color="#e65100" />
+                    <Text style={styles.semWarnText}>⚠️ النُّسخ من فصول دراسية مختلفة — تحقّق جيداً قبل الدمج</Text>
+                  </View>
+                )}
                 {g.courses.map((c) => {
                   const isKeep = keepSel[gi] === c.id;
                   return (
@@ -162,10 +186,13 @@ export default function DuplicateCoursesScreen() {
                     >
                       <View style={[styles.radio, isKeep && styles.radioActive]} />
                       <View style={{ flex: 1 }}>
-                        <Text style={styles.courseMeta}>{c.department_name || 'قسم غير محدد'} — م{c.level ?? '?'}</Text>
+                        <Text style={styles.courseMeta}>
+                          {c.department_name || 'قسم غير محدد'} — م{c.level ?? '?'}{c.section ? ` · شعبة ${c.section}` : ''}{c.code ? ` · ${c.code}` : ''}
+                        </Text>
                         <Text style={styles.courseMeta}>
                           {c.teacher_id ? `أستاذ: ${teacherNames[c.teacher_id] || c.teacher_id}` : 'بلا أستاذ مُسنَد'} · خانات الجدول: {c.slots}
                         </Text>
+                        <Text style={styles.courseMeta}>{c.semester_name ? `الفصل: ${c.semester_name}` : 'بلا فصل دراسي محدَّد'}</Text>
                       </View>
                       {isKeep && <Text style={styles.keepLabel}>سيُحتفَظ به</Text>}
                     </TouchableOpacity>
@@ -206,6 +233,8 @@ const styles = StyleSheet.create({
   groupCard: { backgroundColor: '#fff', marginHorizontal: 12, marginTop: 12, padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#eee' },
   groupHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
   groupTitle: { fontSize: 14, fontWeight: '800', color: '#1a2540', textAlign: 'right', flex: 1 },
+  semWarnBox: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, backgroundColor: '#fff3e0', borderRadius: 8, padding: 8, marginBottom: 8 },
+  semWarnText: { flex: 1, fontSize: 11, color: '#e65100', fontWeight: '700', textAlign: 'right' },
   countBadge: { backgroundColor: '#fff3e0', borderRadius: 10, paddingHorizontal: 8, paddingVertical: 3 },
   countBadgeText: { fontSize: 11, fontWeight: '700', color: '#d84315' },
   courseRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: '#e3e9f2', backgroundColor: '#fafbfd', borderRadius: 10, padding: 10, marginBottom: 6 },

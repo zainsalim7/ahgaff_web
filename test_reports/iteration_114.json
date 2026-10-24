@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the root-cause fix for duplicate courses (backend + frontend) on Preview only. Backend: 7/7 pytest pass. With isolated TEST_ seeded data, generate-semester returns 409 with detail={message, conflicts, duplicates} as an object. duplicates holds duplicate_course_id/name/teacher_name and this_course_id/name when the occupying course is a same-name/dept/level/section copy. A real conflict with a different course returns duplicates=[] and leaves out the merge hint. After merge-duplicates, the dry_run passes (to_create>=1, conflicts_skipped=0) and the group is gone from duplicate-candidates. Merge validation works (self-merge 400, invalid id 400, unauthenticated 401/403). RBAC: admin/dean/department_head get 200, an employee without permission gets 403. Frontend: all 3 flows pass end-to-end. (1) Courses page → المزيد → duplicate-courses-tool-btn opens /duplicate-courses. (2) course-lectures generate modal → preview → generate-error-box shows detail.message as readable text (no [object Object]). go-to-duplicate-merge-tool appears, closes the modal and goes to /duplicate-courses. (3) On /duplicate-courses the radio selection on dup-course-{id} works (defaults to the copy with the most slots). Cancelling window.confirm sends no request. Accepting it calls merge-duplicates and shows a success alert, and the group disappears after reload. A dry-run after the UI merge passes. No page errors.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/courses-tools/duplicate-candidates", "issue": "Groups only by course name, ignoring department, level, section and semester. The UI then offers to merge courses that may be legitimately different. Example: the 'دراسات حضرموت' group holds two courses with different semester_id values. This is inconsistent with the stricter is_dup rule in _weekly_occupancy_conflicts (name+dept+level+section)."},
+      {"endpoint": "POST /api/courses-tools/merge-duplicates & GET duplicate-candidates", "issue": "No department/faculty scope. A department_head (Saeed) gets 200 and sees and can merge courses from every faculty and department."},
+      {"endpoint": "_weekly_occupancy_conflicts", "issue": "is_dup does not compare semester_id, although the review request says duplicates share the same semester. A same-name course from another semester in the same cell is flagged as a duplicate. Minor."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "duplicate-courses merge with 3+ copies", "issue": "Merges are posted one after another in a loop. If one fails midway, the catch shows an error but does not call fetchData, so the list is stale and some copies are already merged.", "affected_selectors": ["merge-dup-group-{index}-btn"]},
+      {"flow": "duplicate-courses access", "issue": "Frontend canManage allows only admin/dean/department_head, but the backend can_manage_schedule also allows MANAGE_COURSES/MANAGE_SETTINGS users. Those users can see the menu button (canEdit) and then get 'غير مصرح'. For unauthorized users the page also shows the misleading empty state 'لا توجد مقررات مكررة حالياً 🎉' after the alert.", "affected_selectors": ["duplicate-courses-tool-btn", "duplicate-courses-screen"]}
+    ],
+    "design_issues": [
+      {"screen": "/duplicate-courses", "issues": ["Course cards show no semester, section or course code, so copies in the same group look identical. The admin cannot tell which one to keep (e.g., the two 'أصول التفسير (أ)' cards are identical).", "The info icon sits at the far left edge, far from the right-aligned RTL text."]},
+      {"screen": "course-lectures generate modal", "issues": ["The 409 message is very long (about 9 lines in a red banner) and repeats the merge hint twice (once per conflict, once at the end).", "Start/end dates use the browser's native input[type=date] instead of a shadcn-style calendar (existing, not new)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_generate_semester_duplicate_detection.py", "/app/test_reports/pytest/pytest_results_iter114.xml"],
+  "action_items": [
+    "Optional: make duplicate-candidates group by (name, department_id, level, section[, semester_id]) to match is_dup, or at least show semester/section/code on each card in /duplicate-courses.",
+    "Optional: scope duplicate-candidates/merge-duplicates by the department_head's department or the dean's faculty.",
+    "Optional: in duplicate-courses handleMergeGroup, call fetchData() in finally (or on error) so a partial merge does not leave a stale list.",
+    "Optional: align frontend canManage with backend can_manage_schedule, and do not show the empty state to unauthorized users.",
+    "Optional: shorten the 409 message so the merge hint is not repeated twice."
+  ],
+  "critical_code_review_comments": [
+    "Breaking change check: _weekly_occupancy_conflicts now returns a dict, and its only caller (generate_semester_lectures_advanced) was updated. The only frontend caller of generate-semester is course-lectures.tsx, which handles both object and string detail. OK.",
+    "duplicate-courses.tsx shows e.response.data.detail directly in an alert. Fine for merge-duplicates (string detail), but it would print [object Object] if the backend ever returns an object detail.",
+    "Merge is destructive and has no undo (soft-deactivates and moves data). There is a confirm dialog, but because the grouping is name-only, cross-department courses can be merged into one shared course by mistake."
+  ],
+  "updated_files": ["/app/backend/tests/test_generate_semester_duplicate_detection.py"],
+  "success_rate": {"backend": "100% (7/7)", "frontend": "100% (3/3 flows)"},
+  "seed_data_creation": "Created temporary TEST_ courses ('TEST_مقرر مكرر للتعارض', 'TEST_مقرر مختلف للتعارض', 'TEST_UI مقرر مكرر') and weekly cells, cloned from course 6a343eaf15515862788eddab. All were removed afterwards (pytest teardown + /tmp/seed_ui.py clean). Real duplicate groups were not merged.",
+  "test_credentials": "admin/admin123, Saeed/test1234, Salim/test1234, view_curr_user/test1234 (from /app/memory/test_credentials.md)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Regression: pytest /app/backend/tests/test_generate_semester_duplicate_detection.py. It seeds duplicate courses in free weekly cells for dept/level of course 6a343eaf15515862788eddab and cleans up after itself. UI: login via placeholders. Courses page 'المزيد' opens the tools menu. course-lectures?courseId=X → 'توليد تلقائي' → fill input[type=date] x2, select[data-testid=generate-room-picker], [role=switch] nth(1)=Sunday (default slot 08:00) → generate-preview-btn. Saturday slot 1 for الشريعة والقانون L1 is occupied by الفقه الإسلامي."
+}
