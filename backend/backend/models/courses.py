@@ -22,6 +22,7 @@ class CourseBase(BaseModel):
     term: Optional[int] = None
     room: Optional[str] = ""
     auto_generated: Optional[bool] = False
+    excluded_from_load: Optional[bool] = False  # 🆕 مقرر إضافي بالكامل — لا يُحتسب من نصاب المعلم (ساعاته تُضاف كاملة للإضافي)
 
 class CourseCreate(CourseBase):
     pass
@@ -35,6 +36,7 @@ class CourseResponse(CourseBase):
     lectures_count: Optional[int] = 0
     created_at: Optional[datetime] = None
     is_active: bool = True
+    excluded_from_load: Optional[bool] = False
 
 class AttendanceStatus:
     PRESENT = "present"

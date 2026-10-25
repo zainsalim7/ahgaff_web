@@ -197,6 +197,7 @@ def report_totals(result: list) -> dict:
         "total_difference_hours": round(sum(t["summary"]["difference_hours"] for t in result), 2),
         "total_expected_hours": round(sum(t["summary"]["expected_hours"] for t in result), 2),
         "total_shortfall_hours": round(sum(t["summary"]["shortfall_hours"] for t in result), 2),
+        "total_extra_only_hours": round(sum(t["summary"].get("extra_only_hours", 0) for t in result), 2),
         "total_bonus_hours": round(sum(t["summary"]["bonus_hours"] for t in result), 2),
         "total_overtime_hours": round(sum(max(0.0, t["summary"]["overtime_hours"]) for t in result), 2),
         "total_overtime_amount": round(sum(t["summary"]["overtime_amount"] or 0 for t in result), 2),
@@ -248,9 +249,11 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         if course_ids:
             courses = [c for c in courses if str(c["_id"]) in course_ids]
         total_scheduled = total_actual = total_expected = total_shortfall = total_excused = 0.0
+        extra_only_hours = 0.0  # 🆕 ساعات مقررات مستثناة من النصاب — تُضاف كاملة كإضافي
         courses_data = []
         for course in courses:
             cid = str(course["_id"])
+            excluded_from_load = bool(course.get("excluded_from_load"))
             attr = [{"teacher_id": tid}] if course.get("_hist_only") else [{"teacher_id": tid}, {"teacher_id": None}]
             lectures = await db.lectures.find({
                 "course_id": cid,
@@ -308,8 +311,13 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
             shortfall = round(max(0.0, expected - actual_hours), 2)
             rate = round(actual_hours / expected * 100) if expected > 0 else (100 if actual_hours > 0 else 0)
 
-            total_scheduled += scheduled_hours; total_actual += actual_hours
-            total_expected += expected; total_shortfall += shortfall; total_excused += excused_hours
+            if excluded_from_load:
+                # 🆕 مقرر إضافي بالكامل: لا يدخل في حساب النصاب (الافتراضية/المنجز/النقص) — كامل ساعاته المنفَّذة تُحتسب إضافياً مباشرة
+                extra_only_hours += actual_hours
+                notes.append("مقرر إضافي بالكامل — لا يُحتسب من النصاب، ساعاته تُضاف كاملة للساعات الإضافية")
+            else:
+                total_scheduled += scheduled_hours; total_actual += actual_hours
+                total_expected += expected; total_shortfall += shortfall; total_excused += excused_hours
             courses_data.append({
                 "course_id": cid, "course_name": course.get("name", ""), "course_code": course.get("code", ""),
                 "department_id": course.get("department_id"), "department_name": dep_docs.get(course.get("department_id") or "", {}).get("name", ""),
@@ -319,6 +327,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 "scheduled_lectures": len(lectures), "executed_lectures": len(executed), "excused_lectures": len(excused),
                 "scheduled_hours": scheduled_hours, "actual_hours": actual_hours, "taught_hours": taught_hours, "excused_hours": excused_hours,
                 "expected_hours": expected, "holiday_hours": holiday_hours, "college_cancel_hours": college_cancel_hours, "shortfall_hours": shortfall, "completion_rate": rate, "is_low": expected > 0 and rate < LOW_RATE_THRESHOLD,
+                "excluded_from_load": excluded_from_load,
                 "note": "، ".join(notes),
             })
 
@@ -342,7 +351,8 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         divisor = float(pol.get("bonus_divisor") or 6)
         bonus_hours = round(total_actual / divisor, 2) if bonus_enabled else 0.0
         after_bonus = round(total_actual + bonus_hours, 2)
-        overtime = round(after_bonus - required_hours, 2)
+        extra_only_hours = round(extra_only_hours, 2)
+        overtime = round(after_bonus - required_hours + extra_only_hours, 2)
         title = teacher.get("academic_title") or ""
         rate_val = (pol.get("rates") or {}).get(title)
         amount = round(max(0.0, overtime) * float(rate_val), 2) if rate_val else None
@@ -361,6 +371,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 "difference_hours": round(total_actual - required_hours, 2),
                 "completion_rate": round(total_actual / required_hours * 100, 2) if required_hours > 0 else 0,
                 "expected_hours": round(total_expected, 2), "shortfall_hours": round(total_shortfall, 2), "excused_hours": round(total_excused, 2),
+                "extra_only_hours": extra_only_hours,
                 "bonus_enabled": bonus_enabled, "bonus_divisor": divisor, "bonus_hours": bonus_hours,
                 "hours_after_bonus": after_bonus, "overtime_hours": overtime,
                 "hourly_rate": rate_val, "currency": pol.get("currency", ""), "overtime_amount": amount,

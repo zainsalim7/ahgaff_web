@@ -15,9 +15,9 @@ import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { DASH, NUM_FONT, dashStyles } from '../src/components/dashboard/dashTheme';
 import { ReportKpis } from '../src/components/reports/ReportShell';
 
-interface Course { course_name: string; course_code: string; level?: number; section?: string; weekly_hours?: number; expected_hours?: number; shortfall_hours?: number; completion_rate?: number; is_low?: boolean; note?: string; scheduled_lectures: number; executed_lectures: number; scheduled_hours: number; actual_hours: number }
+interface Course { course_name: string; course_code: string; level?: number; section?: string; weekly_hours?: number; expected_hours?: number; shortfall_hours?: number; completion_rate?: number; is_low?: boolean; note?: string; scheduled_lectures: number; executed_lectures: number; scheduled_hours: number; actual_hours: number; excluded_from_load?: boolean }
 interface TeacherWL { teacher_id: string; teacher_db_id?: string; teacher_name: string; academic_title?: string; department_id: string; department_name?: string; faculty_id?: string; weekly_hours: number; courses: Course[];
-  summary: { total_courses: number; weekly_hours: number; total_weeks: number; required_hours: number; total_scheduled_hours: number; total_actual_hours: number; difference_hours: number; completion_rate: number; expected_hours?: number; shortfall_hours?: number; bonus_enabled?: boolean; bonus_hours?: number; hours_after_bonus?: number; overtime_hours?: number; hourly_rate?: number | null; overtime_amount?: number | null; currency?: string; late_start?: boolean; effective_weeks?: number; start_week?: number; first_lecture_date?: string | null; holiday_hours?: number; note?: string; course_filter?: boolean } }
+  summary: { total_courses: number; weekly_hours: number; total_weeks: number; required_hours: number; total_scheduled_hours: number; total_actual_hours: number; difference_hours: number; completion_rate: number; expected_hours?: number; shortfall_hours?: number; extra_only_hours?: number; bonus_enabled?: boolean; bonus_hours?: number; hours_after_bonus?: number; overtime_hours?: number; hourly_rate?: number | null; overtime_amount?: number | null; currency?: string; late_start?: boolean; effective_weeks?: number; start_week?: number; first_lecture_date?: string | null; holiday_hours?: number; note?: string; course_filter?: boolean } }
 
 const iso = (d: Date) => d.toISOString().split('T')[0];
 const QUICK = [
@@ -300,7 +300,7 @@ export default function TeacherWorkloadReport() {
                       <View style={[styles.rank, { backgroundColor: rateColor(s.completion_rate) + '1a' }]}><Text style={[styles.rankText, NUM_FONT, { color: rateColor(s.completion_rate) }]}>{i + 1}</Text></View>
                       <View style={{ flex: 2, minWidth: 180 }}>
                         <Text style={styles.tName}>{t.academic_title ? `${t.academic_title} ` : ''}{t.teacher_name}</Text>
-                        <Text style={styles.tSub}>{t.department_name || deptName(t.department_id) || '—'} · {s.total_courses} مقرر · نصاب {s.weekly_hours} س/أسبوع{s.bonus_enabled ? ` · إضافة ${s.bonus_hours} س` : ''}</Text>
+                        <Text style={styles.tSub}>{t.department_name || deptName(t.department_id) || '—'} · {s.total_courses} مقرر · نصاب {s.weekly_hours} س/أسبوع{s.bonus_enabled ? ` · إضافة ${s.bonus_hours} س` : ''}{s.extra_only_hours ? ` · +${s.extra_only_hours} س مقرر إضافي بالكامل` : ''}</Text>
                         {!!s.note && <Text style={styles.tNote} testID={`tw-row-note-${t.teacher_id}`}>⏱ {s.note}</Text>}
                         {!!raisedMap[t.teacher_db_id || ''] && <Text style={styles.tRaised} testID={`tw-row-raised-${t.teacher_id}`}>✉ سبق رفعه بالخطاب {raisedMap[t.teacher_db_id || ''].map((l: any) => `${l.number} (${l.start_date} → ${l.end_date})`).join('، ')}</Text>}
                       </View>
@@ -322,7 +322,7 @@ export default function TeacherWorkloadReport() {
                         {t.courses.map((c, k) => {
                           const r = c.completion_rate ?? (c.scheduled_lectures ? Math.round((c.executed_lectures * 1000) / c.scheduled_lectures) / 10 : 0);
                           return (
-                            <View key={k} style={[styles.cRow, c.is_low && { backgroundColor: '#fdf2f8' }]} testID={`tw-course-row-${t.teacher_db_id || t.teacher_id}-${k}`}>
+                            <View key={k} style={[styles.cRow, c.is_low && { backgroundColor: '#fdf2f8' }, c.excluded_from_load && { backgroundColor: '#fff8e1' }]} testID={`tw-course-row-${t.teacher_db_id || t.teacher_id}-${k}`}>
                               <Text style={[styles.cTd, styles.cName]} numberOfLines={1}>{c.course_name} <Text style={styles.tSub}>{c.course_code}{(c as any).department_name ? ` · ${(c as any).department_name}` : ''}</Text></Text>
                               <Text style={styles.cTd}>{lvl(c)}</Text>
                               {[c.weekly_hours, `${c.executed_lectures}/${c.scheduled_lectures}`, c.expected_hours, c.actual_hours].map((v, j) => <Text key={j} style={[styles.cTd, NUM_FONT]}>{v as any}</Text>)}

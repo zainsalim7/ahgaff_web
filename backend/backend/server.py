@@ -6279,6 +6279,7 @@ async def get_courses(
             "lectures_count": lecture_counts.get(str(c["_id"]), 0),
             "created_at": c.get("created_at"),
             "is_active": c.get("is_active", True),
+            "excluded_from_load": bool(c.get("excluded_from_load")),
             "source": ("curriculum" if (c.get("curriculum_course_id") or c.get("auto_generated")) else ("import" if c.get("created_from_import") else "manual")),
             "shared_links": c.get("shared_links") or [],
             "merge_shared_with": [
@@ -6412,7 +6413,8 @@ async def get_course(course_id: str, current_user: dict = Depends(get_current_us
         "semester_id": course.get("semester_id"),
         "academic_year": course.get("academic_year", "2024-2025"),
         "created_at": course["created_at"],
-        "is_active": course.get("is_active", True)
+        "is_active": course.get("is_active", True),
+        "excluded_from_load": bool(course.get("excluded_from_load")),
     }
 
 async def _teacher_group_scope(course: dict, current_user: dict) -> tuple:
@@ -7376,6 +7378,7 @@ class CourseUpdate(BaseModel):
     academic_year: Optional[str] = None
     credit_hours: Optional[int] = None
     practical_hours: Optional[int] = None  # 🧪 منها ساعات عملية
+    excluded_from_load: Optional[bool] = None  # 🆕 مقرر إضافي بالكامل — لا يُحتسب من نصاب المعلم
 
 class ReassignHistoryRequest(BaseModel):
     course_id: str

@@ -13,6 +13,7 @@ import {
   Platform,
   ActivityIndicator,
   Modal,
+  Switch,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -200,6 +201,7 @@ export default function AddCourseScreen() {
     section: '',
     credit_hours: '3',
     practical_hours: '0',
+    excluded_from_load: false,
   });
   const [sectionCount, setSectionCount] = useState('');
   const [extraSections, setExtraSections] = useState('');  // إضافة شُعب جديدة عند التعديل
@@ -433,6 +435,7 @@ export default function AddCourseScreen() {
       section: '',
       credit_hours: '3',
       practical_hours: '0',
+      excluded_from_load: false,
     });
     setSectionCount('');
   };
@@ -539,6 +542,7 @@ export default function AddCourseScreen() {
       section: course.section || '',
       credit_hours: String(course.credit_hours || 3),
       practical_hours: String((course as any).practical_hours || 0),
+      excluded_from_load: !!(course as any).excluded_from_load,
     });
     setShowForm(true);
   };
@@ -818,6 +822,11 @@ export default function AddCourseScreen() {
                   <Text style={{ fontSize: 8.5, color: '#fff', fontWeight: '800' }}>🧪 {(item as any).practical_hours}ع</Text>
                 </View>
               )}
+              {(item as any).excluded_from_load && (
+                <View style={{ backgroundColor: '#fff8e1', borderWidth: 1, borderColor: '#f9a825', borderRadius: 4, paddingHorizontal: 4, paddingVertical: 1 }} testID={`course-excluded-load-badge-${item.id}`}>
+                  <Text style={{ fontSize: 8.5, color: '#f57f17', fontWeight: '800' }}>➕ خارج النصاب</Text>
+                </View>
+              )}
               {sharedHere ? (
                 <span title={`الأساس: ${getDepartmentName(item.department_id)} / مستوى ${item.level}${item.section ? ` / شعبة ${item.section}` : ''}`}>
                   <TouchableOpacity
@@ -1045,6 +1054,20 @@ export default function AddCourseScreen() {
             <Text style={{ fontSize: 11, color: '#666', marginBottom: 6, textAlign: 'right' }}>
               💡 الافتراضي 0 = كل الساعات نظرية · الساعة العملية تُحسب بنصف قيمتها في نصاب الأستاذ
             </Text>
+
+            <View style={styles.excludeLoadRow}>
+              <Switch
+                value={formData.excluded_from_load}
+                onValueChange={(v) => setFormData({ ...formData, excluded_from_load: v })}
+                testID="excluded-from-load-switch"
+              />
+              <View style={{ flex: 1, alignItems: 'flex-end' }}>
+                <Text style={styles.label}>مقرر إضافي بالكامل (خارج النصاب)</Text>
+                <Text style={{ fontSize: 11, color: '#666', textAlign: 'right' }}>
+                  لا تُحتسب ساعاته من نصاب المعلم؛ كل ساعاته المنفَّذة تُضاف كاملة كساعات إضافية
+                </Text>
+              </View>
+            </View>
 
             {editingCourse ? (
               <>
@@ -2268,6 +2291,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f4f6fb',
   },
+  excludeLoadRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, backgroundColor: '#fff8e1', borderRadius: 10, padding: 12, marginBottom: 12 },
 
   // ====== التصميم الجديد ======
   pageScroll: { padding: 20, paddingBottom: 60, maxWidth: 1440, width: '100%', alignSelf: 'center' },
