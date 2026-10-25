@@ -1,0 +1,37 @@
+{
+  "summary": "Tested admin study-plans overview (API + /study-plans-overview page), new student per-course approved study-plan endpoint, and regression on /students/me/study-plan & /students/me/results. 11/12 backend tests pass; 1 security failure (scope bypass via department_id/faculty_id filter for scoped users). Frontend: dashboard card navigates to /study-plans-overview, stats (34/0/0/34) match API, all 3 filters work, faculty narrows department list, course row opens /manage-study-plan with correct course loaded. One logic/UX issue: courses with a saved-but-unapproved plan are labelled 'لا توجد خطة'.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/study-plans/overview", "issue": "Scope bypass: for scoped users (dean/dept head), passing ?department_id=<other dept> or ?faculty_id=<other faculty> OVERWRITES course_q['department_id'] set from _scope_department_ids, so out-of-scope courses are returned. Reproduced with Saeed (dept head, 4 courses unfiltered) -> ?department_id=<foreign dept> returned 1 foreign course. Fix: intersect the filter with dep_scope (e.g. if department_id not in dep_scope -> return empty/403; for faculty_id use set(fac_dept_ids) & set(dep_scope)), like faculty_board.py does with $and.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/study-plans/overview", "issue": "Status 'none' covers courses that HAVE a saved plan (weeks>0) which is simply not approved yet and has no pending_weeks (e.g. teacher's first save goes straight into weeks, not pending_weeks). E.g. 'دراسات حضرموت' (Hdha) has 3 weeks/6 topics but status none -> UI shows 'لا توجد خطة'. Suggest a 4th status like 'draft'/'unapproved' (plan exists, weeks>0, not approved) or count it as pending awaiting approval."},
+      {"endpoint": "GET /api/study-plans/overview", "issue": "faculty_id filter only matches courses via department.faculty_id; courses carrying faculty_id directly but with no/foreign department are excluded (faculty_board uses $or on faculty_id too). Also no active-semester filter: lists courses from all semesters."},
+      {"endpoint": "GET /api/students/me/courses/{course_id}/study-plan", "issue": "Ownership check (enrolled OR same dept+level) is looser than GET /students/me/courses (which filters by active semester and section, and only uses dept/level fallback when student has NO enrollments). Student can read approved plans of same dept/level courses from other semesters/sections. Low risk (read-only, approved content)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/study-plans-overview", "issues": ["Courses with an existing unapproved plan (shows 'N أسبوع · M موضوع' in green) have badge 'لا توجد خطة' -- contradictory", "'بدون كلية / بدون قسم' group sorts first, above real faculties; consider placing it last", "Admin menu item permissions [MANAGE_CURRICULUM, VIEW_CURRICULUM] while backend also allows manage_courses/view_courses -- minor mismatch"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_study_plans_overview_student.py", "/app/test_reports/pytest/pytest_study_plans_overview.xml"],
+  "action_items": [
+    "HIGH: Fix scope bypass in /api/study-plans/overview — intersect department_id/faculty_id filters with _scope_department_ids result for non-admin users",
+    "Distinguish 'plan exists but not approved' from 'no plan' in overview status (and UI badge/stat card)",
+    "Optional: include courses with direct faculty_id in faculty filter; consider active-semester filter; tighten student per-course ownership to match /students/me/courses"
+  ],
+  "critical_code_review_comments": [
+    "study_plans.py is 828 lines (>700) — consider splitting overview/student endpoints into a separate module",
+    "Overview groups by department/faculty NAME, so two departments with identical names in the same faculty would merge",
+    "study-plans-overview.tsx swallows fetch errors into an empty state (no error message shown to user on 403/500)"
+  ],
+  "updated_files": ["/app/backend/tests/test_study_plans_overview_student.py"],
+  "success_rate": {"backend": "92% (11/12)", "frontend": "100%"},
+  "seed_data_creation": "Temporarily created+approved a study_plans doc on one of student 1001's courses; deleted in finally block (verified overview still shows approved=0).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login via UI requires clicking 'تسجيل الدخول' text (Enter key doesn't submit). Saeed/test1234 is scoped dept head with access to overview (4 courses). teacher180156 gets 403 on overview. Admin totals: 34 courses, all 'none'. Run: pytest backend/tests/test_study_plans_overview_student.py"
+}

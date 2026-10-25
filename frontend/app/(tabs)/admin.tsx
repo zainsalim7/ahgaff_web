@@ -61,7 +61,7 @@ const SECTIONS: Section[] = [
         color: '#1565c0',
         bg: '#dbeafe',
         route: '/study-plans-overview',
-        permissions: [PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.VIEW_CURRICULUM],
+        permissions: [PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.VIEW_CURRICULUM, PERMISSIONS.MANAGE_COURSES, PERMISSIONS.VIEW_COURSES],
       },
       {
         id: 'teacher-courses',

@@ -15,6 +15,7 @@ import { facultiesAPI, departmentsAPI, studyPlansAPI } from '../src/services/api
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   approved: { label: 'معتمدة', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' },
+  draft: { label: 'محفوظة (غير معتمدة)', color: '#1565c0', bg: '#e3f2fd', icon: 'create' },
   pending: { label: 'بانتظار الاعتماد', color: '#ef6c00', bg: '#fff3e0', icon: 'time' },
   none: { label: 'لا توجد خطة', color: '#8a95a8', bg: '#f4f6fb', icon: 'document-outline' },
 };
@@ -94,6 +95,13 @@ export default function StudyPlansOverviewScreen() {
                 <Text style={styles.statValue}>{totals.approved}</Text>
               </View>
             </View>
+            <View style={styles.statCard} testID="stat-draft">
+              <View style={[styles.statIconWrap, { backgroundColor: '#1565c0' }]}><Ionicons name="create" size={20} color="#fff" /></View>
+              <View style={styles.statTextCol}>
+                <Text style={styles.statLabel}>محفوظة غير معتمدة</Text>
+                <Text style={styles.statValue}>{totals.draft || 0}</Text>
+              </View>
+            </View>
             <View style={styles.statCard} testID="stat-pending">
               <View style={[styles.statIconWrap, { backgroundColor: '#ef6c00' }]}><Ionicons name="time" size={20} color="#fff" /></View>
               <View style={styles.statTextCol}>
@@ -159,6 +167,7 @@ export default function StudyPlansOverviewScreen() {
                   >
                     <Picker.Item label="كل الحالات" value="" />
                     <Picker.Item label="معتمدة" value="approved" />
+                    <Picker.Item label="محفوظة (غير معتمدة)" value="draft" />
                     <Picker.Item label="بانتظار الاعتماد" value="pending" />
                     <Picker.Item label="بلا خطة" value="none" />
                   </Picker>
