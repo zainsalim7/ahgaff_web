@@ -56,12 +56,12 @@ const SECTIONS: Section[] = [
       {
         id: 'manage-study-plan',
         label: 'إدارة الخطة الدراسية',
-        description: 'إنشاء وتعديل الخطط الدراسية للأقسام',
+        description: 'متابعة خطط كل المقررات حسب الكليات والأقسام',
         icon: 'library',
         color: '#1565c0',
         bg: '#dbeafe',
-        route: '/manage-study-plan',
-        permissions: [PERMISSIONS.MANAGE_CURRICULUM],
+        route: '/study-plans-overview',
+        permissions: [PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.VIEW_CURRICULUM],
       },
       {
         id: 'teacher-courses',

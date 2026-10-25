@@ -17,6 +17,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.responses import StreamingResponse
 
 from .deps import get_current_user, get_db, has_permission
+from .faculty_board import _scope_department_ids
 from models.permissions import UserRole
 from models.lectures import LectureStatus
 
@@ -195,6 +196,48 @@ async def get_study_plan(course_id: str, current_user: dict = Depends(get_curren
     plan["has_pending"] = bool(plan.get("pending_weeks"))
 
     return plan
+
+
+# ==================== تطبيق الطالب: الخطة الأسبوعية المعتمدة لمقرر معيّن ====================
+@router.get("/students/me/courses/{course_id}/study-plan")
+async def get_my_course_study_plan(course_id: str, current_user: dict = Depends(get_current_user)):
+    """الخطة الأسبوعية (المواضيع) لمقرر من مقررات الطالب — تظهر فقط إن اعتمدها القسم"""
+    if current_user["role"] != UserRole.STUDENT:
+        raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
+    db = get_db()
+    try:
+        ObjectId(course_id)
+    except Exception:
+        raise HTTPException(status_code=400, detail="معرف المقرر غير صالح")
+
+    student = await db.students.find_one({"user_id": current_user["id"]})
+    course = await db.courses.find_one({"_id": ObjectId(course_id)})
+    if not student or not course:
+        return {"approved": False, "weeks": []}
+
+    is_enrolled = await db.enrollments.find_one({"student_id": str(student["_id"]), "course_id": course_id})
+    same_dept_level = (
+        course.get("department_id") == student.get("department_id")
+        and course.get("level") == student.get("level")
+    )
+    if not is_enrolled and not same_dept_level:
+        raise HTTPException(status_code=403, detail="غير مصرح لك بهذا المقرر")
+
+    plan = await db.study_plans.find_one({"course_id": course_id}, {"_id": 0})
+    if not plan or not plan.get("approved"):
+        return {"approved": False, "weeks": []}
+
+    weeks_out = [
+        {
+            "week_number": w.get("week_number"),
+            "topics": [
+                {"title": t.get("title", ""), "notes": t.get("notes", "")}
+                for t in w.get("topics", [])
+            ],
+        }
+        for w in plan.get("weeks", [])
+    ]
+    return {"approved": True, "weeks": weeks_out, "updated_at": plan.get("updated_at")}
 
 
 # ==================== PUT (manual edit) ====================
@@ -644,6 +687,103 @@ async def confirm_study_plan_topics(
         "confirmed_count": confirmed_count,
         "submitted_count": len(confirmations_map),
     }
+
+
+# ==================== Admin: نظرة عامة على خطط كل المقررات (كل الكليات/الأقسام) ====================
+def _has_overview_access(user: dict) -> bool:
+    if user.get("role") == UserRole.ADMIN:
+        return True
+    return any(has_permission(user, p) for p in (
+        "manage_curriculum", "view_curriculum", "manage_courses", "view_courses",
+    ))
+
+
+@router.get("/study-plans/overview")
+async def study_plans_overview(
+    faculty_id: Optional[str] = None,
+    department_id: Optional[str] = None,
+    status: Optional[str] = None,  # approved | pending | none
+    current_user: dict = Depends(get_current_user),
+):
+    """نظرة عامة على الخطط الدراسية (الأسبوعية) لكل المقررات مجمّعة بالكلية ثم القسم — لصفحة الإدارة"""
+    if not _has_overview_access(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+
+    course_q: dict = {"is_active": {"$ne": False}}
+    if current_user["role"] != UserRole.ADMIN:
+        dep_scope = await _scope_department_ids(db, current_user)
+        if dep_scope is not None:
+            course_q["department_id"] = {"$in": dep_scope}
+    if department_id:
+        course_q["department_id"] = department_id
+    elif faculty_id:
+        fac_dept_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        course_q["department_id"] = {"$in": fac_dept_ids}
+
+    courses = await db.courses.find(course_q, {
+        "name": 1, "code": 1, "teacher_id": 1, "department_id": 1, "faculty_id": 1,
+    }).to_list(3000)
+    if not courses:
+        return {"faculties": [], "totals": {"total": 0, "approved": 0, "pending": 0, "none": 0}}
+
+    course_ids = [str(c["_id"]) for c in courses]
+    plans = {p["course_id"]: p async for p in db.study_plans.find({"course_id": {"$in": course_ids}})}
+
+    dept_oids = [ObjectId(d) for d in {c.get("department_id") for c in courses if c.get("department_id")} if ObjectId.is_valid(d)]
+    dept_docs = await db.departments.find({"_id": {"$in": dept_oids}}).to_list(500) if dept_oids else []
+    dept_names = {str(d["_id"]): d.get("name", "") for d in dept_docs}
+    dept_faculty_id = {str(d["_id"]): d.get("faculty_id") for d in dept_docs}
+    # 🆕 fallback: استنتاج كلية المقرر من قسمه إن لم تكن محفوظة مباشرة على المقرر
+    fac_ids = {c.get("faculty_id") for c in courses if c.get("faculty_id")}
+    fac_ids |= {dept_faculty_id.get(c.get("department_id", "")) for c in courses if not c.get("faculty_id")}
+    fac_oids = [ObjectId(f) for f in fac_ids if f and ObjectId.is_valid(f)]
+    fac_names = {str(f["_id"]): f.get("name", "") async for f in db.faculties.find({"_id": {"$in": fac_oids}})} if fac_oids else {}
+    teacher_ids = [ObjectId(t) for t in {c.get("teacher_id") for c in courses if c.get("teacher_id")} if ObjectId.is_valid(t)]
+    teacher_names = {str(t["_id"]): t.get("full_name", "") async for t in db.teachers.find({"_id": {"$in": teacher_ids}})} if teacher_ids else {}
+
+    rows = []
+    for c in courses:
+        cid = str(c["_id"])
+        plan = plans.get(cid)
+        approved = bool(plan.get("approved")) if plan else False
+        has_pending = bool(plan.get("pending_weeks")) if plan else False
+        st = "approved" if approved else ("pending" if has_pending else "none")
+        if status and st != status:
+            continue
+        weeks = (plan or {}).get("weeks", [])
+        fac_id = c.get("faculty_id") or dept_faculty_id.get(c.get("department_id", ""))
+        rows.append({
+            "course_id": cid,
+            "course_name": c.get("name", ""),
+            "course_code": c.get("code", ""),
+            "teacher_name": teacher_names.get(c.get("teacher_id", ""), "غير محدد"),
+            "department_name": dept_names.get(c.get("department_id", ""), "بدون قسم"),
+            "faculty_name": fac_names.get(fac_id, "بدون كلية"),
+            "status": st,
+            "weeks_count": len(weeks),
+            "topics_count": sum(len(w.get("topics", [])) for w in weeks),
+        })
+
+    grouped: dict = {}
+    for r in rows:
+        grouped.setdefault(r["faculty_name"], {}).setdefault(r["department_name"], []).append(r)
+
+    faculties_out = []
+    for fname in sorted(grouped.keys()):
+        deps_out = [
+            {"department_name": dname, "courses": sorted(grouped[fname][dname], key=lambda x: x["course_name"])}
+            for dname in sorted(grouped[fname].keys())
+        ]
+        faculties_out.append({"faculty_name": fname, "departments": deps_out})
+
+    totals = {
+        "total": len(rows),
+        "approved": sum(1 for r in rows if r["status"] == "approved"),
+        "pending": sum(1 for r in rows if r["status"] == "pending"),
+        "none": sum(1 for r in rows if r["status"] == "none"),
+    }
+    return {"faculties": faculties_out, "totals": totals}
 
 
 # ==================== تطبيق الطالب: الخطة الدراسية المعتمدة للقسم ====================

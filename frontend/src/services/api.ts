@@ -1071,4 +1071,10 @@ export const dashboardAPI = {
   admin: () => api.get('/dashboard/admin'),
 };
 
+// Study Plans API (الخطة الدراسية لكل مقرر - أسبوعية)
+export const studyPlansAPI = {
+  getOverview: (params?: { faculty_id?: string; department_id?: string; status?: string }) =>
+    api.get('/study-plans/overview', { params }),
+};
+
 export default api;
