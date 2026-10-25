@@ -96,6 +96,22 @@
 - Faculty Board PDF generation (P2) still pending.
 - MongoDB CPU optimization لـ `faculty_board.list_candidates` (P2) still pending.
 
+## جلسة 25 أكتوبر 2026 (تابع) — Backend تطبيق الطالب: الخطة الدراسية + النتيجة
+
+بناءً على `BACKEND_STUDY_PLAN_RESULTS_TASK.md` المرفوع من المستخدم (مطلوب من مطوّر تطبيق الطالب):
+- **`GET /api/students/me/study-plan`** (`routes/study_plans.py`): يرجع خطة قسم الطالب المعتمدة كاملة
+  (كل المستويات، فصلين لكل مستوى) من `curriculum_courses` — `{levels:[{level, semesters:[{semester, courses:[{name, code?, credit_hours?}]}]}]}`.
+- **`GET /api/students/me/results`** (`routes/grades.py`): يرجع نتيجة الطالب من `student_grades` مجمّعة
+  بالمستوى والفصل (أول/ثاني) — `{levels:[{level, first_semester:{status,gpa,grade}, second_semester:{...}}]}`.
+  مطابقة الطالب: `student_db_id` أولاً ثم fallback بـ `reg_no=student_id`. حساب `status/grade` من `result`
+  الرقمي (نسبة مئوية، عتبة نجاح 60: ≥90 ممتاز، ≥80 جيد جداً، ≥70 جيد، ≥60 مقبول، أقل ضعيف+راسب) — وإن كان
+  `result` نصاً حراً (مثل "ناجح") يُستخدم كما هو كـ`status` بلا `gpa/grade`. مستوى/فصل بلا سجل → `null` (200 دائماً، لا 500).
+- كلا الـ endpoint للطالب المسجّل فقط (`role=student`)، ويرجعان `{"levels": []}` بأمان عند عدم توفر بيانات.
+
+**الاختبار**: تحقق ذاتي عبر curl — `study-plan` اختُبر فعلياً مع بيانات القسم الحقيقية (طالب 1001)، `results`
+اختُبر بإدراج 3 سجلات مؤقتة (88.4→ناجح/جيد جداً، 58.3→راسب/ضعيف، "ناجح" نصي→ناجح بلا gpa) ثم حذفها. طلب بلا توكن → 403 (لا 500).
+لم يُستخدم `testing_agent` (تغيير صغير بإضافة endpoint-ين للقراءة فقط بلا أثر على شاشات موجودة).
+
 ## Pending/Future
 - (P1) AI Assistant Phase C: تنفيذ إجراءات كتابة مع معاينة/تأكيد.
 - (P1) تعريب منتقي التاريخ (Date Picker).

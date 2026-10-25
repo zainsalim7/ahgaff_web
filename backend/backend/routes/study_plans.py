@@ -644,3 +644,44 @@ async def confirm_study_plan_topics(
         "confirmed_count": confirmed_count,
         "submitted_count": len(confirmations_map),
     }
+
+
+# ==================== تطبيق الطالب: الخطة الدراسية المعتمدة للقسم ====================
+@router.get("/students/me/study-plan")
+async def get_my_study_plan(current_user: dict = Depends(get_current_user)):
+    """الخطة الدراسية المعتمدة لقسم الطالب (كل المستويات) — لتطبيق الطالب"""
+    if current_user["role"] != UserRole.STUDENT:
+        raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
+    db = get_db()
+    student = await db.students.find_one({"user_id": current_user["id"]})
+    if not student or not student.get("department_id"):
+        return {"levels": []}
+
+    courses = await db.curriculum_courses.find({
+        "department_id": student["department_id"],
+        "is_active": {"$ne": False},
+        "term": {"$in": [1, 2]},
+    }).to_list(2000)
+
+    levels_map: dict = {}
+    for c in courses:
+        lvl = c.get("level")
+        term = c.get("term")
+        if not lvl or not term:
+            continue
+        entry = {"name": c.get("name", "")}
+        if c.get("code"):
+            entry["code"] = c["code"]
+        if c.get("credit_hours") is not None:
+            entry["credit_hours"] = c["credit_hours"]
+        levels_map.setdefault(lvl, {1: [], 2: []})[term].append(entry)
+
+    levels_out = []
+    for lvl in sorted(levels_map.keys()):
+        semesters = [
+            {"semester": term, "courses": sorted(levels_map[lvl][term], key=lambda x: x["name"])}
+            for term in (1, 2)
+        ]
+        levels_out.append({"level": lvl, "semesters": semesters})
+
+    return {"levels": levels_out}

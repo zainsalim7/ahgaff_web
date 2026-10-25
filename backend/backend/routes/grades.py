@@ -902,6 +902,71 @@ async def delete_grade_import(import_id: str, current_user: dict = Depends(get_c
 
 # ===== السجل الأكاديمي =====
 
+_RESULT_PASS = 60.0
+
+
+def _grade_from_score(score: float) -> str:
+    if score >= 90:
+        return "ممتاز"
+    if score >= 80:
+        return "جيد جداً"
+    if score >= 70:
+        return "جيد"
+    if score >= 60:
+        return "مقبول"
+    return "ضعيف"
+
+
+def _semester_cell(rec: Optional[dict]) -> dict:
+    if not rec:
+        return {"status": None, "gpa": None, "grade": None}
+    raw = str(rec.get("result", "") or "").strip()
+    num = _num(raw)
+    if num is not None:
+        return {
+            "status": "ناجح" if num >= _RESULT_PASS else "راسب",
+            "gpa": round(num, 1),
+            "grade": _grade_from_score(num),
+        }
+    return {"status": raw or None, "gpa": None, "grade": None}
+
+
+# ==================== تطبيق الطالب: النتيجة لكل مستوى درسه ====================
+@router.get("/students/me/results")
+async def get_my_results(current_user: dict = Depends(get_current_user)):
+    """نتيجة الطالب الحالي مجمّعة حسب المستوى والفصل — لتطبيق الطالب"""
+    if current_user["role"] != "student":
+        raise HTTPException(status_code=403, detail="هذا الـ endpoint للطلاب فقط")
+    db = get_db()
+    student = await db.students.find_one({"user_id": current_user["id"]})
+    if not student:
+        return {"levels": []}
+
+    student_db_id = str(student["_id"])
+    recs = await db.student_grades.find({"student_db_id": student_db_id}).to_list(200)
+    if not recs and student.get("student_id"):
+        recs = await db.student_grades.find({"reg_no": student["student_id"]}).to_list(200)
+
+    levels_map: dict = {}
+    for r in recs:
+        lvl = r.get("level")
+        sem = r.get("semester_no")
+        if not lvl or sem not in (1, 2):
+            continue
+        levels_map.setdefault(lvl, {})[sem] = r
+
+    levels_out = []
+    for lvl in sorted(levels_map.keys()):
+        sems = levels_map[lvl]
+        levels_out.append({
+            "level": lvl,
+            "first_semester": _semester_cell(sems.get(1)),
+            "second_semester": _semester_cell(sems.get(2)),
+        })
+
+    return {"levels": levels_out}
+
+
 @router.get("/grades/search")
 async def search_grade_students(q: str = "", current_user: dict = Depends(get_current_user)):
     """بحث عن طالب له درجات مستوردة (بالاسم أو رقم القيد)"""
