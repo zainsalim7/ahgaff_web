@@ -71,7 +71,7 @@ export default function ManageTeachersScreen() {
   // قائمة العمليات (3 نقاط)
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [perPage, setPerPage] = useState(10);
-  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>('name_asc');
 
   const [formData, setFormData] = useState({
     teacher_id: '',

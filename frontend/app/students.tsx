@@ -110,7 +110,7 @@ export default function StudentsScreen() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<string>('');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'none' | 'name_asc' | 'name_desc' | 'attendance_asc' | 'attendance_desc'>('none');
+  const [sortBy, setSortBy] = useState<'none' | 'name_asc' | 'name_desc' | 'attendance_asc' | 'attendance_desc'>('name_asc');
   const [attendanceMap, setAttendanceMap] = useState<Record<string, number | null>>({});
   
   // Pagination
@@ -1363,7 +1363,7 @@ export default function StudentsScreen() {
     setSelectedSectionFilter('');
     setSelectedStatusFilter('');
     setSearchQuery('');
-    setSortBy('none');
+    setSortBy('name_asc');
     setCurrentPage(1);
   }, []);
 
@@ -1384,7 +1384,7 @@ export default function StudentsScreen() {
     }
   }, [sortBy, attendanceMap]);
 
-  const hasAnyFilter = !!(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery || sortBy !== 'none');
+  const hasAnyFilter = !!(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery || (sortBy !== 'none' && sortBy !== 'name_asc'));
 
   if (authLoading || loading) {
     return <LoadingScreen />;

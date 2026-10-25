@@ -18,6 +18,7 @@ import { useRouter, Stack } from 'expo-router';
 import { alumniAPI, facultiesAPI, departmentsAPI } from '../src/services/api';
 import api from '../src/services/api';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
+import { SortableHeader } from '../src/components/SortableHeader';
 
 interface AlumniRow {
   id: string;
@@ -70,6 +71,7 @@ export default function AlumniScreen() {
   const [deptFilter, setDeptFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [searchQ, setSearchQ] = useState('');
+  const [sortBy, setSortBy] = useState<string | null>('name_asc');
   const [restoringId, setRestoringId] = useState<string | null>(null);
   const [exporting, setExporting] = useState<'excel' | 'pdf' | null>(null);
   const [page, setPage] = useState(1);
@@ -145,18 +147,27 @@ export default function AlumniScreen() {
 
   // فلترة محلية بالحالة (لأن الـ API لا يدعمها)
   const visibleItems = useMemo(() => {
-    if (!statusFilter) return items;
-    return items.filter(a => {
-      const g = gradeFromGPA(a.final_gpa);
-      switch (statusFilter) {
-        case 'excellent': return g.label === 'ممتاز' || g.label === 'جيد جداً';
-        case 'good': return g.label === 'جيد';
-        case 'pass': return g.label === 'مقبول';
-        case 'weak': return g.label === 'ضعيف';
-        default: return true;
-      }
-    });
-  }, [items, statusFilter]);
+    let filtered = items;
+    if (statusFilter) {
+      filtered = filtered.filter(a => {
+        const g = gradeFromGPA(a.final_gpa);
+        switch (statusFilter) {
+          case 'excellent': return g.label === 'ممتاز' || g.label === 'جيد جداً';
+          case 'good': return g.label === 'جيد';
+          case 'pass': return g.label === 'مقبول';
+          case 'weak': return g.label === 'ضعيف';
+          default: return true;
+        }
+      });
+    }
+    if (sortBy) {
+      filtered = [...filtered].sort((a, b) => {
+        const cmp = (a.full_name || '').localeCompare(b.full_name || '', 'ar');
+        return sortBy.endsWith('_desc') ? -cmp : cmp;
+      });
+    }
+    return filtered;
+  }, [items, statusFilter, sortBy]);
 
   const totalPages = Math.max(1, Math.ceil(visibleItems.length / perPage));
   const pageItems = useMemo(
@@ -585,7 +596,7 @@ export default function AlumniScreen() {
                 </TouchableOpacity>
               )}
               <Text style={styles.th_idx}>#</Text>
-              <Text style={[styles.th, { flex: 2 }]}>الاسم</Text>
+              <SortableHeader label="الاسم" field="name" currentSort={sortBy} onSort={(v) => setSortBy(v)} containerStyle={[styles.th, { flex: 2 }]} testID="sort-alumni-name" />
               <Text style={styles.th}>رقم القيد</Text>
               <Text style={[styles.th, { flex: 1.4 }]}>الكلية</Text>
               <Text style={[styles.th, { flex: 1.3 }]}>القسم</Text>

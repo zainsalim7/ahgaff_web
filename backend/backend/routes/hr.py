@@ -378,14 +378,14 @@ async def export_employees(search: Optional[str] = None, org_unit_id: Optional[s
 
 @router.get("/employees")
 async def list_employees(search: Optional[str] = None, org_unit_id: Optional[str] = None, category: Optional[str] = None, status: Optional[str] = None,
-                         contract_type: Optional[str] = None, page: int = 1, per_page: int = 30, current_user: dict = Depends(get_current_user)):
+                         contract_type: Optional[str] = None, page: int = 1, per_page: int = 30, sort_dir: str = "asc", current_user: dict = Depends(get_current_user)):
     if not _can_view(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
     q = {**(await _build_query(db, search, org_unit_id, category, status, contract_type)), **(await scope_filter(db, current_user))}
     total = await db.employees.count_documents(q)
     per_page = max(1, min(per_page, 200))
-    emps = await db.employees.find(q).sort("full_name", 1).skip((page - 1) * per_page).limit(per_page).to_list(per_page)
+    emps = await db.employees.find(q).sort("full_name", -1 if sort_dir == "desc" else 1).skip((page - 1) * per_page).limit(per_page).to_list(per_page)
     sf = await scope_filter(db, current_user)
     stats_raw = {s["_id"]: s["n"] async for s in db.employees.aggregate([{"$match": sf}, {"$group": {"_id": "$status", "n": {"$sum": 1}}}])}
     cat_raw = {s["_id"]: s["n"] async for s in db.employees.aggregate([{"$match": sf}, {"$group": {"_id": "$category", "n": {"$sum": 1}}}])}

@@ -110,7 +110,7 @@ export default function AddCourseScreen() {
   const [filterLevel, setFilterLevel] = useState<string>('');
   const [filterSection, setFilterSection] = useState<string>('');
   const [filterSemester, setFilterSemester] = useState<string>(''); // '' = الفصل النشط (افتراضي), 'all' = كل الفصول, أو semester_id محدد
-  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortBy, setSortBy] = useState<string | null>('name_asc');
   const [sharedDetailCourse, setSharedDetailCourse] = useState<Course | null>(null);
   const [sharedDetailData, setSharedDetailData] = useState<any>(null);
   const [integrityOpen, setIntegrityOpen] = useState(false);

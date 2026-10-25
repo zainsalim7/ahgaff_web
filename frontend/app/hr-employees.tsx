@@ -27,7 +27,7 @@ export default function HrEmployees() {
   const [exporting, setExporting] = useState(false);
   const [units, setUnits] = useState<any[]>([]);
   const [data, setData] = useState<any>({ employees: [], total: 0, stats: {} });
-  const [q, setQ] = useState<any>({ search: "", org_unit_id: String(sp.org_unit_id || ''), category: String(sp.category || ''), status: String(sp.status || ''), contract_type: '', page: 1 });
+  const [q, setQ] = useState<any>({ search: "", org_unit_id: String(sp.org_unit_id || ''), category: String(sp.category || ''), status: String(sp.status || ''), contract_type: '', page: 1, sort_dir: 'asc' });
   const [loading, setLoading] = useState(true);
   const [form, setForm] = useState<{ open: boolean; emp: any | null }>({ open: false, emp: null });
   const [detail, setDetail] = useState<any>(null);
@@ -141,7 +141,15 @@ export default function HrEmployees() {
           : (
             <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5, direction: 'rtl' }} data-testid="hr-employees-table">
-                <thead><tr style={{ backgroundColor: '#0f2440', color: '#fff' }}>{canManage && <th style={{ padding: '10px 8px', width: 34 }}><input type="checkbox" checked={allSel} onChange={toggleAll} data-testid="hr-select-all" /></th>}{['الرقم', 'الاسم', 'الفئة', 'المسمى', 'الوحدة', 'التعاقد', 'الحالة', 'حساب', ''].map((h) => <th key={h} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>{h}</th>)}</tr></thead>
+                <thead><tr style={{ backgroundColor: '#0f2440', color: '#fff' }}>{canManage && <th style={{ padding: '10px 8px', width: 34 }}><input type="checkbox" checked={allSel} onChange={toggleAll} data-testid="hr-select-all" /></th>}{['الرقم', 'الاسم', 'الفئة', 'المسمى', 'الوحدة', 'التعاقد', 'الحالة', 'حساب', ''].map((h) => (
+                  <th key={h} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700 }}>
+                    {h === 'الاسم' ? (
+                      <span onClick={() => setQ((p: any) => ({ ...p, sort_dir: p.sort_dir === 'desc' ? 'asc' : 'desc', page: 1 }))} style={{ cursor: 'pointer', userSelect: 'none' }} data-testid="hr-sort-name-toggle">
+                        {h} {q.sort_dir === 'desc' ? '▼ (ي-أ)' : '▲ (أ-ي)'}
+                      </span>
+                    ) : h}
+                  </th>
+                ))}</tr></thead>
                 <tbody>
                   {data.employees.map((e: any) => (
                     <tr key={e.id} style={{ borderBottom: '1px solid #eef2f7', cursor: 'pointer', backgroundColor: sel[e.id] ? '#eff6ff' : undefined }} onClick={() => openDetail(e.id)} data-testid={`hr-emp-row-${e.id}`}>
