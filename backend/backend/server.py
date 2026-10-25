@@ -9346,9 +9346,11 @@ def _ranges_overlap(s1: str, e1: str, s2: str, e2: str) -> bool:
 
 
 def _cell_time_range(cell: dict, slot_by_number: dict) -> tuple:
-    """🕐 المجال الزمني الحقيقي لخلية الجدول الأسبوعي: وقتها المستقل إن كانت خانة مستقلة، وإلا وقت فترتها القياسية"""
-    if cell.get("custom_slot"):
-        return cell.get("actual_start_time", ""), cell.get("actual_end_time", "")
+    """🕐 المجال الزمني الحقيقي لخلية الجدول الأسبوعي: وقتها الفعلي المحفوظ إن وُجد، وإلا وقت فترتها القياسية
+    🎯 actual_start_time/actual_end_time لهما الأولوية دائماً (وقت حر/مستقل) بصرف النظر عن custom_slot،
+    لأن خلايا قديمة قد تحمل وقتاً فعلياً مختلفاً عن الافتراضي دون أن تكون مُعلَّمة custom_slot."""
+    if cell.get("actual_start_time") and cell.get("actual_end_time"):
+        return cell["actual_start_time"], cell["actual_end_time"]
     ts = slot_by_number.get(cell.get("slot_number"))
     if ts:
         return ts.get("start_time", ""), ts.get("end_time", "")

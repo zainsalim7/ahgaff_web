@@ -235,7 +235,11 @@ def _slots_conflict(a: dict, b: dict) -> bool:
 
 
 def _effective_times(s: dict, st_def: str, en_def: str):
-    """الأوقات الفعلية للخانة: (البداية، النهاية، هل تختلف عن الفترة الافتراضية)"""
+    """الأوقات الفعلية للخانة: (البداية، النهاية، هل تختلف عن الفترة الافتراضية)
+    🎯 الأولوية دائماً لوقت الخلية الفعلي المحفوظ (actual_start_time/actual_end_time) — وقت حر/مستقل
+    لا يُستبدل أبداً بالفترة الافتراضية (slot_number) عند المزامنة أو حساب الامتداد."""
+    if s.get("actual_start_time") and s.get("actual_end_time"):
+        return s["actual_start_time"], s["actual_end_time"], True
     st = s.get("computed_start_time") or st_def
     if s.get("computed_end_time"):
         en = s["computed_end_time"]
@@ -623,6 +627,13 @@ async def update_schedule_settings(
     db = get_db()
     update = {}
     if time_slots is not None:
+        # 🛡️ نفس التحقق من صحة الفترات المطبّق في /schedule-settings/time-slots (منع تكرار فساد البيانات)
+        for s in time_slots:
+            st, en, nm = s.get("start_time"), s.get("end_time"), s.get("name", "")
+            if _t2m(st) is None or _t2m(en) is None:
+                raise HTTPException(status_code=400, detail=f"وقت غير صالح في '{nm}' ({st} - {en})")
+            if _t2m(en) <= _t2m(st):
+                raise HTTPException(status_code=400, detail=f"نهاية '{nm}' ({en}) يجب أن تكون بعد بدايتها ({st})")
         update["time_slots"] = time_slots
     if working_days is not None:
         update["working_days"] = canon_days(working_days)
@@ -652,6 +663,14 @@ async def save_time_slots(
 ):
     if not can_manage_schedule(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
+    db = get_db()
+    # 🛡️ تحقق من صحة كل فترة لمنع حفظ أوقات فاسدة (نهاية قبل البداية أو مساوية لها، مثل 00:00)
+    # — هذا هو السبب الجذري لتعطّل المزامنة سابقاً، نمنعه من مصدره هنا
+    for s in slots:
+        if _t2m(s.start_time) is None or _t2m(s.end_time) is None:
+            raise HTTPException(status_code=400, detail=f"وقت غير صالح في '{s.name}' ({s.start_time} - {s.end_time})")
+        if _t2m(s.end_time) <= _t2m(s.start_time):
+            raise HTTPException(status_code=400, detail=f"نهاية '{s.name}' ({s.end_time}) يجب أن تكون بعد بدايتها ({s.start_time})")
     db = get_db()
     settings_id = f"faculty_{faculty_id}" if faculty_id else "global"
     slots_data = [s.dict() for s in slots]
@@ -4987,10 +5006,13 @@ async def resync_lecture_times(
     per_key: dict = defaultdict(list)
     for s in slots:
         wd = _ARABIC_DAY_TO_WEEKDAY.get(s.get("day", ""))
-        st, en = slot_times.get(s.get("slot_number"), ("", ""))
-        if wd is None or not st or not en:
+        if wd is None:
             continue
-        st, en, _ = _effective_times(s, st, en)
+        has_actual = bool(s.get("actual_start_time") and s.get("actual_end_time"))
+        st_def, en_def = slot_times.get(s.get("slot_number", ""), ("", "")) if not has_actual else ("", "")
+        if not has_actual and (not st_def or not en_def):
+            continue
+        st, en, _ = _effective_times(s, st_def, en_def)
         per_key[(s.get("course_id", ""), wd)].append((s.get("slot_number"), st, en))
     for k in per_key:
         per_key[k].sort()
