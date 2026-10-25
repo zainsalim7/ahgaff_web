@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput, Platform, Alert, useWindowDimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput, Platform, Alert, useWindowDimensions, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
@@ -71,6 +71,10 @@ export default function TeacherWorkloadReport() {
   const [open, setOpen] = useState<Record<string, boolean>>({});
   const [sort, setSort] = useState<'rate' | 'name' | 'hours'>('rate');
   const [search, setSearch] = useState('');
+  const [excOpen, setExcOpen] = useState(false);
+  const [excIds, setExcIds] = useState<string[]>([]);
+  const [excSearch, setExcSearch] = useState('');
+  const [savingExc, setSavingExc] = useState(false);
 
   useEffect(() => {
     if (isTeacher) return;
@@ -95,10 +99,10 @@ export default function TeacherWorkloadReport() {
     try {
       const r = await api.get('/reports/teacher-workload', { params });
       setData(r.data.teachers || []); setPeriod(r.data.period); setRan(true);
-      if (!isTeacher) loadRaised(params);
+      if (!isTeacher) { loadRaised(params); api.get('/reports/teacher-workload/exceptions', { params: { start_date: from, end_date: to } }).then((r2) => setExcIds(r2.data.course_ids || [])).catch(() => {}); }
     } catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل تنفيذ التقرير'); }
     finally { setLoading(false); }
-  }, [params, isTeacher]);
+  }, [params, isTeacher, from, to]);
 
   useEffect(() => { if (isTeacher) run(); }, [isTeacher, run]);
 
@@ -143,6 +147,24 @@ export default function TeacherWorkloadReport() {
   const facDepts = departments.filter((d) => !fac || d.faculty_id === fac);
   const filteredTeachers = teachers.filter((t) => (!dept || t.department_id === dept) && (!fac || t.faculty_id === fac || facDepts.some((d) => d.id === t.department_id)) && (!teacherQ || matchAr(t.full_name, teacherQ))).slice(0, 8);
   const lateTeachers = data.filter((t) => t.summary.late_start);
+
+  const allCourses = useMemo(() => {
+    const map = new Map<string, { course_id: string; course_name: string; course_code: string; teacher_name: string; excluded_from_load?: boolean }>();
+    data.forEach((t) => t.courses.forEach((c: any) => { if (!map.has(c.course_id)) map.set(c.course_id, { course_id: c.course_id, course_name: c.course_name, course_code: c.course_code, teacher_name: t.teacher_name, excluded_from_load: c.excluded_from_load && !c.temp_excluded }); }));
+    const list = Array.from(map.values());
+    const q = excSearch.trim();
+    return q ? list.filter((c) => matchAr(c.course_name, q) || matchAr(c.teacher_name, q)) : list;
+  }, [data, excSearch]);
+
+  const saveExceptions = async () => {
+    setSavingExc(true);
+    try {
+      await api.put('/reports/teacher-workload/exceptions', { start_date: from, end_date: to, course_ids: excIds });
+      setExcOpen(false);
+      if (ran) run();
+    } catch { Alert.alert('خطأ', 'تعذر حفظ الاستثناءات'); }
+    finally { setSavingExc(false); }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
@@ -244,6 +266,11 @@ export default function TeacherWorkloadReport() {
               </View>
               <TouchableOpacity style={[styles.chip, hideEmpty && styles.chipOn]} onPress={() => setHideEmpty(!hideEmpty)} testID="tw-hide-empty"><Text style={[styles.chipText, hideEmpty && styles.chipTextOn]}>{hideEmpty ? '✓ ' : ''}إخفاء من لا محاضرات لهم</Text></TouchableOpacity>
               <TouchableOpacity style={[styles.chip, onlyOvertime && styles.chipOn]} onPress={() => setOnlyOvertime(!onlyOvertime)} testID="tw-only-overtime"><Text style={[styles.chipText, onlyOvertime && styles.chipTextOn]}>{onlyOvertime ? '✓ ' : ''}إخفاء من لا إضافي لهم</Text></TouchableOpacity>
+              {ran && (
+                <TouchableOpacity style={[styles.chip, excIds.length > 0 && styles.chipCourseOn]} onPress={() => setExcOpen(true)} testID="tw-exceptions-btn">
+                  <Text style={[styles.chipText, excIds.length > 0 && styles.chipTextOn]}>⏱ استثناء من النصاب لهذه الفترة{excIds.length ? ` (${excIds.length})` : ''}</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.runBtn} onPress={run} disabled={loading} testID="tw-run-btn">
                 {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="play" size={14} color="#fff" />}<Text style={styles.runText}>تنفيذ التقرير</Text>
               </TouchableOpacity>
@@ -343,6 +370,38 @@ export default function TeacherWorkloadReport() {
         )}
       </ScrollView>
       <OvertimePolicyModal visible={policyOpen} onClose={() => setPolicyOpen(false)} onSaved={() => { if (ran) run(); }} />
+      <Modal visible={excOpen} transparent animationType="fade" onRequestClose={() => setExcOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.excModal} testID="tw-exceptions-modal">
+            <View style={styles.excHeader}>
+              <Text style={styles.excTitle}>استثناء مقررات من النصاب لهذه الفترة فقط</Text>
+              <TouchableOpacity onPress={() => setExcOpen(false)} testID="tw-exceptions-close"><Ionicons name="close" size={20} color={DASH.muted} /></TouchableOpacity>
+            </View>
+            <Text style={styles.excHint}>من {from} إلى {to} — المقررات المختارة تُحتسب كاملة ساعاتها إضافياً في هذه الفترة فقط، وتعود للاحتساب الطبيعي في فترات أخرى.</Text>
+            <View style={[styles.inputBox, { marginBottom: 10 }]}>
+              <Ionicons name="search" size={15} color="#94a3b8" /><TextInput value={excSearch} onChangeText={setExcSearch} placeholder="بحث باسم المقرر أو المدرس" placeholderTextColor="#94a3b8" style={styles.input} testID="tw-exceptions-search" />
+            </View>
+            <ScrollView style={{ maxHeight: 360 }}>
+              {allCourses.length === 0 && <Text style={[styles.tSub, { padding: 12, textAlign: 'center' }]}>نفّذ التقرير أولاً لعرض مقرراته</Text>}
+              {allCourses.map((c) => {
+                const on = excIds.includes(c.course_id);
+                return (
+                  <TouchableOpacity key={c.course_id} style={styles.excRow} onPress={() => setExcIds(on ? excIds.filter((x) => x !== c.course_id) : [...excIds, c.course_id])} testID={`tw-exceptions-course-${c.course_id}`} disabled={c.excluded_from_load}>
+                    <Ionicons name={on ? 'checkbox' : 'square-outline'} size={20} color={c.excluded_from_load ? '#cbd5e1' : (on ? DASH.navy : '#94a3b8')} />
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.excRowName}>{c.course_name} <Text style={styles.tSub}>{c.course_code}</Text></Text>
+                      <Text style={styles.tSub}>{c.teacher_name}{c.excluded_from_load ? ' · مستثنى دائماً من إعدادات المقرر' : ''}</Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={styles.excSaveBtn} onPress={saveExceptions} disabled={savingExc} testID="tw-exceptions-save">
+              {savingExc ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="save-outline" size={16} color="#fff" />}<Text style={styles.runText}>حفظ الاستثناءات لهذه الفترة</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -354,6 +413,14 @@ const dateInput = { border: '1px solid #e2e8f0', borderRadius: 8, padding: '6px 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: DASH.bg },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15,23,42,0.5)', alignItems: 'center', justifyContent: 'center', padding: 16 },
+  excModal: { backgroundColor: '#fff', borderRadius: 16, padding: 18, width: '100%', maxWidth: 560 },
+  excHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+  excTitle: { fontSize: 15, fontWeight: '800', color: DASH.navy, textAlign: 'right' },
+  excHint: { fontSize: 11.5, color: DASH.muted, textAlign: 'right', marginBottom: 12, lineHeight: 17 },
+  excRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 4, borderBottomWidth: 1, borderBottomColor: '#f1f5f9' },
+  excRowName: { fontSize: 12.5, fontWeight: '700', color: '#1e293b', textAlign: 'right' },
+  excSaveBtn: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: DASH.navy, borderRadius: 10, paddingVertical: 12, marginTop: 14 },
   content: { padding: 16, paddingBottom: 40, maxWidth: 1400, width: '100%', alignSelf: 'center' },
   hero: { backgroundColor: DASH.navy, borderRadius: 18, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 12, marginBottom: 14, flexWrap: 'wrap' },
   kicker: { color: DASH.gold, fontSize: 11, fontWeight: '800', textAlign: 'right', letterSpacing: 1 },

@@ -32,6 +32,12 @@ class PolicyIn(BaseModel):
     lecture_hour_minutes: Optional[int] = None
 
 
+class WorkloadExceptionsIn(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    course_ids: List[str] = []
+
+
 # ==================== السياسة ====================
 async def load_policies(db) -> Dict[str, dict]:
     """{faculty_id: policy} مع "" للافتراضي العام"""
@@ -90,6 +96,43 @@ async def delete_policy(faculty_id: str, current_user: dict = Depends(get_curren
         raise HTTPException(status_code=403, detail="غير مصرح")
     await get_db().overtime_policies.delete_one({"faculty_id": faculty_id})
     return {"message": "أُعيدت الكلية إلى السياسة الافتراضية"}
+
+
+# ==================== استثناءات مؤقتة من النصاب (مرتبطة بفترة تقرير محددة) ====================
+def _period_key(start: datetime, end: datetime) -> str:
+    return f"{start.date().isoformat()}_{end.date().isoformat()}"
+
+
+@router.get("/reports/teacher-workload/exceptions")
+async def get_workload_exceptions(start_date: Optional[str] = None, end_date: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """🆕 مقررات مُستثناة من النصاب لهذه الفترة فقط (مؤقتاً) — تعود للاحتساب الطبيعي في فترات أخرى"""
+    if current_user.get("role") == UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    start, end = parse_period(start_date, end_date)
+    doc = await db.report_load_exceptions.find_one({"_id": _period_key(start, end)})
+    return {"course_ids": (doc or {}).get("course_ids", [])}
+
+
+@router.put("/reports/teacher-workload/exceptions")
+async def save_workload_exceptions(data: WorkloadExceptionsIn, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") == UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    start, end = parse_period(data.start_date, data.end_date)
+    key = _period_key(start, end)
+    await db.report_load_exceptions.update_one(
+        {"_id": key},
+        {"$set": {
+            "course_ids": data.course_ids,
+            "start_date": start.date().isoformat(),
+            "end_date": end.date().isoformat(),
+            "updated_by": current_user.get("full_name", ""),
+            "updated_at": datetime.utcnow().isoformat(),
+        }},
+        upsert=True,
+    )
+    return {"message": "تم حفظ استثناءات هذا التقرير", "course_ids": data.course_ids}
 
 
 # ==================== الحساب ====================
@@ -210,8 +253,9 @@ def parse_course_ids(course_ids: Optional[str]) -> Optional[set]:
     return ids or None
 
 
-async def compute_workload(db, teachers: List[dict], start: datetime, end: datetime, hide_empty: bool = False, only_overtime: bool = False, exclude_ids: Optional[set] = None, course_ids: Optional[set] = None) -> dict:
-    """يعيد نفس بنية /reports/teacher-workload القديمة + أعمدة كشف الساعات الإضافية"""
+async def compute_workload(db, teachers: List[dict], start: datetime, end: datetime, hide_empty: bool = False, only_overtime: bool = False, exclude_ids: Optional[set] = None, course_ids: Optional[set] = None, extra_course_ids: Optional[set] = None) -> dict:
+    """يعيد نفس بنية /reports/teacher-workload القديمة + أعمدة كشف الساعات الإضافية
+    extra_course_ids: مقررات مُستثناة من النصاب لفترة هذا التقرير فقط (مؤقتاً، محفوظة في report_load_exceptions)"""
     from .calendar_events import holiday_dates
     policies = await load_policies(db)
     total_weeks = weeks_between(start, end)
@@ -253,7 +297,8 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         courses_data = []
         for course in courses:
             cid = str(course["_id"])
-            excluded_from_load = bool(course.get("excluded_from_load"))
+            temp_excluded = bool(extra_course_ids and cid in extra_course_ids)
+            excluded_from_load = bool(course.get("excluded_from_load")) or temp_excluded
             attr = [{"teacher_id": tid}] if course.get("_hist_only") else [{"teacher_id": tid}, {"teacher_id": None}]
             lectures = await db.lectures.find({
                 "course_id": cid,
@@ -314,7 +359,8 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
             if excluded_from_load:
                 # 🆕 مقرر إضافي بالكامل: لا يدخل في حساب النصاب (الافتراضية/المنجز/النقص) — كامل ساعاته المنفَّذة تُحتسب إضافياً مباشرة
                 extra_only_hours += actual_hours
-                notes.append("مقرر إضافي بالكامل — لا يُحتسب من النصاب، ساعاته تُضاف كاملة للساعات الإضافية")
+                notes.append("مقرر مُستثنى لهذا التقرير فقط — لا يُحتسب من النصاب" if temp_excluded and not course.get("excluded_from_load")
+                             else "مقرر إضافي بالكامل — لا يُحتسب من النصاب، ساعاته تُضاف كاملة للساعات الإضافية")
             else:
                 total_scheduled += scheduled_hours; total_actual += actual_hours
                 total_expected += expected; total_shortfall += shortfall; total_excused += excused_hours
@@ -328,6 +374,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
                 "scheduled_hours": scheduled_hours, "actual_hours": actual_hours, "taught_hours": taught_hours, "excused_hours": excused_hours,
                 "expected_hours": expected, "holiday_hours": holiday_hours, "college_cancel_hours": college_cancel_hours, "shortfall_hours": shortfall, "completion_rate": rate, "is_low": expected > 0 and rate < LOW_RATE_THRESHOLD,
                 "excluded_from_load": excluded_from_load,
+                "temp_excluded": temp_excluded,
                 "note": "، ".join(notes),
             })
 

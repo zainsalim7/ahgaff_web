@@ -13524,7 +13524,10 @@ async def get_teacher_workload_report(
     from routes.teacher_overtime import compute_workload, select_teachers, parse_period, parse_course_ids
     start, end = parse_period(start_date, end_date)
     teachers = await select_teachers(db, current_user, teacher_id, faculty_id, department_id)
-    return await compute_workload(db, teachers, start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids))
+    # 🆕 مقررات مُستثناة من النصاب لهذه الفترة فقط (محفوظة مسبقاً من صفحة التقرير)
+    exc_doc = await db.report_load_exceptions.find_one({"_id": f"{start.date().isoformat()}_{end.date().isoformat()}"})
+    extra_course_ids = set(exc_doc.get("course_ids", [])) if exc_doc else None
+    return await compute_workload(db, teachers, start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids), extra_course_ids=extra_course_ids)
 
 
 # ==================== Reports Export (PDF & Excel) ====================
