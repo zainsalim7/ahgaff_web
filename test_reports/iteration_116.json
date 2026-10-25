@@ -1,0 +1,35 @@
+{
+  "summary": "Tested default A-Z name sorting and the asc/desc toggle on 5 screens (students, manage-teachers, courses, hr-employees, alumni) as admin. Backend: 7/7 pytest checks on GET /api/hr/employees sort_dir passed: default=asc, desc is the exact reverse, pagination stays consistent with desc, category filter works with sort, unknown sort_dir falls back to asc, no _id leak. Frontend: all 5 screens open sorted asc by name. Students, teachers and courses: clicking the name header cycles asc → desc → none → asc, and each order was checked on the real rows with localeCompare('ar'). On students, 'إعادة تعيين' sets the order back to name asc, and the status filter and search still work. Teachers and courses: the other sortable columns still respond to clicks. HR: the header shows '▲ (أ-ي)' / '▼ (ي-أ)', clicking it calls the API with sort_dir=desc/asc and reverses the list (Saeed first → موظف تجريبي first), and the category filter keeps sort_dir=desc (3 rows). Alumni: the header cycles asc → desc → none, but there is only 1 graduate in preview, so the actual row order could not be checked with data. One real problem: the alumni sort header is hard to read on the dark-blue table header.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/hr/employees", "issue": "Mongo sorts full_name by raw code point, not by Arabic collation. Latin names (e.g. 'Saeed') come before Arabic ones, and hamza forms (أ/إ/ا) are not grouped together. This differs from the client-side localeCompare('ar') used on the other 4 screens. Optional fix: .sort(...).collation({'locale':'ar'}) or locale 'ar' in find()."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "alumni.tsx table header", "issues": ["SortableHeader uses fixed label colors: #5b6678 inactive, #2962ff active, icon #a8b1c2/#2962ff. The alumni tableHeader background is dark blue and the other headers are white text, so the 'الاسم ↑' header is barely readable (blue on dark blue). Add text-color override props to SortableHeader (e.g. labelColor/activeColor) and pass white/light colors in alumni."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_hr_employees_sort_dir.py", "/app/test_reports/pytest/pytest_hr_sort_dir.xml"],
+  "action_items": [
+    "Fix contrast of the SortableHeader label and icon on the alumni dark-blue table header",
+    "Optional: alumni onSort should also call setPage(1), like the other screens",
+    "Optional: add Arabic collation to the HR employees Mongo sort so it matches the client-side order",
+    "Existing bug, not part of this change: in manage-teachers the 'النصاب' and 'المقررات' sorts use weekly_hours/courses_count, but the cells show current_semester_hours/current_semester_courses_count. Sorted order therefore does not match the numbers shown (seen: hours/courses asc put 'زين سالم' with 15h/5 courses before rows showing 0)."
+  ],
+  "critical_code_review_comments": [
+    "students.tsx: the default and reset now use name_asc, and hasAnyFilter ignores name_asc. Correct.",
+    "SortableHeader cycling to 'none' gives insertion order. This is acceptable because the user asked to keep the existing behavior.",
+    "hr-employees.tsx: sort_dir is sent to the export endpoint as well; the endpoint ignores it (harmless, but the Excel export is not sorted desc)."
+  ],
+  "updated_files": ["/app/backend/tests/test_hr_employees_sort_dir.py"],
+  "success_rate": {"backend": "100%", "frontend": "95% (alumni contrast issue)"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "none",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "On students/teachers/courses the table only appears after a filter is chosen. Students: native select nth(3) = status. Teachers: select first = department. Courses: select first = department, index 1 = 'الكل'. Row testids: student-row-{id}, teacher-name-link-{id}; course rows have no row testid. HR has 18 employees, the filters are custom dropdowns (click 'كل الفئات' then 'إداري'), and the toggle is data-testid=hr-sort-name-toggle. Alumni has only 1 record in preview. In the first text of each row there is an icon glyph (\\uf4a5); filter it out when reading names."
+}

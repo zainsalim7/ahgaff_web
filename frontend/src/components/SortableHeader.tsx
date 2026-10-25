@@ -13,9 +13,12 @@ interface Props {
   onSort: (next: string | null) => void;
   containerStyle?: ViewStyle | ViewStyle[];
   testID?: string;
+  labelColor?: string;
+  activeColor?: string;
+  iconColor?: string;
 }
 
-export function SortableHeader({ label, field, currentSort, onSort, containerStyle, testID }: Props) {
+export function SortableHeader({ label, field, currentSort, onSort, containerStyle, testID, labelColor, activeColor, iconColor }: Props) {
   const ascKey = `${field}_asc`;
   const descKey = `${field}_desc`;
   const isAsc = currentSort === ascKey;
@@ -34,11 +37,11 @@ export function SortableHeader({ label, field, currentSort, onSort, containerSty
       onPress={handleClick}
       testID={testID || `sort-${field}`}
     >
-      <Text style={[s.label, active && s.labelActive]}>{label}</Text>
+      <Text style={[s.label, labelColor ? { color: labelColor } : null, active && (activeColor ? { color: activeColor } : s.labelActive)]}>{label}</Text>
       <Ionicons
         name={isAsc ? 'arrow-up' : isDesc ? 'arrow-down' : 'swap-vertical'}
         size={12}
-        color={active ? '#2962ff' : '#a8b1c2'}
+        color={active ? (activeColor || '#2962ff') : (iconColor || '#a8b1c2')}
       />
     </TouchableOpacity>
   );

@@ -596,7 +596,17 @@ export default function AlumniScreen() {
                 </TouchableOpacity>
               )}
               <Text style={styles.th_idx}>#</Text>
-              <SortableHeader label="الاسم" field="name" currentSort={sortBy} onSort={(v) => setSortBy(v)} containerStyle={[styles.th, { flex: 2 }]} testID="sort-alumni-name" />
+              <SortableHeader
+                label="الاسم"
+                field="name"
+                currentSort={sortBy}
+                onSort={(v) => { setSortBy(v); setPage(1); }}
+                containerStyle={[styles.th, { flex: 2 }]}
+                testID="sort-alumni-name"
+                labelColor="#fff"
+                activeColor="#a7d8ff"
+                iconColor="#cfe3f7"
+              />
               <Text style={styles.th}>رقم القيد</Text>
               <Text style={[styles.th, { flex: 1.4 }]}>الكلية</Text>
               <Text style={[styles.th, { flex: 1.3 }]}>القسم</Text>
