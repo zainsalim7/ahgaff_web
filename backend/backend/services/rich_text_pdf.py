@@ -192,15 +192,20 @@ def parse_rich(html: str, default_size: float = 14, default_font: str = "amiri",
 
 def _words(para: dict) -> List[dict]:
     """🆕 يحافظ على عدد الفراغات الفعلي بين الكلمات (تفريق يدوي متعمَّد)، بما فيها الفراغات العابرة لحدود
-    تنسيق مختلف (bold/لون/...)، بدل اختزالها دائماً لفراغ واحد أو فقدانها عند حدود التنسيق"""
+    تنسيق مختلف (bold/لون/...)، بدل اختزالها دائماً لفراغ واحد أو فقدانها عند حدود التنسيق.
+    🆕 الفراغات التي يكتبها المستخدم في بداية الفقرة (محاولة إزاحة النص يدوياً من الحافة) تُحفظ أيضاً
+    بدل إسقاطها بصمت، وتُستخدم كبادئة إضافية (مثل first_indent) عند الرسم"""
     out = []
     pending = None
+    lead = 0
     for r in para.get("runs", []):
         text = (r["text"] or "").replace("\xa0", " ")
         for tok in re.findall(r"\S+|\s+", text):
             if tok.isspace():
                 if pending is not None:
                     pending["gap"] = max(pending.get("gap", 0), len(tok))
+                elif not out:
+                    lead += len(tok)  # 🆕 فراغات قبل أول كلمة فعلية في الفقرة بأكملها
             else:
                 if pending is not None:
                     out.append(pending)
@@ -211,6 +216,8 @@ def _words(para: dict) -> List[dict]:
         w["idx"] = i  # 🆕 الترتيب المنطقي الأصلي (قبل إعادة الترتيب البصري BiDi) لضبط الفجوة الصحيحة لاحقاً
         if not w.get("gap"):
             w["gap"] = 1  # فراغ افتراضي واحد بين الكلمات (يشمل الحدود بين عناصر HTML المختلفة)
+    if out and lead:
+        out[0]["lead_gap"] = lead
     return out
 
 
@@ -448,7 +455,8 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
             w["sp_unit"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"])
             w["sp"] = w["sp_unit"] * w.get("gap", 1)
         align = (para.get("align") or "center").lower()
-        indent = first_indent if (first_indent and align != "center") else 0
+        lead_px = (words[0].get("lead_gap", 0) * words[0]["sp_unit"]) if words else 0  # 🆕 إزاحة الفراغات البادئة
+        indent = (first_indent if (first_indent and align != "center") else 0) + (lead_px if align != "center" else 0)
         lines, cur, cur_w = [], [], 0.0
         for w in words:
             add = w["w"] + (cur[-1]["sp"] if cur else 0)
@@ -468,8 +476,11 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
                     y = ny
             y -= size * leading
             line = _apply_draw_gaps(_visual_order(line, ltr=(align == "left")))
+            # 🆕 إعادة حساب عرض السطر الفعلي بعد إعادة الترتيب البصري (BiDi) بدل عرض الترتيب المنطقي قبله —
+            # يمنع "دفع" السطر يميناً/تمركزه خطأً عند فقدان فجوة عربي/لاتيني مختلطة أثناء إعادة الترتيب
+            lw_v = sum(w["w"] for w in line) + sum(w["_draw_sp"] for w in line[:-1])
             ind = indent if li == 0 else 0
-            x = x_right - ind if align in ("right", "justify", "start") else (x_left + ind + lw if align == "left" else x_right - (max_w - lw) / 2)
+            x = x_right - ind if align in ("right", "justify", "start") else (x_left + ind + lw_v if align == "left" else x_right - (max_w - lw_v) / 2)
             for w in line:
                 c.setFont(w["font_name"], w["size"])
                 c.setFillColor(parse_color(w.get("color")) or colors.black)

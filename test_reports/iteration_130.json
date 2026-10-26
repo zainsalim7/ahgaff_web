@@ -1,0 +1,51 @@
+{
+  "summary": "Tested whether alignment buttons and typed multi-space gaps in the التحية, سطر الموضوع and الخاتمة boxes reach the live preview, comparing them with the body editor (letter-body). Ran 4 Playwright sessions as admin on /letters using the existing template 'خطاب ترشيح طلاب للتدريب' (id 6ac52b8d47a242e5905b213b). I captured every POST /api/letters/preview-pdf request body and the PNG it returned. RESULT: the frontend state flow works. Every align click (left/center/right) and every typing burst in all 3 boxes sent a new preview-pdf request within about 0.7 s. sections.<key> in that request held the updated HTML, including the new text-align and all 25 literal spaces (no &nbsp;, nothing collapsed or stale). The PNG changed each time. No content reverted, no cursor jump, and selection was kept after align clicks. No related console errors (only unrelated RN-web warnings). For pure-Arabic text the preview drew left, center and right correctly, with the wide gap visible. In the frontend I found NO difference between the 3 boxes and the body editor. The backend uses the same draw_rich() for both (letter_pdf.py lines 251 and 370). I found ONE real renderer bug in rich_text_pdf.draw_rich, which affects sections and body alike: with text-align:left, any line holding a Latin-only word (A-Za-z, e.g. 'XYZ') loses its multi-space gap. The line is also pushed right by the width of the lost gap, so it looks as if the left button did nothing and the spaces collapsed. This matches the user's symptom only if their text contains a Latin word. I could not reproduce the symptom with pure-Arabic content.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/letters/preview-pdf (also issue/draft PDFs) -> rich_text_pdf.draw_rich", "issue": "With text-align:left and a Latin-only word in the line, the multi-space gap is lost and the whole line is pushed right by the gap width. RCA: _visual_order(ltr=True) reverses the line and regroups the Arabic words, which breaks the logical neighbour order (idx). _apply_draw_gaps then gives the 25-space gap (sp of the word before the Latin word) to the LAST visual element, where it is never drawn, and uses sp_unit everywhere else. Meanwhile x starts at x_left + lw, and lw still includes the full gap. Probe output (/app/tests/rca_rich_left_gap.py), HTML 'الموضوع: ترشيح طلاب'+25 spaces+'XYZ', align=left: words drawn from x=154.8 to 267.5 with only single spaces, starting 98 pt (the gap width) right of x_left=56.7. Right and center keep the gap. Pure-Arabic left is correct (minx=56.7, gap kept).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "rich_text_pdf._words", "issue": "Spaces typed at the START of a paragraph are dropped (pending is None when the first token is whitespace), so pushing a greeting or subject inward with leading spaces has no effect in the PDF. Trailing spaces are also ignored for centering. This may also explain user reports of 'spaces don't move the text'."},
+      {"endpoint": "rich_text_pdf.draw_rich", "issue": "'justify' (☰) is drawn exactly like 'right', so the justify button looks like it does nothing on one-line sections such as greeting and closing."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StatementBodyEditor (any box)", "issue": "Test-flow observation, possibly a ProseMirror AllSelection quirk: after Ctrl+A, then an align click, then clicking inside the text and pressing Ctrl+Home/End, the AllSelection sometimes stayed active. The next typing then replaced the whole box content (seen in the subject and closing boxes, not in greeting). Only happens with Ctrl+A; normal clicks and mouse selection were fine.", "selector": "[data-testid=letter-layout-subject] .tiptap", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Layout modal editors", "issues": ["In the editor, a text-align:left paragraph gets CSS direction:ltr, so the Arabic sentence is shown in reversed word order. This does not match the PDF output for pure-Arabic text, which keeps RTL order. Users may be confused.", "The align buttons right/center/justify have no data-testid (only align-left has one); I selected them by title."]}
+    ]
+  },
+  "evidence": {
+    "network_payload_samples": [
+      "subject after LEFT: sections.subject = <p style=\"text-align: left;\"><span style=\"font-size: 14pt;\"><strong><u>الموضوع: {الموضوع}</u></strong></span></p>",
+      "subject after RIGHT: sections.subject = <p style=\"text-align: right;\">...",
+      "greeting after spaces: sections.greeting = <p style=\"text-align: right;\"><span style=\"font-size: 13pt;\">السلام عليكم ورحمة الله وبركاته،[25 literal spaces]XYZ</span></p>",
+      "closing after spaces: sections.closing = ...والتقدير،[25 literal spaces]XYZ...",
+      "top subject input: payload.subject = 'ترشيح طلاب[25 spaces]للتدريب'; the preview showed the wide gap"
+    ],
+    "preview_observations": "Preview PNGs are saved in /app/tests/repro_imgs/ (prev_*.png = Latin XYZ runs, ar_*.png = pure-Arabic runs, c_*.png = top-subject/body). Pure-Arabic greeting with a 25-space gap: center, left and right all drawn correctly, gap visible. Subject, greeting and closing + 'XYZ' + left: gap collapsed and line pushed right by about the gap width. Center and right are fine.",
+    "console": "No errors or warnings tied to the align clicks or typing. Only the unrelated RN-web 'Unexpected text node' and deprecated-prop warnings."
+  },
+  "test_report_links": ["/app/tests/letters_sections_repro.py", "/app/tests/rca_rich_left_gap.py"],
+  "action_items": [
+    "Fix rich_text_pdf.draw_rich and _apply_draw_gaps for align=left with mixed Latin/Arabic lines. Compute each gap from the logical neighbour pair after the ltr reorder, or derive x from the sum of drawn widths plus _draw_sp instead of lw. Then rerun /app/tests/rca_rich_left_gap.py: expect minx == x_left and the gap kept for 'arabic+gap+latin left'.",
+    "Optionally keep leading whitespace in _words (e.g. a leading-indent run), so spaces typed at the start of a greeting or subject push the text as users expect.",
+    "Ask the user for a sample of the exact text they type. If it is pure Arabic, the current code renders it correctly in every alignment, and the remaining suspects are leading spaces, the justify button, or the reversed LTR display in the editor.",
+    "Optional: add data-testid to the right/center/justify align buttons in StatementBodyEditor."
+  ],
+  "critical_code_review_comments": [
+    "Frontend is correct: SecBlock -> StatementBodyEditor.onUpdate -> handleSec -> setSecOverrides -> sections useMemo -> preview useEffect (sections is a dependency) -> issuePayload().sections. The sync useEffect is skipped while focused, and since value === getHTML() it never clobbered edits.",
+    "rich_text_pdf._visual_order(ltr=True) together with _apply_draw_gaps loses gap widths whenever the visual order is not monotonic in idx. The line width (lw) and the drawn advance then differ, which shifts the line.",
+    "_words drops leading and trailing whitespace tokens."
+  ],
+  "updated_files": ["/app/tests/letters_sections_repro.py", "/app/tests/rca_rich_left_gap.py"],
+  "success_rate": {"backend": "N/A (frontend-only round; 1 renderer bug found by direct probe)", "frontend": "100% of state-flow checks passed (alignment and spaces reach the payload for subject, greeting, closing and body)"},
+  "seed_data_creation": "None. I used the existing template 'خطاب ترشيح طلاب للتدريب' (6ac52b8d47a242e5905b213b). Nothing was saved: no draft, issued letter or template was created or changed, and all edits were in-browser only.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Frontend flow for sections has been verified with network evidence. To retest after the backend fix, run python3 /app/tests/rca_rich_left_gap.py from /app/backend, then check 'arabic+gap+latin left' minx == 56.7. For the UI, select the template, open letter-layout-toggle, then use [data-testid=letter-layout-{greeting|subject|closing}] with button[title=...] to align. The table and manual-person regression was not re-tested this round.",
+  "rca of the issue": "Repro: in the subject, greeting or closing box (same in body), have Arabic text, then 25 spaces, then a Latin word (e.g. XYZ), then click يسار. Preview: the gap collapses to single spaces and the line is not at the left margin; it is pushed inward by the gap width. Root cause: rich_text_pdf.draw_rich lines 446-481. After _visual_order(ltr=True), _apply_draw_gaps cannot find logical neighbours (idx), so the wide gap goes to the last visual element (never drawn) and single spaces are used elsewhere. The start x = x_left + lw still includes the full gap. Mitigation: build each draw gap from the logical pair (min idx/max idx) or use the max gap of the two neighbours, and compute x from the actual drawn width. No frontend change is needed for alignment or spaces to reach the backend."
+}
