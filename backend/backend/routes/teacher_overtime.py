@@ -411,7 +411,9 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         bonus_hours = round(total_actual / divisor, 2) if bonus_enabled else 0.0
         after_bonus = round(total_actual + bonus_hours, 2)
         extra_only_hours = round(extra_only_hours, 2)
-        overtime = round(after_bonus - required_hours + extra_only_hours, 2)
+        # 🆕 ساعات المقررات المستثناة من النصاب (عدم الاحتساب) تُحتسب كاملة كإضافي مضمون دائماً،
+        # ولا يُخصم منها أي عجز في النصاب العادي (قد يبقى العجز العادي ظاهراً سلبياً في "الفرق" لكنه لا يأكل من الإضافي المستثنى)
+        overtime = round(max(0.0, after_bonus - required_hours) + extra_only_hours, 2)
         title = teacher.get("academic_title") or ""
         rate_val = (pol.get("rates") or {}).get(title)
         amount = round(max(0.0, overtime) * float(rate_val), 2) if rate_val else None
