@@ -392,7 +392,12 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     sfam = str(L.get("signature_font_family") or "amiri")
     if "signature" in secs:
         y0 = y
-        rich_sec("signature", sig_cx - 40 * mm, sig_cx + 40 * mm, default_size=f("signature_title_font"), default_align="center")
+        # 🆕 عرض أوسع (حتى 75مم بدل 40مم ثابتة لكل جهة) عندما تسمح مساحة الصفحة الفعلية — يتيح تفريق/إزاحة
+        # الكلمات يدوياً بمسافات متعددة داخل كتلة التوقيع كبقية الأقسام. لا يقل أبداً عن القديم (40مم) حفاظاً
+        # على نفس موضع التوقيع المتوسِّط الحالي لمحاذاتي يمين/يسار القريبتين من حافة الصفحة
+        _avail = min(sig_cx - 0, W - sig_cx)
+        sig_half_w = max(40 * mm, min(75 * mm, _avail))
+        rich_sec("signature", sig_cx - sig_half_w, sig_cx + sig_half_w, default_size=f("signature_title_font"), default_align="center")
         if sig_img:
             c.drawImage(sig_img, sig_cx - 19 * mm, y - 16 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); y -= 17 * mm
         y = min(y, y0 - 25 * mm)

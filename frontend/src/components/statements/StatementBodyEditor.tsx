@@ -4,7 +4,19 @@ import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle, FontFamily, FontSize, Color } from '@tiptap/extension-text-style';
-import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table';
+import { Table, TableRow, TableHeader as BaseTableHeader, TableCell as BaseTableCell } from '@tiptap/extension-table';
+
+// 🆕 دعم لون خلفية الخلية (يُحافظ عليه عند لصق جدول منسّق من Word، ويُستخدم أيضاً من أزرار التلوين اليدوي)
+const bgAttr = {
+  backgroundColor: {
+    default: null,
+    parseHTML: (el: HTMLElement) => el.style.backgroundColor || el.getAttribute('bgcolor') || null,
+    renderHTML: (attrs: any) => (attrs.backgroundColor ? { style: `background-color: ${attrs.backgroundColor}` } : {}),
+  },
+};
+const TableCell = BaseTableCell.extend({ addAttributes() { return { ...this.parent?.(), ...bgAttr }; } });
+const TableHeader = BaseTableHeader.extend({ addAttributes() { return { ...this.parent?.(), ...bgAttr }; } });
+const CELL_FILLS = ['#fef9c3', '#dbeafe', '#dcfce7', '#fee2e2', '#f3e8ff'];
 
 export const STATEMENT_FONTS = [
   { key: 'amiri', label: 'أميري (نسخي رسمي)', family: 'Amiri' },
@@ -50,7 +62,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
   const [pickedDate, setPickedDate] = useState('');
   const insertDate = () => { const txt = formatArabicDate(pickedDate); if (txt && editor) { editor.chain().focus().insertContent(`${txt} `).run(); setPickedDate(''); } };
   const editor = useEditor({
-    extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' }), Table.configure({ resizable: false }), TableRow, TableHeader, TableCell],
+    extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' }), Table.configure({ resizable: true }), TableRow, TableHeader, TableCell],
     content: initial || '<p></p>',
     immediatelyRender: false,
     parseOptions: { preserveWhitespace: 'full' }, // 🆕 عدم اختزال الفراغات المتعددة المكتوبة يدوياً بين الكلمات
@@ -96,6 +108,11 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
             <button type="button" data-testid={`${testID}-table-add-col`} style={tb()} onClick={run(() => editor.chain().focus().addColumnAfter().run())} title="إضافة عمود">➕↔</button>
             <button type="button" data-testid={`${testID}-table-del-row`} style={tb()} onClick={run(() => editor.chain().focus().deleteRow().run())} title="حذف الصف">➖↕</button>
             <button type="button" data-testid={`${testID}-table-del-col`} style={tb()} onClick={run(() => editor.chain().focus().deleteColumn().run())} title="حذف العمود">➖↔</button>
+            <button type="button" data-testid={`${testID}-table-merge`} style={tb()} onClick={run(() => editor.chain().focus().mergeOrSplit().run())} title="دمج/تقسيم الخلايا المحدَّدة">⊡ دمج</button>
+            {CELL_FILLS.map((c) => (
+              <button key={c} type="button" style={{ ...tb(), backgroundColor: c, minWidth: 18, width: 18, height: 22, padding: 0 }} onClick={run(() => editor.chain().focus().setCellAttribute('backgroundColor', c).run())} title="تلوين خلفية الخلية" />
+            ))}
+            <button type="button" style={{ ...tb(), color: '#64748b' }} onClick={run(() => editor.chain().focus().setCellAttribute('backgroundColor', null).run())} title="إزالة لون الخلفية">⌫</button>
             <button type="button" data-testid={`${testID}-table-delete`} style={{ ...tb(), color: '#b91c1c' }} onClick={run(() => editor.chain().focus().deleteTable().run())} title="حذف الجدول بالكامل">🗑 جدول</button>
           </>
         )}
@@ -121,8 +138,13 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
       .stmt-tiptap .tiptap p{margin:0 0 4px}
       .stmt-tiptap .tiptap p[style*="text-align: left"]{direction:ltr}
       .stmt-tiptap .tiptap table{border-collapse:collapse;width:100%;margin:8px 0;table-layout:fixed}
-      .stmt-tiptap .tiptap table td,.stmt-tiptap .tiptap table th{border:1px solid #94a3b8;padding:6px 8px;vertical-align:top;position:relative}
+      .stmt-tiptap .tiptap table td,.stmt-tiptap .tiptap table th{border:1px solid #94a3b8;padding:6px 8px;vertical-align:top;position:relative;word-wrap:break-word;overflow-wrap:break-word;white-space:pre-wrap}
       .stmt-tiptap .tiptap table td>p,.stmt-tiptap .tiptap table th>p{margin:0}
+      .stmt-tiptap .tiptap .selectedCell{position:relative}
+      .stmt-tiptap .tiptap .selectedCell:after{content:"";position:absolute;inset:0;background:rgba(0,121,107,.18);pointer-events:none;z-index:2}
+      .stmt-tiptap .tiptap .column-resize-handle{position:absolute;top:0;bottom:-2px;width:4px;background-color:#00796b;pointer-events:none}
+      .stmt-tiptap .tiptap.resize-cursor{cursor:col-resize}
+      .stmt-tiptap .tiptap table *::selection{background:rgba(0,121,107,.25)}
       .stmt-tiptap .tiptap p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#94a3b8;float:right;pointer-events:none;height:0;font-size:13px;font-family:Cairo,sans-serif}`}</style>
     </div>
   );

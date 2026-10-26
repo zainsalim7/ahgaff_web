@@ -63,6 +63,26 @@ def _rich(doc, html, default_size=13, default_align="right", leading=1.5, first_
             _run(p, r["text"], size=r.get("size") or default_size, bold=r.get("bold", False), underline=r.get("underline", False), color=r.get("color"), font=r.get("font") or "amiri")
 
 
+def _shade_cell(cell, color: str):
+    """🆕 تلوين خلفية خلية Word (نفس لون خلفية الخلية المحفوظ من المحرر/لصق جدول Word)"""
+    c = (color or "").strip()
+    if c.startswith("#"):
+        hexv = c[1:]
+    elif c.startswith("rgb"):
+        try:
+            nums = [int(float(x)) for x in c[c.index("(") + 1:c.index(")")].split(",")[:3]]
+            hexv = "".join(f"{n:02X}" for n in nums)
+        except Exception:
+            return
+    else:
+        return
+    if len(hexv) == 3:
+        hexv = "".join(ch * 2 for ch in hexv)
+    shd = OxmlElement("w:shd")
+    shd.set(qn("w:val"), "clear"); shd.set(qn("w:color"), "auto"); shd.set(qn("w:fill"), hexv.upper())
+    cell._tc.get_or_add_tcPr().append(shd)
+
+
 def _rich_table(doc, rows, default_size=13):
     """🆕 جدول حر أدرجه المستخدم يدوياً في محرر الخطاب — يُعاد بناؤه في Word كجدول حقيقي"""
     ncols = max((len(r) for r in rows), default=0)
@@ -72,8 +92,11 @@ def _rich_table(doc, rows, default_size=13):
     for row in rows:
         cells = t.add_row().cells
         for ci in range(ncols):
-            cell_paras = row[ci] if ci < len(row) else [{"align": "right", "runs": []}]
+            cell_obj = row[ci] if ci < len(row) else {"paras": [{"align": "right", "runs": []}], "bg": None}
+            cell_paras = cell_obj.get("paras") or [{"align": "right", "runs": []}]
             c = cells[ci]
+            if cell_obj.get("bg"):
+                _shade_cell(c, cell_obj["bg"])
             p = c.paragraphs[0]; _rtl(p)
             first_align = cell_paras[0].get("align") or "right"
             p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if first_align == "right" else (WD_ALIGN_PARAGRAPH.LEFT if first_align == "left" else WD_ALIGN_PARAGRAPH.CENTER)

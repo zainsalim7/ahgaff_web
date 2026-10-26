@@ -119,7 +119,7 @@ class _Parser(HTMLParser):
         self.stack.append(s)
         if tag == "table":
             self._close()
-            self.table_ctx.append({"rows": [], "cur_row": None, "cur_cell_start": None, "cur_cell_align": None})
+            self.table_ctx.append({"rows": [], "cur_row": None, "cur_cell_start": None, "cur_cell_align": None, "cur_cell_bg": None})
         elif tag == "tr" and self.table_ctx:
             self._close()
             self.table_ctx[-1]["cur_row"] = []
@@ -127,6 +127,7 @@ class _Parser(HTMLParser):
             self._close()
             self.table_ctx[-1]["cur_cell_start"] = len(self.paras)
             self.table_ctx[-1]["cur_cell_align"] = st.get("text-align")
+            self.table_ctx[-1]["cur_cell_bg"] = st.get("background-color")  # 🆕 خلفية الخلية (محفوظة من لصق جدول Word أو زر التلوين)
         elif tag in self.BLOCK:
             self._close()
             self._open(st.get("text-align"))
@@ -140,6 +141,7 @@ class _Parser(HTMLParser):
             self._close()
             ctx = self.table_ctx[-1]
             start = ctx.pop("cur_cell_start", None)
+            bg = ctx.pop("cur_cell_bg", None)
             if start is None:
                 if len(self.stack) > 1 and tag != "br":
                     self.stack.pop()
@@ -150,7 +152,7 @@ class _Parser(HTMLParser):
                 cell_paras = [{"align": ctx.get("cur_cell_align") or "right", "runs": []}]
             if ctx.get("cur_row") is None:
                 ctx["cur_row"] = []
-            ctx["cur_row"].append(cell_paras)
+            ctx["cur_row"].append({"paras": cell_paras, "bg": bg})
         elif tag == "tr" and self.table_ctx:
             ctx = self.table_ctx[-1]
             if ctx.get("cur_row") is not None:
@@ -321,9 +323,11 @@ def _draw_simple_table(c, rows: List[list], x_left: float, x_right: float, y: fl
         return y
     col_w = (x_right - x_left) / ncols
     for row in rows:
-        cells_lines, row_max_size = [], 11.0
+        cells_lines, cells_bg, row_max_size = [], [], 11.0
         for ci in range(ncols):
-            cell = row[ci] if ci < len(row) else [{"align": "right", "runs": []}]
+            cell_obj = row[ci] if ci < len(row) else {"paras": [{"align": "right", "runs": []}], "bg": None}
+            cell = cell_obj.get("paras") or [{"align": "right", "runs": []}]
+            cells_bg.append(cell_obj.get("bg"))
             lines_for_cell = []
             for cpara in cell:
                 align = (cpara.get("align") or "right")
@@ -365,6 +369,10 @@ def _draw_simple_table(c, rows: List[list], x_left: float, x_right: float, y: fl
         for ci in range(ncols):
             cx_right = x_right - ci * col_w
             cx_left = cx_right - col_w
+            bgc = parse_color(cells_bg[ci])
+            if bgc:
+                c.setFillColor(bgc); c.rect(cx_left, top_y - row_h, col_w, row_h, fill=1, stroke=0)
+            c.setStrokeColor(colors.HexColor("#94a3b8"))
             c.rect(cx_left, top_y - row_h, col_w, row_h, stroke=1, fill=0)
             ty = top_y - pad - row_max_size * 0.8
             for ln, lw, align, sz in cells_lines[ci]:
@@ -450,7 +458,8 @@ def _table_to_text(rows: list) -> str:
     for row in rows:
         cells = []
         for cell in row:
-            cells.append(re.sub(r"\s+", " ", "".join(r["text"] for cpara in cell for r in cpara.get("runs", []))).strip())
+            paras = cell.get("paras") if isinstance(cell, dict) else cell
+            cells.append(re.sub(r"\s+", " ", "".join(r["text"] for cpara in (paras or []) for r in cpara.get("runs", []))).strip())
         lines.append(" | ".join(cells))
     return "\n".join(lines)
 
