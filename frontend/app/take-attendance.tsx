@@ -548,7 +548,7 @@ export default function TakeAttendanceScreen() {
       <TouchableOpacity
         style={styles.studentCard}
         onPress={() => toggleStatus(item.id)}
-        data-testid={`student-row-${item.student_id}`}
+        data-testid={`student-row-${item.student_id}`} testID={`student-row-${item.student_id}`}
       >
         <Text style={styles.studentIndex}>{index + 1}</Text>
         <View style={styles.studentInfo}>
@@ -815,7 +815,7 @@ export default function TakeAttendanceScreen() {
               <View style={styles.listCardHeader}>
                 <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
                   <Text style={styles.listCardTitle}>قائمة الحضور</Text>
-                  <TouchableOpacity onPress={cycleSortOrder} style={styles.sortBtn} data-testid="attendance-sort-btn">
+                  <TouchableOpacity onPress={cycleSortOrder} style={styles.sortBtn} data-testid="attendance-sort-btn" testID="attendance-sort-btn">
                     <Ionicons name={sortOrder === 'asc' ? 'arrow-down' : sortOrder === 'desc' ? 'arrow-up' : 'swap-vertical'} size={14} color="#1565c0" />
                     <Text style={styles.sortBtnText}>{sortOrder === 'asc' ? 'أ ← ي' : sortOrder === 'desc' ? 'ي ← أ' : 'ترتيب أبجدي'}</Text>
                   </TouchableOpacity>

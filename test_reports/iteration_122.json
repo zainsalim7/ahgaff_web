@@ -1,0 +1,30 @@
+{
+  "summary": "Frontend-only test of the new alphabetical sort toggle on /course-students (course 698f0000d803b27aab0120af, 72 students) and /take-attendance (lecture 69b2e7bdb318756c5856f463), logged in as admin. Both buttons cycle through 3 states: 'ترتيب أبجدي' (swap-vertical) -> 'أ ← ي' (arrow-down, ascending) -> 'ي ← أ' (arrow-up, descending) -> back to the original order. I checked the ascending order against JS localeCompare('ar') and the descending order is its exact reverse. The sort works on top of the search filter ('محمد', 8 results, all matching and sorted) and on top of the group filters (group-1 24, none 24). Sorting doesn't change the bulk selection: 2 selected stays at 2 after re-sorting, and select-all still gives 72. On take-attendance, tapping a row while sorted toggles its status (حاضر->غائب->معذور), the row keeps its status when moved to a new position by the next sort, the index badges renumber 1..N, and the stats cards update correctly (71/1/0 -> 70/2/0 -> 70/1/1). I did NOT press save, so no attendance data was changed. Only test problem found: the data-testid prop on TouchableOpacity does not render in RN-web, so I added a testID prop to make the buttons selectable.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/course-students mobile (390px)", "issues": ["The search row now holds the search box, the sort button and the تحديد button, so the search input gets narrow and the placeholder 'بحث بالاسم أو الرقم...' is cut off. Option: show the sort button as an icon only on narrow screens."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: on mobile, make the course-students sort button icon-only (or move it to the group filter row) so the search input has room.",
+    "Note: on RN-web, data-testid on TouchableOpacity does not render to the DOM; always use testID (add it next to data-testid). Many existing buttons have only data-testid (e.g. bulk-copy-btn, bulk-move-btn, bulk-unenroll-btn, export-pdf-btn, save-attendance-btn) and cannot be found by tests."
+  ],
+  "critical_code_review_comments": [
+    "The sort logic is correct and is display-only: it makes a new sorted copy ([...arr].sort), so the original filteredEnrolled/students arrays are never changed. On take-attendance it is computed after the loading early return, but it is not a hook, so that is safe.",
+    "select-all still uses filteredEnrolled, which is correct because it contains the same items as sortedEnrolled.",
+    "Small point: sortedEnrolled/sortedStudents are recomputed on every render without useMemo. This is fine for about 100 rows."
+  ],
+  "updated_files": [
+    "/app/frontend/app/course-students.tsx (added testID to course-students-sort-btn, enroll-selection-btn, select-all-btn)",
+    "/app/frontend/app/take-attendance.tsx (added testID to attendance-sort-btn and student-row-*)"
+  ],
+  "success_rate": {"backend": "N/A", "frontend": "100%"},
+  "seed_data_creation": "None. Attendance status toggles were not saved.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "On RN-web, use testID (rendered as data-testid) for selectors. The data-testid prop alone on TouchableOpacity is dropped. Student name text on course-students: div[dir=auto] with fontWeight 600, 15px, rgb(51,51,51). Take-attendance rows: [data-testid^=student-row-]."
+}

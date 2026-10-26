@@ -1044,8 +1044,8 @@ export default function CourseStudentsScreen() {
 
         {/* Search & Selection for enrolled students */}
         <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <View style={{ flex: 1, minWidth: 160, flexDirection: 'row', alignItems: 'center', backgroundColor: '#f5f5f5', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8 }}>
               <Ionicons name="search" size={18} color="#999" />
               <TextInput
                 style={{ flex: 1, marginLeft: 8, fontSize: 14, color: '#333' }}
@@ -1063,7 +1063,7 @@ export default function CourseStudentsScreen() {
             <TouchableOpacity
               style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, gap: 4 }}
               onPress={cycleSortOrder}
-              data-testid="course-students-sort-btn"
+              data-testid="course-students-sort-btn" testID="course-students-sort-btn"
             >
               <Ionicons name={sortOrder === 'asc' ? 'arrow-down' : sortOrder === 'desc' ? 'arrow-up' : 'swap-vertical'} size={16} color="#1565c0" />
               <Text style={{ color: '#1565c0', fontWeight: '700', fontSize: 12 }}>{sortOrder === 'asc' ? 'أ ← ي' : sortOrder === 'desc' ? 'ي ← أ' : 'ترتيب أبجدي'}</Text>
@@ -1072,7 +1072,7 @@ export default function CourseStudentsScreen() {
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}
                 onPress={() => setEnrollSelectionMode(true)}
-                data-testid="enroll-selection-btn"
+                data-testid="enroll-selection-btn" testID="enroll-selection-btn"
               >
                 <Ionicons name="checkbox-outline" size={18} color="#1565c0" />
                 <Text style={{ color: '#1565c0', marginLeft: 4, fontWeight: '600', fontSize: 12 }}>تحديد</Text>
@@ -1118,7 +1118,7 @@ export default function CourseStudentsScreen() {
                       const allIds = filteredEnrolled.map(s => s.student_id);
                       setSelectedEnrolled(selectedEnrolled.length === filteredEnrolled.length ? [] : allIds);
                     }}
-                    data-testid="select-all-btn"
+                    data-testid="select-all-btn" testID="select-all-btn"
                   >
                     <Text style={{ color: '#fff', fontWeight: '600', fontSize: 12 }}>
                       {selectedEnrolled.length === filteredEnrolled.length ? 'إلغاء الكل' : 'تحديد الكل'}
