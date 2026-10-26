@@ -1,0 +1,8 @@
+crons:
+  - name: absence-reminders
+    description: "Checks absent-teacher lectures hourly and sends an absence reminder after 12h"
+    cron: "0 * * * *"
+    # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+    endpoint: "{{BASE_URL}}/api/absence-reminders/run"
+    method: POST
+    enabled: true

@@ -24,6 +24,7 @@ import AddLectureModal, { LectureFormData } from '../src/components/AddLectureMo
 import RoomPicker from '../src/components/RoomPicker';
 import { TimeRangeSummary } from '../src/components/TimeRangeSummary';
 import CancelLectureModal from '../src/components/CancelLectureModal';
+import AbsenceReminderButton from '../src/components/AbsenceReminderButton';
 import { suggestEndTime } from '../src/utils/timeFormat';
 import { useAuthStore } from '../src/store/authStore';
 import { CourseTabBar } from '../src/components/CourseTabBar';
@@ -146,6 +147,7 @@ export default function CourseLecturesScreen() {
   const [rescheduleModal, setRescheduleModal] = useState<{lectureId: string; courseName: string; oldDate: string} | null>(null);
   const [groupModal, setGroupModal] = useState<{ lectureId: string; current: string } | null>(null);
   const canEditGroup = user?.role === 'admin' || hasPermission(PERMISSIONS.MANAGE_LECTURES);
+  const canSendReminder = user?.role === 'admin' || hasPermission(PERMISSIONS.SEND_NOTIFICATIONS);
 
   const changeLectureGroup = async (group: string) => {
     if (!groupModal) return;
@@ -949,6 +951,16 @@ export default function CourseLecturesScreen() {
               <Ionicons name="calendar-outline" size={14} color="#ff9800" />
               <Text style={styles.actBtnRescheduleText}>إعادة الجدولة</Text>
             </TouchableOpacity>
+          )}
+          {item.status === 'absent' && (
+            <AbsenceReminderButton
+              lectureId={item.id}
+              courseName={course?.name || ''}
+              date={item.date}
+              startTime={item.start_time}
+              endTime={item.end_time}
+              canSend={canSendReminder}
+            />
           )}
           {canEditGroup && (course?.groups || []).length > 0 && item.status === 'scheduled' && (
             <TouchableOpacity

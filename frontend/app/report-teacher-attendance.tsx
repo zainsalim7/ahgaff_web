@@ -17,6 +17,8 @@ import { Picker } from '@react-native-picker/picker';
 import { reportsAPI, departmentsAPI, facultiesAPI, teachersAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, tableStyles, rateColor, downloadReport, reportPage } from '../src/components/reports/ReportShell';
+import AbsenceReminderButton from '../src/components/AbsenceReminderButton';
+import { PERMISSIONS } from '../src/contexts/AuthContext';
 
 const STATUS_META: Record<string, { label: string; color: string; bg: string; icon: any }> = {
   executed: { label: 'نُفّذت', color: '#2e7d32', bg: '#e8f5e9', icon: 'checkmark-circle' },
@@ -30,6 +32,7 @@ const getStatusMeta = (status: string) => STATUS_META[status] || { label: status
 export default function TeacherAttendanceReport() {
   const today = new Date().toISOString().split('T')[0];
   const { hasPermission } = useAuth();
+  const canSendReminder = hasPermission(PERMISSIONS.SEND_NOTIFICATIONS);
   const [loading, setLoading] = useState(true);
   const [executing, setExecuting] = useState(false);
   const [hasRun, setHasRun] = useState(false);
@@ -249,19 +252,23 @@ export default function TeacherAttendanceReport() {
               <Bar pct={t.execution_rate} color={rateColor(t.execution_rate)} />, <span style={{ color: '#1565c0', fontSize: 11.5 }}>{expanded === (t.teacher_id || t.teacher_name) ? '▲ إخفاء' : `▼ ${t.lectures.length} محاضرة`}</span>])}
             expand={(i) => { const t = data.teachers[i]; if (expanded !== (t.teacher_id || t.teacher_name)) return null; return (
               <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead><tr>{['المقرر', 'التاريخ', 'الوقت', 'الشعبة', 'الحالة'].map((h) => <th key={h} style={{ ...tableStyles.th, background: 'transparent', fontSize: 11.5, padding: '4px 8px', textAlign: 'right' }}>{h}</th>)}</tr></thead>
+                <thead><tr>{['المقرر', 'التاريخ', 'الوقت', 'الشعبة', 'الحالة', 'تنبيه'].map((h) => <th key={h} style={{ ...tableStyles.th, background: 'transparent', fontSize: 11.5, padding: '4px 8px', textAlign: 'right' }}>{h}</th>)}</tr></thead>
                 <tbody>{t.lectures.map((l: any) => { const m = getStatusMeta(l.status); return (
-                  <tr key={l.lecture_id}><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.course_name}</td><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.date}</td><td style={{ ...tableStyles.td, fontSize: 12, direction: 'ltr', textAlign: 'right' }}>{l.start_time}-{l.end_time}</td><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.section || '—'}</td><td style={tableStyles.td}><Pill color={m.color}>{m.label}</Pill></td></tr>); })}</tbody>
+                  <tr key={l.lecture_id}><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.course_name}</td><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.date}</td><td style={{ ...tableStyles.td, fontSize: 12, direction: 'ltr', textAlign: 'right' }}>{l.start_time}-{l.end_time}</td><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.section || '—'}</td><td style={tableStyles.td}><Pill color={m.color}>{m.label}</Pill></td>
+                  <td style={tableStyles.td}>{l.status === 'absent' && (
+                    <AbsenceReminderButton lectureId={l.lecture_id} courseName={l.course_name} date={l.date} startTime={l.start_time} endTime={l.end_time} canSend={canSendReminder} compact />
+                  )}</td></tr>); })}</tbody>
               </table>); }}
             footer={`${data.teachers.length} أستاذ · اضغط على الصف لعرض محاضراته`} />
         )}
 
         {/* حسب المحاضرات */}
         {hasRun && viewMode === 'lecture' && (
-          <DenseTable testID="lecture-att" head={['#', 'المقرر', 'الأستاذ', 'القسم', 'التاريخ', 'الوقت', 'الشعبة', 'الحالة']}
-            align={['center', 'right', 'right', 'right', 'right', 'center', 'center', 'center']} emptyText="لا توجد محاضرات في هذه الفترة" keys={data.lectures.map((l: any) => l.lecture_id)}
+          <DenseTable testID="lecture-att" head={['#', 'المقرر', 'الأستاذ', 'القسم', 'التاريخ', 'الوقت', 'الشعبة', 'الحالة', 'تنبيه']}
+            align={['center', 'right', 'right', 'right', 'right', 'center', 'center', 'center', 'center']} emptyText="لا توجد محاضرات في هذه الفترة" keys={data.lectures.map((l: any) => l.lecture_id)}
             rows={data.lectures.map((l: any, i: number) => { const m = getStatusMeta(l.status); return [i + 1, <b style={{ color: '#0f2440' }}>{l.course_name}</b>, l.teacher_name, <span style={{ color: '#64748b' }}>{l.department_name}</span>, l.date,
-              <span style={{ direction: 'ltr', display: 'inline-block' }}>{l.start_time}-{l.end_time}</span>, l.section || '—', <Pill color={m.color}>{m.label}</Pill>]; })}
+              <span style={{ direction: 'ltr', display: 'inline-block' }}>{l.start_time}-{l.end_time}</span>, l.section || '—', <Pill color={m.color}>{m.label}</Pill>,
+              l.status === 'absent' ? <AbsenceReminderButton lectureId={l.lecture_id} courseName={l.course_name} date={l.date} startTime={l.start_time} endTime={l.end_time} canSend={canSendReminder} compact /> : null]; })}
             footer={`${data.lectures.length} محاضرة`} />
         )}
 

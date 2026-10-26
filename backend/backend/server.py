@@ -18507,6 +18507,10 @@ async def _aj_user_from_token(token: str):
 
 app.include_router(build_absence_justifications_router(db, get_current_user, _aj_send_push_many, _aj_user_from_token), prefix="/api")
 
+# 🔔 تنبيه الأستاذ الغائب: زر يدوي + إرسال تلقائي (router مستقل — absence_reminders.py)
+from absence_reminders import build_router as build_absence_reminders_router
+app.include_router(build_absence_reminders_router(db, get_current_user, has_permission, _aj_send_push_many), prefix="/api")
+
 # 📍 النطاق الجغرافي لتحضير المحاضرات (geofence_attendance.py)
 from geofence_attendance import build_router as build_geofence_router
 app.include_router(build_geofence_router(db, get_current_user), prefix="/api")

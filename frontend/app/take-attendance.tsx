@@ -26,6 +26,7 @@ import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS, PermissionGate } from '../src/contexts/AuthContext';
 import OfflineIndicator from '../src/components/OfflineIndicator';
+import AbsenceReminderButton from '../src/components/AbsenceReminderButton';
 import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR } from '../src/utils/dateUtils';
 
 interface EnrolledStudent {
@@ -707,6 +708,18 @@ export default function TakeAttendanceScreen() {
                   <View style={[styles.statusPill, { backgroundColor: '#fff3e0' }]}>
                     <Ionicons name="cloud-offline" size={12} color="#ef6c00" />
                     <Text style={[styles.statusPillText, { color: '#ef6c00' }]}>وضع أوفلاين</Text>
+                  </View>
+                )}
+                {lecture?.status === 'absent' && (
+                  <View style={{ marginTop: 8 }}>
+                    <AbsenceReminderButton
+                      lectureId={lecture.id}
+                      courseName={displayName}
+                      date={lecture.date}
+                      startTime={lecture.start_time}
+                      endTime={lecture.end_time}
+                      canSend={hasPermission(PERMISSIONS.SEND_NOTIFICATIONS)}
+                    />
                   </View>
                 )}
               </View>
