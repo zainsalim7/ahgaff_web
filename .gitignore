@@ -48,3 +48,6 @@ backend/backend/uploads/digests/
 # Test result (local)
 test_result.md
 memory/test_credentials.md
+.env
+.env.*
+*.env
