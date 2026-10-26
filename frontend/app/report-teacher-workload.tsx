@@ -76,7 +76,7 @@ export default function TeacherWorkloadReport() {
   const [excSearch, setExcSearch] = useState('');
   const [savingExc, setSavingExc] = useState(false);
   const [mode, setMode] = useState<'standard' | 'custom'>('standard');
-  const [customEntries, setCustomEntries] = useState<{ key: string; teacherId: string; teacherName: string; departmentName?: string; courses: any[]; excludedIds: string[] }[]>([]);
+  const [customEntries, setCustomEntries] = useState<{ key: string; teacherId: string; teacherName: string; departmentName?: string; courses: any[]; includedIds: string[]; excludedIds: string[] }[]>([]);
   const [customTeacherQ, setCustomTeacherQ] = useState('');
   const [customShowList, setCustomShowList] = useState(false);
   const [customData, setCustomData] = useState<TeacherWL[]>([]);
@@ -135,11 +135,20 @@ export default function TeacherWorkloadReport() {
     setCustomTeacherQ(''); setCustomShowList(false);
     try {
       const r = await api.get('/reports/teacher-workload/teacher-courses', { params: { teacher_id: t.id, start_date: from, end_date: to } });
-      setCustomEntries((prev) => [...prev, { key: `${t.id}_${Date.now()}`, teacherId: t.id, teacherName: t.full_name, departmentName: deptName(t.department_id), courses: r.data || [], excludedIds: [] }]);
+      const courses = r.data || [];
+      setCustomEntries((prev) => [...prev, { key: `${t.id}_${Date.now()}`, teacherId: t.id, teacherName: t.full_name, departmentName: deptName(t.department_id), courses, includedIds: courses.map((c: any) => c.id), excludedIds: [] }]);
     } catch { Alert.alert('خطأ', 'تعذر جلب مقررات الأستاذ'); }
   };
 
-  const toggleCustomExclude = (key: string, courseId: string) => {
+  const toggleCustomInclude = (key: string, courseId: string) => {
+    setCustomEntries((prev) => prev.map((e) => {
+      if (e.key !== key) return e;
+      const included = e.includedIds.includes(courseId);
+      return { ...e, includedIds: included ? e.includedIds.filter((x) => x !== courseId) : [...e.includedIds, courseId], excludedIds: included ? e.excludedIds.filter((x) => x !== courseId) : e.excludedIds };
+    }));
+  };
+
+  const toggleCustomLoadExclude = (key: string, courseId: string) => {
     setCustomEntries((prev) => prev.map((e) => e.key === key ? { ...e, excludedIds: e.excludedIds.includes(courseId) ? e.excludedIds.filter((x) => x !== courseId) : [...e.excludedIds, courseId] } : e));
   };
 
@@ -147,7 +156,7 @@ export default function TeacherWorkloadReport() {
     if (!customEntries.length) return;
     setCustomLoading(true);
     try {
-      const entries = customEntries.map((e) => ({ teacher_id: e.teacherId, excluded_course_ids: e.excludedIds }));
+      const entries = customEntries.map((e) => ({ teacher_id: e.teacherId, course_ids: e.includedIds.length ? e.includedIds : ['__none__'], excluded_course_ids: e.excludedIds.filter((x) => e.includedIds.includes(x)) }));
       const r = await api.post('/reports/teacher-workload/custom', { start_date: from, end_date: to, entries });
       setCustomData(r.data.teachers || []); setCustomPeriod(r.data.period); setCustomRan(true);
     } catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل تنفيذ التقرير المخصص'); }
@@ -157,7 +166,7 @@ export default function TeacherWorkloadReport() {
   const downloadCustom = async (fmt: 'pdf' | 'excel') => {
     setCustomExporting(fmt);
     try {
-      const entries = customEntries.map((e) => ({ teacher_id: e.teacherId, excluded_course_ids: e.excludedIds }));
+      const entries = customEntries.map((e) => ({ teacher_id: e.teacherId, course_ids: e.includedIds.length ? e.includedIds : ['__none__'], excluded_course_ids: e.excludedIds.filter((x) => e.includedIds.includes(x)) }));
       const path = fmt === 'pdf' ? 'custom-sheet-pdf' : 'custom-sheet-excel';
       const res = await api.post(`/export/report/teacher-workload/${path}`, { start_date: from, end_date: to, entries }, { responseType: 'blob' });
       const name = filenameFromResponse(res, exportName(['كشف الساعات الإضافية (تقرير مخصص)', from, to], fmt === 'pdf' ? 'pdf' : 'xlsx'));
@@ -481,18 +490,33 @@ export default function TeacherWorkloadReport() {
                 {e.courses.length === 0 ? (
                   <Text style={[styles.tSub, { padding: 8 }]}>لا مقررات لهذا الأستاذ</Text>
                 ) : (
-                  <View style={styles.chips}>
+                  <View>
                     {e.courses.map((c: any) => {
-                      const excluded = e.excludedIds.includes(c.id);
+                      const included = e.includedIds.includes(c.id);
+                      const excludedFromLoad = e.excludedIds.includes(c.id);
                       return (
-                        <TouchableOpacity key={c.id} style={[styles.chip, excluded ? styles.chipExcluded : styles.chipCourseOn]} onPress={() => toggleCustomExclude(e.key, c.id)} testID={`tw-custom-course-${e.key}-${c.id}`}>
-                          <Text style={[styles.chipText, { color: '#fff' }]}>{excluded ? '⏱ ' : '✓ '}{c.name}{c.level ? ` · م${c.level}` : ''}{c.section ? `/${c.section}` : ''}</Text>
-                        </TouchableOpacity>
+                        <View key={c.id} style={styles.customCourseRow} testID={`tw-custom-course-${e.key}-${c.id}`}>
+                          <TouchableOpacity style={styles.customCourseCheck} onPress={() => toggleCustomInclude(e.key, c.id)} testID={`tw-custom-course-include-${e.key}-${c.id}`}>
+                            <Ionicons name={included ? 'checkbox' : 'square-outline'} size={19} color={included ? DASH.navy : '#94a3b8'} />
+                          </TouchableOpacity>
+                          <Text style={[styles.customCourseName, !included && styles.customCourseNameOff]} numberOfLines={1}>
+                            {c.name}{c.level ? ` · م${c.level}` : ''}{c.section ? `/${c.section}` : ''}
+                          </Text>
+                          {included && (
+                            <TouchableOpacity style={[styles.loadPill, excludedFromLoad && styles.loadPillOff]} onPress={() => toggleCustomLoadExclude(e.key, c.id)} testID={`tw-custom-course-load-${e.key}-${c.id}`}>
+                              <Text style={styles.loadPillText}>{excludedFromLoad ? '⏱ إضافي بالكامل' : '✓ ضمن النصاب'}</Text>
+                            </TouchableOpacity>
+                          )}
+                        </View>
                       );
                     })}
                   </View>
                 )}
-                {e.excludedIds.length > 0 && <Text style={styles.courseHint}>المقررات المحددة بـ⏱ ستُحتسب كاملة ساعاتها إضافياً (مستثناة من النصاب) لهذا الإدخال فقط — باقي المقررات (✓) ضمن النصاب العادي</Text>}
+                <Text style={styles.courseHint}>
+                  {`${e.includedIds.length} من ${e.courses.length} مقرر مُدرج في هذا التقرير`}
+                  {e.excludedIds.length ? ` · ${e.excludedIds.length} منها "إضافي بالكامل" (مستثنى من النصاب، يُحتسب كاملاً إضافياً)` : ''}
+                  {e.courses.length - e.includedIds.length ? ` · ${e.courses.length - e.includedIds.length} مقرر غير مُحدَّد سيختفي تماماً من هذا التقرير` : ''}
+                </Text>
               </View>
             ))}
 
@@ -600,6 +624,13 @@ const styles = StyleSheet.create({
   customEntryCard: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, marginBottom: 10 },
   customEntryHead: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 8 },
   customEntryName: { fontSize: 13.5, fontWeight: '800', color: DASH.ink, textAlign: 'right' },
+  customCourseRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, paddingVertical: 7, borderBottomWidth: 1, borderBottomColor: '#eef2f7' },
+  customCourseCheck: { padding: 2 },
+  customCourseName: { flex: 1, fontSize: 12.5, fontWeight: '700', color: DASH.ink, textAlign: 'right' },
+  customCourseNameOff: { color: '#94a3b8', textDecorationLine: 'line-through' },
+  loadPill: { backgroundColor: '#6d28d9', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  loadPillOff: { backgroundColor: '#b45309' },
+  loadPillText: { color: '#fff', fontSize: 11, fontWeight: '800' },
   label: { fontSize: 12, fontWeight: '700', color: DASH.muted, textAlign: 'right', marginBottom: 4 },
   pickerBox: { borderWidth: 1, borderColor: DASH.line, borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
   picker: { height: 40, textAlign: 'right' as any, borderWidth: 0, backgroundColor: 'transparent', fontSize: 13 } as any,
