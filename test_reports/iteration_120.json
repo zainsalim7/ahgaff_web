@@ -1,0 +1,20 @@
+{
+  "summary": "Frontend E2E validation of the redesigned two-control-per-course UI in the custom (مخصص) workload report builder. All requested flows PASS: each course row renders with a checkbox (checked by default) and a purple '✓ ضمن النصاب' pill; unchecking strikes through the name (line-through, grey #94a3b8) and hides the pill; re-checking restores the pill reset to '✓ ضمن النصاب' (even after being إضافي before uncheck); pill toggles to amber '⏱ إضافي بالكامل' and back; hint line updates live ('2 من 3 مقرر مُدرج ... 1 منها إضافي بالكامل ... 1 مقرر غير مُحدَّد سيختفي تماماً'). CRITICAL: with 'لغة إنجليزية - اختبار' unchecked, the request sent course_ids=[2 ids], excluded_course_ids=[حضرموت]; the sheet showed only 'مقرر اختبار 180156' and 'دراسات حضرموت' (English absent). The حضرموت row note says 'مقرر مُستثنى لهذا التقرير فقط — لا يُحتسب من النصاب'. Edge case all unchecked: request sent ['__none__'], the sheet row shows '—' / 'لا مقررات' with النصاب 0.0. Second entry of the same teacher works independently (only English selected -> 1 course row). Remove entry works. PDF (application/pdf) and Excel (spreadsheetml) return 200 with the same payload; the Excel content check confirms English is absent. The standard tab (قياسي) renders normally.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Custom OvertimeSheet", "issues": ["A course marked 'إضافي بالكامل' (excluded from load) still shows a value in النقص (e.g. 9.0) and 0% نسبة الإنجاز highlighted pink. That can confuse users because an excluded course should have no shortage. This is a minor UX/semantic point and not part of this redesign.", "Entry note says 'نصاب 2 مقرر مختار' while one of the 2 is excluded from load. Consider counting only the load-included courses in that phrase."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": ["Optional: hide or blank the النقص and نسبة الإنجاز cells for courses marked إضافي بالكامل in the custom sheet, and adjust the 'نصاب N مقرر مختار' note to count only load-included courses."],
+  "critical_code_review_comments": ["toggleCustomInclude correctly removes the course from excludedIds when unchecking. runCustom/downloadCustom filter excluded_course_ids to included ids and use the '__none__' sentinel. Logic is sound.", "Changing the date range after adding entries does not re-fetch each entry's course list. This is existing behavior; consider refreshing entries or warning the user."],
+  "updated_files": ["/app/test_reports/iteration_120.json"],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "100%"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login admin/admin123. On /report-teacher-workload click 'مخصص', fill tw-custom-date-from/to 2026-01-01/2026-11-01, add زين سالم via mouse down/up on tw-custom-teacher-opt-698ad3da31ab437a06176e2a. Course ids: 698f671431cfba92c49a550d (180156), 698f0000d803b27aab0120af (حضرموت), 6ac2c04cb031f88e942618de (English). Include/load testIDs: tw-custom-course-include-{key}-{cid} and tw-custom-course-load-{key}-{cid}. Plain .click() works for these."
+}
