@@ -4,6 +4,10 @@ import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle, FontFamily, FontSize, Color } from '@tiptap/extension-text-style';
+import Table from '@tiptap/extension-table';
+import TableRow from '@tiptap/extension-table-row';
+import TableHeader from '@tiptap/extension-table-header';
+import TableCell from '@tiptap/extension-table-cell';
 
 export const STATEMENT_FONTS = [
   { key: 'amiri', label: 'أميري (نسخي رسمي)', family: 'Amiri' },
@@ -16,7 +20,7 @@ const SIZES = [12, 14, 16, 18, 20, 22, 24, 28];
 const COLORS = ['#000000', '#00802b', '#c62828', '#1565c0', '#6a1b9a'];
 const GF = 'https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Noto+Kufi+Arabic:wght@400;700&family=Tajawal:wght@400;700&family=Almarai:wght@400;700&display=swap';
 
-export const isHtmlBody = (s: string) => /<(p|div|br|span|b|strong|u|h[1-6])\b/i.test(s || '');
+export const isHtmlBody = (s: string) => /<(p|div|br|span|b|strong|u|h[1-6]|table|tr|td|th)\b/i.test(s || '');
 export const textToHtml = (s: string, align: string = 'center') => (isHtmlBody(s) ? s : (s || '').split('\n').map((l) => `<p style="text-align: ${align}">${l.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</p>`).join(''));
 
 type Props = { value: string; onChange: (html: string) => void; variables?: string[]; placeholder?: string; minHeight?: number; testID?: string; defaultAlign?: 'center' | 'right' };
@@ -49,7 +53,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
   const [pickedDate, setPickedDate] = useState('');
   const insertDate = () => { const txt = formatArabicDate(pickedDate); if (txt && editor) { editor.chain().focus().insertContent(`${txt} `).run(); setPickedDate(''); } };
   const editor = useEditor({
-    extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' })],
+    extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' }), Table.configure({ resizable: false }), TableRow, TableHeader, TableCell],
     content: initial || '<p></p>',
     immediatelyRender: false,
     onUpdate: ({ editor: ed }) => onChange(ed.isEmpty ? '' : ed.getHTML()),
@@ -86,6 +90,18 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
         <button type="button" style={tb(editor.isActive({ textAlign: 'center' }))} onClick={run(() => editor.chain().focus().setTextAlign('center').run())} title="وسط">↔</button>
         <button type="button" style={tb(editor.isActive({ textAlign: 'justify' }))} onClick={run(() => editor.chain().focus().setTextAlign('justify').run())} title="ضبط">☰</button>
         <button type="button" data-testid={`${testID}-align-left`} style={tb(editor.isActive({ textAlign: 'left' }))} onClick={run(() => editor.chain().focus().setTextAlign('left').run())} title="يسار (نص بلغة أجنبية LTR)">⇥</button>
+        <span style={{ width: 1, height: 20, backgroundColor: '#cbd5e1', margin: '0 4px' }} />
+        <button type="button" data-testid={`${testID}-insert-table`} style={tb()} onClick={run(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run())} title="إدراج جدول فارغ لتعبئة محتواه يدوياً">⊞ جدول</button>
+        {editor.isActive('table') && (
+          <>
+            <button type="button" data-testid={`${testID}-table-add-row`} style={tb()} onClick={run(() => editor.chain().focus().addRowAfter().run())} title="إضافة صف">➕↕</button>
+            <button type="button" data-testid={`${testID}-table-add-col`} style={tb()} onClick={run(() => editor.chain().focus().addColumnAfter().run())} title="إضافة عمود">➕↔</button>
+            <button type="button" data-testid={`${testID}-table-del-row`} style={tb()} onClick={run(() => editor.chain().focus().deleteRow().run())} title="حذف الصف">➖↕</button>
+            <button type="button" data-testid={`${testID}-table-del-col`} style={tb()} onClick={run(() => editor.chain().focus().deleteColumn().run())} title="حذف العمود">➖↔</button>
+            <button type="button" data-testid={`${testID}-table-delete`} style={{ ...tb(), color: '#b91c1c' }} onClick={run(() => editor.chain().focus().deleteTable().run())} title="حذف الجدول بالكامل">🗑 جدول</button>
+          </>
+        )}
+        <span style={{ width: 1, height: 20, backgroundColor: '#cbd5e1', margin: '0 4px' }} />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, border: '1px solid #cbd5e1', borderRadius: 6, padding: '1px 6px', background: '#fff' }} title="إدراج تاريخ معيّن (باليوم والهجري) عند المؤشر">
           <span style={{ fontSize: 11.5, fontWeight: 800 }}>📅</span>
           <input type="date" value={pickedDate} data-testid={`${testID}-date-pick`} style={{ border: 'none', fontSize: 11.5, outline: 'none', width: 118 }} onChange={(e) => setPickedDate(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') insertDate(); }} />
@@ -106,6 +122,9 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
       <style>{`.stmt-tiptap .tiptap{min-height:${minHeight}px;padding:10px 12px;outline:none;font-size:14pt;line-height:1.9;color:#1e293b;direction:rtl;text-align:${defaultAlign};font-family:Amiri,serif}
       .stmt-tiptap .tiptap p{margin:0 0 4px}
       .stmt-tiptap .tiptap p[style*="text-align: left"]{direction:ltr}
+      .stmt-tiptap .tiptap table{border-collapse:collapse;width:100%;margin:8px 0;table-layout:fixed}
+      .stmt-tiptap .tiptap table td,.stmt-tiptap .tiptap table th{border:1px solid #94a3b8;padding:6px 8px;vertical-align:top;position:relative}
+      .stmt-tiptap .tiptap table td>p,.stmt-tiptap .tiptap table th>p{margin:0}
       .stmt-tiptap .tiptap p.is-editor-empty:first-child::before{content:attr(data-placeholder);color:#94a3b8;float:right;pointer-events:none;height:0;font-size:13px;font-family:Cairo,sans-serif}`}</style>
     </div>
   );

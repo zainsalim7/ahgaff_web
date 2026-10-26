@@ -110,6 +110,9 @@ export default function LettersPage() {
     if (t.concerns && t.concerns !== 'none' && t.concerns !== 'many') setPeopleKind(t.concerns);
     if (t.letterhead_id && letterheads.some((x) => x.id === t.letterhead_id)) setLhId(t.letterhead_id);
     if (t.series_id && seriesList.some((x) => x.id === t.series_id)) setSeriesId(t.series_id);
+    // 🆕 إلغاء أي تخصيصات أقسام/تخطيط متبقية من قالب أو خطاب سابق، كي يظهر تنسيق القالب المختار كاملاً كما حُفظ
+    setSecOverrides({});
+    setLayout({});
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
