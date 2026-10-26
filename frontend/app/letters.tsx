@@ -110,9 +110,9 @@ export default function LettersPage() {
     if (t.concerns && t.concerns !== 'none' && t.concerns !== 'many') setPeopleKind(t.concerns);
     if (t.letterhead_id && letterheads.some((x) => x.id === t.letterhead_id)) setLhId(t.letterhead_id);
     if (t.series_id && seriesList.some((x) => x.id === t.series_id)) setSeriesId(t.series_id);
-    // 🆕 إلغاء أي تخصيصات أقسام/تخطيط متبقية من قالب أو خطاب سابق، كي يظهر تنسيق القالب المختار كاملاً كما حُفظ
+    // 🆕 إلغاء أي تخصيصات أقسام متبقية من خطاب سابق، واستعادة تخطيط الصفحة المحفوظ مع هذا القالب تحديداً
     setSecOverrides({});
-    setLayout({});
+    setLayout(t.layout || {});
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
@@ -153,7 +153,7 @@ export default function LettersPage() {
     // 🖋️ الخاتمة والتوقيع هوية الكليشة دائماً — لا تُجمَّد داخل القالب (وإلا تجاهلت أي تحديث لاحق على الكليشة)
     const { closing: _c, signature: _s, ...tplSecs } = src ? (src.inputs?.sections || src.sections || {}) : sections;
     try {
-      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src ? (src.signatory_position_id ? '' : src.signatory_name) : sig.name, signatory_title: src ? (src.signatory_position_id ? '' : src.signatory_title) : sig.title, signatory_position_id: src ? (src.signatory_position_id || '') : sig.position_id, letterhead_id: src ? (src.letterhead_id || '') : lhId, series_id: src ? (src.series_id || '') : seriesId, sections: tplSecs, concerns, is_active: true });
+      await api.post('/letter-templates', { name, subject: src?.subject ?? subject, body: src?.inputs?.body || src?.body || body, signatory_name: src ? (src.signatory_position_id ? '' : src.signatory_name) : sig.name, signatory_title: src ? (src.signatory_position_id ? '' : src.signatory_title) : sig.title, signatory_position_id: src ? (src.signatory_position_id || '') : sig.position_id, letterhead_id: src ? (src.letterhead_id || '') : lhId, series_id: src ? (src.series_id || '') : seriesId, sections: tplSecs, layout: src ? (src.layout || {}) : layout, concerns, is_active: true });
       loadAll(); window.alert(`✅ حُفظ القالب «${name}» — سيظهر في قائمة القوالب`);
     } catch (e) { setErr(errOf(e, 'فشل حفظ القالب')); }
   };

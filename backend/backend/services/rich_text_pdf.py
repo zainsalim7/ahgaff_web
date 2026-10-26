@@ -139,7 +139,11 @@ class _Parser(HTMLParser):
         if tag in ("td", "th") and self.table_ctx:
             self._close()
             ctx = self.table_ctx[-1]
-            start = ctx.pop("cur_cell_start", None) or 0
+            start = ctx.pop("cur_cell_start", None)
+            if start is None:
+                if len(self.stack) > 1 and tag != "br":
+                    self.stack.pop()
+                return  # 🆕 وسم إغلاق خلية بلا فتح مطابق — تجاهل بأمان بدل حذف محتوى سابق بالخطأ
             cell_paras = self.paras[start:]
             del self.paras[start:]
             if not cell_paras:
@@ -185,11 +189,12 @@ def parse_rich(html: str, default_size: float = 14, default_font: str = "amiri",
 
 
 def _words(para: dict) -> List[dict]:
-    """🆕 يحافظ على عدد الفراغات الفعلي بين الكلمات (تفريق يدوي متعمَّد) بدل اختزالها دائماً لفراغ واحد"""
+    """🆕 يحافظ على عدد الفراغات الفعلي بين الكلمات (تفريق يدوي متعمَّد)، بما فيها الفراغات العابرة لحدود
+    تنسيق مختلف (bold/لون/...)، بدل اختزالها دائماً لفراغ واحد أو فقدانها عند حدود التنسيق"""
     out = []
+    pending = None
     for r in para.get("runs", []):
         text = (r["text"] or "").replace("\xa0", " ")
-        pending = None
         for tok in re.findall(r"\S+|\s+", text):
             if tok.isspace():
                 if pending is not None:
@@ -198,9 +203,10 @@ def _words(para: dict) -> List[dict]:
                 if pending is not None:
                     out.append(pending)
                 pending = {**r, "text": tok, "gap": 0}
-        if pending is not None:
-            out.append(pending)
-    for w in out:
+    if pending is not None:
+        out.append(pending)
+    for i, w in enumerate(out):
+        w["idx"] = i  # 🆕 الترتيب المنطقي الأصلي (قبل إعادة الترتيب البصري BiDi) لضبط الفجوة الصحيحة لاحقاً
         if not w.get("gap"):
             w["gap"] = 1  # فراغ افتراضي واحد بين الكلمات (يشمل الحدود بين عناصر HTML المختلفة)
     return out
@@ -233,6 +239,25 @@ def _visual_order(line: List[dict], ltr: bool = False) -> List[dict]:
             out += list(reversed(grp)); grp = []; out.append(w)
     out += list(reversed(grp))
     return out
+
+
+def _apply_draw_gaps(line: List[dict]) -> List[dict]:
+    """🆕 بعد إعادة الترتيب البصري (BiDi)، تصحيح عرض الفجوة بعد كل كلمة لتطابق الفجوة الفعلية الأصلية بينها
+    وبين جارتها البصرية التالية (مهم عند تداخل مقاطع لاتينية متعددة الكلمات داخل سطر عربي والعكس)"""
+    n = len(line)
+    for i, w in enumerate(line):
+        if i == n - 1:
+            w["_draw_sp"] = w.get("sp", 0)
+            continue
+        nxt = line[i + 1]
+        wi, ni = w.get("idx"), nxt.get("idx")
+        if wi is not None and ni == wi + 1:
+            w["_draw_sp"] = w.get("sp", 0)
+        elif ni is not None and wi == ni + 1:
+            w["_draw_sp"] = nxt.get("sp", 0)
+        else:
+            w["_draw_sp"] = w.get("sp_unit", w.get("sp", 0))
+    return line
 
 
 def _fit(disp: str, key: str, bold: bool) -> str:
@@ -281,7 +306,7 @@ def placeholder_style(html: str, token: str) -> Optional[dict]:
     if not is_html(html) or token not in (html or ""):
         return None
     for p in parse_rich(html):
-        for r in p["runs"]:
+        for r in p.get("runs", []):
             if token in r["text"]:
                 return {"color": r.get("color"), "size": r.get("size"), "bold": r.get("bold"), "font": r.get("font")}
     return None
@@ -310,7 +335,8 @@ def _draw_simple_table(c, rows: List[list], x_left: float, x_right: float, y: fl
                     w["font_name"] = font_name(w["font"], w["bold"])
                     w["disp"] = _fit(_disp(w["text"], rtl=align.lower() != "left"), w["font"], w["bold"])
                     w["w"] = pdfmetrics.stringWidth(w["disp"], w["font_name"], w["size"])
-                    w["sp"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"]) * w.get("gap", 1)
+                    w["sp_unit"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"])
+                    w["sp"] = w["sp_unit"] * w.get("gap", 1)
                 lines, cur, cur_w = [], [], 0.0
                 cell_max_w = col_w - 2 * pad
                 for w in words:
@@ -343,7 +369,7 @@ def _draw_simple_table(c, rows: List[list], x_left: float, x_right: float, y: fl
             ty = top_y - pad - row_max_size * 0.8
             for ln, lw, align, sz in cells_lines[ci]:
                 if ln:
-                    line = _visual_order(ln, ltr=(align == "left"))
+                    line = _apply_draw_gaps(_visual_order(ln, ltr=(align == "left")))
                     cell_max_w = col_w - 2 * pad
                     x = (cx_right - pad) if align in ("right", "justify", "start") else ((cx_left + pad + lw) if align == "left" else (cx_right - pad - (cell_max_w - lw) / 2))
                     for w in line:
@@ -354,7 +380,7 @@ def _draw_simple_table(c, rows: List[list], x_left: float, x_right: float, y: fl
                         if w["underline"]:
                             c.setLineWidth(0.6)
                             c.line(x, ty - w["size"] * 0.12, x + w["w"], ty - w["size"] * 0.12)
-                        x -= w["sp"]
+                        x -= w["_draw_sp"]
                 ty -= line_h
         c.setFillColor(colors.black)
         c.setStrokeColor(colors.black)
@@ -368,6 +394,7 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
     max_w = x_right - x_left
     for para in paras:
         if para.get("type") == "table":
+            y -= 3  # 🆕 فسحة صغيرة قبل الجدول كي لا يلتصق بالسطر الذي قبله
             y = _draw_simple_table(c, para.get("rows") or [], x_left, x_right, y, ensure=ensure)
             y -= para_gap
             continue
@@ -379,7 +406,8 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
             w["font_name"] = font_name(w["font"], w["bold"])
             w["disp"] = _fit(_disp(w["text"], rtl=(para.get("align") or "").lower() != "left"), w["font"], w["bold"])
             w["w"] = pdfmetrics.stringWidth(w["disp"], w["font_name"], w["size"])
-            w["sp"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"]) * w.get("gap", 1)
+            w["sp_unit"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"])
+            w["sp"] = w["sp_unit"] * w.get("gap", 1)
         align = (para.get("align") or "center").lower()
         indent = first_indent if (first_indent and align != "center") else 0
         lines, cur, cur_w = [], [], 0.0
@@ -400,7 +428,7 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
                 if ny is not None:
                     y = ny
             y -= size * leading
-            line = _visual_order(line, ltr=(align == "left"))
+            line = _apply_draw_gaps(_visual_order(line, ltr=(align == "left")))
             ind = indent if li == 0 else 0
             x = x_right - ind if align in ("right", "justify", "start") else (x_left + ind + lw if align == "left" else x_right - (max_w - lw) / 2)
             for w in line:
@@ -411,13 +439,29 @@ def draw_rich(c, paras: List[dict], x_left: float, x_right: float, y: float, lea
                 if w["underline"]:
                     c.setLineWidth(0.6)
                     c.line(x, y - w["size"] * 0.12, x + w["w"], y - w["size"] * 0.12)
-                x -= w["sp"]
+                x -= w["_draw_sp"]
         c.setFillColor(colors.black)
         y -= para_gap
     return y
 
 
+def _table_to_text(rows: list) -> str:
+    lines = []
+    for row in rows:
+        cells = []
+        for cell in row:
+            cells.append(re.sub(r"\s+", " ", "".join(r["text"] for cpara in cell for r in cpara.get("runs", []))).strip())
+        lines.append(" | ".join(cells))
+    return "\n".join(lines)
+
+
 def html_to_text(html: str) -> str:
     if not is_html(html):
         return html or ""
-    return "\n".join(re.sub(r"\s+", " ", "".join(r["text"] for r in p.get("runs", []))).strip() for p in parse_rich(html) if p.get("type") != "table")
+    parts = []
+    for p in parse_rich(html):
+        if p.get("type") == "table":
+            parts.append(_table_to_text(p.get("rows") or []))
+        else:
+            parts.append(re.sub(r"\s+", " ", "".join(r["text"] for r in p.get("runs", []))).strip())
+    return "\n".join(parts)

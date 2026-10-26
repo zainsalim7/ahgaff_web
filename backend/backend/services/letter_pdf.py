@@ -243,7 +243,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         ensure(space)
         return y if y != before else None
 
-    secs = {k: v for k, v in (s.get("sections") or {}).items() if v and is_html(v) and parse_rich(v) and any(r["text"].strip() for p in parse_rich(v) for r in p["runs"])}
+    secs = {k: v for k, v in (s.get("sections") or {}).items() if v and is_html(v) and any(p.get("type") == "table" or any(r["text"].strip() for r in p.get("runs", [])) for p in parse_rich(v))}
 
     def rich_sec(key, x_l, x_r, default_size=13, default_align="right", lead=1.5):
         """✍️ قسم منسّق (HTML من المحرر) بدل الكتلة المرسومة يدوياً"""

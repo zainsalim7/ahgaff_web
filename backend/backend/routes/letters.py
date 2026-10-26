@@ -162,6 +162,7 @@ class LetterTemplate(BaseModel):
     letterhead_id: Optional[str] = ""
     series_id: Optional[str] = ""
     sections: Optional[dict] = None
+    layout: Optional[dict] = None  # 🆕 تخطيط الصفحة (محاذاة/ألوان/تباعد) يُحفظ مع القالب ليعود عند اختياره لاحقاً
     concerns: Optional[str] = "none"  # none | student | employee | teacher | many
     is_active: bool = True
 

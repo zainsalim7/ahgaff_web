@@ -53,11 +53,35 @@ def _para(doc, align="right", space_after=4, leading=1.5):
 
 def _rich(doc, html, default_size=13, default_align="right", leading=1.5, first_indent_mm=0):
     for i, para in enumerate(parse_rich(html, default_size=default_size, default_font="amiri", default_align=default_align)):
+        if para.get("type") == "table":
+            _rich_table(doc, para.get("rows") or [], default_size=default_size)
+            continue
         p = _para(doc, para.get("align") or default_align, leading=leading)
         if first_indent_mm and (para.get("align") or default_align) != "center":
             p.paragraph_format.first_line_indent = Mm(first_indent_mm)
         for r in para["runs"]:
             _run(p, r["text"], size=r.get("size") or default_size, bold=r.get("bold", False), underline=r.get("underline", False), color=r.get("color"), font=r.get("font") or "amiri")
+
+
+def _rich_table(doc, rows, default_size=13):
+    """🆕 جدول حر أدرجه المستخدم يدوياً في محرر الخطاب — يُعاد بناؤه في Word كجدول حقيقي"""
+    ncols = max((len(r) for r in rows), default=0)
+    if ncols == 0:
+        return
+    t = doc.add_table(rows=0, cols=ncols); t.style = "Table Grid"; t.alignment = WD_TABLE_ALIGNMENT.CENTER; _table_rtl(t)
+    for row in rows:
+        cells = t.add_row().cells
+        for ci in range(ncols):
+            cell_paras = row[ci] if ci < len(row) else [{"align": "right", "runs": []}]
+            c = cells[ci]
+            p = c.paragraphs[0]; _rtl(p)
+            first_align = cell_paras[0].get("align") or "right"
+            p.alignment = WD_ALIGN_PARAGRAPH.RIGHT if first_align == "right" else (WD_ALIGN_PARAGRAPH.LEFT if first_align == "left" else WD_ALIGN_PARAGRAPH.CENTER)
+            for pi, cpara in enumerate(cell_paras):
+                if pi > 0:
+                    p = c.add_paragraph(); _rtl(p)
+                for r in cpara.get("runs", []):
+                    _run(p, r["text"], size=r.get("size") or default_size, bold=r.get("bold", False), underline=r.get("underline", False), color=r.get("color"), font=r.get("font") or "amiri")
 
 
 def _plain(doc, text, size=13, align="right", bold=False, underline=False, leading=1.5):
@@ -129,7 +153,7 @@ def build_letter_docx(s: dict, settings: dict, letterhead: bool = True) -> bytes
     pd2 = cr.add_paragraph(); pd2.alignment = WD_ALIGN_PARAGRAPH.RIGHT; _rtl(pd2); _run(pd2, f"الموافق: {issued.replace('-', '/')}م", size=f("ref_font") - 1.5, bold=True, color="#008022")
     _para(doc, space_after=6)
 
-    secs = {k: v for k, v in (s.get("sections") or {}).items() if v and is_html(v) and any(r["text"].strip() for p in parse_rich(v) for r in p["runs"])}
+    secs = {k: v for k, v in (s.get("sections") or {}).items() if v and is_html(v) and any(p.get("type") == "table" or any(r["text"].strip() for r in p.get("runs", [])) for p in parse_rich(v))}
     rec = s.get("recipient") or {}
     r_align = str(L.get("recipient_align") or "right")
     if "recipient" in secs:

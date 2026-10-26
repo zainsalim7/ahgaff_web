@@ -4,10 +4,7 @@ import StarterKit from '@tiptap/starter-kit';
 import TextAlign from '@tiptap/extension-text-align';
 import Placeholder from '@tiptap/extension-placeholder';
 import { TextStyle, FontFamily, FontSize, Color } from '@tiptap/extension-text-style';
-import Table from '@tiptap/extension-table';
-import TableRow from '@tiptap/extension-table-row';
-import TableHeader from '@tiptap/extension-table-header';
-import TableCell from '@tiptap/extension-table-cell';
+import { Table, TableRow, TableHeader, TableCell } from '@tiptap/extension-table';
 
 export const STATEMENT_FONTS = [
   { key: 'amiri', label: 'أميري (نسخي رسمي)', family: 'Amiri' },
@@ -56,13 +53,14 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
     extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' }), Table.configure({ resizable: false }), TableRow, TableHeader, TableCell],
     content: initial || '<p></p>',
     immediatelyRender: false,
+    parseOptions: { preserveWhitespace: 'full' }, // 🆕 عدم اختزال الفراغات المتعددة المكتوبة يدوياً بين الكلمات
     onUpdate: ({ editor: ed }) => onChange(ed.isEmpty ? '' : ed.getHTML()),
   });
   useEffect(() => {
     if (!editor || editor.isFocused) return;
     const html = textToHtml(value, defaultAlign);
     if ((value || '') === '' && !editor.isEmpty) editor.commands.clearContent(false);
-    else if (html && html !== editor.getHTML()) editor.commands.setContent(html, { emitUpdate: false });
+    else if (html && html !== editor.getHTML()) editor.commands.setContent(html, { emitUpdate: false, parseOptions: { preserveWhitespace: 'full' } });
   }, [value, editor]);
   if (!editor) return null;
   const run = (fn: () => void) => () => fn();
