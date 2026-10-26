@@ -359,6 +359,31 @@ testID `course-students-sort-btn`) و`take-attendance.tsx` (داخل رأس بط
 + 32/32 اختبار pytest موجود مسبقاً ناجح (`test_letters_layout_sections.py`, `test_letters_log_templates_qr_pdf.py`,
 `test_letters_drafts.py`, `test_letters_iter110_fixes.py`) + screenshot لظهور زر الجدول في المحرر.
 
+## تحديث 26 أكتوبر 2026 — إصلاح ثغرة ازدواج المحاضرات الحرجة (P0)
+المستخدم أبلغ عن سماح النظام بوجود محاضرتين في نفس الوقت لنفس الشعبة/الأستاذ عبر إعادة الجدولة. السبب الجذري
+المؤكد (بإعادة إنتاج فعلية عبر curl): `check_teacher_lecture_conflict` تُرجع `"type":"warning"` عند وجود شعبة
+أخرى من نفس المقرر الأساسي لنفس الأستاذ في نفس الوقت (حالة دمج شعبتين، تحتاج تأكيد المستخدم)، لكن
+`reschedule_lecture`، `update_lecture` (PUT /lectures/{id})، وتغيير المجموعة من الواجهة كانت تتحقق فقط من
+`"error"` وتتجاهل `"warning"` تماماً — بعكس `create_lecture` الذي يطلب دائماً `force=true` صريحاً لتجاوز
+التحذير. كما لم تكن هذه المسارات تُمرّر مُدرّس المجموعة (`teacher_override`) عند الفحص، فلا تُكتشف تصادمات
+مُدرّس المجموعة الخاص بها.
+**الإصلاح** (3 جولات مع `testing_agent`، iteration_126/127):
+1. `reschedule_lecture`: أضيف `force` للجسم، تمرير `group` و`teacher_override` (من `lecture.teacher_id` إن
+   كانت للمحاضرة مجموعة)، معالجة `warning`→409 ما لم يكن `force=true`، إضافة `check_students_lecture_conflict`.
+2. `update_lecture`: أضيف حقل `force` لـ `LectureUpdate`، نفس معالجة `warning`/`teacher_override` أعلاه،
+   مع تهيئة `_eff_group_teacher` من مدرّس المجموعة الحالي حتى عند تعديل التاريخ/الوقت بدون تغيير `group` صراحةً.
+3. الواجهة (`course-lectures.tsx`): `handleReschedule`، `changeLectureGroup`، و`handleChangeRoom` (تنظيف فقط)
+   ترسل الآن `force` وتعرض حوار تأكيد عند 409 (نفس نمط `handleChangeRoom` الأصلي) مع إزالة تكرار نص
+   "هل تريد المتابعة؟".
+4. **القاعدة الصارمة (error → رفض مطلق، لا يمكن تجاوزه حتى بـ `force=true`) لم تُغيَّر إطلاقاً** — تحقّقت
+   صراحة بإعادة الاختبار بعد كل إصلاح.
+تحقَّقت عبر: إعادة إنتاج يدوية بـ curl قبل/بعد كل إصلاح + `testing_agent` مرتين (24/25 و12/14 نجاح، كل الثغرات
+المُكتشفة أُصلحت) + تأكيد المستخدم شخصياً لوجود المشكلة الأصلية عبر الواجهة قبل البدء بالإصلاح.
+**ثغرات متبقية بسيطة (منخفضة الأولوية، اختيارية)**: محاضرات الشعب المشتركة (`apply_to_shared`) لا تُفحص
+تعارضها في الموعد الجديد عند النقل الجماعي؛ `DuplicateKeyError` في reschedule/update يُرجع 409 (نفس كود
+التحذير القابل للتجاوز) بدل كود مميز. ملاحظة مراجعة الكود: منطق الفحص (error→400, warning→409 إلا بـforce)
+مكرر عبر 4 مسارات بدل دالة مشتركة واحدة — فرصة Refactor إن تكررت هذه الفئة من الأخطاء مستقبلاً.
+
 ## Pending/Future
 - (P0) النشر الفعلي للإنتاج لم يتم بعد — بانتظار موافقة المستخدم لاستدعاء أداة النشر.
 - (P1) AI Assistant Phase C: تنفيذ إجراءات كتابة مع معاينة/تأكيد.

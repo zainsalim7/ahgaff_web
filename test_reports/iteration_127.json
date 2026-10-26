@@ -1,0 +1,45 @@
+{
+  "summary": "Focused regression of the iteration_126 follow-ups. BACKEND 24/25 pass: GAP 1 (update_lecture force) FIXED: warning -> 409 without force or with force=false, no DB change; force=true -> 200; 'force' key is not stored in the doc. Hard errors stay 400 even with force=true: same course, different course with the same teacher, room booked by a different teacher. Group change to a group whose teacher is busy -> 400 even with force. Group change with a students conflict -> 409, then force -> 200 and teacher_id is set to the group teacher. Non-scheduling fields (lesson_title set and clear, notes, time_locked true/false, status cancelled+reason+reason_type, back to scheduled) all return 200 without force on a lecture that already overlaps, so they are not conflict-checked. GAP 2 (reschedule teacher_override) FIXED: a group-1 lecture of HADRAMOUT rescheduled onto the slot of teacher 698ad3da's '180156' lecture -> 400 with and without force; a group-2 lecture to the same slot -> 200. All 13 original P0 reschedule/create tests from test_reschedule_conflict_force.py still pass. One NEW same-class gap found: in update_lecture (PUT /api/lectures/{id}), when an existing group lecture's date or time is changed WITHOUT 'group' in the body, the group teacher is not used (_eff_group_teacher stays None), so the clash is checked against the course's main teacher and the double-booking is accepted (200, lecture moved). FRONTEND: group-change modal tested end to end (it was never tested before). Choosing group 2 -> PUT {group:'2', force:false} -> 409 -> window.confirm shows the students warning with 'هل تريد المتابعة؟' exactly once. Cancel sends no extra request, the modal stays open and nothing changes. Accept -> PUT {force:true} 200, success toast 'تم تغيير مجموعة المحاضرة', modal closes, DB group=2 and teacher=698bc059. Reschedule modal: 409 -> confirm text has 'هل تريد المتابعة؟' once -> force retry 200 -> toast 'تم إعادة جدولة المحاضرة إلى 2026-11-03'.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/lectures/{lecture_id} (update_lecture, server.py ~9782-9818)", "issue": "Same bug class, last remaining path. _eff_group_teacher is only set inside `if 'group' in update_data`. For an EXISTING group lecture (lecture.group='1', whose group has its own teacher) a PUT with only {date/start_time/end_time/room} passes teacher_override=None, so check_teacher_lecture_conflict uses the course's main teacher. Reproduced: a '180156' lecture (teacher 698ad3da) on 2027-07-21 08:00 and a HADRAMOUT group-1 lecture (group teacher 698ad3da) on 2027-07-22. PUT {date:'2027-07-21'} -> 200 and the lecture moved; expected 400. Fix: initialise `_eff_group_teacher = lecture.get('teacher_id') if lecture.get('group') else None` before the `if 'group' in update_data` block, mirroring reschedule.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/lectures/{id}/reschedule and PUT /api/lectures/{id} (apply_to_shared siblings)", "issue": "Still open from iteration_126: merge-group siblings that move together are not conflict-checked in the new slot."},
+      {"endpoint": "DuplicateKeyError path in reschedule", "issue": "Still returns 409, so the frontend shows a force confirm dialog for a non-bypassable DB-unique rejection (not re-tested, the code is unchanged)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "course-lectures handleChangeRoom (~line 802)", "issues": ["It still appends '\\n\\nهل تريد المتابعة؟' unconditionally. The room warning message itself does not include it, but the /room endpoint's students-conflict warning does, so that path would show the question twice. Apply the same msg.includes('المتابعة') guard."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_update_lecture_conflict_force.py",
+    "/app/backend/tests/test_reschedule_conflict_force.py",
+    "/app/backend/tests/ui_group_change_setup.py",
+    "/app/test_reports/pytest/pytest_update_force_127.xml"
+  ],
+  "action_items": [
+    "update_lecture: default _eff_group_teacher to lecture.get('teacher_id') when the lecture already has a group and 'group' is not in the payload, so date/time/room edits of group lectures check the group teacher's clashes. Then run tests/test_update_lecture_conflict_force.py::TestUpdateGroupChange::test_group_lecture_date_change_uses_group_teacher.",
+    "Optional: add the msg.includes('المتابعة') de-dup guard to handleChangeRoom.",
+    "Optional (carried over): conflict-check apply_to_shared siblings, and use a non-409 code for DuplicateKeyError."
+  ],
+  "critical_code_review_comments": [
+    "update_lecture now mirrors reschedule correctly: error -> 400 unconditionally; warning -> 409 unless force (teacher + room); students check added; 'force' is excluded from update_data.",
+    "reschedule_lecture: teacher_override=lecture.teacher_id for group lectures. If a group has no own teacher, lecture.teacher_id is the main teacher (or None -> falls back to the course teacher). Correct.",
+    "Root cause of the remaining gap is the same drift: the 'effective teacher' is derived differently in each endpoint. A shared helper resolve_effective_group_teacher(lecture, new_group) plus one enforce_conflicts(...) would close this class for good. server.py is 19.5k lines."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_update_lecture_conflict_force.py (new)",
+    "/app/backend/tests/ui_group_change_setup.py (new)"
+  ],
+  "success_rate": {"backend": "24/25 (96%). The only failure is the new update_lecture group-teacher gap.", "frontend": "100% (group-change 409 cancel/accept flow, reschedule 409 dialog de-dup)"},
+  "seed_data_creation": "Temporary lectures tagged TEST_UPD_FORCE / TEST_RESCHED_P0 / TEST_UI_GROUP, all deleted (0 TEST_ lectures remain). For the UI test, semester 698e5cc5 end_date and settings.semester_end_date were changed temporarily and have been RESTORED ('7-5-2026' / '2026-05-07'). Notifications created by test lectures were not cleaned.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `cd /app/backend && python3 -m pytest tests/test_update_lecture_conflict_force.py tests/test_reschedule_conflict_force.py -v`. Both files clean up after themselves. For UI tests on course-lectures, the list only shows lectures whose semester_id equals the course's semester_id (HADRAMOUT -> 698e5cc524745fb79482e099), or lectures without a semester_id inside that semester's dates. Past scheduled lectures are auto-marked absent on list load, and the group/reschedule buttons need status 'scheduled'. So create a future lecture via the API and set its semester_id to the course semester in Mongo (see ui_group_change_setup.py). The list is paginated at 10, so click page '2'. A HADRAMOUT lecture and an ENGLISH lecture at the same time give a students-conflict 409 (level 3, same department). Playwright browser launch sometimes SIGSEGVs; just retry.",
+  "rca of the issue": "Remaining gap: in update_lecture the group teacher is resolved only when the payload changes 'group'. Repro: T180156 lecture on D at 08:00; HADRAMOUT group-1 lecture on D+1; PUT /api/lectures/{g1} {date:D} -> 200 (should be 400). Mitigation: initialise _eff_group_teacher from the existing lecture's group or teacher_id before the group-change block."
+}

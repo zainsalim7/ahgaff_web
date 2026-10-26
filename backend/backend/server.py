@@ -9780,7 +9780,7 @@ async def update_lecture(
 
     # 👥 تغيير/إزالة مجموعة المحاضرة (للمدير أو من يملك صلاحية إدارة المحاضرات)
     _eff_group = lecture.get("group") or ""
-    _eff_group_teacher = None
+    _eff_group_teacher = lecture.get("teacher_id") if _eff_group else None
     if "group" in update_data:
         if current_user["role"] not in (UserRole.ADMIN,) and not has_permission(current_user, "manage_lectures"):
             raise HTTPException(status_code=403, detail="غير مصرح لك بتغيير مجموعة المحاضرة")

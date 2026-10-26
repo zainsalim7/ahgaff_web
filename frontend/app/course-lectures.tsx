@@ -798,8 +798,9 @@ export default function CourseLecturesScreen() {
       const message = error.response?.data?.detail || 'حدث خطأ في تغيير القاعة';
       // تحذير قابل للتجاوز (دمج شعبتين لنفس المعلم)
       if (status === 409 && !force) {
+        const confirmMsg = message.includes('المتابعة') ? message : message + '\n\nهل تريد المتابعة؟';
         if (Platform.OS === 'web') {
-          if (window.confirm(message + '\n\nهل تريد المتابعة؟')) {
+          if (window.confirm(confirmMsg)) {
             await handleChangeRoom(true);
           }
         } else {
