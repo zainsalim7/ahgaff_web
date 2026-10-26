@@ -264,6 +264,12 @@ def _apply_draw_gaps(line: List[dict]) -> List[dict]:
             w["_draw_sp"] = w.get("sp", 0)
         elif ni is not None and wi == ni + 1:
             w["_draw_sp"] = nxt.get("sp", 0)
+        elif wi is not None and ni is not None and ni > wi:
+            # 🆕 حد فاصل أمامي بين مقطعين (عربي↔لاتيني) بعد انعكاس مجموعة متعددة الكلمات بصرياً: الفجوة
+            # الصحيحة هي فجوة الكلمة الحالية نفسها (ما بعدها منطقياً)، وليست فجوة افتراضية بمسافة واحدة
+            w["_draw_sp"] = w.get("sp", 0)
+        elif wi is not None and ni is not None and wi > ni:
+            w["_draw_sp"] = nxt.get("sp", 0)
         else:
             w["_draw_sp"] = w.get("sp_unit", w.get("sp", 0))
     return line

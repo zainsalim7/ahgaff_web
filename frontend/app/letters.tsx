@@ -191,7 +191,7 @@ export default function LettersPage() {
       setTplId(d.template_id || ''); setSubject(d.subject || ''); setBody(inp0.body || d.body || '');
       const r0 = inp0.recipient || d.recipient || {};
       if (r0.id) { setRecMode('list'); setRecId(r0.id); } else { setRecMode('manual'); setRec({ name: r0.name || '', title: r0.title || '', organization: r0.organization || '', suffix: r0.suffix || 'المحترم' }); }
-      setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.name, fields: p.fields })));
+      setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.fields?.الصفة ? `${p.name} (${p.fields.الصفة})` : p.name, sub: p.fields?.الصفة, fields: p.fields })));
       if (d.letterhead_id) setLhId(d.letterhead_id); if (d.series_id) setSeriesId(d.series_id);
       setSecOverrides(d.inputs?.sections && Object.keys(d.inputs.sections).length ? d.inputs.sections : {});
       setSig({ position_id: d.signatory_position_id || '', name: d.signatory_position_id ? '' : (d.signatory_name || ''), title: d.signatory_position_id ? '' : (d.signatory_title || '') }); setValidDays(d.valid_days ? String(d.valid_days) : ''); setLayout(d.layout || {});

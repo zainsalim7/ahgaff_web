@@ -1,0 +1,38 @@
+{
+  "summary": "Tested the letters PDF section fixes (leading-space indent and the left-align shift) and the new custom/manual person feature for {جدول_الأسماء}. Coverage: a pytest file with 11 tests (8 pass, 3 fail), 4 Playwright UI sessions as admin on /letters, and end-to-end replay of the preview-pdf payloads captured from the UI, with word positions extracted using pymupdf. PDF FIX 2 (leading spaces) WORKS end-to-end. Greeting with 15 leading spaces and align=right: right edge moved 544.3 -> 487.3 (57pt inward). With align=left: left edge moved 51.0 -> 108.0. PDF FIX 1 (left shift) WORKS: in the subject box, 'نص عربي' + 25 spaces + 'XYZ' with align=left now starts exactly at the left margin (51.0, same as plain text). BUT the 25-space gap itself is still LOST: the Arabic words and XYZ are drawn adjacent. This happens whenever the run before or after the gap has 2 or more words, in both left and right alignment. Main agent's probe only checked minx, so it missed this. Custom person feature: the toggle opens the form. The add button is disabled for empty and whitespace-only names. The chip shows 'TEST_أحمد اليدوي (رئيس اللجنة) (يدوي)' in orange. A custom-only table renders headers [م، الاسم، الصفة، الرقم، الجهة] with the correct values in the live preview. A mixed table (custom + student) renders unified headers, the mixed banner shows, and the custom role appears in the الصفة column. Saving a draft works and the PDF renders. Draft reload brings the chips back, BUT the custom people come back with id='' (backend _build_ctx). Effects: duplicate React keys, chip testid 'letter-person-chip-', the role is dropped from the chip label, and clicking ✕ on ONE custom chip removes ALL custom people.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "rich_text_pdf._apply_draw_gaps (all letter sections and the body, via draw_rich)", "issue": "A run of many spaces is dropped at a bidi run boundary when the neighbouring run has 2 or more words. Example 1: align=left 'نص عربي'+25sp+'XYZ' is drawn as عربي@56.7, نص@83.1, XYZ@106.4, with no gap (expected XYZ at about 175). Example 2: align=right 'نص عربي'+25sp+'ABC DEF' loses the gap in the same way. Single-word runs keep the gap ('نص'+gap+'XYZ' works). This is the user's actual scenario (Arabic text + spaces + Latin word), so the align-left box still looks broken even though minx is now correct.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "letters._build_ctx (people list returned for kind=custom)", "issue": "Returns id='' for custom people (uses _doc, which custom rows don't have) instead of keeping the incoming p['id']. d.people is saved with an empty id, and the frontend loadDraft reads d.people."},
+      {"endpoint": "letters._table_rows mixed branch (student)", "issue": "Pre-existing: a student with an empty level shows 'الدراسات الإسلامية — المستوى' (a dangling 'المستوى'), because c3='المستوى ' is not empty."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "PeoplePicker after loadDraft (letters.tsx:194)", "issue": "Reloaded custom people all have id=''. This causes duplicate React keys (6 console warnings), the chip testid becomes 'letter-person-chip-', and the label loses '(الصفة)'. Clicking ✕ on one custom chip removes every custom person, because the filter is x.id !== ''. The stale DOM chip also stays visible.", "selector": "[data-testid^='letter-person-chip-']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_custom_people.py", "/app/tests/replay_preview_sections.py", "/app/test_reports/pytest/pytest_letters_custom.xml"],
+  "action_items": [
+    "Fix _apply_draw_gaps in rich_text_pdf.py. When visual neighbours w and nxt are not logically adjacent (a run boundary after bidi reorder), the drawn gap should be the sp of the logical word just before the boundary: the word whose idx = min(idx of the later logical run) - 1. Currently it falls back to sp_unit, and the big gap sits on the last visual word and is never drawn. Verify with test_rich_gap_preserved_at_run_boundary.",
+    "In _build_ctx, keep the custom person's id: 'id': str(r['_doc']['_id']) if r.get('_doc') else p.get('id'). This means _person_row must carry p['id'] for custom rows. Alternatively, the frontend loadDraft should use d.inputs.people for ids and labels, or generate unique ids for custom entries that lack one. Also rebuild the chip label as 'name (role)' on reload.",
+    "Optional: in the mixed student row, drop 'المستوى ' when level is empty."
+  ],
+  "critical_code_review_comments": [
+    "Main agent's probe rca_rich_left_gap.py asserts only minx == x_left. It should also assert the gap is preserved: check x(XYZ) - right edge of the adjacent Arabic word is about 25*sp. Its own output shows XYZ@169.4 directly after الموضوع: (ends at about 169), so the gap is visibly lost in its own probe.",
+    "_person_recipient has no 'custom' branch. With per_person + person_as_recipient, a custom person falls into the teacher branch: prefix = code + '/' (e.g. '777/ name') or 'الأستاذ/', and org = role. Add an explicit custom branch.",
+    "letters.py is 787 lines (over 700). Consider splitting the people/table helpers into a separate module."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_custom_people.py", "/app/tests/replay_preview_sections.py"],
+  "success_rate": {"backend": "73% (8/11 tests pass)", "frontend": "85%"},
+  "test_credentials": "admin/admin123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None kept. Test drafts (م-66 and TEST_ pytest drafts) were deleted. Template 'خطاب ترشيح طلاب للتدريب' was not touched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python3 -m pytest tests/test_letters_custom_people.py -v. 3 tests currently fail: draft_roundtrip (ids) and gap_preserved_at_run_boundary (2 cases). UI login: fill input[placeholder='اسم المستخدم / رقم القيد / الرقم المرجعي'] and input[placeholder='كلمة المرور'], then click the text 'تسجيل الدخول' (pressing Enter does not log in), then goto /letters. Layout boxes: [data-testid=letter-layout-{greeting|subject}] with button[title^='يمين'|'يسار']. To capture preview-pdf post_data to /app/.screenshots/req_*.json, use /app/tests/replay_preview_sections.py, which replays the payloads and prints word x positions.",
+  "rca of the issue": "Gap bug: _visual_order (ltr=True) reverses the line and then re-reverses the Arabic groups. Example: 'نص(0) عربي(1) ␣×25 XYZ(2)' becomes visual RTL-draw order [XYZ2, نص0, عربي1]. In _apply_draw_gaps, XYZ2 to نص0 are not adjacent by idx, so it uses sp_unit (a single space). The 25-space gap is stored as sp on عربي1, which is now the LAST visual word, so it becomes the trailing _draw_sp and is excluded from drawing. The same happens for multi-word Latin runs in RTL lines. Repro: test_rich_gap_preserved_at_run_boundary. Custom-id bug: _build_ctx's returned people use r['_doc']['_id'], and custom rows have no _doc, so the id is ''. This is saved to letters.people, and the frontend loadDraft maps d.people (not d.inputs.people)."
+}

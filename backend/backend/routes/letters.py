@@ -260,7 +260,7 @@ async def _person_row(db, p: dict) -> Optional[dict]:
         if not name:
             return None
         fields = {"الاسم": name, "الصفة": fl.get("الصفة", ""), "الرقم": fl.get("الرقم", ""), "الجهة": fl.get("الجهة", "")}
-        return {"kind": "custom", "name": name, "code": fields["الرقم"], "c1": fields["الصفة"], "c2": fields["الجهة"], "c3": "", "fields": fields}
+        return {"kind": "custom", "id": p.get("id", ""), "name": name, "code": fields["الرقم"], "c1": fields["الصفة"], "c2": fields["الجهة"], "c3": "", "fields": fields}
     oid = _oid(pid)
     if not oid:
         return None
@@ -272,9 +272,9 @@ async def _person_row(db, p: dict) -> Optional[dict]:
         fac = await db.faculties.find_one({"_id": _oid(s.get("faculty_id") or (dept or {}).get("faculty_id"))}) if (s.get("faculty_id") or (dept or {}).get("faculty_id")) else None
         g = student_gender(s, fac)
         fields = {"الاسم": s.get("full_name", ""), "رقم القيد": s.get("student_id", ""), "الرقم المرجعي": s.get("reference_number", ""), "الكلية": (fac or {}).get("name", ""), "القسم": (dept or {}).get("name", ""),
-                  "المستوى": f"المستوى {s.get('level', '')}", "الشعبة": str(s.get("section") or ""), "الجنسية": (s.get("nationality") or "يمني"), "الجنس": "أنثى" if g == "female" else "ذكر",
+                  "المستوى": (f"المستوى {s.get('level')}" if s.get("level") else ""), "الشعبة": str(s.get("section") or ""), "الجنسية": (s.get("nationality") or "يمني"), "الجنس": "أنثى" if g == "female" else "ذكر",
                   "الهاتف": s.get("phone") or "", "البريد": s.get("email") or "", "الحالة": STUDENT_STATUS_AR.get(s.get("status") or "active", "مستمر"), "سنة الالتحاق": str(s.get("enrollment_year") or "")}
-        return {"kind": "student", "name": s.get("full_name", ""), "code": s.get("student_id", ""), "c1": (fac or {}).get("name", ""), "c2": (dept or {}).get("name", ""), "c3": f"المستوى {s.get('level', '')}", "fields": fields, "_doc": s, "_dept": dept, "_fac": fac}
+        return {"kind": "student", "name": s.get("full_name", ""), "code": s.get("student_id", ""), "c1": (fac or {}).get("name", ""), "c2": (dept or {}).get("name", ""), "c3": (f"المستوى {s.get('level')}" if s.get("level") else ""), "fields": fields, "_doc": s, "_dept": dept, "_fac": fac}
     if kind == "employee":
         e = await db.employees.find_one({"_id": oid})
         if not e:
@@ -367,7 +367,7 @@ async def _build_ctx(db, rec: dict, subject: str, people_in: List[dict]) -> tupl
         ctx["عدد_الأسماء"] = str(len(rows))
         ctx["جدول_الأسماء"] = "{جدول_الأسماء}"  # يبقى علامة يرسمها مولّد PDF كجدول
     table = _table_rows([{k: v for k, v in r.items() if not k.startswith("_")} for r in rows])
-    return ctx, table, [{"kind": r["kind"], "id": (str(r["_doc"]["_id"]) if r.get("_doc") else ""), "name": r["name"], "faculty_id": _people_faculty(r),
+    return ctx, table, [{"kind": r["kind"], "id": (str(r["_doc"]["_id"]) if r.get("_doc") else r.get("id", "")), "name": r["name"], "faculty_id": _people_faculty(r),
                           **({"fields": r.get("fields")} if r["kind"] == "custom" else {})} for r in rows]
 
 
@@ -474,6 +474,8 @@ def _person_recipient(row: dict, suffix: str) -> dict:
         prefix, title, org = ("الطالبة/" if female else "الطالب/"), "", " — ".join(x for x in (row["c2"], row["c1"]) if x)
     elif row["kind"] == "employee":
         prefix, title, org = "الأخ/", row["c1"], row["c2"]
+    elif row["kind"] == "custom":
+        prefix, title, org = (f"{row['c1']}/" if row["c1"] else ""), "", row["c2"]
     else:
         prefix, title, org = f"{row['code']}/" if row["code"] else "الأستاذ/", "", row["c1"]
     sfx = suffix or "المحترم"
