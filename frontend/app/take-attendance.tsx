@@ -714,10 +714,6 @@ export default function TakeAttendanceScreen() {
                   <View style={{ marginTop: 8 }}>
                     <AbsenceReminderButton
                       lectureId={lecture.id}
-                      courseName={displayName}
-                      date={lecture.date}
-                      startTime={lecture.start_time}
-                      endTime={lecture.end_time}
                       canSend={hasPermission(PERMISSIONS.SEND_NOTIFICATIONS)}
                     />
                   </View>

@@ -5,37 +5,21 @@ import api from '../services/api';
 
 interface Props {
   lectureId: string;
-  courseName: string;
-  date: string;
-  startTime: string;
-  endTime: string;
   canSend: boolean;
   compact?: boolean;
 }
 
 // 🔔 زر "تنبيه الأستاذ" لمحاضرة غائب فيها الأستاذ — يُستخدم في أكثر من صفحة (تقرير غياب الأساتذة، جدول المقرر)
-export default function AbsenceReminderButton({ lectureId, courseName, date, startTime, endTime, canSend, compact }: Props) {
-  const [status, setStatus] = useState<{ sent: boolean; sent_at?: string; kind?: string } | null>(null);
+export default function AbsenceReminderButton({ lectureId, canSend, compact }: Props) {
+  const [status, setStatus] = useState<{ sent: boolean; sent_at?: string; kind?: string; preview?: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  const [windowHours, setWindowHours] = useState(72);
 
   useEffect(() => {
     if (!canSend) return;
     api.get(`/lectures/${lectureId}/absence-reminder`).then((r) => setStatus(r.data)).catch(() => setStatus({ sent: false }));
-    api.get('/absence-justifications/meta').then((r) => setWindowHours(r.data?.window_hours || 72)).catch(() => {});
   }, [lectureId, canSend]);
 
   if (!canSend || status === null) return null;
-
-  const previewMessage = () => {
-    let deadlineText = '';
-    try {
-      const end = new Date(`${date}T${endTime}:00`);
-      end.setHours(end.getHours() + windowHours);
-      deadlineText = end.toISOString().slice(0, 16).replace('T', ' ');
-    } catch {}
-    return `لاحظنا غيابكم في محاضرة ${courseName} بتاريخ ${date} (${startTime} - ${endTime}). نرجو تقديم عذركم قبل ${deadlineText}. مع تحيات الإدارة`;
-  };
 
   const send = async () => {
     setLoading(true);
@@ -51,7 +35,7 @@ export default function AbsenceReminderButton({ lectureId, courseName, date, sta
   };
 
   const confirmAndSend = () => {
-    const msg = `سيصل هذا النص للأستاذ:\n\n${previewMessage()}`;
+    const msg = `سيصل هذا النص للأستاذ:\n\n${status.preview || ''}`;
     if (Platform.OS === 'web') {
       if (window.confirm(msg)) send();
     } else {

@@ -241,6 +241,32 @@ Backend: `GET/PUT /api/reports/teacher-workload/exceptions` (`routes/teacher_ove
 **النشر:** طلب المستخدم صراحة تأكيد النشر على Cloud Run — هذا أول نشر لهذا التطبيق، يتطلب تأكيد
 المستخدم في المحادثة بسبب رسوم 50 ECU لأول نشر (بانتظار رد "confirm deploy").
 
+## تحديث 26 أكتوبر 2026 — تنبيه الأستاذ الغائب (P1): زر يدوي + تلقائي بعد 12 ساعة
+
+Backend: `/app/backend/backend/absence_reminders.py` (router مستقل مثل absence_justifications.py):
+- `POST/GET /lectures/{lecture_id}/absence-reminder` (يدوي، صلاحية send_notifications، مرة واحدة فقط،
+  409 لمحاضرة لها عذر معلّق/مقبول أو لمحاضرة سبق تنبيهها؛ GET يُرجع preview بنص الرسالة الحقيقي عند
+  عدم الإرسال بعد لتفادي حساب الموعد النهائي في الواجهة بتوقيت خاطئ).
+- `POST /absence-reminders/run` (محمي بـ `Authorization: Bearer $WEBHOOK_CRON_SECRET` — **تنبيه: استُبدل
+  طلب المستخدم الأصلي بإعداد Google Cloud Scheduler يدوياً + هيدر X-Cron-Secret بآلية المنصّة الخاصة
+  بالمهام المجدولة** عبر `/app/.emergent/crons.yml` (مهمة كل ساعة `0 * * * *`)، والتي تُنشئ job على
+  Cloud Scheduler تلقائياً عند النشر وتستدعي المسار بتوكن Bearer مُدار من المنصة — لا حاجة لإعداد يدوي
+  على GCP Console. السر محفوظ في `backend/.env` كـ `WEBHOOK_CRON_SECRET`.
+- فهرس فريد `absence_reminders.lecture_id` (يمنع إرسال مزدوج عند تزامن الطلبات) + معالجة DuplicateKeyError.
+- إن تعذّر إيجاد حساب مستخدم للأستاذ → 422 (لا يُسجَّل تنبيه وهمي ناجح).
+- 🔧 إصلاح جانبي: تقرير `report-teacher-attendance` (تقرير غياب الأساتذة) كان ينسب كل محاضرة لـ
+  `course.teacher_id` فقط متجاهلاً `lecture.teacher_id` (قائد المجموعة/المعوّض) — صُحح ليطابق منطق
+  عزل المجموعات من إصلاح P0 الأمني (نفس الأستاذ الذي يُرسل له التنبيه هو من يظهر في التقرير الآن).
+
+Frontend: `/app/frontend/src/components/AbsenceReminderButton.tsx` (مكوّن مشترك) مُدمج في 3 صفحات:
+`report-teacher-attendance.tsx` (كلا العرضين)، `course-lectures.tsx` (جدول المقرر)، `take-attendance.tsx`
+(تفاصيل المحاضرة). اختُبر عبر curl شامل (7/7 اختبارات القبول) + testing_agent (iteration_123) — 11/13
+نجح مباشرة، أُصلحت مشكلتان (توقيت المعاينة، نسبة المحاضرة للأستاذ الصحيح) + تحصينان إضافيان (race
+condition، حساب بلا مستخدم مرتبط).
+
+**ملاحظة نشر:** هذه الميزة تتطلب نشراً فعلياً حتى تعمل المهمة التلقائية كل ساعة (Cloud Scheduler لا
+يعمل إلا بعد deploy) — الزر اليدوي يعمل فوراً في أي بيئة (preview أو إنتاج) بدون حاجة للنشر.
+
 ## تحديث 26 أكتوبر 2026 — زر ترتيب أبجدي (تصاعدي/تنازلي) في صفحتي طلاب المقرر وتسجيل الحضور
 
 أُضيف زر ترتيب دوّار 3 حالات (افتراضي → أ-ي → ي-أ) في: `course-students.tsx` (بجانب مربع البحث،
@@ -249,7 +275,20 @@ testID `course-students-sort-btn`) و`take-attendance.tsx` (داخل رأس بط
 التحديد المتعدد أو حالة الحضور المُرسلة للباك إند (عرض فقط). اختُبر عبر testing_agent (iteration_122)
 — 100% نجاح، تعديل تصميمي بسيط طُبِّق لاحقاً (flexWrap لصف البحث كي لا ينضغط على الشاشات الصغيرة).
 
+## تحديث 26 أكتوبر 2026 — إصلاح عائق النشر (IndentationError) + فحص جاهزية ناجح
+- `deployment_agent` اكتشف `IndentationError` حقيقي في `server.py` سطر ~19162 داخل
+  `_ensure_weekly_schedule_unique_indexes`: جسم `if dedupe:` كان غير مُزاح بشكل صحيح (تعليق فقط ثم
+  كود بنفس إزاحة `if`)، مما يمنع تحميل الباك إند بالكامل عند الإقلاع (فشل نشر تام).
+- الإصلاح: أُعيدت إزاحة منطق الحذف الآمن (archive + soft-delete عبر `_archive_and_delete`) بالكامل ليكون
+  متداخلاً تحت `if dedupe:` (الذي قيمته الافتراضية `False` ولا يُستدعى بـ `True` من مسار الإقلاع التلقائي
+  `create_indexes()`). تم التحقق عبر `ast.parse` أن الملف يُصرَّف بنجاح والباك إند يقلع بلا أخطاء.
+- إصلاحات بسيطة إضافية طلبها `deployment_agent`: `EXPO_USE_FAST_RESOLVER` في `frontend/.env` أصبحت
+  نصاً مقتبَساً `"1"`، وأُضيف `memory/test_credentials.md` إلى `.gitignore`.
+- أُعيد تشغيل `deployment_agent` → **PASS بلا أي BLOCKER**. المستخدم طلب فحص الجاهزية فقط دون نشر فعلي
+  في هذه الجلسة — لم يتم استدعاء `emergent__send_to_deployer`.
+
 ## Pending/Future
+- (P0) النشر الفعلي للإنتاج لم يتم بعد — بانتظار موافقة المستخدم لاستدعاء أداة النشر.
 - (P1) AI Assistant Phase C: تنفيذ إجراءات كتابة مع معاينة/تأكيد.
 - (P1) تعريب منتقي التاريخ (Date Picker).
 - (P1) تنبيه رئيس القسم عند تأخر اعتماد خطة دراسية محفوظة.

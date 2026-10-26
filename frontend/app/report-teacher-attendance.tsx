@@ -256,7 +256,7 @@ export default function TeacherAttendanceReport() {
                 <tbody>{t.lectures.map((l: any) => { const m = getStatusMeta(l.status); return (
                   <tr key={l.lecture_id}><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.course_name}</td><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.date}</td><td style={{ ...tableStyles.td, fontSize: 12, direction: 'ltr', textAlign: 'right' }}>{l.start_time}-{l.end_time}</td><td style={{ ...tableStyles.td, fontSize: 12 }}>{l.section || '—'}</td><td style={tableStyles.td}><Pill color={m.color}>{m.label}</Pill></td>
                   <td style={tableStyles.td}>{l.status === 'absent' && (
-                    <AbsenceReminderButton lectureId={l.lecture_id} courseName={l.course_name} date={l.date} startTime={l.start_time} endTime={l.end_time} canSend={canSendReminder} compact />
+                    <AbsenceReminderButton lectureId={l.lecture_id} canSend={canSendReminder} compact />
                   )}</td></tr>); })}</tbody>
               </table>); }}
             footer={`${data.teachers.length} أستاذ · اضغط على الصف لعرض محاضراته`} />
@@ -268,7 +268,7 @@ export default function TeacherAttendanceReport() {
             align={['center', 'right', 'right', 'right', 'right', 'center', 'center', 'center', 'center']} emptyText="لا توجد محاضرات في هذه الفترة" keys={data.lectures.map((l: any) => l.lecture_id)}
             rows={data.lectures.map((l: any, i: number) => { const m = getStatusMeta(l.status); return [i + 1, <b style={{ color: '#0f2440' }}>{l.course_name}</b>, l.teacher_name, <span style={{ color: '#64748b' }}>{l.department_name}</span>, l.date,
               <span style={{ direction: 'ltr', display: 'inline-block' }}>{l.start_time}-{l.end_time}</span>, l.section || '—', <Pill color={m.color}>{m.label}</Pill>,
-              l.status === 'absent' ? <AbsenceReminderButton lectureId={l.lecture_id} courseName={l.course_name} date={l.date} startTime={l.start_time} endTime={l.end_time} canSend={canSendReminder} compact /> : null]; })}
+              l.status === 'absent' ? <AbsenceReminderButton lectureId={l.lecture_id} canSend={canSendReminder} compact /> : null]; })}
             footer={`${data.lectures.length} محاضرة`} />
         )}
 

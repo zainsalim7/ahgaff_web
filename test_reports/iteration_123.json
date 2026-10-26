@@ -1,0 +1,45 @@
+{
+  "summary": "Absent-teacher reminder (تنبيه الأستاذ الغائب) P1 feature tested end-to-end. Backend: 9/9 pytest pass (manual POST 200 -> notification with exact title + message to teacher user, absence_reminders doc, GET status, 2nd POST 409 incl. previous sent_at; non-absent 409; pending/approved justification 409; invalid/missing id 404; teacher 403; unauthenticated 401/403; cron run: missing/wrong/no-Bearer -> 401, +13h sent (kind=auto), +5h/+80h/+20h-with-pending not sent, 2nd run sent=0). Frontend: /take-attendance on lecture 6adf07d96ca65fb754750453 -> button shown, confirm dialog with message preview, after confirm green badge 'تم التنبيه 2026-10-26 10:59 (يدوي)', persists after reload; lecture status stays 'absent', status_override intact, attendance records unchanged (0 before/0 after). /report-teacher-attendance (today) by-lecture & by-teacher expanded views render both button and sent badge correctly. /course-lectures shows 7 'تنبيه الأستاذ' buttons beside التفاصيل/إعادة الجدولة; full click-through on one sent OK and badge replaced button. Teacher 222222 (logged in via x-platform: android header since teachers are blocked from web login) sees no reminder button on take-attendance or course-lectures. Feature is functional; several logic/UX issues found, listed below.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/lectures/{id}/absence-reminder", "issue": "Doesn't check the 72h justification window. An admin can send a manual reminder for an old absent lecture (tested: lecture from 2026-04-13), and the message asks the teacher to submit an excuse 'before 2026-04-16', a deadline that has already passed. Either reject with 409 when now > end+72h, or change the wording."},
+      {"endpoint": "absence_reminders collection", "issue": "There is no unique index on lecture_id; the only index is _id. The duplicate check is find_one followed by insert_one, so two concurrent requests (double click, or a manual send racing the cron) can both pass the check and send two notifications. Add create_index('lecture_id', unique=True) and catch DuplicateKeyError -> 409."},
+      {"endpoint": "POST /api/lectures/{id}/absence-reminder", "issue": "If the teacher record has no user_id, nothing is sent (no notification or push), but a reminder doc is still saved and the API returns ok:true, so the UI shows 'تم التنبيه' even though nobody received it. Return a 409/422 instead, or record delivered:false."},
+      {"endpoint": "POST /api/absence-reminders/run", "issue": "Side effect beyond the spec: step 1 changes every past 'scheduled' lecture in the database to 'absent'. This is a global data change triggered by a notification cron. It is also synchronous, even though the code comment says the endpoint should ack immediately and run in the background, and it uses to_list(5000) twice, so it can be slow or silently truncate on a large DB. Confirm the status mutation is intended."},
+      {"endpoint": "GET /api/lectures/{id}/absence-reminder", "issue": "There is no permission check: any authenticated user can read the reminder status of any lecture. This is low risk."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AbsenceReminderButton.previewMessage", "issue": "The deadline in the confirm dialog is computed with new Date(local) followed by toISOString(), which is UTC. For a browser in Yemen (UTC+3) the preview shows a deadline 3h earlier than the one actually sent (verified: TZ=Asia/Aden preview '2026-10-29 06:57' vs backend message '2026-10-29 09:57'). It only matched in the test because the test browser runs in UTC. Format the date manually without converting to UTC, or have the backend return the exact message (e.g. a preview field in the GET status response).", "selector": "[data-testid^='absence-reminder-btn-']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Report teacher attribution vs reminder recipient", "issue": "In /report-teacher-attendance, lecture 6adf07d96ca65fb754750453 is listed under the course teacher 'أستاذ اختبار 180156' (course.teacher_id 698f6714...). The reminder is sent to the lecture's own teacher_id, زين سالم (698ad3da...). So an admin clicks 'تنبيه الأستاذ' on one teacher's row and a different teacher receives it. The report and the reminder should use the same teacher (lecture.teacher_id || course.teacher_id).", "affected_selectors": ["[data-testid^='teacher-att-']", "[data-testid^='absence-reminder-btn-']"]},
+      {"flow": "Report page performance", "issue": "Each AbsenceReminderButton makes 2 requests on mount (GET reminder status + GET /absence-justifications/meta). A report with N absent lectures triggers 2N requests. Batch the status into the report payload, and fetch meta once.", "affected_selectors": ["[data-testid='lecture-att']"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_absence_reminders.py", "/app/test_reports/pytest/pytest_absence_reminders.xml"],
+  "action_items": [
+    "Fix the timezone bug in the AbsenceReminderButton preview deadline (toISOString gives UTC). Better: have the backend return the exact message text.",
+    "Make the report's teacher attribution and the reminder recipient consistent (lecture.teacher_id vs course.teacher_id).",
+    "Add a unique index on absence_reminders.lecture_id and handle DuplicateKeyError -> 409.",
+    "Decide whether a manual reminder past the 72h window should be blocked; the message currently quotes a deadline that has passed.",
+    "Don't report success (ok:true / sent badge) when the teacher has no user account and no notification was delivered.",
+    "Review whether the cron should change scheduled lectures to absent across the whole DB, and drop the misleading 'ack immediately' comment or run the work in the background."
+  ],
+  "critical_code_review_comments": [
+    "absence_reminders.py: the duplicate check is a find_one then insert_one, which is not atomic (no unique index).",
+    "absence_reminders.py: the manual endpoint ignores JUSTIFY_WINDOW_HOURS.",
+    "AbsenceReminderButton.tsx: the message text is duplicated on the client (it is a DRY copy of the backend build_message), which is how the timezone drift happened.",
+    "course-lectures.tsx uses `user?.role === 'admin' || hasPermission(...)`, while report and take-attendance use hasPermission only. Admin works in all three, but the checks are inconsistent."
+  ],
+  "updated_files": ["/app/backend/tests/test_absence_reminders.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% of requested flows functional; 1 preview timezone bug + 1 teacher attribution mismatch"},
+  "seed_data_creation": "The pytest suite creates temporary lectures (room TEST_AR, group TEST_AR_*) and deletes them, along with their reminders, notifications and justifications, on teardown. A temporary UI lecture 6adf089d303f617e27e48172 was deleted, and the UI test reminder on real lecture 69ce7a3de34059a832583800 was removed. The reminder on test lecture 6adf07d96ca65fb754750453 (manual, 2026-10-26T10:59) was KEPT, so that lecture now shows as sent.",
+  "test_credentials": "admin/admin123 works. Teacher 222222/teacher123 is blocked from web login (403 by design) unless the request has the header x-platform: android.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_absence_reminders.py -v. Lecture 6adf07d96ca65fb754750453 already has a manual reminder. /course-lectures only lists lectures in the active semester, so lectures inserted without a semester don't appear there; use the existing April absent lectures to test that page. For teacher UI login use page.set_extra_http_headers({'x-platform':'android'})."
+}

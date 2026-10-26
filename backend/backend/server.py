@@ -13217,10 +13217,11 @@ async def _build_teacher_attendance_report(start_date, end_date, department_id, 
             if not dept or dept.get("faculty_id") != faculty_id:
                 continue
         # فلترة أستاذ محدد
-        if teacher_id and course.get("teacher_id") != teacher_id:
+        lec_teacher_id = lec.get("teacher_id") or course.get("teacher_id")
+        if teacher_id and lec_teacher_id != teacher_id:
             continue
 
-        course_teacher_id = course.get("teacher_id")
+        course_teacher_id = lec_teacher_id
         if course_teacher_id:
             teacher = await get_teacher(course_teacher_id)
             teacher_name = teacher.get("full_name") if teacher else "غير معروف"
@@ -18674,11 +18675,8 @@ async def _startup_db_tasks():
         ("sync_default_roles", sync_default_roles),
         ("restore_lecture_permissions_v1", restore_lecture_permissions_v1),
         ("cleanup_orphan_permissions", cleanup_orphan_permissions),
-        ("cleanup_duplicate_roles_internal", cleanup_duplicate_roles_internal),
         ("migrate_broken_user_roles", migrate_broken_user_roles),
         ("backfill_teaching_loads_semester_internal", backfill_teaching_loads_semester_internal),
-        ("cleanup_orphan_teaching_loads_internal", cleanup_orphan_teaching_loads_internal),
-        ("dedup_teaching_loads_internal", dedup_teaching_loads_internal),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
         ("migrate_letterheads", lambda: migrate_letterheads(db)),
@@ -18755,6 +18753,20 @@ async def backfill_alumni_department_snapshot_internal():
         logging.warning(f"Alumni department snapshot backfill failed (non-critical): {e}")
 
 
+async def _archive_and_delete(collection_name: str, doc: dict, reason: str):
+    """🛡️ حذف آمن وقابل للاسترجاع: ينقل الوثيقة إلى مجموعة أرشيف بدل حذفها نهائياً، حتى يمكن استعادتها
+    يدوياً لاحقاً إن تبيّن أن الحذف كان خطأً (بدل الحذف الدائم بلا نسخة احتياطية عند كل إعادة تشغيل)."""
+    try:
+        archived = dict(doc)
+        archived["_archived_at"] = datetime.now(timezone.utc)
+        archived["_archived_reason"] = reason
+        archived["_archived_from"] = collection_name
+        await db[f"_archived_{collection_name}"].insert_one(archived)
+    except Exception as e:
+        logging.warning(f"archive before delete failed for {collection_name}/{doc.get('_id')}: {e}")
+    await db[collection_name].delete_one({"_id": doc["_id"]})
+
+
 async def dedup_teaching_loads_internal():
     """🧹 إزالة المكررات في teaching_loads: نفس (teacher_id, course_id, semester_id) له أكثر من سجل.
     
@@ -18781,7 +18793,9 @@ async def dedup_teaching_loads_internal():
             ids_sorted = sorted(ids, reverse=True)
             keep_id = ids_sorted[0]
             for old_id in ids_sorted[1:]:
-                await db.teaching_loads.delete_one({"_id": old_id})
+                old_doc = await db.teaching_loads.find_one({"_id": old_id})
+                if old_doc:
+                    await _archive_and_delete("teaching_loads", old_doc, "duplicate (teacher/course/semester)")
                 deleted += 1
             # احتياط: تأكد أن الباقي له updated_at حديث
             await db.teaching_loads.update_one(
@@ -18810,24 +18824,27 @@ async def cleanup_orphan_teaching_loads_internal():
         all_loads = await db.teaching_loads.find({}).to_list(50000)
         if not all_loads:
             return
+        course_ids = {str(load.get("course_id")) for load in all_loads if load.get("course_id")}
+        valid_oids = [ObjectId(c) for c in course_ids if ObjectId.is_valid(c)]
+        courses_map = {}
+        if valid_oids:
+            async for c in db.courses.find({"_id": {"$in": valid_oids}}, {"is_active": 1}):
+                courses_map[str(c["_id"])] = c
         deleted_missing = 0
         deleted_inactive = 0
         for load in all_loads:
-            try:
-                course = await db.courses.find_one({"_id": ObjectId(load["course_id"])})
-                if not course:
-                    await db.teaching_loads.delete_one({"_id": load["_id"]})
-                    deleted_missing += 1
-                elif course.get("is_active") is False:
-                    await db.teaching_loads.delete_one({"_id": load["_id"]})
-                    deleted_inactive += 1
-            except Exception:
-                # ObjectId غير صالح → احذفه
-                try:
-                    await db.teaching_loads.delete_one({"_id": load["_id"]})
-                    deleted_missing += 1
-                except Exception:
-                    pass
+            cid = str(load.get("course_id") or "")
+            if not ObjectId.is_valid(cid):
+                await _archive_and_delete("teaching_loads", load, "invalid course_id")
+                deleted_missing += 1
+                continue
+            course = courses_map.get(cid)
+            if not course:
+                await _archive_and_delete("teaching_loads", load, "course no longer exists")
+                deleted_missing += 1
+            elif course.get("is_active") is False:
+                await _archive_and_delete("teaching_loads", load, "course is_active=False")
+                deleted_inactive += 1
         if deleted_missing > 0 or deleted_inactive > 0:
             logging.info(
                 f"Teaching loads orphan cleanup: deleted {deleted_missing} missing-course, "
@@ -19041,7 +19058,7 @@ async def cleanup_duplicate_roles_internal():
                     {"role_id": str(dup["_id"])},
                     {"$set": {"role_id": str(keep["_id"])}}
                 )
-                await db.roles.delete_one({"_id": dup["_id"]})
+                await _archive_and_delete("roles", dup, "duplicate role name (merged users into kept role)")
                 merged += 1
                 logging.info(f"Cleanup duplicate role '{name}': merged dup {dup['_id']} → {keep['_id']}")
         if merged > 0:
@@ -19130,85 +19147,92 @@ async def migrate_broken_user_roles():
     except Exception as e:
         logging.error(f"User role migration failed (non-critical): {e}")
 
-async def _ensure_weekly_schedule_unique_indexes(db):
+async def _ensure_weekly_schedule_unique_indexes(db, dedupe: bool = False):
     """
     🔒 حماية جذرية ضد الحجز المزدوج في weekly_schedule:
-    1. نبحث عن أي تكرارات قائمة (نفس teacher/day/slot أو room/day/slot أو dept/level/section/day/slot).
-    2. نحتفظ بأقدم نسخة ونحذف الفائض (يتم تسجيله في السجل).
-    3. ننشئ فهارس فريدة جزئية (partial unique indexes) بحيث ترفض MongoDB أي إدخال متعارض حتى لو أخطأ الكود.
+    1. (اختياري، dedupe=True فقط — لا يعمل تلقائياً عند الإقلاع) نبحث عن أي تكرارات قائمة
+       (نفس teacher/day/slot أو room/day/slot أو dept/level/section/day/slot) ونؤرشفها ثم نحذفها.
+    2. ننشئ فهارس فريدة جزئية (partial unique indexes) بحيث ترفض MongoDB أي إدخال متعارض حتى لو أخطأ الكود.
     """
     try:
-        # --- 1) إزالة أي تكرارات قائمة ---
+        # --- 1) إزالة أي تكرارات قائمة (فقط عند تشغيل يدوي صريح من الأدمن — راجع /admin/maintenance/run-cleanup) ---
         removed_total = 0
-        # (a) نفس المعلم في نفس اليوم/الفترة (تُستثنى المحاضرات المشتركة)
-        pipe = [
-            {"$match": {"teacher_id": {"$exists": True, "$nin": [None, ""]}, "merge_group_id": {"$in": [None, ""]}}},
-            {"$group": {
-                "_id": {"t": "$teacher_id", "d": "$day", "s": "$slot_number"},
-                "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
-                "count": {"$sum": 1},
-            }},
-            {"$match": {"count": {"$gt": 1}}},
-        ]
-        async for group in db.weekly_schedule.aggregate(pipe):
-            docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
-            # نحتفظ بالأقدم، نحذف الباقي
-            for extra in docs[1:]:
-                await db.weekly_schedule.delete_one({"_id": extra["id"]})
-                removed_total += 1
-                logging.warning(
-                    f"[schedule dedupe] حُذف تكرار المعلم: teacher={group['_id']['t']} "
-                    f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
-                )
+        if dedupe:
+            # (a) نفس المعلم في نفس اليوم/الفترة (تُستثنى المحاضرات المشتركة)
+            pipe = [
+                {"$match": {"teacher_id": {"$exists": True, "$nin": [None, ""]}, "merge_group_id": {"$in": [None, ""]}}},
+                {"$group": {
+                    "_id": {"t": "$teacher_id", "d": "$day", "s": "$slot_number"},
+                    "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
+                    "count": {"$sum": 1},
+                }},
+                {"$match": {"count": {"$gt": 1}}},
+            ]
+            async for group in db.weekly_schedule.aggregate(pipe):
+                docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+                # نحتفظ بالأقدم، نحذف الباقي
+                for extra in docs[1:]:
+                    extra_doc = await db.weekly_schedule.find_one({"_id": extra["id"]})
+                    if extra_doc:
+                        await _archive_and_delete("weekly_schedule", extra_doc, "duplicate teacher slot")
+                    removed_total += 1
+                    logging.warning(
+                        f"[schedule dedupe] حُذف تكرار المعلم: teacher={group['_id']['t']} "
+                        f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
+                    )
 
-        # (b) نفس القاعة في نفس اليوم/الفترة (تُستثنى المحاضرات المشتركة)
-        pipe = [
-            {"$match": {"room_id": {"$exists": True, "$nin": [None, ""]}, "merge_group_id": {"$in": [None, ""]}}},
-            {"$group": {
-                "_id": {"r": "$room_id", "d": "$day", "s": "$slot_number"},
-                "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
-                "count": {"$sum": 1},
-            }},
-            {"$match": {"count": {"$gt": 1}}},
-        ]
-        async for group in db.weekly_schedule.aggregate(pipe):
-            docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
-            for extra in docs[1:]:
-                await db.weekly_schedule.delete_one({"_id": extra["id"]})
-                removed_total += 1
-                logging.warning(
-                    f"[schedule dedupe] حُذف تكرار القاعة: room={group['_id']['r']} "
-                    f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
-                )
+            # (b) نفس القاعة في نفس اليوم/الفترة (تُستثنى المحاضرات المشتركة)
+            pipe = [
+                {"$match": {"room_id": {"$exists": True, "$nin": [None, ""]}, "merge_group_id": {"$in": [None, ""]}}},
+                {"$group": {
+                    "_id": {"r": "$room_id", "d": "$day", "s": "$slot_number"},
+                    "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
+                    "count": {"$sum": 1},
+                }},
+                {"$match": {"count": {"$gt": 1}}},
+            ]
+            async for group in db.weekly_schedule.aggregate(pipe):
+                docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+                for extra in docs[1:]:
+                    extra_doc = await db.weekly_schedule.find_one({"_id": extra["id"]})
+                    if extra_doc:
+                        await _archive_and_delete("weekly_schedule", extra_doc, "duplicate room slot")
+                    removed_total += 1
+                    logging.warning(
+                        f"[schedule dedupe] حُذف تكرار القاعة: room={group['_id']['r']} "
+                        f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
+                    )
 
-        # (c) نفس الشعبة في نفس اليوم/الفترة — الخانات الكاملة فقط (بلا مجموعة)؛ خانات المجموعات تُقارَن مع المقرر
-        pipe = [
-            {"$group": {
-                "_id": {
-                    "dept": "$department_id", "lvl": "$level",
-                    "sec": {"$ifNull": ["$section", ""]},
-                    "g": {"$ifNull": ["$group", ""]},
-                    "c": {"$cond": [{"$in": [{"$ifNull": ["$group", ""]}, ["", None]]}, "", "$course_id"]},
-                    "d": "$day", "s": "$slot_number",
-                },
-                "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
-                "count": {"$sum": 1},
-            }},
-            {"$match": {"count": {"$gt": 1}}},
-        ]
-        async for group in db.weekly_schedule.aggregate(pipe):
-            docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
-            for extra in docs[1:]:
-                await db.weekly_schedule.delete_one({"_id": extra["id"]})
-                removed_total += 1
-                logging.warning(
-                    f"[schedule dedupe] حُذف تكرار الشعبة: dept={group['_id']['dept']} "
-                    f"level={group['_id']['lvl']} sec={group['_id']['sec']} "
-                    f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
-                )
+            # (c) نفس الشعبة في نفس اليوم/الفترة — الخانات الكاملة فقط (بلا مجموعة)؛ خانات المجموعات تُقارَن مع المقرر
+            pipe = [
+                {"$group": {
+                    "_id": {
+                        "dept": "$department_id", "lvl": "$level",
+                        "sec": {"$ifNull": ["$section", ""]},
+                        "g": {"$ifNull": ["$group", ""]},
+                        "c": {"$cond": [{"$in": [{"$ifNull": ["$group", ""]}, ["", None]]}, "", "$course_id"]},
+                        "d": "$day", "s": "$slot_number",
+                    },
+                    "docs": {"$push": {"id": "$_id", "created_at": "$created_at"}},
+                    "count": {"$sum": 1},
+                }},
+                {"$match": {"count": {"$gt": 1}}},
+            ]
+            async for group in db.weekly_schedule.aggregate(pipe):
+                docs = sorted(group["docs"], key=lambda x: x.get("created_at") or datetime.min.replace(tzinfo=timezone.utc))
+                for extra in docs[1:]:
+                    extra_doc = await db.weekly_schedule.find_one({"_id": extra["id"]})
+                    if extra_doc:
+                        await _archive_and_delete("weekly_schedule", extra_doc, "duplicate section slot")
+                    removed_total += 1
+                    logging.warning(
+                        f"[schedule dedupe] حُذف تكرار الشعبة: dept={group['_id']['dept']} "
+                        f"level={group['_id']['lvl']} sec={group['_id']['sec']} "
+                        f"day={group['_id']['d']} slot={group['_id']['s']} id={extra['id']}"
+                    )
 
-        if removed_total > 0:
-            logging.warning(f"[schedule dedupe] TOTAL removed: {removed_total} slot(s). See warnings above.")
+            if removed_total > 0:
+                logging.warning(f"[schedule dedupe] TOTAL removed: {removed_total} slot(s). See warnings above.")
 
         # --- 2) إنشاء فهارس فريدة جزئية (Partial Unique Indexes) ---
         # MongoDB لا يدعم $ne في partial index. نستخدم $exists+$type فقط.
@@ -19375,6 +19399,8 @@ async def create_indexes():
         await db.students.create_index("user_id")
         await db.teachers.create_index("user_id")
         await db.courses.create_index([("department_id", 1), ("level", 1)])
+        # 🔔 تنبيه الأستاذ الغائب: منع إرسال أكثر من تنبيه واحد لنفس المحاضرة حتى عند طلبات متزامنة
+        await db.absence_reminders.create_index("lecture_id", unique=True)
 
         # 🔒 حماية على مستوى قاعدة البيانات ضد التعارض المزدوج في الجدول الأسبوعي
         # نطبّق فهارس فريدة جزئية بعد إزالة أي تكرار قائم (نحتفظ بأقدم نسخة)

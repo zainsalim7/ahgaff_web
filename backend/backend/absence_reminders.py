@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from fastapi import APIRouter, HTTPException, Depends, Request
 from bson import ObjectId
+from pymongo.errors import DuplicateKeyError
 
 YEMEN_TIMEZONE = timezone(timedelta(hours=3))
 JUSTIFY_WINDOW_HOURS = int(os.environ.get("ABSENCE_JUSTIFY_WINDOW_HOURS", "72"))
@@ -55,31 +56,35 @@ def build_router(db, get_current_user, has_permission, send_push_many=None) -> A
         t = await db.teachers.find_one({"_id": ObjectId(teacher_record_id)}, {"user_id": 1})
         return (t or {}).get("user_id")
 
-    async def send_reminder(lec: dict, course: dict, kind: str, sent_by: Optional[str] = None) -> dict:
+    async def send_reminder(lec: dict, course: dict, kind: str, sent_by: Optional[str] = None) -> Optional[dict]:
         teacher_record_id = lec.get("teacher_id") or course.get("teacher_id")
         user_id = await resolve_user_id(teacher_record_id)
+        if not user_id:
+            return None  # لا يوجد حساب مستخدم مرتبط بالأستاذ — لن نسجّل تنبيهاً وهمياً
         ts = now().isoformat()
         message = build_message(course.get("name", ""), lec)
         data = {"type": "absence_reminder", "lecture_id": str(lec["_id"])}
-        if user_id:
-            await db.notifications.insert_one({
-                "user_id": user_id, "title": NOTIF_TITLE, "message": message, "type": "absence_reminder",
-                "lecture_id": str(lec["_id"]), "course_id": lec.get("course_id"), "course_name": course.get("name", ""),
-                "is_read": False, "created_at": ts,
-            })
-            if send_push_many:
-                try:
-                    docs = await db.fcm_tokens.find({"user_id": user_id}).to_list(50)
-                    tokens = [d["token"] for d in docs if d.get("token")]
-                    if tokens:
-                        await send_push_many(tokens, NOTIF_TITLE, message, data)
-                except Exception as e:
-                    logging.warning(f"absence_reminder push failed: {e}")
+        await db.notifications.insert_one({
+            "user_id": user_id, "title": NOTIF_TITLE, "message": message, "type": "absence_reminder",
+            "lecture_id": str(lec["_id"]), "course_id": lec.get("course_id"), "course_name": course.get("name", ""),
+            "is_read": False, "created_at": ts,
+        })
+        if send_push_many:
+            try:
+                docs = await db.fcm_tokens.find({"user_id": user_id}).to_list(50)
+                tokens = [d["token"] for d in docs if d.get("token")]
+                if tokens:
+                    await send_push_many(tokens, NOTIF_TITLE, message, data)
+            except Exception as e:
+                logging.warning(f"absence_reminder push failed: {e}")
         reminder_doc = {
             "lecture_id": str(lec["_id"]), "teacher_id": teacher_record_id, "kind": kind,
             "sent_by": sent_by, "sent_at": ts,
         }
-        await db.absence_reminders.insert_one(reminder_doc)
+        try:
+            await db.absence_reminders.insert_one(reminder_doc)
+        except DuplicateKeyError:
+            return None  # تنبيه آخر سبقه لنفس المحاضرة (طلب متزامن) — لا نُرسل إشعاراً مكرراً
         return reminder_doc
 
     @router.post("/lectures/{lecture_id}/absence-reminder")
@@ -100,18 +105,27 @@ def build_router(db, get_current_user, has_permission, send_push_many=None) -> A
             raise HTTPException(status_code=409, detail=f"سبق إرسال تنبيه لهذه المحاضرة بتاريخ {existing.get('sent_at')}")
         course = await db.courses.find_one({"_id": ObjectId(lec["course_id"])}) if ObjectId.is_valid(lec.get("course_id") or "") else None
         rem = await send_reminder(lec, course or {}, kind="manual", sent_by=current_user["id"])
+        if not rem:
+            raise HTTPException(status_code=422, detail="لا يوجد حساب مستخدم مرتبط بهذا الأستاذ لإرسال التنبيه إليه")
         return {"ok": True, "sent_at": rem["sent_at"], "kind": "manual"}
 
     @router.get("/lectures/{lecture_id}/absence-reminder")
     async def get_reminder_status(lecture_id: str, current_user: dict = Depends(get_current_user)):
         existing = await db.absence_reminders.find_one({"lecture_id": lecture_id})
-        if not existing:
-            return {"sent": False}
-        return {"sent": True, "sent_at": existing.get("sent_at"), "kind": existing.get("kind")}
+        if existing:
+            return {"sent": True, "sent_at": existing.get("sent_at"), "kind": existing.get("kind")}
+        preview = None
+        if ObjectId.is_valid(lecture_id):
+            lec = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
+            if lec:
+                course = await db.courses.find_one({"_id": ObjectId(lec["course_id"])}) if ObjectId.is_valid(lec.get("course_id") or "") else None
+                preview = build_message(course.get("name", "") if course else "", lec)
+        return {"sent": False, "preview": preview}
 
     @router.post("/absence-reminders/run")
     async def run_absence_reminders(request: Request):
-        # Cron endpoints must ack 2xx immediately; enqueue/background the actual work.
+        # Cron endpoints should ack quickly; هذا الفحص خفيف ومحدود النطاق (محاضرات absent فقط ضمن نافذة
+        # 72 ساعة) فتنفيذه مباشرة هنا آمن زمنياً، ونُرجع النتيجة الفعلية (checked/sent) للمستدعي مباشرة.
         secret = os.environ.get("WEBHOOK_CRON_SECRET")
         auth = request.headers.get("authorization", "")
         token = auth[7:] if auth.lower().startswith("bearer ") else None
@@ -159,8 +173,9 @@ def build_router(db, get_current_user, has_permission, send_push_many=None) -> A
             if await has_active_justification(lid):
                 continue
             course = courses.get(lec.get("course_id"), {})
-            await send_reminder(lec, course, kind="auto")
-            sent_ids.append(lid)
+            rem = await send_reminder(lec, course, kind="auto")
+            if rem:
+                sent_ids.append(lid)
 
         return {"checked": checked, "sent": len(sent_ids), "lecture_ids": sent_ids}
 

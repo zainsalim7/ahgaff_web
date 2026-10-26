@@ -953,14 +953,7 @@ export default function CourseLecturesScreen() {
             </TouchableOpacity>
           )}
           {item.status === 'absent' && (
-            <AbsenceReminderButton
-              lectureId={item.id}
-              courseName={course?.name || ''}
-              date={item.date}
-              startTime={item.start_time}
-              endTime={item.end_time}
-              canSend={canSendReminder}
-            />
+            <AbsenceReminderButton lectureId={item.id} canSend={canSendReminder} />
           )}
           {canEditGroup && (course?.groups || []).length > 0 && item.status === 'scheduled' && (
             <TouchableOpacity
