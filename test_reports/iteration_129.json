@@ -1,0 +1,21 @@
+{
+  "summary": "Narrow frontend follow-up on iteration_128's 2 HIGH bugs in the StatementBodyEditor table feature on /letters, plus the new nested-table guard. All pass. BUG1: when a table is inserted into an empty editor, the full table toolbar (add/del row/col, merge, fill swatches, fill-clear, delete) appears straight away. The toolbar hides when you click a paragraph and comes back straight away when you click into a cell again. BUG2: an empty 3x3 table saved as a draft keeps its table HTML (POST /letters/draft 200, and GET /letters/{id} body contains <table>), and the live preview shows the table. Typing in one cell and then deleting that row leaves 1 table with 2 rows, even after the editor loses focus. NEW: insert-table is disabled=true inside a cell and false outside. Regression: typing, add row/col (to 4x4), fill swatch, drag cell-range select (4 selectedCell), column resize (handle appears, widths change, colwidth saved) and delete table all work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Letter body editor toolbar", "issues": ["The disabled '⊞ جدول' insert-table button looks exactly like the enabled one: tb() ignores the disabled state, so opacity stays 1 and cursor stays pointer. Users get no sign that it is disabled. Suggest style={{...tb(), opacity: editor.isActive('table') ? 0.45 : 1, cursor: editor.isActive('table') ? 'not-allowed' : 'pointer'}}."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": ["(Minor) Grey out the disabled insert-table button: opacity plus a not-allowed cursor."],
+  "critical_code_review_comments": ["Using shouldRerenderOnTransaction: true re-renders the whole toolbar on every keystroke. That is fine at this size; if it becomes a problem, useEditorState is the lighter option."],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (skipped)", "frontend": "100%"},
+  "seed_data_creation": "Created 1 draft (TEST_tablefix_empty, id 6adfc65d53295349b37bc522) and deleted it (DELETE 200, then GET 404). Other TEST_ letters left over from earlier iterations (for example 'TEST_اعتماد_تجريبي', which looks issued) were not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login in the same way: fetch /api/auth/login, set localStorage token and user, goto /letters. Editor: [data-testid='letter-body'] .tiptap. To test column resize in RTL, hover within 2px of a middle cell's edge (td.nth(1)), wait for .column-resize-handle, then drag with steps=20. Hovering the first cell's left edge did not work.",
+  "test_credentials": "admin / admin123 (from /app/memory/test_credentials.md)"
+}

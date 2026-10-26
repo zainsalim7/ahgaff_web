@@ -105,7 +105,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
         <button type="button" style={tb(editor.isActive({ textAlign: 'justify' }))} onClick={run(() => editor.chain().focus().setTextAlign('justify').run())} title="ضبط">☰</button>
         <button type="button" data-testid={`${testID}-align-left`} style={tb(editor.isActive({ textAlign: 'left' }))} onClick={run(() => editor.chain().focus().setTextAlign('left').run())} title="يسار (نص بلغة أجنبية LTR)">⇥</button>
         <span style={{ width: 1, height: 20, backgroundColor: '#cbd5e1', margin: '0 4px' }} />
-        <button type="button" data-testid={`${testID}-insert-table`} style={tb()} disabled={editor.isActive('table')} onClick={run(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run())} title={editor.isActive('table') ? 'لا يمكن إدراج جدول داخل جدول آخر' : 'إدراج جدول فارغ لتعبئة محتواه يدوياً'}>⊞ جدول</button>
+        <button type="button" data-testid={`${testID}-insert-table`} style={{ ...tb(), opacity: editor.isActive('table') ? 0.45 : 1, cursor: editor.isActive('table') ? 'not-allowed' : 'pointer' }} disabled={editor.isActive('table')} onClick={run(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run())} title={editor.isActive('table') ? 'لا يمكن إدراج جدول داخل جدول آخر' : 'إدراج جدول فارغ لتعبئة محتواه يدوياً'}>⊞ جدول</button>
         {editor.isActive('table') && (
           <>
             <button type="button" data-testid={`${testID}-table-add-row`} style={tb()} onClick={run(() => editor.chain().focus().addRowAfter().run())} title="إضافة صف">➕↕</button>
