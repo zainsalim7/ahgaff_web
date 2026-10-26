@@ -47,6 +47,7 @@ class LectureUpdate(BaseModel):
     group: Optional[str] = None  # 👥 تغيير مجموعة المحاضرة ("" = لكل الطلاب)
     plan_topic_id: Optional[str] = None  # معرف موضوع من الخطة الدراسية
     time_locked: Optional[bool] = None  # 🔒 قفل/فك قفل الوقت يدوياً (تجاوز مزامنة الأوقات)
+    force: Optional[bool] = False  # تأكيد صريح لتجاوز تحذير تعارض (دمج شعبتين) — لا يتجاوز أي خطأ صارم
 
 class LectureResponse(BaseModel):
     id: str

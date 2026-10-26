@@ -149,15 +149,33 @@ export default function CourseLecturesScreen() {
   const canEditGroup = user?.role === 'admin' || hasPermission(PERMISSIONS.MANAGE_LECTURES);
   const canSendReminder = user?.role === 'admin' || hasPermission(PERMISSIONS.SEND_NOTIFICATIONS);
 
-  const changeLectureGroup = async (group: string) => {
+  const changeLectureGroup = async (group: string, force: boolean = false) => {
     if (!groupModal) return;
     try {
-      await lecturesAPI.update(groupModal.lectureId, { group } as any);
+      await lecturesAPI.update(groupModal.lectureId, { group, force } as any);
       showNotification('success', group ? 'تم تغيير مجموعة المحاضرة' : 'أصبحت المحاضرة لكل الطلاب');
       setGroupModal(null);
       fetchData(1);
     } catch (e: any) {
-      showNotification('error', e?.response?.data?.detail || 'فشل تغيير المجموعة');
+      const status = e?.response?.status;
+      const msg = e?.response?.data?.detail || 'فشل تغيير المجموعة';
+      if (status === 409 && !force) {
+        const confirmMsg = msg.includes('المتابعة') ? msg : msg + '\n\nهل تريد المتابعة؟';
+        if (Platform.OS === 'web') {
+          if (window.confirm(confirmMsg)) {
+            await changeLectureGroup(group, true);
+            return;
+          }
+        } else {
+          Alert.alert('تنبيه', msg, [
+            { text: 'إلغاء', style: 'cancel' },
+            { text: 'متابعة', onPress: () => changeLectureGroup(group, true) },
+          ]);
+          return;
+        }
+      } else {
+        showNotification('error', msg);
+      }
     }
   };
   const [rescheduleData, setRescheduleData] = useState({ date: '', start_time: '08:00', end_time: '09:00', room: '' });
@@ -844,8 +862,9 @@ export default function CourseLecturesScreen() {
       const msg = error.response?.data?.detail || error.message || 'فشل في إعادة الجدولة';
       // تحذير قابل للتجاوز بتأكيد صريح (دمج شعبتين لنفس الأستاذ/القاعة) — لا يظهر على الأخطاء الصارمة
       if (status === 409 && !force) {
+        const confirmMsg = msg.includes('المتابعة') ? msg : msg + '\n\nهل تريد المتابعة؟';
         if (Platform.OS === 'web') {
-          if (window.confirm(msg + '\n\nهل تريد المتابعة؟')) {
+          if (window.confirm(confirmMsg)) {
             await handleReschedule(true);
             return;
           }
@@ -1980,7 +1999,7 @@ export default function CourseLecturesScreen() {
                   style={{ flex: 1, backgroundColor: '#ff9800', padding: 14, borderRadius: 10, alignItems: 'center', opacity: rescheduling ? 0.6 : 1 }}
                   onPress={() => handleReschedule()}
                   disabled={rescheduling}
-                  data-testid="confirm-reschedule-btn"
+                  testID="confirm-reschedule-btn"
                 >
                   <Text style={{ fontWeight: '600', color: '#fff' }}>
                     {rescheduling ? 'جاري...' : 'إعادة الجدولة'}

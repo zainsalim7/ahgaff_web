@@ -1,0 +1,43 @@
+{
+  "summary": "I tested the P0 reschedule conflict fix in the backend (14 pytest cases against the public URL) and in the browser (course-lectures reschedule modal). The fix works as intended in the reschedule endpoint. In the exact bug scenario (another section of 'الفقه الإسلامي', same teacher), the endpoint returns 409 without force or with force=false, the lecture does not move, and force=true moves it. Two kinds of overlap give an unbypassable 400 even with force=true: the same course_id, and the same course+group. A different course with the same teacher also gives an unbypassable 400. Two different groups of the same course are allowed in parallel (200). A free slot gives 200. For room conflicts, a different teacher gives an unbypassable 400, and the same teacher's other section gives 409 that force=true bypasses. In the UI, the confirm dialog appeared with the warning. Cancel sent only one PUT (409, force=false) and did not move the lecture. Accept retried with force=true (200), showed the success toast and the lecture appeared at 2027-06-07 08:00. POST /api/lectures behaves as before. Two related gaps of the same kind are still open: PUT /api/lectures/{id} silently accepts 'warning' conflicts (the review request's claim that it requires force is incorrect), and reschedule does not check the group teacher's own clashes. All test lectures were deleted; 0 TEST_ lectures remain.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "PUT /api/lectures/{lecture_id} (update_lecture, server.py ~9818-9826)", "issue": "Same bug class as the P0 is still open here. Only type=='error' raises; 'warning' conflicts from check_teacher_lecture_conflict and check_room_lecture_conflict are ignored. LectureUpdate (models/lectures.py) has no `force` field, and check_students_lecture_conflict is not called. Reproduced: moving a FIQH_B (section أ) lecture onto a FIQH_A lecture's slot (same teacher, same time) via PUT {date,start_time,end_time} returned 200 and the lecture moved, with no confirmation. The current frontend only sends lesson_title/plan_topic_id/group/time_locked/cancel to this endpoint, but the API is open to the admin and teacher roles. Contrary to the review request, update_lecture does NOT require force.", "priority": "HIGH"},
+      {"endpoint": "PUT /api/lectures/{lecture_id}/reschedule", "issue": "Group-teacher double-booking is not detected. reschedule_lecture calls check_teacher_lecture_conflict without teacher_override, unlike create_lecture and update_lecture. A group lecture whose group has its own teacher is checked against the course's main teacher. Reproduced: course 'دراسات حضرموت' group 1 (teacher 698ad3da...) was rescheduled onto a slot where that same teacher already teaches 'مقرر اختبار 180156'. Result: 200 and the lecture moved; expected 400.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "PUT /api/lectures/{id}/reschedule (apply_to_shared siblings)", "issue": "Sibling lectures that move together (merge_group siblings) are not conflict-checked in the new slot (teacher, room or students). Only the primary lecture is checked."},
+      {"endpoint": "GET /api/lectures/{course_id}", "issue": "The list is limited to the active semester's date range (2025-12-20..2026-05-07) while server time is 2026-10-26. Future lectures (the only ones reschedule/create accept) never show in course-lectures for course 6a1b3f41... For the UI test I had to insert a lecture dated inside the semester directly in the DB. This is a data or semester-config issue, not caused by this fix."},
+      {"endpoint": "DuplicateKeyError path in reschedule", "issue": "This path also returns 409. The frontend treats every 409 as a bypassable warning, so the user gets a confirm dialog, the force retry hits the same duplicate-key 409, and only then an error toast. Use a distinct status code (for example 400) or an error code for the DB-unique-index rejection."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "course-lectures reschedule modal confirm button", "issue": "Used `data-testid` on a TouchableOpacity, which RN-web does not render, so the selector could not be found. Fixed by changing it to testID='confirm-reschedule-btn'.", "selector": "[data-testid='confirm-reschedule-btn']", "priority": "LOW (fixed)"},
+      {"component": "login.tsx login button", "issue": "No testID on the 'تسجيل الدخول' TouchableOpacity or the username/password inputs.", "selector": "text=تسجيل الدخول", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Reschedule 409 confirm dialog", "issues": ["The text shows 'هل تريد المتابعة؟' twice: the backend message already ends with it and handleReschedule appends it again."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_reschedule_conflict_force.py", "/app/backend/tests/ui_resched_setup.py", "/app/test_reports/pytest/pytest_reschedule_p0.xml"],
+  "action_items": [
+    "Add `force: Optional[bool] = False` to LectureUpdate. In update_lecture, raise 409 on 'warning' from the teacher and room checks unless force, and add check_students_lecture_conflict, mirroring reschedule and create.",
+    "In reschedule_lecture, pass teacher_override=lecture.get('teacher_id') when the lecture has a group with its own teacher, so group-teacher clashes are caught.",
+    "Optional: conflict-check the apply_to_shared siblings in the new slot before moving them.",
+    "Optional: remove the duplicated 'هل تريد المتابعة؟' in the web confirm text, and give DuplicateKeyError a non-409 status so it does not trigger the force dialog."
+  ],
+  "critical_code_review_comments": [
+    "The reschedule_lecture fix is correct: errors raise 400 and cannot be bypassed; warnings raise 409 unless force; group is passed; the students check was added.",
+    "update_lecture never received the force/warning handling that the review request says it has. The P0 class of bug can still be reproduced through PUT /api/lectures/{id}.",
+    "server.py is 19.5k lines. The conflict-gate logic (error→400, warning→409 unless force) is duplicated across create, update, reschedule and room. Extract one helper such as `enforce_conflicts(course_id, date, start, end, room, group, teacher_override, exclude_id, force)` so the endpoints cannot drift apart again."
+  ],
+  "updated_files": ["/app/frontend/app/course-lectures.tsx (data-testid -> testID on confirm-reschedule-btn)", "/app/backend/tests/test_reschedule_conflict_force.py", "/app/backend/tests/ui_resched_setup.py"],
+  "success_rate": {"backend": "12/14 (86%): every requested reschedule and create scenario passes; the 2 failures are the gaps above (update_lecture warning bypass, missing group-teacher check in reschedule)", "frontend": "100% (409 dialog, cancel keeps the lecture, accept retries with force and succeeds, toast shown)"},
+  "seed_data_creation": "Temporary lectures with notes TEST_RESCHED_P0 / TEST_UI_RESCHED (dates 2026-05-05 and 2027-05..06), all deleted afterwards and verified 0 remain. Lecture-created/rescheduled notifications sent to the teachers and students of the test courses were not cleaned up.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `cd /app/backend && python3 -m pytest tests/test_reschedule_conflict_force.py -v`. The test cleans up after itself. Courses used: FIQH_A 69cd1f0b..4991 (section ''), FIQH_B 6a1b3f41..be23 (section أ, same teacher 698e533b...), ENGLISH 6ac2c04c..18de (same teacher, groups), HADRAMOUT 698f0000..20af (groups 1/2 with their own teachers). The teacher has max_daily_lectures=3, so use separate dates per scenario. UI: log in via the placeholders, open /course-lectures?courseId=<id>. Course-lectures only lists lectures inside the active semester range (past dates), so insert a lecture dated in that range directly in the DB to get a reschedule button. Clean up with `python3 tests/ui_resched_setup.py cleanup`.",
+  "rca of the issue": "Root cause: the conflict gate (error→400 unconditionally, warning→409 unless force) was written separately in each endpoint. reschedule (now fixed) and update_lecture (still open) only implemented the error branch, so 'warning' conflicts (another section of the same base course with the same teacher) passed silently. Reproduce on update: create a FIQH_A lecture at D 08:00, a FIQH_B lecture at D+1, then PUT /api/lectures/{B} {date:D,start_time:'08:00',end_time:'09:30'} → 200 and the lecture moves. Mitigation: add force to LectureUpdate plus the warning→409 branch, or use one shared conflict-enforcement helper in all endpoints."
+}
