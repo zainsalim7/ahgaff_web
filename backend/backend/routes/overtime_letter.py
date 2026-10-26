@@ -138,11 +138,11 @@ async def find_raised(db, teacher_ids: List[str], start_date: str, end_date: str
 
 
 @router.get("/reports/teacher-workload/raised")
-async def raised_teachers(start_date: str, end_date: str, faculty_id: Optional[str] = None, department_id: Optional[str] = None, teacher_id: Optional[str] = None,
+async def raised_teachers(start_date: str, end_date: str, faculty_id: Optional[str] = None, department_id: Optional[str] = None, teach_department_id: Optional[str] = None, teacher_id: Optional[str] = None,
                           current_user: dict = Depends(get_current_user)):
     """لكل أستاذ في النطاق: الخطابات (غير الملغاة) التي سبق رفعه فيها عن فترة متداخلة — للشارات ونافذة الرفع"""
     db = get_db()
-    teachers = await select_teachers(db, current_user, teacher_id, faculty_id, department_id)
+    teachers = await select_teachers(db, current_user, teacher_id, faculty_id, department_id, teach_department_id)
     ids = [str(t["_id"]) for t in teachers]
     raised = await find_raised(db, ids, start_date, end_date)
     names = {str(t["_id"]): t.get("full_name", "") for t in teachers}

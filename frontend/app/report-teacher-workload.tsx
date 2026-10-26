@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, StyleSheet, ActivityIndicator, TextInput, Platform, Alert, useWindowDimensions, Modal } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -40,13 +41,14 @@ export default function TeacherWorkloadReport() {
   const [faculties, setFaculties] = useState<any[]>([]);
   const [fac, setFac] = useState('');
   const [dept, setDept] = useState('');
+  const [deptMode, setDeptMode] = useState<'org' | 'teach'>('org');
   const [view, setView] = useState<'summary' | 'sheet'>('summary');
   const [hideEmpty, setHideEmpty] = useState(true);
   const [onlyOvertime, setOnlyOvertime] = useState(false);
   const [raised, setRaised] = useState<any[]>([]);
   const raisedMap = useMemo(() => Object.fromEntries(raised.map((r) => [r.teacher_id, r.letters])), [raised]);
   const loadRaised = async (p: any) => {
-    try { const r = await api.get('/reports/teacher-workload/raised', { params: { start_date: p.start_date, end_date: p.end_date, faculty_id: p.faculty_id, department_id: p.department_id, teacher_id: p.teacher_id } }); setRaised(r.data.items || []); }
+    try { const r = await api.get('/reports/teacher-workload/raised', { params: { start_date: p.start_date, end_date: p.end_date, faculty_id: p.faculty_id, department_id: p.department_id, teach_department_id: p.teach_department_id, teacher_id: p.teacher_id } }); setRaised(r.data.items || []); }
     catch { setRaised([]); }
   };
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -96,12 +98,12 @@ export default function TeacherWorkloadReport() {
     const p: any = { start_date: from, end_date: to };
     if (teacherId) p.teacher_id = teacherId;
     if (teacherId && courseIds.length) p.course_ids = courseIds.join(',');
-    if (dept && !isTeacher) p.department_id = dept;
-    if (fac && !isTeacher) p.faculty_id = fac;
+    if (dept && !isTeacher) { if (deptMode === 'teach') p.teach_department_id = dept; else p.department_id = dept; }
+    if (fac && !isTeacher && deptMode !== 'teach') p.faculty_id = fac;
     if (hideEmpty && !isTeacher) p.hide_empty = true;
     if (onlyOvertime && !isTeacher) p.only_overtime = true;
     return p;
-  }, [from, to, teacherId, courseIds, dept, fac, hideEmpty, onlyOvertime, isTeacher]);
+  }, [from, to, teacherId, courseIds, dept, deptMode, fac, hideEmpty, onlyOvertime, isTeacher]);
 
   const run = useCallback(async () => {
     setLoading(true);
@@ -114,6 +116,20 @@ export default function TeacherWorkloadReport() {
   }, [params, isTeacher, from, to]);
 
   useEffect(() => { if (isTeacher) run(); }, [isTeacher, run]);
+
+  // 🆕 فتح التقرير مباشرة من صفحة المدرس مع تعبئة اسمه وتشغيله تلقائياً
+  const navParams = useLocalSearchParams<{ teacherId?: string; teacherName?: string; autorun?: string }>();
+  useEffect(() => {
+    if (!isTeacher && navParams.teacherId) {
+      setTeacherId(String(navParams.teacherId));
+      setTeacherQ(String(navParams.teacherName || ''));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    if (!isTeacher && navParams.autorun === '1' && teacherId && !ran) run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [teacherId]);
 
   const download = async (fmt: 'pdf' | 'excel') => {
     setExporting(fmt);
@@ -205,7 +221,7 @@ export default function TeacherWorkloadReport() {
 
   const deptName = (id: string) => departments.find((d) => d.id === id)?.name || '';
   const facDepts = departments.filter((d) => !fac || d.faculty_id === fac);
-  const filteredTeachers = teachers.filter((t) => (!dept || t.department_id === dept) && (!fac || t.faculty_id === fac || facDepts.some((d) => d.id === t.department_id)) && (!teacherQ || matchAr(t.full_name, teacherQ))).slice(0, 8);
+  const filteredTeachers = teachers.filter((t) => (!dept || deptMode === 'teach' || t.department_id === dept) && (!fac || t.faculty_id === fac || facDepts.some((d) => d.id === t.department_id)) && (!teacherQ || matchAr(t.full_name, teacherQ))).slice(0, 8);
   const customFilteredTeachers = teachers.filter((t) => !customTeacherQ || matchAr(t.full_name, customTeacherQ)).slice(0, 8);
   const lateTeachers = data.filter((t) => t.summary.late_start);
 
@@ -286,6 +302,15 @@ export default function TeacherWorkloadReport() {
                     {facDepts.map((d) => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                   </Picker>
                 </View>
+                {!!dept && (
+                  <View style={[styles.viewToggle, { marginTop: 6, alignSelf: 'flex-start' }]} testID="tw-dept-mode-toggle">
+                    {([['org', 'ينتمي إليه'], ['teach', 'يُدرّس فيه']] as const).map(([k, l]) => (
+                      <TouchableOpacity key={k} style={[styles.viewBtn, deptMode === k && styles.viewBtnOn]} onPress={() => setDeptMode(k)} testID={`tw-dept-mode-${k}`}>
+                        <Text style={[styles.viewText, deptMode === k && { color: DASH.navy }]}>{l}</Text>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                )}
               </View>
               <View style={{ flex: 1, position: 'relative', zIndex: 50 }}>
                 <Text style={styles.label}>المدرس</Text>

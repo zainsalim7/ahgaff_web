@@ -13561,19 +13561,21 @@ async def get_teacher_workload_report(
     end_date: str = None,
     faculty_id: Optional[str] = None,
     department_id: Optional[str] = None,
+    teach_department_id: Optional[str] = None,
     hide_empty: bool = False,
     only_overtime: bool = False,
     course_ids: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    """تقرير نصاب المدرس + كشف الساعات الإضافية — الحساب في routes/teacher_overtime.py (course_ids: مقررات مختارة مفصولة بفواصل)"""
+    """تقرير نصاب المدرس + كشف الساعات الإضافية — الحساب في routes/teacher_overtime.py (course_ids: مقررات مختارة مفصولة بفواصل)
+    teach_department_id: 🆕 القسم الذي يُدرّس فيه المدرس فعلياً (حسب قسم مقرراته) بدل القسم الذي ينتمي إليه تنظيمياً"""
     from routes.teacher_overtime import compute_workload, select_teachers, parse_period, parse_course_ids
     start, end = parse_period(start_date, end_date)
-    teachers = await select_teachers(db, current_user, teacher_id, faculty_id, department_id)
+    teachers = await select_teachers(db, current_user, teacher_id, faculty_id, department_id, teach_department_id)
     # 🆕 مقررات مُستثناة من النصاب لهذه الفترة فقط (محفوظة مسبقاً من صفحة التقرير)
     exc_doc = await db.report_load_exceptions.find_one({"_id": f"{start.date().isoformat()}_{end.date().isoformat()}"})
     extra_course_ids = set(exc_doc.get("course_ids", [])) if exc_doc else None
-    return await compute_workload(db, teachers, start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids), extra_course_ids=extra_course_ids)
+    return await compute_workload(db, teachers, start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids), extra_course_ids=extra_course_ids, teach_department_id=teach_department_id)
 
 
 # ==================== Reports Export (PDF & Excel) ====================
@@ -13675,6 +13677,7 @@ async def export_teacher_workload_pdf(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     department_id: Optional[str] = None,
+    teach_department_id: Optional[str] = None,
     faculty_id: Optional[str] = None,
     hide_empty: bool = False,
     only_overtime: bool = False,
@@ -13684,7 +13687,7 @@ async def export_teacher_workload_pdf(
     """📄 تصدير تقرير نصاب المدرسين إلى PDF احترافي (reportlab)"""
     from routes.teacher_workload_pdf import build_workload_pdf
     from routes.deps import export_filename, export_headers
-    report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, hide_empty, only_overtime, course_ids, current_user)
+    report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, teach_department_id, hide_empty, only_overtime, course_ids, current_user)
     scope_label = ""
     if department_id:
         report["teachers"] = [t for t in report["teachers"] if t.get("department_id") == department_id]
@@ -13698,6 +13701,9 @@ async def export_teacher_workload_pdf(
             "total_actual_hours": round(sum(t["summary"]["total_actual_hours"] for t in ts), 2),
             "total_difference_hours": round(sum(t["summary"]["difference_hours"] for t in ts), 2),
         }
+    elif teach_department_id:
+        dep = await db.departments.find_one({"_id": ObjectId(teach_department_id)}, {"name": 1}) if ObjectId.is_valid(teach_department_id) else None
+        scope_label = (dep or {}).get("name", "")
     if len(report["teachers"]) == 1:
         scope_label = report["teachers"][0].get("teacher_name", scope_label)
     buf = build_workload_pdf(report, scope_label, current_user.get("full_name", ""))
@@ -13711,6 +13717,7 @@ async def export_teacher_workload_excel(
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     department_id: Optional[str] = None,
+    teach_department_id: Optional[str] = None,
     monthly: bool = False,
     faculty_id: Optional[str] = None,
     hide_empty: bool = False,
@@ -13720,7 +13727,7 @@ async def export_teacher_workload_excel(
 ):
     """تصدير تقرير نصاب المدرسين إلى Excel
     - إذا monthly=true والفترة تشمل أكثر من شهر، يُصدّر كل شهر في sheet منفصل
-    - يدعم فلتر القسم
+    - يدعم فلتر القسم (تنظيمي) أو فلتر القسم الذي يُدرَّس فيه (teach_department_id، بدون فلترة إضافية لأنها تمت مسبقاً في compute_workload)
     """
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
@@ -13781,7 +13788,7 @@ async def export_teacher_workload_excel(
 
     if not months_to_export:
         # Sheet واحد للفترة كاملة
-        report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, hide_empty, only_overtime, course_ids, current_user)
+        report = await get_teacher_workload_report(teacher_id, start_date, end_date, faculty_id, None, teach_department_id, hide_empty, only_overtime, course_ids, current_user)
         data = teacher_rows(report["teachers"], department_id)
         if not data:
             data = [{"ملاحظة": "لا توجد بيانات"}]
@@ -13792,7 +13799,7 @@ async def export_teacher_workload_excel(
         # عدة Sheets - واحد لكل شهر
         with pd.ExcelWriter(output, engine="openpyxl") as writer:
             for s_str, e_str, label in months_to_export:
-                report = await get_teacher_workload_report(teacher_id, s_str, e_str, faculty_id, None, hide_empty, only_overtime, course_ids, current_user)
+                report = await get_teacher_workload_report(teacher_id, s_str, e_str, faculty_id, None, teach_department_id, hide_empty, only_overtime, course_ids, current_user)
                 data = teacher_rows(report["teachers"], department_id)
                 if not data:
                     data = [{"ملاحظة": "لا توجد بيانات لهذا الشهر"}]
@@ -13802,7 +13809,7 @@ async def export_teacher_workload_excel(
 
     output.seek(0)
     _fn = ar_export_filename("نصاب المدرسين الشهري" if months_to_export else "نصاب المدرسين",
-                             await _dept_name_for_export(department_id), ext="xlsx")
+                             await _dept_name_for_export(department_id or teach_department_id), ext="xlsx")
     return StreamingResponse(
         output,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

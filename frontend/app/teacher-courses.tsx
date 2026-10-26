@@ -385,6 +385,14 @@ export default function TeacherCoursesScreen() {
               <Text style={styles.btnGhostText}>رجوع</Text>
             </TouchableOpacity>
             <TouchableOpacity
+              style={[styles.headerBtn, styles.btnGhost]}
+              onPress={() => router.push({ pathname: '/report-teacher-workload', params: { teacherId: teacherId!, teacherName: teacherDisplay, autorun: '1' } })}
+              testID="teacher-overtime-report-btn"
+            >
+              <Ionicons name="stats-chart" size={16} color="#1a2540" />
+              <Text style={styles.btnGhostText}>تقرير الساعات الإضافية</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
               style={[styles.headerBtn, styles.btnExportExcel, ((data?.courses?.length || 0) === 0 || exportingExcel) && { opacity: 0.5 }]}
               onPress={handleExportExcel}
               disabled={(data?.courses?.length || 0) === 0 || exportingExcel}
