@@ -7,7 +7,7 @@ export const lvl = (c: any) => `${LEVELS[c.level] || c.level || ''} ${c.section 
 const f1 = (v: any) => (v === null || v === undefined || v === '' ? '' : Number(v).toFixed(1));
 
 /** 📋 كشف الساعات الإضافية — سطر لكل مقرر مع دمج خلايا الأستاذ (HTML على الويب) */
-export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: number; issuer?: string; raisedMap?: Record<string, any[]> }> = ({ teachers, period, threshold, raisedMap = {} }) => {
+export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: number; issuer?: string; raisedMap?: Record<string, any[]>; muteOvertime?: boolean }> = ({ teachers, period, threshold, raisedMap = {}, muteOvertime = false }) => {
   const anyBonus = teachers.some((t) => t.summary.bonus_enabled);
   const divisor = teachers.find((t) => t.summary.bonus_enabled)?.summary.bonus_divisor ?? 6;
   const anyRate = teachers.some((t) => t.summary.hourly_rate);
@@ -60,7 +60,7 @@ export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: 
                 {k === 0 && <td rowSpan={n} style={{ ...td, fontWeight: 700 }}>{f1(s.total_actual_hours)}</td>}
                 {anyBonus && k === 0 && <td rowSpan={n} style={td} data-testid={`sheet-bonus-${rk}`}>{s.bonus_enabled ? f1(s.bonus_hours) : '—'}</td>}
                 {anyBonus && k === 0 && <td rowSpan={n} style={td}>{f1(s.hours_after_bonus)}</td>}
-                {k === 0 && <td rowSpan={n} style={{ ...td, fontWeight: 800, color: s.overtime_hours >= 0 ? '#15803d' : '#b91c1c' }} data-testid={`sheet-overtime-${rk}`}>{f1(s.overtime_hours)}</td>}
+                {k === 0 && <td rowSpan={n} style={{ ...td, fontWeight: 800, color: muteOvertime ? '#94a3b8' : (s.overtime_hours >= 0 ? '#15803d' : '#b91c1c') }} data-testid={`sheet-overtime-${rk}`}>{muteOvertime ? '—' : f1(s.overtime_hours)}</td>}
                 <td style={{ ...td, color: c.shortfall_hours > 0 ? '#b91c1c' : '#334155' }}>{f1(c.shortfall_hours)}</td>
                 <td style={{ ...td, fontWeight: 800, backgroundColor: c.is_low ? '#fbcfe8' : undefined }} data-testid={c.is_low ? 'sheet-low-cell' : undefined}>{c.completion_rate !== '' ? `${c.completion_rate}%` : ''}</td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'normal', minWidth: 170, maxWidth: 220, fontSize: 10.5, color: '#475569', lineHeight: 1.5 }}>
@@ -75,6 +75,7 @@ export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: 
       </table>
       <div style={{ fontSize: 11, color: '#64748b', marginTop: 8, lineHeight: 1.8 }}>
         المنجز = محاضرات سُجّل لها حضور بمدتها الفعلية · الافتراضية = الساعات الأسبوعية × الأسابيع الكاملة من بداية المحاضرات حتى نهاية الفترة (يُخصم غياب الأستاذ بعذر فقط) · النصاب = النصاب الأسبوعي × الأسابيع الكاملة (حد قاطع) · الإجازات الرسمية لا تُخصم وتُحتسب ساعاتها للأستاذ {anyBonus ? ' · الإضافة = المنجز ÷ المُقسِّم (للكليات المفعَّل فيها) · الساعات الإضافية = (المنجز + الإضافة) − النصاب' : ' · الساعات الإضافية = المنجز − النصاب'} · تُظلَّل نسبة الإنجاز الأقل من {threshold}٪
+        {muteOvertime && <div style={{ color: '#b45309', fontWeight: 700, marginTop: 4 }}>⚠ عمود «إجمالي الساعات الإضافية» مخفي لأن الفلتر الحالي يعرض مقررات قسم تدريس واحد فقط مقارنةً بالنصاب الكامل للأستاذ — غير دقيق في هذا الوضع.</div>}
       </div>
     </div>
   );

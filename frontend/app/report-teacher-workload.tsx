@@ -42,6 +42,7 @@ export default function TeacherWorkloadReport() {
   const [fac, setFac] = useState('');
   const [dept, setDept] = useState('');
   const [deptMode, setDeptMode] = useState<'org' | 'teach'>('org');
+  const [revealDeptNumbers, setRevealDeptNumbers] = useState(false);
   const [view, setView] = useState<'summary' | 'sheet'>('summary');
   const [hideEmpty, setHideEmpty] = useState(true);
   const [onlyOvertime, setOnlyOvertime] = useState(false);
@@ -93,6 +94,9 @@ export default function TeacherWorkloadReport() {
       setTeachers(t.data || []); setDepartments(d.data || []); setFaculties(f.data || []);
     }).catch(() => {});
   }, [isTeacher]);
+
+  const deptScoped = !isTeacher && deptMode === 'teach' && !!dept;
+  const showFull = !deptScoped || revealDeptNumbers;
 
   const params = useMemo(() => {
     const p: any = { start_date: from, end_date: to };
@@ -365,6 +369,11 @@ export default function TeacherWorkloadReport() {
                   <Text style={[styles.chipText, excIds.length > 0 && styles.chipTextOn]}>⏱ استثناء من النصاب لهذه الفترة{excIds.length ? ` (${excIds.length})` : ''}</Text>
                 </TouchableOpacity>
               )}
+              {ran && deptScoped && (
+                <TouchableOpacity style={[styles.chip, revealDeptNumbers && styles.chipCourseOn]} onPress={() => setRevealDeptNumbers(!revealDeptNumbers)} testID="tw-reveal-dept-numbers">
+                  <Text style={[styles.chipText, revealDeptNumbers && styles.chipTextOn]}>{revealDeptNumbers ? '⚠ إظهار الإضافي/النسبة رغم عدم الدقة' : '🙈 إخفاء الإضافي/النسبة (غير دقيقين لهذا القسم)'}</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity style={styles.runBtn} onPress={run} disabled={loading} testID="tw-run-btn">
                 {loading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="play" size={14} color="#fff" />}<Text style={styles.runText}>تنفيذ التقرير</Text>
               </TouchableOpacity>
@@ -381,8 +390,8 @@ export default function TeacherWorkloadReport() {
                 ['النصاب المطلوب', `${Math.round(totals.req * 10) / 10} س`, DASH.navy2, data.some((t) => t.summary.course_filter) ? `نصاب ${data[0]?.courses.length || 0} مقرر مختار — الافتراضية للمقررات المختارة` : lateTeachers.length ? (data.length === 1 ? `من بداية المحاضرات · ${lateTeachers[0].summary.effective_weeks} أسابيع بدل ${period?.total_weeks}` : `${lateTeachers.length} مدرس بدأت محاضراته بعد بداية الفترة`) : 'أسبوعي × الأسابيع الكاملة (حد قاطع)'],
                 ['الساعات المنفَّذة', `${Math.round(totals.act * 10) / 10} س`, DASH.teal, `من ${Math.round(totals.sch * 10) / 10} س مجدولة`],
                 ['المحاضرات المنفَّذة', `${totals.exe}/${totals.lec}`, DASH.purple, 'منفَّذة / مجدولة'],
-                ['نسبة الإنجاز', `${totals.rate}%`, rateColor(totals.rate), totals.below ? `${totals.below} مدرس تحت 75%` : 'الجميع ≥ 75%'],
-                ['الساعات الإضافية', `${Math.round(totals.ot * 10) / 10} س`, DASH.green, totals.sf ? `نقص ${Math.round(totals.sf * 10) / 10} س · ${totals.lowCourses} مقرر تحت 75%` : (data.some((t) => t.summary.bonus_enabled) ? 'بعد الإضافة − النصاب' : 'المنجز − النصاب')],
+                ['نسبة الإنجاز', showFull ? `${totals.rate}%` : '—', showFull ? rateColor(totals.rate) : DASH.muted, showFull ? (totals.below ? `${totals.below} مدرس تحت 75%` : 'الجميع ≥ 75%') : '⚠ غير دقيق — يقارن مقررات هذا القسم فقط بالنصاب الكامل'],
+                ['الساعات الإضافية', showFull ? `${Math.round(totals.ot * 10) / 10} س` : '—', showFull ? DASH.green : DASH.muted, showFull ? (totals.sf ? `نقص ${Math.round(totals.sf * 10) / 10} س · ${totals.lowCourses} مقرر تحت 75%` : (data.some((t) => t.summary.bonus_enabled) ? 'بعد الإضافة − النصاب' : 'المنجز − النصاب')) : '⚠ غير دقيق — يقارن مقررات هذا القسم فقط بالنصاب الكامل'],
                 ...(totals.amt ? [['المستحق المالي', `${totals.amt.toLocaleString('en')} ${totals.cur}`, DASH.gold, 'الساعات الإضافية × سعر الساعة']] : []),
               ] as [string, string | number, string, string | undefined][]).map(([l, v, c, sub]) => ({ label: String(l), value: v as any, color: String(c), sub }))} />
             </View>
@@ -398,7 +407,7 @@ export default function TeacherWorkloadReport() {
             )}
 
             {view === 'sheet' ? (
-              <View style={dashStyles.card} testID="tw-sheet-card">{!isTeacher && <RaiseLetterBar params={params} disabled={rows.length === 0} raised={raised} onDone={() => loadRaised(params)} />}<OvertimeSheet teachers={rows} period={period} threshold={75} raisedMap={raisedMap} /></View>
+              <View style={dashStyles.card} testID="tw-sheet-card">{!isTeacher && <RaiseLetterBar params={params} disabled={rows.length === 0} raised={raised} onDone={() => loadRaised(params)} />}<OvertimeSheet teachers={rows} period={period} threshold={75} raisedMap={raisedMap} muteOvertime={!showFull} /></View>
             ) : (
             <View style={dashStyles.card} testID="tw-table">
               <View style={styles.tableHead}>
@@ -418,7 +427,7 @@ export default function TeacherWorkloadReport() {
                 return (
                   <View key={t.teacher_id + i} style={styles.tRow} testID={`tw-row-${t.teacher_id}`}>
                     <TouchableOpacity style={[styles.tMain, compact && { flexWrap: 'wrap' }]} onPress={() => setOpen({ ...open, [t.teacher_id + i]: !isOpen })} testID={`tw-row-toggle-${t.teacher_id}`}>
-                      <View style={[styles.rank, { backgroundColor: rateColor(s.completion_rate) + '1a' }]}><Text style={[styles.rankText, NUM_FONT, { color: rateColor(s.completion_rate) }]}>{i + 1}</Text></View>
+                      <View style={[styles.rank, { backgroundColor: (showFull ? rateColor(s.completion_rate) : DASH.muted) + '1a' }]}><Text style={[styles.rankText, NUM_FONT, { color: showFull ? rateColor(s.completion_rate) : DASH.muted }]}>{i + 1}</Text></View>
                       <View style={{ flex: 2, minWidth: 180 }}>
                         <Text style={styles.tName}>{t.academic_title ? `${t.academic_title} ` : ''}{t.teacher_name}</Text>
                         <Text style={styles.tSub}>{t.department_name || deptName(t.department_id) || '—'} · {s.total_courses} مقرر · نصاب {s.weekly_hours} س/أسبوع{s.bonus_enabled ? ` · إضافة ${s.bonus_hours} س` : ''}{s.extra_only_hours ? ` · +${s.extra_only_hours} س مقرر إضافي بالكامل` : ''}</Text>
@@ -426,12 +435,12 @@ export default function TeacherWorkloadReport() {
                         {!!raisedMap[t.teacher_db_id || ''] && <Text style={styles.tRaised} testID={`tw-row-raised-${t.teacher_id}`}>✉ سبق رفعه بالخطاب {raisedMap[t.teacher_db_id || ''].map((l: any) => `${l.number} (${l.start_date} → ${l.end_date})`).join('، ')}</Text>}
                       </View>
                       <View style={{ flex: 2, minWidth: 160 }}>
-                        <View style={styles.track}><View style={[styles.fill, { width: `${Math.min(100, s.completion_rate)}%`, backgroundColor: rateColor(s.completion_rate) }]} /></View>
+                        <View style={styles.track}><View style={[styles.fill, { width: `${Math.min(100, showFull ? s.completion_rate : 0)}%`, backgroundColor: showFull ? rateColor(s.completion_rate) : DASH.muted }]} /></View>
                         <Text style={[styles.tSub, NUM_FONT]}>{s.total_actual_hours} من {s.required_hours} ساعة مطلوبة · محاضرات {exe}/{lec}</Text>
                       </View>
-                      <View style={styles.cell}><Text style={[styles.cellVal, NUM_FONT, { color: (s.overtime_hours ?? s.difference_hours) < 0 ? DASH.red : DASH.green }]}>{(s.overtime_hours ?? s.difference_hours) > 0 ? '+' : ''}{s.overtime_hours ?? s.difference_hours}</Text><Text style={styles.cellLbl}>{s.bonus_enabled ? 'إضافية (س)' : 'الفرق (س)'}</Text></View>
+                      <View style={styles.cell} testID={`tw-overtime-cell-${t.teacher_id}`}>{showFull ? <><Text style={[styles.cellVal, NUM_FONT, { color: (s.overtime_hours ?? s.difference_hours) < 0 ? DASH.red : DASH.green }]}>{(s.overtime_hours ?? s.difference_hours) > 0 ? '+' : ''}{s.overtime_hours ?? s.difference_hours}</Text><Text style={styles.cellLbl}>{s.bonus_enabled ? 'إضافية (س)' : 'الفرق (س)'}</Text></> : <><Text style={[styles.cellVal, NUM_FONT, { color: DASH.muted }]}>—</Text><Text style={styles.cellLbl}>غير دقيق</Text></>}</View>
                       {s.overtime_amount != null && <View style={styles.cell}><Text style={[styles.cellVal, NUM_FONT, { color: DASH.gold, fontSize: 13 }]}>{Number(s.overtime_amount).toLocaleString('en')}</Text><Text style={styles.cellLbl}>المستحق {s.currency}</Text></View>}
-                      <View style={styles.cell}><Text style={[styles.cellVal, NUM_FONT, { color: rateColor(s.completion_rate) }]}>{s.completion_rate}%</Text><Text style={styles.cellLbl}>الإنجاز</Text></View>
+                      <View style={styles.cell}>{showFull ? <><Text style={[styles.cellVal, NUM_FONT, { color: rateColor(s.completion_rate) }]}>{s.completion_rate}%</Text><Text style={styles.cellLbl}>الإنجاز</Text></> : <><Text style={[styles.cellVal, NUM_FONT, { color: DASH.muted }]}>—</Text><Text style={styles.cellLbl}>غير دقيق</Text></>}</View>
                       <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={18} color={DASH.muted} />
                     </TouchableOpacity>
                     {isOpen && (
