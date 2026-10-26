@@ -18,7 +18,7 @@ export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: 
     return (
       <View>
         {teachers.map((t, i) => (
-          <View key={t.teacher_db_id || i} style={st.nCard}>
+          <View key={`${t.entry_key || t.teacher_db_id}-${i}`} style={st.nCard}>
             <Text style={st.nName}>{i + 1}. {t.academic_title} {t.teacher_name}</Text>
             <Text style={st.nSub}>نصاب {f1(t.summary.required_hours)} · منجز {f1(t.summary.total_actual_hours)} · إضافية {f1(t.summary.overtime_hours)}</Text>
             {t.courses.map((c: any, k: number) => (
@@ -43,12 +43,13 @@ export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: 
         <tbody>
           {teachers.map((t, i) => {
             const s = t.summary;
+            const rk = t.entry_key || t.teacher_db_id || String(i);
             const cs = t.courses.length ? t.courses : [{ course_name: '—', note: 'لا مقررات', completion_rate: '', is_low: false }];
             const n = cs.length;
             return cs.map((c: any, k: number) => (
-              <tr key={`${t.teacher_db_id}-${k}`} data-testid={`sheet-row-${t.teacher_db_id}-${k}`} style={{ backgroundColor: i % 2 ? '#f8fafc' : '#fff', borderTop: k === 0 && i > 0 ? '2.5px solid #334155' : undefined }}>
+              <tr key={`${rk}-${k}`} data-testid={`sheet-row-${rk}-${k}`} style={{ backgroundColor: i % 2 ? '#f8fafc' : '#fff', borderTop: k === 0 && i > 0 ? '2.5px solid #334155' : undefined }}>
                 {k === 0 && <td rowSpan={n} style={td}>{i + 1}</td>}
-                {k === 0 && <td rowSpan={n} style={{ ...td, textAlign: 'right', fontWeight: 700, whiteSpace: 'normal', minWidth: 120 }} data-testid={`sheet-teacher-${t.teacher_db_id}`}>{t.academic_title} {t.teacher_name}<div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 500 }}>{t.department_name}</div>{raisedMap[t.teacher_db_id] ? <div style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700, marginTop: 2 }} data-testid={`sheet-raised-${t.teacher_db_id}`}>✉ سبق رفعه: {raisedMap[t.teacher_db_id].map((l: any) => l.number).join('، ')}</div> : null}</td>}
+                {k === 0 && <td rowSpan={n} style={{ ...td, textAlign: 'right', fontWeight: 700, whiteSpace: 'normal', minWidth: 120 }} data-testid={`sheet-teacher-${rk}`}>{t.academic_title} {t.teacher_name}<div style={{ fontSize: 10.5, color: '#64748b', fontWeight: 500 }}>{t.department_name}</div>{raisedMap[t.teacher_db_id] ? <div style={{ fontSize: 10, color: '#7c3aed', fontWeight: 700, marginTop: 2 }} data-testid={`sheet-raised-${rk}`}>✉ سبق رفعه: {raisedMap[t.teacher_db_id].map((l: any) => l.number).join('، ')}</div> : null}</td>}
                 <td style={{ ...td, textAlign: 'right' }}>{c.course_name}{c.department_name ? <div style={{ fontSize: 10.5, color: '#64748b' }} data-testid="sheet-course-dept">{c.department_name}</div> : null}</td>
                 <td style={td}>{lvl(c)}</td>
                 <td style={td}>{f1(c.weekly_hours)}</td>
@@ -57,13 +58,13 @@ export const OvertimeSheet: React.FC<{ teachers: any[]; period: any; threshold: 
                 <td style={td}>{f1(c.expected_hours)}</td>
                 <td style={td}>{f1(c.actual_hours)}</td>
                 {k === 0 && <td rowSpan={n} style={{ ...td, fontWeight: 700 }}>{f1(s.total_actual_hours)}</td>}
-                {anyBonus && k === 0 && <td rowSpan={n} style={td} data-testid={`sheet-bonus-${t.teacher_db_id}`}>{s.bonus_enabled ? f1(s.bonus_hours) : '—'}</td>}
+                {anyBonus && k === 0 && <td rowSpan={n} style={td} data-testid={`sheet-bonus-${rk}`}>{s.bonus_enabled ? f1(s.bonus_hours) : '—'}</td>}
                 {anyBonus && k === 0 && <td rowSpan={n} style={td}>{f1(s.hours_after_bonus)}</td>}
-                {k === 0 && <td rowSpan={n} style={{ ...td, fontWeight: 800, color: s.overtime_hours >= 0 ? '#15803d' : '#b91c1c' }} data-testid={`sheet-overtime-${t.teacher_db_id}`}>{f1(s.overtime_hours)}</td>}
+                {k === 0 && <td rowSpan={n} style={{ ...td, fontWeight: 800, color: s.overtime_hours >= 0 ? '#15803d' : '#b91c1c' }} data-testid={`sheet-overtime-${rk}`}>{f1(s.overtime_hours)}</td>}
                 <td style={{ ...td, color: c.shortfall_hours > 0 ? '#b91c1c' : '#334155' }}>{f1(c.shortfall_hours)}</td>
                 <td style={{ ...td, fontWeight: 800, backgroundColor: c.is_low ? '#fbcfe8' : undefined }} data-testid={c.is_low ? 'sheet-low-cell' : undefined}>{c.completion_rate !== '' ? `${c.completion_rate}%` : ''}</td>
                 <td style={{ ...td, textAlign: 'right', whiteSpace: 'normal', minWidth: 170, maxWidth: 220, fontSize: 10.5, color: '#475569', lineHeight: 1.5 }}>
-                  {k === 0 && s.note ? <div style={{ color: '#b45309', fontWeight: 700 }} data-testid={`sheet-late-note-${t.teacher_db_id}`}>⏱ {s.note}</div> : null}
+                  {k === 0 && s.note ? <div style={{ color: '#b45309', fontWeight: 700 }} data-testid={`sheet-late-note-${rk}`}>⏱ {s.note}</div> : null}
                   {c.note}
                 </td>
                 {anyRate && k === 0 && <td rowSpan={n} style={{ ...td, fontWeight: 700 }}>{s.overtime_amount != null ? `${Number(s.overtime_amount).toLocaleString('en')} ${s.currency || ''}` : '—'}</td>}

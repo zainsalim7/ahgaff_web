@@ -75,6 +75,15 @@ export default function TeacherWorkloadReport() {
   const [excIds, setExcIds] = useState<string[]>([]);
   const [excSearch, setExcSearch] = useState('');
   const [savingExc, setSavingExc] = useState(false);
+  const [mode, setMode] = useState<'standard' | 'custom'>('standard');
+  const [customEntries, setCustomEntries] = useState<{ key: string; teacherId: string; teacherName: string; departmentName?: string; courses: any[]; excludedIds: string[] }[]>([]);
+  const [customTeacherQ, setCustomTeacherQ] = useState('');
+  const [customShowList, setCustomShowList] = useState(false);
+  const [customData, setCustomData] = useState<TeacherWL[]>([]);
+  const [customPeriod, setCustomPeriod] = useState<any>(null);
+  const [customRan, setCustomRan] = useState(false);
+  const [customLoading, setCustomLoading] = useState(false);
+  const [customExporting, setCustomExporting] = useState('');
 
   useEffect(() => {
     if (isTeacher) return;
@@ -122,6 +131,46 @@ export default function TeacherWorkloadReport() {
     } catch { Alert.alert('خطأ', 'تعذر التصدير'); } finally { setExporting(''); }
   };
 
+  const addCustomTeacher = async (t: any) => {
+    setCustomTeacherQ(''); setCustomShowList(false);
+    try {
+      const r = await api.get('/courses', { params: { teacher_id: t.id, all_semesters: true, fields: 'name,code,level,section,semester_name' } });
+      setCustomEntries((prev) => [...prev, { key: `${t.id}_${Date.now()}`, teacherId: t.id, teacherName: t.full_name, departmentName: deptName(t.department_id), courses: r.data || [], excludedIds: [] }]);
+    } catch { Alert.alert('خطأ', 'تعذر جلب مقررات الأستاذ'); }
+  };
+
+  const toggleCustomExclude = (key: string, courseId: string) => {
+    setCustomEntries((prev) => prev.map((e) => e.key === key ? { ...e, excludedIds: e.excludedIds.includes(courseId) ? e.excludedIds.filter((x) => x !== courseId) : [...e.excludedIds, courseId] } : e));
+  };
+
+  const runCustom = async () => {
+    if (!customEntries.length) return;
+    setCustomLoading(true);
+    try {
+      const entries = customEntries.map((e) => ({ teacher_id: e.teacherId, excluded_course_ids: e.excludedIds }));
+      const r = await api.post('/reports/teacher-workload/custom', { start_date: from, end_date: to, entries });
+      setCustomData(r.data.teachers || []); setCustomPeriod(r.data.period); setCustomRan(true);
+    } catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل تنفيذ التقرير المخصص'); }
+    finally { setCustomLoading(false); }
+  };
+
+  const downloadCustom = async (fmt: 'pdf' | 'excel') => {
+    setCustomExporting(fmt);
+    try {
+      const entries = customEntries.map((e) => ({ teacher_id: e.teacherId, excluded_course_ids: e.excludedIds }));
+      const path = fmt === 'pdf' ? 'custom-sheet-pdf' : 'custom-sheet-excel';
+      const res = await api.post(`/export/report/teacher-workload/${path}`, { start_date: from, end_date: to, entries }, { responseType: 'blob' });
+      const name = filenameFromResponse(res, exportName(['كشف الساعات الإضافية (تقرير مخصص)', from, to], fmt === 'pdf' ? 'pdf' : 'xlsx'));
+      if (Platform.OS === 'web') {
+        const url = window.URL.createObjectURL(new Blob([res.data])); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); window.URL.revokeObjectURL(url);
+      } else {
+        const p = `${FileSystem.documentDirectory}${name}`; const reader = new FileReader();
+        reader.onloadend = async () => { await FileSystem.writeAsStringAsync(p, (reader.result as string).split(',')[1], { encoding: FileSystem.EncodingType.Base64 }); await Sharing.shareAsync(p); };
+        reader.readAsDataURL(new Blob([res.data]));
+      }
+    } catch { Alert.alert('خطأ', 'تعذر التصدير'); } finally { setCustomExporting(''); }
+  };
+
   const totals = useMemo(() => {
     const req = data.reduce((s, t) => s + t.summary.required_hours, 0);
     const act = data.reduce((s, t) => s + t.summary.total_actual_hours, 0);
@@ -146,6 +195,7 @@ export default function TeacherWorkloadReport() {
   const deptName = (id: string) => departments.find((d) => d.id === id)?.name || '';
   const facDepts = departments.filter((d) => !fac || d.faculty_id === fac);
   const filteredTeachers = teachers.filter((t) => (!dept || t.department_id === dept) && (!fac || t.faculty_id === fac || facDepts.some((d) => d.id === t.department_id)) && (!teacherQ || matchAr(t.full_name, teacherQ))).slice(0, 8);
+  const customFilteredTeachers = teachers.filter((t) => !customTeacherQ || matchAr(t.full_name, customTeacherQ)).slice(0, 8);
   const lateTeachers = data.filter((t) => t.summary.late_start);
 
   const allCourses = useMemo(() => {
@@ -177,6 +227,13 @@ export default function TeacherWorkloadReport() {
           </View>
           <View style={styles.heroActions}>
             {!isTeacher && (
+              <View style={styles.viewToggle} testID="tw-mode-toggle">
+                {([['standard', 'قياسي'], ['custom', 'مخصص']] as const).map(([k, l]) => (
+                  <TouchableOpacity key={k} style={[styles.viewBtn, mode === k && styles.viewBtnOn]} onPress={() => setMode(k)} testID={`tw-mode-${k}`}><Text style={[styles.viewText, mode === k && { color: DASH.navy }]}>{l}</Text></TouchableOpacity>
+                ))}
+              </View>
+            )}
+            {!isTeacher && mode === 'standard' && (
               <View style={styles.viewToggle} testID="tw-view-toggle">
                 {([['summary', 'ملخص'], ['sheet', 'كشف الساعات الإضافية']] as const).map(([k, l]) => (
                   <TouchableOpacity key={k} style={[styles.viewBtn, view === k && styles.viewBtnOn]} onPress={() => setView(k)} testID={`tw-view-${k}`}><Text style={[styles.viewText, view === k && { color: DASH.navy }]}>{l}</Text></TouchableOpacity>
@@ -185,7 +242,7 @@ export default function TeacherWorkloadReport() {
             )}
             {canPolicy && <TouchableOpacity style={styles.iconBtn} onPress={() => setPolicyOpen(true)} testID="tw-policy-btn"><Ionicons name="settings-outline" size={18} color="#fff" /></TouchableOpacity>}
             <TouchableOpacity style={styles.iconBtn} onPress={() => goBack()} testID="tw-back-btn"><Ionicons name="arrow-forward" size={18} color="#fff" /></TouchableOpacity>
-            {ran && data.length > 0 && (
+            {mode === 'standard' && ran && data.length > 0 && (
               <>
                 <TouchableOpacity style={[styles.actBtn, { backgroundColor: '#b91c1c' }]} onPress={() => download('pdf')} disabled={!!exporting} testID="tw-export-pdf-btn">
                   {exporting === 'pdf' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document-text" size={15} color="#fff" />}<Text style={styles.actText}>PDF</Text>
@@ -198,7 +255,7 @@ export default function TeacherWorkloadReport() {
           </View>
         </View>
 
-        {!isTeacher && (
+        {!isTeacher && mode === 'standard' && (
           <View style={[dashStyles.card, { marginBottom: 14, zIndex: 20, overflow: 'visible' }]} testID="tw-filters">
             <View style={[styles.filterRow, { zIndex: 30 }, compact && { flexDirection: 'column' }]}>
               <View style={{ flex: 1 }}>
@@ -278,8 +335,8 @@ export default function TeacherWorkloadReport() {
           </View>
         )}
 
-        {loading && !ran && <ActivityIndicator color={DASH.navy} style={{ marginTop: 30 }} />}
-        {ran && (
+        {mode === 'standard' && loading && !ran && <ActivityIndicator color={DASH.navy} style={{ marginTop: 30 }} />}
+        {mode === 'standard' && ran && (
           <>
             <View testID="tw-summary">
               <ReportKpis items={([
@@ -368,6 +425,104 @@ export default function TeacherWorkloadReport() {
             )}
           </>
         )}
+
+        {mode === 'custom' && !isTeacher && (
+          <View style={[dashStyles.card, { marginBottom: 14, zIndex: 20, overflow: 'visible' }]} testID="tw-custom-builder">
+            <Text style={styles.courseLbl}>➕ إضافة أستاذ إلى التقرير المخصص</Text>
+            <View style={{ position: 'relative', zIndex: 50, marginBottom: 12, maxWidth: 360 }}>
+              <View style={styles.inputBox}>
+                <Ionicons name="person-outline" size={16} color="#94a3b8" />
+                <TextInput value={customTeacherQ} onChangeText={(v) => { setCustomTeacherQ(v); setCustomShowList(true); }} onFocus={() => setCustomShowList(true)} onBlur={() => setTimeout(() => setCustomShowList(false), 180)}
+                  placeholder="اكتب اسم الأستاذ لإضافته" placeholderTextColor="#94a3b8" style={styles.input} testID="tw-custom-teacher-input" />
+              </View>
+              {customShowList && customTeacherQ && (
+                <View style={styles.dropdown} testID="tw-custom-teacher-dropdown">
+                  {customFilteredTeachers.map((t) => (
+                    <TouchableOpacity key={t.id} style={styles.ddItem} onPressIn={() => addCustomTeacher(t)} testID={`tw-custom-teacher-opt-${t.id}`}>
+                      <Text style={styles.ddText}>{t.full_name}</Text><Text style={styles.ddSub}>{deptName(t.department_id)}</Text>
+                    </TouchableOpacity>
+                  ))}
+                  {customFilteredTeachers.length === 0 && <Text style={[styles.ddSub, { padding: 10, textAlign: 'center' }]}>لا نتائج</Text>}
+                </View>
+              )}
+            </View>
+
+            <View style={[styles.chips, { marginBottom: 14, zIndex: 1 }]}>
+              {QUICK.map((q) => (
+                <TouchableOpacity key={q.key} style={[styles.chip, quick === q.key && styles.chipOn]} onPress={() => { const [a, b] = q.range(); setFrom(a); setTo(b); setQuick(q.key); }} testID={`tw-custom-quick-${q.key}`}>
+                  <Text style={[styles.chipText, quick === q.key && styles.chipTextOn]}>{q.label}</Text>
+                </TouchableOpacity>
+              ))}
+              <View style={styles.dates}>
+                <Text style={styles.dateLbl}>من</Text>
+                {Platform.OS === 'web' ? <input type="date" value={from} onChange={(e: any) => { setFrom(e.target.value); setQuick(''); }} style={dateInput as any} data-testid="tw-custom-date-from" /> : <TextInput value={from} onChangeText={setFrom} style={styles.dateNative} />}
+                <Text style={styles.dateLbl}>إلى</Text>
+                {Platform.OS === 'web' ? <input type="date" value={to} onChange={(e: any) => { setTo(e.target.value); setQuick(''); }} style={dateInput as any} data-testid="tw-custom-date-to" /> : <TextInput value={to} onChangeText={setTo} style={styles.dateNative} />}
+              </View>
+            </View>
+
+            {customEntries.length === 0 && (
+              <View style={dashStyles.empty} testID="tw-custom-empty">
+                <Ionicons name="people-outline" size={36} color="#cbd5e1" />
+                <Text style={dashStyles.emptyText}>أضف أساتذة لبناء التقرير المخصص — يمكن إضافة نفس الأستاذ أكثر من مرة بمقررات مختلفة</Text>
+              </View>
+            )}
+
+            {customEntries.map((e, idx) => (
+              <View key={e.key} style={styles.customEntryCard} testID={`tw-custom-entry-${e.key}`}>
+                <View style={styles.customEntryHead}>
+                  <TouchableOpacity onPress={() => setCustomEntries(customEntries.filter((x) => x.key !== e.key))} testID={`tw-custom-entry-remove-${e.key}`}>
+                    <Ionicons name="trash-outline" size={17} color={DASH.red} />
+                  </TouchableOpacity>
+                  <Text style={styles.customEntryName}>{idx + 1}. {e.teacherName} <Text style={styles.tSub}>{e.departmentName}</Text></Text>
+                </View>
+                {e.courses.length === 0 ? (
+                  <Text style={[styles.tSub, { padding: 8 }]}>لا مقررات لهذا الأستاذ</Text>
+                ) : (
+                  <View style={styles.chips}>
+                    {e.courses.map((c: any) => {
+                      const excluded = e.excludedIds.includes(c.id);
+                      return (
+                        <TouchableOpacity key={c.id} style={[styles.chip, excluded ? styles.chipExcluded : styles.chipCourseOn]} onPress={() => toggleCustomExclude(e.key, c.id)} testID={`tw-custom-course-${e.key}-${c.id}`}>
+                          <Text style={[styles.chipText, { color: '#fff' }]}>{excluded ? '⏱ ' : '✓ '}{c.name}{c.level ? ` · م${c.level}` : ''}{c.section ? `/${c.section}` : ''}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
+                )}
+                {e.excludedIds.length > 0 && <Text style={styles.courseHint}>المقررات المحددة بـ⏱ ستُحتسب كاملة ساعاتها إضافياً (مستثناة من النصاب) لهذا الإدخال فقط — باقي المقررات (✓) ضمن النصاب العادي</Text>}
+              </View>
+            ))}
+
+            {customEntries.length > 0 && (
+              <View style={[styles.chips, { marginTop: 6 }]}>
+                <TouchableOpacity style={styles.runBtn} onPress={runCustom} disabled={customLoading} testID="tw-custom-run-btn">
+                  {customLoading ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="play" size={14} color="#fff" />}<Text style={styles.runText}>تنفيذ التقرير المخصص</Text>
+                </TouchableOpacity>
+                {customRan && customData.length > 0 && (
+                  <>
+                    <TouchableOpacity style={[styles.actBtn, { backgroundColor: '#b91c1c' }]} onPress={() => downloadCustom('pdf')} disabled={!!customExporting} testID="tw-custom-export-pdf-btn">
+                      {customExporting === 'pdf' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="document-text" size={15} color="#fff" />}<Text style={styles.actText}>PDF</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity style={[styles.actBtn, { backgroundColor: '#15803d' }]} onPress={() => downloadCustom('excel')} disabled={!!customExporting} testID="tw-custom-export-excel-btn">
+                      {customExporting === 'excel' ? <ActivityIndicator size="small" color="#fff" /> : <Ionicons name="grid" size={15} color="#fff" />}<Text style={styles.actText}>Excel</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {mode === 'custom' && customRan && (
+          <View style={dashStyles.card} testID="tw-custom-sheet-card">
+            {customData.length === 0 ? (
+              <View style={dashStyles.empty}><Ionicons name="document-text-outline" size={36} color="#cbd5e1" /><Text style={dashStyles.emptyText}>لا بيانات للمدخلات المحددة</Text></View>
+            ) : (
+              <OvertimeSheet teachers={customData} period={customPeriod} threshold={75} />
+            )}
+          </View>
+        )}
       </ScrollView>
       <OvertimePolicyModal visible={policyOpen} onClose={() => setPolicyOpen(false)} onSaved={() => { if (ran) run(); }} />
       <Modal visible={excOpen} transparent animationType="fade" onRequestClose={() => setExcOpen(false)}>
@@ -439,6 +594,10 @@ const styles = StyleSheet.create({
   courseLbl: { fontSize: 12.5, fontWeight: '800', color: '#4c1d95', textAlign: 'right', marginBottom: 6 },
   courseHint: { fontSize: 11, color: '#6d28d9', textAlign: 'right', marginTop: 6 },
   chipCourseOn: { backgroundColor: '#6d28d9', borderColor: '#6d28d9' },
+  chipExcluded: { backgroundColor: '#b45309', borderColor: '#b45309' },
+  customEntryCard: { backgroundColor: '#f8fafc', borderWidth: 1, borderColor: '#e2e8f0', borderRadius: 12, padding: 12, marginBottom: 10 },
+  customEntryHead: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, marginBottom: 8 },
+  customEntryName: { fontSize: 13.5, fontWeight: '800', color: DASH.ink, textAlign: 'right' },
   label: { fontSize: 12, fontWeight: '700', color: DASH.muted, textAlign: 'right', marginBottom: 4 },
   pickerBox: { borderWidth: 1, borderColor: DASH.line, borderRadius: 10, backgroundColor: '#fff', overflow: 'hidden' },
   picker: { height: 40, textAlign: 'right' as any, borderWidth: 0, backgroundColor: 'transparent', fontSize: 13 } as any,

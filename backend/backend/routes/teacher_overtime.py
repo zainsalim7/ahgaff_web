@@ -38,6 +38,18 @@ class WorkloadExceptionsIn(BaseModel):
     course_ids: List[str] = []
 
 
+class CustomEntryIn(BaseModel):
+    teacher_id: str
+    course_ids: Optional[List[str]] = None
+    excluded_course_ids: Optional[List[str]] = None
+
+
+class CustomWorkloadIn(BaseModel):
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    entries: List[CustomEntryIn] = []
+
+
 # ==================== السياسة ====================
 async def load_policies(db) -> Dict[str, dict]:
     """{faculty_id: policy} مع "" للافتراضي العام"""
@@ -440,6 +452,30 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
     }
 
 
+async def build_custom_workload_report(db, start: datetime, end: datetime, entries: list) -> dict:
+    """🆕 تقرير نصاب مجمّع: كل إدخال = (معلم + مقرراته المختارة أو كلها + مقررات مستثناة من النصاب لهذا الإدخال فقط)
+    يسمح بتكرار نفس المعلم أكثر من مرة بمقررات مختلفة في كل مرة"""
+    teachers_out = []
+    period = None
+    for i, entry in enumerate(entries):
+        tid = entry.teacher_id
+        if not ObjectId.is_valid(tid):
+            continue
+        t = await db.teachers.find_one({"_id": ObjectId(tid)})
+        if not t:
+            continue
+        cids = set(entry.course_ids) if entry.course_ids else None
+        excl = set(entry.excluded_course_ids) if entry.excluded_course_ids else None
+        r = await compute_workload(db, [t], start, end, course_ids=cids, extra_course_ids=excl)
+        if period is None:
+            period = r["period"]
+        if r["teachers"]:
+            tw = r["teachers"][0]
+            tw["entry_key"] = f"{i}_{tid}"
+            teachers_out.append(tw)
+    return {"teachers": teachers_out, "period": period or {}, "summary": report_totals(teachers_out)}
+
+
 async def select_teachers(db, current_user: dict, teacher_id: Optional[str], faculty_id: Optional[str], department_id: Optional[str]) -> List[dict]:
     """اختيار المدرسين حسب الدور والفلاتر (المدرس: نفسه فقط)"""
     if current_user["role"] == UserRole.TEACHER:
@@ -729,4 +765,38 @@ async def export_sheet_excel(teacher_id: Optional[str] = None, start_date: Optio
     report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id), start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids))
     out = build_sheet_excel(report, await _issuer(db, current_user))
     fname = export_filename("كشف الساعات الإضافية للأساتذة", f"{start.strftime('%Y-%m-%d')} الى {end.strftime('%Y-%m-%d')}", ext="xlsx")
+    return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(fname))
+
+
+# ==================== تقرير مخصص: تجميع عدة معلمين، كل واحد باختياراته الخاصة ====================
+@router.post("/reports/teacher-workload/custom")
+async def compute_custom_workload(data: CustomWorkloadIn, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") == UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    start, end = parse_period(data.start_date, data.end_date)
+    return await build_custom_workload_report(db, start, end, data.entries)
+
+
+@router.post("/export/report/teacher-workload/custom-sheet-pdf")
+async def export_custom_sheet_pdf(data: CustomWorkloadIn, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") == UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    start, end = parse_period(data.start_date, data.end_date)
+    report = await build_custom_workload_report(db, start, end, data.entries)
+    buf = build_sheet_pdf(report, await _issuer(db, current_user), current_user.get("full_name", ""))
+    fname = export_filename("كشف الساعات الإضافية (تقرير مخصص)", f"{start.strftime('%Y-%m-%d')} الى {end.strftime('%Y-%m-%d')}", ext="pdf")
+    return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(fname))
+
+
+@router.post("/export/report/teacher-workload/custom-sheet-excel")
+async def export_custom_sheet_excel(data: CustomWorkloadIn, current_user: dict = Depends(get_current_user)):
+    if current_user.get("role") == UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    db = get_db()
+    start, end = parse_period(data.start_date, data.end_date)
+    report = await build_custom_workload_report(db, start, end, data.entries)
+    out = build_sheet_excel(report, await _issuer(db, current_user))
+    fname = export_filename("كشف الساعات الإضافية (تقرير مخصص)", f"{start.strftime('%Y-%m-%d')} الى {end.strftime('%Y-%m-%d')}", ext="xlsx")
     return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(fname))
