@@ -116,12 +116,12 @@ export default function LettersPage() {
     setLast(null);
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
-  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', letterhead_id: lhId, series_id: seriesId, sections, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
+  const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', letterhead_id: lhId, series_id: seriesId, sections, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
   useEffect(() => {
     const sample = !body.trim();
     if (sample && !showLayout) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
     const t = setTimeout(() => {
-      if (!sample) api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); setTableDefaults(r.data.table?.default_headers || []); }).catch(() => {});
+      if (!sample) api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); setTableDefaults(r.data.table?.default_headers || []); }).catch(() => {});
       setPreviewBusy(true);
       const payload = issuePayload();
       if (sample) { payload.body = '<p style="text-align: right">هذا نص تجريبي لمعاينة تخطيط الصفحة — يظهر مكانه متن الخطاب عند كتابته.</p>'; payload.subject = payload.subject || 'نموذج لمعاينة التخطيط'; if (!Object.keys(payload.recipient).length) payload.recipient = { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }; }
@@ -191,7 +191,7 @@ export default function LettersPage() {
       setTplId(d.template_id || ''); setSubject(d.subject || ''); setBody(inp0.body || d.body || '');
       const r0 = inp0.recipient || d.recipient || {};
       if (r0.id) { setRecMode('list'); setRecId(r0.id); } else { setRecMode('manual'); setRec({ name: r0.name || '', title: r0.title || '', organization: r0.organization || '', suffix: r0.suffix || 'المحترم' }); }
-      setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.name })));
+      setPeople((d.people || []).map((p: any) => ({ kind: p.kind, id: p.id, label: p.name, fields: p.fields })));
       if (d.letterhead_id) setLhId(d.letterhead_id); if (d.series_id) setSeriesId(d.series_id);
       setSecOverrides(d.inputs?.sections && Object.keys(d.inputs.sections).length ? d.inputs.sections : {});
       setSig({ position_id: d.signatory_position_id || '', name: d.signatory_position_id ? '' : (d.signatory_name || ''), title: d.signatory_position_id ? '' : (d.signatory_title || '') }); setValidDays(d.valid_days ? String(d.valid_days) : ''); setLayout(d.layout || {});

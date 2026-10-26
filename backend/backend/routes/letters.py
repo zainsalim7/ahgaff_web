@@ -102,7 +102,7 @@ async def backfill_people_faculty(db):
     async for l in db.letters.find({"people.0": {"$exists": True}, "people.faculty_id": {"$exists": False}}, {"people": 1}):
         people = []
         for p in l.get("people") or []:
-            row = await _person_row(db, p.get("kind", "student"), p.get("id", ""))
+            row = await _person_row(db, p)
             people.append({**p, "faculty_id": _people_faculty(row) if row else ""})
         await db.letters.update_one({"_id": l["_id"]}, {"$set": {"people": people}})
 
@@ -251,7 +251,16 @@ FIELD_CATALOG = {
 }
 
 
-async def _person_row(db, kind: str, pid: str) -> Optional[dict]:
+async def _person_row(db, p: dict) -> Optional[dict]:
+    kind, pid = p.get("kind", "student"), p.get("id", "")
+    if kind == "custom":
+        # 🆕 شخص يدوي ببيانات مؤقتة (لا سجل له في قاعدة البيانات) — يُغذّي {جدول_الأسماء} مباشرة من القيم المكتوبة
+        fl = p.get("fields") or {}
+        name = (fl.get("الاسم") or "").strip()
+        if not name:
+            return None
+        fields = {"الاسم": name, "الصفة": fl.get("الصفة", ""), "الرقم": fl.get("الرقم", ""), "الجهة": fl.get("الجهة", "")}
+        return {"kind": "custom", "name": name, "code": fields["الرقم"], "c1": fields["الصفة"], "c2": fields["الجهة"], "c3": "", "fields": fields}
     oid = _oid(pid)
     if not oid:
         return None
@@ -285,8 +294,9 @@ async def _person_row(db, kind: str, pid: str) -> Optional[dict]:
 
 
 TABLE_HEADERS = {"student": ["م", "الاسم", "رقم القيد", "الكلية", "القسم", "المستوى"], "employee": ["م", "الاسم", "الرقم الوظيفي", "الوظيفة", "الوحدة"], "teacher": ["م", "الاسم", "اللقب", "الكلية"],
+                 "custom": ["م", "الاسم", "الصفة", "الرقم", "الجهة"],
                  "mixed": ["م", "الاسم", "الصفة", "الرقم", "الجهة / الكلية", "القسم / الوظيفة"]}
-KIND_AR = {"student": "طالب", "employee": "موظف", "teacher": "مدرّس"}
+KIND_AR = {"student": "طالب", "employee": "موظف", "teacher": "مدرّس", "custom": "يدوي"}
 
 
 def _table_rows(rows: List[dict]) -> dict:
@@ -301,6 +311,8 @@ def _table_rows(rows: List[dict]) -> dict:
                 data.append([str(i + 1), r["name"], KIND_AR["student"], r["code"], r["c1"], f"{r['c2']} — {r['c3']}".strip(" —")])
             elif r["kind"] == "employee":
                 data.append([str(i + 1), r["name"], KIND_AR["employee"], r["code"], r["c2"], r["c1"]])
+            elif r["kind"] == "custom":
+                data.append([str(i + 1), r["name"], r["c1"] or KIND_AR["custom"], r["code"], r["c2"], ""])
             else:
                 data.append([str(i + 1), r["name"], KIND_AR["teacher"], r["code"], r["c1"], ""])
         return _with_extra_fields(TABLE_HEADERS["mixed"], data, rows)
@@ -309,6 +321,8 @@ def _table_rows(rows: List[dict]) -> dict:
         data = [[str(i + 1), r["name"], r["code"], r["c1"], r["c2"], r["c3"]] for i, r in enumerate(rows)]
     elif k == "employee":
         data = [[str(i + 1), r["name"], r["code"], r["c1"], r["c2"]] for i, r in enumerate(rows)]
+    elif k == "custom":
+        data = [[str(i + 1), r["name"], r["c1"], r["code"], r["c2"]] for i, r in enumerate(rows)]
     else:
         data = [[str(i + 1), r["name"], r["code"], r["c1"]] for i, r in enumerate(rows)]
     return _with_extra_fields(TABLE_HEADERS[k], data, rows)
@@ -331,7 +345,7 @@ async def _build_ctx(db, rec: dict, subject: str, people_in: List[dict]) -> tupl
     ctx = {"اسم_المرسل_إليه": rec.get("name", ""), "صفة_المرسل_إليه": rec.get("title", ""), "جهة_المرسل_إليه": rec.get("organization", ""), "تكريم": rec.get("suffix", ""),
            "الموضوع": subject or "", "التاريخ": now.strftime("%Y/%m/%d") + "م", "التاريخ_الهجري": f"{hj.year}/{hj.month:02d}/{hj.day:02d}هـ", "العام_الجامعي": await _academic_year_display(db),
            "اسم_الطالب": "", "رقم_القيد": "", "الكلية": "", "القسم": "", "المستوى": "", "الجنسية": "", "اسم_الموظف": "", "الوظيفة": "", "وحدة_الموظف": "", "اسم_المدرس": "", "جدول_الأسماء": "{جدول_الأسماء}", "قائمة_الأسماء": "", "عدد_الأسماء": ""}
-    rows = [r for r in [await _person_row(db, p.get("kind", "student"), p.get("id", "")) for p in people_in] if r]
+    rows = [r for r in [await _person_row(db, p) for p in people_in] if r]
     if rows:
         first = rows[0]
         if first["kind"] == "student":
@@ -345,13 +359,16 @@ async def _build_ctx(db, rec: dict, subject: str, people_in: List[dict]) -> tupl
                 ctx[k] = f if g == "female" else m
         elif first["kind"] == "employee":
             ctx["اسم_الموظف"], ctx["الوظيفة"], ctx["وحدة_الموظف"] = first["name"], first["c1"], first["c2"]
+        elif first["kind"] == "custom":
+            pass  # 🆕 شخص يدوي — لا متغيرات فردية مخصصة له؛ بياناته تظهر فقط داخل {جدول_الأسماء}
         else:
             ctx["اسم_المدرس"], ctx["الكلية"] = first["name"], first["c1"]
         ctx["قائمة_الأسماء"] = "، ".join(r["name"] for r in rows)
         ctx["عدد_الأسماء"] = str(len(rows))
         ctx["جدول_الأسماء"] = "{جدول_الأسماء}"  # يبقى علامة يرسمها مولّد PDF كجدول
     table = _table_rows([{k: v for k, v in r.items() if not k.startswith("_")} for r in rows])
-    return ctx, table, [{"kind": r["kind"], "id": str(r["_doc"]["_id"]), "name": r["name"], "faculty_id": _people_faculty(r)} for r in rows]
+    return ctx, table, [{"kind": r["kind"], "id": (str(r["_doc"]["_id"]) if r.get("_doc") else ""), "name": r["name"], "faculty_id": _people_faculty(r),
+                          **({"fields": r.get("fields")} if r["kind"] == "custom" else {})} for r in rows]
 
 
 class PreviewIn(BaseModel):
@@ -467,7 +484,7 @@ def _person_recipient(row: dict, suffix: str) -> dict:
 
 async def _per_person_data(db, data: IssueIn, person: dict) -> Optional[IssueIn]:
     """نسخة من بيانات الإصدار لشخص واحد (المتغيرات تُملأ ببياناته، واختيارياً يصبح هو المرسَل إليه)"""
-    row = await _person_row(db, person.get("kind", "student"), person.get("id", ""))
+    row = await _person_row(db, person)
     if not row:
         return None
     d = data.model_copy(update={"people": [person], "per_person": False, "draft_id": None})
