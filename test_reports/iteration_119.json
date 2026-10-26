@@ -1,0 +1,23 @@
+{
+  "summary": "Targeted retest of 3 fixes on the /report-teacher-workload custom builder (مخصص), done with Playwright as admin on the public URL. All 3 fixes pass. FIX1: with the range 2026-01-01..2026-11-01, adding زين سالم showed 3 chips (مقرر اختبار 180156 · م1/أ, دراسات حضرموت · م3, لغة إنجليزية - اختبار · م3). The OvertimeSheet produced by the run listed exactly the same 3 courses. Nothing was in the report without a chip, and no chip was missing from the report. The backend endpoint uses the same course-selection logic as compute_workload: active courses, then the semester filter, then courses from historical lectures in the range. FIX2: with 3 entries (زين, حسن صالح, Saeed), removing the middle one (حسن) left exactly زين and Saeed, and زين's course exclusion was still in place. Removing زين then left only Saeed. FIX3: after each run, tw-custom-sheet-card and the PDF/Excel buttons were visible. They disappeared right away after each of the 4 triggers: add entry, toggle exclusion, change date (to 2026-10-31), and remove entry. They came back after clicking تنفيذ التقرير المخصص again.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: course chips are fetched only when a teacher is added, using the date range at that moment. If the user then changes the date range, the chips are not re-fetched, so they can stop matching the report (for example, دراسات حضرموت stays as a chip after narrowing to Jan–Feb, or a historical course is missing after widening the range). Consider re-fetching /reports/teacher-workload/teacher-courses for every entry when from/to changes, and keeping excludedIds only for courses that still exist."
+  ],
+  "critical_code_review_comments": [
+    "report-teacher-workload.tsx is 657 lines, close to the 700-line limit. Consider moving the custom builder into its own component.",
+    "teacher-courses endpoint: it runs one find_one per historical course (N+1 queries). A single $in query would be better. The impact is minor."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (frontend only)", "frontend": "100% (3/3 fixes)"},
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To switch to custom mode, click the text 'مخصص'. Teacher options use onPressIn, so click them with mouse.down/up. Date inputs: tw-custom-date-from / tw-custom-date-to (fill with YYYY-MM-DD). With the range 2026-01-01..2026-11-01, زين سالم has 3 courses (ids 698f671431cfba92c49a550d, 698f0000d803b27aab0120af, 6ac2c04cb031f88e942618de)."
+}
