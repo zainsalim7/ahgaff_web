@@ -7332,8 +7332,9 @@ async def get_enrolled_students_for_attendance(
     group_filter = {"group": group} if group else None
     if current_user["role"] == UserRole.TEACHER:
         is_owner, keys = await _teacher_group_scope(course, current_user)
-        if is_owner or keys:
-            group_filter = _resolve_group_filter(is_owner, keys, group)
+        if not is_owner and not keys:
+            raise HTTPException(status_code=403, detail="هذا المقرر ليس ضمن مقرراتك")
+        group_filter = _resolve_group_filter(is_owner, keys, group)
     if group_filter:
         enr_q.update(group_filter)
 
@@ -8191,6 +8192,27 @@ async def _attach_group_courses(lectures: list, course_map: dict, teacher_id: Op
             course_map[str(c["_id"])] = c
     return out
 
+
+async def _filter_lectures_by_group_scope(lectures: list, course_map: dict, current_user: dict) -> list:
+    """👥 خط دفاع إضافي: لمدرّس يقود مجموعة محددة ضمن مقرر لا يملكه أساسياً، يُستبعد أي محاضرة لا تُطابق
+    مجموعاته (group ∈ keys) حتى لو مرّت من الفلترة الأساسية بالاعتماد على lectures.teacher_id فقط"""
+    if current_user.get("role") != UserRole.TEACHER:
+        return lectures
+    scope_cache: dict = {}
+    out = []
+    for lec in lectures:
+        cid = lec.get("course_id")
+        course = course_map.get(cid)
+        if not course:
+            out.append(lec)
+            continue
+        if cid not in scope_cache:
+            scope_cache[cid] = await _teacher_group_scope(course, current_user)
+        is_owner, keys = scope_cache[cid]
+        if is_owner or not keys or (lec.get("group") or "") in keys:
+            out.append(lec)
+    return out
+
 # ==================== Lecture Routes (المحاضرات/الحصص) ====================
 
 @api_router.get("/lectures/today")
@@ -8229,6 +8251,7 @@ async def get_today_lectures(
     _alas(_today_q, await _gas(db))
     lectures = await db.lectures.find(_today_q).sort("start_time", 1).to_list(100)
     lectures = await _attach_group_courses(lectures, course_map, _my_tid)
+    lectures = await _filter_lectures_by_group_scope(lectures, course_map, current_user)
     
     # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
     now = get_yemen_time()
@@ -8252,6 +8275,8 @@ async def get_today_lectures(
 
     result = []
     allowed = parse_fields(fields)
+    if allowed:
+        allowed = allowed | {"group", "group_name"}  # 👥 تُضمَّن دائماً كي يعرف العميل مجموعة المحاضرة
     need_attendance = (allowed is None) or ("attendance_count" in allowed) or ("total_enrolled" in allowed)
 
     # 🆕 batch lookup لأسماء الأقسام والكليات
@@ -8498,6 +8523,7 @@ async def get_month_lectures(
     _alas(_month_q, await _gas(db))
     lectures = await db.lectures.find(_month_q).sort("date", 1).to_list(500)
     lectures = await _attach_group_courses(lectures, course_map, _my_tid)
+    lectures = await _filter_lectures_by_group_scope(lectures, course_map, current_user)
     
     # تحديث تلقائي: المحاضرات المجدولة التي انتهى وقتها بدون تحضير → غائب
     now = get_yemen_time()
@@ -8579,10 +8605,13 @@ async def get_month_lectures(
         dates_with_lectures[date].append(lecture_info)
         lectures_list.append(lecture_info)
     
+    _month_allowed = parse_fields(fields)
+    if _month_allowed:
+        _month_allowed = _month_allowed | {"group", "group_name"}  # 👥 تُضمَّن دائماً كي يعرف العميل مجموعة المحاضرة
     return {
         "dates": list(dates_with_lectures.keys()),
         "lectures_by_date": dates_with_lectures,
-        "lectures": apply_fields(lectures_list, parse_fields(fields)),
+        "lectures": apply_fields(lectures_list, _month_allowed),
         "total_lectures": len(lectures_list)
     }
 
@@ -11181,6 +11210,8 @@ async def record_attendance_session(
             {"course_id": lecture["course_id"], "group": lecture["group"]}, {"student_id": 1})}
         records = [r for r in session.records if r.student_id in _allowed]
         skipped_other_group = len(session.records) - len(records)
+        if skipped_other_group:
+            logger.warning(f"attendance/session: تجاهل {skipped_other_group} طالباً خارج مجموعة '{lecture['group']}' للمحاضرة {session.lecture_id} (مقرر {lecture['course_id']})")
 
     # 📐 اللائحة: الأستاذ لا يسجّل «بعذر» (العذر عبر طلب معتمد فقط) ولا «متأخر» (تُعامل حضوراً)؛
     # ومن لديه عذر معتمد يغطي تاريخ المحاضرة يُسجَّل «بعذر» تلقائياً
