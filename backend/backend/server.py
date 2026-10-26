@@ -10398,6 +10398,7 @@ async def reschedule_lecture(
     new_end_time = body.get("end_time")
     new_room = body.get("room")  # اختياري: تغيير القاعة مع إعادة الجدولة
     apply_to_shared = body.get("apply_to_shared", True)  # 🔗 تطبيق على الشعب المشتركة (افتراضياً نعم)
+    force = bool(body.get("force"))  # تأكيد صريح لتجاوز تحذير (دمج شعبتين لنفس الأستاذ/القاعة) — لا يتجاوز أي خطأ صارم
     
     if not new_date:
         raise HTTPException(status_code=400, detail="يرجى تحديد التاريخ الجديد")
@@ -10419,21 +10420,38 @@ async def reschedule_lecture(
     if start_time and end_time and end_time <= start_time:
         raise HTTPException(status_code=400, detail="وقت النهاية يجب أن يكون بعد وقت البداية")
     
-    # فحص تعارض المحاضرات مع نفس الأستاذ
+    # 👥 مجموعة/شعبة هذه المحاضرة — تُمرَّر للفحص تماماً كما في التعديل العادي والإنشاء
+    _eff_group = lecture.get("group") or None
+
+    # فحص تعارض المحاضرات مع نفس الأستاذ (خطأ صارم لا يُتجاوز، وتحذير يتطلب تأكيداً صريحاً force)
     conflict = await check_teacher_lecture_conflict(
-        lecture.get("course_id", ""), new_date, start_time, end_time, exclude_lecture_id=lecture_id, allow_same_course=True
+        lecture.get("course_id", ""), new_date, start_time, end_time,
+        exclude_lecture_id=lecture_id, allow_same_course=True, group=_eff_group
     )
-    if conflict and conflict["type"] == "error":
-        raise HTTPException(status_code=400, detail=conflict["message"])
+    if conflict:
+        if conflict["type"] == "error":
+            raise HTTPException(status_code=400, detail=conflict["message"])
+        elif conflict["type"] == "warning" and not force:
+            raise HTTPException(status_code=409, detail=conflict["message"])
     
     # 🏛️ فحص تعارض القاعة في الموعد الجديد (بالقاعة الجديدة إن غُيّرت)
     effective_room = new_room if new_room else (lecture.get("room", "") or "")
     room_conflict = await check_room_lecture_conflict(
         lecture.get("course_id", ""), effective_room, new_date, start_time, end_time,
-        exclude_lecture_id=lecture_id
+        exclude_lecture_id=lecture_id, group=_eff_group
     )
-    if room_conflict and room_conflict["type"] == "error":
-        raise HTTPException(status_code=400, detail=room_conflict["message"])
+    if room_conflict:
+        if room_conflict["type"] == "error":
+            raise HTTPException(status_code=400, detail=room_conflict["message"])
+        elif room_conflict["type"] == "warning" and not force:
+            raise HTTPException(status_code=409, detail=room_conflict["message"])
+
+    # 👥 تعارض طلاب المستوى/الشعبة مع مقرر آخر في نفس الوقت (قابل للتجاوز بـ force بعد التأكيد)
+    students_conflict = await check_students_lecture_conflict(
+        lecture.get("course_id", ""), new_date, start_time, end_time, group=_eff_group, exclude_lecture_id=lecture_id
+    )
+    if students_conflict and not force:
+        raise HTTPException(status_code=409, detail=students_conflict["message"])
 
     # 🎯 فحص تفضيلات المدرّس في الموعد الجديد
     pref_conflict = await check_teacher_preferences_conflict(

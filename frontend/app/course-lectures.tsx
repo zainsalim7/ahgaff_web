@@ -821,7 +821,7 @@ export default function CourseLecturesScreen() {
     </TouchableOpacity>
   );
 
-  const handleReschedule = async () => {
+  const handleReschedule = async (force: boolean = false) => {
     if (!rescheduleModal) return;
     if (!rescheduleData.date) {
       if (Platform.OS === 'web') window.alert('يرجى اختيار التاريخ الجديد');
@@ -835,13 +835,30 @@ export default function CourseLecturesScreen() {
     }
     setRescheduling(true);
     try {
-      const res = await api.put(`/lectures/${rescheduleModal.lectureId}/reschedule`, { ...rescheduleData, apply_to_shared: siblings.length > 0 ? applyToShared : false });
+      const res = await api.put(`/lectures/${rescheduleModal.lectureId}/reschedule`, { ...rescheduleData, force, apply_to_shared: siblings.length > 0 ? applyToShared : false });
       showNotification('success', res.data.message || 'تم إعادة الجدولة بنجاح');
       setRescheduleModal(null);
       fetchData(1);
     } catch (error: any) {
+      const status = error.response?.status;
       const msg = error.response?.data?.detail || error.message || 'فشل في إعادة الجدولة';
-      showNotification('error', msg);
+      // تحذير قابل للتجاوز بتأكيد صريح (دمج شعبتين لنفس الأستاذ/القاعة) — لا يظهر على الأخطاء الصارمة
+      if (status === 409 && !force) {
+        if (Platform.OS === 'web') {
+          if (window.confirm(msg + '\n\nهل تريد المتابعة؟')) {
+            await handleReschedule(true);
+            return;
+          }
+        } else {
+          Alert.alert('تنبيه', msg, [
+            { text: 'إلغاء', style: 'cancel' },
+            { text: 'متابعة', onPress: () => handleReschedule(true) },
+          ]);
+          return;
+        }
+      } else {
+        showNotification('error', msg);
+      }
     } finally {
       setRescheduling(false);
     }
@@ -1961,7 +1978,7 @@ export default function CourseLecturesScreen() {
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={{ flex: 1, backgroundColor: '#ff9800', padding: 14, borderRadius: 10, alignItems: 'center', opacity: rescheduling ? 0.6 : 1 }}
-                  onPress={handleReschedule}
+                  onPress={() => handleReschedule()}
                   disabled={rescheduling}
                   data-testid="confirm-reschedule-btn"
                 >
