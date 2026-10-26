@@ -123,6 +123,7 @@ export default function TeacherWorkloadReport() {
     if (!isTeacher && navParams.teacherId) {
       setTeacherId(String(navParams.teacherId));
       setTeacherQ(String(navParams.teacherName || ''));
+      setHideEmpty(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -303,10 +304,10 @@ export default function TeacherWorkloadReport() {
                   </Picker>
                 </View>
                 {!!dept && (
-                  <View style={[styles.viewToggle, { marginTop: 6, alignSelf: 'flex-start' }]} testID="tw-dept-mode-toggle">
+                  <View style={[styles.deptModeToggle, { marginTop: 6, alignSelf: 'flex-start' }]} testID="tw-dept-mode-toggle">
                     {([['org', 'ينتمي إليه'], ['teach', 'يُدرّس فيه']] as const).map(([k, l]) => (
-                      <TouchableOpacity key={k} style={[styles.viewBtn, deptMode === k && styles.viewBtnOn]} onPress={() => setDeptMode(k)} testID={`tw-dept-mode-${k}`}>
-                        <Text style={[styles.viewText, deptMode === k && { color: DASH.navy }]}>{l}</Text>
+                      <TouchableOpacity key={k} style={[styles.deptModeBtn, deptMode === k && styles.deptModeBtnOn]} onPress={() => setDeptMode(k)} testID={`tw-dept-mode-${k}`}>
+                        <Text style={[styles.deptModeText, deptMode === k && styles.deptModeTextOn]}>{l}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -639,6 +640,11 @@ const styles = StyleSheet.create({
   viewBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
   viewBtnOn: { backgroundColor: '#fff' },
   viewText: { fontSize: 12, fontWeight: '800', color: '#fff' },
+  deptModeToggle: { flexDirection: 'row-reverse', backgroundColor: '#f1f5f9', borderRadius: 10, padding: 3, gap: 2 },
+  deptModeBtn: { paddingHorizontal: 12, paddingVertical: 6, borderRadius: 8 },
+  deptModeBtnOn: { backgroundColor: DASH.navy },
+  deptModeText: { fontSize: 12, fontWeight: '800', color: DASH.muted },
+  deptModeTextOn: { color: '#fff' },
   actText: { color: '#fff', fontWeight: '800', fontSize: 12 },
   filterRow: { flexDirection: 'row-reverse', gap: 12 },
   courseBox: { backgroundColor: '#f5f3ff', borderWidth: 1, borderColor: '#ddd6fe', borderRadius: 10, padding: 10, marginTop: 10 },

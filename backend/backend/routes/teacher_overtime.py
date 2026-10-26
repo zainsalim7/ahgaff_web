@@ -305,6 +305,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
 
         if course_ids:
             courses = [c for c in courses if str(c["_id"]) in course_ids]
+        _all_course_ids_for_first = {str(c["_id"]) for c in courses}
         if teach_department_id:
             courses = [c for c in courses if str(c.get("department_id") or "") == teach_department_id]
         total_scheduled = total_actual = total_expected = total_shortfall = total_excused = 0.0
@@ -397,6 +398,16 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         # نصاب المدرس حد قاطع: الأسبوعي × الأسابيع الكاملة؛ يبدأ من بداية محاضراته إن كان توليدها بعد بداية الفترة
         firsts = [_d(c["first_lecture_date"]) for c in courses_data if c.get("first_lecture_date")]
         teacher_first = min(firsts) if firsts else None
+        if teach_department_id and _all_course_ids_for_first:
+            # 🆕 نصاب الأستاذ يبقى كاملاً: بداية محاضراته تُحسب من كل مقرراته في الفترة، لا من مقررات هذا القسم فقط
+            _all_lecs = await db.lectures.find({
+                "course_id": {"$in": list(_all_course_ids_for_first)},
+                "$or": [{"date": {"$gte": start_str, "$lte": end_str}}, {"date": {"$gte": start, "$lte": end}}],
+                "is_cancelled": {"$ne": True}, "status": {"$ne": LectureStatus.CANCELLED},
+            }, {"date": 1}).to_list(2000)
+            _all_dates = [d for d in (_d(l.get("date")) for l in _all_lecs) if d]
+            if _all_dates:
+                teacher_first = min(_all_dates)
         effective_weeks, teacher_start_week, teacher_note = total_weeks, 1, ""
         if teacher_first:
             teacher_start_week = (teacher_first.date() - start.date()).days // 7 + 1
@@ -766,7 +777,9 @@ async def export_sheet_pdf(teacher_id: Optional[str] = None, start_date: Optiona
     """📄 كشف الساعات الإضافية — PDF أفقي بشكل الكشف الرسمي"""
     db = get_db()
     start, end = parse_period(start_date, end_date)
-    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id, teach_department_id), start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids), teach_department_id=teach_department_id)
+    exc_doc = await db.report_load_exceptions.find_one({"_id": f"{start.date().isoformat()}_{end.date().isoformat()}"})
+    extra_course_ids = set(exc_doc.get("course_ids", [])) if exc_doc else None
+    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id, teach_department_id), start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids), extra_course_ids=extra_course_ids, teach_department_id=teach_department_id)
     buf = build_sheet_pdf(report, await _issuer(db, current_user), current_user.get("full_name", ""))
     fname = export_filename("كشف الساعات الإضافية للأساتذة", f"{start.strftime('%Y-%m-%d')} الى {end.strftime('%Y-%m-%d')}", ext="pdf")
     return StreamingResponse(buf, media_type="application/pdf", headers=export_headers(fname))
@@ -778,7 +791,9 @@ async def export_sheet_excel(teacher_id: Optional[str] = None, start_date: Optio
     """📊 كشف الساعات الإضافية — Excel (+ ورقة المستحقات المالية عند وجود سعر ساعة)"""
     db = get_db()
     start, end = parse_period(start_date, end_date)
-    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id, teach_department_id), start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids), teach_department_id=teach_department_id)
+    exc_doc = await db.report_load_exceptions.find_one({"_id": f"{start.date().isoformat()}_{end.date().isoformat()}"})
+    extra_course_ids = set(exc_doc.get("course_ids", [])) if exc_doc else None
+    report = await compute_workload(db, await select_teachers(db, current_user, teacher_id, faculty_id, department_id, teach_department_id), start, end, hide_empty, only_overtime, course_ids=parse_course_ids(course_ids), extra_course_ids=extra_course_ids, teach_department_id=teach_department_id)
     out = build_sheet_excel(report, await _issuer(db, current_user))
     fname = export_filename("كشف الساعات الإضافية للأساتذة", f"{start.strftime('%Y-%m-%d')} الى {end.strftime('%Y-%m-%d')}", ext="xlsx")
     return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(fname))

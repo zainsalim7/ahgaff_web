@@ -1,0 +1,46 @@
+{
+  "summary": "I tested the teacher-workload report: the teach_department_id filter, the new teacher-courses button with autorun, and the fix for excluding a course from the load (overtime = max(0, after_bonus - required) + extra_only). Backend pytest: 11 of 12 pass. The failing test is a real bug: required_hours shrinks under teach_department_id when the teacher's courses in other departments start earlier. What passed: teacher selection by taught course department; the course list limited to that department; the ⚠ note; required_hours stays full for teachers who don't start late; the org department_id filter is unchanged; /raised accepts teach_department_id; pdf, excel, sheet-pdf and sheet-excel all return 200 with the correct content-type; an invalid department returns an empty list. The exclusion formula is correct: حسن صالح, April, deficit case: required 48, normal hours 0 after exclusion, extra 1.5, overtime 1.5 (not negative). Busy teacher, September: max(0, 52.5-36) + 9 = 25.5. Frontend: the teacher-courses button navigates with teacherId, teacherName and autorun=1, the teacher name is filled in, and the report runs automatically. The department toggle appears only after a department is chosen, and 'يُدرّس فيه' sends teach_department_id (no faculty_id or department_id) to the report, /raised and all 4 exports. Hide-empty, hide-no-overtime, the sheet view, the exceptions modal and all exports still work.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/reports/teacher-workload?teach_department_id=", "issue": "required_hours is NOT the teacher's full load when the teacher starts late. compute_workload filters courses by teach_department_id (teacher_overtime.py line 308-309) BEFORE computing teacher_first/effective_weeks (lines 398-405). So the late-start reduction uses only that department's courses. Reproduced with teacher زين سالم 698ad3da31ab437a06176e2a, period 2026-04-01..30. With no filter or the org department filter: required 48, effective_weeks 4, first lecture 04-07 (course in الدراسات الإسلامية). With teach_department_id=698e500997fef774e66e93a8: required 24, effective_weeks 2, first lecture 04-14. The ⚠ note then claims 'النصاب هو نصاب الأستاذ الكامل', which is false. Fix: compute teacher_first from ALL of the teacher's courses, or with a cheap min(lecture.date) query over the teacher's lectures in the period, before applying the department filter.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/export/report/teacher-workload/sheet-pdf & sheet-excel", "issue": "These ignore the per-period exceptions (report_load_exceptions). They call compute_workload without extra_course_ids, while GET /reports/teacher-workload, /pdf and /excel apply them. Verified: حسن صالح, April, one course excluded. The UI and API show overtime 1.5, but the sheet-excel shows 0 overtime and the course counted inside the load. The exported official sheet doesn't match what the user sees. Load exc_doc the same way server.py line 13576 does. This may be pre-existing, but it affects the exclusion feature."},
+      {"endpoint": "compute_workload with teach_department_id", "issue": "Possibly a design problem: total_actual and overtime come only from that department's courses, but are compared against the teacher's full load. A teacher who exceeds their load overall can show 0 overtime and a large deficit in the department view. This matches the user's choice to keep the full load, but the note should also say that overtime/الفرق here is not the teacher's real overtime. Otherwise hide overtime/amount in this mode."},
+      {"endpoint": "select_teachers(teach_department_id)", "issue": "Teachers are selected by any active course in the department, regardless of semester. compute_workload then drops courses from other semesters, so a teacher can appear with 0 courses when hide_empty is off. faculty_id is also silently ignored when teach_department_id is set."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "report-teacher-workload department mode toggle", "issue": "The unselected option is invisible. The toggle reuses styles.viewToggle/viewText, which were made for the dark hero header: white text (#fff) on a rgba(255,255,255,0.12) container. Inside the white filter card, the unselected label is white on white. Measured: teach color=rgb(255,255,255) on a transparent background. Users only see the selected option. Give it its own style with dark text, e.g. DASH.muted on #f1f5f9.", "selector": "[data-testid='tw-dept-mode-toggle'] [data-testid='tw-dept-mode-org'|'tw-dept-mode-teach']", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "teacher-courses -> تقرير الساعات الإضافية (autorun)", "issue": "Autorun works, but hideEmpty defaults to true and the period defaults to this month. If the teacher has no lectures this month (e.g. حسن صالح in Oct 2026), the page shows '0 مدرس / لا توجد بيانات', which looks broken. When navParams.teacherId is present, consider hide_empty=false so the teacher's row always shows.", "affected_selectors": ["[data-testid='tw-table']", "[data-testid='tw-hide-empty']"]}
+    ],
+    "design_issues": [
+      {"screen": "report-teacher-workload", "issues": ["The ⚠ department note is also repeated in the yellow late-start banner (tw-late-start-note), adding noise", "The exceptions modal lists many identical 'بلاغة-2 BLG402 / أ.م أحمد بن سميط' rows with no section or level to tell them apart (pre-existing)", "The date filters use the browser's native date input instead of a styled calendar (pre-existing)"]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_teacher_workload_teach_dept.py", "/app/test_reports/pytest/pytest_teach_dept.xml"],
+  "action_items": [
+    "Compute teacher_first/effective_weeks from all of the teacher's courses before the teach_department_id filter (teacher_overtime.py ~line 308 vs 398), so required_hours stays the full load",
+    "Restyle the tw-dept-mode-toggle so the unselected option is visible on the white card",
+    "Apply report_load_exceptions (extra_course_ids) in the sheet-pdf and sheet-excel exports",
+    "Optional: when opened from the teacher page (navParams.teacherId), default hideEmpty=false",
+    "Optional: clarify or hide overtime/difference in department-taught mode, since they compare partial hours against the full load"
+  ],
+  "critical_code_review_comments": [
+    "teacher_overtime.py compute_workload: the department filter is applied before the teacher-level late-start calculation, which causes the required_hours bug",
+    "sheet exports don't share the exception loading of get_teacher_workload_report; move the exceptions lookup into a shared helper",
+    "report-teacher-workload.tsx is 713 lines and server.py is over 19k lines; consider splitting",
+    "The autorun effect depends only on [teacherId] with exhaustive-deps disabled. It works now because params are memoized in the same render, but it's fragile"
+  ],
+  "updated_files": ["/app/backend/tests/test_teacher_workload_teach_dept.py"],
+  "success_rate": {"backend": "92% (11/12)", "frontend": "90% (all flows work; toggle has a visibility bug)"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "None persistent. Temporary exceptions were added for 2026-09-01_2026-09-30 and 2026-04-01_2026-04-30 and restored to their previous course_ids (empty).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Test data: teach dept الشريعة والقانون=698e500997fef774e66e93a8, org dept الدراسات الإسلامية=698e501d97fef774e66e93a9. Cross-department teacher حسن صالح=698e533beb4c6eb021c50302 (April data). Late-start teacher زين سالم=698ad3da31ab437a06176e2a (April: reproduces the required_hours bug). Busy teacher 6aca3346a95d016d773e4692 (Aug/Sep data). The exceptions endpoint is PUT, not POST. Login uses the 'تسجيل الدخول' button (Enter doesn't submit). On manage-teachers, search 'حسن' and click 'تطبيق الفلتر' to see teacher links.",
+  "rca of the issue": "required_hours bug: in compute_workload, `courses` is reduced to teach_department_id courses, and courses_data is built only from those. teacher_first = min(first_lecture_date of courses_data) then sets effective_weeks and required_hours. Teachers whose earliest lecture is in another department get a later start week and a smaller load. Fix: compute teacher_first from an unfiltered set, e.g. a min-date query on db.lectures for teacher_id in the period, or keep the full course list for the first-date calculation."
+}
