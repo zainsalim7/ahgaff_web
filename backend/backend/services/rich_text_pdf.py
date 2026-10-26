@@ -314,6 +314,35 @@ def placeholder_style(html: str, token: str) -> Optional[dict]:
     return None
 
 
+def _hard_break_word(w: dict, max_w: float, align: str) -> List[dict]:
+    """🆕 تقسيم كلمة واحدة متصلة (بلا مسافات) أعرض من عرض الخلية إلى أجزاء تلائم العرض المتاح"""
+    rtl = align.lower() != "left"
+    text = w["text"]
+    if len(text) <= 1:
+        return [w]
+    pieces, chunk = [], ""
+    for ch in text:
+        trial = chunk + ch
+        disp = _fit(_disp(trial, rtl=rtl), w["font"], w["bold"])
+        tw = pdfmetrics.stringWidth(disp, w["font_name"], w["size"])
+        if chunk and tw > max_w:
+            pieces.append(chunk)
+            chunk = ch
+        else:
+            chunk = trial
+    if chunk:
+        pieces.append(chunk)
+    out = []
+    for i, p in enumerate(pieces):
+        nw = dict(w)
+        nw["text"] = p
+        nw["disp"] = _fit(_disp(p, rtl=rtl), w["font"], w["bold"])
+        nw["w"] = pdfmetrics.stringWidth(nw["disp"], nw["font_name"], nw["size"])
+        nw["sp"] = w["sp"] if i == len(pieces) - 1 else 0  # لا فراغ بين أجزاء الكلمة نفسها
+        out.append(nw)
+    return out
+
+
 def _draw_simple_table(c, rows: List[list], x_left: float, x_right: float, y: float, ensure=None, leading: float = 1.4, pad: float = 4) -> float:
     """🆕 جدول حر فارغ يُدرج المستخدم محتواه يدوياً داخل محرر الخطاب — حدود بسيطة + نص منسّق داخل كل خلية"""
     if not rows:
@@ -341,8 +370,10 @@ def _draw_simple_table(c, rows: List[list], x_left: float, x_right: float, y: fl
                     w["w"] = pdfmetrics.stringWidth(w["disp"], w["font_name"], w["size"])
                     w["sp_unit"] = pdfmetrics.stringWidth(" ", w["font_name"], w["size"])
                     w["sp"] = w["sp_unit"] * w.get("gap", 1)
-                lines, cur, cur_w = [], [], 0.0
                 cell_max_w = col_w - 2 * pad
+                # 🆕 تقسيم قسري لكلمة واحدة أعرض من الخلية (بلا مسافات) بدل خروجها من حدود الخلية
+                words = [piece for w in words for piece in (_hard_break_word(w, cell_max_w, align) if w["w"] > cell_max_w else [w])]
+                lines, cur, cur_w = [], [], 0.0
                 for w in words:
                     add = w["w"] + (cur[-1]["sp"] if cur else 0)
                     if cur and cur_w + add > cell_max_w:

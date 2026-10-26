@@ -65,8 +65,12 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
     extensions: [StarterKit, TextStyle, FontFamily, FontSize, Color, TextAlign.configure({ types: ['heading', 'paragraph'], defaultAlignment: defaultAlign }), Placeholder.configure({ placeholder: placeholder || 'اكتب متن الإفادة هنا…' }), Table.configure({ resizable: true }), TableRow, TableHeader, TableCell],
     content: initial || '<p></p>',
     immediatelyRender: false,
+    shouldRerenderOnTransaction: true, // 🆕 تحديث الشريط (إظهار/إخفاء أزرار الجدول) فوراً عند تحريك المؤشر داخل/خارج جدول
     parseOptions: { preserveWhitespace: 'full' }, // 🆕 عدم اختزال الفراغات المتعددة المكتوبة يدوياً بين الكلمات
-    onUpdate: ({ editor: ed }) => onChange(ed.isEmpty ? '' : ed.getHTML()),
+    onUpdate: ({ editor: ed }) => {
+      const html = ed.getHTML();
+      onChange(ed.isEmpty && !html.includes('<table') ? '' : html); // 🆕 عدم اعتبار جدول فارغ "محتوى فارغ" فيُحذف الجدول بالخطأ
+    },
   });
   useEffect(() => {
     if (!editor || editor.isFocused) return;
@@ -101,7 +105,7 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
         <button type="button" style={tb(editor.isActive({ textAlign: 'justify' }))} onClick={run(() => editor.chain().focus().setTextAlign('justify').run())} title="ضبط">☰</button>
         <button type="button" data-testid={`${testID}-align-left`} style={tb(editor.isActive({ textAlign: 'left' }))} onClick={run(() => editor.chain().focus().setTextAlign('left').run())} title="يسار (نص بلغة أجنبية LTR)">⇥</button>
         <span style={{ width: 1, height: 20, backgroundColor: '#cbd5e1', margin: '0 4px' }} />
-        <button type="button" data-testid={`${testID}-insert-table`} style={tb()} onClick={run(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run())} title="إدراج جدول فارغ لتعبئة محتواه يدوياً">⊞ جدول</button>
+        <button type="button" data-testid={`${testID}-insert-table`} style={tb()} disabled={editor.isActive('table')} onClick={run(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: false }).run())} title={editor.isActive('table') ? 'لا يمكن إدراج جدول داخل جدول آخر' : 'إدراج جدول فارغ لتعبئة محتواه يدوياً'}>⊞ جدول</button>
         {editor.isActive('table') && (
           <>
             <button type="button" data-testid={`${testID}-table-add-row`} style={tb()} onClick={run(() => editor.chain().focus().addRowAfter().run())} title="إضافة صف">➕↕</button>
@@ -110,9 +114,9 @@ export const StatementBodyEditor: React.FC<Props> = ({ value, onChange, variable
             <button type="button" data-testid={`${testID}-table-del-col`} style={tb()} onClick={run(() => editor.chain().focus().deleteColumn().run())} title="حذف العمود">➖↔</button>
             <button type="button" data-testid={`${testID}-table-merge`} style={tb()} onClick={run(() => editor.chain().focus().mergeOrSplit().run())} title="دمج/تقسيم الخلايا المحدَّدة">⊡ دمج</button>
             {CELL_FILLS.map((c) => (
-              <button key={c} type="button" style={{ ...tb(), backgroundColor: c, minWidth: 18, width: 18, height: 22, padding: 0 }} onClick={run(() => editor.chain().focus().setCellAttribute('backgroundColor', c).run())} title="تلوين خلفية الخلية" />
+              <button key={c} type="button" data-testid={`${testID}-table-fill-${c.slice(1)}`} style={{ ...tb(), backgroundColor: c, minWidth: 18, width: 18, height: 22, padding: 0 }} onClick={run(() => editor.chain().focus().setCellAttribute('backgroundColor', c).run())} title="تلوين خلفية الخلية" />
             ))}
-            <button type="button" style={{ ...tb(), color: '#64748b' }} onClick={run(() => editor.chain().focus().setCellAttribute('backgroundColor', null).run())} title="إزالة لون الخلفية">⌫</button>
+            <button type="button" data-testid={`${testID}-table-fill-clear`} style={{ ...tb(), color: '#64748b' }} onClick={run(() => editor.chain().focus().setCellAttribute('backgroundColor', null).run())} title="إزالة لون الخلفية">⌫</button>
             <button type="button" data-testid={`${testID}-table-delete`} style={{ ...tb(), color: '#b91c1c' }} onClick={run(() => editor.chain().focus().deleteTable().run())} title="حذف الجدول بالكامل">🗑 جدول</button>
           </>
         )}

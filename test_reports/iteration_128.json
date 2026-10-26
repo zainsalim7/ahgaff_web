@@ -1,0 +1,38 @@
+{
+  "summary": "Frontend E2E test of the letters (/letters) TipTap editor table and signature fixes, run with Playwright as admin. Login was done by calling /api/auth/login and putting token/user in localStorage. Each flow ran in one script, so the page reload/collapse problem did not get in the way. WORKING: (1) Typing in table cells works. Click-drag across cells adds .selectedCell to every selected cell, and the ::after overlay is visible (rgba(0,121,107,.18)). Shift-click also selects a range. (2) Column resize works: the .column-resize-handle appears at the cell edge, and dragging changed widths from [207,207,207] to [126,247,247], with the width written to colgroup. (3) Long text wraps inside the cell in the editor: 80 unbroken chars give p scrollWidth == clientWidth and the row grows taller. (4) add-row (3->4), add-col (3->4), del-row, merge (colspan=2/rowspan=3) and split (back to 9 cells) all work. A colour swatch fills one cell or a whole multi-cell selection (6/6 cells). delete-table works. (5) Paste test, using a synthetic ClipboardEvent with text/html: background-color, the background shorthand and the bgcolor attribute were all kept on the pasted cells. (6) PDF from the UI (save draft -> 'PDF المسودة' download, checked with PyMuPDF): the coloured cell is filled with #fef9c3 behind its text, and normal words wrap inside the middle cell (x 215.4-379.8). DOCX: w:shd fill=FEF9C3 is present. (7) Signature at the default center alignment, 'الختم' + 40 spaces + 'التوقيع': both words are on the same baseline (y=541.1) at x≈375-398 and x≈197-223, a wide gap centred on the page. This was also visible in the live preview PNG. (8) Regression check: a plain letter with no table renders normally, as a 1-page PDF with a normal preview. TWO BUGS FOUND in StatementBodyEditor, plus one minor PDF overflow.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "rich_text_pdf._draw_simple_table (letter PDF)", "issue": "A long word with no spaces (50x 'ب') is not broken inside a table cell in the PDF. It spans x 203.2-375.8 while the cell's left border is at 215.4, so it overflows about 12pt into the next cell. Normal spaced words wrap correctly. The editor does break the word, so the editor and the PDF disagree."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "StatementBodyEditor table toolbar", "issue": "The table toolbar does not follow the cursor. TipTap v3 useEditor does not re-render on each transaction by default, so editor.isActive('table') is only re-checked when the parent re-renders after a content change. Reproduced: (a) insert a table into an EMPTY editor and the toolbar never appears (tb=False) until another field changes; (b) with text plus a table, click a paragraph and the toolbar hides, then click back into a cell and it stays hidden (tb=False). A user who clicks into an existing table, for example in a loaded draft or template, cannot see add-row, colour or delete controls.", "selector": "[data-testid='letter-body-table-add-row']", "priority": "HIGH"},
+      {"component": "StatementBodyEditor onUpdate / value-sync effect", "issue": "The whole table is silently erased when every cell is empty. onUpdate sends '' when ed.isEmpty, and TipTap treats a document holding only an empty table as empty. Result: (a) body='' after inserting an empty table into an empty editor, so the live preview still says 'choose a template or write the body' (اختر قالباً أو اكتب المتن) and saving a draft says the body is required; (b) type text in one cell, then delete that row so the other cells are empty, and the WHOLE TABLE disappears (tables 1 -> 0), because the sync effect then calls clearContent. Reproduced every time.", "selector": "[data-testid='letter-body'] .tiptap table", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Letter body editor", "issues": ["You can insert a table while the cursor is inside a table cell, which creates a nested table. The PDF/DOCX parsers probably do not support nested tables. Consider disabling '⊞ جدول' when editor.isActive('table')."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "StatementBodyEditor: make the toolbar re-render on selection changes. Use useEditor({ shouldRerenderOnTransaction: true, ... }) or useEditorState(selector: ed => ed.isActive('table')) so the table toolbar shows and hides when the cursor enters or leaves a table.",
+    "StatementBodyEditor onUpdate: do not send '' when the document has a table. For example: const hasTable = ed.$nodes('table')?.length or ed.getHTML().includes('<table'); onChange(ed.isEmpty && !hasTable ? '' : ed.getHTML()). Apply the same guard in the clearContent branch of the value-sync useEffect.",
+    "Optional: in rich_text_pdf table cell wrapping, hard-break single words wider than the cell width so unbroken long strings stay inside the border."
+  ],
+  "critical_code_review_comments": [
+    "StatementBodyEditor.tsx:69: ed.isEmpty treats a document containing only an empty table as empty. This is the root cause of the table being erased.",
+    "StatementBodyEditor.tsx:105: editor.isActive('table') is used in render, but TipTap v3 does not re-render on transactions by default, so the toolbar state is stale.",
+    "The colour swatch and eraser buttons had no data-testid. The tester added `${testID}-table-fill-<hex>` and `${testID}-table-fill-clear`."
+  ],
+  "updated_files": ["/app/frontend/src/components/statements/StatementBodyEditor.tsx (added data-testid to the 5 colour swatches and the eraser only, no logic change)"],
+  "success_rate": {"backend": "N/A (skipped per request; PDF/DOCX checked indirectly through UI export)", "frontend": "~85% (all requested features work; 2 high-priority editor-state bugs found)"},
+  "seed_data_creation": "Two TEST_ draft letters (م-61, م-62) were created through the UI and then deleted with DELETE /api/letters/{id}.",
+  "test_credentials": "admin / admin123 (from /app/memory/test_credentials.md)",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login: in page.evaluate, fetch('/api/auth/login') with {username:'admin',password:'admin123'}, then localStorage.setItem('token', d.access_token) and localStorage.setItem('user', JSON.stringify(d.user)), then goto /letters. Editor: [data-testid='letter-body'] .tiptap. The signature editor is in the layout modal ([data-testid='letter-layout-toggle']): [data-testid='letter-layout-signature'] .tiptap. Close the modal with [data-testid='letter-layout-done'] using force=True, then save a draft with [data-testid='letter-draft-btn'] and download with [data-testid='letter-draft-pdf-btn'] via expect_download. Check the PDF with pymupdf words and drawings; the text comes out as Arabic presentation forms. Cell-range drag only works with stepwise mouse.move (20 steps). Paste test: dispatch a ClipboardEvent('paste') with a DataTransfer holding text/html. To retest the bugs: insert a table into an empty editor and check the toolbar; click a paragraph and then a cell and check the toolbar; type in cell0 only, click del-row and check the table still exists.",
+  "rca of the issue": "Bug 1 (toolbar not shown): TipTap v3 sets shouldRerenderOnTransaction=false by default, so selection-only transactions do not re-render the React component and the isActive('table') check stays stale. Bug 2 (table erased): TipTap's isEmpty returns true for a document with only empty block nodes, including an empty table. onUpdate then sends '' to the parent, and the sync effect sees value==='' with a non-empty editor and calls clearContent(), which deletes the table. Fix both as described in action_items."
+}
