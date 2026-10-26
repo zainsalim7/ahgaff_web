@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend E2E test of the Custom Workload Report Builder on /report-teacher-workload (admin, desktop 1920x1080), plus a light regression check of standard mode. All 10 requested flows pass: the mode toggle works; the builder replaces the standard filters; teacher search shows the dropdown; adding the same teacher twice gives distinct keys (teacherId_timestamp); course chips start as included (✓ purple rgb(109,40,217)), turn excluded on click (⏱ amber rgb(180,83,9)) and revert on a second click; the hint appears only on the entry with exclusions and disappears when you revert; exclusions on one copy don't affect the other; removing an entry works; quick ranges and date inputs work; running the report sends the correct POST /api/reports/teacher-workload/custom (200) with entries=[{teacher_id, excluded_course_ids}] and shows the combined OvertimeSheet (2 entries x 5 courses = 10 rows; the excluded course's note says 'مقرر مُستثنى لهذا التقرير فقط'); PDF export (200 application/pdf) and Excel export (200 xlsx) both downloaded. In regression, standard mode came back with summary/table/sheet and the standard Excel and sheet-PDF downloads worked. No React duplicate-key warnings appeared. One medium functional gap: the course chips don't always match the courses the report actually counts.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/reports/teacher-workload/custom", "issue": "Couldn't check the overtime math for excluded courses with real numbers: every course of the test teacher has 0 actual hours in the period. Excluding 'دراسات حضرموت' via the API sets excluded_from_load=true and adds the note, but required/overtime stay the same (expected, since actual=0)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Custom builder course chips (addCustomTeacher)", "issue": "The chips come from GET /api/courses?teacher_id=X&all_semesters=true, but the report builds its own course set: courses whose current teacher_id is X, plus courses the teacher gave lectures for in the period. For زين سالم, the report includes 'دراسات حضرموت' (698f0000d803b27aab0120af): its teacher_id is now another teacher, but زين has lectures for it in the period, and it is the only course with hours. It never appears as a chip, so the admin cannot exclude it from the UI. The opposite also happens: 'مقرر اختبار 180156' (698f671431cfba92c49a550d) is shown as a chip but is missing from the report, so excluding it does nothing.", "selector": "[data-testid^='tw-custom-course-']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Custom report results vs. edited entries", "issue": "After a run, if the admin adds, removes or toggles entries, the sheet (tw-custom-sheet-card) and the export buttons stay visible with the old results. The exports, however, send the current entries, so the downloaded PDF/Excel can differ from the sheet on screen. Suggest clearing customRan/customData whenever entries or dates change, or showing a 'results out of date' hint.", "affected_selectors": ["tw-custom-sheet-card", "tw-custom-export-pdf-btn", "tw-custom-export-excel-btn"]}
+    ],
+    "design_issues": [
+      {"screen": "Custom builder", "issues": ["The quick-range chip 'هذا الشهر' and the date range are shared with standard mode, so changes in one mode carry over to the other. This may be intended, but it isn't communicated.", "The console shows 'Unexpected text node: . A text node cannot be a child of a <View>'. It also appears on page load, so it is probably not caused by this feature, but worth a grep."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "MEDIUM: Build the custom-entry course chips from the same course set the workload report uses for the selected period: active assigned courses plus courses with lectures by this teacher in the period (_hist_only). Otherwise admins cannot exclude courses such as 'دراسات حضرموت' for زين سالم. Option: a backend endpoint such as GET /reports/teacher-workload/teacher-courses?teacher_id&start_date&end_date.",
+    "LOW: Clear the custom results (customRan=false) when entries or dates change after a run, so the exports always match the sheet on screen.",
+    "LOW: Find the source of the 'Unexpected text node: .' console error."
+  ],
+  "critical_code_review_comments": [
+    "report-teacher-workload.tsx is 655 lines, close to the 700-line limit. Consider moving the custom builder into src/components/reports/CustomWorkloadBuilder.tsx.",
+    "The blob download logic is duplicated in download() and downloadCustom() (~10 lines each); extract a shared helper.",
+    "The remove button uses setCustomEntries(customEntries.filter(...)), which reads stale state; prefer the functional updater, as toggleCustomExclude already does.",
+    "Alert.alert is a no-op on react-native-web, so failures in addCustomTeacher, runCustom and downloadCustom are silent on web."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested; custom endpoints returned 200 during the UI flow)", "frontend": "100% of requested flows pass (1 medium data-source gap found)"},
+  "test_credentials": "admin/admin123 from /app/memory/test_credentials.md",
+  "seed_data_creation": "None",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Playwright note: RN-Web dropdown options use onPressIn, and a plain page.click() on them does NOT register (same for the standard tw-teacher-opt-*). Use page.mouse.move to the option's bbox center, then mouse.down(), wait 100ms, mouse.up(). Login: fill the placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور', then click the text 'تسجيل الدخول' (pressing Enter doesn't submit). Teacher زين سالم: 5 chips from /api/courses, while the report shows 5 courses including 'دراسات حضرموت' (hist-only) and omits 'مقرر اختبار 180156'.",
+  "rca of the issue": "Chip/report mismatch: addCustomTeacher calls /api/courses?teacher_id. The backend compute_workload in teacher_overtime.py (lines ~290-314) starts from courses with teacher_id=tid and is_active, then adds courses from db.lectures.distinct('course_id', {teacher_id: tid, date in range}) as _hist_only. Courses that were reassigned but taught in the period are therefore missing from the chips. Fix: return the per-period course list from the backend and use it for the chips."
+}

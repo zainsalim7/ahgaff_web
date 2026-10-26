@@ -134,7 +134,7 @@ export default function TeacherWorkloadReport() {
   const addCustomTeacher = async (t: any) => {
     setCustomTeacherQ(''); setCustomShowList(false);
     try {
-      const r = await api.get('/courses', { params: { teacher_id: t.id, all_semesters: true, fields: 'name,code,level,section,semester_name' } });
+      const r = await api.get('/reports/teacher-workload/teacher-courses', { params: { teacher_id: t.id, start_date: from, end_date: to } });
       setCustomEntries((prev) => [...prev, { key: `${t.id}_${Date.now()}`, teacherId: t.id, teacherName: t.full_name, departmentName: deptName(t.department_id), courses: r.data || [], excludedIds: [] }]);
     } catch { Alert.alert('خطأ', 'تعذر جلب مقررات الأستاذ'); }
   };
@@ -170,6 +170,8 @@ export default function TeacherWorkloadReport() {
       }
     } catch { Alert.alert('خطأ', 'تعذر التصدير'); } finally { setCustomExporting(''); }
   };
+
+  useEffect(() => { setCustomRan(false); setCustomData([]); }, [customEntries, from, to]);
 
   const totals = useMemo(() => {
     const req = data.reduce((s, t) => s + t.summary.required_hours, 0);
@@ -471,7 +473,7 @@ export default function TeacherWorkloadReport() {
             {customEntries.map((e, idx) => (
               <View key={e.key} style={styles.customEntryCard} testID={`tw-custom-entry-${e.key}`}>
                 <View style={styles.customEntryHead}>
-                  <TouchableOpacity onPress={() => setCustomEntries(customEntries.filter((x) => x.key !== e.key))} testID={`tw-custom-entry-remove-${e.key}`}>
+                  <TouchableOpacity onPress={() => setCustomEntries((prev) => prev.filter((x) => x.key !== e.key))} testID={`tw-custom-entry-remove-${e.key}`}>
                     <Ionicons name="trash-outline" size={17} color={DASH.red} />
                   </TouchableOpacity>
                   <Text style={styles.customEntryName}>{idx + 1}. {e.teacherName} <Text style={styles.tSub}>{e.departmentName}</Text></Text>

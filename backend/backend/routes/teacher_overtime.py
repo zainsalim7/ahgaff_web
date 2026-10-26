@@ -768,6 +768,32 @@ async def export_sheet_excel(teacher_id: Optional[str] = None, start_date: Optio
     return StreamingResponse(out, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=export_headers(fname))
 
 
+@router.get("/reports/teacher-workload/teacher-courses")
+async def get_teacher_period_courses(teacher_id: str, start_date: Optional[str] = None, end_date: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    """🆕 مقررات المعلم ضمن فترة التقرير (نفس منطق compute_workload): المقررات النشطة الحالية + مقررات نُفِّذت لها محاضرات في الفترة حتى لو أُعيد إسنادها لمعلم آخر — تُستخدم لبناء شرائح التقرير المخصص"""
+    if current_user.get("role") == UserRole.TEACHER:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if not ObjectId.is_valid(teacher_id):
+        raise HTTPException(status_code=400, detail="معرف معلم غير صالح")
+    db = get_db()
+    start, end = parse_period(start_date, end_date)
+    start_str, end_str = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+    sem = await semester_for_period(db, start_str, end_str)
+    sem_id = (sem or {}).get("id")
+    courses = await db.courses.find({"teacher_id": teacher_id, "is_active": True}).to_list(100)
+    if sem_id:
+        courses = [c for c in courses if not c.get("semester_id") or str(c.get("semester_id")) == sem_id]
+    cur_ids = {str(c["_id"]) for c in courses}
+    for hc in await db.lectures.distinct("course_id", {"teacher_id": teacher_id, "date": {"$gte": start_str, "$lte": end_str}}):
+        if hc not in cur_ids and ObjectId.is_valid(hc):
+            cdoc = await db.courses.find_one({"_id": ObjectId(hc)})
+            if cdoc:
+                courses.append(cdoc)
+    sem_names = {str(s["_id"]): s.get("name", "") for s in await db.semesters.find({}, {"name": 1}).to_list(200)}
+    return [{"id": str(c["_id"]), "name": c.get("name", ""), "code": c.get("code", ""), "level": c.get("level"),
+              "section": c.get("section") or "", "semester_name": sem_names.get(str(c.get("semester_id")), "")} for c in courses]
+
+
 # ==================== تقرير مخصص: تجميع عدة معلمين، كل واحد باختياراته الخاصة ====================
 @router.post("/reports/teacher-workload/custom")
 async def compute_custom_workload(data: CustomWorkloadIn, current_user: dict = Depends(get_current_user)):
