@@ -97,6 +97,7 @@ export default function TakeAttendanceScreen() {
   const [saving, setSaving] = useState(false);
   const [attendanceRecorded, setAttendanceRecorded] = useState(false);
   const [offlineMode, setOfflineMode] = useState(false);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
 
   // === ربط الخطة الدراسية ===
   const [showLessonModal, setShowLessonModal] = useState(false);
@@ -576,6 +577,15 @@ export default function TakeAttendanceScreen() {
   const absentCount = Object.values(attendance).filter(s => s === 'absent').length;
   const excusedCount = Object.values(attendance).filter(s => s === 'excused').length;
 
+  const sortedStudents = sortOrder
+    ? [...students].sort((a, b) => {
+        const cmp = a.full_name.localeCompare(b.full_name, 'ar');
+        return sortOrder === 'asc' ? cmp : -cmp;
+      })
+    : students;
+
+  const cycleSortOrder = () => setSortOrder(sortOrder === null ? 'asc' : sortOrder === 'asc' ? 'desc' : null);
+
   const displayName = course?.name || courseName || 'المقرر';
   const displayDate = lecture?.date ? formatGregorianDate(parseDate(lecture.date), { includeWeekday: true }) : formatGregorianDate(new Date(), { includeWeekday: true });
   
@@ -803,7 +813,13 @@ export default function TakeAttendanceScreen() {
             {/* Students list card */}
             <View style={styles.listCard}>
               <View style={styles.listCardHeader}>
-                <Text style={styles.listCardTitle}>قائمة الحضور</Text>
+                <View style={{ flexDirection: 'row-reverse', alignItems: 'center', gap: 10 }}>
+                  <Text style={styles.listCardTitle}>قائمة الحضور</Text>
+                  <TouchableOpacity onPress={cycleSortOrder} style={styles.sortBtn} data-testid="attendance-sort-btn">
+                    <Ionicons name={sortOrder === 'asc' ? 'arrow-down' : sortOrder === 'desc' ? 'arrow-up' : 'swap-vertical'} size={14} color="#1565c0" />
+                    <Text style={styles.sortBtnText}>{sortOrder === 'asc' ? 'أ ← ي' : sortOrder === 'desc' ? 'ي ← أ' : 'ترتيب أبجدي'}</Text>
+                  </TouchableOpacity>
+                </View>
                 <Text style={styles.listCardCount}>
                   <Text style={styles.listCardCountAccent}>{students.length}</Text> طالب
                 </Text>
@@ -818,7 +834,7 @@ export default function TakeAttendanceScreen() {
               ) : (
                 <View style={{ opacity: (canTakeAttendanceNow || canEditAttendance) ? 1 : 0.5 }}>
                   <FlatList
-                    data={students}
+                    data={sortedStudents}
                     renderItem={renderStudent}
                     keyExtractor={(item) => item.id}
                     contentContainerStyle={{ padding: 10 }}
@@ -1176,6 +1192,8 @@ const styles = StyleSheet.create({
   listCardHeader: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', padding: 14, borderBottomWidth: 1, borderBottomColor: '#eef1f6' },
   listCardTitle: { fontSize: 15, fontWeight: '700', color: '#1a2540' },
   listCardCount: { fontSize: 12, color: '#5b6678' },
+  sortBtn: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4, backgroundColor: '#e3f2fd', paddingHorizontal: 9, paddingVertical: 5, borderRadius: 8 },
+  sortBtnText: { fontSize: 11, fontWeight: '700', color: '#1565c0' },
   listCardCountAccent: { color: '#1565c0', fontWeight: '700' },
 
   // student card

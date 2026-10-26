@@ -163,6 +163,7 @@ export default function CourseStudentsScreen() {
   const [showGroupsModal, setShowGroupsModal] = useState(false);
   const [groupDefs, setGroupDefs] = useState<Array<{ key: string; name: string }>>([]);
   const [groupFilter, setGroupFilter] = useState<string>('');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!courseId) return;
@@ -591,6 +592,15 @@ export default function CourseStudentsScreen() {
     if (!enrolledSearchText) return true;
     return s.full_name.includes(enrolledSearchText) || s.student_number?.includes(enrolledSearchText);
   });
+
+  const sortedEnrolled = sortOrder
+    ? [...filteredEnrolled].sort((a, b) => {
+        const cmp = a.full_name.localeCompare(b.full_name, 'ar');
+        return sortOrder === 'asc' ? cmp : -cmp;
+      })
+    : filteredEnrolled;
+
+  const cycleSortOrder = () => setSortOrder(sortOrder === null ? 'asc' : sortOrder === 'asc' ? 'desc' : null);
   
   const toggleEnrolledSelection = (studentId: string) => {
     setSelectedEnrolled(prev => 
@@ -1050,6 +1060,14 @@ export default function CourseStudentsScreen() {
                 </TouchableOpacity>
               ) : null}
             </View>
+            <TouchableOpacity
+              style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8, gap: 4 }}
+              onPress={cycleSortOrder}
+              data-testid="course-students-sort-btn"
+            >
+              <Ionicons name={sortOrder === 'asc' ? 'arrow-down' : sortOrder === 'desc' ? 'arrow-up' : 'swap-vertical'} size={16} color="#1565c0" />
+              <Text style={{ color: '#1565c0', fontWeight: '700', fontSize: 12 }}>{sortOrder === 'asc' ? 'أ ← ي' : sortOrder === 'desc' ? 'ي ← أ' : 'ترتيب أبجدي'}</Text>
+            </TouchableOpacity>
             {canManageEnrollments && !enrollSelectionMode && (
               <TouchableOpacity
                 style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: '#e3f2fd', paddingHorizontal: 10, paddingVertical: 8, borderRadius: 8 }}
@@ -1190,7 +1208,7 @@ export default function CourseStudentsScreen() {
           </View>
         ) : (
           <FlatList
-            data={filteredEnrolled}
+            data={sortedEnrolled}
             keyExtractor={(item) => item.enrollment_id}
             renderItem={(props) => {
               if (enrollSelectionMode) {
