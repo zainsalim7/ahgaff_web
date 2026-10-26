@@ -10571,6 +10571,19 @@ async def get_lecture_details(
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
     
     course = await db.courses.find_one({"_id": ObjectId(lecture["course_id"])})
+    if not course:
+        raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    # 🔒 التحقق من الصلاحية: فقط مدرّس المقرر/المحاضرة (أو قائد مجموعتها) يرى تفاصيلها، لا أي مستخدم مسجّل دخول
+    if current_user["role"] == UserRole.TEACHER:
+        user_doc = await db.users.find_one({"_id": ObjectId(current_user["id"])})
+        teacher_record_id = user_doc.get("teacher_record_id") if user_doc else None
+        _lec_teacher = lecture.get("teacher_id")
+        if course["teacher_id"] != current_user["id"] and course["teacher_id"] != teacher_record_id \
+                and _lec_teacher not in (current_user["id"], teacher_record_id):
+            raise HTTPException(status_code=403, detail="غير مصرح لك بعرض تفاصيل هذه المحاضرة")
+    elif current_user["role"] == UserRole.STUDENT:
+        raise HTTPException(status_code=403, detail="غير مصرح")
     
     # الطلاب المسجلين في المقرر (أو في مجموعة المحاضرة فقط 👥)
     enr_q = {"course_id": lecture["course_id"]}
@@ -11090,6 +11103,18 @@ async def record_attendance_session(
                 and _lec_teacher not in (current_user["id"], teacher_record_id):
             raise HTTPException(status_code=403, detail="غير مصرح لك بتسجيل حضور هذا المقرر")
     
+    # 👥 محاضرة مجموعة: تُقبل سجلات طلاب تلك المجموعة فقط (حماية من نسخة قديمة من التطبيق) — تُطبَّق
+    # قبل أي مسار (حفظ مباشر أو طلب اعتماد العميد) حتى لا تتسرب طلبات تعديل لطلاب خارج مجموعة المحاضرة
+    records = session.records
+    skipped_other_group = 0
+    if lecture.get("group"):
+        _allowed = {e["student_id"] async for e in db.enrollments.find(
+            {"course_id": lecture["course_id"], "group": lecture["group"]}, {"student_id": 1})}
+        records = [r for r in session.records if r.student_id in _allowed]
+        skipped_other_group = len(session.records) - len(records)
+        if skipped_other_group:
+            logger.warning(f"attendance/session: تجاهل {skipped_other_group} طالباً خارج مجموعة '{lecture['group']}' للمحاضرة {session.lecture_id} (مقرر {lecture['course_id']})")
+    
     # === التحقق من قواعد التحضير ===
     now = get_yemen_time()
     
@@ -11174,7 +11199,7 @@ async def record_attendance_session(
         # 🆕 مسار اعتماد العميد: تعديل خارج المهلة من مستخدم غير ADMIN/DEAN
         if is_bypass_edit and current_user["role"] not in [UserRole.ADMIN, UserRole.DEAN]:
             diff_result = await create_change_requests_for_diff(
-                lecture, course, session.records, current_user, reason=session.notes
+                lecture, course, records, current_user, reason=session.notes
             )
             return {
                 "status": "pending_approval",
@@ -11201,17 +11226,6 @@ async def record_attendance_session(
     
     # Delete existing attendance for this lecture (فقط إذا لم تكن مكتملة)
     await db.attendance.delete_many({"lecture_id": session.lecture_id})
-    
-    # 👥 محاضرة مجموعة: تُقبل سجلات طلاب تلك المجموعة فقط (حماية من نسخة قديمة من التطبيق)
-    records = session.records
-    skipped_other_group = 0
-    if lecture.get("group"):
-        _allowed = {e["student_id"] async for e in db.enrollments.find(
-            {"course_id": lecture["course_id"], "group": lecture["group"]}, {"student_id": 1})}
-        records = [r for r in session.records if r.student_id in _allowed]
-        skipped_other_group = len(session.records) - len(records)
-        if skipped_other_group:
-            logger.warning(f"attendance/session: تجاهل {skipped_other_group} طالباً خارج مجموعة '{lecture['group']}' للمحاضرة {session.lecture_id} (مقرر {lecture['course_id']})")
 
     # 📐 اللائحة: الأستاذ لا يسجّل «بعذر» (العذر عبر طلب معتمد فقط) ولا «متأخر» (تُعامل حضوراً)؛
     # ومن لديه عذر معتمد يغطي تاريخ المحاضرة يُسجَّل «بعذر» تلقائياً

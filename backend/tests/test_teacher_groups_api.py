@@ -20,7 +20,7 @@ def admin():
 
 @pytest.fixture(scope="module")
 def g1_teacher():
-    return _login("222222", "test1234")
+    return _login("222222", "teacher123")
 
 
 def test_students_group_param_and_field(admin):

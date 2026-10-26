@@ -36,7 +36,15 @@
 - Username: 9999
 - Password: teacher123  (أُعيد تعيينها 2026-08-09)
 
-## Student (يدخل بأي من الخيارين)
+## Teacher (group-leader, created/reset 2026-10-26 for P0 group-isolation testing)
+- Username: 222222   (زين سالم، قائد المجموعة "1" في مقرر "دراسات حضرموت")
+- Password: teacher123
+- teacher_id (سجل): 698ad3da31ab437a06176e2a
+
+## Teacher (primary, reset 2026-10-26)
+- Username: teacher180156   (أستاذ اختبار 180156، المدرس الأساسي لمقرر "دراسات حضرموت")
+- Password: teacher123
+
 - Username: 234   (رقم القيد)
 - أو: AUB2501234   (الرقم المرجعي)
 - Password: 234

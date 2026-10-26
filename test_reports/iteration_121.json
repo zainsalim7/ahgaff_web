@@ -1,0 +1,33 @@
+{
+  "summary": "Ran an independent backend check of the P0 group-leader scope fix. All 19 new tests pass in tests/test_group_leader_scope_p0.py. The tests use real accounts: 222222 leads group 1 of course 698f0000d803b27aab0120af, teacher180156 is that course's primary teacher, plus admin and dean (Salim). (1) enrollments/students: 222222 with no group param gets only the 24 group-1 students (checked against the enrollments collection in the DB). group=2 and group=zzz both return 403. group=1 returns the same set as no param. The primary teacher, admin and dean all get the full list. 222222 gets 403 on an unrelated grouped course and the full list on his own course that has no groups. teacher180156 gets 403 on an unrelated course. (2) lecture-stats as 222222 equals admin's group=1 stats, and group=2 returns 403. (3) lectures/month with fields=id,course_id,date keeps group and group_name, and other fields are still stripped. Tested as 222222, the primary teacher and admin. The group-2 lecture 6ac234164b7f763cfb72f01a, whose teacher_id is 222222, is now excluded from his month view, while the group-1 lecture is kept. lectures/today with fields= keeps group and group_name. (4) attendance/session uses a temporary group-1 lecture created and then deleted in Mongo. As 222222, mixed records (2 in-group, 3 out-of-group) return 200 with skipped_other_group=3, only the 2 in-group students are saved, and the warning is logged in backend.err.log. If all records are out of group: 200, skipped_other_group=2, nothing saved. Regressions: test_lecture_swaps_flow.py prints ALL OK. test_role_based_attendance.py has 9 passed, 1 skipped and only the known failure test_admin_has_no_teacher_only_permissions. test_teacher_groups_api.py has 4 passed after updating 222222's password in that file. While probing other endpoints I found 2 older authorization gaps in the same area that this fix did not touch.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/lectures/{lecture_id}/details", "issue": "No authorization check at all (older code, not part of this fix). Any logged-in user gets the lecture's student list: names, student numbers and attendance status. Reproduced: group leader 222222 read group 2's 24 students via another teacher's group-2 lecture 6ac23ac3217500e782b95df5. Unrelated teacher 9999 and student 1001 also got 200 with 24 students. This undoes the group-scope fix for any client that calls details.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/lectures/{course_id}", "issue": "No teacher or group scope check. 222222 and the unrelated teacher 9999 both get 200 with the full lecture list of course 698f0000d803b27aab0120af. 222222 with group=2 also gets 200 (empty list) instead of 403. This is inconsistent with lecture-stats and enrollments/students."},
+      {"endpoint": "GET /api/lectures/today", "issue": "total_enrolled counts every enrollment in the course, not only the lecture's group. A group leader sees a total of 72 while only 24 students are theirs."},
+      {"endpoint": "_filter_lectures_by_group_scope (today/month)", "issue": "Design edge case: a teacher who owns a course and also leads one of its groups gets is_owner=False with non-empty keys. Their lectures for the whole section (empty group) are then dropped from today and month. Confirm this is intended."},
+      {"endpoint": "POST /api/attendance/session (pending_approval branch)", "issue": "create_change_requests_for_diff receives the unfiltered session.records. Edits after the deadline can still create change requests for students outside the lecture's group. The group filter is only applied after that branch returns."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_group_leader_scope_p0.py", "/app/backend/tests/test_teacher_groups_api.py", "/app/test_reports/pytest/p0_group_scope.xml"],
+  "action_items": [
+    "Add authorization and group scope to GET /api/lectures/{lecture_id}/details. Teachers should pass only if they own the course, are the lecture's teacher_id, or lead lecture.group. Deny students, or limit them to themselves. Other roles need view_lectures/view_attendance permission.",
+    "Add a teacher scope to GET /api/lectures/{course_id} using _teacher_group_scope and _resolve_group_filter (403 for unrelated teachers and for groups the teacher does not lead).",
+    "Filter session.records by group before calling create_change_requests_for_diff in attendance/session.",
+    "Optional: limit total_enrolled in /lectures/today to the lecture's group, and confirm the course-owner-who-also-leads-a-group behaviour in _filter_lectures_by_group_scope."
+  ],
+  "critical_code_review_comments": [
+    "The enrollments/students fix is correct: it now matches the lecture-stats pattern (403 when is_owner=False and keys are empty, otherwise _resolve_group_filter).",
+    "Students enrolled with group=None (24 in this course) are visible only to the primary teacher, not to either group leader. This is expected, but those students cannot be marked in any group lecture.",
+    "server.py is 19.4k lines; the group-scope helpers should move into a separate module."
+  ],
+  "updated_files": ["/app/backend/tests/test_group_leader_scope_p0.py (new)", "/app/backend/tests/test_teacher_groups_api.py (222222 password changed from test1234 to teacher123)"],
+  "success_rate": {"backend": "100% of the requested acceptance criteria (19/19 new tests plus regressions); 1 HIGH and 4 minor issues found in adjacent code", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "None kept. The attendance tests insert a temporary group-1 lecture (notes=TEST_p0_group_scope) and delete it afterwards, together with its attendance and attendance_operations rows. Cleanup verified: 0 left.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Course 698f0000d803b27aab0120af has groups 1 (teacher record 698ad3da..., user 222222/teacher123) and 2 (teacher record 698bc059..., Saeed), plus 24 students with no group. The primary teacher is teacher180156/teacher123, matched by user _id. Lecture 6ac234164b7f763cfb72f01a is a group-2 lecture stamped with 222222's teacher_id and must stay hidden from him. Run: REACT_APP_BACKEND_URL=... pytest tests/test_group_leader_scope_p0.py tests/test_teacher_groups_api.py. Next run should re-test /lectures/{id}/details and /lectures/{course_id} once they are fixed."
+}
