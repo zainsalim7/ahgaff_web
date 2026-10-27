@@ -105,7 +105,7 @@ def filter_table(tbl: dict, columns) -> dict:
     return {**tbl, "headers": out_h, "rows": [[cell(i, r, t, p) for t, p in picks] for i, r in enumerate(rows)]}
 
 
-def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: bool = True) -> bytes:
+def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: bool = True, meta: dict = None) -> bytes:
     """letterhead=False: طباعة على ورق مطبوع مسبقاً (بلا ترويسة ولا تذييل) مع الحفاظ على مواضع المحتوى"""
     import arabic_reshaper
     import qrcode
@@ -401,6 +401,9 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     sig_img = _img("signature_base64")
     s_align, s_off = str(L.get("signature_align") or "left"), f("signature_offset") * mm
     sig_cx = (W / 2) if s_align == "center" else (RM - s_off - 22 * mm) if s_align == "right" else (LM + s_off + 22 * mm)
+    if meta is not None:
+        # 🖋️ إحداثيات أعلى كتلة التوقيع بالمليمتر (من اليسار/الأعلى) — تُستخدم بالواجهة لوضع مقبض السحب فوق موضعها الحقيقي بدقة
+        meta["sig_x_mm"], meta["sig_y_mm"] = round(sig_cx / mm, 1), round((H - y) / mm, 1)
     sfam = str(L.get("signature_font_family") or "amiri")
     if "signature" in secs:
         y0 = y

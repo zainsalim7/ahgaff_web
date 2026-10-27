@@ -1,0 +1,32 @@
+{
+  "summary": "Frontend-only test of the new signature drag-to-reposition overlay on /letters (admin). The drag works: right, far-right, left, down, dragging in the layout modal, the existing numeric inputs, issuing the letter and checking the downloaded PDF all passed. A smoke test of the rest of the page (template pick, people picker search, table settings panel, draft save) also passed, and no page errors appeared. One UX problem: the handle's vertical start position is wrong. It sits about 30-40mm (about 100-130px at desktop size) BELOW the real signature text, often on top of the QR code.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "SignatureDragOverlay", "issue": "The handle's vertical (Y) position is estimated with LETTER_MODEL.positions(), which does not follow the real body text. The handle always lands well below the signature (seen in every screenshot: signature at y≈478, handle at y≈605 in the scaled screenshot). After a right-align drag it covers the QR code. Users won't see that the red handle is 'over the signature'. Possible fix: return the signature's y/x (in mm) from the preview endpoint, for example in a response header like X-Sig-Y, and use that value instead of the estimate.", "selector": "[data-testid='letter-preview-sig-drag-handle']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Letters preview", "issues": ["The handle overlaps the QR code when signature_align is right, which looks confusing."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Fix the handle's Y position so it sits over the actual rendered signature (use the real y from the backend preview instead of the LETTER_MODEL estimate).",
+    "Optional: support touch by switching to pointer events (onPointerDown plus pointermove/pointerup) so the drag works on tablets and phones.",
+    "Optional: update dims on window resize (ResizeObserver). Right now dims only update on img onLoad, so the handle position goes stale if the layout is resized before the next preview refresh.",
+    "Optional: any drag, even a purely horizontal one, also writes gap_signature into layout, which counts as an extra override in the 'تخطيط الصفحة (n تعديل)' badge. Only write gap_signature when the vertical change is not zero."
+  ],
+  "critical_code_review_comments": [
+    "SignatureDragOverlay.tsx: mouse events only (onMouseDown plus window mousemove/mouseup). There is no touch or pointer support, even though this is an Expo/RN-Web app.",
+    "SignatureDragOverlay.tsx: onLayoutChange runs on every mousemove. That is fine because of the 700ms debounce, but each move also re-renders the whole letters page. Acceptable for now.",
+    "Main and modal previews are passed layoutDefaults={...layoutDefaults, ...settings.layout}. If the selected letterhead has its own layout overrides (merged by the backend), the handle's starting X could differ from the rendered signature. It matched in this test with the general letterhead."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "95% (all functional checks passed; the only failure is the handle's vertical placement)"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "Issued letter 40/خ/26 (subject 'TEST_ سحب التوقيع PDF', recipient 'TEST_ مستلم'). Saved draft p-92 (template 'ترشيح طلاب للتدريب الميداني' + ' TEST_draft').",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Measured results: dragging the main handle +200px moved the signature from left to center. +450px gave right (offset 0). -400px gave left. Dragging down 80px set gap_signature 16 to 40 (clamped). Dragging in the modal +220px gave right. Typing 20 in the offset input changed the preview and moved the handle. The issue payload's layout was {signature_align:'right', signature_offset:0, gap_signature:35}, and the downloaded PDF shows the signature right-aligned with the larger gap. The handle is not rendered before body text is typed (count 0). Issuing needs a recipient: use letter-rec-manual-mode + letter-rec-name."
+}

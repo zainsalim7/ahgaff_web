@@ -674,12 +674,14 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool =
     doc = {**(await _compose(db, data, settings)), "auto_table": not per_person, "serial": seq, "number_display": format_number(series.get("format"), seq, year) + " (معاينة)", "year": year,
            "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
     doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادر"}
-    pdf = build_letter_pdf(doc, settings, draft=True, letterhead=letterhead)
+    meta: dict = {}
+    pdf = build_letter_pdf(doc, settings, draft=True, letterhead=letterhead, meta=meta)
+    sig_headers = {"X-Sig-X-Mm": str(meta.get("sig_x_mm", "")), "X-Sig-Y-Mm": str(meta.get("sig_y_mm", ""))}
     if fmt == "png":
         import pymupdf
         page = pymupdf.open(stream=pdf, filetype="pdf")[0]
-        return StreamingResponse(io.BytesIO(page.get_pixmap(dpi=110).tobytes("png")), media_type="image/png", headers={"Cache-Control": "no-store"})
-    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Cache-Control": "no-store"})
+        return StreamingResponse(io.BytesIO(page.get_pixmap(dpi=110).tobytes("png")), media_type="image/png", headers={"Cache-Control": "no-store", **sig_headers})
+    return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Cache-Control": "no-store", **sig_headers})
 
 
 @router.get("/letters")

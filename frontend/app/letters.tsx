@@ -33,6 +33,7 @@ export default function LettersPage() {
   const [body, setBody] = useState('');
   const [preview, setPreview] = useState('');
   const [previewImg, setPreviewImg] = useState('');
+  const [sigPos, setSigPos] = useState<{ x: number; y: number } | null>(null);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewLetterhead, setPreviewLetterhead] = useState(true);
   const [recMode, setRecMode] = useState<'list' | 'manual'>('list');
@@ -127,7 +128,12 @@ export default function LettersPage() {
       const payload = issuePayload();
       if (sample) { payload.body = '<p style="text-align: right">هذا نص تجريبي لمعاينة تخطيط الصفحة — يظهر مكانه متن الخطاب عند كتابته.</p>'; payload.subject = payload.subject || 'نموذج لمعاينة التخطيط'; if (!Object.keys(payload.recipient).length) payload.recipient = { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }; }
       api.post(`/letters/preview-pdf?fmt=png&letterhead=${previewLetterhead}`, payload, { responseType: 'blob' })
-        .then((r) => { const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' })); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; }); })
+        .then((r) => {
+          const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' }));
+          setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; });
+          const sx = parseFloat(r.headers['x-sig-x-mm']), sy = parseFloat(r.headers['x-sig-y-mm']);
+          setSigPos(Number.isFinite(sx) && Number.isFinite(sy) ? { x: sx, y: sy } : null);
+        })
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
@@ -299,7 +305,7 @@ export default function LettersPage() {
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة الحقيقية {previewBusy ? '⏳' : ''}</div>
                     {previewImg ? (
                       <SignatureDragOverlay src={previewImg} alt="معاينة" imgTestId="letter-layout-preview" wrapTestId="letter-layout-sig-drag"
-                        layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0}
+                        layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0} sigPos={sigPos}
                         imgStyle={{ boxShadow: '0 4px 14px rgba(0,0,0,.15)' }} />
                     ) : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري توليد المعاينة…</div>}
                     <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>🖋️ المقبض الأحمر فوق التوقيع — اسحبه لتحريك موضعه مباشرة</div>
@@ -354,7 +360,7 @@ export default function LettersPage() {
             {!recipient && !(isBatch && personAsRec) && body.trim() && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>⚠️ المرسَل إليه لم يُحدد بعد — ستظهر بياناته في المعاينة عند اختياره</div>}
             {previewImg ? (
               <SignatureDragOverlay src={previewImg} alt="معاينة الخطاب" imgTestId="letter-preview-img" wrapTestId="letter-preview-sig-drag"
-                layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0} />
+                layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0} sigPos={sigPos} />
             ) : (
               <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif', color: '#94a3b8', textAlign: 'center', padding: 40 }}>{body.trim() ? 'جاري توليد المعاينة…' : 'اختر قالباً أو اكتب المتن لتظهر المعاينة هنا'}</div>
             )}
