@@ -262,7 +262,7 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
 
     y = H - f("start_y") * mm
     page_idx = 0  # 🆕 عدّاد الصفحات (0 = الأولى) — يُستخدم لمعرفة رقم الصفحة التي يقع فيها التوقيع فعلياً
-    BOTTOM_SAFE = 54 * mm  # 📏 الحد الأدنى المسموح به فوق الذيل — صفحة جديدة فقط عند الاقتراب الفعلي منه (لا حجز زائد)
+    BOTTOM_SAFE = 28 * mm  # 📏 الحد الأدنى فوق التذييل (يغطي خط الفاصل 22مم/صورة التذييل حتى 24مم + هامش أمان بسيط) — صفحة جديدة فقط عند الاقتراب الفعلي من التذييل لا قبله بفراغ كبير
     def ensure(space):
         nonlocal y, page_idx
         if y - space < BOTTOM_SAFE:
