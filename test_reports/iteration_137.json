@@ -1,0 +1,21 @@
+{
+  "summary": "Scoped re-test of the 3 iteration_136 fixes plus a light regression pass. All 3 fixes are VERIFIED. FIX A: on a 45-paragraph, 3-page letter with a manual signatory, a drag on page 3 keeps the label at 'صفحة 3 من 3' in both the main preview and the layout modal (2 drags each), and the handle stays visible. In the main preview the handle moved 80px; in the modal it moved about 105px. The page reset on content edits is preserved: editing the subject or the body goes back to 'صفحة 1 من 3' with prev disabled. FIX B: scan_letter_orphan_sig_iter136.py rerun shows 8-12 paragraphs give 1 page with X-Sig-Page=0. Counts 13-17 still orphan the signature, which is the documented tradeoff and not reported. FIX C: issued PDF with layout.qr_style='footer' and 2 pages has exactly ONE QR on the last page (14mm, bottom-left, 'Scan to verify' once) and the 9mm mini QR on page 1. With qr_style='normal' (3 pages) the mini QR is on every page including the last, and the 26mm full QR is on the last page. Regression: single-page issue gives 1 page with no mini QR or 1/1 number. Draft save/update/pdf/finalize/delete PASS. The multipage iter136 tests (6), manual custom columns (8) and custom people (11) all pass. UI issue through letter-issue-btn triggered the PDF download. Pager prev/next and disabled states work.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_iter137_fixes.py", "/app/backend/tests/scan_letter_orphan_sig_iter136.py", "/app/backend/tests/test_letters_multipage_iter136.py", "/app/backend/tests/test_letters_drafts.py", "/app/test_reports/pytest/pytest_iter137.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "letters.tsx: contentKey no longer includes layout, and layout is a separate dependency of the preview effect. This is correct. The contentChanged reset returns early and then refetches on the next run, which works.",
+    "Observation (not a bug, inconclusive): in the layout modal a second quick small left drag (-40px) right after a right drag did not move the handle. The first modal run also showed no movement on a left drag, which appeared to be the left-margin clamp. The page did not reset. Optional manual check only."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_iter137_fixes.py"],
+  "success_rate": {"backend": "100% (6/6 new + 25 regression pytest + drafts script PASS)", "frontend": "100% (FIX A main + modal, content-reset regression, pager, issue download)"},
+  "seed_data_creation": "Issued several TEST_iter137 letters (counter incremented; issued letters can't be deleted by design).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "test_letters_iter137_fixes.py covers FIX B (8/10/12 paragraphs on a single page) and FIX C. For FIX C, qr_like() excludes the header logo, which is a square 27mm image near the top; filter on bottom > 240mm. In the UI, use evaluate('e=>e.click()') for the pager buttons because they can be outside the viewport. Open the layout modal with letter-layout-toggle and close it with letter-layout-done; the modal handle is letter-layout-sig-drag-handle. test_letters_drafts.py is a plain script; run it with python3, not pytest."
+}
