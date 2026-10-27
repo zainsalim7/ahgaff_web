@@ -1,0 +1,35 @@
+{
+  "summary": "Tested per-person values for EMPTY custom table columns for manual persons in the Letters people table ({جدول_الأسماء}). Result: WORKING end-to-end. Backend: new file test_letters_manual_custom_columns.py passes 8/8. It covers preview-body raw_fields, a filter_table unit test (manual vs constant column, plus a legacy table with no raw_fields), the preview-pdf text, issue → PDF + DOCX text counts, draft save → re-save → finalize, sanitizing of empty and non-string values, the default-columns regression, and issue-batch per-person. Broader letters + lecture-conflict regression: 102/105 pass. The 3 failures are the same pre-existing ones in test_letters_spaces_tables_iter125.py already reported in iteration_132, and they are not caused by this change. UI (Playwright, admin): (1) Added manual person A, then added the empty column 'التوقيع' through letter-table-cols-add-custom with 2 prompts (second left blank). The panel showed '✎ التوقيع (فارغ)'. (2) The manual form then showed letter-person-manual-extra-التوقيع with placeholder 'التوقيع (عمود مخصص)'. Before the column existed there was no extra input. (3) Added person B with XSIG99. The input reset after adding. In the live preview, XSIG99 appeared only in B's row and A's cell was blank. (4) Saved a draft (م-90). The API confirmed inputs.people[1].fields.التوقيع=XSIG99, layout.table_columns has {label:'التوقيع',text:''}, and table.raw_fields is correct. (5) Reloaded the draft via /letters?id=...: chips and the extra input were restored. (6) Added a DB student (mixed table) and a constant column 'ملاحظة'='CONST88'. The preview showed CONST88 in all 3 rows and XSIG99 only in row 2. (7) Approved and issued the draft as 35/خ/26. The downloaded PDF (with and without letterhead) has XSIG99 once, on the same y-position as row 2, and CONST88 three times. The DOCX table rows are exactly ['1','TEST_شخص أ','يدوي','111','','CONST88'] / ['2','TEST_شخص ب','يدوي','','XSIG99','CONST88'] / ['3','محمد أحمد علي','طالب','12345','','CONST88']. Lecture-overlap smoke check: test_update_lecture_conflict_force.py passes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "services/letter_pdf.filter_table (manual column)", "issue": "An empty custom column whose label matches a system field (e.g. 'الهاتف', 'البريد', 'الكلية') silently shows each student's/employee's DB value, because raw_fields holds the full DB fields dict. This may be surprising, but it is arguably acceptable."},
+      {"endpoint": "tests/test_letters_spaces_tables_iter125.py", "issue": "Pre-existing: 3 stale or known failures (the cell dict shape changed, and the spaces-across-runs gap is 2 instead of 3). Same as iteration_132."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Letters > manual person form", "issues": ["The extra-column input is 130px wide, so the placeholder 'التوقيع (عمود مخصص)' gets truncated. Widen it slightly or use a shorter placeholder."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_manual_custom_columns.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "OPTIONAL (UX gap): manual persons added BEFORE an empty custom column was created, and DB-picked students/employees/teachers, cannot have a per-row value filled. There is no edit action on a chip. Consider an edit action on chips or a per-cell grid editor.",
+    "OPTIONAL: when the people kinds become mixed after columns were configured, the saved label 'الجهة' no longer matches the mixed header 'الجهة / الكلية', so that column silently disappears from the table. This was seen in the UI after adding a student to a custom-only draft. It is pre-existing behaviour.",
+    "LOW: update the stale tests in test_letters_spaces_tables_iter125.py."
+  ],
+  "critical_code_review_comments": [
+    "_person_row(custom) drops empty and non-string extra values (good, and verified). Extra keys that collide with fixed keys (الاسم/الصفة/الرقم/الجهة) are ignored by design.",
+    "filter_table looks up a manual column by raw_fields[i].get(label). For non-custom rows, raw_fields contains the DB fields, so a label collision exposes DB data (see minor issue).",
+    "Letters issued before this change have no raw_fields, so manual columns render blank without crashing (unit-tested).",
+    "app/letters.tsx and PeoplePicker.tsx: customColumns is derived correctly from layout.table_columns, and it is also restored when a draft is loaded."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_manual_custom_columns.py"],
+  "success_rate": {"backend": "100% (8/8 new; 102/105 broader regression, 3 pre-existing failures unrelated to this change)", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_ letters: draft م-90 → issued 35/خ/26 (id 6ae02503e05931daf09e9d24, now revoked), plus batch letters from the test run (revoked). The pytest file deletes its own drafts and revokes its issued letters.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "UI login: use the placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور', then click the text 'تسجيل الدخول' (pressing Enter does not submit). Draft load URL: /letters?id=<id>. Handle the custom-column prompts with page.on('dialog') and accept with a queued list [label, text]. PDF text assertions work with ASCII markers such as XSIG77 or CONST55 (Arabic text is reshaped). Run pytest with REACT_APP_BACKEND_URL exported."
+}

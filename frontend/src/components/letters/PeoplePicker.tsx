@@ -39,7 +39,7 @@ export const PeoplePicker = ({ kind, people, onChange, customColumns = [] }: { k
             <input style={{ ...inp, width: 130 }} placeholder="الجهة (اختياري)" value={mOrg} onChange={(e) => setMOrg(e.target.value)} data-testid="letter-person-manual-org" />
             <input style={{ ...inp, width: 90 }} placeholder="رقم (اختياري)" value={mCode} onChange={(e) => setMCode(e.target.value)} data-testid="letter-person-manual-code" />
             {customColumns.map((c) => (
-              <input key={c} style={{ ...inp, width: 130, borderColor: '#fcd34d' }} placeholder={`${c} (عمود مخصص)`} value={mExtra[c] || ''} onChange={(e) => setMExtra({ ...mExtra, [c]: e.target.value })} data-testid={`letter-person-manual-extra-${c}`} />
+              <input key={c} style={{ ...inp, width: 170, borderColor: '#fcd34d' }} placeholder={`${c} (عمود مخصص)`} value={mExtra[c] || ''} onChange={(e) => setMExtra({ ...mExtra, [c]: e.target.value })} data-testid={`letter-person-manual-extra-${c}`} />
             ))}
             <button type="button" onClick={addManual} disabled={!mName.trim()} style={{ padding: '6px 12px', borderRadius: 6, border: 'none', background: '#ea580c', color: '#fff', fontWeight: 700, fontSize: 12, cursor: mName.trim() ? 'pointer' : 'not-allowed', opacity: mName.trim() ? 1 : 0.5 }} data-testid="letter-person-manual-add">إضافة</button>
             <button type="button" onClick={() => setManual(false)} style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #e2e8f0', background: '#fff', fontSize: 12, cursor: 'pointer' }} data-testid="letter-person-manual-cancel">إلغاء</button>
