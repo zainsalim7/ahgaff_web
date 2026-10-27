@@ -254,6 +254,7 @@ def _apply_draw_gaps(line: List[dict]) -> List[dict]:
     """🆕 بعد إعادة الترتيب البصري (BiDi)، تصحيح عرض الفجوة بعد كل كلمة لتطابق الفجوة الفعلية الأصلية بينها
     وبين جارتها البصرية التالية (مهم عند تداخل مقاطع لاتينية متعددة الكلمات داخل سطر عربي والعكس)"""
     n = len(line)
+    by_idx = {w.get("idx"): w for w in line if w.get("idx") is not None}
     for i, w in enumerate(line):
         if i == n - 1:
             w["_draw_sp"] = w.get("sp", 0)
@@ -264,12 +265,11 @@ def _apply_draw_gaps(line: List[dict]) -> List[dict]:
             w["_draw_sp"] = w.get("sp", 0)
         elif ni is not None and wi == ni + 1:
             w["_draw_sp"] = nxt.get("sp", 0)
-        elif wi is not None and ni is not None and ni > wi:
-            # 🆕 حد فاصل أمامي بين مقطعين (عربي↔لاتيني) بعد انعكاس مجموعة متعددة الكلمات بصرياً: الفجوة
-            # الصحيحة هي فجوة الكلمة الحالية نفسها (ما بعدها منطقياً)، وليست فجوة افتراضية بمسافة واحدة
-            w["_draw_sp"] = w.get("sp", 0)
-        elif wi is not None and ni is not None and wi > ni:
-            w["_draw_sp"] = nxt.get("sp", 0)
+        elif wi is not None and ni is not None:
+            # 🆕 جاران بصريان غير متجاورين منطقياً (بعد انعكاس مجموعة متعددة الكلمات BiDi): الفجوة الصحيحة
+            # هي أقصى فجوة مخزَّنة على أي كلمة منطقية تقع بينهما فعلياً، أياً كان موقعها البصري الفعلي
+            lo, hi = min(wi, ni), max(wi, ni)
+            w["_draw_sp"] = max((by_idx[k].get("sp", 0) for k in range(lo, hi) if k in by_idx), default=w.get("sp_unit", w.get("sp", 0)))
         else:
             w["_draw_sp"] = w.get("sp_unit", w.get("sp", 0))
     return line

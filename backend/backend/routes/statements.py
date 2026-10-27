@@ -57,7 +57,7 @@ def _var_ctx(student: dict, dept, faculty, academic_year_display: str, nationali
         "اسم_الطالب": student.get("full_name", ""),
         "رقم_القيد": student.get("student_id", ""),
         "الجنسية": (nationality or student.get("nationality") or "يمني").strip(),
-        "المستوى": LEVEL_AR.get(student.get("level") or 1, str(student.get("level") or "")),
+        "المستوى": (LEVEL_AR.get(student.get("level"), str(student.get("level"))) if student.get("level") else ""),
         "التخصص": ((dept or {}).get("name", "") or "").strip(),
         "الكلية": ((faculty or {}).get("name", "") or "").strip(),
         "العام_الجامعي": academic_year_display,
