@@ -55,9 +55,10 @@ def number_pages_buf(buf: io.BytesIO, title: str = "", **kw) -> io.BytesIO:
 def decorate_multipage(pdf: bytes, *, ref: str = "", date: str = "", verify: str = "", mini_qr: bool = True, continuation: bool = True,
                        header_y_mm: float = 48, footer_y_mm: float = 3, margin_mm: float = 20, skip_qr_on_last: bool = False) -> bytes:
     """يرجع الـPDF كما هو إن كان صفحة واحدة؛ وإلا يضيف لكل صفحة: «تابع الخطاب رقم … — بتاريخ …» تحت الكليشة مباشرة (من
-    الصفحة 2)، وشارة أنيقة صغيرة أسفل يمين الصفحة بين نهاية المتن وبداية صورة/خط التذييل (24-32مم من الأسفل تقريباً):
+    الصفحة 2)، وشارة أنيقة صغيرة أسفل يمين الصفحة بين نهاية المتن وبداية صورة/خط التذييل (25-33مم من الأسفل تقريباً):
     رقم الصفحة «صفحة n من N» + QR مصغّر للتحقق + «يُتبع…» إن لم تكن الأخيرة. هذا الشريط فوق التذييل مباشرة فلا يتداخل مع
-    شعار/معلومات الجهة المرسومة فيه، ولا يأخذ أي حيّز من متن الرسالة (المتن محجوز له حدّ أدنى 33مم فوق التذييل أصلاً)."""
+    شعار/معلومات الجهة المرسومة فيه، ولا يأخذ أي حيّز من متن الرسالة (المتن محجوز له حدّ أدنى 37مم فوق التذييل أصلاً،
+    والـQR الكبير بجانب التوقيع يُرفع حدّه الأدنى في الصفحات المتعددة كي لا يتصادم مع الشارة)."""
     from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import mm
@@ -83,7 +84,7 @@ def decorate_multipage(pdf: bytes, *, ref: str = "", date: str = "", verify: str
         show_qr = qr_img is not None and not (skip_qr_on_last and i == n - 1)
         qsz = 6.8 * mm
         chip_h, chip_w = 8 * mm, (34 * mm if show_qr else 24 * mm)
-        cx1, cy1 = W - margin_mm * mm - chip_w, 24 * mm
+        cx1, cy1 = W - margin_mm * mm - chip_w, 25 * mm
         c.saveState()
         c.setFillColorRGB(0.93, 0.97, 0.93); c.setStrokeColorRGB(0.0, 0.5, 0.13); c.setLineWidth(0.6)
         c.roundRect(cx1, cy1, chip_w, chip_h, 1.6 * mm, fill=1, stroke=1)
@@ -93,7 +94,7 @@ def decorate_multipage(pdf: bytes, *, ref: str = "", date: str = "", verify: str
         c.setFillColorRGB(0.0, 0.5, 0.13); c.setFont("Amiri-Bold", 7.5)
         c.drawRightString(text_right, cy1 + chip_h / 2 + 1, _ar(f"صفحة {i + 1} من {n}"))
         c.setFillColorRGB(0.5, 0.52, 0.55); c.setFont("Amiri", 5.5)
-        c.drawRightString(text_right, cy1 + 1.6, _ar("يُتبع…") if i < n - 1 else _ar("التحقق من الأصالة") if show_qr else "")
+        c.drawRightString(text_right, cy1 + 1.8, _ar("يُتبع…") if i < n - 1 else _ar("التحقق من الأصالة") if show_qr else "")
         c.restoreState()
         c.showPage(); c.save(); ob.seek(0)
         page.merge_page(PdfReader(ob).pages[0])

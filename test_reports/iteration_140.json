@@ -1,0 +1,38 @@
+{
+  "summary": "Tested the new page-number chip from decorate_multipage (صفحة n من N + mini QR, placed 24-32mm from the bottom, right side) and BOTTOM_SAFE=33mm. Method: new pytest file with PDF geometry analysis in pymupdf (vector drawings, text spans and image bboxes), high-DPI visual zooms, a custom footer image (24mm) injected via letterhead_override to reproduce the user's complaint, and an HR preview with a long body. Also ran Playwright on the /letters live preview. WORKING: the chip sits above the footer image or separator line and no longer overlaps them. Footer image spans 0-24mm and the chip 24-32mm. The chip appears on every page of multipage letters. 'يُتبع…' shows on non-last pages only, and the last page shows 'التحقق من الأصالة'. With qr_style=footer the last page has no mini QR and a narrower chip. The 'تابع الخطاب رقم … بتاريخ' header appears from page 2 only. Single-page letters get no chip. HR multipage gets a text-only chip in the white area above the gold footer band, with no overlap with the HR QR or the Ref/Date or Verify text. UI pager works ('صفحة 1 من 3' then 2/3) and the chip is visible in the preview PNG. The iter139 regression suite passes (8 passed, 1 skipped). BROKEN: (1) CRITICAL: on the last page with qr_style=normal, the chip is drawn ON TOP of the large verification QR when the signature is low on the page. qr_y has a floor of 30mm and the QR sits at x=162-188mm, while the chip covers x=158-192mm and y=24-32mm. This hides about 2mm of the QR's bottom rows, including part of the bottom-left finder pattern, and fully hides the 'Scan to verify' label. Reproduced at k=20, 22 and 24 paragraphs in previews, and on 4 real issued letters via GET /api/letters/{id}/pdf. (2) The last body line on non-last pages collides with the chip's top edge. Baselines stop at 33mm, but Arabic descenders reach about 30.2mm, so the text bbox overlaps the chip (top at 32mm) by about 1.8mm. Visually, the descender of 'ص' cuts the chip's green border. Seen on page 1 for k=12-30. (3) The chip's second line ('يُتبع…' or 'التحقق من الأصالة') has its baseline only 0.56mm above the chip bottom. Its descenders cross the chip border down to 23.3mm and touch the footer image. The chip also sits flush on the footer image with zero gap. (4) Minor, existing since iter139 and not a regression: k=11 still gives a 2-page letter where page 2 holds only one body fragment line plus the closing and signature.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/letters/preview-pdf & GET /api/letters/{id}/pdf (letter_pdf.py qr_style=normal + pdf_pages.decorate_multipage)", "issue": "The chip overlaps and covers the bottom of the large verification QR and the whole 'Scan to verify' label on the last page whenever qr_y hits its 30mm floor (letter_pdf.py: qr_y = max(30*mm, y-36*mm), qx = RM-4mm-qr_size, which is the same right side as the chip at y 24-32mm). This can break QR scanning on real issued letters.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "letter_pdf.py BOTTOM_SAFE=33mm vs chip top at 32mm", "issue": "BOTTOM_SAFE is checked against the baseline, so descenders of the last body line extend to about 30.2mm and overlap the chip top (32mm) by about 1.8mm. Visibly, the 'ص' descender crosses the chip border. Needs about 3mm more clearance: BOTTOM_SAFE about 36mm, or a chip about 24.5-30mm tall, or both."},
+      {"endpoint": "pdf_pages.decorate_multipage chip 2nd line", "issue": "The 2nd-line text baseline is at cy1+1.6pt, so the text overflows below the chip's bottom border (bbox reaches 23.3mm against a chip bottom of 24mm) and touches the footer image. The chip also has a 0mm gap above the footer image. Suggest cy1 = 25mm and second-line baseline at cy1+2.2mm."},
+      {"endpoint": "pdf_pages.decorate_multipage", "issue": "The footer_y_mm parameter is now unused (dead argument still passed by letter_pdf.py and hr_letter_pdf.py). The chip y is hard-coded to 24mm regardless of caller. This works for HR now, but is fragile if bottom_margin_mm changes."},
+      {"endpoint": "auto-shrink orphan guard", "issue": "Residual edge case from iter139 is unchanged: k=11 of ~17-word paragraphs gives page 2 with one body fragment line plus the signature. Not caused by the 28→33mm change."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Letter PDF / preview chip", "issues": ["At the 110dpi preview the chip is very small and 'يُتبع…' is barely legible.", "The mini QR is 6.8mm for a full verify URL; modules are about 0.2mm, so it is marginal to scan when printed (consider a 9-10mm QR or a shorter verify URL)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_page_chip_iter140.py", "/app/backend/tests/explore_chip_iter140.py", "/app/test_reports/pytest/iter140.xml"],
+  "action_items": [
+    "HIGH: Prevent the chip from covering the last-page verification QR (qr_style=normal). Either raise the qr_y floor to ≥37mm when the page count is >1 (QR plus 'Scan to verify' label must clear 32mm), or move the big QR left of the chip (qx ≤ W-margin-chip_w-2mm), or skip/shift the chip on the last page when the QR is low.",
+    "Give the last body line clearance above the chip: BOTTOM_SAFE ≈ 36mm (baseline) or a lower and shorter chip (e.g. 25-31mm). Re-run the orphan scan afterwards.",
+    "Keep the chip's second-line text inside the chip and add a ≥1mm gap above the footer image (chip from 25mm, second-line baseline at about cy1+2.2mm).",
+    "Optional: remove or use the dead footer_y_mm argument."
+  ],
+  "critical_code_review_comments": [
+    "pdf_pages.decorate_multipage draws the chip on top of already-rendered content (merge_page overlay) with an opaque fill, so any content in the 24-32mm right zone gets hidden. letter_pdf draws its large QR exactly there (floor 30mm) and the body reaches 30mm with descenders.",
+    "chip_y is hard-coded to 24mm and footer_y_mm is ignored, so the HR and letter engines no longer control placement."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_page_chip_iter140.py", "/app/backend/tests/explore_chip_iter140.py"],
+  "success_rate": {"backend": "55% (6/11 chip tests pass; failures are real layout issues; the HR failure is mainly a false positive from the full-page letterhead background, and the HR chip is visually OK)", "frontend": "100% (preview pager and chip render)"},
+  "seed_data_creation": "None. Previews only (no serial consumed). The custom footer image was injected via letterhead_override and was not saved.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: cd /app/backend/tests && pytest test_letters_page_chip_iter140.py -s (about 60s). chip() finds the roundRect by fill (0.93,0.97,0.93), and chip_collisions() lists text spans and images hitting it. test_hr_multipage_chip currently flags the full-page HR letterhead background image (0,0,210,297) as a collision; that is a false positive, so filter images wider than 100mm in chip_collisions before re-running. Custom footer image simulation: letterhead_override={'footer_image_base64': footer_png()} on /api/letters/preview-pdf. Repro for the QR overlap: body(22) with default layout, last page. Four TEST_iter139 issued letters in the DB also show it."
+}

@@ -262,7 +262,7 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
 
     y = H - f("start_y") * mm
     page_idx = 0  # 🆕 عدّاد الصفحات (0 = الأولى) — يُستخدم لمعرفة رقم الصفحة التي يقع فيها التوقيع فعلياً
-    BOTTOM_SAFE = 33 * mm  # 📏 الحد الأدنى فوق التذييل (خط الفاصل 22مم/صورة التذييل حتى 24مم + شارة ترقيم الصفحات أعلاها 24-32مم + هامش أمان بسيط) — صفحة جديدة فقط عند الاقتراب الفعلي من التذييل لا قبله بفراغ كبير
+    BOTTOM_SAFE = 37 * mm  # 📏 الحد الأدنى فوق التذييل (خط الفاصل 22مم/صورة التذييل حتى 24مم + شارة ترقيم الصفحات أعلاها 25-33مم + هامش أمان كافٍ لذيول الأحرف) — صفحة جديدة فقط عند الاقتراب الفعلي من التذييل لا قبله بفراغ كبير
     def ensure(space):
         nonlocal y, page_idx
         if y - space < BOTTOM_SAFE:
@@ -462,7 +462,8 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
             c.setFillColorRGB(0, 0, 0)
         else:
             qr_size = f("qr_size") * mm
-            qr_y = max(30 * mm, y - 36 * mm)  # 📍 يلتصق بنهاية المتن إن كانت الصفحة شبه فارغة (بدل ثبوته بفراغ كبير أسفلها)، ولا ينزل عن 30مم فوق الذيل
+            qr_floor = (40 if page_idx > 0 else 30) * mm  # 🆕 في الصفحات المتعددة، يرتفع الحد الأدنى كي لا يتداخل مع شارة ترقيم الصفحات أعلى التذييل (33مم)
+            qr_y = max(qr_floor, y - 36 * mm)  # 📍 يلتصق بنهاية المتن إن كانت الصفحة شبه فارغة (بدل ثبوته بفراغ كبير أسفلها)
             qx = RM - 4 * mm - qr_size
             c.drawImage(qr_img, qx, qr_y, qr_size, qr_size)
             c.setFont("Helvetica", 8); c.drawCentredString(qx + qr_size / 2, qr_y - 4 * mm, "Scan to verify")
