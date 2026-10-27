@@ -1,0 +1,28 @@
+{
+  "summary": "Frontend retest of the signature drag handle position fix on /letters (admin), plus the other changes from this round. FIXED: the handle now sits exactly on the rendered signature title. The preview response headers return X-Sig-X-Mm/X-Sig-Y-Mm (for example 40.0/136.8), and the handle centre measures at the same x mm with y = sig_y+4mm. It no longer sits below the signature or over the QR code, in the main preview and in the layout-modal preview. A purely horizontal drag (+450px) sends only {signature_align:'right', signature_offset:0} and the badge shows '(2 تعديل)', so no extra gap_signature is added. A drag with a vertical component (down ~80px) adds gap_signature 40 (clamped) and the badge shows '(3 تعديل)'. The handle follows the moved signature after the preview refreshes. A combined drag (+250px right, +50px down) gave issue payload layout {center, 0, gap_signature:32}. In the issued PDF (41/خ/26) the signature title spans x 90.4-119.6mm (centre 105.0) at y 152.1mm, matching the preview headers (105.0/152.8). With no manual signatory (letterhead default), the handle renders at a sensible spot and there are no page errors. A template whose signatory comes from the position lookup also gets a handle placed exactly on 'رئيس الجامعة'. Resizing the window from 1920 to 1280 with the modal open kept the handle at the same relative mm (105.0/156.8). Smoke checks passed: template pick, people search, table settings panel, draft save (م-93). No page errors in any run.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Letters preview", "issues": ["The handle (34px circle) is centred on the signature title text and covers its first word or two (for example 'عميد ■ختبار'). Consider offsetting it slightly above or beside the text, or making it semi-transparent, so users can still read what they are dragging."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional UX: while the mouse is held down, the handle no longer follows the cursor. xMm/yMm come from the stale sigPos until the next preview response arrives (700ms debounce + network). Possible fix: while dragging, render the handle at drag-start position + pointer delta; switch back to sigPos after the refresh.",
+    "Optional: the handle covers the signature title text. Nudge it, for example to top = sig_y - 3mm or to one side of the block."
+  ],
+  "critical_code_review_comments": [
+    "SignatureDragOverlay: next = {...layout, ...}. If the user drags down (which sets gap_signature) and then, in the same drag, moves back to within 1.5mm of the start, the stale gap_signature from the earlier move stays in layout. Edge case only.",
+    "The preview PNG renders page 1 only, but meta sig_y_mm is taken from wherever the signature is drawn. If a long body or table pushes the signature onto page 2, the handle will be drawn at the page-2 y on top of the page-1 image. Consider returning a page index in the headers, or hiding the handle when the signature page is not 1.",
+    "sigPos stays set to the last successful response. If a later preview request fails (.catch is silent), the handle may stay at the old position. Acceptable."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested; headers confirmed through the UI network responses)", "frontend": "100% (all 8 requested scenarios passed)"},
+  "test_credentials": "admin/admin123",
+  "seed_data_creation": "Issued letter 41/خ/26 (subject 'TEST_ تحقق موضع التوقيع', recipient 'TEST_ مستلم'). Saved draft م-93 (template 'خطاب ترشيح طلاب للتدريب' + ' TEST_draft135').",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Measured: with a manual signatory and short body, headers were X-Sig-X-Mm 40.0 and X-Sig-Y-Mm 136.8. The handle centre maps to (sig_x, sig_y+4) mm on the preview image (img width 647px = 210mm at 1920 viewport). Dragging +450px horizontally gave right/0 with no gap_signature. Dragging -200px/+80px gave center + gap 40. Dragging +250px/+50px from the default gave center + gap 32, and the PDF matched the preview. To issue, the subject must be filled (letter-subject), otherwise an alert blocks the action. Recipient: letter-rec-manual-mode + letter-rec-name."
+}

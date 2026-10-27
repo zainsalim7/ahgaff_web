@@ -30,11 +30,18 @@ export const SignatureDragOverlay: React.FC<Props> = ({ src, alt, imgTestId, wra
   // 🎯 نفضّل دائماً الموضع الحقيقي المُستلم من آخر توليد PDF فعلي (sigPos) على التقدير التقريبي
   const xMm = sigPos ? sigPos.x : xMmEstimate;
   const yMm = sigPos ? sigPos.y + 4 : yMmEstimate;
+  // 👆 أثناء السحب نفعلياً نتتبع المؤشر مباشرة (دلتا بكسل)، ثم نعود لاعتماد sigPos الحقيقي بعد تحديث المعاينة
+  const [liveDelta, setLiveDelta] = useState<{ dx: number; dy: number } | null>(null);
+  const shownXMm = liveDelta && dims.w ? xMm + liveDelta.dx * (PAGE_W / dims.w) : xMm;
+  const shownYMm = liveDelta && dims.h ? yMm + liveDelta.dy * (PAGE_H / dims.h) : yMm;
 
   const startDrag = (clientX: number, clientY: number) => {
     drag.current = { startX: clientX, startY: clientY, xMm0: xMm, gap0: num('gap_signature', 16) };
+    setLiveDelta({ dx: 0, dy: 0 });
     setDragging(true);
   };
+
+  React.useEffect(() => { if (!dragging) setLiveDelta(null); }, [sigPos]); // eslint-disable-line react-hooks/exhaustive-deps
 
   React.useEffect(() => {
     if (!wrapRef.current) return;
@@ -50,6 +57,7 @@ export const SignatureDragOverlay: React.FC<Props> = ({ src, alt, imgTestId, wra
     const mmPerPxX = dims.w ? PAGE_W / dims.w : 0, mmPerPxY = dims.h ? PAGE_H / dims.h : 0;
     const move = (clientX: number, clientY: number) => {
       if (!drag.current || !mmPerPxX) return;
+      setLiveDelta({ dx: clientX - drag.current.startX, dy: clientY - drag.current.startY });
       const dyMm = (clientY - drag.current.startY) * mmPerPxY;
       const newX = drag.current.xMm0 + (clientX - drag.current.startX) * mmPerPxX;
       let newAlign = 'center', newOffset = 0;
@@ -81,7 +89,7 @@ export const SignatureDragOverlay: React.FC<Props> = ({ src, alt, imgTestId, wra
           data-testid={`${wrapTestId}-handle`}
           title="🖋️ اسحب لتحريك موضع التوقيع — يميناً/يساراً لتغيير الجهة والإزاحة، وأعلى/أسفل لتغيير مسافته عن الخاتمة"
           style={{
-            position: 'absolute', left: (xMm / PAGE_W) * dims.w, top: (yMm / PAGE_H) * dims.h, transform: 'translate(-50%, -50%)',
+            position: 'absolute', left: (shownXMm / PAGE_W) * dims.w, top: (shownYMm / PAGE_H) * dims.h - 15, transform: 'translate(-50%, -50%)',
             cursor: dragging ? 'grabbing' : 'grab', width: 30, height: 30, borderRadius: '50%', touchAction: 'none',
             background: dragging ? '#be123c' : 'rgba(190,18,60,.85)', display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#fff', fontSize: 15, fontWeight: 900, boxShadow: '0 2px 10px rgba(0,0,0,.35)', border: '2px solid #fff', userSelect: 'none', zIndex: 5,
