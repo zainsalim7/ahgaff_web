@@ -1,0 +1,27 @@
+{
+  "summary": "Retested the iter140 chip fixes (chip 25-33mm, BOTTOM_SAFE=37mm, big-QR floor 40mm on multipage last page) with pymupdf geometry checks, 600dpi pixel checks and zoomed renders. Results: 27 passed, 2 failed, 1 skipped. FIXED: (1) The chip vs large QR collision (CRITICAL in iter140) is fixed. For k=10..32 the large QR bottom is always at 40mm or higher on multipage last pages (k=18-23 and k=31-32 hit the floor), so the gap to the chip top (33mm) is 7mm. The 'Scan to verify' label is fully clear of the chip. (2) Body text vs chip top is fixed. The minimum span bbox clearance including descenders is 2.16mm above the chip top over k=10..32 on all pages. (3) The chip has a 1.0mm gap above the custom 24mm footer image (letterhead_override) and above the default separator line. (4) Single-page letters have no chip. (5) Orphan guard scan k=5..30: no orphan pages (k<=10: 1 page, 11-23: 2 pages, 24-30: 3 pages), so the window did not widen. (6) HR multipage (5 pages): text-only chip at x 164-188mm, y 25-33mm, with no mini QR and no clash with the HR QR or the Ref/Date or Verify text. STILL BROKEN (minor): the chip's 2nd line ('يُتبع…' / 'التحقق من الأصالة') still overflows the chip's bottom border. Its span bbox is 24.40-27.82mm against a chip bottom of 25.00mm, and real ink goes down to 24.63mm. The 600dpi zoom shows the descenders of ي (in يتبع) and ق (in التحقق) crossing the green bottom border. Root cause: pdf_pages.py line 97 uses `cy1 + 1.8`, which is in POINTS (0.635mm), not 1.8mm as stated in the review request.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "pdf_pages.decorate_multipage (line 97)", "issue": "The 2nd-line baseline is `cy1 + 1.8` in points (0.635mm), not 1.8mm. The Amiri 5.5pt descenders (ي / ق / ع) cross the chip's bottom border by about 0.4mm and touch it on every page, though they no longer touch the footer image (1mm gap). Fix: use `cy1 + 1.8*mm`, and if needed nudge the 1st line up (for example `cy1 + chip_h/2 + 1.5`) so the two lines don't collide."},
+      {"endpoint": "pdf_pages.decorate_multipage", "issue": "The footer_y_mm parameter is still unused (dead argument), and the chip y is hard-coded at 25mm."},
+      {"endpoint": "pdf_pages.decorate_multipage", "issue": "Cosmetic: the damma in 'يُتبع' doesn't show in the rendered text (shaping drops the diacritic at 5.5pt)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_letters_page_chip_iter141.py", "/app/backend/tests/explore_chip_iter141.py", "/app/test_reports/pytest/iter141.xml"],
+  "action_items": [
+    "Minor: in pdf_pages.py line 97, change `cy1 + 1.8` to `cy1 + 1.8 * mm` (units bug) so the 2nd chip line stays fully inside the chip. Then rerun test_letters_page_chip_iter141.py::test_chip_text_inside_and_footer_gap."
+  ],
+  "critical_code_review_comments": [
+    "letter_pdf.py: qr_floor = 40mm when page_idx>0 is correct, since page_idx>0 only happens on multipage letters where the chip exists. Single-page letters keep 30mm and have no chip.",
+    "qr_style=footer draws the small QR at LM (x=20mm), y=24mm. It is on the left, so it doesn't clash with the right-side chip.",
+    "Hard-coded chip geometry (25/33mm) is duplicated as magic numbers in BOTTOM_SAFE (37mm) and qr_floor (40mm). Consider shared constants."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_page_chip_iter141.py", "/app/backend/tests/explore_chip_iter141.py", "/app/backend/tests/test_letters_bottom_safe_iter139.py (threshold for the lowest PARA block raised 45→50mm, which is expected with BOTTOM_SAFE 37mm)"],
+  "success_rate": {"backend": "93% (27/29; both failures are the same minor chip 2nd-line overflow)", "frontend": "not tested (not requested)"},
+  "seed_data_creation": "none (previews only)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Use test_letters_page_chip_iter141.py (chip 25-33mm). test_letters_page_chip_iter140.py::test_chip_geometry hard-codes 24-32mm and is now obsolete. Zoom renders are saved to /tmp/i141_*.png by explore_chip_iter141.py."
+}

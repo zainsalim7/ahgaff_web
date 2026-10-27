@@ -94,7 +94,7 @@ def decorate_multipage(pdf: bytes, *, ref: str = "", date: str = "", verify: str
         c.setFillColorRGB(0.0, 0.5, 0.13); c.setFont("Amiri-Bold", 7.5)
         c.drawRightString(text_right, cy1 + chip_h / 2 + 1, _ar(f"صفحة {i + 1} من {n}"))
         c.setFillColorRGB(0.5, 0.52, 0.55); c.setFont("Amiri", 5.5)
-        c.drawRightString(text_right, cy1 + 1.8, _ar("يُتبع…") if i < n - 1 else _ar("التحقق من الأصالة") if show_qr else "")
+        c.drawRightString(text_right, cy1 + 1.8 * mm, _ar("يُتبع…") if i < n - 1 else _ar("التحقق من الأصالة") if show_qr else "")
         c.restoreState()
         c.showPage(); c.save(); ob.seek(0)
         page.merge_page(PdfReader(ob).pages[0])

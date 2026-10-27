@@ -68,7 +68,7 @@ def test_long_body_close_to_footer_no_overlap(s, n):
     assert int(r.headers["X-Sig-Page"]) == d.page_count - 1
     p0 = lowest_para_bottom_mm(d[0])
     print(f"n={n} pages={d.page_count} page0 lowest body line bottom={p0:.1f}mm")
-    assert p0 is not None and 22 <= p0 <= 45, f"body bottom on page 1 at {p0}mm"
+    assert p0 is not None and 22 <= p0 <= 50, f"body bottom on page 1 at {p0}mm"  # iter141: BOTTOM_SAFE 37mm
     # signature name on last page
     assert "TEST_SIGNAME" in d[-1].get_text() or "SIGNAME" in d[-1].get_text()
 
