@@ -75,9 +75,12 @@ def merge_layout(*parts) -> dict:
 
 
 def filter_table(tbl: dict, columns) -> dict:
-    """يُبقي الأعمدة المختارة بترتيبها: نص = عمود من بيانات النظام، {label, text} = عمود مخصص (فارغ أو نص ثابت).
+    """يُبقي الأعمدة المختارة بترتيبها: نص = عمود من بيانات النظام، {label, text} = عمود مخصص.
+    العمود المخصص بنص ثابت يتكرر في كل الصفوف؛ وإن تُرك فارغاً فيُقرأ لكل صف من بياناته الخاصة (raw_fields) —
+    أي القيمة التي أدخلها المستخدم لهذا الشخص تحديداً عند «شخص يدوي» بنفس عنوان العمود.
     بلا تخصيص → الأعمدة الافتراضية (default_headers) فقط"""
     headers, rows = (tbl or {}).get("headers") or [], (tbl or {}).get("rows") or []
+    raw_fields = (tbl or {}).get("raw_fields") or []
     if not headers:
         return tbl or {}
     if not columns:
@@ -85,12 +88,21 @@ def filter_table(tbl: dict, columns) -> dict:
     out_h, picks = [], []
     for col in columns:
         if isinstance(col, dict):
-            out_h.append(str(col.get("label") or "")); picks.append(("custom", str(col.get("text") or "")))
+            label, text = str(col.get("label") or ""), str(col.get("text") or "")
+            out_h.append(label)
+            picks.append(("manual", label) if not text else ("custom", text))
         elif col in headers:
             out_h.append(col); picks.append(("idx", headers.index(col)))
     if not out_h:
         return tbl
-    return {**tbl, "headers": out_h, "rows": [[(r[p] if p < len(r) else "") if t == "idx" else p for t, p in picks] for r in rows]}
+
+    def cell(i: int, r: list, t: str, p):
+        if t == "idx":
+            return r[p] if p < len(r) else ""
+        if t == "manual":
+            return (raw_fields[i] if i < len(raw_fields) else {}).get(p, "")
+        return p
+    return {**tbl, "headers": out_h, "rows": [[cell(i, r, t, p) for t, p in picks] for i, r in enumerate(rows)]}
 
 
 def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: bool = True) -> bytes:

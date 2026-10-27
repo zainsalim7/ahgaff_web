@@ -250,7 +250,7 @@ export default function LettersPage() {
               <label style={{ ...lbl, marginBottom: 0 }}>الأسماء التي يخصّها الخطاب (اختياري)</label>
               <select style={{ ...inp, width: 'auto', padding: '4px 8px', fontSize: 12 }} value={peopleKind} onChange={(e) => setPeopleKind(e.target.value)} data-testid="letter-people-kind" title="نوع البحث — تبديل النوع لا يمسح الأسماء المضافة"><option value="student">طلاب</option><option value="employee">موظفون</option><option value="teacher">هيئة تدريس</option></select>
             </div>
-            <PeoplePicker kind={peopleKind} people={people} onChange={setPeople} />
+            <PeoplePicker kind={peopleKind} people={people} onChange={setPeople} customColumns={(layout.table_columns || []).filter((c: any) => typeof c !== 'string' && !c.text).map((c: any) => c.label)} />
             {people.length > 1 && (
               <div style={{ border: `1px solid ${perPerson ? '#fdba74' : '#e2e8f0'}`, background: perPerson ? '#fff7ed' : '#f8fafc', borderRadius: 10, padding: 10, marginTop: 8, fontSize: 12.5 }} data-testid="letter-mode-panel">
                 <div style={{ fontWeight: 800, marginBottom: 6 }}>👥 طريقة الإصدار لـ {people.length} أشخاص:</div>

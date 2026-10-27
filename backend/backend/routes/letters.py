@@ -259,7 +259,10 @@ async def _person_row(db, p: dict) -> Optional[dict]:
         name = (fl.get("الاسم") or "").strip()
         if not name:
             return None
-        fields = {"الاسم": name, "الصفة": fl.get("الصفة", ""), "الرقم": fl.get("الرقم", ""), "الجهة": fl.get("الجهة", "")}
+        fixed = {"الاسم": name, "الصفة": fl.get("الصفة", ""), "الرقم": fl.get("الرقم", ""), "الجهة": fl.get("الجهة", "")}
+        # ✍️ أي حقول أعمدة مخصصة أضافها المستخدم (الأعمدة الفارغة للتعبئة اليدوية) تُحفظ أيضاً لتظهر في خليتها بالجدول
+        extra_custom = {k: str(v) for k, v in fl.items() if k not in fixed and isinstance(v, str) and v}
+        fields = {**fixed, **extra_custom}
         return {"kind": "custom", "id": p.get("id", ""), "name": name, "code": fields["الرقم"], "c1": fields["الصفة"], "c2": fields["الجهة"], "c3": "", "fields": fields}
     oid = _oid(pid)
     if not oid:
@@ -335,7 +338,9 @@ def _with_extra_fields(default_headers: list, data: list, rows: list) -> dict:
         if any(r["kind"] == k for r in rows):
             extra += [h for h in FIELD_CATALOG[k] if h not in default_headers and h not in extra]
     full = [row + [(rows[i].get("fields") or {}).get(h, "") for h in extra] for i, row in enumerate(data)]
-    return {"headers": default_headers + extra, "default_headers": default_headers, "rows": full, "mixed": len({r["kind"] for r in rows}) > 1}
+    # 🆕 raw_fields: بيانات كل صف الخام (تشمل حقول الأعمدة المخصصة الفارغة للتعبئة اليدوية) — يُستخدم عند تصفية الأعمدة
+    return {"headers": default_headers + extra, "default_headers": default_headers, "rows": full, "mixed": len({r["kind"] for r in rows}) > 1,
+            "raw_fields": [r.get("fields") or {} for r in rows]}
 
 
 async def _build_ctx(db, rec: dict, subject: str, people_in: List[dict]) -> tuple:
