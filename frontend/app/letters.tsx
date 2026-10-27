@@ -130,7 +130,7 @@ export default function LettersPage() {
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
   const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', letterhead_id: lhId, series_id: seriesId, sections, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
-  const contentKey = useMemo(() => JSON.stringify({ body, subject, recipient, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })), sig, layout, perPerson, personAsRec, lhId, seriesId, sections }), [body, subject, recipient, people, sig, layout, perPerson, personAsRec, lhId, seriesId, sections]);
+  const contentKey = useMemo(() => JSON.stringify({ body, subject, recipient, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })), sig, perPerson, personAsRec, lhId, seriesId, sections }), [body, subject, recipient, people, sig, perPerson, personAsRec, lhId, seriesId, sections]);
   const prevContentKey = useRef(contentKey);
   useEffect(() => {
     const sample = !body.trim();
@@ -156,7 +156,7 @@ export default function LettersPage() {
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [contentKey, previewPage, previewLetterhead, showLayout]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contentKey, layout, previewPage, previewLetterhead, showLayout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const afterIssue = async (r: any) => {
     setLast(r.data); setDraft(null);

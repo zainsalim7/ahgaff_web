@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the two fixes on /letters: footer page numbers with the mini QR on every page, and paging through a multi-page preview with a page-aware signature handle. Backend: new pytest file with 6/6 passing, plus regression runs of test_letters_drafts.py (PASS) and test_letters_manual_custom_columns.py (8/8). Frontend: Playwright E2E. Both fixes work. One real UX bug: dragging the signature on its page (e.g. page 3) changes the layout, which counts as a content change, so the pager jumps back to page 1 and the drag handle disappears. The user has to go back to page 3 to see where the signature landed. There is also a medium backend regression: the new ensure(38mm) reserve can push the signature alone onto a new page.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "build_letter_pdf (services/letter_pdf.py L399 ensure(38*mm))", "issue": "MEDIUM regression. The new 38mm up-front reserve (combined with BOTTOM_SAFE 54mm) pushes the signature block onto a new page even when it used to fit. Scan with N identical paragraphs: 9 paragraphs -> 1 page (sig_y 202mm); 10 paragraphs -> 2 pages where page 2 has only the signature (sig_y 55mm, 0 body paragraphs). The same orphan-signature page happens for 10-17 paragraphs. At 10 paragraphs the signature would end at about 219mm from the top, with the footer line at 275mm, so a letter that used to fit on one page now becomes 2 pages with a lone signature page. Suggestion: reserve only the real block height (about 12mm without a signature image, about 28mm with one) instead of 38mm, and/or keep the last body paragraph together with the closing and signature."},
+      {"endpoint": "decorate_multipage + qr_style='footer'", "issue": "Duplicate QR when layout.qr_style='footer' on a multi-page letter. The last page draws both the 14mm footer QR at the bottom-left (24mm from the bottom) and the 9mm mini QR at the bottom-right. Verified with preview-pdf: last page images = (18,24,14mm) + (183,3,9mm). Consider skipping the mini QR on the last page when qr_style=='footer'."},
+      {"endpoint": "decorate_multipage with letterhead footer_image_base64", "issue": "Code review only, not tested. The footer image covers 0-24mm, and the mini QR plus page number at 3-12mm are drawn on top of it, so they may overlap artwork in custom footer images."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "letters.tsx preview effect (contentKey includes layout)", "issue": "Dragging the signature handle on page 3 of 3 changes the layout (the button shows 'تخطيط الصفحة (3 تعديل)'), and contentKey includes the layout. The effect then resets previewPage to 0, so the pager shows 'صفحة 1 من 3' and the handle and the dragged signature are no longer visible. Reproduced: on page 3, handle=1 -> drag -> label 'صفحة 1 من 3', handle=0. The same logic applies in the layout modal. Fix: don't reset the page on layout-only changes from the drag (keep previewPage), or after the response arrives jump to the new X-Sig-Page when the change came from the signature drag.", "selector": "[data-testid=letter-preview-sig-drag-handle], [data-testid=letter-preview-pager-label]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Letters issue form", "issues": ["The date insert inside the body editor still uses the browser's native date input (mm/dd/yyyy) instead of a styled date picker. This is a pre-existing minor issue."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_multipage_iter136.py", "/app/backend/tests/scan_letter_orphan_sig_iter136.py", "/app/test_reports/pytest/pytest_iter136.xml"],
+  "action_items": [
+    "Keep the preview on the signature's page after a signature drag. The layout change from the drag currently resets the pager to page 1 and hides the handle (letters.tsx contentKey/reset logic, main preview and layout modal).",
+    "Reduce or refine the ensure(38*mm) signature reserve in letter_pdf.py so the signature doesn't get pushed alone onto a new page when it used to fit (e.g. 10 short paragraphs now give 2 pages with an orphan signature page).",
+    "Optional: skip the mini QR on the last page when qr_style=='footer', to avoid two QRs on the last page."
+  ],
+  "critical_code_review_comments": [
+    "letters.tsx preview effect: preview-pdf requests are not cancelled or sequence-checked, so a slow older response can overwrite a newer page image or page count during fast next/prev clicks. Consider an AbortController or a request id.",
+    "Paging also re-fires /letters/preview-body on every page change even though the content hasn't changed. This is a wasted request.",
+    "Backend: preview_letter_pdf correctly clamps the page index (page=99 and page=-3 return 200 with the last/first page). The X-Page-Count and X-Sig-Page headers are correct (4 pages, sig_page 3 for a 55-paragraph body; 1/0 for a short body).",
+    "Issued TEST letters can't be deleted (delete issued -> 400), so the test runs used up real serial numbers 44-46+/خ/26 in the default series."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_multipage_iter136.py", "/app/backend/tests/scan_letter_orphan_sig_iter136.py"],
+  "success_rate": {"backend": "100% of the new pytest (6/6); one medium layout regression found by the scan script", "frontend": "about 90% (pager, labels, disabled states, page-aware handle and hint, content-change reset, layout-modal pager, single-page regression and issue/download all pass; the post-drag page reset is a bug)"},
+  "seed_data_creation": "Issued TEST_multipage / TEST_ui letters (they can't be deleted because they are issued) and some drafts, which were deleted by the drafts script.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login with admin/admin123 and go to /letters. Fill letter-subject, click letter-rec-manual-mode and fill letter-rec-name, select letter-signatory-select='__manual__' and fill letter-signatory-title/-name, then click '[data-testid=letter-body] [contenteditable=true]' and use keyboard.insert_text with Enter. 45 paragraphs give 3 pages with sig on page 3. The pager is letter-preview-pager (-prev/-next/-label); the layout modal pager is letter-layout-pager. The handle is letter-preview-sig-drag-handle (and letter-layout-sig-drag-handle in the modal). Issue via letter-issue-btn triggers a download. Retest: after dragging on page 3, the pager should stay on page 3 (currently it resets to page 1). Rerun scan_letter_orphan_sig_iter136.py: with 10-17 paragraphs it should not produce a signature-only page 2 if the reserve is fixed.",
+  "rca of the issue": "Post-drag reset: in the letters.tsx preview effect, contentKey = JSON.stringify({..., layout, ...}). The signature drag writes signature_align/signature_offset/gap_signature into layout, so contentChanged is true and setPreviewPage(0) runs. Orphan signature page: in letter_pdf.py L399, ensure(38*mm) requires y - 38mm >= BOTTOM_SAFE (54mm), i.e. the signature title must be at least 92mm from the bottom, even though the drawn block without an image is only about 12mm tall."
+}

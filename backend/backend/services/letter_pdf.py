@@ -396,11 +396,11 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     elif L.get("show_closing"):
         c.setFont("Amiri", BODY); c.drawRightString(RM, y, ar(settings.get("closing") or "وتفضلوا بقبول فائق الاحترام والتقدير،"))
     y -= f("gap_signature") * mm
-    ensure(38 * mm)  # 🆕 نحجز مسبقاً كامل ارتفاع كتلة التوقيع (عنوان+اسم+صورة محتملة) كي لا تنكسر بين صفحتين، ولتبقى meta (رقم الصفحة والإحداثيات) مطابقة لموضع الرسم الفعلي
+    sig_img = _img("signature_base64")
+    ensure((22 if sig_img else 9) * mm)  # 🆕 نحجز مسبقاً ارتفاع كتلة التوقيع الفعلي فقط (أكبر إن وُجدت صورة توقيع) كي لا تنكسر بين صفحتين دون داعٍ، ولتبقى meta (رقم الصفحة والإحداثيات) مطابقة لموضع الرسم الفعلي
 
     sig_title = (s.get("signatory_title") or "").strip()
     sig_name = (s.get("signatory_name") or "").strip()
-    sig_img = _img("signature_base64")
     s_align, s_off = str(L.get("signature_align") or "left"), f("signature_offset") * mm
     sig_cx = (W / 2) if s_align == "center" else (RM - s_off - 22 * mm) if s_align == "right" else (LM + s_off + 22 * mm)
     if meta is not None:
@@ -455,4 +455,5 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     c.showPage(); c.save()
     from services.pdf_pages import decorate_multipage
     return decorate_multipage(buf.getvalue(), ref=str(s.get("number_display") or ""), date=issued.replace("-", "/") + "م" if issued else "",
-                              verify=s.get("verify_url") or "", mini_qr=qr_enabled, header_y_mm=f("header_bottom") + 5, footer_y_mm=3, margin_mm=f("margin_side"))
+                              verify=s.get("verify_url") or "", mini_qr=qr_enabled, header_y_mm=f("header_bottom") + 5, footer_y_mm=3, margin_mm=f("margin_side"),
+                              skip_qr_on_last=(qr_style == "footer"))  # ⛔ تفادي ازدواج الـQR على الصفحة الأخيرة إن كانت نسخة الذيل الكبيرة مرسومة فيها أصلاً
