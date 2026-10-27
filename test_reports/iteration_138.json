@@ -1,0 +1,28 @@
+{
+  "summary": "Tested the auto-shrink body_leading retry wrapper in build_letter_pdf() and the signature-split fix, using /api/letters/preview-pdf, issue, PDF and DOCX, plus a light UI regression on /letters. Results: (1) The main agent's scan (~12-word paragraphs) matches the claim. Counts 8-15 fit on 1 page, 16-17 are the known orphan edge, and 18+ paginate with body text on the last page. (2) I swept 1-20 paragraphs of ~17 words each (2 lines) across 5 signature variants: rich default, rich + signature image, classic, classic + image, and a 3-line rich signature. Title, name and extra line were NEVER split across pages, and X-Sig-Page always matched the page the title is actually on. (3) With 2-line paragraphs, the residual orphan window is n=9 (plain), or n=8-9 when a signature image is set. This is the same documented edge as 16-17 short paragraphs, because the edge depends on line count, not paragraph count. I confirmed that every attempt down to 0.7x (1.05) still orphans at n=9, so falling back to 1.0x is correct. (4) Short letters (3 paragraphs) give the same paragraph y-positions as an explicit body_leading=1.5, so nothing is compressed, and they respond in about 0.15s. Worst-case retry requests take 0.5-2.0s. (5) For n=4, 14 and 22, the issued PDF matches the preview (page count, signature page, paragraph positions), and DOCX returns 200 and is a valid zip. (6) Regression suites pass: test_letters_multipage_iter136, test_letters_drafts, test_letters_manual_custom_columns and test_letters_iter137_fixes (20 tests). (7) UI check: 14 paragraphs show no pager and the drag handle on page 0. 25 paragraphs show the pager as 'صفحة 1 من 2', with no handle on page 1 and the handle above the signature after clicking next.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "build_letter_pdf (letter_pdf.py)", "issue": "Each retry only compresses line leading. Paragraph gap (para_gap=3), gap_closing and gap_signature stay fixed, so the rescue window is narrow (1-2 paragraph counts still orphan). At 0.7x the in-paragraph lines also get visibly tight (for example the 8 x 2-line paragraph case). This is design feedback, not a bug."},
+      {"endpoint": "/api/letters/preview-pdf fmt=png", "issue": "Every page PNG request re-runs up to 7 renders (about 1.7-2s in edge cases), and the UI pager fetches each page separately. Caching the chosen leading or PDF per payload would avoid repeating this work."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_letters_autoshrink_leading_iter138.py", "/app/backend/tests/scan_autoshrink_iter138.py", "/app/test_reports/pytest/iter138.xml"],
+  "action_items": [
+    "None blocking.",
+    "Optional: also shrink gap_closing/gap_signature/para_gap in the later retries to narrow the residual orphan window further.",
+    "Optional: note in the docs that the '8-15 paragraphs' figure applies only to 1-line paragraphs."
+  ],
+  "critical_code_review_comments": [
+    "The orphan check uses body_end_page_idx, captured before the closing. If the closing alone moves to the next page with the signature, it counts as an orphan, which is acceptable.",
+    "The signature reservation is 20mm (34mm with an image). A rich signature section with 4+ lines could still exceed it. 3 lines tested OK.",
+    "In the rich-signature + image path, the image is drawn at y-16mm after the rich section with no extra ensure(), so a tall section could push the image toward BOTTOM_SAFE. It was not observed in tests."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_autoshrink_leading_iter138.py", "/app/backend/tests/scan_autoshrink_iter138.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Issued 3 TEST_autoshrink letters (n=4, 14, 22). Issued letters cannot be deleted.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Main regression: pytest backend/tests/test_letters_autoshrink_leading_iter138.py (10 tests, about 80s). It sweeps 1-20 paragraphs of 17 words across 5 signature variants (signature image injected through letterhead_override.signature_base64; sections={} forces the classic signature path) and allows an orphan window of at most 2 counts. scan_autoshrink_iter138.py shows the orphan threshold against explicit leading values. UI: use letter-signatory-select='__manual__'. The body editor is a contenteditable inside [data-testid=letter-body]; set it with execCommand insertHTML."
+}
