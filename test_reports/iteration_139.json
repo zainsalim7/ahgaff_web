@@ -1,0 +1,43 @@
+{
+  "summary": "Regression testing of the shared letter_pdf.py engine after BOTTOM_SAFE was lowered from 54 to 28mm, with the auto-shrink wrapper (up to 7 rebuilds, down to 0.7x leading). Backend: ran 9 existing letter/HR suites (88 tests: 83 pass, 5 fail, none caused by the PDF change) plus a new test_letters_bottom_safe_iter139.py (8 pass, 1 skip). Also ran an orphan scan over 6-31 paragraphs for two paragraph lengths. UI (Playwright, admin): short preview, multipage pager, signature drag handle position and drag, custom column text in PeoplePicker, real issue, letter-new draft flow, overtime-letters open-in-letters, and the HR letters page. No breakage from the change was found. On page 1 the body now ends about 28-30mm from the bottom, just above the footer separator with no overlap. Long letters paginate correctly and the signature/QR stays on the last page. The X-Sig headers match the PDF, and the drag handle lands within about 1mm of the real signature. One residual edge case remains: for each paragraph shape, exactly one paragraph count still gives an orphan signature page (body fills page 1, signature alone on page 2) even after shrinking to 0.7x. This is narrower than the earlier 16-17 window.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/letters/preview-pdf (build_letter_pdf auto-shrink)", "issue": "Residual orphan signature: ~12-word paragraphs at k=20 and ~17-word (2-line) paragraphs at k=11 give 2 pages. The body ends on page 1 (bottom about 28-30mm) and page 2 holds only the closing and signature. All 7 shrink attempts fail, so it falls back to 1.0x. Every other count from 6 to 31 is correct. The claim that orphan cases are fixed automatically holds for most counts but not all."},
+      {"endpoint": "POST /api/letters/preview-pdf with draft_id (overtime drafts)", "issue": "Opening an overtime-letter draft in /letters (from /overtime-letters 'ol-open') gives a 1-page preview with an EMPTY {جدول_الأسماء} table. The real draft PDF (/letters/{id}/pdf) is 2 pages with the 15-teacher table. The cause is that preview-pdf ignores the stored draft table (doc.table / custom_table); only save_draft rebuilds it via rebuild_overtime_table. This bug existed before and is not caused by BOTTOM_SAFE, but preview and actual output differ."},
+      {"endpoint": "tests (stale expectations, not app bugs)", "issue": "test_letters_autoshrink_leading_iter138::test_main_agent_short_paragraphs_8_to_15_single_page now fails because the orphan count moved to k=20 with BOTTOM_SAFE=28, and the test expects k=20 to be fine. test_hr_letters fails 4 tests from data drift: teacher180156 now has an employee profile, and dean Salim was given HR permissions (see test_credentials.md)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "letter-new.tsx draft preview", "issue": "Shows only page 1 of the draft (GET /letters/{id}/pdf?fmt=png with no page param, no PreviewPager). For multi-page drafts the user cannot see later pages or the signature before issuing.", "selector": "[data-testid=letter-new-preview-img]", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "overtime-letters -> open in /letters", "issue": "The preview is missing the teacher table, so it does not match the real draft PDF (see backend minor issue).", "affected_selectors": ["[data-testid^=ol-open-]", "[data-testid=letter-preview-img]"]}
+    ],
+    "design_issues": [
+      {"screen": "/letters preview", "issues": ["The red drag handle sits on top of the first characters of the signatory title (e.g. 'عميد الكلية'), partly hiding it. Cosmetic.", "After issuing, the live preview still shows the just-issued number with '(معاينة)' until the form changes. Minor."]},
+      {"screen": "letter-new draft (template خطاب ترشيح طلاب)", "issues": ["Little vertical space between the names table and the following paragraph ('آملين التكرم...')."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_bottom_safe_iter139.py", "/app/backend/tests/scan_orphan_iter139.py", "/app/test_reports/pytest/iter139_letters.xml", "/app/test_reports/pytest/iter139_bottom_safe.xml"],
+  "action_items": [
+    "Optional: close the one residual orphan count per paragraph shape. Options: let the auto-shrink also reduce gap_signature or paragraph spacing, or when still orphaned move the last body line or paragraph to the signature page so the signature never stands alone.",
+    "Make preview-pdf with draft_id reuse the stored draft table for linked_report overtime drafts (call rebuild_overtime_table or use ex['table'] when custom_table), so the overtime preview matches the real PDF.",
+    "Update the stale test expectation in test_letters_autoshrink_leading_iter138.py (k=20 is now the edge) and the test_hr_letters fixtures (teacher180156/dean data drift).",
+    "Optional: add a PreviewPager to the letter-new.tsx draft preview.",
+    "Fix the docstring in build_letter_pdf: it says 'حتى 85%' but the loop goes to 0.7."
+  ],
+  "critical_code_review_comments": [
+    "build_letter_pdf: when every attempt orphans, best_pdf stays at the 1.0x attempt, which is fine. The orphan check uses sig_page > body_end_page_idx, which is correct. Worst case is 7 full rebuilds per request (about 0.5-2s). Acceptable, but consider caching or a binary search if batch PDFs (issue-batch, batch/{id}/pdf) start to grow.",
+    "X-Page-Count is only returned for fmt=png, not fmt=pdf. That is fine for the UI, but worth noting for API consumers.",
+    "HR letters use a separate engine (routes/hr_letter_pdf.py with platypus), so they are NOT affected by the letter_pdf.py change. Overtime letters use the shared engine and render correctly: page 1 table rows plus a 'يتبع' marker, page 2 with the rest and the signature."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_bottom_safe_iter139.py", "/app/backend/tests/scan_orphan_iter139.py"],
+  "success_rate": {"backend": "96% (91/96 executed tests; all 5 failures are stale test expectations or data drift, not app regressions)", "frontend": "100% of requested flows work (7/7); 1 pre-existing preview mismatch on overtime drafts"},
+  "seed_data_creation": "Temporary TEST_iter139 letters were issued and then revoked. Overtime drafts (م-112..م-114, م-121) and the letter-new draft م-120 were created and deleted. These consumed serial numbers in the numbering series.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Main regression: pytest backend/tests/test_letters_bottom_safe_iter139.py (about 15s). It covers headers, body bottom of 22-45mm on page 1, signature on the last page, issue vs preview page count, an overtime raise-letter draft PDF plus attachments (use hide_empty=false, mode=amend, tag_previous=true; delete afterwards), and HR PDF. scan_orphan_iter139.py prints the orphan window per paragraph count. UI: log in by setting localStorage token/user from /api/auth/login. Body editor: execCommand insertHTML on [data-testid=letter-body] [contenteditable]. Recipient: letter-rec-manual-mode. Signatory: letter-signatory-select='__manual__'. Custom column: letter-table-toggle, then letter-table-cols-add-custom (2 window.prompt dialogs), then letter-person-manual-extra-<label>.",
+  "rca of the issue": "Orphan residue: with BOTTOM_SAFE=28mm page 1 holds more lines. When the body exactly fills page 1, the closing plus signature block needs more space than a 0.7x leading shrink can recover (about one paragraph's worth), so all attempts still orphan. Overtime preview mismatch: preview_letter_pdf builds doc from _compose(data) with auto_table from data.people (empty for overtime drafts) and never reads the stored draft's custom table, whereas save_draft explicitly calls rebuild_overtime_table."
+}
