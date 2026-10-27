@@ -10,10 +10,11 @@ type Props = {
   onLayoutChange: (l: Record<string, any>) => void;
   hasTable?: boolean; imgStyle?: React.CSSProperties;
   sigPos?: { x: number; y: number } | null; // الموضع الحقيقي (مم) من آخر معاينة فعلية من الخلفية — أدق من التقدير
+  showHandle?: boolean; // أخفِ المقبض إن كانت الصفحة المعروضة ليست صفحة التوقيع الفعلية (خطاب متعدد الصفحات)
 };
 
 /** مقبض سحب فوق صورة المعاينة الحيّة يسمح بتحريك موضع التوقيع فعلياً (أفقياً: يمين/وسط/يسار + إزاحة، ورأسياً: مسافته قبل الخاتمة) بدل الاكتفاء بحقول الإعدادات المخفية. */
-export const SignatureDragOverlay: React.FC<Props> = ({ src, alt, imgTestId, wrapTestId, layout, layoutDefaults, onLayoutChange, hasTable = true, imgStyle, sigPos }) => {
+export const SignatureDragOverlay: React.FC<Props> = ({ src, alt, imgTestId, wrapTestId, layout, layoutDefaults, onLayoutChange, hasTable = true, imgStyle, sigPos, showHandle = true }) => {
   const wrapRef = useRef<HTMLDivElement>(null);
   const [dims, setDims] = useState({ w: 0, h: 0 });
   const [dragging, setDragging] = useState(false);
@@ -82,7 +83,7 @@ export const SignatureDragOverlay: React.FC<Props> = ({ src, alt, imgTestId, wra
     <div ref={wrapRef} style={{ position: 'relative' }} data-testid={wrapTestId}>
       <img src={src} alt={alt} data-testid={imgTestId} onLoad={(e) => setDims({ w: e.currentTarget.clientWidth, h: e.currentTarget.clientHeight })}
         style={{ width: '100%', display: 'block', boxShadow: '0 4px 18px rgba(0,0,0,.18)', borderRadius: 4, background: '#fff', ...imgStyle }} />
-      {dims.w > 0 && (
+      {showHandle && dims.w > 0 && (
         <div
           onMouseDown={(e) => { e.preventDefault(); startDrag(e.clientX, e.clientY); }}
           onTouchStart={(e) => { const t = e.touches[0]; if (t) startDrag(t.clientX, t.clientY); }}

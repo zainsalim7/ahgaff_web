@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
@@ -7,6 +7,14 @@ import { downloadBlob, filenameFromResponse } from '../src/utils/exportName';
 
 const lbl: React.CSSProperties = { display: 'block', fontSize: 12, fontWeight: 800, color: '#334155', marginBottom: 6, textAlign: 'right' };
 const errOf = (e: any, d: string) => e?.response?.data?.detail || d;
+
+const PreviewPager = ({ page, count, onChange, testID }: { page: number; count: number; onChange: (p: number) => void; testID: string }) => count <= 1 ? null : (
+  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 }} data-testid={testID}>
+    <button type="button" onClick={() => onChange(Math.max(0, page - 1))} disabled={page === 0} style={{ ...btn('#fff', { padding: '2px 10px', fontSize: 12 }), opacity: page === 0 ? 0.4 : 1 }} data-testid={`${testID}-prev`}>‹ السابقة</button>
+    <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }} data-testid={`${testID}-label`}>صفحة {page + 1} من {count}</span>
+    <button type="button" onClick={() => onChange(Math.min(count - 1, page + 1))} disabled={page === count - 1} style={{ ...btn('#fff', { padding: '2px 10px', fontSize: 12 }), opacity: page === count - 1 ? 0.4 : 1 }} data-testid={`${testID}-next`}>التالية ›</button>
+  </div>
+);
 import { StatementBodyEditor } from '../src/components/statements/StatementBodyEditor';
 import { SignatoryPicker, EMPTY_SIGNATORY, Signatory } from '../src/components/statements/SignatoryPicker';
 import { LetterheadManager } from '../src/components/letters/LetterheadManager';
@@ -34,6 +42,9 @@ export default function LettersPage() {
   const [preview, setPreview] = useState('');
   const [previewImg, setPreviewImg] = useState('');
   const [sigPos, setSigPos] = useState<{ x: number; y: number } | null>(null);
+  const [previewPage, setPreviewPage] = useState(0);
+  const [previewPageCount, setPreviewPageCount] = useState(1);
+  const [sigPage, setSigPage] = useState(0);
   const [previewBusy, setPreviewBusy] = useState(false);
   const [previewLetterhead, setPreviewLetterhead] = useState(true);
   const [recMode, setRecMode] = useState<'list' | 'manual'>('list');
@@ -119,25 +130,33 @@ export default function LettersPage() {
   };
   const recipient = useMemo(() => recMode === 'list' ? (recips.find((r) => r.id === recId) || null) : (rec.name || rec.title ? rec : null), [recMode, recId, recips, rec]);
   const issuePayload = () => ({ template_id: tplId || null, template_name: tpl?.name || 'خطاب', subject, body, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })), signatory_name: sig.name, signatory_title: sig.title, signatory_position_id: sig.position_id || '', letterhead_id: lhId, series_id: seriesId, sections, valid_days: validDays ? parseInt(validDays, 10) : null, base_url: typeof window !== 'undefined' ? window.location.origin : '', layout: Object.keys(layout || {}).length ? layout : null, draft_id: draft?.id || null, per_person: perPerson && people.length > 1, person_as_recipient: perPerson && people.length > 1 && personAsRec });
+  const contentKey = useMemo(() => JSON.stringify({ body, subject, recipient, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })), sig, layout, perPerson, personAsRec, lhId, seriesId, sections }), [body, subject, recipient, people, sig, layout, perPerson, personAsRec, lhId, seriesId, sections]);
+  const prevContentKey = useRef(contentKey);
   useEffect(() => {
     const sample = !body.trim();
     if (sample && !showLayout) { setPreview(''); setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return ''; }); return; }
+    const contentChanged = prevContentKey.current !== contentKey;
+    prevContentKey.current = contentKey;
+    if (contentChanged && previewPage !== 0) { setPreviewPage(0); return; } // 🔄 أي تعديل في المحتوى يعيد المعاينة لصفحتها الأولى
+    const pageToFetch = previewPage;
     const t = setTimeout(() => {
       if (!sample) api.post('/letters/preview-body', { body, subject, recipient: recipient || {}, people: people.map((p) => ({ kind: p.kind, id: p.id, fields: p.fields })) }).then((r) => { setPreview(r.data.body); setTableHeaders(r.data.table?.headers || []); setTableDefaults(r.data.table?.default_headers || []); }).catch(() => {});
       setPreviewBusy(true);
       const payload = issuePayload();
       if (sample) { payload.body = '<p style="text-align: right">هذا نص تجريبي لمعاينة تخطيط الصفحة — يظهر مكانه متن الخطاب عند كتابته.</p>'; payload.subject = payload.subject || 'نموذج لمعاينة التخطيط'; if (!Object.keys(payload.recipient).length) payload.recipient = { title: 'عميد الكلية', name: 'د. فلان الفلاني', suffix: 'المحترم' }; }
-      api.post(`/letters/preview-pdf?fmt=png&letterhead=${previewLetterhead}`, payload, { responseType: 'blob' })
+      api.post(`/letters/preview-pdf?fmt=png&letterhead=${previewLetterhead}&page=${pageToFetch}`, payload, { responseType: 'blob' })
         .then((r) => {
           const url = URL.createObjectURL(new Blob([r.data], { type: 'image/png' }));
           setPreviewImg((o) => { if (o) URL.revokeObjectURL(o); return url; });
           const sx = parseFloat(r.headers['x-sig-x-mm']), sy = parseFloat(r.headers['x-sig-y-mm']);
           setSigPos(Number.isFinite(sx) && Number.isFinite(sy) ? { x: sx, y: sy } : null);
+          setPreviewPageCount(Math.max(1, parseInt(r.headers['x-page-count'] || '1', 10)));
+          setSigPage(parseInt(r.headers['x-sig-page'] || '0', 10));
         })
         .catch(() => {}).finally(() => setPreviewBusy(false));
     }, 700);
     return () => clearTimeout(t);
-  }, [body, subject, recipient, people, sig, layout, previewLetterhead, perPerson, personAsRec, lhId, seriesId, sections, showLayout]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [contentKey, previewPage, previewLetterhead, showLayout]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const afterIssue = async (r: any) => {
     setLast(r.data); setDraft(null);
@@ -306,9 +325,10 @@ export default function LettersPage() {
                     {previewImg ? (
                       <SignatureDragOverlay src={previewImg} alt="معاينة" imgTestId="letter-layout-preview" wrapTestId="letter-layout-sig-drag"
                         layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0} sigPos={sigPos}
-                        imgStyle={{ boxShadow: '0 4px 14px rgba(0,0,0,.15)' }} />
+                        showHandle={previewPage === sigPage} imgStyle={{ boxShadow: '0 4px 14px rgba(0,0,0,.15)' }} />
                     ) : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري توليد المعاينة…</div>}
-                    <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>🖋️ المقبض الأحمر فوق التوقيع — اسحبه لتحريك موضعه مباشرة</div>
+                    <PreviewPager page={previewPage} count={previewPageCount} onChange={setPreviewPage} testID="letter-layout-pager" />
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>{previewPage === sigPage ? '🖋️ المقبض الأحمر فوق التوقيع — اسحبه لتحريك موضعه مباشرة' : `🖋️ التوقيع في الصفحة ${sigPage + 1} — انتقل إليها لتحريكه`}</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}><button onClick={() => setShowLayout(false)} style={btn('#0f2440')} data-testid="letter-layout-done">تم</button></div>
@@ -360,11 +380,13 @@ export default function LettersPage() {
             {!recipient && !(isBatch && personAsRec) && body.trim() && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>⚠️ المرسَل إليه لم يُحدد بعد — ستظهر بياناته في المعاينة عند اختياره</div>}
             {previewImg ? (
               <SignatureDragOverlay src={previewImg} alt="معاينة الخطاب" imgTestId="letter-preview-img" wrapTestId="letter-preview-sig-drag"
-                layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0} sigPos={sigPos} />
+                layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0} sigPos={sigPos}
+                showHandle={previewPage === sigPage} />
             ) : (
               <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif', color: '#94a3b8', textAlign: 'center', padding: 40 }}>{body.trim() ? 'جاري توليد المعاينة…' : 'اختر قالباً أو اكتب المتن لتظهر المعاينة هنا'}</div>
             )}
-            {previewImg && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>🖋️ اسحب المقبض الأحمر فوق التوقيع لتحريك موضعه مباشرة في هذا الخطاب</div>}
+            {previewImg && <PreviewPager page={previewPage} count={previewPageCount} onChange={setPreviewPage} testID="letter-preview-pager" />}
+            {previewImg && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>{previewPage === sigPage ? '🖋️ اسحب المقبض الأحمر فوق التوقيع لتحريك موضعه مباشرة في هذا الخطاب' : `🖋️ التوقيع في الصفحة ${sigPage + 1} — انتقل إليها لتحريكه`}</div>}
             {!!preview && !previewImg && <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif' }}>{preview.replace(/<[^>]+>/g, ' ')}</div>}
           </div>
         </div>

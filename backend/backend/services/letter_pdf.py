@@ -241,11 +241,12 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     c.setFillColorRGB(0, 0, 0)
 
     y = H - f("start_y") * mm
+    page_idx = 0  # 🆕 عدّاد الصفحات (0 = الأولى) — يُستخدم لمعرفة رقم الصفحة التي يقع فيها التوقيع فعلياً
     BOTTOM_SAFE = 54 * mm  # 📏 الحد الأدنى المسموح به فوق الذيل — صفحة جديدة فقط عند الاقتراب الفعلي منه (لا حجز زائد)
     def ensure(space):
-        nonlocal y
+        nonlocal y, page_idx
         if y - space < BOTTOM_SAFE:
-            footer(); c.showPage(); header(); y = H - (f("header_bottom") + 13) * mm
+            footer(); c.showPage(); header(); y = H - (f("header_bottom") + 13) * mm; page_idx += 1
 
     def ensure_y(space, cur=None):
         nonlocal y
@@ -395,6 +396,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     elif L.get("show_closing"):
         c.setFont("Amiri", BODY); c.drawRightString(RM, y, ar(settings.get("closing") or "وتفضلوا بقبول فائق الاحترام والتقدير،"))
     y -= f("gap_signature") * mm
+    ensure(38 * mm)  # 🆕 نحجز مسبقاً كامل ارتفاع كتلة التوقيع (عنوان+اسم+صورة محتملة) كي لا تنكسر بين صفحتين، ولتبقى meta (رقم الصفحة والإحداثيات) مطابقة لموضع الرسم الفعلي
 
     sig_title = (s.get("signatory_title") or "").strip()
     sig_name = (s.get("signatory_name") or "").strip()
@@ -402,8 +404,8 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     s_align, s_off = str(L.get("signature_align") or "left"), f("signature_offset") * mm
     sig_cx = (W / 2) if s_align == "center" else (RM - s_off - 22 * mm) if s_align == "right" else (LM + s_off + 22 * mm)
     if meta is not None:
-        # 🖋️ إحداثيات أعلى كتلة التوقيع بالمليمتر (من اليسار/الأعلى) — تُستخدم بالواجهة لوضع مقبض السحب فوق موضعها الحقيقي بدقة
-        meta["sig_x_mm"], meta["sig_y_mm"] = round(sig_cx / mm, 1), round((H - y) / mm, 1)
+        # 🖋️ إحداثيات أعلى كتلة التوقيع بالمليمتر (من اليسار/الأعلى) ورقم صفحتها (0=الأولى) — تُستخدم بالواجهة لوضع مقبض السحب فوق موضعها الحقيقي بدقة
+        meta["sig_x_mm"], meta["sig_y_mm"], meta["sig_page"] = round(sig_cx / mm, 1), round((H - y) / mm, 1), page_idx
     sfam = str(L.get("signature_font_family") or "amiri")
     if "signature" in secs:
         y0 = y
@@ -453,4 +455,4 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
     c.showPage(); c.save()
     from services.pdf_pages import decorate_multipage
     return decorate_multipage(buf.getvalue(), ref=str(s.get("number_display") or ""), date=issued.replace("-", "/") + "م" if issued else "",
-                              verify=s.get("verify_url") or "", mini_qr=qr_enabled, header_y_mm=f("header_bottom") + 5, footer_y_mm=24.5, margin_mm=f("margin_side"))
+                              verify=s.get("verify_url") or "", mini_qr=qr_enabled, header_y_mm=f("header_bottom") + 5, footer_y_mm=3, margin_mm=f("margin_side"))

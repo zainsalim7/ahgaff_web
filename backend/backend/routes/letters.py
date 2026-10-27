@@ -658,8 +658,8 @@ async def delete_draft(lid: str, current_user: dict = Depends(get_current_user))
 
 
 @router.post("/letters/preview-pdf")
-async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool = True, current_user: dict = Depends(get_current_user)):
-    """👁️ معاينة حيّة للخطاب قبل الإصدار — بلا رقم تسلسلي ولا حفظ (png = صورة الصفحة الأولى)"""
+async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool = True, page: int = 0, current_user: dict = Depends(get_current_user)):
+    """👁️ معاينة حيّة للخطاب قبل الإصدار — بلا رقم تسلسلي ولا حفظ (png = صورة صفحة واحدة محدَّدة بـ page، 0 = الأولى)"""
     _guard(current_user)
     db = get_db()
     settings, series = await _lh_series(db, current_user, data)
@@ -676,11 +676,14 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool =
     doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادر"}
     meta: dict = {}
     pdf = build_letter_pdf(doc, settings, draft=True, letterhead=letterhead, meta=meta)
-    sig_headers = {"X-Sig-X-Mm": str(meta.get("sig_x_mm", "")), "X-Sig-Y-Mm": str(meta.get("sig_y_mm", ""))}
+    sig_headers = {"X-Sig-X-Mm": str(meta.get("sig_x_mm", "")), "X-Sig-Y-Mm": str(meta.get("sig_y_mm", "")), "X-Sig-Page": str(meta.get("sig_page", 0))}
     if fmt == "png":
         import pymupdf
-        page = pymupdf.open(stream=pdf, filetype="pdf")[0]
-        return StreamingResponse(io.BytesIO(page.get_pixmap(dpi=110).tobytes("png")), media_type="image/png", headers={"Cache-Control": "no-store", **sig_headers})
+        doc_pdf = pymupdf.open(stream=pdf, filetype="pdf")
+        page_count = doc_pdf.page_count
+        pg = doc_pdf[max(0, min(page, page_count - 1))]
+        return StreamingResponse(io.BytesIO(pg.get_pixmap(dpi=110).tobytes("png")), media_type="image/png",
+                                  headers={"Cache-Control": "no-store", "X-Page-Count": str(page_count), **sig_headers})
     return StreamingResponse(io.BytesIO(pdf), media_type="application/pdf", headers={"Cache-Control": "no-store", **sig_headers})
 
 
