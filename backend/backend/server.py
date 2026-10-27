@@ -18215,6 +18215,11 @@ async def get_activity_logs(
         query["faculty_id"] = current_user["faculty_id"]
     elif current_user["role"] == "department_head" and current_user.get("department_id"):
         query["department_id"] = current_user["department_id"]
+    elif current_user["role"] == "custom":
+        from routes.hr_common import hr_scope_isolation_faculty_ids
+        fac_scope = await hr_scope_isolation_faculty_ids(db, current_user)
+        if fac_scope is not None:  # 🔒 عزل الوحدات: مقيَّد بنطاق hr_scope (بلا تأثير على من نطاقه «كل الجامعة»)
+            query["faculty_id"] = {"$in": fac_scope} if fac_scope else "__none__"
     
     # فلترة إضافية
     if user_id:

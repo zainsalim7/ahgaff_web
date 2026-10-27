@@ -12,7 +12,7 @@ from pydantic import BaseModel
 from bson import ObjectId
 
 from .deps import get_db, get_current_user, log_activity, export_stamp, has_permission, has_any_permission
-from .hr_common import scope_employee_ids, user_id_of
+from .hr_common import scope_employee_ids, user_id_of, hr_scope_isolation_faculty_ids
 from .letterheads import resolve_letterhead, resolve_series, next_serial, format_number
 from .statements import _apply_vars, _var_ctx, _safe_dept, _academic_year_display, get_verify_base, student_gender, GENDER_VARS
 from services.letter_pdf import build_letter_pdf
@@ -64,11 +64,22 @@ def _user_faculties(user: dict) -> list:
 
 
 async def _visible_filter(db, user: dict) -> dict:
-    """نطاق السجل: الأدمن الكل؛ غيره: ما أصدره + العامة (بلا أشخاص) + ما يخص كلياته + موظفو نطاقه الإداري"""
+    """نطاق السجل: الأدمن الكل؛ غيره: ما أصدره + العامة (بلا أشخاص) + ما يخص كلياته + موظفو نطاقه الإداري.
+    🔒 عزل الوحدات الإدارية: إن كان نطاق hr_scope للمستخدم مقيَّداً بكليات محددة، تُعزل الخطابات «العامة» (بلا أشخاص)
+    أيضاً — لا يراها إلا من أصدرها، أو مَن نطاقه يشمل كلية مُصدرها، أو مَن أصدرها مستخدم غير مقيَّد (خطاب جامعة-عام)."""
     if user.get("role") == "admin":
         return {}
     uid = user_id_of(user)
-    ors: list = [{"issued_by": uid}, {"created_by": uid}, {"people": {"$size": 0}}, {"people": {"$exists": False}}]
+    ors: list = [{"issued_by": uid}, {"created_by": uid}]
+    general_cond = {"$or": [{"people": {"$size": 0}}, {"people": {"$exists": False}}]}
+    fac_scope = await hr_scope_isolation_faculty_ids(db, user) if has_any_permission(user, HR_PERMS) else None
+    if fac_scope is None:
+        ors.append(general_cond)
+    else:
+        ors.append({"$and": [general_cond, {"$or": [
+            {"created_by_faculty_ids": {"$exists": False}}, {"created_by_faculty_ids": {"$size": 0}},
+            {"created_by_faculty_ids": {"$in": fac_scope}},
+        ]}]})
     fids = _user_faculties(user)
     if fids:
         ors.append({"people": {"$elemMatch": {"kind": {"$in": ["student", "teacher"]}, "faculty_id": {"$in": fids}}}})
@@ -506,9 +517,11 @@ async def _finalize_fields(db, series: dict, base_url: Optional[str], valid_days
     token = uuid.uuid4().hex
     verify_base = (await get_verify_base(db)) or (base_url or "").rstrip("/")
     now = datetime.now(timezone.utc)
+    fac_scope = await hr_scope_isolation_faculty_ids(db, current_user)
     return {"serial": seq, "number_display": number, "year": year, "status": "issued",
             "verify_token": token, "verify_url": f"{verify_base}/verify-letter?token={token}" if verify_base else token,
             "issued_by": current_user.get("id", ""), "issued_by_name": current_user.get("full_name", ""), "issued_at": now.isoformat(),
+            "created_by_faculty_ids": fac_scope or [],
             "expires_at": (now + timedelta(days=valid_days)).isoformat() if valid_days and valid_days > 0 else None, "is_revoked": False}
 
 
@@ -616,8 +629,9 @@ async def save_draft(data: IssueIn, current_user: dict = Depends(get_current_use
         await db.letters.update_one({"_id": ex["_id"]}, {"$set": doc})
         return {"id": str(ex["_id"]), "number": ex["number_display"], "status": "draft"}
     counter = await db.letter_counters.find_one_and_update({"_id": "draft"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    fac_scope = await hr_scope_isolation_faculty_ids(db, current_user)
     doc.update({"draft_seq": counter["seq"], "number_display": f"م-{counter['seq']}", "created_by": current_user.get("id", ""), "created_by_name": current_user.get("full_name", ""),
-                "issued_at": datetime.now(timezone.utc).isoformat()})
+                "created_by_faculty_ids": fac_scope or [], "issued_at": datetime.now(timezone.utc).isoformat()})
     r = await db.letters.insert_one(doc)
     return {"id": str(r.inserted_id), "number": doc["number_display"], "status": "draft"}
 

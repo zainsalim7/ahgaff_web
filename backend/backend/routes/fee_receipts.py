@@ -57,11 +57,26 @@ async def _assert_type_allowed(db, current_user: dict, type_id: str):
     return allowed
 
 
+async def _apply_hr_scope(db, current_user: dict, base: dict, id_field: str) -> dict:
+    """🔒 عزل الوحدات الإدارية: يضيّق فلتر النطاق الأكاديمي بنطاق hr_scope الخاص بالمستخدم إن كان مقيَّداً بكليات محددة
+    (موظف شؤون مالية/موظفين مُقيَّد بكلية معيّنة) — بلا أي تأثير على العميد/رئيس القسم/الأدمن (نطاقهم الأكاديمي كما هو)."""
+    from .hr_common import hr_scope_isolation_department_ids
+    dept_scope = await hr_scope_isolation_department_ids(db, current_user)
+    if dept_scope is None:
+        return base or {"_id": ObjectId("000000000000000000000000")}
+    if not dept_scope:
+        return {"_id": ObjectId("000000000000000000000000")}
+    ids = dept_scope if id_field != "_id" else [ObjectId(d) for d in dept_scope if ObjectId.is_valid(d)]
+    extra = {id_field: {"$in": ids}}
+    return {"$and": [base, extra]} if base else extra
+
+
 async def _scope_query(current_user: dict) -> dict:
-    """🔒 فلتر طلاب نطاق المستخدم (كليته/أقسامه) — {} للأدمن = الكل"""
+    """🔒 فلتر طلاب نطاق المستخدم (كليته/أقسامه + عزل hr_scope إن كان مقيَّداً) — {} للأدمن = الكل"""
     if is_admin(current_user):
         return {}
-    return await get_scope_filter(current_user, "students") or {"_id": ObjectId("000000000000000000000000")}
+    db = get_db()
+    return await _apply_hr_scope(db, current_user, await get_scope_filter(current_user, "students"), "department_id")
 
 
 async def _scoped_student_ids(db, current_user: dict):
@@ -83,7 +98,7 @@ async def _assert_in_scope(db, current_user: dict, student_id: str):
 
 async def _scope_departments(db, current_user: dict) -> list:
     """أقسام النطاق لقوائم الفلاتر في الواجهة"""
-    dq = {} if is_admin(current_user) else (await get_scope_filter(current_user, "departments") or {"_id": ObjectId("000000000000000000000000")})
+    dq = {} if is_admin(current_user) else await _apply_hr_scope(db, current_user, await get_scope_filter(current_user, "departments"), "_id")
     return [{"id": str(d["_id"]), "name": d.get("name", "")} async for d in db.departments.find(dq, {"name": 1}).sort("name", 1)]
 
 

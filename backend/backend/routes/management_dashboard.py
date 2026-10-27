@@ -52,9 +52,17 @@ def dashboard_sections(user: dict) -> dict:
 
 
 async def _resolve_scope(db, user: dict, faculty_id: Optional[str], department_id: Optional[str]) -> dict:
-    """النطاق المسموح (كل الأقسام للأدمن) ثم تضييقه بالفلتر اليدوي ضمن المسموح فقط"""
+    """النطاق المسموح (كل الأقسام للأدمن) ثم تضييقه بالفلتر اليدوي ضمن المسموح فقط.
+    🔒 عزل الوحدات: إن كان نطاق hr_scope للمستخدم مقيَّداً بكليات محددة، يُضيَّق النطاق الأكاديمي بها أيضاً."""
     is_admin = user.get("role") in (UserRole.ADMIN, UserRole.UNIVERSITY_PRESIDENT)  # نطاق الجامعة كلها
     dq = {} if is_admin else await get_scope_filter(user, "departments")
+    if not is_admin:
+        from .hr_common import hr_scope_isolation_department_ids
+        hr_depts = await hr_scope_isolation_department_ids(db, user)
+        if hr_depts is not None:
+            oids = [ObjectId(d) for d in hr_depts if ObjectId.is_valid(d)]
+            extra = {"_id": {"$in": oids}}
+            dq = {"$and": [dq, extra]} if dq else extra
     depts = await db.departments.find(dq, {"name": 1, "faculty_id": 1}).to_list(500)
     fac_ids = sorted({d.get("faculty_id") for d in depts if d.get("faculty_id")})
     faculties = []

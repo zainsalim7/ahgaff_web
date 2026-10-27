@@ -327,6 +327,46 @@ def restrict_ids(q: dict, field: str, allowed: Optional[list]) -> dict:
     return {**q, field: {"$in": list(ok)}}
 
 
+_ACADEMIC_SCOPED_ROLES = {"dean", "department_head", "admin", "university_president"}
+
+
+async def hr_scope_isolation_faculty_ids(db, current_user: dict) -> Optional[list]:
+    """🔒 نطاق «عزل الوحدات» الإضافي (خطابات/سندات مالية/تقارير/سجل نشاط) — يُطبَّق فقط على من ليس له نطاق أكاديمي
+    خاص به أصلاً (غير عميد/رئيس قسم/أدمن/رئيس جامعة)، حفاظاً على سلوك الأدوار الأكاديمية الحالي بلا أي تغيير."""
+    if current_user.get("role") in _ACADEMIC_SCOPED_ROLES:
+        return None
+    return await hr_scope_faculty_ids(db, current_user)
+
+
+async def hr_scope_isolation_department_ids(db, current_user: dict) -> Optional[list]:
+    if current_user.get("role") in _ACADEMIC_SCOPED_ROLES:
+        return None
+    return await hr_scope_department_ids(db, current_user)
+
+
+async def hr_scope_faculty_ids(db, current_user: dict) -> Optional[list]:
+    """🏛️ الكليات الأكاديمية المقابلة لنطاق hr_scope الحالي (عبر وحدات نوع «كلية» المرتبطة بها) — None إن لم يكن
+    المستخدم مقيَّداً (ALL/الأدمن)، أداة العزل العامة التي تُستخدم خارج شؤون الموظفين أيضاً (الخطابات، السندات المالية، التقارير)."""
+    s = await hr_scope_units(db, current_user)
+    if s is None:
+        return None
+    if not s:
+        return []
+    rows = await db.org_units.find({"_id": {"$in": [ObjectId(x) for x in s if ObjectId.is_valid(x)]}, "faculty_id": {"$exists": True, "$ne": None}}, {"faculty_id": 1}).to_list(2000)
+    return list({r["faculty_id"] for r in rows if r.get("faculty_id")})
+
+
+async def hr_scope_department_ids(db, current_user: dict) -> Optional[list]:
+    """أقسام الكليات المقابلة لنطاق hr_scope — None إن لم يكن مقيَّداً (للشاشات التي تُفلتر بمعرّف القسم)"""
+    fac_ids = await hr_scope_faculty_ids(db, current_user)
+    if fac_ids is None:
+        return None
+    if not fac_ids:
+        return []
+    rows = await db.departments.find({"faculty_id": {"$in": fac_ids}}, {"_id": 1}).to_list(2000)
+    return [str(d["_id"]) for d in rows]
+
+
 async def scope_summary(db, current_user: dict) -> dict:
     s = await hr_scope_units(db, current_user)
     if s is None:
