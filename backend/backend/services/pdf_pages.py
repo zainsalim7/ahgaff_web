@@ -55,10 +55,10 @@ def number_pages_buf(buf: io.BytesIO, title: str = "", **kw) -> io.BytesIO:
 def decorate_multipage(pdf: bytes, *, ref: str = "", date: str = "", verify: str = "", mini_qr: bool = True, continuation: bool = True,
                        header_y_mm: float = 48, footer_y_mm: float = 3, margin_mm: float = 20, skip_qr_on_last: bool = False) -> bytes:
     """يرجع الـPDF كما هو إن كان صفحة واحدة؛ وإلا يضيف لكل صفحة: «تابع الخطاب رقم … — بتاريخ …» تحت الكليشة مباشرة (من
-    الصفحة 2)، وشارة أنيقة صغيرة أسفل يمين الصفحة بين نهاية المتن وبداية صورة/خط التذييل (25-33مم من الأسفل تقريباً):
-    رقم الصفحة «صفحة n من N» + QR مصغّر للتحقق + «يُتبع…» إن لم تكن الأخيرة. هذا الشريط فوق التذييل مباشرة فلا يتداخل مع
-    شعار/معلومات الجهة المرسومة فيه، ولا يأخذ أي حيّز من متن الرسالة (المتن محجوز له حدّ أدنى 37مم فوق التذييل أصلاً،
-    والـQR الكبير بجانب التوقيع يُرفع حدّه الأدنى في الصفحات المتعددة كي لا يتصادم مع الشارة)."""
+    الصفحة 2)، وشارة أنيقة صغيرة داخل شريط التذييل نفسه أمام صوره/معلوماته مباشرة (أسفل يسار الصفحة، 7-16مم من الأسفل
+    تقريباً): رقم الصفحة «صفحة n من N» + QR مصغّر للتحقق + «يُتبع…» إن لم تكن الأخيرة. بإخفاء هذه الشارة (mini_qr/continuation
+    معطّلين أو خطاب بصفحة واحدة) يظهر شريط التذييل كاملاً دون أي إضافة. المتن لا يحتاج حيّزاً إضافياً لأجلها فيبقى قريباً
+    من التذييل كالمعتاد (`BOTTOM_SAFE`)."""
     from pypdf import PdfReader, PdfWriter
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import mm
@@ -82,9 +82,9 @@ def decorate_multipage(pdf: bytes, *, ref: str = "", date: str = "", verify: str
             c.setFillColorRGB(0.42, 0.45, 0.5); c.setFont("Amiri", 8.5)
             c.drawRightString(W - margin_mm * mm, H - header_y_mm * mm, _ar(f"تابع الخطاب رقم {ref}" + (f" — بتاريخ {date}" if date else "")))
         show_qr = qr_img is not None and not (skip_qr_on_last and i == n - 1)
-        qsz = 6.8 * mm
-        chip_h, chip_w = 8 * mm, (34 * mm if show_qr else 24 * mm)
-        cx1, cy1 = W - margin_mm * mm - chip_w, 25 * mm
+        qsz = 6.5 * mm
+        chip_h, chip_w = 9 * mm, (32 * mm if show_qr else 22 * mm)
+        cx1, cy1 = margin_mm * mm, 6 * mm  # 🆕 يسار الصفحة، أمام شريط/صورة التذييل مباشرة (بناءً على طلب المستخدم)
         c.saveState()
         c.setFillColorRGB(0.93, 0.97, 0.93); c.setStrokeColorRGB(0.0, 0.5, 0.13); c.setLineWidth(0.6)
         c.roundRect(cx1, cy1, chip_w, chip_h, 1.6 * mm, fill=1, stroke=1)
