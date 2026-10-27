@@ -1,0 +1,35 @@
+{
+  "summary": "Tested the 5 HR unit role presets (hr_manager, finance_manager, services_manager, hr_secretary, regular_employee) and the automatic hr_scope=MY_UNIT. Backend: 23/23 new pytest tests passed, and the 16/16 regression tests in test_unit_isolation_hr_scope.py still pass. Frontend: on /manage-roles the 'إنشاء / تحديث' button calls POST /api/roles/hr-presets, which returns 200 and creates or updates 9 roles. The 5 role cards show the right permission counts (12/7/8/3/0). Creating a user with 'المدير المالي' from /manage-users works: hr_scope is MY_UNIT, confirmed through GET /api/hr/users/{id}/scope. One UI bug: on web no success message appears after the preset buttons are clicked.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/users/{id}", "issue": "If a user moves from one of the 5 preset roles to an unrestricted role (for example hr_officer or a custom role), hr_scope stays at MY_UNIT. This is consistent with 'never override', but admins may not expect it."},
+      {"endpoint": "GET /api/hr/users/{id}/scope", "issue": "Returns 'ALL' when hr_scope is null, so the API cannot tell 'no scope set yet' from an explicit 'ALL'. This makes the 'only if not set' rule hard to see from the UI."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "manage-roles HR presets / Admin presets buttons", "issue": "onPress uses Alert.alert, which does nothing on react-native-web. On web the user gets no success or error message after 'إنشاء / تحديث' (POST returns 200, but no dialog or toast appears; confirmed in Playwright, dialogs=[]). manage-users already uses window.alert when Platform.OS==='web'; the same pattern is needed here.", "selector": "[data-testid=create-hr-presets-btn]", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "manage-users / scope", "issues": ["A new user given a preset role gets MY_UNIT, but has no linked employee record or org unit yet. Their effective scope is empty ('لا توجد وحدة محددة', units_count=0), so they see no HR, fee or letter data. This fails closed by design, but the UI does not warn the admin to link the user to an employee or unit."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_hr_role_presets_default_scope.py", "/app/test_reports/pytest/pytest_hr_presets.xml"],
+  "action_items": [
+    "manage-roles.tsx: show success and error messages on web for the preset buttons (window.alert or a toast when Platform.OS==='web'). This applies to both create-hr-presets-btn and create-admin-presets-btn.",
+    "Optional: after a user is created or edited with a preset role and has no linked employee or unit, show a hint that their MY_UNIT scope is currently empty."
+  ],
+  "critical_code_review_comments": [
+    "create_hr_role_presets matches existing roles by preset_key OR name. An unrelated custom role that happens to be named 'سكرتير المدير' or 'الموظف العادي' would be silently taken over and get its permissions overwritten.",
+    "In both POST and PUT /api/users, the auto-scope sets hr_scope_unit_ids=[] when it applies. That is correct, but there is no audit or activity-log entry recording the automatic scope assignment.",
+    "Regression check for existing hr_manager users was vacuous: no users are currently assigned the hr_manager preset role (0 found). The code path (presets only update db.roles) does not touch users."
+  ],
+  "updated_files": ["/app/frontend/app/manage-roles.tsx (changed data-testid to testID on create-hr-presets-btn and create-admin-presets-btn so the testid actually renders on RN-web)", "/app/backend/tests/test_hr_role_presets_default_scope.py (new)"],
+  "success_rate": {"backend": "100% (23/23 new + 16/16 regression)", "frontend": "90% (flows work; success message missing on web)"},
+  "seed_data_creation": "None kept. Test users TEST_hrp_* and TEST_ui_fin_mgr were created and deleted. The 9 HR preset roles and the admin presets stay in place (as requested).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: python -m pytest backend/tests/test_hr_role_presets_default_scope.py -v (it cleans up its own users). The presets endpoint is idempotent: a second call gives 0 created / 9 updated. Login UI: fill the placeholders, then click the text 'تسجيل الدخول'."
+}

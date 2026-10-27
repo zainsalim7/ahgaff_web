@@ -418,10 +418,16 @@ export default function ManageRolesScreen() {
         </View>
         <TouchableOpacity
           onPress={async () => {
-            try { const r = await rolesAPI.createHrPresets(); Alert.alert('تم', r.data.message); hasFetched.current = false; setRoles([]); fetchData(); }
-            catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل إنشاء الأدوار'); }
+            try {
+              const r = await rolesAPI.createHrPresets();
+              if (Platform.OS === 'web') window.alert(r.data.message); else Alert.alert('تم', r.data.message);
+              hasFetched.current = false; setRoles([]); fetchData();
+            } catch (e: any) {
+              const msg = e?.response?.data?.detail || 'فشل إنشاء الأدوار';
+              if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
+            }
           }}
-          style={{ backgroundColor: '#6d28d9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} data-testid="create-hr-presets-btn">
+          style={{ backgroundColor: '#6d28d9', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} testID="create-hr-presets-btn">
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>إنشاء / تحديث</Text>
         </TouchableOpacity>
       </View>
@@ -434,10 +440,16 @@ export default function ManageRolesScreen() {
         </View>
         <TouchableOpacity
           onPress={async () => {
-            try { const r = await rolesAPI.createAdminPresets(); Alert.alert('تم', r.data.message); hasFetched.current = false; setRoles([]); fetchData(); }
-            catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل إنشاء الأدوار'); }
+            try {
+              const r = await rolesAPI.createAdminPresets();
+              if (Platform.OS === 'web') window.alert(r.data.message); else Alert.alert('تم', r.data.message);
+              hasFetched.current = false; setRoles([]); fetchData();
+            } catch (e: any) {
+              const msg = e?.response?.data?.detail || 'فشل إنشاء الأدوار';
+              if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
+            }
           }}
-          style={{ backgroundColor: '#0369a1', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} data-testid="create-admin-presets-btn">
+          style={{ backgroundColor: '#0369a1', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8 }} testID="create-admin-presets-btn">
           <Text style={{ color: '#fff', fontWeight: '700', fontSize: 12.5 }}>إنشاء / تحديث</Text>
         </TouchableOpacity>
       </View>
