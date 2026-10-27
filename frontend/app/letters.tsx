@@ -14,6 +14,7 @@ import { SeriesManager } from '../src/components/letters/SeriesManager';
 import { TableColumnsPicker } from '../src/components/letters/LetterLayoutEditor';
 import { LetterSectionsEditor } from '../src/components/letters/LetterSectionsEditor';
 import { PeoplePicker, Person } from '../src/components/letters/PeoplePicker';
+import { SignatureDragOverlay } from '../src/components/letters/SignatureDragOverlay';
 
 
 export default function LettersPage() {
@@ -296,7 +297,12 @@ export default function LettersPage() {
                     actions={letterheads.find((x) => x.id === lhId)?.can_edit && <button type="button" onClick={saveSectionsAsLetterheadDefault} style={btn('#f5f3ff', { color: '#6d28d9', padding: '4px 10px', fontSize: 12 })} data-testid="letter-sections-save-lh" title="يصبح هذا التنسيق افتراضياً لكل خطابات هذه الكليشة">💾 حفظ كافتراضي للكليشة</button>} />
                   <div style={{ position: 'sticky', top: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', marginBottom: 6 }}>المعاينة الحقيقية {previewBusy ? '⏳' : ''}</div>
-                    {previewImg ? <img src={previewImg} alt="معاينة" style={{ width: '100%', boxShadow: '0 4px 14px rgba(0,0,0,.15)', borderRadius: 4 }} data-testid="letter-layout-preview" /> : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري توليد المعاينة…</div>}
+                    {previewImg ? (
+                      <SignatureDragOverlay src={previewImg} alt="معاينة" imgTestId="letter-layout-preview" wrapTestId="letter-layout-sig-drag"
+                        layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0}
+                        imgStyle={{ boxShadow: '0 4px 14px rgba(0,0,0,.15)' }} />
+                    ) : <div style={{ color: '#94a3b8', fontSize: 12 }}>جاري توليد المعاينة…</div>}
+                    <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4 }}>🖋️ المقبض الأحمر فوق التوقيع — اسحبه لتحريك موضعه مباشرة</div>
                   </div>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 10 }}><button onClick={() => setShowLayout(false)} style={btn('#0f2440')} data-testid="letter-layout-done">تم</button></div>
@@ -347,10 +353,12 @@ export default function LettersPage() {
             {isBatch && <div style={{ fontSize: 12, color: '#9a3412', background: '#fff7ed', border: '1px solid #fdba74', borderRadius: 8, padding: '6px 10px', marginBottom: 8 }} data-testid="letter-batch-banner">👥 سيصدر <b>{people.length}</b> خطاباً مستقلاً — المعاينة لخطاب الأول: <b>{people[0]?.label}</b></div>}
             {!recipient && !(isBatch && personAsRec) && body.trim() && <div style={{ fontSize: 12, color: '#b45309', marginBottom: 8 }}>⚠️ المرسَل إليه لم يُحدد بعد — ستظهر بياناته في المعاينة عند اختياره</div>}
             {previewImg ? (
-              <img src={previewImg} alt="معاينة الخطاب" data-testid="letter-preview-img" style={{ width: '100%', boxShadow: '0 4px 18px rgba(0,0,0,.18)', borderRadius: 4, background: '#fff' }} />
+              <SignatureDragOverlay src={previewImg} alt="معاينة الخطاب" imgTestId="letter-preview-img" wrapTestId="letter-preview-sig-drag"
+                layout={layout} layoutDefaults={{ ...layoutDefaults, ...(settings?.layout || {}) }} onLayoutChange={setLayout} hasTable={people.length > 0} />
             ) : (
               <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif', color: '#94a3b8', textAlign: 'center', padding: 40 }}>{body.trim() ? 'جاري توليد المعاينة…' : 'اختر قالباً أو اكتب المتن لتظهر المعاينة هنا'}</div>
             )}
+            {previewImg && <div style={{ fontSize: 10.5, color: '#94a3b8', marginTop: 4, textAlign: 'center' }}>🖋️ اسحب المقبض الأحمر فوق التوقيع لتحريك موضعه مباشرة في هذا الخطاب</div>}
             {!!preview && !previewImg && <div style={{ whiteSpace: 'pre-wrap', lineHeight: 2, fontSize: 14.5, fontFamily: 'Amiri, serif' }}>{preview.replace(/<[^>]+>/g, ' ')}</div>}
           </div>
         </div>
