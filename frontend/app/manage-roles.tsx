@@ -414,7 +414,7 @@ export default function ManageRolesScreen() {
       <View style={[styles.infoCard, { backgroundColor: '#f3e8ff', justifyContent: 'space-between' }]} testID="hr-presets-card">
         <View style={{ flex: 1 }}>
           <Text style={[styles.infoText, { fontWeight: '800', color: '#4c1d95' }]}>أدوار شؤون الموظفين الجاهزة</Text>
-          <Text style={[styles.infoText, { fontSize: 11.5 }]}>مدير شؤون الموظفين · أخصائي · مسؤول الحضور · مسؤول المراسلات · مراقب (اطّلاع). يمكن تعديل صلاحياتها لاحقاً.</Text>
+          <Text style={[styles.infoText, { fontSize: 11.5 }]}>مدير شؤون الموظفين · المدير المالي · مدير الخدمات · سكرتير المدير · الموظف العادي (مقيّدون تلقائياً بوحدتهم فقط) · أخصائي · مسؤول الحضور · مسؤول المراسلات · مراقب (اطّلاع). يمكن تعديل صلاحياتها لاحقاً.</Text>
         </View>
         <TouchableOpacity
           onPress={async () => {

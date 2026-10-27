@@ -330,6 +330,11 @@ def restrict_ids(q: dict, field: str, allowed: Optional[list]) -> dict:
 _ACADEMIC_SCOPED_ROLES = {"dean", "department_head", "admin", "university_president"}
 
 
+def has_own_academic_scope(user: dict) -> bool:
+    """هل لدى المستخدم نطاقاً أكاديمياً خاصاً به (faculty_id/department_id) مستقلاً عن hr_scope؟"""
+    return bool(user.get("faculty_id") or user.get("department_id") or user.get("department_ids") or user.get("faculty_ids"))
+
+
 async def hr_scope_isolation_faculty_ids(db, current_user: dict) -> Optional[list]:
     """🔒 نطاق «عزل الوحدات» الإضافي (خطابات/سندات مالية/تقارير/سجل نشاط) — يُطبَّق فقط على من ليس له نطاق أكاديمي
     خاص به أصلاً (غير عميد/رئيس قسم/أدمن/رئيس جامعة)، حفاظاً على سلوك الأدوار الأكاديمية الحالي بلا أي تغيير."""

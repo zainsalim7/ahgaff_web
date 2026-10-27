@@ -59,8 +59,9 @@ async def _assert_type_allowed(db, current_user: dict, type_id: str):
 
 async def _apply_hr_scope(db, current_user: dict, base: dict, id_field: str) -> dict:
     """🔒 عزل الوحدات الإدارية: يضيّق فلتر النطاق الأكاديمي بنطاق hr_scope الخاص بالمستخدم إن كان مقيَّداً بكليات محددة
-    (موظف شؤون مالية/موظفين مُقيَّد بكلية معيّنة) — بلا أي تأثير على العميد/رئيس القسم/الأدمن (نطاقهم الأكاديمي كما هو)."""
-    from .hr_common import hr_scope_isolation_department_ids
+    (موظف شؤون مالية/موظفين مُقيَّد بكلية معيّنة) — بلا أي تأثير على العميد/رئيس القسم/الأدمن (نطاقهم الأكاديمي كما هو).
+    من ليس له نطاق أكاديمي خاص به (لا faculty_id/department_id) يُستبدل فلتره الفاشل (deny-all) بنطاق hr_scope وحده."""
+    from .hr_common import hr_scope_isolation_department_ids, has_own_academic_scope
     dept_scope = await hr_scope_isolation_department_ids(db, current_user)
     if dept_scope is None:
         return base or {"_id": ObjectId("000000000000000000000000")}
@@ -68,6 +69,8 @@ async def _apply_hr_scope(db, current_user: dict, base: dict, id_field: str) -> 
         return {"_id": ObjectId("000000000000000000000000")}
     ids = dept_scope if id_field != "_id" else [ObjectId(d) for d in dept_scope if ObjectId.is_valid(d)]
     extra = {id_field: {"$in": ids}}
+    if not has_own_academic_scope(current_user):
+        return extra
     return {"$and": [base, extra]} if base else extra
 
 

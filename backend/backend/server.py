@@ -1382,6 +1382,10 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
             user_dict["role_id"] = user.role_id
             user_dict["role"] = system_key
             user_dict["permissions"] = role.get("permissions", [])
+            # 🔒 عزل تلقائي: أدوار الوحدات الخمسة (مدير HR/مالي/خدمات/سكرتير/موظف عادي) تبدأ مقيّدة بوحدتها فقط
+            if role.get("default_hr_scope"):
+                user_dict["hr_scope"] = role["default_hr_scope"]
+                user_dict["hr_scope_unit_ids"] = []
 
     # 🏛️ تعدد الكليات: كليات كاملة فقط — يضبط faculty_id للتوافق ويمسح الأقسام عند التعدد
     _multi_fids = [f for f in (user_dict.get("faculty_ids") or []) if f]
@@ -1687,6 +1691,10 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
             update_data["role_id"] = data.role_id
             update_data["role"] = sys_key
             update_data["permissions"] = role.get("permissions", [])
+            # 🔒 عزل تلقائي: يُسنَد فقط إن لم يكن للمستخدم نطاق hr_scope محدد سابقاً (لا يُلغي اختيار الأدمن اليدوي)
+            if role.get("default_hr_scope") and not user.get("hr_scope"):
+                update_data["hr_scope"] = role["default_hr_scope"]
+                update_data["hr_scope_unit_ids"] = []
     
     # 🔒 تحقق إلزامي: لا يُسمح بحفظ مستخدم محدود النطاق بدون scope data (يمنع سيناريو zain)
     # نحسب الحالة النهائية بعد التحديث
@@ -1848,6 +1856,8 @@ async def get_all_roles(current_user: dict = Depends(get_current_user)):
             "permissions": role.get("permissions", []),
             "is_system": role.get("is_system", False),
             "system_key": system_key,
+            "preset_key": role.get("preset_key", ""),
+            "default_hr_scope": role.get("default_hr_scope"),
             "users_count": users_count,
             "created_at": role.get("created_at", get_yemen_time())
         })
@@ -1990,10 +2000,10 @@ async def create_hr_role_presets(current_user: dict = Depends(get_current_user))
     for p in HR_ROLE_PRESETS:
         ex = await db.roles.find_one({"$or": [{"preset_key": p["key"]}, {"name": p["name"]}]})
         if ex:
-            await db.roles.update_one({"_id": ex["_id"]}, {"$set": {"preset_key": p["key"], "description": p["description"], "permissions": p["permissions"]}})
+            await db.roles.update_one({"_id": ex["_id"]}, {"$set": {"preset_key": p["key"], "description": p["description"], "permissions": p["permissions"], "default_hr_scope": p.get("default_hr_scope")}})
             updated.append(p["name"])
         else:
-            await db.roles.insert_one({"name": p["name"], "description": p["description"], "permissions": p["permissions"], "is_system": False, "preset_key": p["key"], "created_at": get_yemen_time(), "created_by": current_user["id"]})
+            await db.roles.insert_one({"name": p["name"], "description": p["description"], "permissions": p["permissions"], "is_system": False, "preset_key": p["key"], "default_hr_scope": p.get("default_hr_scope"), "created_at": get_yemen_time(), "created_by": current_user["id"]})
             created.append(p["name"])
     return {"created": created, "updated": updated, "message": f"تم إنشاء {len(created)} دور وتحديث {len(updated)} — أسندها للمستخدمين من إدارة المستخدمين"}
 

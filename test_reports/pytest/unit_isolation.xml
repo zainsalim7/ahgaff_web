@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="4" skipped="0" tests="15" time="9.607" timestamp="2026-10-27T22:20:38.268944+00:00" hostname="agent-env-09acf16a-7ac0-4f4f-bdd8-550445b492cb"><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_scope_effective" time="5.686" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_general_letter_isolation" time="0.950" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_u2_sees_unstamped_legacy_general_letters" time="0.144" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_u2_cannot_revoke_isolated_letter" time="0.109" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_draft_stamped_and_isolated" time="0.210" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_fee_stats_u1_girls_only" time="0.138"><failure message="assert 0 == 72">backend/tests/test_unit_isolation_hr_scope.py:169: in test_fee_stats_u1_girls_only
+    assert d["total_students"] == expected == 72
+E   assert 0 == 72</failure></testcase><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_fee_unpaid_students_u1_girls_only" time="0.091"><failure message="assert 0 == 72&#10; +  where 0 = len([])">backend/tests/test_unit_isolation_hr_scope.py:177: in test_fee_unpaid_students_u1_girls_only
+    assert len(rows) == 72
+E   assert 0 == 72
+E    +  where 0 = len([])</failure></testcase><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_fee_stats_admin_unchanged" time="0.119" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_dashboard_u1_girls_only" time="0.160"><failure message="AssertionError: assert [] == ['698e501d97fef774e66e93a9']&#10;  &#10;  Right contains one more item: '698e501d97fef774e66e93a9'&#10;  &#10;  Full diff:&#10;  + []&#10;  - [&#10;  -     '698e501d97fef774e66e93a9',&#10;  - ]">backend/tests/test_unit_isolation_hr_scope.py:195: in test_dashboard_u1_girls_only
+    assert [x["id"] for x in sc["departments"]] == [GIRLS_DEPT]
+E   AssertionError: assert [] == ['698e501d97fef774e66e93a9']
+E     
+E     Right contains one more item: '698e501d97fef774e66e93a9'
+E     
+E     Full diff:
+E     + []
+E     - [
+E     -     '698e501d97fef774e66e93a9',
+E     - ]</failure></testcase><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_dashboard_u2_sharia_only" time="0.132"><failure message="AssertionError: assert set() == {'698e4f9297fef774e66e93a4'}&#10;  &#10;  Extra items in the right set:&#10;  '698e4f9297fef774e66e93a4'&#10;  &#10;  Full diff:&#10;  + set()&#10;  - {&#10;  -     '698e4f9297fef774e66e93a4',&#10;  - }">backend/tests/test_unit_isolation_hr_scope.py:206: in test_dashboard_u2_sharia_only
+    assert {x["faculty_id"] for x in sc["departments"]} == {SHARIA_FAC}
+E   AssertionError: assert set() == {'698e4f9297fef774e66e93a4'}
+E     
+E     Extra items in the right set:
+E     '698e4f9297fef774e66e93a4'
+E     
+E     Full diff:
+E     + set()
+E     - {
+E     -     '698e4f9297fef774e66e93a4',
+E     - }</failure></testcase><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_activity_logs_u1_girls_only" time="0.120" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_activity_logs_u1_cannot_override_faculty" time="0.095" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_activity_logs_admin_dean_head_unchanged" time="0.350" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_salim_unchanged" time="0.355" /><testcase classname="backend.tests.test_unit_isolation_hr_scope" name="test_saeed_unchanged" time="0.649" /></testsuite></testsuites>

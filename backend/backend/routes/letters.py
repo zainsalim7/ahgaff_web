@@ -72,7 +72,7 @@ async def _visible_filter(db, user: dict) -> dict:
     uid = user_id_of(user)
     ors: list = [{"issued_by": uid}, {"created_by": uid}]
     general_cond = {"$or": [{"people": {"$size": 0}}, {"people": {"$exists": False}}]}
-    fac_scope = await hr_scope_isolation_faculty_ids(db, user) if has_any_permission(user, HR_PERMS) else None
+    fac_scope = await hr_scope_isolation_faculty_ids(db, user) if has_any_permission(user, HR_PERMS + ["issue_letters"]) else None
     if fac_scope is None:
         ors.append(general_cond)
     else:

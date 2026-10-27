@@ -516,8 +516,20 @@ DEFAULT_PERMISSIONS[UserRole.UNIVERSITY_PRESIDENT] = list(READ_ONLY_PERMISSIONS)
 _HR_ALL = [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_EMPLOYEES, Permission.HR_MANAGE_ORG, Permission.HR_MANAGE_LEAVES, Permission.HR_MANAGE_ATTENDANCE, Permission.HR_MANAGE_WORK_SETTINGS,
            Permission.HR_MANAGE_CORRESPONDENCE, Permission.HR_MANAGE_TASKS, Permission.HR_MANAGE_APPRAISALS, Permission.HR_MANAGE_LEAVE_SETTINGS]
 HR_ROLE_PRESETS = [
+    # ====== 🧭 الأدوار الإدارية الخمسة (كل دور مقيَّد افتراضياً بوحدته/كليته فقط — عزل تلقائي) ======
     {"key": "hr_manager", "name": "مدير شؤون الموظفين", "description": "كامل صلاحيات شؤون الموظفين: السجل والمستندات، الهيكل التنظيمي، اعتماد الإجازات والأرصدة، الحضور الإداري، المراسلات، إسناد المهام، اعتماد التقييم السنوي، التقرير السنوي وبطاقة HR في لوحة القيادة",
-     "permissions": _HR_ALL + [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_HR]},
+     "permissions": _HR_ALL + [Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_HR], "default_hr_scope": "MY_UNIT"},
+    {"key": "finance_manager", "name": "المدير المالي", "description": "اعتماد وإدارة السندات المالية (الرسوم)، إصدار الإفادات والشهادات، الإحصائيات المالية وبطاقة التنبيهات في لوحة القيادة",
+     "permissions": [Permission.MANAGE_FEE_RECEIPTS, Permission.VIEW_FEE_RECEIPTS, Permission.ISSUE_STATEMENTS, Permission.DASHBOARD_FINANCE, Permission.DASHBOARD_ALERTS, Permission.REPORT_STUDENT, Permission.EXPORT_REPORTS],
+     "default_hr_scope": "MY_UNIT"},
+    {"key": "services_manager", "name": "مدير الخدمات", "description": "إدارة الخدمات العامة: الحضور الإداري ومواقع العمل، بطاقات الموظفين واعتماد صورها، والقاعات والمرافق (دور عام افتراضي — يمكن تعديل صلاحياته حسب نطاق \"الخدمات\" الفعلي في مؤسستك)",
+     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_ATTENDANCE, Permission.HR_MANAGE_LOCATIONS, Permission.HR_PRINT_CARDS, Permission.HR_APPROVE_PHOTOS, Permission.MANAGE_ROOMS, Permission.DASHBOARD_HR, Permission.DASHBOARD_ALERTS],
+     "default_hr_scope": "MY_UNIT"},
+    {"key": "hr_secretary", "name": "سكرتير المدير", "description": "سكرتير مدير شؤون الموظفين: تسجيل الوارد والصادر والمذكرات والتعاميم، إصدار الخطابات الرسمية، وعرض سجل الموظفين — ضَع الموظف في نفس وحدة مدير شؤون الموظفين ليتطابق نطاق رؤيته معه",
+     "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_CORRESPONDENCE, Permission.ISSUE_LETTERS], "default_hr_scope": "MY_UNIT"},
+    {"key": "regular_employee", "name": "الموظف العادي", "description": "بلا صلاحيات إدارية — وصول ذاتي فقط لملفه الشخصي وحضوره وإجازاته ومهامه عبر تطبيق الموظف",
+     "permissions": [], "default_hr_scope": "MY_UNIT"},
+    # ====== أدوار شؤون الموظفين الإضافية (اختيارية) ======
     {"key": "hr_officer", "name": "أخصائي شؤون الموظفين", "description": "التشغيل اليومي دون سلطة اعتماد: إدارة سجلات الموظفين والمستندات، الحضور الإداري، المراسلات، وعرض الإجازات والتقييمات",
      "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.HR_MANAGE_EMPLOYEES, Permission.HR_MANAGE_ATTENDANCE, Permission.HR_MANAGE_CORRESPONDENCE]},
     {"key": "hr_attendance_clerk", "name": "مسؤول الحضور والانصراف", "description": "الكشف اليومي للحضور الإداري والتقرير الشهري فقط، مع عرض سجل الموظفين",
@@ -527,6 +539,8 @@ HR_ROLE_PRESETS = [
     {"key": "hr_auditor", "name": "مراقب شؤون الموظفين (اطّلاع فقط)", "description": "اطّلاع كامل على السجل والإجازات والحضور والمراسلات والتقييمات والتقرير السنوي وبطاقة HR دون أي تعديل — مناسب للإدارة العليا",
      "permissions": [Permission.HR_VIEW_EMPLOYEES, Permission.DASHBOARD_ALERTS, Permission.DASHBOARD_HR]},
 ]
+# 🔒 مفاتيح الأدوار التي يُسنَد لها نطاق hr_scope=MY_UNIT تلقائياً عند أول إسناد (ما لم يكن للمستخدم نطاق محدد سابقاً)
+HR_SCOPE_DEFAULT_PRESET_KEYS = {p["key"]: p["default_hr_scope"] for p in HR_ROLE_PRESETS if p.get("default_hr_scope")}
 
 # 🧩 أدوار إدارية جاهزة (تُنشأ بزر واحد من إدارة الأدوار)
 ADMIN_ROLE_PRESETS = [
