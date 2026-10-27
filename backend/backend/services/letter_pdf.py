@@ -106,6 +106,26 @@ def filter_table(tbl: dict, columns) -> dict:
 
 
 def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: bool = True, meta: dict = None) -> bytes:
+    """🆕 يحاول الرسم بتباعد السطور الطبيعي أولاً؛ وإن انتهى المتن على صفحة ويبقى التوقيع وحده يتيماً على صفحة جديدة،
+    يُعيد الرسم بتباعد أصغر تدريجياً (حتى 85% من القيمة الأصلية) لتقليل فرصة الصفحة اليتيمة — مع إبقاء القراءة واضحة دوماً"""
+    orig_leading = float(merge_layout(settings.get("layout"), s.get("layout"))["body_leading"])
+    best_pdf, best_meta = None, None
+    for mult in (1.0, 0.95, 0.9, 0.85, 0.8, 0.75, 0.7):
+        s_try = s if mult == 1.0 else {**s, "layout": {**(s.get("layout") or {}), "body_leading": round(orig_leading * mult, 3)}}
+        trial_meta: dict = {}
+        pdf = _build_letter_pdf_once(s_try, settings, draft, letterhead, meta=trial_meta)
+        orphan = trial_meta.get("sig_page", 0) > trial_meta.get("body_end_page_idx", 0)
+        if best_pdf is None:
+            best_pdf, best_meta = pdf, trial_meta  # احتياطي: أفضل محاولة حتى الآن (الأقل ضغطاً عند التساوي)
+        if not orphan:
+            best_pdf, best_meta = pdf, trial_meta
+            break
+    if meta is not None:
+        meta.update(best_meta)
+    return best_pdf
+
+
+def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterhead: bool = True, meta: dict = None) -> bytes:
     """letterhead=False: طباعة على ورق مطبوع مسبقاً (بلا ترويسة ولا تذييل) مع الحفاظ على مواضع المحتوى"""
     import arabic_reshaper
     import qrcode
@@ -389,6 +409,8 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
             y -= f("gap_table_before") * mm; draw_table(s["table"], tbl_inherit); y -= f("gap_table_after") * mm
     if "{جدول_الأسماء}" not in body and has_table and s.get("auto_table", True):
         y -= f("gap_table_before") * mm; draw_table(s["table"]); y -= f("gap_table_after") * mm
+    if meta is not None:
+        meta["body_end_page_idx"] = page_idx  # 🆕 آخر صفحة احتوت فعلياً على متن — تُقارَن برقم صفحة التوقيع لاكتشاف «الصفحة اليتيمة»
     y -= f("gap_closing") * mm
     ensure(4 * mm)  # 📏 سطر الخاتمة نفسه فقط — التوقيع والـQR يتكيّفان لاحقاً مع ما تبقّى من المساحة (لا يُحجز لهما فراغ إضافي مسبقاً)
     if "closing" in secs:
@@ -397,7 +419,7 @@ def build_letter_pdf(s: dict, settings: dict, draft: bool = False, letterhead: b
         c.setFont("Amiri", BODY); c.drawRightString(RM, y, ar(settings.get("closing") or "وتفضلوا بقبول فائق الاحترام والتقدير،"))
     y -= f("gap_signature") * mm
     sig_img = _img("signature_base64")
-    ensure((22 if sig_img else 9) * mm)  # 🆕 نحجز مسبقاً ارتفاع كتلة التوقيع الفعلي فقط (أكبر إن وُجدت صورة توقيع) كي لا تنكسر بين صفحتين دون داعٍ، ولتبقى meta (رقم الصفحة والإحداثيات) مطابقة لموضع الرسم الفعلي
+    ensure((34 if sig_img else 20) * mm)  # 🆕 نحجز مسبقاً ارتفاع كتلة التوقيع الفعلي (عنوان+اسم، وأكبر مع صورة توقيع) كي لا تنكسر بين صفحتين (حتى عند عرضها كقسم HTML بسطرين منفصلين)، ولتبقى meta (رقم الصفحة والإحداثيات) مطابقة لموضع الرسم الفعلي
 
     sig_title = (s.get("signatory_title") or "").strip()
     sig_name = (s.get("signatory_name") or "").strip()
