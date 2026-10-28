@@ -32,6 +32,7 @@ export default function DailyReport() {
     setExporting(fmt);
     const params: any = { date: selectedDate };
     if (selectedDept) params.department_id = selectedDept;
+    else if (selectedFaculty) params.faculty_id = selectedFaculty;
     await downloadReport(fmt === 'pdf' ? '/reports/daily/export-pdf' : '/export/report/daily/excel', params, ['التقرير اليومي', deptName, selectedDate], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting('');
   };
@@ -52,6 +53,7 @@ export default function DailyReport() {
     try {
       const params: any = { date: selectedDate };
       if (selectedDept) params.department_id = selectedDept;
+      else if (selectedFaculty) params.faculty_id = selectedFaculty;
       const reportRes = await reportsAPI.getDailyReport(params);
       setLectures(reportRes.data.lectures || []);
       setSummary(reportRes.data.summary);
@@ -63,7 +65,7 @@ export default function DailyReport() {
       setExecuting(false);
       setRefreshing(false);
     }
-  }, [selectedDept, selectedDate]);
+  }, [selectedDept, selectedFaculty, selectedDate]);
 
   const onRefresh = () => {
     if (!hasRun) return;

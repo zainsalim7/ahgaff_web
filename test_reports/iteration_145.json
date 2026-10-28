@@ -1,0 +1,41 @@
+{
+  "summary": "Frontend-only test of the cascading Faculty→Department filter (Expo web, admin + dept-head Saeed). All 12 changed screens render the faculty filter before the department filter. Department stays locked until a faculty is picked, only that faculty's departments are listed, and switching faculty clears the department. Checked on: manage-teachers, courses, students, curriculum, report-student, report-warnings, report-daily, report-attendance-overview, report-lesson-completion, teaching-load-report (chips), send-department-results (steps 1/2/3 correct), teaching-load (crossDept disables both pickers). Reports ran with the correct department_id. Regression: git confirms the 9 untouched screens were not modified, and all 9 load without page errors. Main problems: (1) curriculum 'توليد للفصل النشط' is NOT disabled after a faculty change clears the department, and the request then generates offerings for ALL departments; the old plan also stays on screen. (2) courses.tsx ignores filterFaculty in the list. (3) In 3 reports, picking a faculty with 'جميع الأقسام' still returns university-wide data.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "curriculum.tsx - Generate offerings button", "issue": "After changing the faculty (selectedDept=''), gen-offerings-btn stays enabled (disabled={generating || !activeSemester} has no !selectedDept). generateOfferings() posts department_id='' to /api/curriculum/generate-offerings. Backend routes/curriculum.py checks `if department_id:`, which is falsy, so it generates offerings for EVERY department in the university. The review request said this button should be disabled. Not clicked during testing because it is destructive.", "selector": "[data-testid='gen-offerings-btn']", "priority": "HIGH"},
+      {"component": "curriculum.tsx - plan grid", "issue": "After a faculty change clears the department, the previous department's plan (11 courses, levels) is still shown. fetchCurriculum returns early when !selectedDept and does not clear the state. The wipe button is also not visually disabled.", "selector": "[data-testid='curriculum-faculty-picker']", "priority": "MEDIUM"},
+      {"component": "(tabs)/courses.tsx list filtering", "issue": "filterFaculty is not used in list filtering (lines ~787/1294) or in the empty-state condition (line 1461). Picking only a faculty still shows 'اختر فلتراً لعرض المقررات'. Picking faculty=كلية البنات + dept='الكل' shows all 12 courses, including الشريعة والقانون courses from the other faculty. manage-teachers and students do scope by faculty, so the screens behave differently.", "selector": "[data-testid='courses-faculty-filter']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "report-warnings / report-daily / report-attendance-overview with faculty + 'جميع الأقسام'", "issue": "Only department_id is sent, so the results are university-wide even though a faculty is selected. GET /api/reports/warnings already accepts faculty_id, but the frontend does not pass it. daily and attendance-overview have no faculty_id param on the backend.", "affected_selectors": ["[data-testid='warnings-faculty-filter']", "[data-testid='daily-faculty-filter']", "[data-testid='overview-faculty-filter']"]},
+      {"flow": "teaching-load-report scope=teacher, chip 'كل أقسام هذه الكلية'", "issue": "With no department, teachersAPI.getAll({}) fetches ALL teachers, not just the faculty's. The label is misleading.", "affected_selectors": ["[data-testid^='faculty-chip-']"]},
+      {"flow": "report-student faculty only", "issue": "Picking only a faculty does not narrow the course or student pickers (still 'اختر طالب (91 طالب)'). They narrow only once a department is picked.", "affected_selectors": ["[data-testid='student-report-faculty-filter']", "[data-testid='student-picker']"]}
+    ],
+    "design_issues": [
+      {"screen": "manage-teachers", "issues": ["The 'القسم' stat card still shows 'الكل' when a faculty is selected; consider showing the faculty name."]},
+      {"screen": "All 12 screens (scoped users)", "issues": ["Dept-head Saeed sees only one faculty (كلية البنات) but must still pick it by hand before the department unlocks. Suggest auto-selecting when faculties.length===1 (curriculum already auto-selects)."]},
+      {"screen": "teaching-load-report", "issues": ["Department chips have no testID (faculty chips do)."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "curriculum.tsx: add !selectedDept to gen-offerings-btn disabled, add an early-return guard in generateOfferings, clear the curriculum state when selectedDept is empty, and visually disable the wipe/export buttons.",
+    "courses.tsx: apply filterFaculty in list filtering (department_id in the faculty's departments, also for dept='all'), and include filterFaculty in the empty-state condition.",
+    "report-warnings.tsx: send faculty_id when a faculty is selected without a department (backend supports it). For daily/overview, either add faculty_id support on the backend or filter on the client.",
+    "teaching-load-report.tsx (teacher scope) and report-student.tsx: when only a faculty is selected, limit the teacher/course/student lists to that faculty's departments.",
+    "Optional: auto-select the faculty when the user can see only one; departments without faculty_id can no longer be reached on any of the 12 screens (no such departments in current data)."
+  ],
+  "critical_code_review_comments": [
+    "Departments with no faculty_id were reachable before (teaching-load grouped them as 'بدون كلية'). They are now hidden on all 12 screens; current data has none.",
+    "manage-teachers.tsx (1815 lines), courses.tsx (2796), students.tsx (4528) and teaching-load.tsx (1787) are all far over the 700-line guideline.",
+    "The faculty→department cascade logic is copy-pasted across 12 screens. A shared useFacultyDeptFilter hook would remove the duplication."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "N/A (not requested)", "frontend": "85% - all 12 screens meet the cascade/lock/reset spec; 1 HIGH (curriculum generate not disabled) + 2 MEDIUM functional gaps"},
+  "test_credentials": "admin/admin123, Saeed/test1234 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Expo web app. Login: fill placeholder 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور', then click the text 'تسجيل الدخول' (.last). Pickers render as <select> with data-testid. Faculties: F1=698e4f9297fef774e66e93a4 (الشريعة والقانون: depts 698e500997fef774e66e93a8, 698f671331cfba92c49a550c, 698f8093539792f8917b7bd3), F2=698e4fb497fef774e66e93a6 (البنات: dept 698e501d97fef774e66e93a9). Use select_option by value; the department name has a trailing space, so label matching fails. Expected counts: students F1=19, F2=72 (91 total); teachers F1=12, F2=3. Do NOT click gen-offerings-btn with an empty department, because it generates offerings university-wide."
+}

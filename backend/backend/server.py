@@ -11985,6 +11985,7 @@ async def get_summary_report(current_user: dict = Depends(get_current_user)):
 @api_router.get("/reports/attendance-overview")
 async def get_attendance_overview_report(
     department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
     start_date: Optional[str] = None,
     end_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
@@ -11997,6 +11998,9 @@ async def get_attendance_overview_report(
     course_query = {"is_active": True}
     if department_id:
         course_query["department_id"] = department_id
+    elif faculty_id:
+        dep_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        course_query["department_id"] = {"$in": dep_ids}
     
     courses = await db.courses.find(course_query).to_list(100)
     
@@ -12252,6 +12256,7 @@ async def get_student_attendance_report(
 async def get_daily_report(
     date: Optional[str] = None,
     department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير يومي - ملخص الحضور ليوم محدد"""
@@ -12271,6 +12276,9 @@ async def get_daily_report(
     course_query = {"is_active": True}
     if department_id:
         course_query["department_id"] = department_id
+    elif faculty_id:
+        dep_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        course_query["department_id"] = {"$in": dep_ids}
     courses = await db.courses.find(course_query).to_list(100)
     course_ids = [str(c["_id"]) for c in courses]
     

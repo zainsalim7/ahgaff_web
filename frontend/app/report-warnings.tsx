@@ -30,6 +30,7 @@ export default function WarningsReport() {
     setExporting(fmt);
     const params: any = {}
     if (selectedDept) params.department_id = selectedDept;
+    else if (selectedFaculty) params.faculty_id = selectedFaculty;
     await downloadReport(fmt === 'pdf' ? '/reports/warnings/export-pdf' : '/export/report/warnings/excel', params, ['تقرير الإنذارات والحرمان', deptName], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting('');
   };
@@ -50,6 +51,7 @@ export default function WarningsReport() {
     try {
       const params: any = {}
       if (selectedDept) params.department_id = selectedDept;
+      else if (selectedFaculty) params.faculty_id = selectedFaculty;
       const reportRes = await reportsAPI.getWarningsReport(params);
       setWarnings(reportRes.data.warnings || []);
       setDeprivations(reportRes.data.deprivations || []);
@@ -62,7 +64,7 @@ export default function WarningsReport() {
       setExecuting(false);
       setRefreshing(false);
     }
-  }, [selectedDept]);
+  }, [selectedDept, selectedFaculty]);
 
   const onRefresh = () => {
     if (!hasRun) return;

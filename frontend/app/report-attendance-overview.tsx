@@ -32,6 +32,7 @@ export default function AttendanceOverviewReport() {
     setExporting(fmt);
     const params: any = {};
     if (selectedDept) params.department_id = selectedDept;
+    else if (selectedFaculty) params.faculty_id = selectedFaculty;
     await downloadReport(fmt === 'pdf' ? '/reports/attendance-overview/export-pdf' : '/export/report/attendance-overview/excel', params, ['تقرير الحضور الشامل', deptName], fmt === 'pdf' ? 'pdf' : 'xlsx');
     setExporting('');
   };
@@ -54,6 +55,7 @@ export default function AttendanceOverviewReport() {
     try {
       const params: any = {};
       if (selectedDept) params.department_id = selectedDept;
+      else if (selectedFaculty) params.faculty_id = selectedFaculty;
       const reportRes = await reportsAPI.getAttendanceOverview(params);
       setCourses(reportRes.data.courses || []);
       setSummary(reportRes.data.summary);
@@ -65,7 +67,7 @@ export default function AttendanceOverviewReport() {
       setExecuting(false);
       setRefreshing(false);
     }
-  }, [selectedDept]);
+  }, [selectedDept, selectedFaculty]);
 
   // للمعلم: تحميل تلقائي (ليس له فلاتر)
   useEffect(() => {

@@ -55,10 +55,15 @@ export default function TeachingLoadReport() {
       if (scope !== 'teacher') return;
       try {
         const res = await teachersAPI.getAll(selectedDept ? { department_id: selectedDept } : {});
-        setTeachers(res.data || []);
+        let list = res.data || [];
+        if (!selectedDept && selectedFaculty) {
+          const facDeptIds = new Set(departments.filter((d: any) => d.faculty_id === selectedFaculty).map((d: any) => d.id));
+          list = list.filter((t: any) => facDeptIds.has(t.department_id) || (t.department_ids || []).some((id: string) => facDeptIds.has(id)));
+        }
+        setTeachers(list);
       } catch {}
     })();
-  }, [scope, selectedDept]);
+  }, [scope, selectedDept, selectedFaculty, departments]);
 
   const filteredTeachers = useMemo(() => {
     if (!teacherSearch.trim()) return teachers;
@@ -306,6 +311,7 @@ export default function TeachingLoadReport() {
                       key={d.id}
                       style={[st.deptChip, active && st.deptChipActive]}
                       onPress={() => { setSelectedDept(d.id); resetReport(); }}
+                      testID={`dept-chip-${d.id}`}
                     >
                       <Text style={[st.deptChipText, active && st.deptChipTextActive]}>{d.name}</Text>
                     </TouchableOpacity>

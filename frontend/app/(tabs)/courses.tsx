@@ -784,8 +784,9 @@ export default function AddCourseScreen() {
     const lecturesCount = (item as any).lectures_count ?? 0;
     const sLinks = ((item as any).shared_links || []) as any[];
     const mLinks = ((item as any).merge_shared_with || []) as any[];
-    const hasLocFilter = Boolean((filterDept && filterDept !== 'all') || filterLevel || filterSection);
-    const primaryMatches = (!filterDept || filterDept === 'all' || item.department_id === filterDept)
+    const matchesFaculty = !filterFaculty || departments.find((d: any) => d.id === item.department_id)?.faculty_id === filterFaculty;
+    const hasLocFilter = Boolean(filterFaculty || (filterDept && filterDept !== 'all') || filterLevel || filterSection);
+    const primaryMatches = matchesFaculty && (!filterDept || filterDept === 'all' || item.department_id === filterDept)
       && (!filterLevel || String(item.level) === filterLevel)
       && (!filterSection || (item.section || '') === filterSection);
     const sharedHere = Boolean((hasLocFilter && !primaryMatches && sLinks.length > 0) || (item as any).shared_here);
@@ -1285,6 +1286,10 @@ export default function AddCourseScreen() {
             {/* بطاقات الإحصائيات */}
             {(() => {
               const filtered = courses.filter(c => {
+                if (filterFaculty) {
+                  const cFacultyId = departments.find((d: any) => d.id === c.department_id)?.faculty_id;
+                  if (cFacultyId !== filterFaculty) return false;
+                }
                 if (searchQuery) {
                   const q = searchQuery.toLowerCase();
                   if (!c.name?.toLowerCase().includes(q) && !c.code?.toLowerCase().includes(q)) return false;
@@ -1458,7 +1463,7 @@ export default function AddCourseScreen() {
                   </View>
 
                   {/* بطاقة الجدول — لا تعرض حتى يختار المستخدم فلتراً */}
-                  {!(filterDept || searchQuery || filterSemester || filterLevel || filterSection) ? (
+                  {!(filterFaculty || filterDept || searchQuery || filterSemester || filterLevel || filterSection) ? (
                     <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6', padding: 50, alignItems: 'center', gap: 14 }}>
                       <Ionicons name="filter-circle-outline" size={72} color="#cfd6e1" />
                       <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'center' }}>اختر فلتراً لعرض المقررات</Text>

@@ -103,7 +103,7 @@ export default function CurriculumScreen() {
   };
 
   const fetchGrid = useCallback(async () => {
-    if (!selectedDept) return;
+    if (!selectedDept) { setGrid(null); setSectionsMap({}); return; }
     setLoading(true);
     try {
       const res = await api.get(`/curriculum/by-department/${selectedDept}`);
@@ -168,6 +168,7 @@ export default function CurriculumScreen() {
   };
 
   const generateOfferings = async (term?: number) => {
+    if (!selectedDept) return;
     if (!activeSemester) {
       const msg = 'لا يوجد فصل نشط حالياً';
       if (Platform.OS === 'web') window.alert(msg); else Alert.alert('خطأ', msg);
@@ -681,7 +682,7 @@ export default function CurriculumScreen() {
                   <TouchableOpacity
                     style={[styles.toolBtn, { backgroundColor: '#e1f5fe' }]}
                     onPress={() => generateOfferings()}
-                    disabled={generating || !activeSemester}
+                    disabled={generating || !activeSemester || !selectedDept}
                     testID="gen-offerings-btn"
                   >
                     {generating ? <ActivityIndicator size="small" color="#0277bd" /> : <Ionicons name="play-circle" size={18} color="#0277bd" />}
