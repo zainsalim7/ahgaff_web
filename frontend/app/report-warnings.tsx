@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { reportsAPI, departmentsAPI } from '../src/services/api';
+import { reportsAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
@@ -17,6 +17,8 @@ export default function WarningsReport() {
   const [warnings, setWarnings] = useState<any[]>([]);
   const [deprivations, setDeprivations] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [summary, setSummary] = useState<any>(null);
   const [activeTab, setActiveTab] = useState<'warnings' | 'deprivations'>('warnings');
@@ -35,8 +37,9 @@ export default function WarningsReport() {
   useEffect(() => {
     (async () => {
       try {
-        const deptsRes = await departmentsAPI.getAll();
+        const [deptsRes, facsRes] = await Promise.all([departmentsAPI.getAll(), facultiesAPI.getAll().catch(() => ({ data: [] }))]);
         setDepartments(deptsRes.data);
+        setFaculties(facsRes.data || []);
       } catch (e) { console.error(e); }
       finally { setMetaLoading(false); }
     })();
@@ -96,11 +99,20 @@ export default function WarningsReport() {
 
         <ReportFilters onRun={runReport} running={executing} hasRun={hasRun}>
           <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={reportPage.label}>الكلية</Text>
+            <View style={reportPage.pickerBox}>
+              <Picker selectedValue={selectedFaculty} onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); }} style={reportPage.picker} testID="warnings-faculty-filter">
+                <Picker.Item label="جميع الكليات" value="" />
+                {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+              </Picker>
+            </View>
+          </View>
+          <View style={{ flex: 1, minWidth: 220 }}>
             <Text style={reportPage.label}>القسم</Text>
             <View style={reportPage.pickerBox}>
-              <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker}>
-                <Picker.Item label="جميع الأقسام" value="" />
-                {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+              <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker} enabled={!!selectedFaculty} testID="warnings-department-filter">
+                <Picker.Item label={selectedFaculty ? 'جميع الأقسام' : 'اختر الكلية أولاً'} value="" />
+                {departments.filter(d => d.faculty_id === selectedFaculty).map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
               </Picker>
             </View>
           </View>

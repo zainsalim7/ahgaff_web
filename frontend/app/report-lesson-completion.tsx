@@ -69,6 +69,8 @@ export default function LessonCompletionReport() {
   const [refreshing, setRefreshing] = useState(false);
   const [data, setData] = useState<CourseCompletion[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [coursesInDept, setCoursesInDept] = useState<any[]>([]);
   const [selectedCourse, setSelectedCourse] = useState('');
@@ -200,8 +202,9 @@ export default function LessonCompletionReport() {
 
   const fetchDepartments = async () => {
     try {
-      const res = await departmentsAPI.getAll();
+      const [res, facRes] = await Promise.all([departmentsAPI.getAll(), api.get('/faculties').catch(() => ({ data: [] }))]);
       setDepartments(res.data);
+      setFaculties(facRes.data || []);
     } catch {}
   };
 
@@ -328,19 +331,32 @@ export default function LessonCompletionReport() {
         />
         <ReportFilters onRun={runReport} running={loading} hasRun={reportRun} disabled={!selectedCourse} runLabel={!selectedCourse ? 'اختر القسم والمقرر ثم نفّذ' : undefined}>
           <View style={{ flex: 1, minWidth: 220 }}>
-            <Text style={reportPage.label}>1. القسم</Text>
+            <Text style={reportPage.label}>1. الكلية</Text>
             <View style={reportPage.pickerBox}>
-              <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker}>
+              <Picker selectedValue={selectedFaculty} onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); }} style={reportPage.picker} testID="lesson-faculty-filter">
+                <Picker.Item label="-- اختر الكلية --" value="" />
+                {faculties.map(f => (
+                  <Picker.Item key={f.id} label={f.name} value={f.id} />
+                ))}
+              </Picker>
+            </View>
+          </View>
+          {selectedFaculty && (
+          <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={reportPage.label}>2. القسم</Text>
+            <View style={reportPage.pickerBox}>
+              <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker} testID="lesson-department-filter">
                 <Picker.Item label="-- اختر القسم --" value="" />
-                {departments.map(d => (
+                {departments.filter(d => d.faculty_id === selectedFaculty).map(d => (
                   <Picker.Item key={d.id} label={d.name} value={d.id} />
                 ))}
               </Picker>
             </View>
           </View>
+          )}
           {selectedDept && (
             <View style={{ flex: 1, minWidth: 220 }}>
-              <Text style={reportPage.label}>2. المقرر</Text>
+              <Text style={reportPage.label}>3. المقرر</Text>
               {loadingCourses ? (
                 <ActivityIndicator size="small" color="#4caf50" style={{ height: 40 }} />
               ) : (

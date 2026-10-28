@@ -102,10 +102,12 @@ export default function StudentsScreen() {
   }, [isStudent, authLoading]);
   
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   
   // فلاتر
+  const [selectedFacultyFilter, setSelectedFacultyFilter] = useState<string>('');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('');
   const [selectedLevelFilter, setSelectedLevelFilter] = useState<string>('');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('');
@@ -298,6 +300,13 @@ export default function StudentsScreen() {
     }
 
     try {
+      const facsRes = await api.get('/faculties');
+      setFaculties(facsRes.data || []);
+    } catch (error) {
+      console.error('Error fetching faculties:', error);
+    }
+
+    try {
       const studentsRes = await studentsAPI.getAll();
       setStudents(studentsRes.data);
       // 👥 خريطة مجموعات الطلاب (شارة لمن هو موزّع في مجموعة)
@@ -339,8 +348,15 @@ export default function StudentsScreen() {
   }, [openStudent]);
 
   // تصفية الطلاب
+  const deptFacultyMap = useMemo(() => {
+    const m = new Map<string, string>();
+    departments.forEach(d => { if ((d as any).faculty_id) m.set(d.id, (d as any).faculty_id); });
+    return m;
+  }, [departments]);
+
   const filteredStudents = useMemo(() => {
     const filtered = students.filter(student => {
+      const matchesFaculty = !selectedFacultyFilter || deptFacultyMap.get(student.department_id || '') === selectedFacultyFilter;
       const matchesDept = !selectedDeptFilter || student.department_id === selectedDeptFilter;
       const matchesLevel = !selectedLevelFilter || String(student.level) === selectedLevelFilter;
       const matchesSection = !selectedSectionFilter || 
@@ -352,7 +368,7 @@ export default function StudentsScreen() {
       const studentStatus = (student as any).status || (student.is_active === false ? 'inactive' : 'active');
       const matchesStatus = !selectedStatusFilter || studentStatus === selectedStatusFilter;
       
-      return matchesDept && matchesLevel && matchesSection && matchesSearch && matchesStatus;
+      return matchesFaculty && matchesDept && matchesLevel && matchesSection && matchesSearch && matchesStatus;
     });
     // 🔤 فرز ديناميكي حسب الحقل المختار
     if (sortBy !== 'none') {
@@ -380,7 +396,7 @@ export default function StudentsScreen() {
       });
     }
     return filtered;
-  }, [students, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery, selectedStatusFilter, sortBy, attendanceMap]);
+  }, [students, selectedFacultyFilter, deptFacultyMap, selectedDeptFilter, selectedLevelFilter, selectedSectionFilter, searchQuery, selectedStatusFilter, sortBy, attendanceMap]);
 
   // الشعب المتاحة
   const availableSections = useMemo(() => {
@@ -1358,6 +1374,7 @@ export default function StudentsScreen() {
 
   // إعادة تعيين كل الفلاتر
   const handleResetFilters = useCallback(() => {
+    setSelectedFacultyFilter('');
     setSelectedDeptFilter('');
     setSelectedLevelFilter('');
     setSelectedSectionFilter('');
@@ -1384,7 +1401,7 @@ export default function StudentsScreen() {
     }
   }, [sortBy, attendanceMap]);
 
-  const hasAnyFilter = !!(selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery || (sortBy !== 'none' && sortBy !== 'name_asc'));
+  const hasAnyFilter = !!(selectedFacultyFilter || selectedDeptFilter || selectedLevelFilter || selectedSectionFilter || selectedStatusFilter || searchQuery || (sortBy !== 'none' && sortBy !== 'name_asc'));
 
   if (authLoading || loading) {
     return <LoadingScreen />;
@@ -1529,15 +1546,32 @@ export default function StudentsScreen() {
             </View>
 
             <View style={styles.filterField}>
+              <Text style={styles.filterLbl}>الكلية</Text>
+              <View style={styles.dropdown}>
+                <Picker
+                  selectedValue={selectedFacultyFilter}
+                  onValueChange={(v) => { setSelectedFacultyFilter(v); setSelectedDeptFilter(''); setCurrentPage(1); }}
+                  style={styles.dropdownInner}
+                  testID="students-faculty-filter"
+                >
+                  <Picker.Item label="الكل" value="" />
+                  {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                </Picker>
+              </View>
+            </View>
+
+            <View style={styles.filterField}>
               <Text style={styles.filterLbl}>البرنامج</Text>
               <View style={styles.dropdown}>
                 <Picker
                   selectedValue={selectedDeptFilter}
                   onValueChange={(v) => { setSelectedDeptFilter(v); setCurrentPage(1); }}
                   style={styles.dropdownInner}
+                  enabled={!!selectedFacultyFilter}
+                  testID="students-department-filter"
                 >
-                  <Picker.Item label="الكل" value="" />
-                  {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                  <Picker.Item label={selectedFacultyFilter ? 'الكل' : 'اختر الكلية أولاً'} value="" />
+                  {departments.filter(d => (d as any).faculty_id === selectedFacultyFilter).map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                 </Picker>
               </View>
             </View>

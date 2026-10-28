@@ -147,6 +147,7 @@ export default function TeachingLoadPage() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [faculties, setFaculties] = useState<any[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedTeacher, setSelectedTeacher] = useState('');
   const [selectedCourses, setSelectedCourses] = useState<CourseLoad[]>([]);
@@ -830,35 +831,35 @@ export default function TeachingLoadPage() {
       </View>
 
       <ScrollView style={styles.scrollView}>
-        {/* Department Filter - shared, grouped by faculty */}
+        {/* Faculty + Department Filters - cascading الكلية ← القسم */}
         <View style={styles.filterCard}>
-          <Text style={styles.filterLabel}>القسم</Text>
+          <Text style={styles.filterLabel}>الكلية</Text>
+          <View style={styles.pickerWrapper}>
+            <Picker
+              selectedValue={selectedFaculty}
+              onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); setSelectedTeacher(''); }}
+              style={styles.picker}
+              enabled={!crossDept}
+              data-testid="teaching-load-faculty-picker"
+            >
+              <Picker.Item label="-- اختر الكلية --" value="" />
+              {faculties.map((f: any) => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+            </Picker>
+          </View>
+
+          <Text style={[styles.filterLabel, { marginTop: 10 }]}>القسم</Text>
           <View style={styles.pickerWrapper}>
             <Picker
               selectedValue={selectedDept}
               onValueChange={(v) => { setSelectedDept(v); setSelectedTeacher(''); }}
               style={styles.picker}
-              enabled={!crossDept}
+              enabled={!crossDept && !!selectedFaculty}
               data-testid="teaching-load-dept-picker"
             >
-              <Picker.Item label="-- اختر القسم --" value="" />
-              {(() => {
-                // 🔧 تجميع الأقسام حسب الكلية ليُظهر "[الكلية] القسم"
-                const byFac: Record<string, any[]> = {};
-                for (const d of departments) {
-                  const fname = d.faculty_name || faculties.find(f => f.id === d.faculty_id)?.name || 'بدون كلية';
-                  (byFac[fname] = byFac[fname] || []).push(d);
-                }
-                const items: any[] = [];
-                Object.keys(byFac).sort().forEach(fname => {
-                  byFac[fname].forEach((d: any) => {
-                    items.push(
-                      <Picker.Item key={d.id} label={`[${fname}] ${d.name}`} value={d.id} />
-                    );
-                  });
-                });
-                return items;
-              })()}
+              <Picker.Item label={selectedFaculty ? '-- اختر القسم --' : 'اختر الكلية أولاً'} value="" />
+              {departments.filter((d: any) => d.faculty_id === selectedFaculty).map((d: any) => (
+                <Picker.Item key={d.id} label={d.name} value={d.id} />
+              ))}
             </Picker>
           </View>
 
@@ -867,7 +868,7 @@ export default function TeachingLoadPage() {
             onPress={() => {
               const next = !crossDept;
               setCrossDept(next);
-              if (next) setSelectedDept('');
+              if (next) { setSelectedFaculty(''); setSelectedDept(''); }
               setSelectedTeacher('');
               setSearchResults([]);
               setSearchQuery('');

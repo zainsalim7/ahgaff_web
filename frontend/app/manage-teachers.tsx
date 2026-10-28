@@ -19,7 +19,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { teachersAPI, departmentsAPI } from '../src/services/api';
+import { teachersAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
 import { API_URL } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { SortableHeader } from '../src/components/SortableHeader';
@@ -61,10 +61,12 @@ export default function ManageTeachersScreen() {
   const router = useRouter();
   const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
+  const [filterFaculty, setFilterFaculty] = useState<string>('');
   const [filterDepartment, setFilterDepartment] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -184,8 +186,9 @@ export default function ManageTeachersScreen() {
       const results = await Promise.allSettled([
         teachersAPI.getAll(),
         departmentsAPI.getAll(),
+        facultiesAPI.getAll(),
       ]);
-      const [teachersRes, deptsRes] = results;
+      const [teachersRes, deptsRes, facsRes] = results;
       if (teachersRes.status === 'fulfilled') {
         setTeachers(teachersRes.value.data || []);
       } else {
@@ -197,6 +200,12 @@ export default function ManageTeachersScreen() {
       } else {
         console.warn('Failed to fetch departments:', deptsRes.reason);
         setDepartments([]);
+      }
+      if (facsRes.status === 'fulfilled') {
+        setFaculties(facsRes.value.data || []);
+      } else {
+        console.warn('Failed to fetch faculties:', facsRes.reason);
+        setFaculties([]);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -518,6 +527,13 @@ export default function ManageTeachersScreen() {
 
   // فلترة المعلمين
   let filteredTeachers = teachers;
+  if (filterFaculty) {
+    const deptIdsInFaculty = new Set(departments.filter(d => (d as any).faculty_id === filterFaculty).map(d => d.id));
+    filteredTeachers = filteredTeachers.filter(t =>
+      deptIdsInFaculty.has(t.department_id || '') ||
+      (t.department_ids && t.department_ids.some(id => deptIdsInFaculty.has(id)))
+    );
+  }
   if (filterDepartment) {
     filteredTeachers = filteredTeachers.filter(t => 
       t.department_id === filterDepartment || 
@@ -547,7 +563,12 @@ export default function ManageTeachersScreen() {
     [teachers],
   );
 
-  const hasActiveFilter = !!filterDepartment || !!searchQuery;
+  const hasActiveFilter = !!filterFaculty || !!filterDepartment || !!searchQuery;
+
+  const departmentsInFilterFaculty = useMemo(
+    () => departments.filter(d => !filterFaculty || (d as any).faculty_id === filterFaculty),
+    [departments, filterFaculty]
+  );
 
   const renderTeacher = ({ item, index }: { item: Teacher; index: number }) => {
     const hasAccount = !!item.user_id;
@@ -866,26 +887,42 @@ export default function ManageTeachersScreen() {
                   </View>
                 </View>
                 <View style={styles.filterField}>
+                  <Text style={styles.filterLbl}>الكلية</Text>
+                  <View style={styles.dropdown}>
+                    <Picker
+                      selectedValue={filterFaculty}
+                      onValueChange={(v) => { setFilterFaculty(v); setFilterDepartment(''); setCurrentPage(1); }}
+                      style={styles.dropdownInner}
+                      testID="teachers-faculty-filter"
+                    >
+                      <Picker.Item label="الكل" value="" />
+                      {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                    </Picker>
+                  </View>
+                </View>
+                <View style={styles.filterField}>
                   <Text style={styles.filterLbl}>القسم</Text>
                   <View style={styles.dropdown}>
                     <Picker
                       selectedValue={filterDepartment}
                       onValueChange={(v) => { setFilterDepartment(v); setCurrentPage(1); }}
                       style={styles.dropdownInner}
+                      enabled={!!filterFaculty}
+                      testID="teachers-department-filter"
                     >
-                      <Picker.Item label="الكل" value="" />
-                      {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                      <Picker.Item label={filterFaculty ? 'الكل' : 'اختر الكلية أولاً'} value="" />
+                      {departmentsInFilterFaculty.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                     </Picker>
                   </View>
                 </View>
                 <View style={styles.filterBtns}>
                   <TouchableOpacity
                     style={styles.resetBtn}
-                    onPress={() => { setFilterDepartment(''); setSearchQuery(''); setCurrentPage(1); }}
-                    disabled={!filterDepartment && !searchQuery}
+                    onPress={() => { setFilterFaculty(''); setFilterDepartment(''); setSearchQuery(''); setCurrentPage(1); }}
+                    disabled={!hasActiveFilter}
                   >
-                    <Ionicons name="refresh" size={13} color={(filterDepartment || searchQuery) ? '#2962ff' : '#a8b1c2'} />
-                    <Text style={[styles.resetBtnText, !(filterDepartment || searchQuery) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
+                    <Ionicons name="refresh" size={13} color={hasActiveFilter ? '#2962ff' : '#a8b1c2'} />
+                    <Text style={[styles.resetBtnText, !hasActiveFilter && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
                   </TouchableOpacity>
                   <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { paddingHorizontal: 18 }]}>
                     <Text style={styles.btnPrimaryText}>تطبيق الفلتر</Text>

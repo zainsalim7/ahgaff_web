@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, Stack } from 'expo-router';
 import { teachingLoadAPI, departmentsAPI, teachersAPI, semestersAPI } from '../src/services/api';
+import api from '../src/services/api';
 
 const STATUS_COLORS: Record<string, { bg: string; text: string; barBg: string; label: string; icon: any }> = {
   overload: { bg: '#ffebee', text: '#c62828', barBg: '#ef5350', label: 'حمل زائد', icon: 'warning' },
@@ -18,6 +19,8 @@ type ReportScope = 'department' | 'teacher';
 export default function TeachingLoadReport() {
   const router = useRouter();
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [teachers, setTeachers] = useState<any[]>([]);
   const [semesters, setSemesters] = useState<any[]>([]);
   const [scope, setScope] = useState<ReportScope>('department');
@@ -36,8 +39,9 @@ export default function TeachingLoadReport() {
   useEffect(() => {
     (async () => {
       try {
-        const [dRes, sRes] = await Promise.all([departmentsAPI.getAll(), semestersAPI.getAll()]);
+        const [dRes, sRes, fRes] = await Promise.all([departmentsAPI.getAll(), semestersAPI.getAll(), api.get('/faculties').catch(() => ({ data: [] }))]);
         setDepartments(dRes.data || []);
+        setFaculties(fRes.data || []);
         const sems = sRes.data || [];
         setSemesters(sems);
         const active = sems.find((x: any) => x.status === 'active');
@@ -258,21 +262,44 @@ export default function TeachingLoadReport() {
               </View>
             </View>
 
+            {/* الكلية */}
+            <View style={st.filterField}>
+              <Text style={st.filterLabel}>الكلية <Text style={st.required}>*</Text></Text>
+              <View dataSet={{ responsive: 'chip-grid' }} style={st.chipGrid}>
+                {faculties.map((f: any) => {
+                  const active = selectedFaculty === f.id;
+                  return (
+                    <TouchableOpacity
+                      key={f.id}
+                      style={[st.deptChip, active && st.deptChipActive]}
+                      onPress={() => { setSelectedFaculty(f.id); setSelectedDept(''); resetReport(); }}
+                      testID={`faculty-chip-${f.id}`}
+                    >
+                      <Text style={[st.deptChipText, active && st.deptChipTextActive]}>{f.name}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             {/* القسم */}
             <View style={st.filterField}>
               <Text style={st.filterLabel}>
                 القسم {scope === 'department' ? <Text style={st.required}>*</Text> : <Text style={st.hint}>(اختياري)</Text>}
               </Text>
+              {!selectedFaculty ? (
+                <Text style={st.hint}>اختر الكلية أولاً</Text>
+              ) : (
               <View dataSet={{ responsive: 'chip-grid' }} style={st.chipGrid}>
                 {scope === 'teacher' && (
                   <TouchableOpacity
                     style={[st.deptChip, !selectedDept && st.deptChipActive]}
                     onPress={() => { setSelectedDept(''); resetReport(); }}
                   >
-                    <Text style={[st.deptChipText, !selectedDept && st.deptChipTextActive]}>كل الأقسام</Text>
+                    <Text style={[st.deptChipText, !selectedDept && st.deptChipTextActive]}>كل أقسام هذه الكلية</Text>
                   </TouchableOpacity>
                 )}
-                {departments.map((d: any) => {
+                {departments.filter((d: any) => d.faculty_id === selectedFaculty).map((d: any) => {
                   const active = selectedDept === d.id;
                   return (
                     <TouchableOpacity
@@ -285,6 +312,7 @@ export default function TeachingLoadReport() {
                   );
                 })}
               </View>
+              )}
             </View>
 
             {/* المعلم — يظهر فقط في وضع "معلم" */}

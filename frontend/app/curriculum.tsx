@@ -30,6 +30,8 @@ export default function CurriculumScreen() {
   // المستخدم بصلاحية "العرض فقط" يرى الخطة ويصدّرها لكن لا يستطيع التعديل
   const canManage = user?.role === 'admin' || hasPermission(PERMISSIONS.MANAGE_CURRICULUM);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState<string>('');
   const [selectedDept, setSelectedDept] = useState<string>(params.departmentId || '');
   const [grid, setGrid] = useState<any>(null);
   const [loading, setLoading] = useState(false);
@@ -63,19 +65,26 @@ export default function CurriculumScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [d, s] = await Promise.all([
+        const [d, s, f] = await Promise.all([
           api.get('/departments'),
           api.get('/semesters?status=active').catch(() => ({ data: [] })),
+          api.get('/faculties').catch(() => ({ data: [] })),
         ]);
         const deptItems = d.data?.items || d.data || [];
         setDepartments(deptItems);
+        setFaculties(f.data?.items || f.data || []);
         const sems = s.data?.items || s.data || [];
         const active = (Array.isArray(sems) ? sems : []).find((x: any) => x.status === 'active') || sems[0];
         setActiveSemester(active);
         // 🔧 أزلنا /archives من التحميل الأساسي — يُستدعى فقط عند فتح زر "استيراد من أرشيف"
         // (يمنع 403 ثانوياً لمستخدمين بلا صلاحية الأرشيف)
         if (!params.departmentId && deptItems.length > 0) {
-          setSelectedDept(deptItems[0].id || deptItems[0]._id);
+          const firstDept = deptItems[0];
+          setSelectedFaculty(firstDept.faculty_id || '');
+          setSelectedDept(firstDept.id || firstDept._id);
+        } else if (params.departmentId) {
+          const matched = deptItems.find((d: any) => (d.id || d._id) === params.departmentId);
+          if (matched) setSelectedFaculty(matched.faculty_id || '');
         }
       } catch (e) {
         // ignore
@@ -574,6 +583,32 @@ export default function CurriculumScreen() {
               </View>
             </View>
 
+            {/* بطاقة اختيار الكلية */}
+            <View style={styles.sectionCard}>
+              <View style={styles.sectionCardHeader}>
+                <Text style={styles.sectionCardTitle}>اختر الكلية</Text>
+              </View>
+              <View style={styles.deptDropdownWrap}>
+                <View style={styles.deptDropdown}>
+                  <Ionicons name="school-outline" size={16} color="#6a1b9a" style={{ marginHorizontal: 8 }} />
+                  <Picker
+                    selectedValue={selectedFaculty}
+                    onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); }}
+                    style={styles.deptDropdownPicker}
+                    enabled={faculties.length > 0}
+                    testID="curriculum-faculty-picker"
+                  >
+                    <Picker.Item label="-- اختر كلية --" value="" />
+                    {faculties.map((f: any) => {
+                      const fid = f.id || f._id;
+                      return <Picker.Item key={fid} label={f.name} value={fid} />;
+                    })}
+                  </Picker>
+                  <Ionicons name="chevron-down" size={16} color="#8a95a8" style={{ marginHorizontal: 8 }} />
+                </View>
+              </View>
+            </View>
+
             {/* بطاقة اختيار القسم */}
             <View style={styles.sectionCard}>
               <View style={styles.sectionCardHeader}>
@@ -592,14 +627,17 @@ export default function CurriculumScreen() {
                     selectedValue={selectedDept}
                     onValueChange={(v) => setSelectedDept(v)}
                     style={styles.deptDropdownPicker}
-                    enabled={departments.length > 0}
+                    enabled={!!selectedFaculty}
+                    testID="curriculum-department-picker"
                   >
-                    {departments.length === 0 ? (
+                    {!selectedFaculty ? (
+                      <Picker.Item label="اختر الكلية أولاً" value="" />
+                    ) : departments.filter((d: any) => d.faculty_id === selectedFaculty).length === 0 ? (
                       <Picker.Item label="لا توجد أقسام" value="" />
                     ) : (
                       <>
                         <Picker.Item label="-- اختر قسماً --" value="" />
-                        {departments.map((d: any) => {
+                        {departments.filter((d: any) => d.faculty_id === selectedFaculty).map((d: any) => {
                           const did = d.id || d._id;
                           return <Picker.Item key={did} label={d.name} value={did} />;
                         })}
@@ -608,7 +646,7 @@ export default function CurriculumScreen() {
                   </Picker>
                   <Ionicons name="chevron-down" size={16} color="#8a95a8" style={{ marginHorizontal: 8 }} />
                 </View>
-                <Text style={styles.deptDropdownHint}>إجمالي الأقسام المتاحة: {departments.length}</Text>
+                <Text style={styles.deptDropdownHint}>إجمالي الأقسام المتاحة: {departments.filter((d: any) => !selectedFaculty || d.faculty_id === selectedFaculty).length}</Text>
               </View>
             </View>
 

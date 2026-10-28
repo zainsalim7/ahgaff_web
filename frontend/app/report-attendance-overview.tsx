@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { Picker } from '@react-native-picker/picker';
-import { reportsAPI, departmentsAPI } from '../src/services/api';
+import { reportsAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
 
@@ -18,6 +18,8 @@ export default function AttendanceOverviewReport() {
   const [refreshing, setRefreshing] = useState(false);
   const [courses, setCourses] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [summary, setSummary] = useState<any>(null);
   const [sortBy, setSortBy] = useState<'name' | 'rate'>('rate');
@@ -38,8 +40,9 @@ export default function AttendanceOverviewReport() {
     (async () => {
       try {
         if (!isTeacher) {
-          const deptsRes = await departmentsAPI.getAll();
+          const [deptsRes, facsRes] = await Promise.all([departmentsAPI.getAll(), facultiesAPI.getAll().catch(() => ({ data: [] }))]);
           setDepartments(deptsRes.data);
+          setFaculties(facsRes.data || []);
         }
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
@@ -105,11 +108,20 @@ export default function AttendanceOverviewReport() {
         {!isTeacher && (
           <ReportFilters onRun={runReport} running={executing} hasRun={hasRun}>
             <View style={{ flex: 1, minWidth: 220 }}>
+              <Text style={reportPage.label}>الكلية</Text>
+              <View style={reportPage.pickerBox}>
+                <Picker selectedValue={selectedFaculty} onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); }} style={reportPage.picker} testID="overview-faculty-filter">
+                  <Picker.Item label="جميع الكليات" value="" />
+                  {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                </Picker>
+              </View>
+            </View>
+            <View style={{ flex: 1, minWidth: 220 }}>
               <Text style={reportPage.label}>القسم</Text>
               <View style={reportPage.pickerBox}>
-                <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker}>
-                  <Picker.Item label="جميع الأقسام" value="" />
-                  {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker} enabled={!!selectedFaculty} testID="overview-department-filter">
+                  <Picker.Item label={selectedFaculty ? 'جميع الأقسام' : 'اختر الكلية أولاً'} value="" />
+                  {departments.filter(d => d.faculty_id === selectedFaculty).map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                 </Picker>
               </View>
             </View>

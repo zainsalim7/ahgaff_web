@@ -22,6 +22,12 @@ interface Department {
   id: string;
   name: string;
   code: string;
+  faculty_id?: string;
+}
+
+interface Faculty {
+  id: string;
+  name: string;
 }
 
 const showAlert = (title: string, msg: string) => {
@@ -34,6 +40,8 @@ export default function SendDepartmentResultsScreen() {
   const { user } = useAuth();
 
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [faculties, setFaculties] = useState<Faculty[]>([]);
+  const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
   const [selectedDept, setSelectedDept] = useState<Department | null>(null);
   const [selectedLevel, setSelectedLevel] = useState<number | null>(null);
   const [selectedSection, setSelectedSection] = useState<string>('');
@@ -65,8 +73,9 @@ export default function SendDepartmentResultsScreen() {
   const loadDepartments = async () => {
     try {
       setLoading(true);
-      const r = await api.get('/departments');
-      setDepartments((r.data || []).map((d: any) => ({ id: d.id, name: d.name, code: d.code })));
+      const [r, fr] = await Promise.all([api.get('/departments'), api.get('/faculties').catch(() => ({ data: [] }))]);
+      setDepartments((r.data || []).map((d: any) => ({ id: d.id, name: d.name, code: d.code, faculty_id: d.faculty_id })));
+      setFaculties(fr.data || []);
     } catch (e: any) {
       showAlert('خطأ', e?.response?.data?.detail || 'تعذر تحميل الأقسام');
     } finally {
@@ -222,10 +231,40 @@ export default function SendDepartmentResultsScreen() {
             </Text>
           </View>
 
-          {/* Step 1: Department selection (dropdown) */}
+          {/* Step 1: Faculty selection */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>1. اختر القسم</Text>
-            {departments.length === 0 ? (
+            <Text style={styles.sectionTitle}>1. اختر الكلية</Text>
+            {faculties.length === 0 ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="alert-circle" size={20} color="#999" />
+                <Text style={styles.emptyText}>لا توجد كليات متاحة</Text>
+              </View>
+            ) : (
+              <View style={styles.pickerWrap}>
+                <Picker
+                  selectedValue={selectedFacultyId}
+                  onValueChange={(val) => { setSelectedFacultyId(val); setSelectedDept(null); }}
+                  style={styles.picker}
+                  testID="faculty-picker"
+                >
+                  <Picker.Item label="-- اختر الكلية --" value="" />
+                  {faculties.map((f) => (
+                    <Picker.Item key={f.id} label={f.name} value={f.id} />
+                  ))}
+                </Picker>
+              </View>
+            )}
+          </View>
+
+          {/* Step 2: Department selection (dropdown) */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>2. اختر القسم</Text>
+            {!selectedFacultyId ? (
+              <View style={styles.emptyBox}>
+                <Ionicons name="information-circle" size={20} color="#999" />
+                <Text style={styles.emptyText}>اختر الكلية أولاً</Text>
+              </View>
+            ) : departments.filter((d) => d.faculty_id === selectedFacultyId).length === 0 ? (
               <View style={styles.emptyBox}>
                 <Ionicons name="alert-circle" size={20} color="#999" />
                 <Text style={styles.emptyText}>
@@ -248,7 +287,7 @@ export default function SendDepartmentResultsScreen() {
                   testID="dept-picker"
                 >
                   <Picker.Item label="-- اختر القسم --" value="" />
-                  {departments.map((d) => (
+                  {departments.filter((d) => d.faculty_id === selectedFacultyId).map((d) => (
                     <Picker.Item
                       key={d.id}
                       label={`${d.name}${d.code ? ` (${d.code})` : ''}`}
@@ -347,7 +386,7 @@ export default function SendDepartmentResultsScreen() {
           {/* Step 2: Template + Upload */}
           {selectedDept && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>2. تحميل النموذج ورفع النتائج</Text>
+              <Text style={styles.sectionTitle}>3. تحميل النموذج ورفع النتائج</Text>
 
               <View style={styles.infoBox}>
                 <Ionicons name="information-circle" size={18} color="#1565c0" />

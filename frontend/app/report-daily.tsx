@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { reportsAPI, departmentsAPI } from '../src/services/api';
+import { reportsAPI, departmentsAPI, facultiesAPI } from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { formatGregorianDate, WEEKDAYS_AR } from '../src/utils/dateUtils';
 import { ReportHero, ReportKpis, ReportFilters, ReportEmpty, DenseTable, Pill, Bar, downloadReport, reportPage } from '../src/components/reports/ReportShell';
@@ -19,6 +19,8 @@ export default function DailyReport() {
   const [refreshing, setRefreshing] = useState(false);
   const [lectures, setLectures] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedDate, setSelectedDate] = useState(todayStr());
   const [summary, setSummary] = useState<any>(null);
@@ -37,8 +39,9 @@ export default function DailyReport() {
   useEffect(() => {
     (async () => {
       try {
-        const deptsRes = await departmentsAPI.getAll();
+        const [deptsRes, facsRes] = await Promise.all([departmentsAPI.getAll(), facultiesAPI.getAll().catch(() => ({ data: [] }))]);
         setDepartments(deptsRes.data);
+        setFaculties(facsRes.data || []);
       } catch (e) { console.error(e); }
       finally { setLoading(false); }
     })();
@@ -125,11 +128,20 @@ export default function DailyReport() {
             <Text style={styles.dateHint}>{formatDateStr(selectedDate)}</Text>
           </View>
           <View style={{ flex: 1, minWidth: 220 }}>
+            <Text style={reportPage.label}>الكلية</Text>
+            <View style={reportPage.pickerBox}>
+              <Picker selectedValue={selectedFaculty} onValueChange={(v) => { setSelectedFaculty(v); setSelectedDept(''); }} style={reportPage.picker} testID="daily-faculty-filter">
+                <Picker.Item label="جميع الكليات" value="" />
+                {faculties.map(f => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+              </Picker>
+            </View>
+          </View>
+          <View style={{ flex: 1, minWidth: 220 }}>
             <Text style={reportPage.label}>القسم</Text>
             <View style={reportPage.pickerBox}>
-              <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker}>
-                <Picker.Item label="جميع الأقسام" value="" />
-                {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+              <Picker selectedValue={selectedDept} onValueChange={setSelectedDept} style={reportPage.picker} enabled={!!selectedFaculty} testID="daily-department-filter">
+                <Picker.Item label={selectedFaculty ? 'جميع الأقسام' : 'اختر الكلية أولاً'} value="" />
+                {departments.filter(d => d.faculty_id === selectedFaculty).map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
               </Picker>
             </View>
           </View>

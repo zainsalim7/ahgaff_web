@@ -41,11 +41,13 @@ export default function StudentReport() {
   
   // بيانات الفلاتر
   const [departments, setDepartments] = useState<any[]>([]);
+  const [faculties, setFaculties] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [students, setStudents] = useState<any[]>([]);
   const [filteredStudents, setFilteredStudents] = useState<any[]>([]);
   
   // الفلاتر المحددة
+  const [selectedFaculty, setSelectedFaculty] = useState('');
   const [selectedDept, setSelectedDept] = useState('');
   const [selectedCourse, setSelectedCourse] = useState('');
   const [selectedStudent, setSelectedStudent] = useState('');
@@ -102,10 +104,11 @@ export default function StudentReport() {
   const fetchFiltersData = async () => {
     try {
       setLoadingFilters(true);
-      const [deptsRes, coursesRes, studentsRes] = await Promise.all([
+      const [deptsRes, coursesRes, studentsRes, facsRes] = await Promise.all([
         departmentsAPI.getAll(),
         coursesAPI.getAll(),
-        studentsAPI.getAll()
+        studentsAPI.getAll(),
+        api.get('/faculties').catch(() => ({ data: [] }))
       ]);
       
       let allCourses = coursesRes.data || [];
@@ -122,6 +125,7 @@ export default function StudentReport() {
       }
       
       setDepartments(allDepts);
+      setFaculties(facsRes.data || []);
       setCourses(allCourses);
       setStudents(allStudents);
       setFilteredStudents(allStudents);
@@ -326,6 +330,7 @@ export default function StudentReport() {
 
   // إعادة تعيين الفلاتر
   const resetFilters = () => {
+    setSelectedFaculty('');
     setSelectedDept('');
     setSelectedCourse('');
     setSelectedStudent('');
@@ -371,7 +376,7 @@ export default function StudentReport() {
               <TouchableOpacity onPress={handleRefresh} style={styles.refreshBtn} accessibilityLabel="تحديث">
                 <Ionicons name="refresh" size={20} color="#9c27b0" />
               </TouchableOpacity>
-              {(selectedDept || selectedCourse || selectedStudent) && (
+              {(selectedFaculty || selectedDept || selectedCourse || selectedStudent) && (
                 <TouchableOpacity onPress={resetFilters}>
                   <Text style={styles.resetText}>إعادة تعيين</Text>
                 </TouchableOpacity>
@@ -383,6 +388,30 @@ export default function StudentReport() {
             <ActivityIndicator size="small" color="#9c27b0" style={{ marginVertical: 20 }} />
           ) : (
             <View style={styles.filtersRowWrap}>
+              {/* فلتر الكلية */}
+              <View style={styles.filterRow}>
+                <Text style={styles.filterLabel}>الكلية</Text>
+                <View style={styles.pickerWrapper}>
+                  <Picker
+                    selectedValue={selectedFaculty}
+                    onValueChange={(value) => {
+                      setSelectedFaculty(value);
+                      setSelectedDept('');
+                      setSelectedCourse('');
+                      setSelectedStudent('');
+                      setStudentData(null);
+                    }}
+                    style={styles.picker}
+                    testID="student-report-faculty-filter"
+                  >
+                    <Picker.Item label="جميع الكليات" value="" />
+                    {faculties.map((fac: any) => (
+                      <Picker.Item key={fac.id} label={fac.name} value={fac.id} />
+                    ))}
+                  </Picker>
+                </View>
+              </View>
+
               {/* فلتر القسم */}
               <View style={styles.filterRow}>
                 <Text style={styles.filterLabel}>القسم</Text>
@@ -396,9 +425,11 @@ export default function StudentReport() {
                       setStudentData(null);
                     }}
                     style={styles.picker}
+                    enabled={!!selectedFaculty}
+                    testID="student-report-department-filter"
                   >
-                    <Picker.Item label="جميع الأقسام" value="" />
-                    {departments.map((dept) => (
+                    <Picker.Item label={selectedFaculty ? 'جميع الأقسام' : 'اختر الكلية أولاً'} value="" />
+                    {departments.filter((dept: any) => dept.faculty_id === selectedFaculty).map((dept) => (
                       <Picker.Item key={dept.id} label={dept.name} value={dept.id} />
                     ))}
                   </Picker>

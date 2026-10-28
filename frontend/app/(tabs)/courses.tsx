@@ -107,6 +107,7 @@ export default function AddCourseScreen() {
   
   // Search and filter
   const [searchQuery, setSearchQuery] = useState<string>('');
+  const [filterFaculty, setFilterFaculty] = useState<string>('');
   const [filterDept, setFilterDept] = useState<string>('');
   const [filterLevel, setFilterLevel] = useState<string>('');
   const [filterSection, setFilterSection] = useState<string>('');
@@ -1371,16 +1372,32 @@ export default function AddCourseScreen() {
                         </View>
                       </View>
                       <View style={styles.filterField}>
+                        <Text style={styles.filterLbl}>الكلية</Text>
+                        <View style={styles.dropdown}>
+                          <Picker
+                            selectedValue={filterFaculty}
+                            onValueChange={(v) => { setFilterFaculty(v); setFilterDept(''); setCurrentPage(1); }}
+                            style={styles.dropdownInner}
+                            testID="courses-faculty-filter"
+                          >
+                            <Picker.Item label="الكل" value="" />
+                            {faculties.map((f: any) => <Picker.Item key={f.id} label={f.name} value={f.id} />)}
+                          </Picker>
+                        </View>
+                      </View>
+                      <View style={styles.filterField}>
                         <Text style={styles.filterLbl}>القسم</Text>
                         <View style={styles.dropdown}>
                           <Picker
                             selectedValue={filterDept}
                             onValueChange={(v) => { setFilterDept(v); setCurrentPage(1); }}
                             style={styles.dropdownInner}
+                            enabled={!!filterFaculty}
+                            testID="courses-department-filter"
                           >
-                            <Picker.Item label="اختر القسم..." value="" />
-                            {authUser?.role === 'admin' && <Picker.Item label="الكل" value="all" />}
-                            {departments.map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
+                            <Picker.Item label={filterFaculty ? 'اختر القسم...' : 'اختر الكلية أولاً'} value="" />
+                            {authUser?.role === 'admin' && filterFaculty && <Picker.Item label="الكل" value="all" />}
+                            {departments.filter((d: any) => !filterFaculty || d.faculty_id === filterFaculty).map(d => <Picker.Item key={d.id} label={d.name} value={d.id} />)}
                           </Picker>
                         </View>
                       </View>
@@ -1429,9 +1446,9 @@ export default function AddCourseScreen() {
                         </View>
                       </View>
                       <View style={styles.filterBtns}>
-                        <TouchableOpacity style={styles.resetBtn} onPress={() => { setFilterDept(''); setSearchQuery(''); setFilterSemester(''); setFilterLevel(''); setFilterSection(''); setCurrentPage(1); }} disabled={!filterDept && !searchQuery && !filterSemester && !filterLevel && !filterSection}>
-                          <Ionicons name="refresh" size={13} color={(filterDept || searchQuery || filterSemester || filterLevel || filterSection) ? '#2962ff' : '#a8b1c2'} />
-                          <Text style={[styles.resetBtnText, !(filterDept || searchQuery || filterSemester || filterLevel || filterSection) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
+                        <TouchableOpacity style={styles.resetBtn} onPress={() => { setFilterFaculty(''); setFilterDept(''); setSearchQuery(''); setFilterSemester(''); setFilterLevel(''); setFilterSection(''); setCurrentPage(1); }} disabled={!filterFaculty && !filterDept && !searchQuery && !filterSemester && !filterLevel && !filterSection}>
+                          <Ionicons name="refresh" size={13} color={(filterFaculty || filterDept || searchQuery || filterSemester || filterLevel || filterSection) ? '#2962ff' : '#a8b1c2'} />
+                          <Text style={[styles.resetBtnText, !(filterFaculty || filterDept || searchQuery || filterSemester || filterLevel || filterSection) && { color: '#a8b1c2' }]}>إعادة تعيين</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={[styles.headerBtn, styles.btnPrimary, { paddingHorizontal: 18 }]}>
                           <Text style={styles.btnPrimaryText}>تطبيق الفلتر</Text>
