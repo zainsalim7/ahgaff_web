@@ -11,6 +11,7 @@ import {
   ActivityIndicator,
   Modal,
   Switch,
+  Platform,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -96,8 +97,10 @@ export default function PermissionsScreen() {
   // صلاحيات وتسمية الدور الأساسي للمستخدم (دوره لا يُعدَّل من هذه الشاشة إطلاقاً)
   const getRoleInfo = useCallback((user: User) => {
     const roleDoc = user.role_id ? roles.find(r => r.id === user.role_id) : null;
-    const basePerms = roleDoc ? (roleDoc.permissions || []) : (defaultPermissions[user.role] || []);
-    const roleName = roleDoc ? roleDoc.name : (ROLE_LABELS[user.role] || user.role);
+    const roleBase = roleDoc ? (roleDoc.permissions || []) : (defaultPermissions[user.role] || []);
+    // صلاحياته المباشرة المسندة سابقاً (قبل وجود هذه الشاشة) تبقى ثابتة أيضاً، وليست قابلة للحذف من هنا
+    const basePerms = Array.from(new Set([...roleBase, ...(user.permissions || [])]));
+    const roleName = roleDoc ? roleDoc.name : (user.role === 'custom' ? 'دور مخصص' : (ROLE_LABELS[user.role] || user.role));
     return { roleName, basePerms };
   }, [roles, defaultPermissions]);
 
@@ -124,12 +127,12 @@ export default function PermissionsScreen() {
     setSaving(true);
     try {
       await usersAPI.updateCustomPermissions(selectedUser.id, customPermissions);
-      Alert.alert('نجاح', 'تم حفظ الصلاحيات الإضافية');
+      if (Platform.OS === 'web') window.alert('تم حفظ الصلاحيات الإضافية'); else Alert.alert('نجاح', 'تم حفظ الصلاحيات الإضافية');
       setShowModal(false);
       fetchData();
     } catch (error: any) {
       const message = error.response?.data?.detail || 'فشل في حفظ التغييرات';
-      Alert.alert('خطأ', message);
+      if (Platform.OS === 'web') window.alert(message); else Alert.alert('خطأ', message);
     } finally {
       setSaving(false);
     }
@@ -138,30 +141,30 @@ export default function PermissionsScreen() {
   const handleResetPermissions = async () => {
     if (!selectedUser) return;
 
-    Alert.alert(
-      'إعادة تعيين الصلاحيات الإضافية',
-      'سيتم إزالة كل الصلاحيات الإضافية الفردية لهذا المستخدم فقط — صلاحيات دوره الأساسي تبقى كما هي. متابعة؟',
-      [
+    const doReset = async () => {
+      setSaving(true);
+      try {
+        await usersAPI.updateCustomPermissions(selectedUser.id, []);
+        setCustomPermissions([]);
+        if (Platform.OS === 'web') window.alert('تم إعادة تعيين الصلاحيات الإضافية'); else Alert.alert('نجاح', 'تم إعادة تعيين الصلاحيات الإضافية');
+        setShowModal(false);
+        fetchData();
+      } catch (error) {
+        if (Platform.OS === 'web') window.alert('فشل في إعادة تعيين الصلاحيات'); else Alert.alert('خطأ', 'فشل في إعادة تعيين الصلاحيات');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const msg = 'سيتم إزالة كل الصلاحيات الإضافية الفردية لهذا المستخدم فقط — صلاحيات دوره الأساسي تبقى كما هي. متابعة؟';
+    if (Platform.OS === 'web') {
+      if (window.confirm(msg)) doReset();
+    } else {
+      Alert.alert('إعادة تعيين الصلاحيات الإضافية', msg, [
         { text: 'إلغاء', style: 'cancel' },
-        {
-          text: 'إعادة تعيين',
-          onPress: async () => {
-            setSaving(true);
-            try {
-              await usersAPI.updateCustomPermissions(selectedUser.id, []);
-              setCustomPermissions([]);
-              Alert.alert('نجاح', 'تم إعادة تعيين الصلاحيات الإضافية');
-              setShowModal(false);
-              fetchData();
-            } catch (error) {
-              Alert.alert('خطأ', 'فشل في إعادة تعيين الصلاحيات');
-            } finally {
-              setSaving(false);
-            }
-          },
-        },
-      ]
-    );
+        { text: 'إعادة تعيين', onPress: doReset },
+      ]);
+    }
   };
 
   // تجميع الصلاحيات حسب الفئة
@@ -350,23 +353,25 @@ export default function PermissionsScreen() {
                   <View key={category} style={styles.permCategory}>
                     <Text style={styles.categoryTitle}>{category}</Text>
                     {extraPerms.map(perm => (
-                      <TouchableOpacity
+                      <View
                         key={perm.key}
                         style={styles.permItem}
-                        onPress={() => togglePermission(perm.key, basePerms)}
                         testID={`permission-toggle-${perm.key}`}
                       >
-                        <View style={styles.permInfo}>
+                        <TouchableOpacity
+                          style={styles.permInfo}
+                          onPress={() => togglePermission(perm.key, basePerms)}
+                        >
                           <Text style={styles.permLabel}>{perm.label}</Text>
                           <Text style={styles.permKey}>{perm.key}</Text>
-                        </View>
+                        </TouchableOpacity>
                         <Switch
                           value={customPermissions.includes(perm.key)}
                           onValueChange={() => togglePermission(perm.key, basePerms)}
                           trackColor={{ false: '#e0e0e0', true: '#ffcc80' }}
                           thumbColor={customPermissions.includes(perm.key) ? '#ff9800' : '#f4f3f4'}
                         />
-                      </TouchableOpacity>
+                      </View>
                     ))}
                   </View>
                   );

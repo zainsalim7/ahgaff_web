@@ -2215,6 +2215,9 @@ async def update_user_custom_permissions(user_id: str, data: CustomPermissionsUp
     if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
+    if not ObjectId.is_valid(user_id):
+        raise HTTPException(status_code=400, detail="معرّف مستخدم غير صالح")
+    
     user = await db.users.find_one({"_id": ObjectId(user_id)})
     if not user:
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")

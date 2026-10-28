@@ -1,0 +1,42 @@
+{
+  "summary": "Tested the new per-user extra permissions feature (/permissions screen plus PUT /api/users/{id}/custom-permissions) on both backend and frontend, and checked /manage-users for regressions. Backend: 12 of 13 tests passed. Saving works, invalid keys are filtered out, saving does not change role, role_id or permissions, reset to [] works, non-admins get 403, and the login session (/auth/me) gets the extra permissions. The one failure: an invalid ObjectId returns 500. Frontend: the list, role names (including custom role_id roles such as المدير المالي), filters, modal sections, locked base chips, saving and reopening all work. Two web bugs: (1) the reset button does nothing on web, and (2) clicking the Switch itself does not toggle it. Regression: changing the role in /manage-users works (window.alert success, role_id saved) and custom_permissions survive the role change. Existing users' permissions and custom_permissions are unchanged.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/users/{user_id}/custom-permissions", "issue": "A user_id that is not a valid ObjectId (e.g. 'not-an-id') returns 500 because ObjectId(user_id) raises InvalidId. It should return 400 or 404."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "permissions.tsx handleResetPermissions", "issue": "The reset button (إعادة تعيين) does nothing on web. Alert.alert with buttons does nothing in react-native-web, so no confirm dialog appears, onPress never runs and the API is never called. Reproduced: after clicking, no dialog appeared, the modal stayed open and the toggle stayed ON. Fix: use window.confirm when Platform.OS === 'web', as manage-users.tsx and other screens already do.", "selector": "[data-testid='permissions-reset-btn']", "priority": "HIGH"},
+      {"component": "permissions.tsx handleSave / error alerts", "issue": "No success or error message is shown on web, also because of Alert.alert. The save works and the modal closes, but no alert or dialog appears. Use window.alert on web.", "selector": "[data-testid='permissions-save-btn']", "priority": "MEDIUM"},
+      {"component": "permissions.tsx extra permission row", "issue": "Clicking the Switch itself toggles the permission twice: Switch onValueChange fires and the click also reaches the parent TouchableOpacity onPress, so the state ends up unchanged. Clicking the label or row works. Fix: remove onValueChange from the Switch (or make it pointerEvents none), or stop the click from reaching the row.", "selector": "[data-testid^='permission-toggle-'] input[type=checkbox]", "priority": "HIGH"}
+    ],
+    "integration_issues": [
+      {"flow": "Base permissions and permission count", "issue": "getRoleInfo uses only the role document's permissions (or default_permissions[role]) and ignores the user's own `permissions` field. The backend (get_current_user) grants role-doc ∪ user.permissions ∪ custom_permissions. Example: Salim's own permissions include hr_manage_leaves, hr_manage_org, hr_manage_employees and hr_view_employees, which are not in the dean role. The screen shows them as OFF toggles even though he has them, and the card shows 34 instead of the real total. test_iso_hr2 (role 'custom', no role_id) shows 0 permissions and a raw 'custom' label while it really has 6.", "affected_selectors": ["[data-testid^='permissions-user-card-']"]},
+      {"flow": "Role with empty permissions", "issue": "For role docs with 0 permissions (مشرف قسم, الموظف العادي) the backend falls back to the system_key or default permissions, but the frontend shows no base permissions. This is an edge case."}
+    ],
+    "design_issues": [
+      {"screen": "/permissions list", "issues": ["The raw English 'custom' label appears as a role name and filter chip for users with role='custom' and no role_id. Show a label such as 'دور مخصص' instead."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_custom_permissions_screen.py", "/app/test_reports/pytest/custom_perms.xml"],
+  "action_items": [
+    "permissions.tsx: replace Alert.alert in handleResetPermissions with window.confirm on web (and window.alert for the success and error messages in handleSave and reset), so reset works and messages appear on web",
+    "permissions.tsx: fix the Switch double toggle inside the TouchableOpacity row (keep a single toggle handler)",
+    "permissions.tsx: include user.permissions (the user's own grants) in the base or effective set for the count and the locked chips, so users with direct grants (e.g. Salim) are shown correctly; map role 'custom' with no role_id to an Arabic label",
+    "server.py update_user_custom_permissions: validate ObjectId and return 400/404 instead of 500"
+  ],
+  "critical_code_review_comments": [
+    "custom_permissions is not a new field: Salim, Saeed, fee_dorm, fee_general and view_curr_user already had values from earlier sessions, and they are preserved and shown correctly as ON toggles. Using reset on Salim would wipe test-setup permissions (hr_manage_tasks, hr_manage_appraisals) that iteration_146 tests rely on.",
+    "Any non-admin user with manage_users can grant any permission, including manage_users or manage_roles, to anyone (including themselves) through this endpoint. This matches the existing trust model, but consider limiting it to admins.",
+    "GET /api/users excludes teachers and students, so this screen cannot grant extra permissions to teachers. The 'academic + admin extras' case only covers dean/department_head, which are listed."
+  ],
+  "updated_files": ["/app/backend/tests/test_custom_permissions_screen.py"],
+  "success_rate": {"backend": "92% (12/13)", "frontend": "75% (list, filters, modal sections, save+persist and manage-users regression pass; reset broken on web; switch click broken)"},
+  "seed_data_creation": "Created TEST_ui_hybrid (dean) for UI testing and deleted it afterwards. The pytest fixture creates and deletes TEST_cp_<ts>. Did not modify Salim, Saeed or other existing users.",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login: admin/admin123 through the 'تسجيل الدخول' button (Enter does not submit). /permissions testIDs: permissions-filter-<roleName>, permissions-user-card-<id>, permissions-save-btn, permissions-reset-btn, permission-toggle-<key>. Click the row label text (not the switch) to toggle. Creating a dean user requires faculty_id (use 698e4f9297fef774e66e93a4). Finance role id: 6ae12b45b4d7a835c4c9b5fe. After the fix, retest reset on web (expect a window.confirm dialog) and a direct switch click.",
+  "rca of the issue": "Reset and success messages: react-native-web's Alert.alert does nothing, and permissions.tsx uses it without a Platform.OS==='web' fallback (unlike manage-users.tsx). Switch: RN-web Switch is an input inside a TouchableOpacity that also toggles, so one click runs togglePermission twice."
+}
