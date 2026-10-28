@@ -343,6 +343,8 @@ export const usersAPI = {
   addPermission: (id: string, data: any) => api.post(`/users/${id}/permissions`, data),
   updateAllPermissions: (id: string, scopes: any[]) => api.put(`/users/${id}/permissions`, { scopes }),
   deletePermission: (id: string, permissionId: string) => api.delete(`/users/${id}/permissions/${permissionId}`),
+  // صلاحيات إضافية فردية فوق الدور الأساسي (لا تمس صلاحيات الدور)
+  updateCustomPermissions: (id: string, customPermissions: string[]) => api.put(`/users/${id}/custom-permissions`, { custom_permissions: customPermissions }),
 };
 
 // Permissions API

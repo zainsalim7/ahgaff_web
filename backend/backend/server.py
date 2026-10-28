@@ -1481,6 +1481,7 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
             "created_at": u["created_at"],
             "is_active": u.get("is_active", True),
             "permissions": u.get("permissions") or DEFAULT_PERMISSIONS.get(u["role"], []),
+            "custom_permissions": u.get("custom_permissions") or [],
             "university_id": u.get("university_id"),
             "faculty_id": u.get("faculty_id"),
             "faculty_ids": u.get("faculty_ids", []),
@@ -2202,6 +2203,31 @@ async def reset_user_permissions(user_id: str, current_user: dict = Depends(get_
         "message": "تم إعادة تعيين الصلاحيات إلى الافتراضية",
         "permissions": default_perms
     }
+
+
+class CustomPermissionsUpdate(BaseModel):
+    custom_permissions: List[str]
+
+
+@api_router.put("/users/{user_id}/custom-permissions")
+async def update_user_custom_permissions(user_id: str, data: CustomPermissionsUpdate, current_user: dict = Depends(get_current_user)):
+    """صلاحيات إضافية فردية فوق صلاحيات الدور الأساسي — لا تمس دور المستخدم أو صلاحياته الممنوحة من دوره إطلاقاً"""
+    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_users"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    
+    user = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user:
+        raise HTTPException(status_code=404, detail="المستخدم غير موجود")
+    
+    valid_keys = {p["key"] for p in ALL_PERMISSIONS}
+    cleaned = [p for p in data.custom_permissions if p in valid_keys]
+    
+    await db.users.update_one(
+        {"_id": ObjectId(user_id)},
+        {"$set": {"custom_permissions": cleaned}}
+    )
+    
+    return {"message": "تم حفظ الصلاحيات الإضافية", "custom_permissions": cleaned}
 
 # ==================== Department Routes ====================
 

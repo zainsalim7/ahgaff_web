@@ -25,9 +25,12 @@ interface Permission {
   category: string;
 }
 
-interface Role {
-  key: string;
-  label: string;
+interface RoleDoc {
+  id: string;
+  name: string;
+  permissions: string[];
+  is_system?: boolean;
+  system_key?: string;
 }
 
 interface User {
@@ -35,8 +38,10 @@ interface User {
   username: string;
   full_name: string;
   role: string;
+  role_id?: string;
   email?: string;
   permissions: string[];
+  custom_permissions?: string[];
 }
 
 const ROLE_COLORS: { [key: string]: string } = {
@@ -57,13 +62,12 @@ export default function PermissionsScreen() {
   const router = useRouter();
   const [users, setUsers] = useState<User[]>([]);
   const [allPermissions, setAllPermissions] = useState<Permission[]>([]);
-  const [roles, setRoles] = useState<Role[]>([]);
+  const [roles, setRoles] = useState<RoleDoc[]>([]);
   const [defaultPermissions, setDefaultPermissions] = useState<{ [key: string]: string[] }>({});
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState<User | null>(null);
   const [showModal, setShowModal] = useState(false);
-  const [userPermissions, setUserPermissions] = useState<string[]>([]);
-  const [selectedRole, setSelectedRole] = useState<string>('');
+  const [customPermissions, setCustomPermissions] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [filterRole, setFilterRole] = useState<string>('');
 
@@ -89,15 +93,23 @@ export default function PermissionsScreen() {
     fetchData();
   }, [fetchData]);
 
+  // صلاحيات وتسمية الدور الأساسي للمستخدم (دوره لا يُعدَّل من هذه الشاشة إطلاقاً)
+  const getRoleInfo = useCallback((user: User) => {
+    const roleDoc = user.role_id ? roles.find(r => r.id === user.role_id) : null;
+    const basePerms = roleDoc ? (roleDoc.permissions || []) : (defaultPermissions[user.role] || []);
+    const roleName = roleDoc ? roleDoc.name : (ROLE_LABELS[user.role] || user.role);
+    return { roleName, basePerms };
+  }, [roles, defaultPermissions]);
+
   const openUserModal = (user: User) => {
     setSelectedUser(user);
-    setUserPermissions([...user.permissions]);
-    setSelectedRole(user.role);
+    setCustomPermissions([...(user.custom_permissions || [])]);
     setShowModal(true);
   };
 
-  const togglePermission = (permKey: string) => {
-    setUserPermissions(prev => {
+  const togglePermission = (permKey: string, basePerms: string[]) => {
+    if (basePerms.includes(permKey)) return; // صلاحية ممنوحة من الدور — لا تُعدَّل من هنا
+    setCustomPermissions(prev => {
       if (prev.includes(permKey)) {
         return prev.filter(p => p !== permKey);
       } else {
@@ -106,26 +118,13 @@ export default function PermissionsScreen() {
     });
   };
 
-  const handleRoleChange = (newRole: string) => {
-    setSelectedRole(newRole);
-    // تحديث الصلاحيات للافتراضية للدور الجديد
-    setUserPermissions(defaultPermissions[newRole] || []);
-  };
-
   const handleSave = async () => {
     if (!selectedUser) return;
 
     setSaving(true);
     try {
-      // إذا تغير الدور، استخدم API تحديث الدور
-      if (selectedRole !== selectedUser.role) {
-        await usersAPI.updateRole(selectedUser.id, selectedRole, userPermissions);
-      } else {
-        // فقط تحديث الصلاحيات
-        await usersAPI.updatePermissions(selectedUser.id, userPermissions);
-      }
-      
-      Alert.alert('نجاح', 'تم حفظ التغييرات');
+      await usersAPI.updateCustomPermissions(selectedUser.id, customPermissions);
+      Alert.alert('نجاح', 'تم حفظ الصلاحيات الإضافية');
       setShowModal(false);
       fetchData();
     } catch (error: any) {
@@ -140,8 +139,8 @@ export default function PermissionsScreen() {
     if (!selectedUser) return;
 
     Alert.alert(
-      'إعادة تعيين الصلاحيات',
-      'سيتم إعادة تعيين صلاحيات هذا المستخدم إلى الافتراضية حسب دوره. متابعة؟',
+      'إعادة تعيين الصلاحيات الإضافية',
+      'سيتم إزالة كل الصلاحيات الإضافية الفردية لهذا المستخدم فقط — صلاحيات دوره الأساسي تبقى كما هي. متابعة؟',
       [
         { text: 'إلغاء', style: 'cancel' },
         {
@@ -149,8 +148,9 @@ export default function PermissionsScreen() {
           onPress: async () => {
             setSaving(true);
             try {
-              await usersAPI.resetPermissions(selectedUser.id);
-              Alert.alert('نجاح', 'تم إعادة تعيين الصلاحيات');
+              await usersAPI.updateCustomPermissions(selectedUser.id, []);
+              setCustomPermissions([]);
+              Alert.alert('نجاح', 'تم إعادة تعيين الصلاحيات الإضافية');
               setShowModal(false);
               fetchData();
             } catch (error) {
@@ -174,13 +174,19 @@ export default function PermissionsScreen() {
   }, {} as { [key: string]: Permission[] });
 
   const filteredUsers = filterRole 
-    ? users.filter(u => u.role === filterRole)
+    ? users.filter(u => getRoleInfo(u).roleName === filterRole)
     : users;
 
-  const renderUser = ({ item }: { item: User }) => (
+  const uniqueRoleNames = Array.from(new Set(users.map(u => getRoleInfo(u).roleName)));
+
+  const renderUser = ({ item }: { item: User }) => {
+    const { roleName, basePerms } = getRoleInfo(item);
+    const totalPerms = new Set([...basePerms, ...(item.custom_permissions || [])]).size;
+    return (
     <TouchableOpacity
       style={styles.userCard}
       onPress={() => openUserModal(item)}
+      testID={`permissions-user-card-${item.id}`}
     >
       <View style={[styles.roleIndicator, { backgroundColor: ROLE_COLORS[item.role] || '#999' }]} />
       <View style={styles.userInfo}>
@@ -188,17 +194,18 @@ export default function PermissionsScreen() {
         <Text style={styles.userUsername}>@{item.username}</Text>
         <View style={styles.roleTag}>
           <Text style={[styles.roleText, { color: ROLE_COLORS[item.role] || '#999' }]}>
-            {ROLE_LABELS[item.role] || item.role}
+            {roleName}
           </Text>
         </View>
       </View>
       <View style={styles.permCount}>
         <Ionicons name="key" size={18} color="#ff9800" />
-        <Text style={styles.permCountText}>{item.permissions?.length || 0}</Text>
+        <Text style={styles.permCountText}>{totalPerms}</Text>
       </View>
       <Ionicons name="chevron-forward" size={20} color="#ccc" />
     </TouchableOpacity>
-  );
+    );
+  };
 
   if (loading) {
     return <LoadingScreen />;
@@ -211,7 +218,7 @@ export default function PermissionsScreen() {
         <TouchableOpacity onPress={() => goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color="#fff" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>إدارة الصلاحيات</Text>
+        <Text style={styles.headerTitle}>الصلاحيات الإضافية والنطاق</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -219,7 +226,7 @@ export default function PermissionsScreen() {
       <View style={styles.infoBanner}>
         <Ionicons name="information-circle" size={20} color="#1565c0" />
         <Text style={styles.infoBannerText}>
-          اضغط على المستخدم لتعديل دوره وصلاحياته
+          اضغط على المستخدم لمنحه صلاحيات إدارية إضافية فردية أو تحديد نطاق وحدته — دوره الأساسي يبقى كما هو
         </Text>
       </View>
 
@@ -228,24 +235,21 @@ export default function PermissionsScreen() {
         <TouchableOpacity
           style={[styles.filterBtn, !filterRole && styles.filterBtnActive]}
           onPress={() => setFilterRole('')}
+          testID="permissions-filter-all"
         >
           <Text style={[styles.filterText, !filterRole && styles.filterTextActive]}>الكل</Text>
         </TouchableOpacity>
-        {roles.map(role => (
+        {uniqueRoleNames.map(roleName => (
           <TouchableOpacity
-            key={role.key}
-            style={[
-              styles.filterBtn, 
-              filterRole === role.key && styles.filterBtnActive,
-              { borderColor: ROLE_COLORS[role.key] }
-            ]}
-            onPress={() => setFilterRole(role.key)}
+            key={roleName}
+            style={[styles.filterBtn, filterRole === roleName && styles.filterBtnActive]}
+            onPress={() => setFilterRole(roleName)}
+            testID={`permissions-filter-${roleName}`}
           >
             <Text style={[
-              styles.filterText, 
-              filterRole === role.key && styles.filterTextActive,
-              filterRole === role.key && { color: '#fff' }
-            ]}>{role.label}</Text>
+              styles.filterText,
+              filterRole === roleName && styles.filterTextActive,
+            ]}>{roleName}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -277,8 +281,8 @@ export default function PermissionsScreen() {
             <TouchableOpacity onPress={() => setShowModal(false)}>
               <Ionicons name="close" size={28} color="#333" />
             </TouchableOpacity>
-            <Text style={styles.modalTitle}>تعديل الصلاحيات</Text>
-            <TouchableOpacity onPress={handleSave} disabled={saving}>
+            <Text style={styles.modalTitle}>صلاحيات إضافية ونطاق الوحدة</Text>
+            <TouchableOpacity onPress={handleSave} disabled={saving} testID="permissions-save-btn">
               {saving ? (
                 <ActivityIndicator size="small" color="#ff9800" />
               ) : (
@@ -287,11 +291,13 @@ export default function PermissionsScreen() {
             </TouchableOpacity>
           </View>
 
-          {selectedUser && (
+          {selectedUser && (() => {
+            const { roleName, basePerms } = getRoleInfo(selectedUser);
+            return (
             <ScrollView style={styles.modalContent}>
               {/* User Info */}
               <View style={styles.userInfoSection}>
-                <View style={[styles.avatarLarge, { backgroundColor: ROLE_COLORS[selectedUser.role] }]}>
+                <View style={[styles.avatarLarge, { backgroundColor: ROLE_COLORS[selectedUser.role] || '#999' }]}>
                   <Ionicons name="person" size={32} color="#fff" />
                 </View>
                 <Text style={styles.modalUserName}>{selectedUser.full_name}</Text>
@@ -300,69 +306,75 @@ export default function PermissionsScreen() {
 
               {!['teacher', 'student'].includes(selectedUser.role) && <HrScopeEditor userId={selectedUser.id} />}
 
-              {/* Role Selection */}
+              {/* الدور الأساسي - عرض فقط، لا يُعدَّل من هنا */}
               <View style={styles.section}>
-                <Text style={styles.sectionTitle}>الدور</Text>
-                <View style={styles.rolesGrid}>
-                  {roles.map(role => (
-                    <TouchableOpacity
-                      key={role.key}
-                      style={[
-                        styles.roleOption,
-                        selectedRole === role.key && styles.roleOptionActive,
-                        selectedRole === role.key && { borderColor: ROLE_COLORS[role.key], backgroundColor: ROLE_COLORS[role.key] + '15' }
-                      ]}
-                      onPress={() => handleRoleChange(role.key)}
-                    >
-                      <Ionicons 
-                        name={selectedRole === role.key ? "checkmark-circle" : "ellipse-outline"} 
-                        size={20} 
-                        color={selectedRole === role.key ? ROLE_COLORS[role.key] : '#999'} 
-                      />
-                      <Text style={[
-                        styles.roleOptionText,
-                        selectedRole === role.key && { color: ROLE_COLORS[role.key], fontWeight: '600' }
-                      ]}>{role.label}</Text>
-                    </TouchableOpacity>
-                  ))}
+                <Text style={styles.sectionTitle}>الدور الأساسي</Text>
+                <View style={styles.roleBadgeReadonly}>
+                  <Ionicons name="shield-checkmark" size={18} color="#1565c0" />
+                  <Text style={styles.roleBadgeReadonlyText}>{roleName}</Text>
                 </View>
+                <Text style={styles.roleChangeHint}>لتغيير الدور الأساسي لهذا المستخدم، استخدم شاشة "إدارة المستخدمين"</Text>
               </View>
 
-              {/* Permissions */}
+              {/* صلاحيات الدور - ثابتة، لا تُعدَّل */}
+              {basePerms.length > 0 && (
+                <View style={styles.section}>
+                  <Text style={styles.sectionTitle}>صلاحيات الدور الأساسي (ثابتة)</Text>
+                  <View style={styles.basePermsWrap}>
+                    {basePerms.map(pk => {
+                      const p = allPermissions.find(ap => ap.key === pk);
+                      return (
+                        <View key={pk} style={styles.basePermChip}>
+                          <Ionicons name="lock-closed" size={11} color="#78909c" />
+                          <Text style={styles.basePermChipText}>{p?.label || pk}</Text>
+                        </View>
+                      );
+                    })}
+                  </View>
+                </View>
+              )}
+
+              {/* الصلاحيات الإضافية الفردية */}
               <View style={styles.section}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle}>الصلاحيات</Text>
-                  <TouchableOpacity onPress={handleResetPermissions}>
+                  <Text style={styles.sectionTitle}>صلاحيات إضافية فردية</Text>
+                  <TouchableOpacity onPress={handleResetPermissions} testID="permissions-reset-btn">
                     <Text style={styles.resetText}>إعادة تعيين</Text>
                   </TouchableOpacity>
                 </View>
 
-                {Object.entries(groupedPermissions).map(([category, perms]) => (
+                {Object.entries(groupedPermissions).map(([category, perms]) => {
+                  const extraPerms = perms.filter(p => !basePerms.includes(p.key));
+                  if (extraPerms.length === 0) return null;
+                  return (
                   <View key={category} style={styles.permCategory}>
                     <Text style={styles.categoryTitle}>{category}</Text>
-                    {perms.map(perm => (
+                    {extraPerms.map(perm => (
                       <TouchableOpacity
                         key={perm.key}
                         style={styles.permItem}
-                        onPress={() => togglePermission(perm.key)}
+                        onPress={() => togglePermission(perm.key, basePerms)}
+                        testID={`permission-toggle-${perm.key}`}
                       >
                         <View style={styles.permInfo}>
                           <Text style={styles.permLabel}>{perm.label}</Text>
                           <Text style={styles.permKey}>{perm.key}</Text>
                         </View>
                         <Switch
-                          value={userPermissions.includes(perm.key)}
-                          onValueChange={() => togglePermission(perm.key)}
+                          value={customPermissions.includes(perm.key)}
+                          onValueChange={() => togglePermission(perm.key, basePerms)}
                           trackColor={{ false: '#e0e0e0', true: '#ffcc80' }}
-                          thumbColor={userPermissions.includes(perm.key) ? '#ff9800' : '#f4f3f4'}
+                          thumbColor={customPermissions.includes(perm.key) ? '#ff9800' : '#f4f3f4'}
                         />
                       </TouchableOpacity>
                     ))}
                   </View>
-                ))}
+                  );
+                })}
               </View>
             </ScrollView>
-          )}
+            );
+          })()}
         </SafeAreaView>
       </Modal>
     </SafeAreaView>
@@ -594,6 +606,44 @@ const styles = StyleSheet.create({
   roleOptionText: {
     fontSize: 14,
     color: '#666',
+  },
+  roleBadgeReadonly: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#e3f2fd',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  roleBadgeReadonlyText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1565c0',
+  },
+  roleChangeHint: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 8,
+  },
+  basePermsWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  basePermChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: '#eceff1',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 14,
+  },
+  basePermChipText: {
+    fontSize: 11.5,
+    color: '#546e7a',
   },
   permCategory: {
     marginBottom: 16,

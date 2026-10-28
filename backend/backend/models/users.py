@@ -48,6 +48,7 @@ class UserResponse(UserBase):
     created_at: datetime
     is_active: bool = True
     permissions: List[str] = []
+    custom_permissions: List[str] = []
     faculty_name: Optional[str] = None
     faculty_names: Optional[List[str]] = None
     department_name: Optional[str] = None
