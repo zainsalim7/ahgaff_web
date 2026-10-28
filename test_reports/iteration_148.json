@@ -1,0 +1,23 @@
+{
+  "summary": "Focused retest of the 5 fixes on /permissions from iteration_147, plus a light regression check. All 5 fixes pass. FIX1: reset shows a window.confirm, then a window.alert; custom_permissions became [] in the DB and in the reopened modal, and base permissions stayed at 31. FIX2: clicking the Switch input directly toggles once and stays (False to True to False); clicking the label works; clicking the switch with the mouse works. FIX3: saving shows the 'تم حفظ الصلاحيات الإضافية' alert and the data persisted. FIX4: Salim's old direct grants (hr_manage_leaves/org/employees/attendance, hr_view_employees, manage_fee_receipts) now appear in the locked base section and are not in the editable extras; his real custom grants hr_manage_tasks and hr_manage_appraisals show as ON extras. FIX5: PUT with user_id 'not-an-id' returns 400. Regression: pytest 13/13 pass (including role change via role_id and custom_permissions not touching role or permissions). /manage-users loads, and Salim and Saeed were byte-identical before and after.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/permissions modal extra-permission rows", "issues": ["The label sits right next to the Switch with almost no gap (e.g. 'إدارة الأدوار' touches the switch). The perm key text sits on the far opposite side of the row instead of under the label, which looks disjointed. Add marginEnd between the label and the Switch, and stack the key under the label."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_custom_permissions_screen.py", "/app/backend/tests/ui148_setup.py", "/app/test_reports/pytest/custom_perms_148.xml"],
+  "action_items": ["Optional (cosmetic): spacing between the label and the Switch in permission rows on /permissions"],
+  "critical_code_review_comments": [
+    "Salim has manage_fee_receipts in both permissions and custom_permissions. After FIX4 it shows as locked base, so the custom copy is hidden but is kept on save; reset removes it from custom_permissions only, and the user keeps it through permissions. This is harmless but worth knowing.",
+    "Any user with manage_users (not only admin) can still grant manage_users or manage_roles through this endpoint, as noted in iteration_147."
+  ],
+  "updated_files": ["/app/backend/tests/test_custom_permissions_screen.py (test_invalid_objectid now strictly asserts 400)", "/app/backend/tests/ui148_setup.py (new helper)"],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% (5/5 fixes verified)"},
+  "seed_data_creation": "Created TEST_ui148 (dean), used it for the save and reset tests, then deleted it. Salim and Saeed were opened read-only (not saved).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Login: admin/admin123 (click 'تسجيل الدخول'). testIDs on /permissions: permissions-user-card-<id>, permission-toggle-<key> (a View wrapper; the Switch is input[type=checkbox] inside it), permissions-save-btn, permissions-reset-btn. Web dialogs use window.confirm/alert, so handle them with page.on('dialog'). Helper: python backend/tests/ui148_setup.py setup|snap|teardown."
+}

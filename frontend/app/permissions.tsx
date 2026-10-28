@@ -672,6 +672,7 @@ const styles = StyleSheet.create({
   },
   permInfo: {
     flex: 1,
+    marginEnd: 12,
   },
   permLabel: {
     fontSize: 14,

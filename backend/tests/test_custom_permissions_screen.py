@@ -106,7 +106,8 @@ class TestCustomPermissions:
 
     def test_invalid_objectid(self, admin):
         r = admin.put(f"{API}/users/not-an-id/custom-permissions", json={"custom_permissions": []})
-        assert r.status_code in (400, 404, 422), f"got {r.status_code}"
+        assert r.status_code == 400, f"got {r.status_code}"
+        assert "detail" in r.json()
 
     def test_bad_body_422(self, admin, temp_user):
         r = admin.put(f"{API}/users/{temp_user['id']}/custom-permissions", json={"foo": 1})
