@@ -579,6 +579,31 @@ MY_UNIT لكنه غير مرتبط بموظف/وحدة بعد (يرى صفراً
 بالإسناد التلقائي لـ hr_scope؛ مطابقة preset بالاسم (name) إضافة للمفتاح (preset_key) قد تستولي خطأً على دور
 مخصص بنفس الاسم العربي (حافة نادرة جداً).
 
+## تحديث 28 أكتوبر 2026 (جلسة ثانية) — ترتيب الفلاتر: الكلية ← القسم في 12 شاشة
+بناءً على طلب المستخدم: كل شاشات الفلاتر يجب أن تبدأ بـ"الكلية" ثم "القسم" (إلزامي: القسم مقفل حتى تُختار
+كلية)، مع الحفاظ على بقية الفلاتر (مستوى/شعبة/مجموعة/فصل) كما هي.
+**12 شاشة محدَّثة**: manage-teachers.tsx، (tabs)/courses.tsx، students.tsx، curriculum.tsx، report-student.tsx،
+report-warnings.tsx، report-daily.tsx، report-attendance-overview.tsx، report-lesson-completion.tsx،
+teaching-load-report.tsx (حُوّل من رقاقات أقسام فقط إلى رقاقات كلية←قسم)، teaching-load.tsx (حُوّل من Picker
+مجمّع بعرض "[الكلية] القسم" إلى Pickerين منفصلين)، send-department-results.tsx (أعيد ترقيم الخطوات 1/2/3).
+**شاشات لم تُمس (كانت صحيحة مسبقاً)**: grades.tsx، weekly-schedule.tsx، report-course.tsx (يستخدم
+CourseFilter)، availability-report.tsx، report-absent-students.tsx، batch-print.tsx، alumni.tsx،
+manage-attendance.tsx، study-plans-overview.tsx، report-teacher-workload.tsx، report-teacher-attendance.tsx.
+**Backend**: أُضيف `faculty_id` كباراميتر اختياري لـ `GET /reports/daily` و`/reports/attendance-overview`
+(كان موجوداً مسبقاً في `/reports/warnings`)، يحوّل إلى قائمة `department_id` ضمن الكلية. جميع نداءات هذه الدوال
+الداخلية (من الـ6 إندبوينتات PDF/Excel) أصبحت تستخدم keyword args بدل positional args لتفادي أي كسر مستقبلي
+عند إضافة باراميترات جديدة.
+**إصلاح حرج بعد الاختبار الأول**: إضافة `faculty_id` كباراميتر ثانٍ في 3 دوال كسرت 4 نداءات داخلية positional
+(أرجعت current_user إلى مكان faculty_id → 500). أُصلح بتحويل كل النداءات الداخلية الـ6 إلى keyword args + تأكيد
+عبر `backend/tests/test_reports_pdf.py` (25/25 ناجح) وcurl مباشر على كل الإندبوينتات الستة.
+تحقَّق عبر `testing_agent` على جولتين: الأولى وجدت 3 مشاكل وظيفية (curriculum توليد غير معطّل، courses.tsx لا
+يطبّق فلتر الكلية، تقارير daily/overview/warnings لا ترسل faculty_id) + تم إصلاحها، الجولة الثانية أكدت الإصلاحات
+لكن كشفت الانحدار الحرج أعلاه وأُصلح فوراً.
+**ملاحظات منخفضة الأولوية لم تُعالَج**: أزرار curriculum المعطّلة بلا تنسيق بصري باهت (لوناً تبقى كأنها فعّالة
+رغم تعطيلها فعلياً)؛ تسمية مُصدَّرات PDF/Excel بـ"جميع الأقسام" حتى عند تحديد كلية فقط (البيانات نفسها صحيحة
+ومقيّدة، فقط النص التوضيحي يحتاج تحسين)؛ شاشات الأدوار scoped (مثل عميد كلية واحدة) يجب أن يختار كليته يدوياً
+رغم أنها الوحيدة المتاحة له.
+
 ## Credentials
 انظر `/app/memory/test_credentials.md`.
 

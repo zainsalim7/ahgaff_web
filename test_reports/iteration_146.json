@@ -1,0 +1,39 @@
+{
+  "summary": "Focused retest of the 4 fixes from iteration_145, plus a light regression pass (admin, Expo web 1920x1080). All 4 UI fixes PASS. curriculum: changing faculty clears the department and the plan grid ('المستوى' count 5→0, totals 0), and gen-offerings-btn becomes aria-disabled (pointer-events none); a force-click sent no generate-offerings request. courses: faculty=كلية البنات alone shows only its 3 courses with no empty state; F2+'الكل' shows the same 3, F1 shows 9, and no courses leak across faculties. warnings/daily/attendance-overview with faculty + 'جميع الأقسام' send faculty_id (verified on the request URL); overview returns 4 courses for F2 versus 34 university-wide. teaching-load-report teacher scope: F2 chip + 'كل أقسام هذه الكلية' lists 3 teachers, F1 lists 12, out of 15 in total. NEW CRITICAL REGRESSION caused by the backend fix: adding the faculty_id parameter shifted the positional arguments, so 4 export endpoints now return 500.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/reports/attendance-overview/export-pdf and GET /api/export/report/attendance-overview/excel", "issue": "500 TypeError: 'Depends' object is not subscriptable. server.py:12933 and :14120 call get_attendance_overview_report(department_id, None, None, current_user) positionally. The new faculty_id param is 2nd, so current_user lands in end_date and the real current_user is the Depends default. Reproduced from the UI: the PDF button on report-attendance-overview returns 500.", "priority": "CRITICAL"},
+      {"endpoint": "GET /api/reports/daily/export-pdf and GET /api/export/report/daily/excel", "issue": "500, same root cause. server.py:13001 and :13879 call get_daily_report(date, department_id, current_user), so current_user goes into faculty_id. Existing regression test backend/tests/test_reports_pdf.py now fails 5 of 25 (it passed before).", "priority": "CRITICAL"}
+    ],
+    "minor": [
+      {"endpoint": "PDF/Excel exports for attendance-overview, daily, warnings", "issue": "The frontend now sends faculty_id to the export endpoints, but none of the export handlers declare or forward it. Exports with faculty only will be university-wide and labelled 'جميع الأقسام', which does not match the on-screen report."},
+      {"endpoint": "GET /api/reports/warnings/export-pdf (server.py:12955) and /api/export/report/warnings/excel (:13645)", "issue": "Pre-existing: get_warnings_report(department_id, warning_threshold, deprivation_threshold, current_user) is called positionally against the signature (department_id, faculty_id, level, current_user). warning_threshold ends up in faculty_id and deprivation_threshold in level. Works only while the thresholds are None."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "curriculum gen-offerings-btn / wipe-dept-btn", "issue": "Functionally disabled, but there is no visual disabled style (same colours as enabled). wipe-dept-btn has no disabled prop, though its handler has a !selectedDept guard.", "selector": "[data-testid='gen-offerings-btn']", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Export PDF/Excel on report-attendance-overview and report-daily", "issue": "Backend returns 500 (see backend critical).", "affected_selectors": ["export PDF/Excel buttons in report heroes"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_reports_pdf.py"],
+  "action_items": [
+    "server.py: use keyword args in every internal call: get_attendance_overview_report(department_id=..., faculty_id=..., current_user=current_user) at lines ~12933 and ~14120, get_daily_report(date=..., department_id=..., faculty_id=..., current_user=current_user) at ~13001 and ~13879, and get_warnings_report(department_id=..., faculty_id=..., current_user=current_user) at ~12955 and ~13645.",
+    "Add faculty_id: Optional[str] = None to the 6 export endpoints (PDF + Excel for overview, daily, warnings) and forward it, so exports match the on-screen faculty-scoped report.",
+    "Re-run backend/tests/test_reports_pdf.py; all 25 should pass.",
+    "Optional: give the disabled curriculum buttons a dimmed style."
+  ],
+  "critical_code_review_comments": [
+    "Calling FastAPI route functions positionally from other routes is fragile: any new param breaks callers. Extract a shared builder (e.g. _build_daily_report) or always use kwargs.",
+    "The 'الأقسام المتاحة' stat card on curriculum still shows the global 4 when a faculty is selected (the hint below the picker shows the faculty count of 1). Cosmetic."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "80% (test_reports_pdf.py 20/25, regressions)", "frontend": "100% for the 4 retested fixes; 6 regression screens load without errors"},
+  "seed_data_creation": "none",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "F1=698e4f9297fef774e66e93a4 (29 courses, 12 teachers), F2=698e4fb497fef774e66e93a6 (4 active courses or 3 in the active semester on the courses screen, 3 teachers). The teaching-load-report teacher list renders only after clicking teacher-search. Retest the export endpoints with: REACT_APP_BACKEND_URL=... pytest backend/tests/test_reports_pdf.py."
+}

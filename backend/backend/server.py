@@ -12925,12 +12925,12 @@ def _pdf_stream(buf, *name_parts):
 
 
 @api_router.get("/reports/attendance-overview/export-pdf")
-async def export_attendance_overview_pdf(department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def export_attendance_overview_pdf(department_id: Optional[str] = None, faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """📄 تقرير الحضور الشامل PDF"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
     from routes.report_pdf import build_report_pdf
-    report = await get_attendance_overview_report(department_id, None, None, current_user)
+    report = await get_attendance_overview_report(department_id=department_id, faculty_id=faculty_id, current_user=current_user)
     courses, s = sorted(report["courses"], key=lambda c: -c["attendance_rate"]), report["summary"]
     dept = await _dept_name_for_export(department_id)
     rows = [["#", "المقرر", "الرمز", "المدرّس", "حاضر", "متأخر", "غائب", "السجلات", "نسبة الحضور"]]
@@ -12947,12 +12947,12 @@ async def export_attendance_overview_pdf(department_id: Optional[str] = None, cu
 
 
 @api_router.get("/reports/warnings/export-pdf")
-async def export_warnings_pdf(department_id: Optional[str] = None, warning_threshold: float = 25.0, deprivation_threshold: float = 40.0, current_user: dict = Depends(get_current_user)):
+async def export_warnings_pdf(department_id: Optional[str] = None, faculty_id: Optional[str] = None, warning_threshold: float = 25.0, deprivation_threshold: float = 40.0, current_user: dict = Depends(get_current_user)):
     """📄 تقرير الإنذارات والحرمان PDF"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
     from routes.report_pdf import build_report_pdf
-    report = await get_warnings_report(department_id, warning_threshold, deprivation_threshold, current_user)
+    report = await get_warnings_report(department_id=department_id, faculty_id=faculty_id, current_user=current_user)
     dept = await _dept_name_for_export(department_id)
     head = ["#", "الطالب", "رقم القيد", "المقرر", "الرمز", "المحاضرات", "الغياب", "نسبة الغياب", "المتبقي المسموح"]
     def _rows(items):
@@ -12993,12 +12993,12 @@ async def export_absent_students_pdf(department_id: Optional[str] = None, course
 
 
 @api_router.get("/reports/daily/export-pdf")
-async def export_daily_pdf(date: Optional[str] = None, department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+async def export_daily_pdf(date: Optional[str] = None, department_id: Optional[str] = None, faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """📄 التقرير اليومي PDF"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتصدير التقارير")
     from routes.report_pdf import build_report_pdf
-    report = await get_daily_report(date, department_id, current_user)
+    report = await get_daily_report(date=date, department_id=department_id, faculty_id=faculty_id, current_user=current_user)
     lectures, s = report["lectures"], report["summary"]
     dept = await _dept_name_for_export(department_id)
     day = (report.get("date") or "")[:10]
@@ -13633,6 +13633,7 @@ async def get_teacher_workload_report(
 @api_router.get("/export/report/warnings/excel")
 async def export_warnings_excel(
     department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
     warning_threshold: float = 25.0,
     deprivation_threshold: float = 40.0,
     current_user: dict = Depends(get_current_user)
@@ -13642,7 +13643,7 @@ async def export_warnings_excel(
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب البيانات
-    report = await get_warnings_report(department_id, warning_threshold, deprivation_threshold, current_user)
+    report = await get_warnings_report(department_id=department_id, faculty_id=faculty_id, current_user=current_user)
     
     # إعداد البيانات
     all_data = []
@@ -13870,13 +13871,14 @@ async def export_teacher_workload_excel(
 async def export_daily_excel(
     date: Optional[str] = None,
     department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير التقرير اليومي إلى Excel"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
-    report = await get_daily_report(date, department_id, current_user)
+    report = await get_daily_report(date=date, department_id=department_id, faculty_id=faculty_id, current_user=current_user)
     
     data = []
     for lecture in report["lectures"]:
@@ -14111,13 +14113,14 @@ async def export_course_report_excel(
 @api_router.get("/export/report/attendance-overview/excel")
 async def export_attendance_overview_excel(
     department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
     """تصدير تقرير الحضور الشامل إلى Excel"""
     if not has_permission(current_user, Permission.EXPORT_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
-    report = await get_attendance_overview_report(department_id, None, None, current_user)
+    report = await get_attendance_overview_report(department_id=department_id, faculty_id=faculty_id, current_user=current_user)
     
     data = []
     for course in report["courses"]:
