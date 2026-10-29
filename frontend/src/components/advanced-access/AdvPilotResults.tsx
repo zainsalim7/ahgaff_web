@@ -7,7 +7,7 @@ import { COLORS, PILOT_SEVERITY_LABELS, PILOT_CATEGORY_LABELS, PILOT_TEST_TYPE_L
 const FILTER_USERS = ['Salim', 'Saeed', 'teacher180156', 'president'];
 const FILTER_SEVERITIES = ['critical', 'high', 'medium', 'info'];
 const FILTER_STATUSES = ['pass', 'fail', 'diff', 'baseline', 'info'];
-const STATUS_LABELS: { [k: string]: string } = { pass: 'ناجحة', fail: 'فاشلة', diff: 'اختلاف', baseline: 'خط أساس', info: 'معلوماتية' };
+const STATUS_LABELS: { [k: string]: string } = { pass: 'ناجحة', fail: 'فاشلة', diff: 'اختلاف', baseline: 'خط أساس', info: 'لا مقابل قديم' };
 
 export const AdvPilotResults: React.FC<{ isAdmin: boolean; canView: boolean }> = ({ isAdmin, canView }) => {
   const [loading, setLoading] = useState(true);
@@ -53,6 +53,12 @@ export const AdvPilotResults: React.FC<{ isAdmin: boolean; canView: boolean }> =
   };
 
   const confirmStopPilot = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('سيتم حذف كل الأدوار والتكليفات والنتائج التجريبية فورًا (بادئتها PILOT_). النظام القديم لن يتأثر. هل أنت متأكد؟')) {
+        stopPilot();
+      }
+      return;
+    }
     Alert.alert(
       'تأكيد إيقاف التجربة',
       'سيتم حذف كل الأدوار والتكليفات والنتائج التجريبية فورًا (بادئتها PILOT_). النظام القديم لن يتأثر. هل أنت متأكد؟',

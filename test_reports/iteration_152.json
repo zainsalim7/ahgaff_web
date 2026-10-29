@@ -1,0 +1,35 @@
+{
+  "summary": "Round 4 verification of the Phase 5 pilot fixes (AdvPilotResults tab, desktop 1920x1080, admin plus teacher180156 logged in by injecting a token). 5 of 6 fixes are verified as working. One is broken: the stop button's confirmation does nothing on web. (1) Special-character filter: the UI search with '(' gives 6 rows and '(أي' gives 1; '[', '*', '.+' and '\\' give 0 rows, all with no errors. The API GET /pilot/results?permission_key= returns 200 for (, [, *, .+, \\ and )(? — the 500 is fixed. (2) Stop confirmation is BROKEN on web: clicking adv-pilot-stop-btn shows no dialog (no browser dialog event, nothing added to the page) and deletes nothing; 117 rows remain. The backend POST /pilot/reset works when called directly. (3) Export: teacher180156 with view and view_pilot (non-admin) sees adv-pilot-export-btn and no run or stop buttons. Clicking it downloads pilot_results.xlsx (13750 bytes). (4) The user cards show 'معلوماتية' counts: Salim 1, Saeed 3, teacher180156 1. president shows none because its info count is 0 (all 20 are baseline), and the card hides zero values by design. (5) All 16 filter chips have unique testIDs (user-all/Salim/Saeed/teacher180156/president, severity-all/critical/high/medium/info, status-all/pass/fail/diff/baseline/info). Status filters give info 5, baseline 20, diff 40, pass 52, fail 0, and user and severity filters change the list correctly. (6) Two runs in a row from the UI both returned 200. After each run: 42 total assignments, 5 active PILOT_ assignments, 6 PILOT_ roles — nothing piles up. Reset deletes all PILOT_ assignments (total dropped to 36, PILOT_ 0). NOTE: after every run, exactly 1 PILOT_ assignment in status 'ended' remains ('PILOT_تكليف مؤقت لاختبار الإنهاء'). This is the throwaway assignment from the end_assignment test case, which pilot_service ends on purpose during the run. It does not pile up, but it does not meet the literal requirement of 'no ended PILOT_ assignments after a run'.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/advanced-access/pilot/run", "issue": "Each run leaves 1 PILOT_ assignment with status 'ended' (the throwaway used by _run_end_assignment_case, pilot_service.py line ~172). It is not cumulative, since reset deletes it, but it still appears in GET /assignments. If the requirement is zero ended PILOT_ assignments after a run, delete the throwaway at the end of the run (after the end_assignment checks) or filter it out."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdvPilotResults stop button", "issue": "confirmStopPilot uses Alert.alert with buttons. In react-native-web, Alert.alert is a no-op (node_modules/react-native-web/dist/exports/Alert/index.js: 'static alert() {}'). On web, clicking the stop button does nothing: no confirmation and no reset, so the stop feature is completely broken in the browser. Fix: on Platform.OS==='web', use window.confirm(...) and call stopPilot() if confirmed (as other components like MasterScheduleView and PrintBatches already do); otherwise use Alert.alert, or a custom Modal for both.", "selector": "[data-testid='adv-pilot-stop-btn']", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Pilot tab filters", "issues": ["The severity chip 'معلوماتية' (77 rows) and the new status chip 'معلوماتية' (5 rows) share the same label but mean different things. This may confuse users; consider renaming the status one (e.g. 'لا مقابل قديم')."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "HIGH: fix the stop-button confirmation on web (Alert.alert is a no-op in react-native-web) — use window.confirm on web, or a Modal",
+    "LOW: decide whether the single ended throwaway PILOT_ assignment left after each run is acceptable; otherwise delete it at the end of run_pilot"
+  ],
+  "critical_code_review_comments": [
+    "AdvPilotResults.tsx line 55-61: Alert.alert with buttons does not work on react-native-web",
+    "The search is client-side String.includes, so it is safe from regex issues. The backend permission_key filter uses re.escape and returns 200 for all special characters tested"
+  ],
+  "updated_files": ["/app/test_reports/iteration_152.json"],
+  "success_rate": {"backend": "100% (special-char filter, run/reset non-cumulative)", "frontend": "83% (5/6 fixes verified; stop confirmation broken on web)"},
+  "test_credentials": "admin/admin123; teacher180156/teacher123 (app-only on web, so log in by injecting the token from a curl login into localStorage token/user)",
+  "seed_data_creation": "teacher180156 was temporarily granted the tester sub_permissions [view, view_pilot] to check export, then revoked with DELETE /testers/698f671431cfba92c49a550e (state restored).",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Final state: pilot RUNNING (reset and re-run via API at the end; 117 cases, 0 fail, 0 security issues, 5 active and 1 ended PILOT_ assignments). The only remaining work is to retest adv-pilot-stop-btn after the web confirm fix: clicking cancel must keep the data, and confirming must empty the tab ('لم تُشغَّل التجربة بعد'). Then re-run so the pilot is left running.",
+  "rca of the issue": "Stop button no-op on web: react-native-web's Alert implementation is an empty static method, so Alert.alert(...) never shows anything and the onPress callback of 'إيقاف وحذف' is never called. Reproduce: as admin, open /advanced-access-control, go to the pilot tab, click the stop button; no dialog appears and GET /pilot/summary still has has_run=true. Mitigation: use a Platform check with window.confirm on web."
+}

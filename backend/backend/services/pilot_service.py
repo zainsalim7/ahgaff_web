@@ -334,6 +334,8 @@ async def run_pilot(db, triggered_by: dict) -> Dict[str, Any]:
     throwaway_role = await _make_pilot_role(db, "تكليف_مؤقت_للإنهاء", saeed_committee_keys[:2])
     throwaway_assignment = await _make_pilot_assignment(db, SAEED_ID, throwaway_role, "تكليف مؤقت لاختبار الإنهاء", "administrative", "university", [])
     results += await _run_end_assignment_case(db, SAEED_ID, throwaway_assignment, [saeed_academic, saeed_admin, saeed_committee])
+    await db.advanced_user_assignments.delete_one({"_id": ObjectId(throwaway_assignment)})
+    await db.advanced_roles.delete_one({"_id": ObjectId(throwaway_role)})
 
     # ── teacher180156: أستاذ — نطاق مقرر حقيقي ──
     teacher_keys = await _pick_permission_keys(db)
