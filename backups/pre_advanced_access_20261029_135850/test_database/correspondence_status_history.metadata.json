@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"correspondence_id":{"$numberInt":"1"},"created_at":{"$numberInt":"1"}},"name":"correspondence_id_1_created_at_1"}],"uuid":"aacb252a066e4903a6217b66b33bd5ae","collectionName":"correspondence_status_history","type":"collection"}

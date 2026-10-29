@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"76e5986ba2a5452986f601e92d4b1932","collectionName":"hr_card_print_jobs","type":"collection"}

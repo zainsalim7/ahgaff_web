@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"a40b8fc4dcfd46e5bcfac9941aed668b","collectionName":"overtime_policies","type":"collection"}

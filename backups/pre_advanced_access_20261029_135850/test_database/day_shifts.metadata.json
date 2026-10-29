@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"3e63bdb267bf4ef89f7c3ba7a6e9342e","collectionName":"day_shifts","type":"collection"}

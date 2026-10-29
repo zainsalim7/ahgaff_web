@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"3ccb50b20857462a99f57ce468f049a0","collectionName":"study_plans","type":"collection"}

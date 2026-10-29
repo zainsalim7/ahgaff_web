@@ -1,0 +1,152 @@
+[
+  {
+    "key": "academic_structure",
+    "name_ar": "إدارة الهيكل الأكاديمي (الكليات والأقسام)",
+    "count": 35
+  },
+  {
+    "key": "alumni",
+    "name_ar": "إدارة شؤون الخريجين",
+    "count": 8
+  },
+  {
+    "key": "archive",
+    "name_ar": "إدارة الأرشفة",
+    "count": 17
+  },
+  {
+    "key": "assistant",
+    "name_ar": "إدارة المساعد الذكي (مرشد الأحقاف)",
+    "count": 14
+  },
+  {
+    "key": "attendance",
+    "name_ar": "إدارة الحضور والغياب",
+    "count": 34
+  },
+  {
+    "key": "calendar",
+    "name_ar": "إدارة التقويم والإجازات الأكاديمية",
+    "count": 11
+  },
+  {
+    "key": "cards",
+    "name_ar": "إدارة البطاقات",
+    "count": 63
+  },
+  {
+    "key": "certificates",
+    "name_ar": "إدارة الشهادات والإفادات",
+    "count": 27
+  },
+  {
+    "key": "correspondence",
+    "name_ar": "إدارة المراسلات الرسمية",
+    "count": 65
+  },
+  {
+    "key": "councils",
+    "name_ar": "إدارة اللجان والمجالس",
+    "count": 10
+  },
+  {
+    "key": "courses",
+    "name_ar": "إدارة المقررات والشعب",
+    "count": 40
+  },
+  {
+    "key": "curriculum",
+    "name_ar": "إدارة الخطط الدراسية",
+    "count": 32
+  },
+  {
+    "key": "dashboard",
+    "name_ar": "لوحة القيادة والتقارير الإدارية",
+    "count": 7
+  },
+  {
+    "key": "enrollments",
+    "name_ar": "إدارة القبول والتسجيل",
+    "count": 8
+  },
+  {
+    "key": "finance",
+    "name_ar": "إدارة العمليات المالية",
+    "count": 22
+  },
+  {
+    "key": "general_tools",
+    "name_ar": "أدوات عامة (بحث وتفاصيل الكيانات)",
+    "count": 16
+  },
+  {
+    "key": "grades",
+    "name_ar": "إدارة الدرجات والنتائج",
+    "count": 14
+  },
+  {
+    "key": "hr_attendance",
+    "name_ar": "شؤون الموظفين — الحضور الإداري",
+    "count": 47
+  },
+  {
+    "key": "hr_core",
+    "name_ar": "شؤون الموظفين — السجل والهيكل التنظيمي",
+    "count": 45
+  },
+  {
+    "key": "hr_leaves",
+    "name_ar": "شؤون الموظفين — الإجازات",
+    "count": 18
+  },
+  {
+    "key": "hr_tasks",
+    "name_ar": "شؤون الموظفين — المهام والتقييم",
+    "count": 21
+  },
+  {
+    "key": "letters",
+    "name_ar": "إدارة الخطابات الرسمية",
+    "count": 67
+  },
+  {
+    "key": "notifications",
+    "name_ar": "إدارة الإشعارات",
+    "count": 24
+  },
+  {
+    "key": "reports",
+    "name_ar": "إدارة التقارير والإحصائيات",
+    "count": 44
+  },
+  {
+    "key": "schedule",
+    "name_ar": "إدارة الجداول والمحاضرات",
+    "count": 99
+  },
+  {
+    "key": "students",
+    "name_ar": "إدارة الطلاب",
+    "count": 44
+  },
+  {
+    "key": "system_tools",
+    "name_ar": "إدارة النظام والإعدادات والتكاملات",
+    "count": 47
+  },
+  {
+    "key": "system_users",
+    "name_ar": "إدارة المستخدمين والأدوار والصلاحيات (النظام القديم)",
+    "count": 41
+  },
+  {
+    "key": "teachers",
+    "name_ar": "إدارة أعضاء هيئة التدريس",
+    "count": 20
+  },
+  {
+    "key": "teaching_load",
+    "name_ar": "إدارة العبء التدريسي",
+    "count": 36
+  }
+]

@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"correspondence_id":{"$numberInt":"1"},"snapshot_stage":{"$numberInt":"1"}},"name":"correspondence_id_1_snapshot_stage_1","unique":true}],"uuid":"6f5e54ceb1d74ec5bb5b2d717f88f10d","collectionName":"correspondence_data_snapshots","type":"collection"}

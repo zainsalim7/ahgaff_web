@@ -17,6 +17,7 @@
 - Department: الدراسات الإسلامية / كلية البنات
 - custom_permissions: manage_fee_receipts (أُضيفت 2026-09 لاختبار نطاق السندات المالية)
 - 2026-10-06: أُضيفت صلاحيات HR (hr_view/manage_employees, hr_manage_org/leaves/attendance) + **hr_scope=UNITS على «كلية البنات»** لاختبار نطاق الوحدة — يرى موظف واحد (Saeed) فقط. لإلغاء: PUT /api/hr/users/698f71ba5c5620a4449eeb7e/scope {hr_scope:'ALL'}
+- 2026-10-29: لديه سجل tester نشط في `advanced_access_testers` (سياق مشروع مركز الصلاحيات المتقدم التجريبي SHADOW MODE فقط — لا يؤثر إطلاقًا على صلاحياته القديمة). للإلغاء: DELETE /api/advanced-access/testers/698f79d75c5620a4449eeb89 (بتوكن أدمن).
 
 ## View-Curriculum Test User (Added 2026-06-26)
 - Username: view_curr_user

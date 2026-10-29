@@ -1,0 +1,276 @@
+{
+  "public_no_auth": [
+    {
+      "method": "GET",
+      "path": "/app-version/{app_name}",
+      "file": "routes/app_versions.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/verify-report/{doc_id}",
+      "file": "routes/archive_pdf.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "POST",
+      "path": "/auth/login",
+      "file": "routes/auth.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/verify/certificate/{token}",
+      "file": "routes/certificates.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/correspondence/verify/{token}",
+      "file": "routes/correspondence_pdf.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/grades/verify/{token}",
+      "file": "routes/grades.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/",
+      "file": "routes/handoffs.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/handoffs/{name}.md",
+      "file": "routes/handoffs.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/handoffs/{name}",
+      "file": "routes/handoffs.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/hr/appraisals/appraisal/{token}",
+      "file": "routes/hr_appraisals.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/hr/verify/employee/{token}",
+      "file": "routes/hr_cards.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/hr/public/employee-photo/{token}",
+      "file": "routes/hr_cards.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/hr/letters/verify/letter/{token}",
+      "file": "routes/hr_letters.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/health",
+      "file": "routes/integration_api.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/push",
+      "file": "routes/internal_push.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/verify/letter/{token}",
+      "file": "routes/letters.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/verify/statement/{token}",
+      "file": "routes/statements.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/verify/card/{token}",
+      "file": "routes/student_cards.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/public/card-photo/{token}",
+      "file": "routes/student_cards.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/student-excuses/{excuse_id}/attachments/{idx}",
+      "file": "routes/student_excuses.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/student-excuses/{excuse_id}/form-pdf",
+      "file": "routes/student_excuses.py",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/health",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/api/health",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-guide",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/deploy-guide/raw",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/init-admin",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "POST",
+      "path": "/api/reset-admin",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings/academic-years",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/settings/semesters",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    },
+    {
+      "method": "GET",
+      "path": "/api/files/{path:path}",
+      "file": "server",
+      "reason": "عام بلا تسجيل دخول بالتصميم (تحقق/تسجيل دخول/صحة النظام)"
+    }
+  ],
+  "service_key_auth": [
+    {
+      "method": "POST",
+      "path": "/hr/presence-check/run",
+      "file": "routes/hr_presence.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/academic-years",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/semesters",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/colleges",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/departments",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/programs",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/levels",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/courses",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/students",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/students/by-number/{student_number}",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/sections",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "GET",
+      "path": "/integration/enrollments",
+      "file": "routes/integration_api.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    },
+    {
+      "method": "POST",
+      "path": "/internal/weekly-digest",
+      "file": "routes/weekly_digest.py",
+      "reason": "مصادقة خادم-لخادم بمفتاح خدمة، ليست صلاحية مستخدم بشري"
+    }
+  ]
+}

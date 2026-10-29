@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"numbering_scheme_id":{"$numberInt":"1"},"year":{"$numberInt":"1"}},"name":"numbering_scheme_id_1_year_1","unique":true}],"uuid":"56ed36553815493e8d801c01e943b660","collectionName":"document_sequences","type":"collection"}

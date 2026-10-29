@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"files_id":{"$numberInt":"1"},"n":{"$numberInt":"1"}},"name":"files_id_1_n_1","unique":true}],"uuid":"3a7604ae4f0d447291bfa7852ad7e407","collectionName":"letter_attachments.chunks","type":"collection"}

@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"},{"v":{"$numberInt":"2"},"key":{"template_id":{"$numberInt":"1"},"version_number":{"$numberInt":"1"}},"name":"template_id_1_version_number_1","unique":true}],"uuid":"876576406709443e89d9a9b889220ae9","collectionName":"correspondence_template_versions","type":"collection"}

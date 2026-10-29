@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"4cbc2d3e77e54931a88f58bf09b64a54","collectionName":"hr_leave_types","type":"collection"}

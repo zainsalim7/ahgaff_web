@@ -1,0 +1,1 @@
+{"indexes":[{"v":{"$numberInt":"2"},"key":{"_id":{"$numberInt":"1"}},"name":"_id_"}],"uuid":"bfb30289f2494b5faba1cf3556edf2f2","collectionName":"card_print_settings","type":"collection"}
