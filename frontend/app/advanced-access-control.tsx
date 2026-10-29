@@ -52,11 +52,11 @@ export default function AdvancedAccessControlScreen() {
 
   if (!hasAccess) {
     return (
-      <SafeAreaView style={styles.container} data-testid="adv-access-denied">
+      <SafeAreaView style={styles.container} testID="adv-access-denied">
         <View style={styles.deniedBox}>
           <Ionicons name="lock-closed" size={48} color={COLORS.danger} />
           <Text style={styles.deniedText}>لا تملك صلاحية الوصول إلى مركز الصلاحيات المتقدم (تجريبي)</Text>
-          <TouchableOpacity style={styles.backBtn} onPress={() => goBack()} data-testid="adv-denied-back-btn">
+          <TouchableOpacity style={styles.backBtn} onPress={() => goBack()} testID="adv-denied-back-btn">
             <Text style={styles.backBtnText}>رجوع</Text>
           </TouchableOpacity>
         </View>
@@ -84,16 +84,16 @@ export default function AdvancedAccessControlScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container} data-testid="advanced-access-control-screen">
+    <SafeAreaView style={styles.container} testID="advanced-access-control-screen">
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => goBack()} data-testid="adv-back-btn">
+        <TouchableOpacity onPress={() => goBack()} testID="adv-back-btn">
           <Ionicons name="arrow-forward" size={24} color="#fff" />
         </TouchableOpacity>
         <View style={{ flex: 1, marginHorizontal: 10 }}>
           <Text style={styles.headerTitle}>مركز الصلاحيات المتقدم</Text>
           <View style={styles.shadowBadge}><Text style={styles.shadowBadgeText}>SHADOW MODE — تجريبي، لا يؤثر على النظام الحالي</Text></View>
         </View>
-        <TouchableOpacity style={styles.ctxBtn} onPress={() => setShowContextModal(true)} data-testid="adv-context-switcher-btn">
+        <TouchableOpacity style={styles.ctxBtn} onPress={() => setShowContextModal(true)} testID="adv-context-switcher-btn">
           <Ionicons name="swap-horizontal" size={16} color="#fff" />
           <Text style={styles.ctxBtnText} numberOfLines={1}>{activeContext?.context_label_ar || 'سياق العمل'}</Text>
         </TouchableOpacity>
@@ -101,7 +101,7 @@ export default function AdvancedAccessControlScreen() {
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar} contentContainerStyle={{ paddingHorizontal: 8 }}>
         {TABS.map(t => (
-          <TouchableOpacity key={t.key} style={[styles.tab, activeTab === t.key && styles.tabActive]} onPress={() => setActiveTab(t.key)} data-testid={`adv-tab-${t.key}`}>
+          <TouchableOpacity key={t.key} style={[styles.tab, activeTab === t.key && styles.tabActive]} onPress={() => setActiveTab(t.key)} testID={`adv-tab-${t.key}`}>
             <Ionicons name={t.icon as any} size={16} color={activeTab === t.key ? '#fff' : COLORS.primary} />
             <Text style={[styles.tabText, activeTab === t.key && styles.tabTextActive]}>{t.label}</Text>
           </TouchableOpacity>
@@ -114,11 +114,11 @@ export default function AdvancedAccessControlScreen() {
 
       <Modal visible={showContextModal} transparent animationType="fade" onRequestClose={() => setShowContextModal(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setShowContextModal(false)}>
-          <View style={styles.contextModalBox} data-testid="adv-context-switcher-modal">
+          <View style={styles.contextModalBox} testID="adv-context-switcher-modal">
             <Text style={styles.contextModalTitle}>سياق العمل الحالي</Text>
             {contexts.length === 0 && <Text style={styles.emptyText}>لا توجد تكليفات نشطة لحسابك ضمن النظام الجديد</Text>}
             {contexts.map((c: any) => (
-              <TouchableOpacity key={c.id} style={styles.contextOption} onPress={() => selectContext(c)} data-testid={`adv-context-option-${c.id}`}>
+              <TouchableOpacity key={c.id} style={styles.contextOption} onPress={() => selectContext(c)} testID={`adv-context-option-${c.id}`}>
                 <Ionicons name={c.assignment_type === 'academic' ? 'school' : 'business'} size={18} color={COLORS.primary} />
                 <View style={{ flex: 1, marginRight: 8 }}>
                   <Text style={styles.contextOptionLabel}>{c.context_label_ar}</Text>

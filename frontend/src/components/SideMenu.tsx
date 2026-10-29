@@ -14,7 +14,7 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { useAuth, PERMISSIONS } from '../contexts/AuthContext';
 import { getRoleLabel } from '../utils/roleLabels';
-import { advancedAccessAPI } from '../services/api';
+import { useAdvancedAccessContextStore } from '../store/advancedAccessContextStore';
 
 interface MenuItem {
   id: string;
@@ -206,12 +206,11 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
   const userRole = user?.role || 'student';
   const { hasAnyPermission } = useAuth();
   const isAdmin = userRole === 'admin';
-  const [hasAdvAccess, setHasAdvAccess] = useState(false);
+  const { hasAccess: hasAdvAccess, checked: advChecked, checkAccess: checkAdvAccess } = useAdvancedAccessContextStore();
 
   React.useEffect(() => {
-    if (isAdmin) { setHasAdvAccess(true); return; }
-    advancedAccessAPI.myAccess().then(res => setHasAdvAccess(!!res.data?.has_access)).catch(() => setHasAdvAccess(false));
-  }, [isAdmin]);
+    if (user?.id && !advChecked) checkAdvAccess();
+  }, [user?.id, advChecked, checkAdvAccess]);
 
   // فلترة العناصر حسب صلاحيات المستخدم الفردية
   const filteredItems = MENU_ITEMS.filter(item => {

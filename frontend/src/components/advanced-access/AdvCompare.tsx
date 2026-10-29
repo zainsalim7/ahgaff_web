@@ -20,7 +20,7 @@ export const AdvCompare: React.FC<{ canRun: boolean }> = ({ canRun }) => {
 
   useEffect(() => {
     if (!canRun) return;
-    advancedAccessAPI.getAllAssignments('active').then(res => setAssignments(res.data));
+    advancedAccessAPI.getAllAssignments('active').then(res => setAssignments(res.data)).catch(() => setAssignments([]));
   }, [canRun]);
 
   const run = async () => {
@@ -30,31 +30,33 @@ export const AdvCompare: React.FC<{ canRun: boolean }> = ({ canRun }) => {
     try {
       const res = await advancedAccessAPI.getCompareSummary(assignmentId);
       setSummary(res.data);
+    } catch (e: any) {
+      setSummary({ error: e?.response?.data?.detail || 'تعذّر تشغيل المقارنة' });
     } finally { setRunning(false); }
   };
 
-  if (!canRun) return <Text style={styles.desc} data-testid="adv-compare-no-access">تحتاج صلاحية "تشغيل المحاكي" لاستخدام المقارنة</Text>;
+  if (!canRun) return <Text style={styles.desc} testID="adv-compare-no-access">تحتاج صلاحية "تشغيل المحاكي" لاستخدام المقارنة</Text>;
 
   return (
-    <View data-testid="adv-compare">
+    <View testID="adv-compare">
       <Text style={styles.title}>مقارنة النظام القديم بالجديد</Text>
       <Text style={styles.desc}>قراءة فقط — لا تُعدِّل أي قرار في النظام القديم مهما كانت نتيجة المقارنة</Text>
 
       <Text style={styles.label}>اختر تكليفًا للمقارنة</Text>
       <ScrollView horizontal style={{ flexDirection: 'row-reverse' }}>
         {assignments.map(a => (
-          <TouchableOpacity key={a.id} style={[styles.chip, assignmentId === a.id && styles.chipActive]} onPress={() => { setAssignmentId(a.id); setSummary(null); }} data-testid={`adv-compare-assignment-${a.id}`}>
+          <TouchableOpacity key={a.id} style={[styles.chip, assignmentId === a.id && styles.chipActive]} onPress={() => { setAssignmentId(a.id); setSummary(null); }} testID={`adv-compare-assignment-${a.id}`}>
             <Text style={[styles.chipText, assignmentId === a.id && styles.chipTextActive]}>{a.user_name} — {a.context_label_ar}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
-      <TouchableOpacity style={styles.runBtn} onPress={run} disabled={running || !assignmentId} data-testid="adv-compare-run-btn">
+      <TouchableOpacity style={styles.runBtn} onPress={run} disabled={running || !assignmentId} testID="adv-compare-run-btn">
         {running ? <ActivityIndicator color="#fff" /> : <><Ionicons name="git-compare" size={16} color="#fff" /><Text style={styles.runBtnText}>تشغيل المقارنة</Text></>}
       </TouchableOpacity>
 
       {summary && !summary.error && (
-        <View data-testid="adv-compare-result">
+        <View testID="adv-compare-result">
           <Text style={styles.summaryLine}>الصلاحيات الفعّالة لهذا التكليف: {summary.effective_permissions_total} — قابلة للمقارنة: {summary.comparable_count} — غير قابلة للمقارنة (لا مكافئ قديم): {summary.not_comparable_count}</Text>
           <View style={styles.grid}>
             {Object.entries(CATEGORY_META).map(([k, meta]) => (
@@ -64,11 +66,11 @@ export const AdvCompare: React.FC<{ canRun: boolean }> = ({ canRun }) => {
               </View>
             ))}
           </View>
-          <TouchableOpacity onPress={() => setShowDetails(s => !s)} data-testid="adv-compare-toggle-details">
+          <TouchableOpacity onPress={() => setShowDetails(s => !s)} testID="adv-compare-toggle-details">
             <Text style={styles.detailsToggle}>{showDetails ? 'إخفاء التفاصيل' : 'عرض تفاصيل كل صلاحية'}</Text>
           </TouchableOpacity>
           {showDetails && summary.details?.map((d: any, i: number) => (
-            <View key={i} style={styles.detailRow} data-testid={`adv-compare-detail-${i}`}>
+            <View key={i} style={styles.detailRow} testID={`adv-compare-detail-${i}`}>
               <Text style={styles.detailPerm}>{d.permission_key}</Text>
               <Text style={[styles.detailCat, { color: (CATEGORY_META[d.category] || {}).color || COLORS.textMuted }]}>{(CATEGORY_META[d.category] || {}).label || 'لا مكافئ قديم'}</Text>
             </View>

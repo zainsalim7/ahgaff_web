@@ -1,28 +1,27 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { advancedAccessAPI } from '../../services/api';
+import { useAdvancedAccessContextStore } from '../../store/advancedAccessContextStore';
 import { COLORS, SCOPE_TYPE_LABELS } from './shared';
 
-export const AdvContextPage: React.FC<{ contexts: any[]; onRefresh: () => void }> = ({ contexts, onRefresh }) => {
-  const [detail, setDetail] = useState<any>(null);
-  const [loadingId, setLoadingId] = useState('');
+export const AdvContextPage: React.FC<{ contexts: any[]; onRefresh: () => void }> = ({ contexts }) => {
+  const { activeContext, switchContext } = useAdvancedAccessContextStore();
+  const [loadingId, setLoadingId] = React.useState('');
 
   const switchTo = async (ctx: any) => {
     setLoadingId(ctx.id);
     try {
-      const res = await advancedAccessAPI.getAssignmentContext(ctx.id);
-      setDetail(res.data);
+      await switchContext(ctx);
     } finally { setLoadingId(''); }
   };
 
   return (
-    <View data-testid="adv-context-page">
+    <View testID="adv-context-page">
       <Text style={styles.title}>سياق العمل — مناصبي النشطة ({contexts.length})</Text>
       <Text style={styles.desc}>انتقل بين مناصبك دون تسجيل الخروج — التبديل للعرض فقط، لا يغيّر أي صلاحية حقيقية في النظام القديم</Text>
 
       {contexts.map(c => (
-        <TouchableOpacity key={c.id} style={styles.card} onPress={() => switchTo(c)} data-testid={`adv-context-card-${c.id}`}>
+        <TouchableOpacity key={c.id} style={styles.card} onPress={() => switchTo(c)} testID={`adv-context-card-${c.id}`}>
           <Ionicons name={c.assignment_type === 'academic' ? 'school' : 'business'} size={22} color={COLORS.primary} />
           <View style={{ flex: 1, marginRight: 10 }}>
             <Text style={styles.cardTitle}>{c.context_label_ar}</Text>
@@ -33,14 +32,14 @@ export const AdvContextPage: React.FC<{ contexts: any[]; onRefresh: () => void }
       ))}
       {contexts.length === 0 && <Text style={styles.empty}>لا توجد لك تكليفات نشطة ضمن النظام الجديد حاليًا</Text>}
 
-      {detail && (
-        <View style={styles.detailBox} data-testid="adv-context-detail-box">
-          <Text style={styles.detailTitle}>{detail.context_label_ar}</Text>
-          <Text style={styles.detailLine}>الدور: {detail.role_name_ar}</Text>
-          <Text style={styles.detailLine}>النطاق: {SCOPE_TYPE_LABELS[detail.scope?.scope_type] || detail.scope?.scope_type}</Text>
-          <Text style={styles.detailLine}>عدد الصلاحيات الفعّالة ضمن هذا السياق: {detail.effective_permissions?.length}</Text>
+      {activeContext && (
+        <View style={styles.detailBox} testID="adv-context-detail-box">
+          <Text style={styles.detailTitle}>{activeContext.context_label_ar}</Text>
+          <Text style={styles.detailLine}>الدور: {activeContext.role_name_ar}</Text>
+          <Text style={styles.detailLine}>النطاق: {SCOPE_TYPE_LABELS[activeContext.scope?.scope_type] || activeContext.scope?.scope_type}</Text>
+          <Text style={styles.detailLine}>عدد الصلاحيات الفعّالة ضمن هذا السياق: {activeContext.effective_permissions?.length}</Text>
           <Text style={styles.detailSub}>أول 10 صلاحيات:</Text>
-          {(detail.effective_permissions || []).slice(0, 10).map((p: string) => (
+          {(activeContext.effective_permissions || []).slice(0, 10).map((p: string) => (
             <Text key={p} style={styles.permItem}>• {p}</Text>
           ))}
         </View>

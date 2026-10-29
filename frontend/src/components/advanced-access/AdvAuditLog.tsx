@@ -22,15 +22,15 @@ export const AdvAuditLog: React.FC<{ canView: boolean }> = ({ canView }) => {
 
   useEffect(() => { load(); }, [load]);
 
-  if (!canView) return <View data-testid="adv-audit-no-access"><Text style={styles.desc}>تحتاج صلاحية "عرض سجل التدقيق" للاطّلاع على هذا القسم</Text></View>;
+  if (!canView) return <View testID="adv-audit-no-access"><Text style={styles.desc}>تحتاج صلاحية "عرض سجل التدقيق" للاطّلاع على هذا القسم</Text></View>;
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
 
   return (
-    <View data-testid="adv-audit-log">
+    <View testID="adv-audit-log">
       <Text style={styles.title}>سجل التدقيق ({logs.length})</Text>
       <Text style={styles.desc}>سجل مستقل لكل عملية حساسة داخل مركز الصلاحيات المتقدم</Text>
       {logs.map((l, i) => (
-        <View key={l.id || i} style={styles.row} data-testid={`adv-audit-row-${i}`}>
+        <View key={l.id || i} style={styles.row} testID={`adv-audit-row-${i}`}>
           <Text style={styles.action}>{ACTION_LABELS[l.action] || l.action}</Text>
           <Text style={styles.meta}>بواسطة: {l.actor_username || l.actor_user_id} — {new Date(l.timestamp).toLocaleString('ar-EG')}</Text>
         </View>

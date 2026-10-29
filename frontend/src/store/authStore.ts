@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
 import { clearMemCache } from '../services/api';
+import { useAdvancedAccessContextStore } from './advancedAccessContextStore';
 
 interface AuthState {
   user: User | null;
@@ -23,6 +24,9 @@ export const useAuthStore = create<AuthState>((set) => ({
   setAuth: async (user: User, token: string) => {
     await AsyncStorage.setItem('token', token);
     await AsyncStorage.setItem('user', JSON.stringify(user));
+    useAdvancedAccessContextStore.setState({
+      hasAccess: false, isAdmin: false, subPermissions: [], contexts: [], activeContext: null, checked: false,
+    });
     set({ user, token, isAuthenticated: true, isLoading: false });
   },
 
@@ -35,6 +39,9 @@ export const useAuthStore = create<AuthState>((set) => ({
     await AsyncStorage.removeItem('token');
     await AsyncStorage.removeItem('user');
     clearMemCache();
+    useAdvancedAccessContextStore.setState({
+      hasAccess: false, isAdmin: false, subPermissions: [], contexts: [], activeContext: null, checked: false,
+    });
     set({ user: null, token: null, isAuthenticated: false, isLoading: false });
   },
 

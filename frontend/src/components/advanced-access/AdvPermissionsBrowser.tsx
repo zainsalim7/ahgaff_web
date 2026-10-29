@@ -33,11 +33,11 @@ export const AdvPermissionsBrowser: React.FC = () => {
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
 
   return (
-    <View data-testid="adv-permissions-browser">
+    <View testID="adv-permissions-browser">
       <Text style={styles.title}>سجل الصلاحيات التفصيلي ({permissions.length})</Text>
-      <TextInput style={styles.search} placeholder="ابحث بالاسم أو واجهة API..." value={search} onChangeText={setSearch} textAlign="right" data-testid="adv-perm-search-input" />
+      <TextInput style={styles.search} placeholder="ابحث بالاسم أو واجهة API..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-perm-search-input" />
       <View style={styles.filterRow}>
-        <TouchableOpacity style={[styles.chip, !groupFilter && styles.chipActive]} onPress={() => setGroupFilter('')} data-testid="adv-perm-group-all">
+        <TouchableOpacity style={[styles.chip, !groupFilter && styles.chipActive]} onPress={() => setGroupFilter('')} testID="adv-perm-group-all">
           <Text style={[styles.chipText, !groupFilter && styles.chipTextActive]}>كل المجموعات</Text>
         </TouchableOpacity>
       </View>
@@ -45,21 +45,21 @@ export const AdvPermissionsBrowser: React.FC = () => {
         horizontal showsHorizontalScrollIndicator={false}
         data={groups} keyExtractor={g => g.key} style={{ marginBottom: 10 }}
         renderItem={({ item }) => (
-          <TouchableOpacity style={[styles.chip, groupFilter === item.key && styles.chipActive]} onPress={() => setGroupFilter(groupFilter === item.key ? '' : item.key)} data-testid={`adv-perm-group-${item.key}`}>
+          <TouchableOpacity style={[styles.chip, groupFilter === item.key && styles.chipActive]} onPress={() => setGroupFilter(groupFilter === item.key ? '' : item.key)} testID={`adv-perm-group-${item.key}`}>
             <Text style={[styles.chipText, groupFilter === item.key && styles.chipTextActive]}>{item.name_ar} ({item.count})</Text>
           </TouchableOpacity>
         )}
       />
       <View style={styles.filterRow}>
         {Object.entries(OP_TYPE_LABELS).slice(0, 10).map(([k, v]) => (
-          <TouchableOpacity key={k} style={[styles.chipSm, opFilter === k && styles.chipActive]} onPress={() => setOpFilter(opFilter === k ? '' : k)} data-testid={`adv-perm-op-${k}`}>
+          <TouchableOpacity key={k} style={[styles.chipSm, opFilter === k && styles.chipActive]} onPress={() => setOpFilter(opFilter === k ? '' : k)} testID={`adv-perm-op-${k}`}>
             <Text style={[styles.chipTextSm, opFilter === k && styles.chipTextActive]}>{v}</Text>
           </TouchableOpacity>
         ))}
       </View>
       <Text style={styles.resultCount}>النتائج: {filtered.length}</Text>
       {filtered.slice(0, 200).map(p => (
-        <View key={p.key} style={styles.permRow} data-testid={`adv-perm-row-${p.key}`}>
+        <View key={p.key} style={styles.permRow} testID={`adv-perm-row-${p.key}`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.permLabel}>{p.label_ar}</Text>
             <Text style={styles.permApi}>{p.linked_api}</Text>

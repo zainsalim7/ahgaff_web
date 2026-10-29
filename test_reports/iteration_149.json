@@ -1,0 +1,51 @@
+{
+  "summary": "Phase 3 frontend test of Advanced Access Control (SHADOW MODE) plus the new GlobalContextSwitcher, run on the Expo web build at 1920x1080. Working: as admin, all 11 tabs render with no React/page errors. Dashboard shows 30 groups / 976 permissions / 28 roles / 9 of 18 active assignments / 1 tester, and the rescan button works ('تم تحديث السجل: 976 صلاحية نشطة ضمن 30 مجموعة'). Permissions browser (976), roles (28), assignments (18), scopes (9 faculties), direct permissions (0), context page (admin has 0 contexts), audit log (100), simulator flow (user -> assignment -> permission -> run gives 'مرفوض' with reason; the scope-type picker loads options), compare (90/0/0/19 cards and the details toggle), and the testers list (Seaaad active, grant modal opens) all work. The purple global switcher button shows on / and /students for admin and opens the modal 'سياق العمل الحالي (تجريبي)'. Saeed (sub_permissions include context_switch) sees the button, 9 contexts, can switch context and gets the clear button. Salim does not get access (denied screen at /advanced-access-control and 403 on the APIs) when he logs in fresh. Legacy screens (/, /manage-users, /manage-roles, /permissions) behave as before for admin, Salim and Saeed; git shows no changes to the legacy pages. Bugs found: 1 HIGH frontend state leak across logout, 1 MEDIUM side-menu stale state, 2 HIGH backend isolation/escalation gaps, plus several minor issues.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/advanced-access/assignments/{id}/context", "issue": "Missing ownership check (IDOR). Any non-admin tester with context_switch can switch to and read any other user's assignment context, including effective_permissions. Reproduced: Saeed read a TEST_ assignment belonging to Salim and got 200. Fix: allow only when assignment.user_id == current_user.id or the caller is admin (or has run_tests, for the simulator).", "priority": "HIGH"},
+      {"endpoint": "POST /api/advanced-access/assignments", "issue": "Privilege escalation inside the shadow system. A non-admin tester with manage_assignments can create an assignment for himself with the role '[مستورد] مدير النظام' and scope university. Reproduced: Saeed got 200; the assignment was ended in teardown. manage_roles similarly lets a tester edit any role's permissions. Fix: block self-assignment by non-admins and block assigning/editing roles above the caller's own level, or limit these sub-permissions to admin.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/advanced-access/me/access", "issue": "Called before login (from SideMenu on the login page) and returns 403. Harmless in itself, but it causes the frontend side-menu bug below."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "advancedAccessContextStore + GlobalContextSwitcher", "issue": "The zustand store is never reset on logout, and 'checked' stays true, so checkAccess is not run again for the next user. Reproduced in one tab: admin logs in, logs out, Salim logs in without a reload. The purple switcher button is still visible to Salim, and its modal would show the previous user's contexts and active context. It only goes away after a full page reload. Fix: reset the store (hasAccess, isAdmin, subPermissions, contexts, activeContext, checked=false) in authStore.logout, or re-run checkAccess whenever user.id or token changes.", "selector": "[data-testid='global-context-switcher-btn']", "priority": "HIGH"},
+      {"component": "SideMenu (advanced-access item)", "issue": "The hasAdvAccess effect depends only on [isAdmin]. On the login page myAccess runs without a token and gets 403, so hasAdvAccess=false. When a non-admin tester such as Saeed then logs in, isAdmin does not change, the effect does not run again, and 'مركز الصلاحيات المتقدم 🧪' is missing until a reload. The same staleness applies when switching between non-admin users. Fix: depend on user?.id or token, and skip the call when not authenticated.", "selector": "text=مركز الصلاحيات المتقدم 🧪", "priority": "MEDIUM"},
+      {"component": "GlobalContextSwitcher option highlight", "issue": "The active option is never highlighted. activeContext comes from /assignments/{id}/context, which returns 'assignment_id', not 'id', so activeContext?.id === c.id is always false. Fix: compare activeContext?.assignment_id.", "selector": "global-context-option-*", "priority": "LOW"},
+      {"component": "All 11 advanced-access components + GlobalContextSwitcher modal + adv page", "issue": "The raw data-testid prop on RN View/TouchableOpacity is not rendered on react-native-web: 0 matches for adv-tab-dashboard, advanced-access-control-screen, adv-assignment-view-* and global-context-switcher-modal. Only testID works, as on global-context-switcher-btn. Replace data-testid with testID.", "selector": "[data-testid^='adv-']", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "Context switching consistency", "issue": "Switching on the AdvContextPage cards only sets local 'detail' and does not update the store's activeContext. The header button and the global switcher therefore do not reflect a switch made on that page.", "affected_selectors": ["adv-context-card-*", "adv-context-switcher-btn"]}
+    ],
+    "design_issues": [
+      {"screen": "/advanced-access-control", "issues": ["The Stack header title shows the raw route name 'advanced-access-control' because no Stack.Screen title is set in _layout.tsx. Add title 'مركز الصلاحيات المتقدم'.", "Two stacked headers: the Stack header plus the custom blue header, which wastes vertical space.", "The simulator permission list shows many identical labels (e.g. 3x 'عرض قائمة — absence excuses', 'إضافة — create' with path 'POST /'). They cannot be told apart without the method/path, so show the path under each label."]},
+      {"screen": "Global context modal (RTL)", "issues": ["The empty-state text 'لا توجد تكليفات نشطة لحسابك ضمن النظام الجديد (SHADOW MODE)' renders with broken bidi parentheses ('SHADOW) ... (MODE'). Wrap the Latin part with a direction mark or drop the parentheses."]},
+      {"screen": "Test data", "issues": ["Saeed has 9 identical active assignments 'عضو لجنة تجريبي' and 9 ended 'عميد تجريبي — الكلية الأولى' left over from earlier pytest runs, all with the imported admin role. This clutters the switcher, simulator and compare lists. Consider cleaning up and adding teardown to the phase-2 tests."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_adv_access_isolation.py", "/app/test_reports/pytest/adv_access_isolation.xml"],
+  "action_items": [
+    "HIGH: reset advancedAccessContextStore on logout or user change (authStore.logout should call useAdvancedAccessContextStore.setState with the initial state, checked=false), so the global switcher does not leak to the next user",
+    "HIGH (backend): add an ownership check to GET /advanced-access/assignments/{id}/context (owner or admin, or run_tests for the simulator)",
+    "HIGH (backend): stop non-admin testers from self-assigning or escalating via POST /assignments (and PUT /roles), e.g. reject user_id == current_user unless admin, or restrict manage_assignments/manage_roles to admin",
+    "MEDIUM: SideMenu hasAdvAccess effect: depend on user?.id/token and skip the call when not authenticated",
+    "MEDIUM: replace data-testid with testID across src/components/advanced-access/*.tsx and advanced-access-control.tsx (RN web drops data-testid)",
+    "LOW: GlobalContextSwitcher active highlight should compare activeContext?.assignment_id",
+    "LOW: add a Stack.Screen title for advanced-access-control; fix the bidi of '(SHADOW MODE)'; make AdvContextPage update the store's activeContext"
+  ],
+  "critical_code_review_comments": [
+    "GlobalContextSwitcher runs checkAccess only when !checked, and nothing ever sets checked back to false, which is the root of the cross-user leak",
+    "SideMenu and the store both call myAccess separately; the side menu should read hasAccess from the shared store (DRY, single source of truth)",
+    "AdvCompare.run has no catch: on an API error it fails silently with no error state shown",
+    "AdvSimulator/AdvCompare useEffect promise chains have no .catch, so a 403 would cause an unhandled rejection"
+  ],
+  "updated_files": ["/app/backend/tests/test_adv_access_isolation.py"],
+  "success_rate": {"backend": "60% (3/5 isolation tests pass; 2 security gaps)", "frontend": "~80% (all tabs and flows work; 1 HIGH state leak, 1 MEDIUM menu staleness, minor UI issues)"},
+  "test_credentials": "admin/admin123, Salim/test1234, Saeed/test1234 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "The isolation tests create 2 TEST_ assignments (TEST_isolation_salim for Salim, TEST_self_escalation for Saeed) and end them in teardown (status=ended).",
+  "retest_needed": true,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Expo web app. Login: fill input[placeholder='اسم المستخدم / رقم القيد / الرقم المرجعي'] and input[placeholder='كلمة المرور'], then click the text 'تسجيل الدخول' (Enter does not submit). Only testID-based selectors work (floating-menu-btn, global-context-switcher-btn); select advanced-access tabs by text. The header context button also contains the text 'سياق العمل', so use .last for that tab. To check the leak fix: admin login -> logout via side menu 'تسجيل الخروج' -> Salim login without reload -> global-context-switcher-btn count should be 0. Run pytest /app/backend/tests/test_adv_access_isolation.py for the IDOR and self-escalation checks."
+}

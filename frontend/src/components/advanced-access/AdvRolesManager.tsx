@@ -56,11 +56,11 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
 
   return (
-    <View data-testid="adv-roles-manager">
+    <View testID="adv-roles-manager">
       <View style={styles.headerRow}>
         <Text style={styles.title}>الأدوار المتقدمة ({roles.length})</Text>
         {canManage && (
-          <TouchableOpacity style={styles.addBtn} onPress={openCreate} data-testid="adv-role-create-btn">
+          <TouchableOpacity style={styles.addBtn} onPress={openCreate} testID="adv-role-create-btn">
             <Ionicons name="add" size={16} color="#fff" />
             <Text style={styles.addBtnText}>دور جديد</Text>
           </TouchableOpacity>
@@ -68,7 +68,7 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
       </View>
 
       {roles.map(r => (
-        <View key={r.id} style={styles.roleCard} data-testid={`adv-role-card-${r.id}`}>
+        <View key={r.id} style={styles.roleCard} testID={`adv-role-card-${r.id}`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.roleName}>{r.name_ar}</Text>
             <Text style={styles.roleDesc} numberOfLines={2}>{r.description}</Text>
@@ -79,9 +79,9 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
           </View>
           {canManage && (
             <View style={styles.roleActions}>
-              <TouchableOpacity onPress={() => openEdit(r)} data-testid={`adv-role-edit-${r.id}`}><Ionicons name="create-outline" size={20} color={COLORS.primary} /></TouchableOpacity>
-              {r.status === 'draft' && <TouchableOpacity onPress={() => promote(r, 'shadow')} data-testid={`adv-role-promote-shadow-${r.id}`}><Ionicons name="flask-outline" size={20} color={COLORS.shadow} /></TouchableOpacity>}
-              {r.status === 'shadow' && <TouchableOpacity onPress={() => promote(r, 'ready_for_review')} data-testid={`adv-role-promote-review-${r.id}`}><Ionicons name="checkmark-circle-outline" size={20} color={COLORS.warning} /></TouchableOpacity>}
+              <TouchableOpacity onPress={() => openEdit(r)} testID={`adv-role-edit-${r.id}`}><Ionicons name="create-outline" size={20} color={COLORS.primary} /></TouchableOpacity>
+              {r.status === 'draft' && <TouchableOpacity onPress={() => promote(r, 'shadow')} testID={`adv-role-promote-shadow-${r.id}`}><Ionicons name="flask-outline" size={20} color={COLORS.shadow} /></TouchableOpacity>}
+              {r.status === 'shadow' && <TouchableOpacity onPress={() => promote(r, 'ready_for_review')} testID={`adv-role-promote-review-${r.id}`}><Ionicons name="checkmark-circle-outline" size={20} color={COLORS.warning} /></TouchableOpacity>}
             </View>
           )}
         </View>
@@ -91,17 +91,17 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>{editing ? 'تعديل دور' : 'دور جديد'}</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)} data-testid="adv-role-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-role-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
           </View>
           <ScrollView style={{ padding: 14 }}>
             <Text style={styles.label}>اسم الدور</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} textAlign="right" data-testid="adv-role-name-input" />
+            <TextInput style={styles.input} value={name} onChangeText={setName} textAlign="right" testID="adv-role-name-input" />
             <Text style={styles.label}>الوصف</Text>
-            <TextInput style={[styles.input, { height: 60 }]} value={description} onChangeText={setDescription} textAlign="right" multiline data-testid="adv-role-desc-input" />
+            <TextInput style={[styles.input, { height: 60 }]} value={description} onChangeText={setDescription} textAlign="right" multiline testID="adv-role-desc-input" />
             <Text style={styles.label}>الصلاحيات</Text>
             <AdvPermissionPicker selected={selectedPerms} onChange={setSelectedPerms} />
             {!!error && <Text style={styles.errorText}>{error}</Text>}
-            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} data-testid="adv-role-save-btn">
+            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} testID="adv-role-save-btn">
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>حفظ</Text>}
             </TouchableOpacity>
           </ScrollView>

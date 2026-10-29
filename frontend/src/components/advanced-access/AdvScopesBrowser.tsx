@@ -16,12 +16,12 @@ export const AdvScopesBrowser: React.FC = () => {
   }, [type]);
 
   return (
-    <View data-testid="adv-scopes-browser">
+    <View testID="adv-scopes-browser">
       <Text style={styles.title}>النطاقات الإدارية والأكاديمية المتاحة</Text>
       <Text style={styles.desc}>تُقرأ مباشرة من قاعدة البيانات — أي وحدة جديدة تُضاف بالنظام الحالي تظهر هنا تلقائيًا دون أي تعديل كود</Text>
       <View style={styles.tabRow}>
         {BROWSABLE.map(t => (
-          <TouchableOpacity key={t} style={[styles.chip, type === t && styles.chipActive]} onPress={() => setType(t)} data-testid={`adv-scope-type-${t}`}>
+          <TouchableOpacity key={t} style={[styles.chip, type === t && styles.chipActive]} onPress={() => setType(t)} testID={`adv-scope-type-${t}`}>
             <Text style={[styles.chipText, type === t && styles.chipTextActive]}>{SCOPE_TYPE_LABELS[t]}</Text>
           </TouchableOpacity>
         ))}
@@ -30,7 +30,7 @@ export const AdvScopesBrowser: React.FC = () => {
         <>
           <Text style={styles.count}>العدد الحالي: {options.length}</Text>
           {options.map(o => (
-            <View key={o.id} style={styles.row} data-testid={`adv-scope-option-${o.id}`}>
+            <View key={o.id} style={styles.row} testID={`adv-scope-option-${o.id}`}>
               <Text style={styles.rowText}>{o.name}</Text>
             </View>
           ))}

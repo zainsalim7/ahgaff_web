@@ -20,12 +20,12 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
 
   useEffect(() => {
     if (!canRun) return;
-    Promise.all([advancedAccessAPI.getLightUsers(), advancedAccessAPI.getPermissions()]).then(([u, p]) => { setUsers(u.data); setPermissions(p.data); });
+    Promise.all([advancedAccessAPI.getLightUsers(), advancedAccessAPI.getPermissions()]).then(([u, p]) => { setUsers(u.data); setPermissions(p.data); }).catch(() => {});
   }, [canRun]);
 
   useEffect(() => {
     if (!userId) { setAssignments([]); return; }
-    advancedAccessAPI.getUserAssignments(userId).then(res => setAssignments(res.data.filter((a: any) => a.status === 'active')));
+    advancedAccessAPI.getUserAssignments(userId).then(res => setAssignments(res.data.filter((a: any) => a.status === 'active'))).catch(() => setAssignments([]));
   }, [userId]);
 
   useEffect(() => {
@@ -44,19 +44,19 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
     } finally { setRunning(false); }
   };
 
-  if (!canRun) return <Text style={styles.desc} data-testid="adv-simulator-no-access">تحتاج صلاحية "تشغيل المحاكي" لاستخدام هذا القسم</Text>;
+  if (!canRun) return <Text style={styles.desc} testID="adv-simulator-no-access">تحتاج صلاحية "تشغيل المحاكي" لاستخدام هذا القسم</Text>;
 
   const filteredPerms = permissions.filter(p => !search || p.label_ar.includes(search));
 
   return (
-    <View data-testid="adv-simulator">
+    <View testID="adv-simulator">
       <Text style={styles.title}>محاكي الصلاحيات</Text>
       <Text style={styles.desc}>للقراءة والاختبار فقط — لا ينفّذ أي تغيير على بيانات الإنتاج</Text>
 
       <Text style={styles.label}>المستخدم</Text>
       <ScrollView horizontal style={styles.row}>
         {users.map(u => (
-          <TouchableOpacity key={u.id} style={[styles.chip, userId === u.id && styles.chipActive]} onPress={() => { setUserId(u.id); setAssignmentId(''); setResult(null); }} data-testid={`adv-sim-user-${u.id}`}>
+          <TouchableOpacity key={u.id} style={[styles.chip, userId === u.id && styles.chipActive]} onPress={() => { setUserId(u.id); setAssignmentId(''); setResult(null); }} testID={`adv-sim-user-${u.id}`}>
             <Text style={[styles.chipText, userId === u.id && styles.chipTextActive]}>{u.full_name || u.username}</Text>
           </TouchableOpacity>
         ))}
@@ -65,7 +65,7 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       <Text style={styles.label}>السياق (التكليف)</Text>
       <ScrollView horizontal style={styles.row}>
         {assignments.map(a => (
-          <TouchableOpacity key={a.id} style={[styles.chip, assignmentId === a.id && styles.chipActive]} onPress={() => setAssignmentId(a.id)} data-testid={`adv-sim-assignment-${a.id}`}>
+          <TouchableOpacity key={a.id} style={[styles.chip, assignmentId === a.id && styles.chipActive]} onPress={() => setAssignmentId(a.id)} testID={`adv-sim-assignment-${a.id}`}>
             <Text style={[styles.chipText, assignmentId === a.id && styles.chipTextActive]}>{a.context_label_ar}</Text>
           </TouchableOpacity>
         ))}
@@ -73,10 +73,10 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       </ScrollView>
 
       <Text style={styles.label}>الصلاحية المستهدفة</Text>
-      <TextInput style={styles.input} placeholder="ابحث عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" data-testid="adv-sim-perm-search" />
+      <TextInput style={styles.input} placeholder="ابحث عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-sim-perm-search" />
       <ScrollView style={{ maxHeight: 140 }}>
         {filteredPerms.slice(0, 40).map(p => (
-          <TouchableOpacity key={p.key} style={[styles.pickRow, permKey === p.key && styles.pickRowActive]} onPress={() => setPermKey(p.key)} data-testid={`adv-sim-perm-${p.key}`}>
+          <TouchableOpacity key={p.key} style={[styles.pickRow, permKey === p.key && styles.pickRowActive]} onPress={() => setPermKey(p.key)} testID={`adv-sim-perm-${p.key}`}>
             <Text style={styles.pickRowText}>{p.label_ar}</Text>
           </TouchableOpacity>
         ))}
@@ -85,7 +85,7 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       <Text style={styles.label}>النطاق المستهدف (اختياري)</Text>
       <ScrollView horizontal style={styles.row}>
         {['', 'faculty', 'department', 'unit', 'course'].map(st => (
-          <TouchableOpacity key={st || 'none'} style={[styles.chip, targetScopeType === st && styles.chipActive]} onPress={() => { setTargetScopeType(st); setTargetRefId(''); }} data-testid={`adv-sim-scopetype-${st || 'none'}`}>
+          <TouchableOpacity key={st || 'none'} style={[styles.chip, targetScopeType === st && styles.chipActive]} onPress={() => { setTargetScopeType(st); setTargetRefId(''); }} testID={`adv-sim-scopetype-${st || 'none'}`}>
             <Text style={[styles.chipText, targetScopeType === st && styles.chipTextActive]}>{st ? SCOPE_TYPE_LABELS[st] : 'بلا نطاق محدد'}</Text>
           </TouchableOpacity>
         ))}
@@ -93,19 +93,19 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       {scopeOptions.length > 0 && (
         <ScrollView style={{ maxHeight: 100 }}>
           {scopeOptions.map(o => (
-            <TouchableOpacity key={o.id} style={[styles.pickRow, targetRefId === o.id && styles.pickRowActive]} onPress={() => setTargetRefId(o.id)} data-testid={`adv-sim-scoperef-${o.id}`}>
+            <TouchableOpacity key={o.id} style={[styles.pickRow, targetRefId === o.id && styles.pickRowActive]} onPress={() => setTargetRefId(o.id)} testID={`adv-sim-scoperef-${o.id}`}>
               <Text style={styles.pickRowText}>{o.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
       )}
 
-      <TouchableOpacity style={styles.runBtn} onPress={run} disabled={running} data-testid="adv-sim-run-btn">
+      <TouchableOpacity style={styles.runBtn} onPress={run} disabled={running} testID="adv-sim-run-btn">
         {running ? <ActivityIndicator color="#fff" /> : <><Ionicons name="play" size={16} color="#fff" /><Text style={styles.runBtnText}>تشغيل المحاكي</Text></>}
       </TouchableOpacity>
 
       {result && (
-        <View style={[styles.resultBox, { backgroundColor: result.allowed ? COLORS.successBg : COLORS.dangerBg }]} data-testid="adv-sim-result">
+        <View style={[styles.resultBox, { backgroundColor: result.allowed ? COLORS.successBg : COLORS.dangerBg }]} testID="adv-sim-result">
           <Ionicons name={result.allowed ? 'checkmark-circle' : 'close-circle'} size={28} color={result.allowed ? COLORS.success : COLORS.danger} />
           <Text style={[styles.resultDecision, { color: result.allowed ? COLORS.success : COLORS.danger }]}>{result.allowed ? 'مسموح' : 'مرفوض'}</Text>
           <Text style={styles.resultReason}>{result.reason}</Text>

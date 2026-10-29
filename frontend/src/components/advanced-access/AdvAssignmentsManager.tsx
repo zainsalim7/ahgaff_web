@@ -77,11 +77,11 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
 
   return (
-    <View data-testid="adv-assignments-manager">
+    <View testID="adv-assignments-manager">
       <View style={styles.headerRow}>
         <Text style={styles.title}>التكليفات المتعددة ({assignments.length})</Text>
         {canManage && (
-          <TouchableOpacity style={styles.addBtn} onPress={openCreate} data-testid="adv-assignment-create-btn">
+          <TouchableOpacity style={styles.addBtn} onPress={openCreate} testID="adv-assignment-create-btn">
             <Ionicons name="add" size={16} color="#fff" />
             <Text style={styles.addBtnText}>تكليف جديد</Text>
           </TouchableOpacity>
@@ -89,7 +89,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
       </View>
 
       {assignments.map(a => (
-        <View key={a.id} style={styles.card} data-testid={`adv-assignment-card-${a.id}`}>
+        <View key={a.id} style={styles.card} testID={`adv-assignment-card-${a.id}`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.cardTitle}>{a.context_label_ar}</Text>
             <Text style={styles.cardMeta}>{a.user_name} — {a.role_name_ar} — {a.assignment_type === 'academic' ? 'أكاديمي' : 'إداري'}</Text>
@@ -99,9 +99,9 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
             <Text style={styles.statusBadgeText}>{a.status === 'active' ? 'نشط' : 'منتهٍ'}</Text>
           </View>
           <View style={styles.actions}>
-            <TouchableOpacity onPress={() => viewContext(a)} data-testid={`adv-assignment-view-${a.id}`}><Ionicons name="eye-outline" size={20} color={COLORS.primary} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => viewContext(a)} testID={`adv-assignment-view-${a.id}`}><Ionicons name="eye-outline" size={20} color={COLORS.primary} /></TouchableOpacity>
             {canManage && a.status === 'active' && (
-              <TouchableOpacity onPress={() => endAssignment(a)} data-testid={`adv-assignment-end-${a.id}`}><Ionicons name="stop-circle-outline" size={20} color={COLORS.danger} /></TouchableOpacity>
+              <TouchableOpacity onPress={() => endAssignment(a)} testID={`adv-assignment-end-${a.id}`}><Ionicons name="stop-circle-outline" size={20} color={COLORS.danger} /></TouchableOpacity>
             )}
           </View>
         </View>
@@ -109,7 +109,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
 
       <Modal visible={!!detail} transparent animationType="fade" onRequestClose={() => setDetail(null)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setDetail(null)}>
-          <View style={styles.detailBox} data-testid="adv-assignment-detail-modal">
+          <View style={styles.detailBox} testID="adv-assignment-detail-modal">
             <Text style={styles.modalTitle}>{detail?.context_label_ar}</Text>
             <Text style={styles.detailLine}>الدور: {detail?.role_name_ar}</Text>
             <Text style={styles.detailLine}>النطاق: {SCOPE_TYPE_LABELS[detail?.scope?.scope_type] || detail?.scope?.scope_type}</Text>
@@ -122,13 +122,13 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>تكليف جديد</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)} data-testid="adv-assignment-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-assignment-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
           </View>
           <ScrollView style={{ padding: 14 }}>
             <Text style={styles.label}>المستخدم</Text>
             <ScrollView horizontal style={styles.pickerRow}>
               {users.map(u => (
-                <TouchableOpacity key={u.id} style={[styles.pickChip, userId === u.id && styles.pickChipActive]} onPress={() => setUserId(u.id)} data-testid={`adv-assignment-user-${u.id}`}>
+                <TouchableOpacity key={u.id} style={[styles.pickChip, userId === u.id && styles.pickChipActive]} onPress={() => setUserId(u.id)} testID={`adv-assignment-user-${u.id}`}>
                   <Text style={[styles.pickChipText, userId === u.id && styles.pickChipTextActive]}>{u.full_name || u.username}</Text>
                 </TouchableOpacity>
               ))}
@@ -137,7 +137,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
             <Text style={styles.label}>نوع التكليف</Text>
             <View style={styles.pickerRow}>
               {[['academic', 'أكاديمي'], ['administrative', 'إداري']].map(([v, l]) => (
-                <TouchableOpacity key={v} style={[styles.pickChip, assignmentType === v && styles.pickChipActive]} onPress={() => setAssignmentType(v)} data-testid={`adv-assignment-type-${v}`}>
+                <TouchableOpacity key={v} style={[styles.pickChip, assignmentType === v && styles.pickChipActive]} onPress={() => setAssignmentType(v)} testID={`adv-assignment-type-${v}`}>
                   <Text style={[styles.pickChipText, assignmentType === v && styles.pickChipTextActive]}>{l}</Text>
                 </TouchableOpacity>
               ))}
@@ -146,19 +146,19 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
             <Text style={styles.label}>الدور المتقدم</Text>
             <ScrollView horizontal style={styles.pickerRow}>
               {roles.map(r => (
-                <TouchableOpacity key={r.id} style={[styles.pickChip, roleId === r.id && styles.pickChipActive]} onPress={() => setRoleId(r.id)} data-testid={`adv-assignment-role-${r.id}`}>
+                <TouchableOpacity key={r.id} style={[styles.pickChip, roleId === r.id && styles.pickChipActive]} onPress={() => setRoleId(r.id)} testID={`adv-assignment-role-${r.id}`}>
                   <Text style={[styles.pickChipText, roleId === r.id && styles.pickChipTextActive]}>{r.name_ar}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
 
             <Text style={styles.label}>تسمية السياق (مثال: عميد كلية التعليم عن بعد)</Text>
-            <TextInput style={styles.input} value={label} onChangeText={setLabel} textAlign="right" data-testid="adv-assignment-label-input" />
+            <TextInput style={styles.input} value={label} onChangeText={setLabel} textAlign="right" testID="adv-assignment-label-input" />
 
             <Text style={styles.label}>نوع النطاق</Text>
             <ScrollView horizontal style={styles.pickerRow}>
               {SCOPE_TYPES.map(st => (
-                <TouchableOpacity key={st} style={[styles.pickChip, scopeType === st && styles.pickChipActive]} onPress={() => { setScopeType(st); setScopeRefIds([]); }} data-testid={`adv-assignment-scopetype-${st}`}>
+                <TouchableOpacity key={st} style={[styles.pickChip, scopeType === st && styles.pickChipActive]} onPress={() => { setScopeType(st); setScopeRefIds([]); }} testID={`adv-assignment-scopetype-${st}`}>
                   <Text style={[styles.pickChipText, scopeType === st && styles.pickChipTextActive]}>{SCOPE_TYPE_LABELS[st]}</Text>
                 </TouchableOpacity>
               ))}
@@ -169,7 +169,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
                 <Text style={styles.label}>اختر عناصر النطاق</Text>
                 <ScrollView style={{ maxHeight: 160 }}>
                   {scopeOptions.map(o => (
-                    <TouchableOpacity key={o.id} style={styles.checkRow} onPress={() => toggleScopeRef(o.id)} data-testid={`adv-assignment-scoperef-${o.id}`}>
+                    <TouchableOpacity key={o.id} style={styles.checkRow} onPress={() => toggleScopeRef(o.id)} testID={`adv-assignment-scoperef-${o.id}`}>
                       <Ionicons name={scopeRefIds.includes(o.id) ? 'checkbox' : 'square-outline'} size={18} color={COLORS.primary} />
                       <Text style={styles.checkLabel}>{o.name}</Text>
                     </TouchableOpacity>
@@ -179,7 +179,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
             )}
 
             {!!error && <Text style={styles.errorText}>{error}</Text>}
-            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} data-testid="adv-assignment-save-btn">
+            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} testID="adv-assignment-save-btn">
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>إنشاء التكليف</Text>}
             </TouchableOpacity>
           </ScrollView>

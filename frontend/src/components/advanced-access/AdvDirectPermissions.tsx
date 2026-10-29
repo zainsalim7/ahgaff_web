@@ -59,11 +59,11 @@ export const AdvDirectPermissions: React.FC<{ canManage: boolean }> = ({ canMana
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
 
   return (
-    <View data-testid="adv-direct-permissions">
+    <View testID="adv-direct-permissions">
       <View style={styles.headerRow}>
         <Text style={styles.title}>الصلاحيات المباشرة (استثناءات) ({rows.length})</Text>
         {canManage && (
-          <TouchableOpacity style={styles.addBtn} onPress={openGrant} data-testid="adv-direct-grant-btn">
+          <TouchableOpacity style={styles.addBtn} onPress={openGrant} testID="adv-direct-grant-btn">
             <Ionicons name="add" size={16} color="#fff" />
             <Text style={styles.addBtnText}>منح صلاحية مباشرة</Text>
           </TouchableOpacity>
@@ -71,12 +71,12 @@ export const AdvDirectPermissions: React.FC<{ canManage: boolean }> = ({ canMana
       </View>
       <Text style={styles.desc}>تُمنح لتكليف معيّن دون تعديل دوره الأساسي — تظهر هنا كمصدر "منح مباشر" مستقل</Text>
       {rows.map((r, i) => (
-        <View key={i} style={styles.card} data-testid={`adv-direct-row-${i}`}>
+        <View key={i} style={styles.card} testID={`adv-direct-row-${i}`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.cardTitle}>{r.permission_key}</Text>
             <Text style={styles.cardMeta}>{r.user_name} — {r.context_label_ar}{r.reason ? ` — السبب: ${r.reason}` : ''}</Text>
           </View>
-          {canManage && <TouchableOpacity onPress={() => revoke(r)} data-testid={`adv-direct-revoke-${i}`}><Ionicons name="close-circle-outline" size={22} color={COLORS.danger} /></TouchableOpacity>}
+          {canManage && <TouchableOpacity onPress={() => revoke(r)} testID={`adv-direct-revoke-${i}`}><Ionicons name="close-circle-outline" size={22} color={COLORS.danger} /></TouchableOpacity>}
         </View>
       ))}
       {rows.length === 0 && <Text style={styles.empty}>لا توجد صلاحيات مباشرة ممنوحة حاليًا</Text>}
@@ -85,30 +85,30 @@ export const AdvDirectPermissions: React.FC<{ canManage: boolean }> = ({ canMana
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>منح صلاحية مباشرة</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)} data-testid="adv-direct-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-direct-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
           </View>
           <ScrollView style={{ padding: 14 }}>
             <Text style={styles.label}>التكليف المستهدف</Text>
             <ScrollView style={{ maxHeight: 140 }}>
               {assignments.filter(a => a.status === 'active').map(a => (
-                <TouchableOpacity key={a.id} style={[styles.pickRow, assignmentId === a.id && styles.pickRowActive]} onPress={() => setAssignmentId(a.id)} data-testid={`adv-direct-assignment-${a.id}`}>
+                <TouchableOpacity key={a.id} style={[styles.pickRow, assignmentId === a.id && styles.pickRowActive]} onPress={() => setAssignmentId(a.id)} testID={`adv-direct-assignment-${a.id}`}>
                   <Text style={styles.pickRowText}>{a.user_name} — {a.context_label_ar}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
             <Text style={styles.label}>الصلاحية</Text>
-            <TextInput style={styles.input} placeholder="ابحث..." value={search} onChangeText={setSearch} textAlign="right" data-testid="adv-direct-perm-search" />
+            <TextInput style={styles.input} placeholder="ابحث..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-direct-perm-search" />
             <ScrollView style={{ maxHeight: 160 }}>
               {filteredPerms.slice(0, 50).map(p => (
-                <TouchableOpacity key={p.key} style={[styles.pickRow, permKey === p.key && styles.pickRowActive]} onPress={() => setPermKey(p.key)} data-testid={`adv-direct-perm-${p.key}`}>
+                <TouchableOpacity key={p.key} style={[styles.pickRow, permKey === p.key && styles.pickRowActive]} onPress={() => setPermKey(p.key)} testID={`adv-direct-perm-${p.key}`}>
                   <Text style={styles.pickRowText}>{p.label_ar}</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
             <Text style={styles.label}>السبب (اختياري)</Text>
-            <TextInput style={styles.input} value={reason} onChangeText={setReason} textAlign="right" data-testid="adv-direct-reason-input" />
+            <TextInput style={styles.input} value={reason} onChangeText={setReason} textAlign="right" testID="adv-direct-reason-input" />
             {!!error && <Text style={styles.errorText}>{error}</Text>}
-            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} data-testid="adv-direct-save-btn">
+            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} testID="adv-direct-save-btn">
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>منح</Text>}
             </TouchableOpacity>
           </ScrollView>

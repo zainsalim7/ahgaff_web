@@ -53,19 +53,19 @@ export const AdvDashboard: React.FC = () => {
   ];
 
   return (
-    <View data-testid="adv-dashboard">
+    <View testID="adv-dashboard">
       <Text style={styles.sectionTitle}>لوحة معلومات مركز الصلاحيات المتقدم</Text>
       <Text style={styles.sectionDesc}>الأعداد محدَّثة مباشرة من قاعدة البيانات (SHADOW MODE — لا تؤثر على النظام الحالي)</Text>
       <View style={styles.grid}>
         {cards.map((c, i) => (
-          <View key={i} style={styles.card} data-testid={`adv-dashboard-card-${c.label}`}>
+          <View key={i} style={styles.card} testID={`adv-dashboard-card-${c.label}`}>
             <Ionicons name={c.icon as any} size={26} color={c.color} />
             <Text style={styles.cardValue}>{c.value}</Text>
             <Text style={styles.cardLabel}>{c.label}</Text>
           </View>
         ))}
       </View>
-      <TouchableOpacity style={styles.seedBtn} onPress={runSeed} disabled={seeding} data-testid="adv-seed-registry-btn">
+      <TouchableOpacity style={styles.seedBtn} onPress={runSeed} disabled={seeding} testID="adv-seed-registry-btn">
         {seeding ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="refresh" size={16} color="#fff" />}
         <Text style={styles.seedBtnText}>إعادة فحص الكود وتحديث سجل الصلاحيات (للأدمن)</Text>
       </TouchableOpacity>

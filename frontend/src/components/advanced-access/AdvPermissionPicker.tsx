@@ -53,12 +53,12 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
   if (loading) return <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />;
 
   return (
-    <View data-testid="adv-permission-picker">
+    <View testID="adv-permission-picker">
       <Text style={styles.countLabel}>المختار: {selected.length} / {permissions.length}</Text>
-      <TextInput style={styles.search} placeholder="بحث سريع عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" data-testid="adv-picker-search" />
+      <TextInput style={styles.search} placeholder="بحث سريع عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-picker-search" />
       <View style={styles.quickRow}>
         {QUICK_OPS.map(op => (
-          <TouchableOpacity key={op} style={styles.quickChip} onPress={() => selectByOp(op)} data-testid={`adv-picker-quick-${op}`}>
+          <TouchableOpacity key={op} style={styles.quickChip} onPress={() => selectByOp(op)} testID={`adv-picker-quick-${op}`}>
             <Text style={styles.quickChipText}>{OP_TYPE_LABELS[op]} فقط</Text>
           </TouchableOpacity>
         ))}
@@ -71,16 +71,16 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
           const isOpen = !!expanded[g.key];
           return (
             <View key={g.key} style={styles.groupBox}>
-              <TouchableOpacity style={styles.groupHeader} onPress={() => setExpanded(e => ({ ...e, [g.key]: !e[g.key] }))} data-testid={`adv-picker-group-toggle-${g.key}`}>
+              <TouchableOpacity style={styles.groupHeader} onPress={() => setExpanded(e => ({ ...e, [g.key]: !e[g.key] }))} testID={`adv-picker-group-toggle-${g.key}`}>
                 <Ionicons name={isOpen ? 'chevron-up' : 'chevron-down'} size={16} color={COLORS.textMuted} />
                 <Text style={styles.groupCount}>{selCount}/{items.length}</Text>
-                <TouchableOpacity onPress={() => toggleGroup(g.key)} style={styles.groupCheckbox} data-testid={`adv-picker-group-selectall-${g.key}`}>
+                <TouchableOpacity onPress={() => toggleGroup(g.key)} style={styles.groupCheckbox} testID={`adv-picker-group-selectall-${g.key}`}>
                   <Ionicons name={selCount === items.length ? 'checkbox' : selCount > 0 ? 'remove-circle' : 'square-outline'} size={20} color={COLORS.primary} />
                 </TouchableOpacity>
                 <Text style={styles.groupName}>{g.name_ar}</Text>
               </TouchableOpacity>
               {isOpen && items.map(p => (
-                <TouchableOpacity key={p.key} style={styles.permRow} onPress={() => toggleOne(p.key)} data-testid={`adv-picker-perm-${p.key}`}>
+                <TouchableOpacity key={p.key} style={styles.permRow} onPress={() => toggleOne(p.key)} testID={`adv-picker-perm-${p.key}`}>
                   <Ionicons name={selectedSet.has(p.key) ? 'checkbox' : 'square-outline'} size={18} color={COLORS.primary} />
                   <View style={{ flex: 1 }}>
                     <Text style={styles.permLabel}>{p.label_ar}</Text>

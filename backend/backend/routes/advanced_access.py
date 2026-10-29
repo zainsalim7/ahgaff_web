@@ -146,6 +146,8 @@ async def update_advanced_role(role_id: str, data: AdvancedRoleUpdate, current_u
     role = await db.advanced_roles.find_one({"_id": _oid(role_id, "الدور")})
     if not role:
         raise HTTPException(status_code=404, detail="الدور غير موجود")
+    if current_user.get("role") != "admin" and role.get("imported_from_legacy_role_id"):
+        raise HTTPException(status_code=403, detail="تعديل الأدوار المستوردة من النظام القديم للأدمن فقط")
     update = {k: v for k, v in data.dict(exclude_unset=True).items()}
     if "status" in update and update["status"] not in ("draft", "shadow", "ready_for_review"):
         raise HTTPException(status_code=400, detail="حالة غير صالحة (draft/shadow/ready_for_review فقط — لا حالة إنتاج ضمن هذا المشروع)")
@@ -215,6 +217,8 @@ async def get_user_active_contexts(user_id: str, current_user: dict = Depends(re
 @router.post("/assignments")
 async def create_assignment(data: AssignmentCreate, current_user: dict = Depends(require_adv_access("manage_assignments"))):
     db = get_db()
+    if current_user.get("role") != "admin" and data.user_id == current_user["id"]:
+        raise HTTPException(status_code=403, detail="لا يمكنك إسناد تكليف لنفسك")
     if not await db.users.find_one({"_id": _oid(data.user_id, "المستخدم")}):
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
     if not await db.advanced_roles.find_one({"_id": _oid(data.advanced_role_id, "الدور")}):
@@ -257,6 +261,10 @@ async def get_assignment_context(assignment_id: str, current_user: dict = Depend
     assignment = await db.advanced_user_assignments.find_one({"_id": _oid(assignment_id, "التكليف")})
     if not assignment:
         raise HTTPException(status_code=404, detail="التكليف غير موجود")
+    is_admin = current_user.get("role") == "admin"
+    is_owner = assignment.get("user_id") == current_user["id"]
+    if not is_admin and not is_owner and not await has_sub_permission(db, current_user, "run_tests"):
+        raise HTTPException(status_code=403, detail="لا يمكنك الاطلاع على سياق عمل مستخدم آخر")
     role = await db.advanced_roles.find_one({"_id": ObjectId(assignment["advanced_role_id"])}) if ObjectId.is_valid(assignment["advanced_role_id"]) else None
     effective = await compute_effective_permissions(db, assignment)
     await write_audit_log(db, current_user, "context_switched", target_user_id=assignment["user_id"], assignment_id=assignment_id)

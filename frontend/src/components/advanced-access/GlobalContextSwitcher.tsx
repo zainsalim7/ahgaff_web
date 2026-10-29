@@ -26,19 +26,19 @@ export const GlobalContextSwitcher: React.FC = () => {
 
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <TouchableOpacity style={styles.overlay} activeOpacity={1} onPress={() => setModalVisible(false)}>
-          <View style={styles.box} data-testid="global-context-switcher-modal">
+          <View style={styles.box} testID="global-context-switcher-modal">
             <Text style={styles.title}>سياق العمل الحالي (تجريبي)</Text>
             <Text style={styles.subtitle}>{activeContext ? activeContext.context_label_ar : 'لم يُفعَّل أي سياق بعد'}</Text>
             {contexts.length === 0 && (
-              <Text style={styles.empty}>لا توجد تكليفات نشطة لحسابك ضمن النظام الجديد (SHADOW MODE)</Text>
+              <Text style={styles.empty}>لا توجد تكليفات نشطة لحسابك ضمن النظام الجديد — SHADOW MODE</Text>
             )}
             <ScrollView style={{ maxHeight: 280 }}>
               {contexts.map((c: any) => (
                 <TouchableOpacity
                   key={c.id}
-                  style={[styles.option, activeContext?.id === c.id && styles.optionActive]}
+                  style={[styles.option, activeContext?.assignment_id === c.id && styles.optionActive]}
                   onPress={() => { switchContext(c); setModalVisible(false); }}
-                  data-testid={`global-context-option-${c.id}`}
+                  testID={`global-context-option-${c.id}`}
                 >
                   <Ionicons name={c.assignment_type === 'academic' ? 'school' : 'business'} size={18} color="#1565c0" />
                   <View style={{ flex: 1, marginRight: 8 }}>
@@ -49,7 +49,7 @@ export const GlobalContextSwitcher: React.FC = () => {
               ))}
             </ScrollView>
             {!!activeContext && (
-              <TouchableOpacity style={styles.clearBtn} onPress={() => { clearContext(); setModalVisible(false); }} data-testid="global-context-clear-btn">
+              <TouchableOpacity style={styles.clearBtn} onPress={() => { clearContext(); setModalVisible(false); }} testID="global-context-clear-btn">
                 <Text style={styles.clearBtnText}>إلغاء السياق النشط</Text>
               </TouchableOpacity>
             )}

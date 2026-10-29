@@ -229,6 +229,7 @@ export default function RootLayout() {
           <Stack.Screen name="student-references" options={{ title: 'الأرقام المرجعية للطلاب' }} />
           <Stack.Screen name="student-autofill" options={{ title: 'ملء بيانات الطلاب' }} />
           <Stack.Screen name="notifications" options={{ title: 'الإشعارات' }} />
+          <Stack.Screen name="advanced-access-control" options={{ headerShown: false }} />
         </Stack>
 
         {/* الأزرار العائمة - تظهر في جميع الصفحات عند تسجيل الدخول */}

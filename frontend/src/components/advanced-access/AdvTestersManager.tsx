@@ -57,11 +57,11 @@ export const AdvTestersManager: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) =
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
 
   return (
-    <View data-testid="adv-testers-manager">
+    <View testID="adv-testers-manager">
       <View style={styles.headerRow}>
         <Text style={styles.title}>المختبرون المصرَّح لهم ({testers.filter(t => t.is_active).length})</Text>
         {isAdmin && (
-          <TouchableOpacity style={styles.addBtn} onPress={openGrant} data-testid="adv-tester-grant-btn">
+          <TouchableOpacity style={styles.addBtn} onPress={openGrant} testID="adv-tester-grant-btn">
             <Ionicons name="add" size={16} color="#fff" />
             <Text style={styles.addBtnText}>منح وصول تجريبي</Text>
           </TouchableOpacity>
@@ -70,7 +70,7 @@ export const AdvTestersManager: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) =
       {!isAdmin && <Text style={styles.adminOnlyNote}>إدارة المختبرين متاحة للأدمن فقط</Text>}
 
       {testers.map(t => (
-        <View key={t.id} style={styles.card} data-testid={`adv-tester-card-${t.id}`}>
+        <View key={t.id} style={styles.card} testID={`adv-tester-card-${t.id}`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.cardTitle}>{userMap[t.user_id] || t.user_id}</Text>
             <Text style={styles.cardMeta}>{(t.sub_permissions || []).map((s: string) => SUB_PERMISSION_LABELS[s] || s).join('، ')}</Text>
@@ -79,7 +79,7 @@ export const AdvTestersManager: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) =
             <Text style={styles.statusBadgeText}>{t.is_active ? 'نشط' : 'ملغى'}</Text>
           </View>
           {isAdmin && t.is_active && (
-            <TouchableOpacity onPress={() => revoke(t)} data-testid={`adv-tester-revoke-${t.id}`}><Ionicons name="close-circle-outline" size={22} color={COLORS.danger} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => revoke(t)} testID={`adv-tester-revoke-${t.id}`}><Ionicons name="close-circle-outline" size={22} color={COLORS.danger} /></TouchableOpacity>
           )}
         </View>
       ))}
@@ -89,26 +89,26 @@ export const AdvTestersManager: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) =
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>منح وصول تجريبي</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)} data-testid="adv-tester-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
+            <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-tester-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
           </View>
           <ScrollView style={{ padding: 14 }}>
             <Text style={styles.label}>المستخدم</Text>
             <ScrollView style={{ maxHeight: 160 }}>
               {users.map(u => (
-                <TouchableOpacity key={u.id} style={[styles.userRow, userId === u.id && styles.userRowActive]} onPress={() => setUserId(u.id)} data-testid={`adv-tester-user-${u.id}`}>
+                <TouchableOpacity key={u.id} style={[styles.userRow, userId === u.id && styles.userRowActive]} onPress={() => setUserId(u.id)} testID={`adv-tester-user-${u.id}`}>
                   <Text style={styles.userRowText}>{u.full_name || u.username} ({u.role})</Text>
                 </TouchableOpacity>
               ))}
             </ScrollView>
             <Text style={styles.label}>الصلاحيات الفرعية الممنوحة</Text>
             {Object.entries(SUB_PERMISSION_LABELS).map(([k, v]) => (
-              <TouchableOpacity key={k} style={styles.checkRow} onPress={() => toggleSub(k)} data-testid={`adv-tester-sub-${k}`}>
+              <TouchableOpacity key={k} style={styles.checkRow} onPress={() => toggleSub(k)} testID={`adv-tester-sub-${k}`}>
                 <Ionicons name={subs.includes(k) ? 'checkbox' : 'square-outline'} size={18} color={COLORS.primary} />
                 <Text style={styles.checkLabel}>{v}</Text>
               </TouchableOpacity>
             ))}
             {!!error && <Text style={styles.errorText}>{error}</Text>}
-            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} data-testid="adv-tester-save-btn">
+            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} testID="adv-tester-save-btn">
               {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>منح الوصول</Text>}
             </TouchableOpacity>
           </ScrollView>
