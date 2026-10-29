@@ -19,6 +19,7 @@ from services.advanced_access_service import (
     list_user_work_contexts, write_audit_log, SUB_PERMISSIONS, get_tester_record,
     compare_decision, compare_summary_for_assignment,
 )
+from services.pilot_service import run_pilot, reset_pilot
 
 router = APIRouter(prefix="/advanced-access", tags=["مركز الصلاحيات المتقدم (تجريبي)"])
 
@@ -391,3 +392,108 @@ async def list_audit_logs(limit: int = 100, current_user: dict = Depends(require
     db = get_db()
     logs = await db.advanced_permission_audit_logs.find({}).sort("timestamp", -1).limit(min(limit, 500)).to_list(500)
     return [_ser(logv) for logv in logs]
+
+
+# ══════════════ المرحلة 5: التجربة التشغيلية المحدودة (Pilot) — SHADOW MODE، مستخدمون حقيقيون محدودون ══════════════
+
+def _require_admin():
+    async def _dep(current_user: dict = Depends(get_current_user)):
+        if current_user.get("role") != "admin":
+            raise HTTPException(status_code=403, detail="هذا الإجراء للأدمن فقط")
+        return current_user
+    return _dep
+
+
+@router.post("/pilot/run")
+async def pilot_run(current_user: dict = Depends(_require_admin())):
+    """يُنشئ أدوارًا وتكليفات تجريبية (PILOT_) لعدد محدود من المستخدمين الحقيقيين المعتمدين، ويُسجِّل نتائج فحوصات فعلية"""
+    db = get_db()
+    return await run_pilot(db, current_user)
+
+
+@router.post("/pilot/reset")
+async def pilot_reset(current_user: dict = Depends(_require_admin())):
+    """إيقاف فوري للتجربة: إنهاء كل التكليفات التجريبية وحذف الأدوار والنتائج — لا يلمس النظام القديم"""
+    db = get_db()
+    result = await reset_pilot(db)
+    await write_audit_log(db, current_user, "pilot_reset_executed")
+    return result
+
+
+@router.get("/pilot/summary")
+async def pilot_summary(current_user: dict = Depends(require_adv_access("view_pilot"))):
+    db = get_db()
+    run = await db.advanced_pilot_runs.find_one({})
+    if not run:
+        return {"has_run": False}
+    run["id"] = str(run.pop("_id"))
+    run["has_run"] = True
+    return run
+
+
+@router.get("/pilot/results")
+async def pilot_results(
+    user_key: Optional[str] = None, test_type: Optional[str] = None, category: Optional[str] = None,
+    severity: Optional[str] = None, permission_key: Optional[str] = None, scope_type: Optional[str] = None,
+    status: Optional[str] = None,
+    current_user: dict = Depends(require_adv_access("view_pilot")),
+):
+    db = get_db()
+    q = {}
+    if user_key:
+        q["user_key"] = user_key
+    if test_type:
+        q["test_type"] = test_type
+    if category:
+        q["category"] = category
+    if severity:
+        q["severity"] = severity
+    if status:
+        q["status"] = status
+    if permission_key:
+        q["permission_key"] = {"$regex": permission_key}
+    if scope_type:
+        q["target_scope_type"] = scope_type
+    docs = await db.advanced_pilot_results.find(q).sort("created_at", -1).to_list(2000)
+    return [_ser(d) for d in docs]
+
+
+@router.get("/pilot/export.xlsx")
+async def pilot_export_xlsx(current_user: dict = Depends(require_adv_access("view_pilot"))):
+    from io import BytesIO
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment
+    from fastapi.responses import StreamingResponse
+
+    db = get_db()
+    docs = await db.advanced_pilot_results.find({}).sort("created_at", -1).to_list(5000)
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "نتائج التجربة التشغيلية"
+    ws.sheet_view.rightToLeft = True
+    headers = ["المستخدم", "نوع الاختبار", "التكليف", "الصلاحية", "النطاق المستهدف", "المتوقَّع", "الفعلي",
+               "القرار القديم", "القرار الجديد", "التصنيف", "الخطورة", "الحالة", "السبب"]
+    ws.append(headers)
+    for cell in ws[1]:
+        cell.font = Font(bold=True)
+        cell.alignment = Alignment(horizontal="right")
+    for d in docs:
+        ws.append([
+            d.get("username"), d.get("test_type"), d.get("assignment_id") or "-", d.get("permission_key"),
+            d.get("target_scope_type") or "-", str(d.get("expected", "-")), str(d.get("actual", "-")),
+            str(d.get("old_decision")), str(d.get("new_decision")), d.get("category") or "-",
+            d.get("severity"), d.get("status"), d.get("reason"),
+        ])
+    for row in ws.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(horizontal="right", wrap_text=True)
+    for col in ws.columns:
+        ws.column_dimensions[col[0].column_letter].width = 22
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=pilot_results.xlsx"},
+    )

@@ -223,6 +223,11 @@ class TestFutureOrgUnitsAutoDiscovery:
         unique_code = f"ADVTEST{int(time.time())}"
         new_fac = requests.post(f"{BASE_URL}/api/faculties", headers=_h(token), json={"name": "كلية اختبار الصلاحيات المتقدمة", "code": unique_code})
         assert new_fac.status_code in (200, 201), new_fac.text
-        after = requests.get(f"{BASE_URL}/api/advanced-access/scope-options/faculty", headers=_h(token)).json()
-        assert len(after) == len(before) + 1, "يجب أن تظهر الكلية الجديدة تلقائيًا دون أي تعديل كود"
-        print(f"PASS: كلية جديدة أُنشئت بالنظام القديم ظهرت فورًا كنطاق متاح ({len(before)} → {len(after)})")
+        fac_id = new_fac.json().get("id") or new_fac.json().get("_id")
+        try:
+            after = requests.get(f"{BASE_URL}/api/advanced-access/scope-options/faculty", headers=_h(token)).json()
+            assert len(after) == len(before) + 1, "يجب أن تظهر الكلية الجديدة تلقائيًا دون أي تعديل كود"
+            print(f"PASS: كلية جديدة أُنشئت بالنظام القديم ظهرت فورًا كنطاق متاح ({len(before)} → {len(after)})")
+        finally:
+            if fac_id:
+                requests.delete(f"{BASE_URL}/api/faculties/{fac_id}", headers=_h(token))

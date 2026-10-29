@@ -382,6 +382,12 @@ export const advancedAccessAPI = {
   grantTester: (data: any) => api.post('/advanced-access/testers', data),
   revokeTester: (userId: string) => api.delete(`/advanced-access/testers/${userId}`),
   getAuditLogs: (limit = 100) => api.get('/advanced-access/audit-logs', { params: { limit } }),
+  // المرحلة 5: التجربة التشغيلية المحدودة (Pilot)
+  runPilot: () => api.post('/advanced-access/pilot/run'),
+  resetPilot: () => api.post('/advanced-access/pilot/reset'),
+  getPilotSummary: () => api.get('/advanced-access/pilot/summary'),
+  getPilotResults: (params?: any) => api.get('/advanced-access/pilot/results', { params: params || {} }),
+  exportPilotExcel: () => api.get('/advanced-access/pilot/export.xlsx', { responseType: 'blob' }),
 };
 
 // Settings API

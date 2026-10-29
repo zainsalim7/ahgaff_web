@@ -16,6 +16,7 @@ import { AdvContextPage } from '../src/components/advanced-access/AdvContextPage
 import { AdvAuditLog } from '../src/components/advanced-access/AdvAuditLog';
 import { AdvSimulator } from '../src/components/advanced-access/AdvSimulator';
 import { AdvCompare } from '../src/components/advanced-access/AdvCompare';
+import { AdvPilotResults } from '../src/components/advanced-access/AdvPilotResults';
 
 const TABS = [
   { key: 'dashboard', label: 'لوحة المعلومات', icon: 'speedometer' },
@@ -29,6 +30,7 @@ const TABS = [
   { key: 'audit', label: 'سجل التدقيق', icon: 'document-text' },
   { key: 'simulator', label: 'محاكي الصلاحيات', icon: 'play-circle' },
   { key: 'compare', label: 'مقارنة النظامين', icon: 'git-compare' },
+  { key: 'pilot', label: 'نتائج التجربة التشغيلية', icon: 'analytics' },
 ];
 
 export default function AdvancedAccessControlScreen() {
@@ -64,7 +66,7 @@ export default function AdvancedAccessControlScreen() {
     );
   }
 
-  const subs = isAdmin ? ['view', 'context_switch', 'manage_roles', 'manage_assignments', 'manage_permissions', 'run_tests', 'view_audit'] : subPermissions;
+  const subs = isAdmin ? ['view', 'context_switch', 'manage_roles', 'manage_assignments', 'manage_permissions', 'run_tests', 'view_audit', 'view_pilot'] : subPermissions;
 
   const renderTab = () => {
     switch (activeTab) {
@@ -79,9 +81,12 @@ export default function AdvancedAccessControlScreen() {
       case 'audit': return <AdvAuditLog canView={subs.includes('view_audit')} />;
       case 'simulator': return <AdvSimulator canRun={subs.includes('run_tests')} />;
       case 'compare': return <AdvCompare canRun={subs.includes('run_tests')} />;
+      case 'pilot': return <AdvPilotResults isAdmin={isAdmin} canView={isAdmin || subs.includes('view_pilot')} />;
       default: return null;
     }
   };
+
+  const visibleTabs = TABS.filter(t => t.key !== 'pilot' || isAdmin || subs.includes('view_pilot'));
 
   return (
     <SafeAreaView style={styles.container} testID="advanced-access-control-screen">
@@ -100,7 +105,7 @@ export default function AdvancedAccessControlScreen() {
       </View>
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.tabBar} contentContainerStyle={{ paddingHorizontal: 8 }}>
-        {TABS.map(t => (
+        {visibleTabs.map(t => (
           <TouchableOpacity key={t.key} style={[styles.tab, activeTab === t.key && styles.tabActive]} onPress={() => setActiveTab(t.key)} testID={`adv-tab-${t.key}`}>
             <Ionicons name={t.icon as any} size={16} color={activeTab === t.key ? '#fff' : COLORS.primary} />
             <Text style={[styles.tabText, activeTab === t.key && styles.tabTextActive]}>{t.label}</Text>

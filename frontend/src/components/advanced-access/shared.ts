@@ -47,5 +47,33 @@ export const SUB_PERMISSION_LABELS: { [key: string]: string } = {
   view: 'عرض الأدوار والصلاحيات', context_switch: 'تجربة تبديل سياق العمل',
   manage_roles: 'إدارة الأدوار التجريبية', manage_assignments: 'إدارة التكليفات',
   manage_permissions: 'تعديل الصلاحيات المباشرة', run_tests: 'تشغيل المحاكي والمقارنة',
-  view_audit: 'عرض سجل التدقيق',
+  view_audit: 'عرض سجل التدقيق', view_pilot: 'عرض نتائج التجربة التشغيلية (المرحلة 5)',
+};
+
+export const PILOT_SEVERITY_LABELS: { [key: string]: { label: string; color: string } } = {
+  critical: { label: 'حرجة', color: '#b71c1c' },
+  high: { label: 'عالية', color: '#c62828' },
+  medium: { label: 'متوسطة', color: '#ef6c00' },
+  info: { label: 'معلوماتية', color: '#1565c0' },
+};
+
+export const PILOT_CATEGORY_LABELS: { [key: string]: string } = {
+  both_allow: 'اتفاق — كلا النظامين يسمح', both_deny: 'اتفاق — كلا النظامين يرفض',
+  old_allow_new_deny: 'اختلاف — القديم يسمح والجديد يرفض', new_allow_old_deny: 'اختلاف — الجديد يسمح والقديم يرفض',
+  no_legacy_equivalent: 'لا يوجد مكافئ قديم', legacy_baseline_only: 'خط أساس قديم فقط (بلا تكليف تجريبي)',
+};
+
+export const PILOT_TEST_TYPE_LABELS: { [key: string]: string } = {
+  scope_isolation_in: 'عزل النطاق — داخل النطاق', scope_isolation_out: 'عزل النطاق — خارج النطاق',
+  permission_denial: 'رفض صلاحية غير ممنوحة', multi_role_own_permission: 'تعدد مناصب — صلاحية خاصة',
+  multi_role_cross_isolation: 'تعدد مناصب — عزل متقاطع', compare: 'مقارنة بالنظام القديم',
+  end_assignment_self_blocked: 'إنهاء تكليف — حجب فوري', end_assignment_others_unaffected: 'إنهاء تكليف — سلامة الباقي',
+  security_impersonation: 'أمان — انتحال', security_escalation_self: 'أمان — تصعيد ذاتي',
+  security_escalation_other_user: 'أمان — تصعيد لمستخدم آخر', security_imported_role_edit_block: 'أمان — حماية دور مستورد',
+  security_idor_context: 'أمان — IDOR', legacy_baseline_only: 'خط أساس (president)',
+};
+
+export const PILOT_USER_LABELS: { [key: string]: string } = {
+  Salim: 'Salim — عميد كلية الشريعة والقانون', Saeed: 'Saeed — رئيس قسم (3 مناصب متزامنة)',
+  teacher180156: 'teacher180156 — أستاذ مقرر', president: 'president — رئيس الجامعة (خط أساس فقط)',
 };
