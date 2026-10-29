@@ -49,6 +49,7 @@ export const SUB_PERMISSION_LABELS: { [key: string]: string } = {
   manage_permissions: 'تعديل الصلاحيات المباشرة', run_tests: 'تشغيل المحاكي والمقارنة',
   view_audit: 'عرض سجل التدقيق', view_pilot: 'عرض نتائج التجربة التشغيلية (المرحلة 5)',
   manage_rollback: 'التحكم بمفاتيح التفعيل والتراجع (Phase 6B)',
+  manage_role_review: 'مراجعة الأدوار والصلاحيات الحساسة (Phase 7-B)',
 };
 
 export const ROLLBACK_STOP_LABELS: { [key: string]: string } = {
@@ -58,6 +59,14 @@ export const ROLLBACK_STOP_LABELS: { [key: string]: string } = {
   master_flag_off: 'المفتاح المركزي معطَّل (OFF)',
   scope_not_activated: 'النطاق غير مُفعَّل ضمن قائمة التفعيل',
   none: 'غير محجوب (لن يحدث في هذه المرحلة)',
+};
+
+export const REVIEW_STATUS_LABELS: { [key: string]: string } = {
+  not_reviewed: 'لم يُراجع', in_review: 'قيد المراجعة', needs_changes: 'يحتاج إلى تعديل', ready_for_approval: 'جاهز للاعتماد',
+};
+
+export const REVIEW_STATUS_COLORS: { [key: string]: string } = {
+  not_reviewed: COLORS.textMuted, in_review: COLORS.warning, needs_changes: COLORS.danger, ready_for_approval: COLORS.success,
 };
 
 export const PILOT_SEVERITY_LABELS: { [key: string]: { label: string; color: string } } = {

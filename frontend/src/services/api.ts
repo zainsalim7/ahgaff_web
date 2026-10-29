@@ -394,6 +394,18 @@ export const advancedAccessAPI = {
   attemptScopeActivation: (data: { scope_type: string; ref_id: string; reason: string }) => api.post('/advanced-access/rollback/scope-activation', data),
   getRollbackAudit: (limit = 100) => api.get('/advanced-access/rollback/audit', { params: { limit } }),
   simulateRollbackDecision: (data: any) => api.post('/advanced-access/rollback/simulate', data),
+  // Phase 7-B: مراجعة الأدوار والصلاحيات الحساسة
+  getReviewMeta: () => api.get('/advanced-access/review/meta'),
+  getReviewSummary: () => api.get('/advanced-access/review/summary'),
+  getRoleReviews: () => api.get('/advanced-access/review/roles'),
+  updateRoleReview: (key: string, data: any) => api.put(`/advanced-access/review/roles/${key}`, data),
+  addRoleReviewNote: (key: string, text: string) => api.post(`/advanced-access/review/roles/${key}/notes`, { text }),
+  approveRoleReview: (key: string, reason: string) => api.post(`/advanced-access/review/roles/${key}/approve`, { reason }),
+  getSensitivePermissionReviews: () => api.get('/advanced-access/review/sensitive-permissions'),
+  updateSensitivePermissionReview: (key: string, data: any) => api.put(`/advanced-access/review/sensitive-permissions/${key}`, data),
+  addSensitivePermissionNote: (key: string, text: string) => api.post(`/advanced-access/review/sensitive-permissions/${key}/notes`, { text }),
+  approveSensitivePermissionReview: (key: string, reason: string) => api.post(`/advanced-access/review/sensitive-permissions/${key}/approve`, { reason }),
+  getReviewAudit: (limit = 200) => api.get('/advanced-access/review/audit', { params: { limit } }),
 };
 
 // Settings API
