@@ -9,6 +9,7 @@ import { AuthProvider } from '../src/contexts/AuthContext';
 import { AssistantWidget } from '../src/components/assistant/AssistantWidget';
 import { SideMenu } from '../src/components/SideMenu';
 import GlobalSearch from '../src/components/GlobalSearch';
+import { GlobalContextSwitcher } from '../src/components/advanced-access/GlobalContextSwitcher';
 import { injectResponsiveStyles } from '../src/utils/responsiveStyles';
 
 // Enable RTL for Arabic
@@ -248,6 +249,7 @@ export default function RootLayout() {
             >
               <Ionicons name="search" size={20} color="#fff" />
             </TouchableOpacity>
+            <GlobalContextSwitcher />
           </View>
         )}
 

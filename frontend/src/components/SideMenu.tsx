@@ -14,6 +14,7 @@ import { router } from 'expo-router';
 import { useAuthStore } from '../store/authStore';
 import { useAuth, PERMISSIONS } from '../contexts/AuthContext';
 import { getRoleLabel } from '../utils/roleLabels';
+import { advancedAccessAPI } from '../services/api';
 
 interface MenuItem {
   id: string;
@@ -192,6 +193,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'archives', label: 'الفصول المؤرشفة', icon: 'archive', path: '/archives', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
   { id: 'archive-search', label: 'البحث في الأرشيف', icon: 'search', path: '/archive-search', permissions: [PERMISSIONS.SEARCH_ARCHIVE] },
   { id: 'trash', label: 'سلة المحذوفات', icon: 'trash', path: '/trash', permissions: ['manage_trash', 'purge_trash'] },
+  { id: 'advanced-access-control', label: 'مركز الصلاحيات المتقدم 🧪', icon: 'shield-half', path: '/advanced-access-control', permissions: [], advancedAccessOnly: true } as any,
 ];
 
 interface SideMenuProps {
@@ -204,9 +206,16 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
   const userRole = user?.role || 'student';
   const { hasAnyPermission } = useAuth();
   const isAdmin = userRole === 'admin';
+  const [hasAdvAccess, setHasAdvAccess] = useState(false);
+
+  React.useEffect(() => {
+    if (isAdmin) { setHasAdvAccess(true); return; }
+    advancedAccessAPI.myAccess().then(res => setHasAdvAccess(!!res.data?.has_access)).catch(() => setHasAdvAccess(false));
+  }, [isAdmin]);
 
   // فلترة العناصر حسب صلاحيات المستخدم الفردية
   const filteredItems = MENU_ITEMS.filter(item => {
+    if ((item as any).advancedAccessOnly) return hasAdvAccess;
     if (item.forAll) return true;
     if (item.roles) return item.roles.includes(userRole);
     if (item.adminOnly) return isAdmin;

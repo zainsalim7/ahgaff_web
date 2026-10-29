@@ -242,3 +242,75 @@ async def write_audit_log(db, actor: dict, action: str, target_user_id: Optional
         "after": after,
         "timestamp": _now(),
     })
+
+
+# ══════════════ مقارنة النظام القديم بالجديد (قراءة فقط — لا تُعدِّل أي قرار قديم) ══════════════
+
+async def compare_decision(db, user_id: str, assignment_id: str, permission_key: str) -> Dict[str, Any]:
+    from routes.deps import build_user_context, has_permission as legacy_has_permission
+
+    new_result = await check_permission(db, user_id, assignment_id, permission_key)
+    perm_doc = await db.advanced_permissions.find_one({"key": permission_key})
+    legacy_keys = (perm_doc or {}).get("legacy_permissions_detected") or []
+
+    if not ObjectId.is_valid(user_id):
+        return {"category": "error", "reason": "معرّف مستخدم غير صالح"}
+    user_doc = await db.users.find_one({"_id": ObjectId(user_id)})
+    if not user_doc:
+        return {"category": "error", "reason": "المستخدم غير موجود"}
+
+    new_decision = new_result["allowed"]
+    if not legacy_keys:
+        return {
+            "old_decision": None, "new_decision": new_decision, "category": "no_legacy_equivalent",
+            "reason": "لا يوجد ربط مكتشف كوديًا بصلاحية قديمة مكافئة لهذه الصلاحية الجديدة",
+            "new_reason": new_result.get("reason"),
+        }
+
+    built = await build_user_context(db, user_doc)
+    old_decision = any(legacy_has_permission(built, lk) for lk in legacy_keys)
+
+    if old_decision and new_decision:
+        category = "both_allow"
+    elif not old_decision and not new_decision:
+        category = "both_deny"
+    elif old_decision and not new_decision:
+        category = "old_allow_new_deny"
+    else:
+        category = "new_allow_old_deny"
+
+    return {
+        "old_decision": old_decision, "new_decision": new_decision, "category": category,
+        "legacy_permissions_checked": legacy_keys, "new_reason": new_result.get("reason"),
+    }
+
+
+async def compare_summary_for_assignment(db, user_id: str, assignment_id: str) -> Dict[str, Any]:
+    if not ObjectId.is_valid(assignment_id):
+        return {"error": "معرّف تكليف غير صالح"}
+    assignment = await db.advanced_user_assignments.find_one({"_id": ObjectId(assignment_id)})
+    if not assignment:
+        return {"error": "التكليف غير موجود"}
+    effective = await compute_effective_permissions(db, assignment)
+    comparable_docs = await db.advanced_permissions.find(
+        {"key": {"$in": list(effective)}, "legacy_permissions_detected": {"$ne": []}}
+    ).to_list(2000)
+    comparable_keys = [d["key"] for d in comparable_docs]
+    not_comparable_count = len(effective) - len(comparable_keys)
+
+    results = []
+    counts = {"both_allow": 0, "both_deny": 0, "old_allow_new_deny": 0, "new_allow_old_deny": 0}
+    for key in comparable_keys:
+        r = await compare_decision(db, user_id, assignment_id, key)
+        results.append({"permission_key": key, **r})
+        if r.get("category") in counts:
+            counts[r["category"]] += 1
+
+    return {
+        "assignment_id": assignment_id,
+        "effective_permissions_total": len(effective),
+        "comparable_count": len(comparable_keys),
+        "not_comparable_count": not_comparable_count,
+        "counts": counts,
+        "details": results,
+    }

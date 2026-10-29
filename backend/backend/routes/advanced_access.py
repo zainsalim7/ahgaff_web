@@ -11,15 +11,37 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user
 from models.advanced_access import (
-    AdvancedRoleCreate, AdvancedRoleUpdate, AssignmentCreate, TesterGrant, CheckPermissionRequest,
+    AdvancedRoleCreate, AdvancedRoleUpdate, AssignmentCreate, TesterGrant, CheckPermissionRequest, DirectPermissionGrant,
 )
 from services.advanced_access_service import (
     seed_permission_registry, create_advanced_access_indexes, import_legacy_roles_reference,
-    has_sub_permission, compute_effective_permissions, check_permission,
-    list_user_work_contexts, write_audit_log, SUB_PERMISSIONS,
+    has_sub_permission, has_advanced_access, compute_effective_permissions, check_permission,
+    list_user_work_contexts, write_audit_log, SUB_PERMISSIONS, get_tester_record,
+    compare_decision, compare_summary_for_assignment,
 )
 
 router = APIRouter(prefix="/advanced-access", tags=["مركز الصلاحيات المتقدم (تجريبي)"])
+
+
+@router.get("/me/access")
+async def my_access(current_user: dict = Depends(get_current_user)):
+    """بدون بوابة — يخبر الواجهة فقط إن كان المستخدم الحالي يملك حق الدخول لعرض الرابط في القائمة"""
+    db = get_db()
+    is_admin = current_user.get("role") == "admin"
+    tester = None if is_admin else await get_tester_record(db, current_user["id"])
+    return {
+        "is_admin": is_admin,
+        "has_access": is_admin or bool(tester),
+        "sub_permissions": SUB_PERMISSIONS if is_admin else ((tester or {}).get("sub_permissions") or []),
+    }
+
+
+@router.get("/me/contexts")
+async def my_contexts(current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    if not await has_advanced_access(db, current_user):
+        raise HTTPException(status_code=403, detail="لا تملك صلاحية الوصول إلى مركز الصلاحيات المتقدم (تجريبي)")
+    return await list_user_work_contexts(db, current_user["id"], active_only=True)
 
 
 def require_adv_access(sub_permission: Optional[str] = None):
@@ -151,7 +173,31 @@ async def scope_options(scope_type: str, current_user: dict = Depends(require_ad
     return [{"id": str(i["_id"]), "name": i.get("name", "")} for i in items]
 
 
+# ══════════════ قائمة مستخدمين خفيفة (لاختيار المستهدف بالتكليف) ══════════════
+
+@router.get("/users")
+async def list_light_users(current_user: dict = Depends(require_adv_access("manage_assignments"))):
+    db = get_db()
+    users = await db.users.find({}, {"username": 1, "full_name": 1, "role": 1}).to_list(5000)
+    return [{"id": str(u["_id"]), "username": u.get("username"), "full_name": u.get("full_name"), "role": u.get("role")} for u in users]
+
+
 # ══════════════ التكليفات المتعددة (الجوهر الفعلي لتعدد المناصب) ══════════════
+
+@router.get("/assignments")
+async def list_all_assignments(status: Optional[str] = None, current_user: dict = Depends(require_adv_access("view"))):
+    db = get_db()
+    q = {}
+    if status:
+        q["status"] = status
+    out = []
+    async for a in db.advanced_user_assignments.find(q).sort("created_at", -1):
+        user_doc = await db.users.find_one({"_id": ObjectId(a["user_id"])}) if ObjectId.is_valid(a["user_id"]) else None
+        role_doc = await db.advanced_roles.find_one({"_id": ObjectId(a["advanced_role_id"])}) if ObjectId.is_valid(a["advanced_role_id"]) else None
+        out.append({**_ser(a), "user_name": (user_doc or {}).get("full_name") or (user_doc or {}).get("username"),
+                    "role_name_ar": (role_doc or {}).get("name_ar")})
+    return out
+
 
 @router.get("/users/{user_id}/assignments")
 async def get_user_assignments(user_id: str, current_user: dict = Depends(require_adv_access("view"))):
@@ -225,12 +271,58 @@ async def get_assignment_context(assignment_id: str, current_user: dict = Depend
     }
 
 
-# ══════════════ محاكي التحقق (بدائي — للاختبار الخلفي فقط، لا UI بعد) ══════════════
+# ══════════════ الصلاحيات المباشرة لتكليف (استثناءات دون تعديل الدور) ══════════════
+
+@router.post("/assignments/{assignment_id}/direct-permissions")
+async def grant_direct_permission(assignment_id: str, data: DirectPermissionGrant, current_user: dict = Depends(require_adv_access("manage_permissions"))):
+    db = get_db()
+    assignment = await db.advanced_user_assignments.find_one({"_id": _oid(assignment_id, "التكليف")})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="التكليف غير موجود")
+    if not await db.advanced_permissions.find_one({"key": data.permission_key, "is_active": True}):
+        raise HTTPException(status_code=400, detail="صلاحية غير معروفة")
+    grant = data.dict()
+    grant["granted_by"] = current_user["id"]
+    grant["granted_at"] = datetime.now(timezone.utc)
+    await db.advanced_user_assignments.update_one({"_id": assignment["_id"]}, {"$push": {"direct_permissions": grant}})
+    await write_audit_log(db, current_user, "direct_permission_granted", target_user_id=assignment["user_id"], assignment_id=assignment_id, after=grant["permission_key"])
+    return {"message": "تم منح الصلاحية المباشرة"}
+
+
+@router.delete("/assignments/{assignment_id}/direct-permissions/{permission_key}")
+async def revoke_direct_permission(assignment_id: str, permission_key: str, current_user: dict = Depends(require_adv_access("manage_permissions"))):
+    db = get_db()
+    assignment = await db.advanced_user_assignments.find_one({"_id": _oid(assignment_id, "التكليف")})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="التكليف غير موجود")
+    await db.advanced_user_assignments.update_one({"_id": assignment["_id"]}, {"$pull": {"direct_permissions": {"permission_key": permission_key}}})
+    await write_audit_log(db, current_user, "direct_permission_revoked", target_user_id=assignment["user_id"], assignment_id=assignment_id, before=permission_key)
+    return {"message": "تم سحب الصلاحية المباشرة"}
+
+
+# ══════════════ محاكي التحقق ══════════════
 
 @router.post("/check")
 async def run_check(data: CheckPermissionRequest, current_user: dict = Depends(require_adv_access("run_tests"))):
     db = get_db()
     return await check_permission(db, data.user_id, data.assignment_id, data.permission_key, data.target_scope_type, data.target_ref_id)
+
+
+# ══════════════ مقارنة النظام القديم بالجديد (قراءة فقط) ══════════════
+
+@router.post("/compare")
+async def compare_one(data: CheckPermissionRequest, current_user: dict = Depends(require_adv_access("run_tests"))):
+    db = get_db()
+    return await compare_decision(db, data.user_id, data.assignment_id, data.permission_key)
+
+
+@router.get("/compare/summary/{assignment_id}")
+async def compare_summary(assignment_id: str, current_user: dict = Depends(require_adv_access("run_tests"))):
+    db = get_db()
+    assignment = await db.advanced_user_assignments.find_one({"_id": _oid(assignment_id, "التكليف")})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="التكليف غير موجود")
+    return await compare_summary_for_assignment(db, assignment["user_id"], assignment_id)
 
 
 # ══════════════ المختبرون (الوصول للمركز نفسه) ══════════════

@@ -353,6 +353,37 @@ export const permissionsAPI = {
   getAll: () => api.get('/permissions/all'),
 };
 
+// 🧪 مركز الصلاحيات المتقدم (Advanced Access Control — SHADOW MODE، تجريبي ومستقل عن النظام أعلاه)
+export const advancedAccessAPI = {
+  myAccess: () => api.get('/advanced-access/me/access'),
+  myContexts: () => api.get('/advanced-access/me/contexts'),
+  seedRegistry: () => api.post('/advanced-access/seed-registry'),
+  importLegacyRoles: () => api.post('/advanced-access/import-legacy-roles'),
+  getPermissionGroups: () => api.get('/advanced-access/permission-groups'),
+  getPermissions: (groupKey?: string) => api.get('/advanced-access/permissions', { params: groupKey ? { group_key: groupKey } : {} }),
+  getRoles: () => api.get('/advanced-access/roles'),
+  getRole: (id: string) => api.get(`/advanced-access/roles/${id}`),
+  createRole: (data: any) => api.post('/advanced-access/roles', data),
+  updateRole: (id: string, data: any) => api.put(`/advanced-access/roles/${id}`, data),
+  getScopeOptions: (scopeType: string) => api.get(`/advanced-access/scope-options/${scopeType}`),
+  getLightUsers: () => api.get('/advanced-access/users'),
+  getAllAssignments: (status?: string) => api.get('/advanced-access/assignments', { params: status ? { status } : {} }),
+  getUserAssignments: (userId: string) => api.get(`/advanced-access/users/${userId}/assignments`),
+  getUserContexts: (userId: string) => api.get(`/advanced-access/users/${userId}/contexts`),
+  createAssignment: (data: any) => api.post('/advanced-access/assignments', data),
+  endAssignment: (id: string) => api.post(`/advanced-access/assignments/${id}/end`),
+  getAssignmentContext: (id: string) => api.get(`/advanced-access/assignments/${id}/context`),
+  grantDirectPermission: (assignmentId: string, data: any) => api.post(`/advanced-access/assignments/${assignmentId}/direct-permissions`, data),
+  revokeDirectPermission: (assignmentId: string, permissionKey: string) => api.delete(`/advanced-access/assignments/${assignmentId}/direct-permissions/${encodeURIComponent(permissionKey)}`),
+  runCheck: (data: any) => api.post('/advanced-access/check', data),
+  runCompare: (data: any) => api.post('/advanced-access/compare', data),
+  getCompareSummary: (assignmentId: string) => api.get(`/advanced-access/compare/summary/${assignmentId}`),
+  getTesters: () => api.get('/advanced-access/testers'),
+  grantTester: (data: any) => api.post('/advanced-access/testers', data),
+  revokeTester: (userId: string) => api.delete(`/advanced-access/testers/${userId}`),
+  getAuditLogs: (limit = 100) => api.get('/advanced-access/audit-logs', { params: { limit } }),
+};
+
 // Settings API
 export const settingsAPI = {
   get: () => api.get('/settings'),
