@@ -15,6 +15,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
   const [detail, setDetail] = useState<any>(null);
 
   const [userId, setUserId] = useState('');
+  const [userSearch, setUserSearch] = useState('');
   const [assignmentType, setAssignmentType] = useState('academic');
   const [roleId, setRoleId] = useState('');
   const [label, setLabel] = useState('');
@@ -23,16 +24,17 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
   const [scopeRefIds, setScopeRefIds] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+  const [actionError, setActionError] = useState('');
 
   const load = useCallback(() => {
     setLoading(true);
-    advancedAccessAPI.getAllAssignments().then(res => setAssignments(res.data)).finally(() => setLoading(false));
+    advancedAccessAPI.getAllAssignments().then(res => setAssignments(res.data)).catch(() => setAssignments([])).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const openCreate = async () => {
-    setError(''); setUserId(''); setAssignmentType('academic'); setRoleId(''); setLabel(''); setScopeType('university'); setScopeRefIds([]);
+    setError(''); setUserId(''); setUserSearch(''); setAssignmentType('academic'); setRoleId(''); setLabel(''); setScopeType('university'); setScopeRefIds([]);
     try {
       const [u, r] = await Promise.all([advancedAccessAPI.getLightUsers(), advancedAccessAPI.getRoles()]);
       setUsers(u.data); setRoles(r.data);
@@ -65,13 +67,11 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
   };
 
   const endAssignment = async (a: any) => {
-    await advancedAccessAPI.endAssignment(a.id);
-    load();
+    try { await advancedAccessAPI.endAssignment(a.id); load(); } catch (e: any) { setActionError(e?.response?.data?.detail || 'تعذّر إنهاء التكليف'); }
   };
 
   const viewContext = async (a: any) => {
-    const res = await advancedAccessAPI.getAssignmentContext(a.id);
-    setDetail(res.data);
+    try { const res = await advancedAccessAPI.getAssignmentContext(a.id); setDetail(res.data); } catch (e: any) { setActionError(e?.response?.data?.detail || 'تعذّر عرض السياق'); }
   };
 
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;
@@ -87,6 +87,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
           </TouchableOpacity>
         )}
       </View>
+      {!!actionError && <Text style={styles.errorText}>{actionError}</Text>}
 
       {assignments.map(a => (
         <View key={a.id} style={styles.card} testID={`adv-assignment-card-${a.id}`}>
@@ -126,8 +127,9 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
           </View>
           <ScrollView style={{ padding: 14 }}>
             <Text style={styles.label}>المستخدم</Text>
-            <ScrollView horizontal style={styles.pickerRow}>
-              {users.map(u => (
+            <TextInput style={styles.input} placeholder="ابحث باسم المستخدم..." value={userSearch} onChangeText={setUserSearch} textAlign="right" testID="adv-assignment-user-search" />
+            <ScrollView horizontal style={styles.pickerRow} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
+              {users.filter(u => !userSearch || (u.full_name || u.username || '').includes(userSearch)).map(u => (
                 <TouchableOpacity key={u.id} style={[styles.pickChip, userId === u.id && styles.pickChipActive]} onPress={() => setUserId(u.id)} testID={`adv-assignment-user-${u.id}`}>
                   <Text style={[styles.pickChipText, userId === u.id && styles.pickChipTextActive]}>{u.full_name || u.username}</Text>
                 </TouchableOpacity>
@@ -144,7 +146,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
             </View>
 
             <Text style={styles.label}>الدور المتقدم</Text>
-            <ScrollView horizontal style={styles.pickerRow}>
+            <ScrollView horizontal style={styles.pickerRow} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
               {roles.map(r => (
                 <TouchableOpacity key={r.id} style={[styles.pickChip, roleId === r.id && styles.pickChipActive]} onPress={() => setRoleId(r.id)} testID={`adv-assignment-role-${r.id}`}>
                   <Text style={[styles.pickChipText, roleId === r.id && styles.pickChipTextActive]}>{r.name_ar}</Text>
@@ -156,7 +158,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
             <TextInput style={styles.input} value={label} onChangeText={setLabel} textAlign="right" testID="adv-assignment-label-input" />
 
             <Text style={styles.label}>نوع النطاق</Text>
-            <ScrollView horizontal style={styles.pickerRow}>
+            <ScrollView horizontal style={styles.pickerRow} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
               {SCOPE_TYPES.map(st => (
                 <TouchableOpacity key={st} style={[styles.pickChip, scopeType === st && styles.pickChipActive]} onPress={() => { setScopeType(st); setScopeRefIds([]); }} testID={`adv-assignment-scopetype-${st}`}>
                   <Text style={[styles.pickChipText, scopeType === st && styles.pickChipTextActive]}>{SCOPE_TYPE_LABELS[st]}</Text>

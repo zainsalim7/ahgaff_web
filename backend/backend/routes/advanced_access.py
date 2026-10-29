@@ -175,10 +175,17 @@ async def scope_options(scope_type: str, current_user: dict = Depends(require_ad
     return [{"id": str(i["_id"]), "name": i.get("name", "")} for i in items]
 
 
-# ══════════════ قائمة مستخدمين خفيفة (لاختيار المستهدف بالتكليف) ══════════════
+# ══════════════ قائمة مستخدمين خفيفة (لاختيار المستهدف بالتكليف أو داخل المحاكي) ══════════════
+
+async def _users_list_access(current_user: dict = Depends(get_current_user)):
+    db = get_db()
+    if not (await has_sub_permission(db, current_user, "manage_assignments") or await has_sub_permission(db, current_user, "run_tests")):
+        raise HTTPException(status_code=403, detail="لا تملك صلاحية الوصول إلى مركز الصلاحيات المتقدم (تجريبي)")
+    return current_user
+
 
 @router.get("/users")
-async def list_light_users(current_user: dict = Depends(require_adv_access("manage_assignments"))):
+async def list_light_users(current_user: dict = Depends(_users_list_access)):
     db = get_db()
     users = await db.users.find({}, {"username": 1, "full_name": 1, "role": 1}).to_list(5000)
     return [{"id": str(u["_id"]), "username": u.get("username"), "full_name": u.get("full_name"), "role": u.get("role")} for u in users]
@@ -217,8 +224,12 @@ async def get_user_active_contexts(user_id: str, current_user: dict = Depends(re
 @router.post("/assignments")
 async def create_assignment(data: AssignmentCreate, current_user: dict = Depends(require_adv_access("manage_assignments"))):
     db = get_db()
-    if current_user.get("role") != "admin" and data.user_id == current_user["id"]:
-        raise HTTPException(status_code=403, detail="لا يمكنك إسناد تكليف لنفسك")
+    if current_user.get("role") != "admin":
+        if data.user_id == current_user["id"]:
+            raise HTTPException(status_code=403, detail="لا يمكنك إسناد تكليف لنفسك")
+        target_role = await db.advanced_roles.find_one({"_id": _oid(data.advanced_role_id, "الدور")})
+        if target_role and target_role.get("imported_from_legacy_role_id"):
+            raise HTTPException(status_code=403, detail="لا يمكن إسناد الأدوار المستوردة من النظام القديم إلا من قِبل الأدمن")
     if not await db.users.find_one({"_id": _oid(data.user_id, "المستخدم")}):
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
     if not await db.advanced_roles.find_one({"_id": _oid(data.advanced_role_id, "الدور")}):

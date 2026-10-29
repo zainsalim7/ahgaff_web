@@ -43,7 +43,7 @@ export const AdvCompare: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       <Text style={styles.desc}>قراءة فقط — لا تُعدِّل أي قرار في النظام القديم مهما كانت نتيجة المقارنة</Text>
 
       <Text style={styles.label}>اختر تكليفًا للمقارنة</Text>
-      <ScrollView horizontal style={{ flexDirection: 'row-reverse' }}>
+      <ScrollView horizontal contentContainerStyle={{ flexDirection: 'row-reverse' }}>
         {assignments.map(a => (
           <TouchableOpacity key={a.id} style={[styles.chip, assignmentId === a.id && styles.chipActive]} onPress={() => { setAssignmentId(a.id); setSummary(null); }} testID={`adv-compare-assignment-${a.id}`}>
             <Text style={[styles.chipText, assignmentId === a.id && styles.chipTextActive]}>{a.user_name} — {a.context_label_ar}</Text>

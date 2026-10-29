@@ -46,7 +46,7 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
 
   if (!canRun) return <Text style={styles.desc} testID="adv-simulator-no-access">تحتاج صلاحية "تشغيل المحاكي" لاستخدام هذا القسم</Text>;
 
-  const filteredPerms = permissions.filter(p => !search || p.label_ar.includes(search));
+  const filteredPerms = permissions.filter(p => !search || p.label_ar.includes(search) || p.key.includes(search) || (p.linked_api_path || '').includes(search));
 
   return (
     <View testID="adv-simulator">
@@ -54,7 +54,7 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       <Text style={styles.desc}>للقراءة والاختبار فقط — لا ينفّذ أي تغيير على بيانات الإنتاج</Text>
 
       <Text style={styles.label}>المستخدم</Text>
-      <ScrollView horizontal style={styles.row}>
+      <ScrollView horizontal style={styles.row} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
         {users.map(u => (
           <TouchableOpacity key={u.id} style={[styles.chip, userId === u.id && styles.chipActive]} onPress={() => { setUserId(u.id); setAssignmentId(''); setResult(null); }} testID={`adv-sim-user-${u.id}`}>
             <Text style={[styles.chipText, userId === u.id && styles.chipTextActive]}>{u.full_name || u.username}</Text>
@@ -63,7 +63,7 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       </ScrollView>
 
       <Text style={styles.label}>السياق (التكليف)</Text>
-      <ScrollView horizontal style={styles.row}>
+      <ScrollView horizontal style={styles.row} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
         {assignments.map(a => (
           <TouchableOpacity key={a.id} style={[styles.chip, assignmentId === a.id && styles.chipActive]} onPress={() => setAssignmentId(a.id)} testID={`adv-sim-assignment-${a.id}`}>
             <Text style={[styles.chipText, assignmentId === a.id && styles.chipTextActive]}>{a.context_label_ar}</Text>
@@ -73,17 +73,18 @@ export const AdvSimulator: React.FC<{ canRun: boolean }> = ({ canRun }) => {
       </ScrollView>
 
       <Text style={styles.label}>الصلاحية المستهدفة</Text>
-      <TextInput style={styles.input} placeholder="ابحث عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-sim-perm-search" />
-      <ScrollView style={{ maxHeight: 140 }}>
+      <TextInput style={styles.input} placeholder="ابحث بالاسم أو المفتاح أو المسار..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-sim-perm-search" />
+      <ScrollView style={{ maxHeight: 160 }}>
         {filteredPerms.slice(0, 40).map(p => (
           <TouchableOpacity key={p.key} style={[styles.pickRow, permKey === p.key && styles.pickRowActive]} onPress={() => setPermKey(p.key)} testID={`adv-sim-perm-${p.key}`}>
             <Text style={styles.pickRowText}>{p.label_ar}</Text>
+            <Text style={styles.pickRowMeta}>{p.linked_api_method} {p.linked_api_path} — {p.key}</Text>
           </TouchableOpacity>
         ))}
       </ScrollView>
 
       <Text style={styles.label}>النطاق المستهدف (اختياري)</Text>
-      <ScrollView horizontal style={styles.row}>
+      <ScrollView horizontal style={styles.row} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
         {['', 'faculty', 'department', 'unit', 'course'].map(st => (
           <TouchableOpacity key={st || 'none'} style={[styles.chip, targetScopeType === st && styles.chipActive]} onPress={() => { setTargetScopeType(st); setTargetRefId(''); }} testID={`adv-sim-scopetype-${st || 'none'}`}>
             <Text style={[styles.chipText, targetScopeType === st && styles.chipTextActive]}>{st ? SCOPE_TYPE_LABELS[st] : 'بلا نطاق محدد'}</Text>
@@ -129,6 +130,7 @@ const styles = StyleSheet.create({
   pickRow: { backgroundColor: '#fff', borderRadius: 8, padding: 8, marginBottom: 4, borderWidth: 1, borderColor: COLORS.border },
   pickRowActive: { borderColor: COLORS.primary, backgroundColor: COLORS.primaryLight },
   pickRowText: { fontSize: 12, color: COLORS.text, textAlign: 'right' },
+  pickRowMeta: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 2 },
   runBtn: { flexDirection: 'row-reverse', backgroundColor: COLORS.primary, borderRadius: 8, padding: 14, alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 16 },
   runBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
   resultBox: { borderRadius: 10, padding: 16, alignItems: 'center', marginTop: 16, gap: 4 },

@@ -17,13 +17,15 @@ export const AdvTestersManager: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) =
 
   const load = useCallback(() => {
     setLoading(true);
-    Promise.all([advancedAccessAPI.getTesters(), isAdmin ? advancedAccessAPI.getLightUsers() : Promise.resolve({ data: [] })])
+    if (!isAdmin) { setTesters([]); setLoading(false); return; }
+    Promise.all([advancedAccessAPI.getTesters(), advancedAccessAPI.getLightUsers()])
       .then(([t, u]) => {
         setTesters(t.data);
         const map: { [k: string]: string } = {};
         (u.data || []).forEach((x: any) => { map[x.id] = x.full_name || x.username; });
         setUserMap(map);
       })
+      .catch(() => setTesters([]))
       .finally(() => setLoading(false));
   }, [isAdmin]);
 
@@ -50,8 +52,7 @@ export const AdvTestersManager: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) =
   };
 
   const revoke = async (t: any) => {
-    await advancedAccessAPI.revokeTester(t.user_id);
-    load();
+    try { await advancedAccessAPI.revokeTester(t.user_id); load(); } catch (e) { /* ignore */ }
   };
 
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 40 }} />;

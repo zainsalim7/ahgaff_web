@@ -68,7 +68,7 @@ export default function AdvancedAccessControlScreen() {
 
   const renderTab = () => {
     switch (activeTab) {
-      case 'dashboard': return <AdvDashboard />;
+      case 'dashboard': return <AdvDashboard isAdmin={isAdmin} />;
       case 'permissions': return <AdvPermissionsBrowser />;
       case 'roles': return <AdvRolesManager canManage={subs.includes('manage_roles')} />;
       case 'assignments': return <AdvAssignmentsManager canManage={subs.includes('manage_assignments')} />;
@@ -135,7 +135,7 @@ export default function AdvancedAccessControlScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
-  header: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: COLORS.primary, padding: 14, paddingTop: Platform.OS === 'ios' ? 8 : 14 },
+  header: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: COLORS.primary, padding: 14, paddingTop: Platform.OS === 'ios' ? 8 : Platform.OS === 'web' ? 56 : 14 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold', textAlign: 'right' },
   shadowBadge: { backgroundColor: COLORS.shadow, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginTop: 4, alignSelf: 'flex-end' },
   shadowBadgeText: { color: '#fff', fontSize: 10 },

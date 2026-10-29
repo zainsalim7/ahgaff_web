@@ -18,7 +18,7 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
 
   const load = useCallback(() => {
     setLoading(true);
-    advancedAccessAPI.getRoles().then(res => setRoles(res.data)).finally(() => setLoading(false));
+    advancedAccessAPI.getRoles().then(res => setRoles(res.data)).catch(() => setRoles([])).finally(() => setLoading(false));
   }, []);
 
   useEffect(() => { load(); }, [load]);
@@ -43,8 +43,7 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
   };
 
   const promote = async (role: any, status: string) => {
-    await advancedAccessAPI.updateRole(role.id, { status });
-    load();
+    try { await advancedAccessAPI.updateRole(role.id, { status }); load(); } catch (e: any) { setError(e?.response?.data?.detail || 'تعذّر تحديث حالة الدور'); }
   };
 
   const duplicate = () => {
@@ -66,6 +65,7 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
           </TouchableOpacity>
         )}
       </View>
+      {!!error && !modalVisible && <Text style={styles.errorText}>{error}</Text>}
 
       {roles.map(r => (
         <View key={r.id} style={styles.roleCard} testID={`adv-role-card-${r.id}`}>

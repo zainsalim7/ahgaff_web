@@ -4,7 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { advancedAccessAPI } from '../../services/api';
 import { COLORS } from './shared';
 
-export const AdvDashboard: React.FC = () => {
+export const AdvDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({ groups: 0, permissions: 0, roles: 0, assignments: 0, activeAssignments: 0, testers: 0, auditLogs: 0 });
   const [seeding, setSeeding] = useState(false);
@@ -12,21 +12,24 @@ export const AdvDashboard: React.FC = () => {
 
   const load = useCallback(async () => {
     setLoading(true);
-    try {
-      const [groups, perms, roles, assignments, testers, audit] = await Promise.all([
-        advancedAccessAPI.getPermissionGroups(), advancedAccessAPI.getPermissions(),
-        advancedAccessAPI.getRoles(), advancedAccessAPI.getAllAssignments(),
-        advancedAccessAPI.getTesters(), advancedAccessAPI.getAuditLogs(1),
-      ]);
-      setStats({
-        groups: groups.data.length, permissions: perms.data.length, roles: roles.data.length,
-        assignments: assignments.data.length,
-        activeAssignments: assignments.data.filter((a: any) => a.status === 'active').length,
-        testers: testers.data.filter((t: any) => t.is_active).length,
-        auditLogs: audit.data.length ? '≥1' as any : 0,
-      });
-    } catch (e) { /* ignore */ } finally { setLoading(false); }
-  }, []);
+    const calls = [
+      advancedAccessAPI.getPermissionGroups(), advancedAccessAPI.getPermissions(),
+      advancedAccessAPI.getRoles(), advancedAccessAPI.getAllAssignments(),
+      isAdmin ? advancedAccessAPI.getTesters() : Promise.resolve({ data: [] }),
+      isAdmin ? advancedAccessAPI.getAuditLogs(1) : Promise.resolve({ data: [] }),
+    ];
+    const [groups, perms, roles, assignments, testers, audit] = await Promise.allSettled(calls);
+    const val = (r: any) => (r.status === 'fulfilled' ? r.value.data : []);
+    const groupsData = val(groups), permsData = val(perms), rolesData = val(roles), assignmentsData = val(assignments), testersData = val(testers), auditData = val(audit);
+    setStats({
+      groups: groupsData.length, permissions: permsData.length, roles: rolesData.length,
+      assignments: assignmentsData.length,
+      activeAssignments: assignmentsData.filter((a: any) => a.status === 'active').length,
+      testers: testersData.filter((t: any) => t.is_active).length,
+      auditLogs: auditData.length ? '≥1' as any : 0,
+    });
+    setLoading(false);
+  }, [isAdmin]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -49,7 +52,7 @@ export const AdvDashboard: React.FC = () => {
     { label: 'الصلاحيات التفصيلية', value: stats.permissions, icon: 'list', color: COLORS.success },
     { label: 'الأدوار المتقدمة', value: stats.roles, icon: 'key', color: COLORS.shadow },
     { label: 'التكليفات (نشطة)', value: `${stats.activeAssignments}/${stats.assignments}`, icon: 'people', color: COLORS.warning },
-    { label: 'المختبرون المصرَّح لهم', value: stats.testers, icon: 'flask', color: COLORS.danger },
+    ...(isAdmin ? [{ label: 'المختبرون المصرَّح لهم', value: stats.testers, icon: 'flask', color: COLORS.danger }] : []),
   ];
 
   return (
@@ -65,10 +68,12 @@ export const AdvDashboard: React.FC = () => {
           </View>
         ))}
       </View>
-      <TouchableOpacity style={styles.seedBtn} onPress={runSeed} disabled={seeding} testID="adv-seed-registry-btn">
-        {seeding ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="refresh" size={16} color="#fff" />}
-        <Text style={styles.seedBtnText}>إعادة فحص الكود وتحديث سجل الصلاحيات (للأدمن)</Text>
-      </TouchableOpacity>
+      {isAdmin && (
+        <TouchableOpacity style={styles.seedBtn} onPress={runSeed} disabled={seeding} testID="adv-seed-registry-btn">
+          {seeding ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="refresh" size={16} color="#fff" />}
+          <Text style={styles.seedBtnText}>إعادة فحص الكود وتحديث سجل الصلاحيات (للأدمن)</Text>
+        </TouchableOpacity>
+      )}
       {!!seedMsg && <Text style={styles.seedMsg}>{seedMsg}</Text>}
     </View>
   );

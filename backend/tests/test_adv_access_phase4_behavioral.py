@@ -302,6 +302,22 @@ def test_security_privilege_escalation_root_cause_self_assignment_blocked(ctx):
     assert r.status_code == 403, f"تصعيد الصلاحيات ما زال ممكنًا: {r.status_code} {r.text}"
 
 
+def test_security_non_admin_cannot_assign_imported_role_to_other_user(ctx):
+    """الجذر الموسَّع: مختبر غير أدمن لا يمكنه إسناد دور مستورد من النظام القديم لأي مستخدم آخر أيضًا، ليس فقط لنفسه"""
+    salim_id = _uid(ctx, "Salim")
+    admin_role = next((r for r in requests.get(f"{API}/roles", headers=ctx["admin"]).json()
+                        if 'مدير النظام' in (r.get('name_ar') or '')), None)
+    assert admin_role
+    saeed_h, _ = _login("Saeed", "test1234")
+    r = requests.post(f"{API}/assignments", headers=saeed_h, json={
+        "user_id": salim_id, "assignment_type": "administrative", "advanced_role_id": admin_role["id"],
+        "context_label_ar": "TEST_phase4_escalation_to_other", "scope": {"scope_type": "university", "scope_ref_ids": []},
+    })
+    if r.status_code == 200:
+        ctx["created_assignments"].append(r.json()["id"])
+    assert r.status_code == 403, f"تصعيد الصلاحيات عبر إسناد مستخدم آخر ما زال ممكنًا: {r.status_code} {r.text}"
+
+
 def test_security_non_admin_cannot_edit_imported_legacy_role(ctx):
     """الجذر: تعديل الأدوار المستوردة من النظام القديم (بما فيها دور الأدمن المستورد) يبقى للأدمن حصريًا"""
     admin_role = next((r for r in requests.get(f"{API}/roles", headers=ctx["admin"]).json()
