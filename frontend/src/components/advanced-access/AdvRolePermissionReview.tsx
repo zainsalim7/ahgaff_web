@@ -10,16 +10,21 @@ export const AdvRolePermissionReview: React.FC<{ canManage: boolean }> = ({ canM
   const [meta, setMeta] = useState<any>(null);
   const [summary, setSummary] = useState<any>(null);
   const [roles, setRoles] = useState<any[]>([]);
+  const [permissionLabels, setPermissionLabels] = useState<any>({});
   const [subTab, setSubTab] = useState<'roles' | 'sensitive'>('roles');
 
   const load = useCallback(async () => {
     setLoading(true);
-    const [m, s, r] = await Promise.all([
+    const [m, s, r, p] = await Promise.all([
       advancedAccessAPI.getReviewMeta(),
       advancedAccessAPI.getReviewSummary(),
       advancedAccessAPI.getRoleReviews(),
+      advancedAccessAPI.getPermissions(),
     ]);
     setMeta(m.data); setSummary(s.data); setRoles(r.data);
+    const labelMap: any = {};
+    (p.data || []).forEach((perm: any) => { labelMap[perm.key] = perm.label_ar; });
+    setPermissionLabels(labelMap);
     setLoading(false);
   }, []);
 
@@ -40,6 +45,10 @@ export const AdvRolePermissionReview: React.FC<{ canManage: boolean }> = ({ canM
           <View style={styles.summaryCard}><Text style={styles.summaryNum}>{summary.sensitive_approved}</Text><Text style={styles.summaryLabel}>صلاحيات مُعتمَدة</Text></View>
           <View style={styles.summaryCard}><Text style={styles.summaryNum}>{summary.roles_with_excess_flags}</Text><Text style={styles.summaryLabel}>أدوار بها صلاحيات زائدة</Text></View>
           <View style={styles.summaryCard}><Text style={styles.summaryNum}>{summary.roles_with_missing_coverage}</Text><Text style={styles.summaryLabel}>أدوار بها فجوة مطابقة</Text></View>
+          <View style={styles.summaryCard}><Text style={styles.summaryNum}>{summary.roles_unused_pending_review}</Text><Text style={styles.summaryLabel}>أدوار غير مستخدمة</Text></View>
+          <View style={styles.summaryCard}><Text style={styles.summaryNum}>{summary.roles_completion_avg}%</Text><Text style={styles.summaryLabel}>متوسط إنجاز مراجعة الأدوار</Text></View>
+          <View style={styles.summaryCard}><Text style={styles.summaryNum}>{summary.sensitive_completion_avg}%</Text><Text style={styles.summaryLabel}>متوسط إنجاز مراجعة الصلاحيات</Text></View>
+          <View style={styles.summaryCard}><Text style={styles.summaryNum}>{summary.roles_needing_second_approval + summary.sensitive_needing_second_approval}</Text><Text style={styles.summaryLabel}>بانتظار موافقة ثانية</Text></View>
         </View>
       )}
 
@@ -53,7 +62,7 @@ export const AdvRolePermissionReview: React.FC<{ canManage: boolean }> = ({ canM
       </View>
 
       {subTab === 'roles'
-        ? <AdvRoleReviewList canManage={canManage} roleCategories={meta.role_categories} scopeOptions={meta.scope_options} />
+        ? <AdvRoleReviewList canManage={canManage} roleCategories={meta.role_categories} scopeOptions={meta.scope_options} permissionLabels={permissionLabels} />
         : <AdvSensitiveReviewList canManage={canManage} permCategories={meta.permission_categories} scopeOptions={meta.scope_options} roles={roles} />}
     </View>
   );

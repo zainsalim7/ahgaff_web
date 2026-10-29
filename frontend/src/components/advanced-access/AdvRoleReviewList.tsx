@@ -2,9 +2,9 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { advancedAccessAPI } from '../../services/api';
-import { COLORS, REVIEW_STATUS_LABELS, REVIEW_STATUS_COLORS } from './shared';
+import { COLORS, REVIEW_STATUS_LABELS, REVIEW_STATUS_COLORS, USAGE_STATUS_LABELS, DECISION_LABELS, DECISION_COLORS } from './shared';
 
-export const AdvRoleReviewList: React.FC<{ canManage: boolean; roleCategories: any; scopeOptions: any }> = ({ canManage, roleCategories, scopeOptions }) => {
+export const AdvRoleReviewList: React.FC<{ canManage: boolean; roleCategories: any; scopeOptions: any; permissionLabels: any }> = ({ canManage, roleCategories, scopeOptions, permissionLabels }) => {
   const [loading, setLoading] = useState(true);
   const [roles, setRoles] = useState<any[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
@@ -51,6 +51,12 @@ export const AdvRoleReviewList: React.FC<{ canManage: boolean; roleCategories: a
     catch (e: any) { setError(e?.response?.data?.detail || 'تعذّر الاعتماد'); }
   };
 
+  const decidePermission = async (permKey: string, decision: string) => {
+    if (!selected) return;
+    try { await advancedAccessAPI.decideRolePermission(selected.key, permKey, decision); await refreshSelected(selected.key); }
+    catch (e: any) { setError(e?.response?.data?.detail || 'تعذّر تسجيل القرار'); }
+  };
+
   const filtered = statusFilter ? roles.filter(r => r.status === statusFilter) : roles;
 
   if (loading) return <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 30 }} />;
@@ -70,9 +76,11 @@ export const AdvRoleReviewList: React.FC<{ canManage: boolean; roleCategories: a
         <TouchableOpacity key={role.key} style={styles.roleCard} onPress={() => openDetail(role)} testID={`adv-role-card-${role.key}`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.roleName}>{role.legacy_role_name}</Text>
-            <Text style={styles.roleMeta}>مستخدمون: {role.linked_users_count} | صلاحيات: {role.permission_keys_count} | حساسة: {role.sensitive_linked_count}</Text>
+            <Text style={styles.roleMeta}>مستخدمون: {role.linked_users_count} | صلاحيات: {role.permission_keys_count} | حساسة: {role.sensitive_linked_count} | الإنجاز: {role.completion_percentage}%</Text>
+            <Text style={role.usage_status === 'unused_pending_review' ? styles.warnText : styles.listItemSmall}>{USAGE_STATUS_LABELS[role.usage_status]}</Text>
             {role.excess_flags_count > 0 && <Text style={styles.warnText}>⚠ صلاحيات زائدة محتملة: {role.excess_flags_count}</Text>}
             {role.missing_coverage_count > 0 && <Text style={styles.warnText}>⚠ فجوة مطابقة: {role.missing_coverage_count} صلاحية قديمة بلا مكافئ</Text>}
+            {role.needs_second_approval && <Text style={styles.warnText}>⏳ بانتظار موافقة ثانية مستقلة</Text>}
           </View>
           <View style={[styles.statusBadge, { backgroundColor: REVIEW_STATUS_COLORS[role.status] }]}>
             <Text style={styles.statusBadgeText}>{REVIEW_STATUS_LABELS[role.status]}</Text>
@@ -90,16 +98,45 @@ export const AdvRoleReviewList: React.FC<{ canManage: boolean; roleCategories: a
                   <Text style={styles.modalTitle}>{selected.legacy_role_name}</Text>
                   <TouchableOpacity onPress={() => setSelected(null)} testID="adv-role-detail-close-btn"><Ionicons name="close" size={22} color={COLORS.text} /></TouchableOpacity>
                 </View>
-                <Text style={styles.sectionLabel}>المستخدمون المرتبطون ({selected.linked_users_count})</Text>
+                <Text style={styles.sectionLabel}>المستخدمون المرتبطون ({selected.linked_users_count}) — {USAGE_STATUS_LABELS[selected.usage_status]}</Text>
                 {selected.linked_users.map((u: any) => <Text key={u.id} style={styles.listItem}>• {u.full_name} ({u.username})</Text>)}
-                {selected.linked_users_count === 0 && <Text style={styles.listItem}>لا يوجد مستخدم مرتبط حاليًا</Text>}
+                {selected.linked_users_count === 0 && <Text style={styles.listItemSmall}>{selected.usage_note}</Text>}
+                {selected.role_definition_created_at && <Text style={styles.listItemSmall}>تاريخ إنشاء تعريف الدور: {new Date(selected.role_definition_created_at).toLocaleDateString('ar-EG')}</Text>}
+
+                <Text style={styles.sectionLabel}>مقارنة الصلاحيات (قديم ↔ جديد) — نسبة إنجاز المراجعة: {selected.completion_percentage}%</Text>
+                <Text style={styles.listItemSmall}>الصلاحيات القديمة ({selected.legacy_permission_keys_count}): {(selected.legacy_permission_keys || []).slice(0, 20).join('، ')}{(selected.legacy_permission_keys || []).length > 20 ? ' ...' : ''}</Text>
+                <Text style={[styles.listItemSmall, { marginTop: 6 }]}>الصلاحيات الجديدة المقترحة ({selected.permission_keys_count}) — اعتمد أو ارفض كل صلاحية:</Text>
+                <ScrollView style={styles.permScroll} nestedScrollEnabled testID="adv-role-permission-comparison-list">
+                  {Object.keys(selected.permission_decisions || {}).map((pk: string) => {
+                    const dec = selected.permission_decisions[pk];
+                    return (
+                      <View key={pk} style={styles.permDecisionRow}>
+                        <Text style={styles.permDecisionLabel} numberOfLines={1}>{permissionLabels[pk] || pk}</Text>
+                        <View style={[styles.decisionBadge, { backgroundColor: DECISION_COLORS[dec.decision] }]}><Text style={styles.decisionBadgeText}>{DECISION_LABELS[dec.decision]}</Text></View>
+                        {canManage && (
+                          <View style={styles.decisionBtns}>
+                            <TouchableOpacity onPress={() => decidePermission(pk, 'approved')} testID={`adv-role-perm-approve-${pk}`}><Ionicons name="checkmark-circle" size={18} color={COLORS.success} /></TouchableOpacity>
+                            <TouchableOpacity onPress={() => decidePermission(pk, 'rejected')} testID={`adv-role-perm-reject-${pk}`}><Ionicons name="close-circle" size={18} color={COLORS.danger} /></TouchableOpacity>
+                          </View>
+                        )}
+                      </View>
+                    );
+                  })}
+                </ScrollView>
 
                 <Text style={styles.sectionLabel}>الصلاحيات الحساسة المرتبطة ({selected.sensitive_linked_count})</Text>
-                {selected.sensitive_linked.slice(0, 15).map((k: string) => <Text key={k} style={styles.listItemSmall}>• {k}</Text>)}
+                {selected.sensitive_linked.slice(0, 15).map((k: string) => <Text key={k} style={styles.listItemSmall}>• {permissionLabels[k] || k}</Text>)}
                 {selected.sensitive_linked.length > 15 && <Text style={styles.listItemSmall}>... و{selected.sensitive_linked.length - 15} أخرى</Text>}
 
                 <Text style={styles.sectionLabel}>صلاحيات زائدة محتملة ({selected.excess_flags_count})</Text>
-                {selected.excess_flags.map((f: any) => <Text key={f.key} style={styles.warnText}>• {f.key} — {f.reason}</Text>)}
+                {selected.excess_flags.map((f: any) => (
+                  <View key={f.key} style={styles.excessBox}>
+                    <Text style={styles.warnText}>• {f.label_ar || f.key} ({f.operation_type})</Text>
+                    <Text style={styles.listItemSmall}>السبب: {f.reason}</Text>
+                    <Text style={styles.listItemSmall}>النطاق الحالي المقترح: {scopeOptions[f.role_current_scope] || 'غير محدَّد'} | الخطورة: {f.risk}</Text>
+                    <Text style={styles.listItemSmall}>التوصية: {f.recommendation}</Text>
+                  </View>
+                ))}
                 {selected.excess_flags_count === 0 && <Text style={styles.listItemSmall}>لا يوجد</Text>}
 
                 <Text style={styles.sectionLabel}>فجوات مطابقة (صلاحيات قديمة بلا مكافئ جديد مكتشَف) ({selected.missing_coverage_count})</Text>
@@ -184,4 +221,11 @@ const styles = StyleSheet.create({
   input: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, padding: 8, flex: 1, textAlign: 'right', fontSize: 12 },
   smallBtn: { backgroundColor: COLORS.primary, borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 },
   smallBtnText: { color: '#fff', fontWeight: '600', fontSize: 12 },
+  permScroll: { maxHeight: 220, borderWidth: 1, borderColor: COLORS.border, borderRadius: 8, marginTop: 6 },
+  permDecisionRow: { flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 6, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: COLORS.border, gap: 8 },
+  permDecisionLabel: { flex: 1, fontSize: 11, color: COLORS.text, textAlign: 'right' },
+  decisionBadge: { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 2 },
+  decisionBadgeText: { color: '#fff', fontSize: 9, fontWeight: '600' },
+  decisionBtns: { flexDirection: 'row-reverse', gap: 6 },
+  excessBox: { backgroundColor: '#fff8ed', borderRadius: 8, padding: 8, marginBottom: 6, borderWidth: 1, borderColor: COLORS.warning },
 });

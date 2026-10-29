@@ -406,6 +406,7 @@ export const advancedAccessAPI = {
   addSensitivePermissionNote: (key: string, text: string) => api.post(`/advanced-access/review/sensitive-permissions/${key}/notes`, { text }),
   approveSensitivePermissionReview: (key: string, reason: string) => api.post(`/advanced-access/review/sensitive-permissions/${key}/approve`, { reason }),
   getReviewAudit: (limit = 200) => api.get('/advanced-access/review/audit', { params: { limit } }),
+  decideRolePermission: (roleKey: string, permKey: string, decision: string, note?: string) => api.post(`/advanced-access/review/roles/${roleKey}/permissions/${permKey}/decision`, { decision, note }),
 };
 
 // Settings API

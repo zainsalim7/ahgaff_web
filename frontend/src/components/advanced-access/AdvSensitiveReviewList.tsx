@@ -76,7 +76,8 @@ export const AdvSensitiveReviewList: React.FC<{ canManage: boolean; permCategori
         <TouchableOpacity key={p.permission_key} style={styles.permCard} onPress={() => { setSelected(p); setNoteText(''); setApproveReason(''); }} testID={`adv-sensitive-card-${p.permission_key}`}>
           <View style={{ flex: 1 }}>
             <Text style={styles.permLabel}>{p.label_ar}</Text>
-            <Text style={styles.permMeta}>{p.permission_key} | المسموح لها: {(p.allowed_role_keys || []).length} دور</Text>
+            <Text style={styles.permMeta}>{p.permission_key} | المسموح لها: {(p.allowed_role_keys || []).length} دور | مرشَّحة: {(p.candidate_role_keys || []).length} | الإنجاز: {p.completion_percentage}%</Text>
+            {p.needs_second_approval && <Text style={styles.warnText}>⏳ بانتظار موافقة ثانية مستقلة</Text>}
           </View>
           <View style={[styles.sensBadge, { backgroundColor: SENSITIVITY_LABELS[p.sensitivity]?.color }]}>
             <Text style={styles.sensBadgeText}>{SENSITIVITY_LABELS[p.sensitivity]?.label}</Text>
@@ -100,7 +101,12 @@ export const AdvSensitiveReviewList: React.FC<{ canManage: boolean; permCategori
                 <Text style={styles.listItemSmall}>{selected.permission_key}</Text>
                 <Text style={styles.listItemSmall}>التصنيف: {permCategories[selected.category]} | الحساسية: {SENSITIVITY_LABELS[selected.sensitivity]?.label}</Text>
 
-                <Text style={styles.sectionLabel}>الأدوار المسموح لها بهذه الصلاحية ({(selected.allowed_role_keys || []).length})</Text>
+                <Text style={styles.sectionLabel}>الأدوار المرشَّحة تلقائيًا (بناءً على صلاحياتها الفعلية الحالية — اقتراح غير معتمَد) ({(selected.candidate_role_names || []).length})</Text>
+                {(selected.candidate_role_names || []).length > 0
+                  ? <Text style={styles.listItemSmall}>{selected.candidate_role_names.join('، ')}</Text>
+                  : <Text style={styles.listItemSmall}>لا يوجد دور يحمل هذه الصلاحية فعليًا ضمن الصلاحيات الجديدة المشتقة من النظام القديم — يتطلب اختيارًا يدويًا كاملاً</Text>}
+
+                <Text style={styles.sectionLabel}>الأدوار المسموح لها بهذه الصلاحية (معتمَد يدويًا) ({(selected.allowed_role_keys || []).length})</Text>
                 {roles.map(r => (
                   <TouchableOpacity key={r.key} disabled={!canManage} style={styles.roleToggleRow} onPress={() => toggleAllowedRole(r.key)} testID={`adv-sensitive-role-toggle-${r.key}`}>
                     <Ionicons name={(selected.allowed_role_keys || []).includes(r.key) ? 'checkbox' : 'square-outline'} size={18} color={COLORS.primary} />
@@ -172,6 +178,7 @@ const styles = StyleSheet.create({
   permCard: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fff', borderRadius: 10, padding: 12, marginBottom: 8, borderWidth: 1, borderColor: COLORS.border },
   permLabel: { fontSize: 13, fontWeight: 'bold', color: COLORS.text, textAlign: 'right' },
   permMeta: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 2 },
+  warnText: { fontSize: 10, color: COLORS.warning, textAlign: 'right', marginTop: 2 },
   sensBadge: { borderRadius: 10, paddingHorizontal: 6, paddingVertical: 3, marginRight: 6 },
   sensBadgeText: { color: '#fff', fontSize: 9, fontWeight: '700' },
   statusBadge: { borderRadius: 12, paddingHorizontal: 8, paddingVertical: 4, marginRight: 6 },

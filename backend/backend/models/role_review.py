@@ -25,3 +25,8 @@ class SensitivePermissionReviewUpdate(BaseModel):
     requires_dual_approval: Optional[bool] = None
     requires_audit_log: Optional[bool] = None
     status: Optional[str] = None
+
+
+class PermissionDecisionUpdate(BaseModel):
+    decision: str
+    note: Optional[str] = None

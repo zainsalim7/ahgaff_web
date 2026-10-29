@@ -1,12 +1,12 @@
 """
-خدمة مراجعة الأدوار الـ28 والصلاحيات الحساسة الـ116 — Phase 7-B
+خدمة مراجعة الأدوار الـ28 والصلاحيات الحساسة — Phase 7-B
 «المراجعة الشاملة للأدوار والصلاحيات الحساسة»
 
 مستقلة تمامًا عن النظام القديم (routes/deps.py) وعن منظومة التراجع (Phase 6B) — لا تمنح ولا تسحب
-أي صلاحية فعلية، ولا تعدّل أي دور/تكليف قديم. كل الحقول "المقترحة" (suggested_*) هي اقتراحات للعرض
-فقط؛ الحقول "المؤكَّدة" (confirmed_*) لا تُضبط إلا يدويًا من مراجع بشري عبر الواجهة، ولا تُملأ تلقائيًا.
-لا يوجد أي اعتماد تلقائي: الاعتماد يتطلب فعلاً صريحًا من مراجع (أو اثنين عند الحاجة لموافقة مزدوجة)،
-ويُمنع اعتماد المراجع لدوره/صلاحيته الخاصة.
+أي صلاحية فعلية، ولا تعدّل أي دور/تكليف قديم. كل الحقول "المقترحة"/"المرشَّحة" (suggested_*, candidate_*)
+هي اقتراحات للعرض فقط؛ الحقول "المؤكَّدة" (confirmed_*, allowed_role_keys) لا تُضبط إلا يدويًا من مراجع
+بشري عبر الواجهة، ولا تُملأ تلقائيًا بناءً على تشابه الأسماء. لا يوجد أي اعتماد تلقائي: الاعتماد يتطلب
+فعلاً صريحًا من مراجع (أو اثنين عند الحاجة لموافقة مزدوجة)، ويُمنع اعتماد المراجع لدوره/صلاحيته الخاصة.
 """
 from datetime import datetime, timezone
 from typing import Optional
@@ -46,7 +46,19 @@ SCOPE_OPTIONS = {
 LEGACY_SCOPE_MAP = {"university": "university", "faculty": "faculty", "department": "department", "assigned_courses": "course"}
 
 STATUSES = ["not_reviewed", "in_review", "needs_changes", "ready_for_approval"]
+DECISIONS = ["pending", "approved", "rejected"]
 DELETE_SENSITIVE_GROUPS = ("students", "hr_core", "hr_attendance", "hr_leaves", "hr_tasks")
+# عمليات نشر/اعتماد النتائج النهائية موجودة فعليًا في مجموعات courses/academic_structure/general_tools
+# (وليس ضمن مجموعة grades نفسها) — أُلحقت هنا صراحةً بتصنيف «الدرجات والنتائج» حسب طلب المستخدم (قرار 29 أكتوبر 2026)
+GRADES_RESULTS_EXTRA_KEYS = {
+    "courses_ser_send_final_results_json",
+    "courses_ser_send_final_results_upload",
+    "academic_structure_ser_send_department_final_results_upload",
+    "general_tools_ser_get_department_final_results_template",
+    "general_tools_ser_get_final_results_template",
+}
+
+RISK_LABELS = {"critical": "عالية جدًا", "high": "عالية", "medium": "متوسطة", "low": "منخفضة"}
 
 
 def _now():
@@ -54,14 +66,15 @@ def _now():
 
 
 def categorize_permission(p: dict) -> str:
+    key = p.get("key")
     group = p.get("group_key")
     op = p.get("operation_type")
+    if key in GRADES_RESULTS_EXTRA_KEYS or group == "grades":
+        return "grades_results"
     if op == "delete" and group in DELETE_SENSITIVE_GROUPS:
         return "delete_student_staff_data"
     if group == "system_users":
         return "users_roles_permissions"
-    if group == "grades":
-        return "grades_results"
     if group == "finance":
         return "finance"
     if group in ("letters", "correspondence"):
@@ -90,6 +103,14 @@ def suggest_role_category(name: str) -> str:
     return "mixed"
 
 
+def role_required_approvals(doc: dict) -> int:
+    return 2 if (doc.get("sensitive_linked_count") or 0) > 0 else 1
+
+
+def permission_required_approvals(doc: dict) -> int:
+    return 2 if doc.get("requires_dual_approval") else 1
+
+
 async def _build_legacy_coverage_raw(db):
     covered = []
     async for p in db.advanced_permissions.find({}, {"legacy_permissions_detected": 1}):
@@ -105,9 +126,20 @@ async def _resolve_role_linked_users(db, legacy_role_id: str, system_key: Option
     return [{"id": str(u["_id"]), "username": u.get("username"), "full_name": u.get("full_name")} for u in users]
 
 
+def _excess_reason_and_risk(perm_doc: dict) -> dict:
+    sens = (perm_doc or {}).get("sensitivity", "medium")
+    return {
+        "label_ar": (perm_doc or {}).get("label_ar"),
+        "operation_type": (perm_doc or {}).get("operation_type"),
+        "sensitivity": sens,
+        "risk": RISK_LABELS.get(sens, "متوسطة"),
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+    }
+
+
 async def seed_role_reviews(db) -> int:
     sensitive_keys = {p["key"] async for p in db.advanced_permissions.find({"sensitivity": {"$in": ["critical", "high"]}}, {"key": 1})}
-    admin_only_keys = {p["key"] async for p in db.advanced_permissions.find({"admin_only_detected": True}, {"key": 1})}
+    admin_only_docs = {p["key"]: p async for p in db.advanced_permissions.find({"admin_only_detected": True})}
     covered_raw = await _build_legacy_coverage_raw(db)
 
     count = 0
@@ -125,10 +157,23 @@ async def seed_role_reviews(db) -> int:
         legacy_keys = role.get("legacy_permission_keys") or []
         sensitive_linked = sorted(set(perm_keys) & sensitive_keys)
         excess_flags = [
-            {"key": k, "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)"}
-            for k in perm_keys if k in admin_only_keys and system_key != "admin"
+            {"key": k, "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)", **_excess_reason_and_risk(admin_only_docs.get(k)), "role_current_scope": LEGACY_SCOPE_MAP.get(legacy_role.get("scope"))}
+            for k in perm_keys if k in admin_only_docs and system_key != "admin"
         ]
         missing_coverage = [lk for lk in legacy_keys if not any(lk in raw for raw in covered_raw)]
+
+        old = await db.advanced_role_reviews.find_one({"_id": role["key"]}) or {}
+        old_decisions = old.get("permission_decisions") or {}
+        permission_decisions = {k: old_decisions.get(k) or {"decision": "pending", "note": None, "by_username": None, "at": None} for k in perm_keys}
+        decided_count = sum(1 for v in permission_decisions.values() if v["decision"] != "pending")
+        completion_percentage = round(decided_count / len(permission_decisions) * 100) if permission_decisions else 0
+
+        usage_status = "active_in_use" if linked_users else "unused_pending_review"
+        usage_note = (
+            f"مستخدَم حاليًا من {len(linked_users)} مستخدم(ين)" if linked_users
+            else "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام."
+        )
+
         doc = {
             "legacy_role_id": legacy_role_id,
             "legacy_role_name": legacy_role.get("name"),
@@ -138,6 +183,7 @@ async def seed_role_reviews(db) -> int:
             "linked_users": linked_users,
             "permission_keys_count": len(perm_keys),
             "legacy_permission_keys_count": len(legacy_keys),
+            "legacy_permission_keys": legacy_keys,
             "sensitive_linked": sensitive_linked,
             "sensitive_linked_count": len(sensitive_linked),
             "excess_flags": excess_flags,
@@ -146,6 +192,13 @@ async def seed_role_reviews(db) -> int:
             "missing_coverage_count": len(missing_coverage),
             "suggested_category": suggest_role_category(legacy_role.get("name") or ""),
             "suggested_scope": LEGACY_SCOPE_MAP.get(legacy_role.get("scope")),
+            "usage_status": usage_status,
+            "usage_note": usage_note,
+            "has_zero_mapped_permissions": len(perm_keys) == 0,
+            "role_definition_created_at": legacy_role.get("created_at"),
+            "role_definition_updated_at": legacy_role.get("updated_at"),
+            "permission_decisions": permission_decisions,
+            "completion_percentage": completion_percentage,
             "computed_at": _now(),
         }
         await db.advanced_role_reviews.update_one(
@@ -165,14 +218,42 @@ async def seed_role_reviews(db) -> int:
 
 
 async def seed_sensitive_permission_reviews(db) -> int:
+    role_perm_map: dict = {}
+    role_name_map: dict = {}
+    legacy_ids = []
+    roles_cache = []
+    async for role in db.advanced_roles.find({"imported_from_legacy_role_id": {"$ne": None}}):
+        roles_cache.append(role)
+        legacy_ids.append(role["imported_from_legacy_role_id"])
+        for k in (role.get("permission_keys") or []):
+            role_perm_map.setdefault(k, []).append(role["key"])
+    legacy_roles = {}
+    try:
+        async for lr in db.roles.find({"_id": {"$in": [ObjectId(i) for i in legacy_ids]}}, {"name": 1}):
+            legacy_roles[str(lr["_id"])] = lr.get("name")
+    except Exception:
+        pass
+    for role in roles_cache:
+        role_name_map[role["key"]] = legacy_roles.get(role["imported_from_legacy_role_id"], role.get("name_ar"))
+
     count = 0
     async for p in db.advanced_permissions.find({"sensitivity": {"$in": ["critical", "high"]}}):
         category = categorize_permission(p)
         default_dual = p.get("sensitivity") == "critical"
+        candidate_role_keys = sorted(set(role_perm_map.get(p["key"], [])))
+        candidate_role_names = [role_name_map.get(k, k) for k in candidate_role_keys]
+
+        old = await db.advanced_sensitive_permission_reviews.find_one({"_id": p["key"]}) or {}
+        allowed = old.get("allowed_role_keys") or []
+        recommended_scope = old.get("recommended_scope")
+        status = old.get("status", "not_reviewed")
+        completion_percentage = round(sum([bool(allowed), bool(recommended_scope), status != "not_reviewed"]) / 3 * 100)
+
         doc = {
             "permission_key": p["key"], "label_ar": p.get("label_ar"), "group_key": p.get("group_key"),
             "sensitivity": p.get("sensitivity"), "admin_only_detected": p.get("admin_only_detected", False),
-            "category": category, "computed_at": _now(),
+            "category": category, "candidate_role_keys": candidate_role_keys, "candidate_role_names": candidate_role_names,
+            "completion_percentage": completion_percentage, "computed_at": _now(),
         }
         await db.advanced_sensitive_permission_reviews.update_one(
             {"_id": p["key"]},
@@ -189,6 +270,17 @@ async def seed_sensitive_permission_reviews(db) -> int:
         )
         count += 1
     return count
+
+
+async def set_permission_decision(db, role_key: str, perm_key: str, decision: str, note: Optional[str], by_username: str):
+    entry = {"decision": decision, "note": note, "by_username": by_username, "at": _now()}
+    await db.advanced_role_reviews.update_one({"_id": role_key}, {"$set": {f"permission_decisions.{perm_key}": entry}})
+    doc = await db.advanced_role_reviews.find_one({"_id": role_key})
+    decisions = doc.get("permission_decisions") or {}
+    decided_count = sum(1 for v in decisions.values() if v.get("decision") != "pending")
+    completion_percentage = round(decided_count / len(decisions) * 100) if decisions else 0
+    await db.advanced_role_reviews.update_one({"_id": role_key}, {"$set": {"completion_percentage": completion_percentage}})
+    return await db.advanced_role_reviews.find_one({"_id": role_key})
 
 
 async def resolve_current_user_advanced_role_key(db, current_user: dict) -> Optional[str]:

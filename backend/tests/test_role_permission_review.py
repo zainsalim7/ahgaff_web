@@ -40,13 +40,15 @@ def _reset_role(admin_h, role_key):
     db.advanced_role_reviews.update_one({"_id": role_key}, {"$set": {"approved": False, "approvals": []}})
 
 
-def test_exact_counts_28_roles_116_sensitive_permissions():
+def test_exact_counts_28_roles_and_sensitive_permissions():
     admin_h, _ = _login("admin", "admin123")
     roles = requests.get(f"{API}/review/roles", headers=admin_h).json()
     perms = requests.get(f"{API}/review/sensitive-permissions", headers=admin_h).json()
     assert len(roles) == 28
-    assert len(perms) == 116
+    # 116 الأصلية + صلاحيتا درجات أُعيد تصنيفهما high بقرار المستخدم (29 أكتوبر 2026، المرحلة 7-ب)
+    assert len(perms) == 118
     assert all(p["sensitivity"] in ("critical", "high") for p in perms)
+    assert sum(1 for p in perms if p["category"] == "grades_results") == 5
 
 
 def test_no_auto_approval_on_seed():
@@ -105,3 +107,25 @@ def test_legacy_login_and_permissions_unaffected():
     assert user.get("role") == "admin"
     r = requests.get(f"{BASE_URL}/api/users", headers=h)
     assert r.status_code == 200
+
+
+def test_permission_decision_updates_completion_and_is_not_auto_approval():
+    admin_h, _ = _login("admin", "admin123")
+    role = requests.get(f"{API}/review/roles/{ROLE_WITH_ADMIN}", headers=admin_h).json()
+    some_key = next(iter(role["permission_decisions"].keys()))
+    r = requests.post(f"{API}/review/roles/{ROLE_WITH_ADMIN}/permissions/{some_key}/decision", headers=admin_h, json={"decision": "approved", "note": "اختبار آلي"})
+    assert r.status_code == 200
+    updated = r.json()
+    assert updated["permission_decisions"][some_key]["decision"] == "approved"
+    assert updated["completion_percentage"] > 0
+    assert updated["approved"] is False  # قرار بصلاحية واحدة لا يعني اعتماد الدور كله
+    # إعادة الضبط
+    requests.post(f"{API}/review/roles/{ROLE_WITH_ADMIN}/permissions/{some_key}/decision", headers=admin_h, json={"decision": "pending"})
+
+
+def test_candidate_role_keys_are_suggestions_not_auto_granted():
+    admin_h, _ = _login("admin", "admin123")
+    perms = requests.get(f"{API}/review/sensitive-permissions", headers=admin_h).json()
+    for p in perms:
+        assert p["allowed_role_keys"] == []  # لا منح تلقائي حتى لو وُجدت أدوار مرشَّحة
+        assert isinstance(p["candidate_role_keys"], list)

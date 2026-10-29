@@ -10,10 +10,11 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .deps import get_db
 from .advanced_access import require_adv_access
-from models.role_review import RoleReviewUpdate, ReviewNote, ApprovalRequest, SensitivePermissionReviewUpdate
+from models.role_review import RoleReviewUpdate, ReviewNote, ApprovalRequest, SensitivePermissionReviewUpdate, PermissionDecisionUpdate
 from services.role_permission_review_service import (
     seed_role_reviews, seed_sensitive_permission_reviews, write_review_audit_log,
-    resolve_current_user_advanced_role_key, CATEGORIES, ROLE_CATEGORIES, SCOPE_OPTIONS, STATUSES,
+    resolve_current_user_advanced_role_key, set_permission_decision, role_required_approvals,
+    permission_required_approvals, CATEGORIES, ROLE_CATEGORIES, SCOPE_OPTIONS, STATUSES, DECISIONS,
 )
 
 router = APIRouter(prefix="/advanced-access/review", tags=["مراجعة الأدوار والصلاحيات (Phase 7-B)"])
@@ -23,9 +24,11 @@ def _now():
     return datetime.now(timezone.utc)
 
 
-def _ser(d: dict) -> dict:
+def _ser(d: dict, required: int = None) -> dict:
     d = dict(d)
     d["key"] = d.pop("_id")
+    if required is not None:
+        d["needs_second_approval"] = required > 1 and len(d.get("approvals") or []) == 1 and not d.get("approved")
     return d
 
 
@@ -53,12 +56,23 @@ async def review_summary(current_user: dict = Depends(require_adv_access("view")
         "roles_by_status": by_status(roles),
         "roles_approved": sum(1 for r in roles if r.get("approved")),
         "roles_needing_admin_decision": sum(1 for r in roles if not r.get("approved")),
+        "roles_reviewed_by_human": sum(1 for r in roles if r.get("status") != "not_reviewed"),
+        "roles_pending_review": sum(1 for r in roles if r.get("status") == "not_reviewed"),
+        "roles_completion_avg": round(sum(r.get("completion_percentage", 0) for r in roles) / len(roles)) if roles else 0,
+        "roles_needing_second_approval": sum(1 for r in roles if role_required_approvals(r) > 1 and len(r.get("approvals") or []) == 1 and not r.get("approved")),
         "roles_with_excess_flags": sum(1 for r in roles if r.get("excess_flags_count", 0) > 0),
         "roles_with_missing_coverage": sum(1 for r in roles if r.get("missing_coverage_count", 0) > 0),
+        "roles_unused_pending_review": sum(1 for r in roles if r.get("usage_status") == "unused_pending_review"),
+        "roles_with_zero_mapped_permissions": sum(1 for r in roles if r.get("has_zero_mapped_permissions")),
         "sensitive_total": len(perms),
         "sensitive_by_status": by_status(perms),
         "sensitive_approved": sum(1 for p in perms if p.get("approved")),
+        "sensitive_reviewed_by_human": sum(1 for p in perms if p.get("status") != "not_reviewed"),
+        "sensitive_pending_review": sum(1 for p in perms if p.get("status") == "not_reviewed"),
+        "sensitive_completion_avg": round(sum(p.get("completion_percentage", 0) for p in perms) / len(perms)) if perms else 0,
+        "sensitive_needing_second_approval": sum(1 for p in perms if permission_required_approvals(p) > 1 and len(p.get("approvals") or []) == 1 and not p.get("approved")),
         "sensitive_without_allowed_roles": sum(1 for p in perms if not p.get("allowed_role_keys")),
+        "grades_results_sensitive_count": sum(1 for p in perms if p.get("category") == "grades_results"),
     }
 
 
@@ -67,7 +81,7 @@ async def list_role_reviews(current_user: dict = Depends(require_adv_access("vie
     db = get_db()
     await seed_role_reviews(db)
     docs = await db.advanced_role_reviews.find({}).sort("legacy_role_name", 1).to_list(200)
-    return [_ser(d) for d in docs]
+    return [_ser(d, role_required_approvals(d)) for d in docs]
 
 
 @router.get("/roles/{role_key}")
@@ -76,7 +90,7 @@ async def get_role_review(role_key: str, current_user: dict = Depends(require_ad
     d = await db.advanced_role_reviews.find_one({"_id": role_key})
     if not d:
         raise HTTPException(404, "الدور غير موجود")
-    return _ser(d)
+    return _ser(d, role_required_approvals(d))
 
 
 @router.put("/roles/{role_key}")
@@ -101,7 +115,24 @@ async def update_role_review(role_key: str, data: RoleReviewUpdate, current_user
     await db.advanced_role_reviews.update_one({"_id": role_key}, {"$set": update})
     await write_review_audit_log(db, current_user, "role_review_updated", "role", role_key,
                                   before={k: before.get(k) for k in update if k in before}, after=update)
-    return _ser(await db.advanced_role_reviews.find_one({"_id": role_key}))
+    d = await db.advanced_role_reviews.find_one({"_id": role_key})
+    return _ser(d, role_required_approvals(d))
+
+
+@router.post("/roles/{role_key}/permissions/{perm_key}/decision")
+async def decide_role_permission(role_key: str, perm_key: str, data: PermissionDecisionUpdate,
+                                  current_user: dict = Depends(require_adv_access("manage_role_review"))):
+    if data.decision not in DECISIONS:
+        raise HTTPException(400, "قرار غير صالح")
+    db = get_db()
+    role = await db.advanced_role_reviews.find_one({"_id": role_key})
+    if not role:
+        raise HTTPException(404, "الدور غير موجود")
+    if perm_key not in (role.get("permission_decisions") or {}):
+        raise HTTPException(404, "هذه الصلاحية ليست ضمن صلاحيات هذا الدور")
+    d = await set_permission_decision(db, role_key, perm_key, data.decision, data.note, current_user.get("username"))
+    await write_review_audit_log(db, current_user, f"role_permission_decision_{data.decision}", "role_permission", f"{role_key}:{perm_key}", reason=data.note)
+    return _ser(d, role_required_approvals(d))
 
 
 @router.post("/roles/{role_key}/notes")
@@ -114,7 +145,8 @@ async def add_role_note(role_key: str, data: ReviewNote, current_user: dict = De
     if res.matched_count == 0:
         raise HTTPException(404, "الدور غير موجود")
     await write_review_audit_log(db, current_user, "role_review_note_added", "role", role_key, reason=data.text)
-    return _ser(await db.advanced_role_reviews.find_one({"_id": role_key}))
+    d = await db.advanced_role_reviews.find_one({"_id": role_key})
+    return _ser(d, role_required_approvals(d))
 
 
 @router.post("/roles/{role_key}/approve")
@@ -135,12 +167,13 @@ async def approve_role_review(role_key: str, data: ApprovalRequest, current_user
     if any(a["by_id"] == current_user["id"] for a in approvals):
         raise HTTPException(400, "لقد اعتمدتَ هذه المراجعة مسبقًا — مطلوب موافقة شخص آخر إن كانت موافقة مزدوجة")
     approvals.append({"by_id": current_user["id"], "by_username": current_user.get("username"), "reason": data.reason.strip(), "at": _now()})
-    required = 2 if doc.get("sensitive_linked_count", 0) > 0 else 1
+    required = role_required_approvals(doc)
     approved = len(approvals) >= required
     await db.advanced_role_reviews.update_one({"_id": role_key}, {"$set": {"approvals": approvals, "approved": approved}})
     await write_review_audit_log(db, current_user, "role_review_approved" if approved else "role_review_partial_approval",
                                   "role", role_key, reason=data.reason, after={"approvals_count": len(approvals), "required": required})
-    return _ser(await db.advanced_role_reviews.find_one({"_id": role_key}))
+    d = await db.advanced_role_reviews.find_one({"_id": role_key})
+    return _ser(d, role_required_approvals(d))
 
 
 @router.get("/sensitive-permissions")
@@ -148,7 +181,7 @@ async def list_sensitive_permission_reviews(current_user: dict = Depends(require
     db = get_db()
     await seed_sensitive_permission_reviews(db)
     docs = await db.advanced_sensitive_permission_reviews.find({}).sort("permission_key", 1).to_list(200)
-    return [_ser(d) for d in docs]
+    return [_ser(d, permission_required_approvals(d)) for d in docs]
 
 
 @router.put("/sensitive-permissions/{perm_key}")
@@ -180,7 +213,8 @@ async def update_sensitive_permission_review(perm_key: str, data: SensitivePermi
     await db.advanced_sensitive_permission_reviews.update_one({"_id": perm_key}, {"$set": update})
     await write_review_audit_log(db, current_user, "sensitive_review_updated", "sensitive_permission", perm_key,
                                   before={k: before.get(k) for k in update if k in before}, after=update)
-    return _ser(await db.advanced_sensitive_permission_reviews.find_one({"_id": perm_key}))
+    d = await db.advanced_sensitive_permission_reviews.find_one({"_id": perm_key})
+    return _ser(d, permission_required_approvals(d))
 
 
 @router.post("/sensitive-permissions/{perm_key}/notes")
@@ -193,7 +227,8 @@ async def add_sensitive_permission_note(perm_key: str, data: ReviewNote, current
     if res.matched_count == 0:
         raise HTTPException(404, "الصلاحية غير موجودة")
     await write_review_audit_log(db, current_user, "sensitive_review_note_added", "sensitive_permission", perm_key, reason=data.text)
-    return _ser(await db.advanced_sensitive_permission_reviews.find_one({"_id": perm_key}))
+    d = await db.advanced_sensitive_permission_reviews.find_one({"_id": perm_key})
+    return _ser(d, permission_required_approvals(d))
 
 
 @router.post("/sensitive-permissions/{perm_key}/approve")
@@ -214,12 +249,13 @@ async def approve_sensitive_permission_review(perm_key: str, data: ApprovalReque
     if any(a["by_id"] == current_user["id"] for a in approvals):
         raise HTTPException(400, "لقد اعتمدتَ هذه المراجعة مسبقًا")
     approvals.append({"by_id": current_user["id"], "by_username": current_user.get("username"), "reason": data.reason.strip(), "at": _now()})
-    required = 2 if doc.get("requires_dual_approval") else 1
+    required = permission_required_approvals(doc)
     approved = len(approvals) >= required
     await db.advanced_sensitive_permission_reviews.update_one({"_id": perm_key}, {"$set": {"approvals": approvals, "approved": approved}})
     await write_review_audit_log(db, current_user, "sensitive_review_approved" if approved else "sensitive_review_partial_approval",
                                   "sensitive_permission", perm_key, reason=data.reason, after={"approvals_count": len(approvals), "required": required})
-    return _ser(await db.advanced_sensitive_permission_reviews.find_one({"_id": perm_key}))
+    d = await db.advanced_sensitive_permission_reviews.find_one({"_id": perm_key})
+    return _ser(d, permission_required_approvals(d))
 
 
 @router.get("/audit")

@@ -69,6 +69,17 @@ export const REVIEW_STATUS_COLORS: { [key: string]: string } = {
   not_reviewed: COLORS.textMuted, in_review: COLORS.warning, needs_changes: COLORS.danger, ready_for_approval: COLORS.success,
 };
 
+export const USAGE_STATUS_LABELS: { [key: string]: string } = {
+  active_in_use: 'مستخدَم حاليًا', unused_pending_review: 'غير مستخدم — قيد المراجعة',
+};
+
+export const DECISION_LABELS: { [key: string]: string } = {
+  pending: 'معلَّق', approved: 'مقبول', rejected: 'مرفوض',
+};
+export const DECISION_COLORS: { [key: string]: string } = {
+  pending: COLORS.textMuted, approved: COLORS.success, rejected: COLORS.danger,
+};
+
 export const PILOT_SEVERITY_LABELS: { [key: string]: { label: string; color: string } } = {
   critical: { label: 'حرجة', color: '#b71c1c' },
   high: { label: 'عالية', color: '#c62828' },
