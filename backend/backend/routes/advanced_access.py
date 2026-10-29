@@ -4,6 +4,7 @@
 الوصول محصور بالأدمن أو مستخدمين مصرَّح لهم صراحة عبر advanced_access_testers (انظر has_sub_permission).
 """
 from datetime import datetime, timezone
+import re
 from typing import Optional, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -451,7 +452,7 @@ async def pilot_results(
     if status:
         q["status"] = status
     if permission_key:
-        q["permission_key"] = {"$regex": permission_key}
+        q["permission_key"] = {"$regex": re.escape(permission_key)}
     if scope_type:
         q["target_scope_type"] = scope_type
     docs = await db.advanced_pilot_results.find(q).sort("created_at", -1).to_list(2000)

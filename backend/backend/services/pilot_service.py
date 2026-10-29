@@ -287,8 +287,8 @@ def _summarize(results: List[dict]) -> Dict[str, Any]:
 
 
 async def reset_pilot(db) -> Dict[str, Any]:
-    """إيقاف فوري للتجربة: إنهاء كل التكليفات التجريبية وحذف الأدوار والنتائج — لا يلمس النظام القديم إطلاقًا"""
-    await db.advanced_user_assignments.update_many({"context_label_ar": {"$regex": "^PILOT_"}}, {"$set": {"status": "ended", "ended_at": _now()}})
+    """إيقاف فوري للتجربة: حذف كل التكليفات والأدوار والنتائج التجريبية — لا يلمس النظام القديم إطلاقًا"""
+    await db.advanced_user_assignments.delete_many({"context_label_ar": {"$regex": "^PILOT_"}})
     deleted = await db.advanced_roles.delete_many({"name_ar": {"$regex": "^PILOT_"}})
     await db.advanced_pilot_results.delete_many({})
     await db.advanced_pilot_runs.delete_many({})

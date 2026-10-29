@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, Platform, TextInput, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { advancedAccessAPI } from '../../services/api';
 import { COLORS, PILOT_SEVERITY_LABELS, PILOT_CATEGORY_LABELS, PILOT_TEST_TYPE_LABELS, PILOT_USER_LABELS } from './shared';
 
 const FILTER_USERS = ['Salim', 'Saeed', 'teacher180156', 'president'];
 const FILTER_SEVERITIES = ['critical', 'high', 'medium', 'info'];
-const FILTER_STATUSES = ['pass', 'fail', 'diff', 'baseline'];
+const FILTER_STATUSES = ['pass', 'fail', 'diff', 'baseline', 'info'];
+const STATUS_LABELS: { [k: string]: string } = { pass: 'ناجحة', fail: 'فاشلة', diff: 'اختلاف', baseline: 'خط أساس', info: 'معلوماتية' };
 
 export const AdvPilotResults: React.FC<{ isAdmin: boolean; canView: boolean }> = ({ isAdmin, canView }) => {
   const [loading, setLoading] = useState(true);
@@ -51,6 +52,14 @@ export const AdvPilotResults: React.FC<{ isAdmin: boolean; canView: boolean }> =
     } catch (e: any) { setError(e?.response?.data?.detail || 'تعذّر إيقاف التجربة'); } finally { setResetting(false); }
   };
 
+  const confirmStopPilot = () => {
+    Alert.alert(
+      'تأكيد إيقاف التجربة',
+      'سيتم حذف كل الأدوار والتكليفات والنتائج التجريبية فورًا (بادئتها PILOT_). النظام القديم لن يتأثر. هل أنت متأكد؟',
+      [{ text: 'إلغاء', style: 'cancel' }, { text: 'إيقاف وحذف', style: 'destructive', onPress: stopPilot }],
+    );
+  };
+
   const exportExcel = async () => {
     try {
       const res = await advancedAccessAPI.exportPilotExcel();
@@ -89,17 +98,17 @@ export const AdvPilotResults: React.FC<{ isAdmin: boolean; canView: boolean }> =
             {running ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="play" size={16} color="#fff" />}
             <Text style={styles.runBtnText}>تشغيل التجربة</Text>
           </TouchableOpacity>
-          <TouchableOpacity style={styles.stopBtn} onPress={stopPilot} disabled={resetting} testID="adv-pilot-stop-btn">
+          <TouchableOpacity style={styles.stopBtn} onPress={confirmStopPilot} disabled={resetting} testID="adv-pilot-stop-btn">
             {resetting ? <ActivityIndicator color="#fff" size="small" /> : <Ionicons name="stop" size={16} color="#fff" />}
             <Text style={styles.runBtnText}>إيقاف التجربة وحذف البيانات التجريبية</Text>
           </TouchableOpacity>
-          {results.length > 0 && (
-            <TouchableOpacity style={styles.exportBtn} onPress={exportExcel} testID="adv-pilot-export-btn">
-              <Ionicons name="download" size={16} color={COLORS.primary} />
-              <Text style={styles.exportBtnText}>تصدير Excel</Text>
-            </TouchableOpacity>
-          )}
         </View>
+      )}
+      {results.length > 0 && (
+        <TouchableOpacity style={styles.exportBtn} onPress={exportExcel} testID="adv-pilot-export-btn">
+          <Ionicons name="download" size={16} color={COLORS.primary} />
+          <Text style={styles.exportBtnText}>تصدير Excel</Text>
+        </TouchableOpacity>
       )}
 
       {!summary?.has_run && <Text style={styles.empty}>لم تُشغَّل التجربة بعد{isAdmin ? ' — اضغط "تشغيل التجربة"' : ''}</Text>}
@@ -121,7 +130,7 @@ export const AdvPilotResults: React.FC<{ isAdmin: boolean; canView: boolean }> =
             {Object.entries(summary.by_user || {}).map(([u, s]: [string, any]) => (
               <View key={u} style={styles.userCard} testID={`adv-pilot-user-card-${u}`}>
                 <Text style={styles.userCardTitle}>{PILOT_USER_LABELS[u] || u}</Text>
-                <Text style={styles.userCardLine}>إجمالي: {s.total} — ناجحة: {s.pass} — فاشلة: {s.fail} — اختلافات: {s.diff}{s.baseline ? ` — خط أساس: ${s.baseline}` : ''}</Text>
+                <Text style={styles.userCardLine}>إجمالي: {s.total} — ناجحة: {s.pass} — فاشلة: {s.fail} — اختلافات: {s.diff}{s.baseline ? ` — خط أساس: ${s.baseline}` : ''}{s.info ? ` — معلوماتية: ${s.info}` : ''}</Text>
               </View>
             ))}
           </View>
@@ -129,20 +138,20 @@ export const AdvPilotResults: React.FC<{ isAdmin: boolean; canView: boolean }> =
           <Text style={styles.sectionLabel}>تصفية النتائج ({filtered.length} من {results.length})</Text>
           <Text style={styles.filterLabel}>المستخدم</Text>
           <ScrollView horizontal contentContainerStyle={{ flexDirection: 'row-reverse' }} style={styles.filterRow}>
-            <Chip label="الكل" active={!filterUser} onPress={() => setFilterUser('')} />
-            {FILTER_USERS.map(u => <Chip key={u} label={u} active={filterUser === u} onPress={() => setFilterUser(u)} />)}
+            <Chip label="الكل" active={!filterUser} onPress={() => setFilterUser('')} testID="adv-pilot-filter-user-all" />
+            {FILTER_USERS.map(u => <Chip key={u} label={u} active={filterUser === u} onPress={() => setFilterUser(u)} testID={`adv-pilot-filter-user-${u}`} />)}
           </ScrollView>
           <Text style={styles.filterLabel}>الخطورة</Text>
           <ScrollView horizontal contentContainerStyle={{ flexDirection: 'row-reverse' }} style={styles.filterRow}>
-            <Chip label="الكل" active={!filterSeverity} onPress={() => setFilterSeverity('')} />
-            {FILTER_SEVERITIES.map(s => <Chip key={s} label={PILOT_SEVERITY_LABELS[s]?.label || s} active={filterSeverity === s} onPress={() => setFilterSeverity(s)} />)}
+            <Chip label="الكل" active={!filterSeverity} onPress={() => setFilterSeverity('')} testID="adv-pilot-filter-severity-all" />
+            {FILTER_SEVERITIES.map(s => <Chip key={s} label={PILOT_SEVERITY_LABELS[s]?.label || s} active={filterSeverity === s} onPress={() => setFilterSeverity(s)} testID={`adv-pilot-filter-severity-${s}`} />)}
           </ScrollView>
           <Text style={styles.filterLabel}>الحالة</Text>
           <ScrollView horizontal contentContainerStyle={{ flexDirection: 'row-reverse' }} style={styles.filterRow}>
-            <Chip label="الكل" active={!filterStatus} onPress={() => setFilterStatus('')} />
-            {FILTER_STATUSES.map(s => <Chip key={s} label={s === 'pass' ? 'ناجحة' : s === 'fail' ? 'فاشلة' : s === 'diff' ? 'اختلاف' : 'خط أساس'} active={filterStatus === s} onPress={() => setFilterStatus(s)} />)}
+            <Chip label="الكل" active={!filterStatus} onPress={() => setFilterStatus('')} testID="adv-pilot-filter-status-all" />
+            {FILTER_STATUSES.map(s => <Chip key={s} label={STATUS_LABELS[s]} active={filterStatus === s} onPress={() => setFilterStatus(s)} testID={`adv-pilot-filter-status-${s}`} />)}
           </ScrollView>
-          <TextInput style={styles.searchInput} placeholder="ابحث بمفتاح الصلاحية أو نوع الاختبار..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-pilot-search-input" />
+          <TextInput style={styles.searchInput} placeholder="ابحث بمفتاح الصلاحية أو نوع الاختبار" value={search} onChangeText={setSearch} textAlign="right" testID="adv-pilot-search-input" />
 
           {filtered.slice(0, 150).map((r, i) => (
             <View key={r.id || i} style={styles.resultRow} testID={`adv-pilot-result-row-${i}`}>
@@ -179,8 +188,8 @@ const StatCard: React.FC<{ label: string; value: any; icon: string; color: strin
   </View>
 );
 
-const Chip: React.FC<{ label: string; active: boolean; onPress: () => void }> = ({ label, active, onPress }) => (
-  <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress}>
+const Chip: React.FC<{ label: string; active: boolean; onPress: () => void; testID?: string }> = ({ label, active, onPress, testID }) => (
+  <TouchableOpacity style={[styles.chip, active && styles.chipActive]} onPress={onPress} testID={testID}>
     <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
   </TouchableOpacity>
 );

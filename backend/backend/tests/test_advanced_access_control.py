@@ -205,6 +205,9 @@ class TestMultiAssignmentAndScopeIsolation:
             assert res["allowed"] is False
             print("PASS: الصلاحية تُرفض فور انتهاء التكليف")
 
+        # تنظيف: إنهاء assignment2 المتبقي من هذا السيناريو لتفادي تراكم بيانات تجريبية نشطة
+        requests.post(f"{BASE_URL}/api/advanced-access/assignments/{s['assignment2']}/end", headers=_h(token))
+
 
 class TestAuditLog:
     def test_audit_log_recorded(self, admin_session):

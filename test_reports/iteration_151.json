@@ -1,0 +1,43 @@
+{
+  "summary": "Phase 5 (Pilot, SHADOW MODE) test of the new 'نتائج التجربة التشغيلية' tab in /advanced-access-control. Backend: new pytest file, 13/14 passing. Frontend: admin desktop at 1920x800 and mobile at 390x844, Saeed, Salim, and teacher180156 logged in by injecting a token. WORKING: the pilot tab renders for admin as the last tab. The 6 stat cards show 117 cases, 0 failed, 0 security issues and 100% success; 'ناجحة' and divergence vary per run, 54-58 and 34-38, because permissions are sampled randomly. There is one card for each of Salim (19 cases), Saeed (57), teacher180156 (21) and president (20, all baseline). Every filter changes the list and the 'X من Y' counter correctly: user (57/19/21/20), severity (info 83 / medium 34), status (pass/diff/baseline/fail), and search ('security' gives 5; nonsense text shows the empty message). Export downloads a real pilot_results.xlsx (13.8KB); the backend file has exactly total_cases data rows. The run button updates the timestamp and numbers with no 4xx or 5xx. The stop button empties the tab ('لم تُشغَّل التجربة بعد'), GET /roles returns no PILOT_ roles, and GET /assignments returns no active PILOT_ assignments. Re-running restores everything. view_pilot gating works: teacher180156 granted 'view' through the Testers tab UI does NOT see adv-tab-pilot, and the backend returns 403 on summary, results and export. After view_pilot was added the tab appears with data, and the run, stop and export buttons are hidden. After revoke the teacher sees the access-denied screen. Saeed (tester without view_pilot) does not see the tab. Salim and teacher180156 get 403 on the pilot endpoints. Before/after Mongo snapshots of role, custom_permissions, faculty_id and department_id for Salim, Saeed, teacher180156 and president are IDENTICAL. The legacy system is unchanged: the Salim dean dashboard and Saeed dept-head dashboard load with real counts, the teacher home page loads, and the teacher's course 'دراسات حضرموت' is still returned by the API. git shows no legacy files changed in phase 5. RTL layout is correct on desktop and mobile with no horizontal overflow. FINAL STATE: the pilot is left RUNNING (117 cases, 5 active PILOT_ assignments), and the teacher180156 tester record is revoked (inactive).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/advanced-access/pilot/results?permission_key=(", "issue": "Returns 500. permission_key goes into Mongo $regex without escaping, so an invalid regex crashes the request. Fix: use re.escape(permission_key)."},
+      {"endpoint": "POST /api/advanced-access/pilot/reset (and /pilot/run, which calls reset)", "issue": "Pilot assignments are only set to 'ended', never deleted, while their roles ARE deleted. Ended PILOT_ assignments pile up on every run (30 orphan docs after a few runs) and point at advanced_role_ids that no longer exist. They show up in the assignments tab and inflate the dashboard total (5/184). Consider deleting them, or at least filtering them out."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "AdvPilotResults export button", "issue": "adv-pilot-export-btn sits inside the {isAdmin && ...} block, so a non-admin with view_pilot cannot export even though the backend allows it (export.xlsx returns 200 for that user).", "selector": "[data-testid='adv-pilot-export-btn']", "priority": "LOW"},
+      {"component": "AdvPilotResults stop button", "issue": "The destructive 'إيقاف التجربة وحذف البيانات التجريبية' runs immediately with no confirmation dialog.", "selector": "[data-testid='adv-pilot-stop-btn']", "priority": "LOW"}
+    ],
+    "integration_issues": [
+      {"flow": "Per-user cards / status filter", "issue": "Results with status='info' (no_legacy_equivalent compare cases, 5 per run) are not counted on the user cards and have no status chip. For example Salim shows total 19 but pass 12 + fail 0 + diff 6 = 18. The status chips also add up to 112, not 117.", "affected_selectors": ["[data-testid^='adv-pilot-user-card-']"]}
+    ],
+    "design_issues": [
+      {"screen": "Pilot tab (mobile)", "issues": ["Filter chips have no testIDs.", "The floating AI button overlaps the bottom result cards (already known from iteration_150).", "The search placeholder ellipsis renders on the left in RTL."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_adv_access_phase5_pilot.py", "/app/test_reports/pytest/pytest_phase5_pilot.xml"],
+  "action_items": [
+    "Escape the permission_key regex in /pilot/results (re.escape) to fix the 500.",
+    "Show adv-pilot-export-btn to anyone with canView, not only admin.",
+    "Add a confirmation dialog to adv-pilot-stop-btn.",
+    "Count and show the 'info' status in the per-user cards and add an 'info' status chip, so the totals add up.",
+    "Delete (or hide) ended PILOT_ assignments in reset_pilot so orphan records don't pile up."
+  ],
+  "critical_code_review_comments": [
+    "pilot_service picks permissions with random.shuffle, so pass and divergence counts change on every run (58/34, then 54/38). Run-to-run comparisons mean little; consider a fixed seed or a fixed sample.",
+    "The 'نسبة النجاح 100%' card counts only pass/fail cases; the label says so, which is acceptable.",
+    "Any number of probe assignments (PILOT_escalation_probe_*) created through create_assignment are cleaned up by the ^PILOT_ regex. OK."
+  ],
+  "updated_files": ["/app/backend/tests/test_adv_access_phase5_pilot.py"],
+  "success_rate": {"backend": "93% (13/14)", "frontend": "100% of requested flows (minor UX issues only)"},
+  "test_credentials": "admin/admin123, Salim/test1234, Saeed/test1234, teacher180156/teacher123 (teacher web login returns 403 from the browser by a pre-existing rule; tested by getting a token via curl and injecting localStorage 'token' and 'user').",
+  "seed_data_creation": "No seed data. The pilot was run and reset several times and left RUNNING at the end. The teacher180156 tester record was granted and then revoked (is_active=false, sub_permissions ['view','view_pilot']; originally inactive ['context_switch']).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `pytest backend/tests/test_adv_access_phase5_pilot.py`; it runs, resets and re-runs the pilot and grants/revokes the teacher tester. Login inputs have no testIDs; use placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور' and click the text 'تسجيل الدخول'. Teacher web login is blocked in the browser, so inject a token. The pilot tab is adv-tab-pilot.",
+  "rca of the issue": "The /pilot/results 500 comes from q['permission_key'] = {'$regex': permission_key} with raw user input; an invalid pattern such as '(' raises a pymongo OperationFailure."
+}
