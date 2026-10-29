@@ -1,0 +1,19 @@
+{
+  "timestamp": "20261029_222824",
+  "collections": {
+    "advanced_permissions": 976,
+    "advanced_permission_groups": 30,
+    "advanced_roles": 141,
+    "advanced_user_assignments": 151,
+    "advanced_access_testers": 2,
+    "advanced_permission_audit_logs": 1354,
+    "advanced_role_reviews": 28,
+    "advanced_role_review_audit_logs": 79,
+    "advanced_sensitive_permission_reviews": 118,
+    "advanced_access_feature_flags": 1,
+    "advanced_rollback_audit_logs": 18,
+    "advanced_pilot_runs": 1,
+    "advanced_pilot_results": 117
+  },
+  "purpose": "Phase 7-D pre-rebuild backup"
+}

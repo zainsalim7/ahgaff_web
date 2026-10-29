@@ -1,0 +1,78 @@
+[
+  {
+    "_id": "6ae3a8cbf528dc53389cc5b3",
+    "started_at": "2026-10-29T20:12:59.426000",
+    "finished_at": "2026-10-29T20:12:59.693000",
+    "triggered_by_user_id": "698dc4d65076e00e781884f8",
+    "triggered_by_username": "admin",
+    "total_cases": 117,
+    "pass_count": 56,
+    "fail_count": 0,
+    "success_rate": 100.0,
+    "security_issues_count": 0,
+    "divergence_count": 36,
+    "by_severity": {
+      "info": 81,
+      "medium": 36
+    },
+    "by_category": {
+      "new_allow_old_deny": 36,
+      "both_allow": 29,
+      "no_legacy_equivalent": 5,
+      "legacy_baseline_only": 20
+    },
+    "by_test_type": {
+      "scope_isolation_in": 3,
+      "scope_isolation_out": 3,
+      "permission_denial": 3,
+      "compare": 32,
+      "multi_role_own_permission": 3,
+      "multi_role_cross_isolation": 6,
+      "compare_رئيس_قسم": 16,
+      "compare_عضو_إداري": 16,
+      "compare_عضو_لجنة": 6,
+      "end_assignment_self_blocked": 1,
+      "end_assignment_others_unaffected": 3,
+      "security_impersonation": 1,
+      "security_escalation_self": 1,
+      "security_escalation_other_user": 1,
+      "security_imported_role_edit_block": 1,
+      "security_idor_context": 1,
+      "legacy_baseline_only": 20
+    },
+    "by_user": {
+      "Salim": {
+        "total": 19,
+        "pass": 12,
+        "fail": 0,
+        "diff": 6,
+        "baseline": 0,
+        "info": 1
+      },
+      "Saeed": {
+        "total": 57,
+        "pass": 38,
+        "fail": 0,
+        "diff": 16,
+        "baseline": 0,
+        "info": 3
+      },
+      "teacher180156": {
+        "total": 21,
+        "pass": 6,
+        "fail": 0,
+        "diff": 14,
+        "baseline": 0,
+        "info": 1
+      },
+      "president": {
+        "total": 20,
+        "pass": 0,
+        "fail": 0,
+        "diff": 0,
+        "baseline": 20,
+        "info": 0
+      }
+    }
+  }
+]

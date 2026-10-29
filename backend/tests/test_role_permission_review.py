@@ -45,8 +45,10 @@ def test_exact_counts_28_roles_and_sensitive_permissions():
     roles = requests.get(f"{API}/review/roles", headers=admin_h).json()
     perms = requests.get(f"{API}/review/sensitive-permissions", headers=admin_h).json()
     assert len(roles) == 28
-    # 116 الأصلية + صلاحيتا درجات أُعيد تصنيفهما high بقرار المستخدم (29 أكتوبر 2026، المرحلة 7-ب)
-    assert len(perms) == 118
+    # 122 بعد المرحلة 7-د: 1026 صلاحية فعلية (نمو حقيقي في الـ Endpoints منذ المرحلة 2، وليس 976) +
+    # صلاحيتا الدرجات المُصحَّحتان فعليًا الآن إلى "عالية" (التصحيح وُثِّق نصًّا في 7-ب لكن لم يُطبَّق على
+    # قاعدة البيانات حتى اكتُشفت الفجوة في 7-ج وطُبِّقت فعليًا هنا في 7-د كتصحيح دائم في مصدر التوليد)
+    assert len(perms) == 122
     assert all(p["sensitivity"] in ("critical", "high") for p in perms)
     assert sum(1 for p in perms if p["category"] == "grades_results") == 5
 

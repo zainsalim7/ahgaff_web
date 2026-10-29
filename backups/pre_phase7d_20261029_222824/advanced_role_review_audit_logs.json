@@ -1,0 +1,1374 @@
+[
+  {
+    "_id": "6ae3bac0f0fb88ebdd5f60e1",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "confirmed_category": null,
+      "confirmed_scope": null,
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:29:36.913000",
+      "confirmed_category": "student_affairs",
+      "confirmed_scope": "faculty",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:29:36.914000"
+  },
+  {
+    "_id": "6ae3bac1f0fb88ebdd5f60e3",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة فنية أولى - اختبار آلي",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:29:37.010000"
+  },
+  {
+    "_id": "6ae3bac1f0fb88ebdd5f60e5",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "موافقة ثانية مستقلة - اختبار آلي",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:29:37.113000"
+  },
+  {
+    "_id": "6ae3bac1f0fb88ebdd5f60e7",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:29:37.245000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:29:37.246000"
+  },
+  {
+    "_id": "6ae3bac1f0fb88ebdd5f60e9",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:29:37.365000"
+  },
+  {
+    "_id": "6ae3bac1f0fb88ebdd5f60ea",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_note_added",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "ملاحظة اختبار آلي",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:29:37.477000"
+  },
+  {
+    "_id": "6ae3bacef0fb88ebdd5f60ee",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "sensitive_review_updated",
+    "target_type": "sensitive_permission",
+    "target_id": "students_students_delete_student",
+    "reason": null,
+    "before": {
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "allowed_role_keys": [],
+      "recommended_scope": null,
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:29:50.196000",
+      "allowed_role_keys": [
+        "legacy_698c93119a944c07ac7f80c4"
+      ],
+      "recommended_scope": "faculty",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:29:50.197000"
+  },
+  {
+    "_id": "6ae3bacef0fb88ebdd5f60f0",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "sensitive_review_partial_approval",
+    "target_type": "sensitive_permission",
+    "target_id": "students_students_delete_student",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:29:50.311000"
+  },
+  {
+    "_id": "6ae3bacef0fb88ebdd5f60f2",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "sensitive_review_approved",
+    "target_type": "sensitive_permission",
+    "target_id": "students_students_delete_student",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:29:50.436000"
+  },
+  {
+    "_id": "6ae3baf17364712bf8ac13f6",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": null,
+      "reviewed_at": null,
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:25.372000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:30:25.373000"
+  },
+  {
+    "_id": "6ae3baf27364712bf8ac13fc",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:25.372000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:26.775000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:30:26.776000"
+  },
+  {
+    "_id": "6ae3baf27364712bf8ac13fe",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:30:26.923000"
+  },
+  {
+    "_id": "6ae3baf37364712bf8ac1400",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:30:27.036000"
+  },
+  {
+    "_id": "6ae3baf37364712bf8ac1404",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:26.775000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:27.253000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:30:27.253000"
+  },
+  {
+    "_id": "6ae3baf37364712bf8ac1407",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:29:37.245000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:27.699000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:30:27.700000"
+  },
+  {
+    "_id": "6ae3baf37364712bf8ac1409",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:30:27.790000"
+  },
+  {
+    "_id": "6ae3baf37364712bf8ac140a",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:27.699000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:27.929000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:30:27.930000"
+  },
+  {
+    "_id": "6ae3bbba7364712bf8ac14fd",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:27.253000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:46.225000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:33:46.226000"
+  },
+  {
+    "_id": "6ae3bbbb7364712bf8ac1503",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:46.225000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:47.164000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:33:47.165000"
+  },
+  {
+    "_id": "6ae3bbbb7364712bf8ac1507",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:47.164000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:47.426000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:33:47.427000"
+  },
+  {
+    "_id": "6ae3bbbb7364712bf8ac150a",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:30:27.929000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:47.854000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:33:47.855000"
+  },
+  {
+    "_id": "6ae3bbbb7364712bf8ac150c",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:33:47.942000"
+  },
+  {
+    "_id": "6ae3bbbc7364712bf8ac150d",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:47.854000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:48.096000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:33:48.096000"
+  },
+  {
+    "_id": "6ae3bbce7364712bf8ac1516",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:47.426000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:06.892000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:34:06.892000"
+  },
+  {
+    "_id": "6ae3bbcf7364712bf8ac151a",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:06.892000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:07.129000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:34:07.129000"
+  },
+  {
+    "_id": "6ae3bbf3d9005c435332f337",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:07.129000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:43.089000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:34:43.089000"
+  },
+  {
+    "_id": "6ae3bbf4d9005c435332f33d",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:43.089000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:44.187000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:34:44.187000"
+  },
+  {
+    "_id": "6ae3bbf4d9005c435332f33f",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:34:44.268000"
+  },
+  {
+    "_id": "6ae3bbf4d9005c435332f341",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:34:44.349000"
+  },
+  {
+    "_id": "6ae3bbf4d9005c435332f345",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:44.187000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:44.512000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:34:44.513000"
+  },
+  {
+    "_id": "6ae3bbf4d9005c435332f348",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:33:48.096000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:44.907000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:34:44.908000"
+  },
+  {
+    "_id": "6ae3bbf4d9005c435332f34a",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:34:44.999000"
+  },
+  {
+    "_id": "6ae3bbf5d9005c435332f34b",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:44.907000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:45.079000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:34:45.080000"
+  },
+  {
+    "_id": "6ae3bc19d9005c435332f43e",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:44.512000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:21.408000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:35:21.409000"
+  },
+  {
+    "_id": "6ae3bc1ad9005c435332f444",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:21.408000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:22.269000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:35:22.270000"
+  },
+  {
+    "_id": "6ae3bc1ad9005c435332f446",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:35:22.374000"
+  },
+  {
+    "_id": "6ae3bc1ad9005c435332f448",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:35:22.463000"
+  },
+  {
+    "_id": "6ae3bc1ad9005c435332f44c",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:22.269000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:22.655000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:35:22.655000"
+  },
+  {
+    "_id": "6ae3bc1bd9005c435332f44f",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:34:45.079000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:23.026000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:35:23.027000"
+  },
+  {
+    "_id": "6ae3bc1bd9005c435332f451",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:35:23.117000"
+  },
+  {
+    "_id": "6ae3bc1bd9005c435332f452",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:23.026000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:23.233000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:35:23.234000"
+  },
+  {
+    "_id": "6ae3bf6881553f1fb0c945eb",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:22.655000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:28.648000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:49:28.648000"
+  },
+  {
+    "_id": "6ae3bf6981553f1fb0c945f1",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:28.648000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:29.556000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:49:29.557000"
+  },
+  {
+    "_id": "6ae3bf6981553f1fb0c945f3",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:49:29.716000"
+  },
+  {
+    "_id": "6ae3bf6981553f1fb0c945f5",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:49:29.816000"
+  },
+  {
+    "_id": "6ae3bf6a81553f1fb0c945f9",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:29.556000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:30.023000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:49:30.024000"
+  },
+  {
+    "_id": "6ae3bf7081553f1fb0c945fc",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:35:23.233000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:36.664000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:49:36.665000"
+  },
+  {
+    "_id": "6ae3bf7081553f1fb0c945fe",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:49:36.801000"
+  },
+  {
+    "_id": "6ae3bf7181553f1fb0c945ff",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:36.664000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:37.918000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:49:37.918000"
+  },
+  {
+    "_id": "6ae3bf8beea3a9f80a88d335",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:30.023000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:03.958000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:50:03.959000"
+  },
+  {
+    "_id": "6ae3bf8deea3a9f80a88d33b",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:03.958000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:05.212000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:50:05.212000"
+  },
+  {
+    "_id": "6ae3bf8deea3a9f80a88d33d",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:50:05.368000"
+  },
+  {
+    "_id": "6ae3bf8deea3a9f80a88d33f",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:50:05.493000"
+  },
+  {
+    "_id": "6ae3bf8deea3a9f80a88d343",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:05.212000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:05.749000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:50:05.750000"
+  },
+  {
+    "_id": "6ae3bf8eeea3a9f80a88d346",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:49:37.918000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:06.165000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:50:06.166000"
+  },
+  {
+    "_id": "6ae3bf8eeea3a9f80a88d348",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:50:06.278000"
+  },
+  {
+    "_id": "6ae3bf8eeea3a9f80a88d349",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:06.165000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:06.382000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:50:06.383000"
+  },
+  {
+    "_id": "6ae3bf90eea3a9f80a88d34f",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_permission_decision_approved",
+    "target_type": "role_permission",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2:academic_structure_departments_create_department",
+    "reason": "اختبار آلي",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:50:08.401000"
+  },
+  {
+    "_id": "6ae3bf90eea3a9f80a88d351",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_permission_decision_pending",
+    "target_type": "role_permission",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2:academic_structure_departments_create_department",
+    "reason": null,
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:50:08.513000"
+  },
+  {
+    "_id": "6ae3c083cca559fda59acd74",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:05.749000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:11.483000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:54:11.484000"
+  },
+  {
+    "_id": "6ae3c084cca559fda59acd7a",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:11.483000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:12.421000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:54:12.421000"
+  },
+  {
+    "_id": "6ae3c084cca559fda59acd7c",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:54:12.535000"
+  },
+  {
+    "_id": "6ae3c084cca559fda59acd7e",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:54:12.621000"
+  },
+  {
+    "_id": "6ae3c084cca559fda59acd82",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:12.421000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:12.823000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:54:12.824000"
+  },
+  {
+    "_id": "6ae3c085cca559fda59acd85",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:50:06.382000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:13.245000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:54:13.246000"
+  },
+  {
+    "_id": "6ae3c085cca559fda59acd87",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:54:13.346000"
+  },
+  {
+    "_id": "6ae3c085cca559fda59acd88",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:13.245000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:13.489000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:54:13.489000"
+  },
+  {
+    "_id": "6ae3c087cca559fda59acd8e",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_permission_decision_approved",
+    "target_type": "role_permission",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2:academic_structure_departments_create_department",
+    "reason": "اختبار آلي",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:54:15.482000"
+  },
+  {
+    "_id": "6ae3c087cca559fda59acd90",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_permission_decision_pending",
+    "target_type": "role_permission",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2:academic_structure_departments_create_department",
+    "reason": null,
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:54:15.648000"
+  },
+  {
+    "_id": "6ae3c1021d439a3c9d269e12",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:12.823000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:18.634000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:56:18.635000"
+  },
+  {
+    "_id": "6ae3c1031d439a3c9d269e18",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:18.634000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:19.734000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:56:19.735000"
+  },
+  {
+    "_id": "6ae3c1031d439a3c9d269e1a",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_partial_approval",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة أولى",
+    "before": null,
+    "after": {
+      "approvals_count": 1,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:56:19.865000"
+  },
+  {
+    "_id": "6ae3c1031d439a3c9d269e1c",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "role_review_approved",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": "مراجعة ثانية",
+    "before": null,
+    "after": {
+      "approvals_count": 2,
+      "required": 2
+    },
+    "timestamp": "2026-10-29T21:56:19.960000"
+  },
+  {
+    "_id": "6ae3c1041d439a3c9d269e20",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698c93119a944c07ac7f80c4",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:19.734000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:20.176000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:56:20.177000"
+  },
+  {
+    "_id": "6ae3c1041d439a3c9d269e23",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:54:13.489000",
+      "status": "not_reviewed"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:20.626000",
+      "status": "ready_for_approval"
+    },
+    "timestamp": "2026-10-29T21:56:20.626000"
+  },
+  {
+    "_id": "6ae3c1041d439a3c9d269e25",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_approval_blocked_self",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": "محاولة اعتماد الذات",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:56:20.716000"
+  },
+  {
+    "_id": "6ae3c1041d439a3c9d269e26",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_review_updated",
+    "target_type": "role",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2",
+    "reason": null,
+    "before": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:20.626000",
+      "status": "ready_for_approval"
+    },
+    "after": {
+      "reviewed_by": "admin",
+      "reviewed_at": "2026-10-29T21:56:20.810000",
+      "status": "not_reviewed"
+    },
+    "timestamp": "2026-10-29T21:56:20.811000"
+  },
+  {
+    "_id": "6ae3c1061d439a3c9d269e2c",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_permission_decision_approved",
+    "target_type": "role_permission",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2:academic_structure_departments_create_department",
+    "reason": "اختبار آلي",
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:56:22.628000"
+  },
+  {
+    "_id": "6ae3c1061d439a3c9d269e2e",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "role_permission_decision_pending",
+    "target_type": "role_permission",
+    "target_id": "legacy_698a4cffbc4813c8639d66d2:academic_structure_departments_create_department",
+    "reason": null,
+    "before": null,
+    "after": null,
+    "timestamp": "2026-10-29T21:56:22.736000"
+  }
+]

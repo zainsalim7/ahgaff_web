@@ -1,0 +1,26 @@
+[
+  {
+    "_id": "6ae389d681d3854248ff2eed",
+    "user_id": "698f671431cfba92c49a550e",
+    "granted_at": "2026-10-29T21:56:10.783000",
+    "granted_by": "698dc4d65076e00e781884f8",
+    "is_active": false,
+    "revoked_at": "2026-10-29T21:56:11.261000",
+    "sub_permissions": [
+      "view"
+    ]
+  },
+  {
+    "_id": "6ae3baf2f616c6602ec69a0d",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "granted_at": "2026-10-29T21:56:19.594000",
+    "granted_by": "698dc4d65076e00e781884f8",
+    "is_active": false,
+    "revoked_at": "2026-10-29T21:56:20.043000",
+    "sub_permissions": [
+      "view",
+      "manage_role_review",
+      "view_audit"
+    ]
+  }
+]

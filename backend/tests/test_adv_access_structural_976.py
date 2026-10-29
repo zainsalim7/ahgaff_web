@@ -27,10 +27,13 @@ def all_groups():
     return list(_db().advanced_permission_groups.find({}))
 
 
-def test_exactly_976_active_permissions_in_30_groups(all_permissions, all_groups):
+def test_exactly_1026_active_permissions_in_31_groups(all_permissions, all_groups):
+    """العدد 976 (المرحلة 2) أصبح 1026 بعد المرحلة 7-د: نمو حقيقي في عدد الـ Endpoints منذ ذلك الحين
+    (1021→1071 إجمالي الآن)، وليس خطأ في الماسح. هذا الاختبار يُحدَّث عمدًا عند أي إعادة بناء مستقبلية
+    للسجل — العدد الثابت هنا ليس افتراضًا بل قيمة مُتحقَّق منها وقت هذا التحديث (29 أكتوبر 2026)."""
     active = [p for p in all_permissions if p.get("is_active")]
-    assert len(active) == 976, f"متوقَّع 976 صلاحية نشطة، الفعلي: {len(active)}"
-    assert len(all_groups) == 30, f"متوقَّع 30 مجموعة، الفعلي: {len(all_groups)}"
+    assert len(active) == 1026, f"متوقَّع 1026 صلاحية نشطة، الفعلي: {len(active)}"
+    assert len(all_groups) == 31, f"متوقَّع 31 مجموعة، الفعلي: {len(all_groups)}"
 
 
 def test_every_permission_has_valid_group(all_permissions, all_groups):
@@ -39,10 +42,10 @@ def test_every_permission_has_valid_group(all_permissions, all_groups):
     assert not orphans, f"صلاحيات بمجموعة غير موجودة: {orphans[:10]}"
 
 
-def test_all_976_permissions_linked_to_real_source_function(all_permissions):
+def test_all_1026_permissions_linked_to_real_source_function(all_permissions):
     """لكل صلاحية نشطة: source_file موجود فعليًا + source_function معرّفة فعليًا داخله (regex مباشر على الكود)."""
     perms = [p for p in all_permissions if p.get("is_active")]
-    assert len(perms) == 976
+    assert len(perms) == 1026
 
     file_cache = {}
     broken = []

@@ -1,0 +1,11 @@
+[
+  {
+    "_id": "singleton",
+    "master_enabled": false,
+    "scoped_activations": [],
+    "last_reason": "إعادة ضبط بعد الاختبار الآلي",
+    "updated_at": "2026-10-29T21:56:16.809000",
+    "updated_by": "698dc4d65076e00e781884f8",
+    "updated_by_username": "admin"
+  }
+]

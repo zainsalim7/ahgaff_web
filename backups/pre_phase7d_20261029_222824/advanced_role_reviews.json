@@ -1,0 +1,6648 @@
+[
+  {
+    "_id": "legacy_698a4cffbc4813c8639d66d2",
+    "advanced_role_key": "legacy_698a4cffbc4813c8639d66d2",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.495000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.527000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 20,
+    "legacy_role_id": "698a4cffbc4813c8639d66d2",
+    "legacy_role_name": "مدير النظام",
+    "legacy_role_system_key": "admin",
+    "linked_users": [
+      {
+        "id": "698dc4d65076e00e781884f8",
+        "username": "admin",
+        "full_name": "مدير النظام"
+      }
+    ],
+    "linked_users_count": 1,
+    "missing_coverage": [
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_student",
+      "report_teacher_workload",
+      "report_warnings"
+    ],
+    "missing_coverage_count": 7,
+    "notes": [],
+    "permission_keys_count": 109,
+    "reviewed_at": "2026-10-29T21:56:20.810000",
+    "reviewed_by": "admin",
+    "sensitive_linked": [
+      "academic_structure_departments_delete_department",
+      "academic_structure_ser_delete_department",
+      "academic_structure_ser_delete_semester",
+      "courses_courses_delete_course",
+      "courses_ser_delete_course",
+      "courses_ser_safe_delete_course",
+      "curriculum_study_plans_approve_study_plan",
+      "curriculum_study_plans_reject_pending_study_plan",
+      "curriculum_study_plans_unapprove_study_plan",
+      "schedule_ser_delete_lecture",
+      "schedule_ser_delete_schedule",
+      "students_ser_delete_student",
+      "students_ser_reset_student_password",
+      "students_ser_safe_delete_student",
+      "students_ser_unexclude_student_from_course",
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_delete_academic_year",
+      "system_tools_ser_permanent_delete_trash_item",
+      "system_users_ser_delete_user",
+      "system_users_ser_delete_user_permission",
+      "system_users_ser_reset_user_password"
+    ],
+    "sensitive_linked_count": 21,
+    "status": "not_reviewed",
+    "suggested_category": "technical",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "academic_structure_departments_create_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": "admin",
+        "at": "2026-10-29T21:56:22.733000"
+      },
+      "academic_structure_departments_delete_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_departments_update_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_activate_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_archive_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_close_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_create_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_create_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_delete_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_delete_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_restore_semester_from_archive": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_update_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_update_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "attendance_ser_bulk_update_attendance_status": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "attendance_ser_record_attendance_session": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "attendance_ser_update_attendance_status": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_all_courses": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_matching_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_clone_course_section": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_diagnose_enrollment": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_restore_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_safe_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_update_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_approve_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_clone_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_confirm_study_plan_topics": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_get_study_plan_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_reject_pending_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_unapprove_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_update_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_upload_study_plan_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "notifications_ser_create_manual_notification": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_change_lecture_room": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures_advanced": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_reschedule_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_activate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_activate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_change_level": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_deactivate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_set_gender": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_create_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_deactivate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_exclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_courses_admin": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_reset_student_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_restore_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_safe_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_sync_students_enrollments": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_unexclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_update_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_add_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_delete_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_update_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_add_user_permission": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_create_user": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_delete_user": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_delete_user_permission": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_get_user_permissions_endpoint_v2": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_get_users": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_reset_user_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_reset_user_permissions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_toggle_user_active": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_update_all_user_permissions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_update_user": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_update_user_custom_permissions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-09T21:09:19.688000",
+    "role_definition_updated_at": "2026-02-13T09:59:56.324000",
+    "usage_note": "مستخدَم حاليًا من 1 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "edit_attendance",
+      "export_reports",
+      "import_data",
+      "manage_courses",
+      "manage_departments",
+      "manage_lectures",
+      "manage_students",
+      "manage_users",
+      "record_attendance",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_student",
+      "report_teacher_workload",
+      "report_warnings",
+      "send_notifications",
+      "view_attendance",
+      "view_lectures",
+      "view_reports"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698a4cffbc4813c8639d66d3",
+    "advanced_role_key": "legacy_698a4cffbc4813c8639d66d3",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.497000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.538000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 8,
+    "legacy_role_id": "698a4cffbc4813c8639d66d3",
+    "legacy_role_name": "مدرس",
+    "legacy_role_system_key": "teacher",
+    "linked_users": [
+      {
+        "id": "698f671431cfba92c49a550e",
+        "username": "teacher180156",
+        "full_name": "أستاذ اختبار 180156"
+      },
+      {
+        "id": "698f85b8539792f8917b7be0",
+        "username": "9999",
+        "full_name": "حسن صالح"
+      },
+      {
+        "id": "698f867e9245118463b679ca",
+        "username": "222222",
+        "full_name": "زين سالم"
+      },
+      {
+        "id": "6ac44ee5610c7fff6425ed73",
+        "username": "TESTIMPORT1791250148A",
+        "full_name": "معلم استيراد اختبار 1"
+      },
+      {
+        "id": "6ac44ee5610c7fff6425ed75",
+        "username": "TESTIMPORT1791250148B",
+        "full_name": "معلم استيراد اختبار 2"
+      },
+      {
+        "id": "6ac44eeb610c7fff6425ed7a",
+        "username": "TESTDUP1791250154",
+        "full_name": "معلم اختبار تكرار"
+      },
+      {
+        "id": "6ac45573610c7fff6425f208",
+        "username": "TESTIMPORT1791251827A",
+        "full_name": "معلم استيراد اختبار 1"
+      },
+      {
+        "id": "6ac45574610c7fff6425f20a",
+        "username": "TESTIMPORT1791251827B",
+        "full_name": "معلم استيراد اختبار 2"
+      },
+      {
+        "id": "6ac4557f610c7fff6425f20f",
+        "username": "TESTDUP1791251838",
+        "full_name": "معلم اختبار تكرار"
+      },
+      {
+        "id": "6ac45d13610c7fff6425f738",
+        "username": "TESTDUP1791253776",
+        "full_name": "معلم اختبار تكرار"
+      },
+      {
+        "id": "6ac463d62bfe121e37b32749",
+        "username": "TESTIMPORT1791255509A",
+        "full_name": "معلم استيراد اختبار 1"
+      },
+      {
+        "id": "6ac463d62bfe121e37b3274b",
+        "username": "TESTIMPORT1791255509B",
+        "full_name": "معلم استيراد اختبار 2"
+      }
+    ],
+    "linked_users_count": 12,
+    "missing_coverage": [
+      "report_absent_students",
+      "report_course",
+      "report_teacher_workload"
+    ],
+    "missing_coverage_count": 3,
+    "notes": [],
+    "permission_keys_count": 20,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "schedule_ser_delete_lecture"
+    ],
+    "sensitive_linked_count": 1,
+    "status": "not_reviewed",
+    "suggested_category": "educational",
+    "suggested_scope": "course",
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "attendance_ser_record_attendance_session": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_change_lecture_room": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures_advanced": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_reschedule_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-09T21:09:19.716000",
+    "role_definition_updated_at": null,
+    "usage_note": "مستخدَم حاليًا من 12 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "export_reports",
+      "manage_lectures",
+      "record_attendance",
+      "report_absent_students",
+      "report_course",
+      "report_teacher_workload",
+      "view_attendance",
+      "view_lectures"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698a4cffbc4813c8639d66d4",
+    "advanced_role_key": "legacy_698a4cffbc4813c8639d66d4",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.499000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.540000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 9,
+    "legacy_role_id": "698a4cffbc4813c8639d66d4",
+    "legacy_role_name": "موظف",
+    "legacy_role_system_key": "employee",
+    "linked_users": [
+      {
+        "id": "698f671431cfba92c49a550f",
+        "username": "testuser180156",
+        "full_name": "مستخدم اختبار 180156"
+      },
+      {
+        "id": "6a3ed8007bbeba2020958f58",
+        "username": "view_curr_user",
+        "full_name": "مستخدم عرض الخطة"
+      },
+      {
+        "id": "6ab2deab563adb003d9615bd",
+        "username": "fee_dorm",
+        "full_name": "موظف_رسوم_السكن"
+      },
+      {
+        "id": "6ab2deab563adb003d9615bf",
+        "username": "fee_general",
+        "full_name": "موظف_الرسوم_العامة"
+      },
+      {
+        "id": "6ab41cd4bee9a1cf08bef184",
+        "username": "EMP-100",
+        "full_name": "موظف تجريبي"
+      },
+      {
+        "id": "6ab41d00bee9a1cf08bef193",
+        "username": "EMP-200",
+        "full_name": "مدير تجريبي"
+      },
+      {
+        "id": "6ab445c1955114730552243e",
+        "username": "EMP-300",
+        "full_name": "مسؤول حضور تجريبي"
+      }
+    ],
+    "linked_users_count": 7,
+    "missing_coverage": [
+      "report_absent_students",
+      "report_student",
+      "report_warnings"
+    ],
+    "missing_coverage_count": 3,
+    "notes": [],
+    "permission_keys_count": 47,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "students_ser_delete_student",
+      "students_ser_reset_student_password",
+      "students_ser_safe_delete_student",
+      "students_ser_unexclude_student_from_course",
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_permanent_delete_trash_item"
+    ],
+    "sensitive_linked_count": 6,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "courses_ser_auto_enroll_matching_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_activate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_activate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_change_level": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_deactivate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_set_gender": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_create_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_deactivate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_exclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_courses_admin": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_reset_student_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_restore_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_safe_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_unexclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_update_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-09T21:09:19.719000",
+    "role_definition_updated_at": null,
+    "usage_note": "مستخدَم حاليًا من 7 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "export_reports",
+      "import_data",
+      "manage_students",
+      "report_absent_students",
+      "report_student",
+      "report_warnings",
+      "view_attendance",
+      "view_lectures",
+      "view_reports"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698a4cffbc4813c8639d66d5",
+    "advanced_role_key": "legacy_698a4cffbc4813c8639d66d5",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.502000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.542000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 3,
+    "legacy_role_id": "698a4cffbc4813c8639d66d5",
+    "legacy_role_name": "طالب",
+    "legacy_role_system_key": "student",
+    "linked_users": [
+      {
+        "id": "69a99544650b31fa86440da1",
+        "username": "234",
+        "full_name": "خالد"
+      },
+      {
+        "id": "69a99544650b31fa86440da2",
+        "username": "1001",
+        "full_name": "طالب اختبار 1"
+      },
+      {
+        "id": "69a99545650b31fa86440da3",
+        "username": "1002",
+        "full_name": "طالب اختبار 2"
+      },
+      {
+        "id": "69a99545650b31fa86440da4",
+        "username": "1003",
+        "full_name": "طالب اختبار 3"
+      },
+      {
+        "id": "69a99545650b31fa86440da5",
+        "username": "12345",
+        "full_name": "محمد أحمد علي"
+      },
+      {
+        "id": "69a99545650b31fa86440da6",
+        "username": "12346",
+        "full_name": "أحمد محمد سعيد"
+      },
+      {
+        "id": "69a99546650b31fa86440da7",
+        "username": "1027047",
+        "full_name": "ألفِي انيسة صالحة"
+      },
+      {
+        "id": "69a99546650b31fa86440da8",
+        "username": "1027049",
+        "full_name": "أليسيا نور سافطري"
+      },
+      {
+        "id": "69a99546650b31fa86440da9",
+        "username": "1027005",
+        "full_name": "أمينة أكثم محمد عبدالله"
+      },
+      {
+        "id": "69a99546650b31fa86440daa",
+        "username": "1027050",
+        "full_name": "أنديني تِيارا نور حليزة"
+      },
+      {
+        "id": "69a99547650b31fa86440dab",
+        "username": "1027051",
+        "full_name": "أولياء رحمة قنديلة"
+      },
+      {
+        "id": "69a99547650b31fa86440dac",
+        "username": "1026008",
+        "full_name": "إنتان زهراء"
+      },
+      {
+        "id": "69a99547650b31fa86440dad",
+        "username": "1027001",
+        "full_name": "ابتدا نيل الحسنى"
+      },
+      {
+        "id": "69a99547650b31fa86440dae",
+        "username": "1027003",
+        "full_name": "امرأة الجزيلة أم عزيزة أحمد"
+      },
+      {
+        "id": "69a99547650b31fa86440daf",
+        "username": "1026015",
+        "full_name": "بائق تيتين ألفيانا ديوي"
+      },
+      {
+        "id": "69a99548650b31fa86440db0",
+        "username": "1027007",
+        "full_name": "تشا وولان شافيتري"
+      },
+      {
+        "id": "69a99548650b31fa86440db1",
+        "username": "1027054",
+        "full_name": "حسن الهداية"
+      },
+      {
+        "id": "69a99548650b31fa86440db2",
+        "username": "1026095",
+        "full_name": "خالصة غ إسماعيل"
+      },
+      {
+        "id": "69a99548650b31fa86440db3",
+        "username": "1027008",
+        "full_name": "خديجة معليمو محمد"
+      },
+      {
+        "id": "69a99549650b31fa86440db4",
+        "username": "1027055",
+        "full_name": "دوي فوسفيتا ساري"
+      },
+      {
+        "id": "69a99549650b31fa86440db5",
+        "username": "1025020",
+        "full_name": "ديتا أفريكارتي لينبانغ"
+      },
+      {
+        "id": "69a99549650b31fa86440db6",
+        "username": "1027010",
+        "full_name": "ديوي ربيعة الفطرية"
+      },
+      {
+        "id": "69a99549650b31fa86440db7",
+        "username": "1027057",
+        "full_name": "رحمة الأزكياء"
+      },
+      {
+        "id": "69a9954a650b31fa86440db8",
+        "username": "1027011",
+        "full_name": "رفدة دليلة المائلة"
+      },
+      {
+        "id": "69a9954a650b31fa86440db9",
+        "username": "1027058",
+        "full_name": "رفدة نور الفوزية"
+      },
+      {
+        "id": "69a9954a650b31fa86440dba",
+        "username": "1026030",
+        "full_name": "رقية جمعة سلومو"
+      },
+      {
+        "id": "69a9954a650b31fa86440dbb",
+        "username": "1027012",
+        "full_name": "رقية راشد علي"
+      },
+      {
+        "id": "69a9954a650b31fa86440dbc",
+        "username": "1027059",
+        "full_name": "ريستو فوزية"
+      },
+      {
+        "id": "69a9954b650b31fa86440dbd",
+        "username": "1027014",
+        "full_name": "ريفا نور فائزة"
+      },
+      {
+        "id": "69a9954b650b31fa86440dbe",
+        "username": "1027015",
+        "full_name": "ريني عملية فوتري"
+      },
+      {
+        "id": "69a9954b650b31fa86440dbf",
+        "username": "1027060",
+        "full_name": "زكية نبيلة"
+      },
+      {
+        "id": "69a9954b650b31fa86440dc0",
+        "username": "1027016",
+        "full_name": "زينة إبراهيم عبدالله"
+      },
+      {
+        "id": "69a9954c650b31fa86440dc1",
+        "username": "1027017",
+        "full_name": "زينة سقاف السقاف"
+      },
+      {
+        "id": "69a9954c650b31fa86440dc2",
+        "username": "1027018",
+        "full_name": "سارينا سارينا"
+      },
+      {
+        "id": "69a9954c650b31fa86440dc3",
+        "username": "1026040",
+        "full_name": "سري وحيوني بي كينيق"
+      },
+      {
+        "id": "69a9954c650b31fa86440dc4",
+        "username": "1027061",
+        "full_name": "سكينة مودة"
+      },
+      {
+        "id": "69a9954d650b31fa86440dc5",
+        "username": "1027062",
+        "full_name": "سلوى ميريني"
+      },
+      {
+        "id": "69a9954d650b31fa86440dc6",
+        "username": "1026043",
+        "full_name": "سيتي الزهراء"
+      },
+      {
+        "id": "69a9954d650b31fa86440dc7",
+        "username": "1027063",
+        "full_name": "سيتي ثريا"
+      },
+      {
+        "id": "69a9954d650b31fa86440dc8",
+        "username": "1025021",
+        "full_name": "سيتي زينة أمي كلثوم"
+      },
+      {
+        "id": "69a9954d650b31fa86440dc9",
+        "username": "1027064",
+        "full_name": "سيتي عائشة"
+      },
+      {
+        "id": "69a9954e650b31fa86440dca",
+        "username": "1027065",
+        "full_name": "سيتي نداء الحسنة"
+      },
+      {
+        "id": "69a9954e650b31fa86440dcb",
+        "username": "1027066",
+        "full_name": "سيتي نور خافيا موناديا فوزي"
+      },
+      {
+        "id": "69a9954e650b31fa86440dcc",
+        "username": "1027021",
+        "full_name": "عائشة فرح دينا"
+      },
+      {
+        "id": "69a9954e650b31fa86440dcd",
+        "username": "1027022",
+        "full_name": "عائشة محمد عمري"
+      },
+      {
+        "id": "69a9954f650b31fa86440dce",
+        "username": "1026001",
+        "full_name": "عدلية أنيس عباس"
+      },
+      {
+        "id": "69a9954f650b31fa86440dcf",
+        "username": "1027068",
+        "full_name": "عرفنا أزلاء الزهراء"
+      },
+      {
+        "id": "69a9954f650b31fa86440dd0",
+        "username": "1027069",
+        "full_name": "عطايا رحشا"
+      },
+      {
+        "id": "69a9954f650b31fa86440dd1",
+        "username": "1027070",
+        "full_name": "عَليا ديسملِكَا"
+      },
+      {
+        "id": "69a9954f650b31fa86440dd2",
+        "username": "1027074",
+        "full_name": "مفتاح السعادة ديا أغستينا"
+      },
+      {
+        "id": "69a99550650b31fa86440dd3",
+        "username": "1025030",
+        "full_name": "مكرمة زلفي"
+      },
+      {
+        "id": "69a99550650b31fa86440dd4",
+        "username": "1027075",
+        "full_name": "مهدية الأمة"
+      },
+      {
+        "id": "69a99550650b31fa86440dd5",
+        "username": "1027035",
+        "full_name": "مواندام جعفر عبدالبر"
+      },
+      {
+        "id": "69a99550650b31fa86440dd6",
+        "username": "1027034",
+        "full_name": "موتيارا داليمونتي"
+      },
+      {
+        "id": "69a99551650b31fa86440dd7",
+        "username": "1027038",
+        "full_name": "نادا عزتي سلسبيلا لوبيس"
+      },
+      {
+        "id": "69a99551650b31fa86440dd8",
+        "username": "1027036",
+        "full_name": "نجمى حورا محمد"
+      },
+      {
+        "id": "69a99551650b31fa86440dd9",
+        "username": "1027037",
+        "full_name": "نجوى شاهرة"
+      },
+      {
+        "id": "69a99551650b31fa86440dda",
+        "username": "1027079",
+        "full_name": "نسفا نزول الرحمة"
+      },
+      {
+        "id": "69a99552650b31fa86440ddb",
+        "username": "1027080",
+        "full_name": "نشوى فاطن زهراني"
+      },
+      {
+        "id": "69a99552650b31fa86440ddc",
+        "username": "1026025",
+        "full_name": "نصره موسى  عبدالله"
+      },
+      {
+        "id": "69a99552650b31fa86440ddd",
+        "username": "1027076",
+        "full_name": "نندا نعمة الكريمة"
+      },
+      {
+        "id": "69a99552650b31fa86440dde",
+        "username": "1027041",
+        "full_name": "نور بايا"
+      },
+      {
+        "id": "69a99552650b31fa86440ddf",
+        "username": "1027081",
+        "full_name": "نور رزكا نبيلة"
+      },
+      {
+        "id": "69a99553650b31fa86440de0",
+        "username": "1025076",
+        "full_name": "نور عزيزة"
+      },
+      {
+        "id": "69a99553650b31fa86440de1",
+        "username": "1025037",
+        "full_name": "نور فجرية رمضان"
+      },
+      {
+        "id": "69a99553650b31fa86440de2",
+        "username": "1027082",
+        "full_name": "نور لطيفة بنت ذوالقرنين"
+      },
+      {
+        "id": "69a99553650b31fa86440de3",
+        "username": "1027042",
+        "full_name": "نيتا عبدالله"
+      },
+      {
+        "id": "69a99554650b31fa86440de4",
+        "username": "1027078",
+        "full_name": "نيسرينا عاقلة جميل محمدية"
+      },
+      {
+        "id": "69a99554650b31fa86440de5",
+        "username": "1026091",
+        "full_name": "نيل المنى مسرون روستام"
+      },
+      {
+        "id": "69a99554650b31fa86440de6",
+        "username": "1027043",
+        "full_name": "نينغ نور الفوزية"
+      },
+      {
+        "id": "69a99554650b31fa86440de7",
+        "username": "1027083",
+        "full_name": "وحدانية نورماليتا"
+      },
+      {
+        "id": "69a99554650b31fa86440de8",
+        "username": "1027084",
+        "full_name": "ييني وان نورياوتي سرجو"
+      },
+      {
+        "id": "6ac23d29efacb6fb570c2591",
+        "username": "999",
+        "full_name": "طالب تجريبي"
+      },
+      {
+        "id": "6aca4bc709ba7d28249c3d1d",
+        "username": "50001",
+        "full_name": "أحمد محمد علي"
+      },
+      {
+        "id": "6aca4bc709ba7d28249c3d1e",
+        "username": "50002",
+        "full_name": "خالد عبدالله سالم"
+      },
+      {
+        "id": "6aca4bc809ba7d28249c3d1f",
+        "username": "50003",
+        "full_name": "عمر حسين أحمد"
+      },
+      {
+        "id": "6aca4bc809ba7d28249c3d20",
+        "username": "128202",
+        "full_name": "فرما ذاقف س. فباغي  "
+      },
+      {
+        "id": "6aca4bc809ba7d28249c3d21",
+        "username": "129213",
+        "full_name": "محمد دافا أبياسا "
+      },
+      {
+        "id": "6aca4bc809ba7d28249c3d22",
+        "username": "129255",
+        "full_name": "محمد فقيه الحسني "
+      },
+      {
+        "id": "6aca4bc809ba7d28249c3d23",
+        "username": "129142",
+        "full_name": "عبادالله المخلصين  "
+      },
+      {
+        "id": "6aca4bc909ba7d28249c3d24",
+        "username": "129199",
+        "full_name": "محمد أكثم محمد "
+      },
+      {
+        "id": "6aca4bc909ba7d28249c3d25",
+        "username": "129254",
+        "full_name": "محمد فرحان ضياء الحق موحدي"
+      },
+      {
+        "id": "6aca4bc909ba7d28249c3d26",
+        "username": "129201",
+        "full_name": "محمد باشا صبري نيارطا "
+      },
+      {
+        "id": "6aca4bc909ba7d28249c3d27",
+        "username": "129274",
+        "full_name": "مشفع حافظ الرزاق "
+      },
+      {
+        "id": "6aca4bc909ba7d28249c3d28",
+        "username": "129140",
+        "full_name": "صلاح البنياني بن رمضاني "
+      },
+      {
+        "id": "6aca4bca09ba7d28249c3d29",
+        "username": "129095",
+        "full_name": "خير الملادي بن تسمين "
+      },
+      {
+        "id": "6aca4bca09ba7d28249c3d2a",
+        "username": "129192",
+        "full_name": "محمد إسمي مولانا "
+      },
+      {
+        "id": "6aca4bca09ba7d28249c3d2b",
+        "username": "129101",
+        "full_name": "رحمن ديفا الفجري "
+      },
+      {
+        "id": "6aca4bca09ba7d28249c3d2c",
+        "username": "129249",
+        "full_name": "محمد فائز رافقي هارهاب"
+      },
+      {
+        "id": "6aca4bca09ba7d28249c3d2d",
+        "username": "129253",
+        "full_name": "محمد فخريانشاه علمي "
+      },
+      {
+        "id": "6aca4bcb09ba7d28249c3d2e",
+        "username": "129281",
+        "full_name": "نوفل باحسين سيد محضار "
+      },
+      {
+        "id": "6aca4bcb09ba7d28249c3d2f",
+        "username": "99999",
+        "full_name": "طالب اختبار"
+      }
+    ],
+    "linked_users_count": 92,
+    "missing_coverage": [
+      "report_student"
+    ],
+    "missing_coverage_count": 1,
+    "notes": [],
+    "permission_keys_count": 4,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "mixed",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-09T21:09:19.721000",
+    "role_definition_updated_at": null,
+    "usage_note": "مستخدَم حاليًا من 92 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "report_student",
+      "view_attendance",
+      "view_lectures"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698a4d07bc4813c8639d66d6",
+    "advanced_role_key": "legacy_698a4d07bc4813c8639d66d6",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.504000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.544000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 0,
+    "legacy_role_id": "698a4d07bc4813c8639d66d6",
+    "legacy_role_name": "مشرف قسم",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [],
+    "missing_coverage_count": 0,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "academic",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-02-09T21:09:27.484000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [],
+    "has_zero_mapped_permissions": true
+  },
+  {
+    "_id": "legacy_698a53e34a833e65ff410ad8",
+    "advanced_role_key": "legacy_698a53e34a833e65ff410ad8",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.505000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.545000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 0,
+    "legacy_role_id": "698a53e34a833e65ff410ad8",
+    "legacy_role_name": "مشرف مقرر",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [],
+    "missing_coverage_count": 0,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "academic",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-02-09T21:38:43.812000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [],
+    "has_zero_mapped_permissions": true
+  },
+  {
+    "_id": "legacy_698c93119a944c07ac7f80c1",
+    "advanced_role_key": "legacy_698c93119a944c07ac7f80c1",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.508000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.547000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 41,
+    "legacy_role_id": "698c93119a944c07ac7f80c1",
+    "legacy_role_name": "رئيس الجامعة",
+    "legacy_role_system_key": "university_president",
+    "linked_users": [
+      {
+        "id": "6ab13e3709466a2b7b88502d",
+        "username": "president",
+        "full_name": "رئيس الجامعة (تجريبي)"
+      }
+    ],
+    "linked_users_count": 1,
+    "missing_coverage": [
+      "dashboard_alerts",
+      "dashboard_attendance",
+      "dashboard_export",
+      "dashboard_finance",
+      "dashboard_hr",
+      "dashboard_rooms",
+      "dashboard_students",
+      "dashboard_teachers",
+      "export_archive",
+      "manage_fee_receipts",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_lesson_completion",
+      "report_student",
+      "report_teacher_workload",
+      "report_warnings",
+      "search_archive",
+      "view_archive",
+      "view_courses",
+      "view_curriculum",
+      "view_departments",
+      "view_enrollments",
+      "view_faculties",
+      "view_fee_receipts",
+      "view_schedule",
+      "view_statistics",
+      "view_students",
+      "view_teachers",
+      "view_teaching_load",
+      "view_users"
+    ],
+    "missing_coverage_count": 32,
+    "notes": [],
+    "permission_keys_count": 19,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": "university",
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-11T14:32:49.033000",
+    "role_definition_updated_at": null,
+    "usage_note": "مستخدَم حاليًا من 1 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "dashboard_alerts",
+      "dashboard_attendance",
+      "dashboard_export",
+      "dashboard_finance",
+      "dashboard_hr",
+      "dashboard_rooms",
+      "dashboard_students",
+      "dashboard_teachers",
+      "export_archive",
+      "export_reports",
+      "export_students",
+      "hr_view_employees",
+      "manage_fee_receipts",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_lesson_completion",
+      "report_student",
+      "report_teacher_attendance",
+      "report_teacher_workload",
+      "report_warnings",
+      "search_archive",
+      "view_activity_logs",
+      "view_archive",
+      "view_attendance",
+      "view_courses",
+      "view_curriculum",
+      "view_departments",
+      "view_enrollments",
+      "view_faculties",
+      "view_fee_receipts",
+      "view_lectures",
+      "view_reports",
+      "view_schedule",
+      "view_statistics",
+      "view_student_notifications",
+      "view_students",
+      "view_teachers",
+      "view_teaching_load",
+      "view_users"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698c93119a944c07ac7f80c2",
+    "advanced_role_key": "legacy_698c93119a944c07ac7f80c2",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.510000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.549000",
+    "excess_flags": [
+      {
+        "key": "academic_structure_departments_create_department",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "إضافة — departments",
+        "operation_type": "add",
+        "sensitivity": "medium",
+        "risk": "متوسطة",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "faculty"
+      },
+      {
+        "key": "academic_structure_departments_delete_department",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "حذف — departments",
+        "operation_type": "delete",
+        "sensitivity": "critical",
+        "risk": "عالية جدًا",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "faculty"
+      },
+      {
+        "key": "academic_structure_departments_update_department",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "تعديل — departments",
+        "operation_type": "edit",
+        "sensitivity": "medium",
+        "risk": "متوسطة",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "faculty"
+      },
+      {
+        "key": "courses_courses_create_course",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "إضافة — courses",
+        "operation_type": "add",
+        "sensitivity": "medium",
+        "risk": "متوسطة",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "faculty"
+      },
+      {
+        "key": "courses_courses_delete_course",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "حذف — courses",
+        "operation_type": "delete",
+        "sensitivity": "critical",
+        "risk": "عالية جدًا",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "faculty"
+      }
+    ],
+    "excess_flags_count": 5,
+    "legacy_permission_keys_count": 31,
+    "legacy_role_id": "698c93119a944c07ac7f80c2",
+    "legacy_role_name": "عميد كلية",
+    "legacy_role_system_key": "dean",
+    "linked_users": [
+      {
+        "id": "698f71ba5c5620a4449eeb7e",
+        "username": "Salim",
+        "full_name": "Salim"
+      }
+    ],
+    "linked_users_count": 1,
+    "missing_coverage": [
+      "approve_attendance_changes",
+      "dashboard_alerts",
+      "dashboard_attendance",
+      "dashboard_export",
+      "dashboard_finance",
+      "dashboard_rooms",
+      "dashboard_students",
+      "dashboard_teachers",
+      "issue_letters",
+      "manage_student_excuses",
+      "manage_teaching_load",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_lesson_completion",
+      "report_student",
+      "report_teacher_workload",
+      "report_warnings",
+      "view_courses"
+    ],
+    "missing_coverage_count": 20,
+    "notes": [],
+    "permission_keys_count": 110,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "academic_structure_departments_delete_department",
+      "academic_structure_ser_delete_department",
+      "academic_structure_ser_delete_semester",
+      "courses_courses_delete_course",
+      "courses_ser_delete_course",
+      "courses_ser_safe_delete_course",
+      "curriculum_study_plans_approve_study_plan",
+      "curriculum_study_plans_reject_pending_study_plan",
+      "curriculum_study_plans_unapprove_study_plan",
+      "enrollments_ser_unenroll_student",
+      "schedule_ser_delete_lecture",
+      "schedule_ser_delete_schedule",
+      "students_ser_delete_student",
+      "students_ser_reset_student_password",
+      "students_ser_safe_delete_student",
+      "students_ser_unexclude_student_from_course",
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_delete_academic_year",
+      "system_tools_ser_permanent_delete_trash_item",
+      "teachers_ser_delete_teacher",
+      "teachers_ser_reset_teacher_password",
+      "teachers_ser_safe_delete_teacher"
+    ],
+    "sensitive_linked_count": 22,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": "faculty",
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "academic_structure_departments_create_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_departments_delete_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_departments_update_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_activate_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_archive_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_close_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_create_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_create_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_delete_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_delete_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_restore_semester_from_archive": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_update_department": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_update_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_all_courses": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_matching_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_clone_course_section": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_diagnose_enrollment": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_restore_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_safe_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_update_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_approve_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_clone_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_confirm_study_plan_topics": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_get_study_plan_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_reject_pending_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_unapprove_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_update_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_upload_study_plan_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_copy_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_move_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_enroll_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_get_courses_of_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_unenroll_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_change_lecture_room": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures_advanced": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_reschedule_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_activate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_activate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_change_level": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_deactivate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_set_gender": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_create_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_deactivate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_exclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_courses_admin": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_reset_student_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_restore_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_safe_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_sync_students_enrollments": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_unexclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_update_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_add_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_delete_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_update_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_activate_teacher_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_create_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_deactivate_teacher_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_delete_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_export_selected_teachers": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_export_selected_teachers_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_get_teacher_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_reset_teacher_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_restore_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_safe_delete_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_teachers_bulk_action": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_update_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-11T14:32:49.033000",
+    "role_definition_updated_at": "2026-02-13T18:53:52.654000",
+    "usage_note": "مستخدَم حاليًا من 1 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "approve_attendance_changes",
+      "dashboard_alerts",
+      "dashboard_attendance",
+      "dashboard_export",
+      "dashboard_finance",
+      "dashboard_rooms",
+      "dashboard_students",
+      "dashboard_teachers",
+      "export_reports",
+      "import_data",
+      "issue_letters",
+      "manage_courses",
+      "manage_departments",
+      "manage_enrollments",
+      "manage_lectures",
+      "manage_student_excuses",
+      "manage_students",
+      "manage_teachers",
+      "manage_teaching_load",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_lesson_completion",
+      "report_student",
+      "report_teacher_workload",
+      "report_warnings",
+      "view_attendance",
+      "view_courses",
+      "view_lectures",
+      "view_reports"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698c93119a944c07ac7f80c3",
+    "advanced_role_key": "legacy_698c93119a944c07ac7f80c3",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.513000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.551000",
+    "excess_flags": [
+      {
+        "key": "courses_courses_create_course",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "إضافة — courses",
+        "operation_type": "add",
+        "sensitivity": "medium",
+        "risk": "متوسطة",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "department"
+      },
+      {
+        "key": "courses_courses_delete_course",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "حذف — courses",
+        "operation_type": "delete",
+        "sensitivity": "critical",
+        "risk": "عالية جدًا",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "department"
+      }
+    ],
+    "excess_flags_count": 2,
+    "legacy_permission_keys_count": 28,
+    "legacy_role_id": "698c93119a944c07ac7f80c3",
+    "legacy_role_name": "رئيس قسم",
+    "legacy_role_system_key": "department_head",
+    "linked_users": [
+      {
+        "id": "698f79d75c5620a4449eeb89",
+        "username": "Saeed",
+        "full_name": "Seaaad"
+      },
+      {
+        "id": "6ac44fa8610c7fff6425eda9",
+        "username": "TEST_remove_dept_1791250343",
+        "full_name": "Test Remove Dept 1791250343"
+      },
+      {
+        "id": "6ac4565b610c7fff6425f23d",
+        "username": "TEST_remove_dept_1791252058",
+        "full_name": "Test Remove Dept 1791252058"
+      },
+      {
+        "id": "6ae354e6e00a3aca74eaac96",
+        "username": "TEST_remove_dept_1793283302",
+        "full_name": "Test Remove Dept 1793283302"
+      },
+      {
+        "id": "6ae35569e00a3aca74eab0d7",
+        "username": "TEST_remove_dept_1793283432",
+        "full_name": "Test Remove Dept 1793283432"
+      },
+      {
+        "id": "6ae35772e00a3aca74eab782",
+        "username": "TEST_remove_dept_1793283954",
+        "full_name": "Test Remove Dept 1793283954"
+      }
+    ],
+    "linked_users_count": 6,
+    "missing_coverage": [
+      "dashboard_alerts",
+      "dashboard_attendance",
+      "dashboard_export",
+      "dashboard_finance",
+      "dashboard_rooms",
+      "dashboard_students",
+      "dashboard_teachers",
+      "issue_letters",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_lesson_completion",
+      "report_student",
+      "report_teacher_workload",
+      "report_warnings",
+      "view_courses"
+    ],
+    "missing_coverage_count": 17,
+    "notes": [],
+    "permission_keys_count": 107,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "academic_structure_ser_delete_semester",
+      "courses_courses_delete_course",
+      "courses_ser_delete_course",
+      "courses_ser_safe_delete_course",
+      "curriculum_study_plans_approve_study_plan",
+      "curriculum_study_plans_reject_pending_study_plan",
+      "curriculum_study_plans_unapprove_study_plan",
+      "enrollments_ser_unenroll_student",
+      "schedule_ser_delete_lecture",
+      "schedule_ser_delete_schedule",
+      "students_ser_delete_student",
+      "students_ser_reset_student_password",
+      "students_ser_safe_delete_student",
+      "students_ser_unexclude_student_from_course",
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_delete_academic_year",
+      "system_tools_ser_permanent_delete_trash_item",
+      "teachers_ser_delete_teacher",
+      "teachers_ser_reset_teacher_password",
+      "teachers_ser_safe_delete_teacher"
+    ],
+    "sensitive_linked_count": 20,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": "department",
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "academic_structure_ser_activate_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_archive_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_close_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_create_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_delete_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_restore_semester_from_archive": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_update_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "attendance_ser_bulk_update_attendance_status": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "attendance_ser_record_attendance_session": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "attendance_ser_update_attendance_status": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_all_courses": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_matching_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_clone_course_section": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_diagnose_enrollment": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_restore_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_safe_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_update_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_approve_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_clone_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_confirm_study_plan_topics": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_get_study_plan_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_reject_pending_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_unapprove_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_update_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_upload_study_plan_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_copy_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_move_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_enroll_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_get_courses_of_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_unenroll_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_change_lecture_room": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures_advanced": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_reschedule_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_activate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_activate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_change_level": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_deactivate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_set_gender": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_create_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_deactivate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_exclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_courses_admin": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_reset_student_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_restore_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_safe_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_sync_students_enrollments": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_unexclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_update_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_add_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_delete_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_update_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_activate_teacher_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_create_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_deactivate_teacher_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_delete_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_export_selected_teachers": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_export_selected_teachers_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_get_teacher_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_reset_teacher_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_restore_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_safe_delete_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_teachers_bulk_action": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_update_teacher": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-11T14:32:49.033000",
+    "role_definition_updated_at": null,
+    "usage_note": "مستخدَم حاليًا من 6 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "dashboard_alerts",
+      "dashboard_attendance",
+      "dashboard_export",
+      "dashboard_finance",
+      "dashboard_rooms",
+      "dashboard_students",
+      "dashboard_teachers",
+      "export_reports",
+      "import_data",
+      "issue_letters",
+      "manage_attendance",
+      "manage_courses",
+      "manage_enrollments",
+      "manage_lectures",
+      "manage_students",
+      "manage_teachers",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_course",
+      "report_daily",
+      "report_lesson_completion",
+      "report_student",
+      "report_teacher_workload",
+      "report_warnings",
+      "view_attendance",
+      "view_courses",
+      "view_lectures",
+      "view_reports"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698c93119a944c07ac7f80c4",
+    "advanced_role_key": "legacy_698c93119a944c07ac7f80c4",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.515000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.553000",
+    "excess_flags": [
+      {
+        "key": "courses_courses_create_course",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "إضافة — courses",
+        "operation_type": "add",
+        "sensitivity": "medium",
+        "risk": "متوسطة",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "faculty"
+      },
+      {
+        "key": "courses_courses_delete_course",
+        "reason": "مكتشف أنه حصري للأدمن في الكود القديم (admin_only_detected)",
+        "label_ar": "حذف — courses",
+        "operation_type": "delete",
+        "sensitivity": "critical",
+        "risk": "عالية جدًا",
+        "recommendation": "يوصى بمراجعة الحاجة الفعلية لهذه الصلاحية ضمن مسؤوليات الدور، مع تضييق نطاقها (بدل سحبها بالكامل) إن تبيّن أنها تتجاوز صلاحيات الدور القديم المرجعي.",
+        "role_current_scope": "faculty"
+      }
+    ],
+    "excess_flags_count": 2,
+    "legacy_permission_keys_count": 15,
+    "legacy_role_id": "698c93119a944c07ac7f80c4",
+    "legacy_role_name": "مدير التسجيل",
+    "legacy_role_system_key": "registration_manager",
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "issue_letters",
+      "manage_student_excuses",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_daily",
+      "report_student",
+      "report_warnings",
+      "view_courses"
+    ],
+    "missing_coverage_count": 8,
+    "notes": [],
+    "permission_keys_count": 92,
+    "reviewed_at": "2026-10-29T21:56:20.176000",
+    "reviewed_by": "admin",
+    "sensitive_linked": [
+      "academic_structure_ser_delete_semester",
+      "courses_courses_delete_course",
+      "courses_ser_delete_course",
+      "courses_ser_safe_delete_course",
+      "curriculum_study_plans_approve_study_plan",
+      "curriculum_study_plans_reject_pending_study_plan",
+      "curriculum_study_plans_unapprove_study_plan",
+      "enrollments_ser_unenroll_student",
+      "schedule_ser_delete_lecture",
+      "schedule_ser_delete_schedule",
+      "students_ser_delete_student",
+      "students_ser_reset_student_password",
+      "students_ser_safe_delete_student",
+      "students_ser_unexclude_student_from_course",
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_delete_academic_year",
+      "system_tools_ser_permanent_delete_trash_item"
+    ],
+    "sensitive_linked_count": 17,
+    "status": "not_reviewed",
+    "suggested_category": "student_affairs",
+    "suggested_scope": "faculty",
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "academic_structure_ser_activate_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_archive_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_close_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_create_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_delete_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_restore_semester_from_archive": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_update_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_courses_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_all_courses": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_matching_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_clone_course_section": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_create_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_diagnose_enrollment": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_restore_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_safe_delete_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_update_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_approve_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_clone_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_confirm_study_plan_topics": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_get_study_plan_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_reject_pending_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_unapprove_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_update_study_plan": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "curriculum_study_plans_upload_study_plan_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_copy_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_move_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_enroll_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_get_courses_of_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_unenroll_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_change_lecture_room": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures_advanced": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_reschedule_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_activate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_activate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_change_level": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_deactivate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_set_gender": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_create_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_deactivate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_exclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_courses_admin": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_reset_student_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_restore_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_safe_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_sync_students_enrollments": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_unexclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_update_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_add_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_delete_academic_year": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_update_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-11T14:32:49.033000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "export_reports",
+      "import_data",
+      "issue_letters",
+      "manage_courses",
+      "manage_enrollments",
+      "manage_student_excuses",
+      "manage_students",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_daily",
+      "report_student",
+      "report_warnings",
+      "view_attendance",
+      "view_courses",
+      "view_reports"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_698c93119a944c07ac7f80c5",
+    "advanced_role_key": "legacy_698c93119a944c07ac7f80c5",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.517000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.554000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 13,
+    "legacy_role_id": "698c93119a944c07ac7f80c5",
+    "legacy_role_name": "موظف تسجيل",
+    "legacy_role_system_key": "registrar",
+    "linked_users": [
+      {
+        "id": "6a37f399fe679f3eb37a0fe9",
+        "username": "test_registrar",
+        "full_name": "مسجل تجريبي"
+      }
+    ],
+    "linked_users_count": 1,
+    "missing_coverage": [
+      "issue_letters",
+      "manage_student_excuses",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_student",
+      "report_warnings",
+      "view_courses"
+    ],
+    "missing_coverage_count": 7,
+    "notes": [],
+    "permission_keys_count": 51,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "enrollments_ser_unenroll_student",
+      "students_ser_delete_student",
+      "students_ser_reset_student_password",
+      "students_ser_safe_delete_student",
+      "students_ser_unexclude_student_from_course",
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_permanent_delete_trash_item"
+    ],
+    "sensitive_linked_count": 7,
+    "status": "not_reviewed",
+    "suggested_category": "student_affairs",
+    "suggested_scope": "faculty",
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "courses_ser_auto_enroll_all_courses": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_matching_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_copy_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_move_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_enroll_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_get_courses_of_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_unenroll_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_activate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_activate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_change_level": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_deactivate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_set_gender": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_create_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_deactivate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_exclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_courses_admin": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_reset_student_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_restore_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_safe_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_sync_students_enrollments": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_unexclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_update_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-02-11T14:32:49.033000",
+    "role_definition_updated_at": null,
+    "usage_note": "مستخدَم حاليًا من 1 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "export_reports",
+      "import_data",
+      "issue_letters",
+      "manage_enrollments",
+      "manage_student_excuses",
+      "manage_students",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_student",
+      "report_warnings",
+      "view_attendance",
+      "view_courses",
+      "view_reports"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_69b8990004a7ed3e031cfe00",
+    "advanced_role_key": "legacy_69b8990004a7ed3e031cfe00",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.519000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.556000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 1,
+    "legacy_role_id": "69b8990004a7ed3e031cfe00",
+    "legacy_role_name": "تجربة مسجل 1",
+    "legacy_role_system_key": null,
+    "linked_users": [
+      {
+        "id": "69b8990104a7ed3e031cfe01",
+        "username": "333333",
+        "full_name": "مستخدم اختبار"
+      }
+    ],
+    "linked_users_count": 1,
+    "missing_coverage": [
+      "view_courses"
+    ],
+    "missing_coverage_count": 1,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "mixed",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-03-16T23:57:52.685000",
+    "role_definition_updated_at": null,
+    "usage_note": "مستخدَم حاليًا من 1 مستخدم(ين)",
+    "usage_status": "active_in_use",
+    "legacy_permission_keys": [
+      "view_courses"
+    ],
+    "has_zero_mapped_permissions": true
+  },
+  {
+    "_id": "legacy_6ab443a1724aacd57bcc03ec",
+    "advanced_role_key": "legacy_6ab443a1724aacd57bcc03ec",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.521000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.557000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 12,
+    "legacy_role_id": "6ab443a1724aacd57bcc03ec",
+    "legacy_role_name": "مدير شؤون الموظفين",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "dashboard_alerts",
+      "dashboard_hr",
+      "hr_manage_appraisals",
+      "hr_manage_attendance",
+      "hr_manage_correspondence",
+      "hr_manage_leave_settings",
+      "hr_manage_leaves",
+      "hr_manage_org",
+      "hr_manage_tasks",
+      "hr_manage_work_settings"
+    ],
+    "missing_coverage_count": 10,
+    "notes": [],
+    "permission_keys_count": 2,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "cards_hr_card_print_get_back_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "hr_attendance_hr_shifts_set_employee_shifts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-09-23T21:24:49.552000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "dashboard_alerts",
+      "dashboard_hr",
+      "hr_manage_appraisals",
+      "hr_manage_attendance",
+      "hr_manage_correspondence",
+      "hr_manage_employees",
+      "hr_manage_leave_settings",
+      "hr_manage_leaves",
+      "hr_manage_org",
+      "hr_manage_tasks",
+      "hr_manage_work_settings",
+      "hr_view_employees"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6ab443a1724aacd57bcc03ed",
+    "advanced_role_key": "legacy_6ab443a1724aacd57bcc03ed",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.523000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.559000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 4,
+    "legacy_role_id": "6ab443a1724aacd57bcc03ed",
+    "legacy_role_name": "أخصائي شؤون الموظفين",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "hr_manage_attendance",
+      "hr_manage_correspondence"
+    ],
+    "missing_coverage_count": 2,
+    "notes": [],
+    "permission_keys_count": 2,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "cards_hr_card_print_get_back_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "hr_attendance_hr_shifts_set_employee_shifts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-09-23T21:24:49.553000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "hr_manage_attendance",
+      "hr_manage_correspondence",
+      "hr_manage_employees",
+      "hr_view_employees"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6ab443a1724aacd57bcc03ee",
+    "advanced_role_key": "legacy_6ab443a1724aacd57bcc03ee",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.525000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.560000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 2,
+    "legacy_role_id": "6ab443a1724aacd57bcc03ee",
+    "legacy_role_name": "مسؤول الحضور والانصراف",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "hr_manage_attendance"
+    ],
+    "missing_coverage_count": 1,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-09-23T21:24:49.554000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "hr_manage_attendance",
+      "hr_view_employees"
+    ],
+    "has_zero_mapped_permissions": true
+  },
+  {
+    "_id": "legacy_6ab443a1724aacd57bcc03ef",
+    "advanced_role_key": "legacy_6ab443a1724aacd57bcc03ef",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.526000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.562000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 2,
+    "legacy_role_id": "6ab443a1724aacd57bcc03ef",
+    "legacy_role_name": "مسؤول المراسلات (السكرتارية)",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "hr_manage_correspondence"
+    ],
+    "missing_coverage_count": 1,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-09-23T21:24:49.555000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "hr_manage_correspondence",
+      "hr_view_employees"
+    ],
+    "has_zero_mapped_permissions": true
+  },
+  {
+    "_id": "legacy_6ab443a1724aacd57bcc03f0",
+    "advanced_role_key": "legacy_6ab443a1724aacd57bcc03f0",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.528000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.563000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 3,
+    "legacy_role_id": "6ab443a1724aacd57bcc03f0",
+    "legacy_role_name": "مراقب شؤون الموظفين (اطّلاع فقط)",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "dashboard_alerts",
+      "dashboard_hr"
+    ],
+    "missing_coverage_count": 2,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-09-23T21:24:49.555000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "dashboard_alerts",
+      "dashboard_hr",
+      "hr_view_employees"
+    ],
+    "has_zero_mapped_permissions": true
+  },
+  {
+    "_id": "legacy_6aca4ac467c2a4b79df54036",
+    "advanced_role_key": "legacy_6aca4ac467c2a4b79df54036",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.530000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.564000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 12,
+    "legacy_role_id": "6aca4ac467c2a4b79df54036",
+    "legacy_role_name": "مسؤول القبول والتسجيل",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "issue_letters",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_student",
+      "report_warnings",
+      "view_courses"
+    ],
+    "missing_coverage_count": 6,
+    "notes": [],
+    "permission_keys_count": 46,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "enrollments_ser_unenroll_student",
+      "students_ser_delete_student",
+      "students_ser_reset_student_password",
+      "students_ser_safe_delete_student",
+      "students_ser_unexclude_student_from_course",
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_permanent_delete_trash_item"
+    ],
+    "sensitive_linked_count": 7,
+    "status": "not_reviewed",
+    "suggested_category": "student_affairs",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "courses_ser_auto_enroll_all_courses": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_auto_enroll_matching_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_copy_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_bulk_move_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_enroll_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_get_courses_of_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "enrollments_ser_unenroll_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_activate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_activate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_change_level": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_deactivate_students": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_bulk_set_gender": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_create_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_deactivate_student_account": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_exclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_backup_info": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_courses_admin": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_student_notifications": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_get_students_unread_notifications_counts": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_reset_student_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_restore_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_safe_delete_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_sync_students_enrollments": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_unexclude_student_from_course": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "students_ser_update_student": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-10T14:25:08.127000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "export_reports",
+      "import_data",
+      "issue_letters",
+      "manage_enrollments",
+      "manage_students",
+      "report_absent_students",
+      "report_attendance_overview",
+      "report_student",
+      "report_warnings",
+      "view_attendance",
+      "view_courses",
+      "view_lectures"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6aca4ac467c2a4b79df54037",
+    "advanced_role_key": "legacy_6aca4ac467c2a4b79df54037",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.533000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.566000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 11,
+    "legacy_role_id": "6aca4ac467c2a4b79df54037",
+    "legacy_role_name": "مسؤول الجداول والمحاضرات",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "manage_calendar",
+      "manage_rooms",
+      "shift_day",
+      "view_courses",
+      "view_teachers",
+      "view_teaching_load"
+    ],
+    "missing_coverage_count": 6,
+    "notes": [],
+    "permission_keys_count": 23,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "academic_structure_ser_delete_semester",
+      "schedule_ser_delete_lecture",
+      "schedule_ser_delete_schedule"
+    ],
+    "sensitive_linked_count": 3,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "academic_structure_ser_activate_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_archive_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_close_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_create_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_delete_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_restore_semester_from_archive": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "academic_structure_ser_update_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_clone_course_section": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "courses_ser_get_course_lecture_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_change_lecture_room": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_create_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_delete_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_generate_semester_lectures_advanced": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_month_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_get_today_lectures": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_reschedule_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_lecture": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "schedule_ser_update_schedule": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-10T14:25:08.128000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "courses_clone_section",
+      "generate_lectures",
+      "manage_calendar",
+      "manage_lectures",
+      "manage_rooms",
+      "manage_schedule",
+      "manage_semesters",
+      "shift_day",
+      "view_courses",
+      "view_teachers",
+      "view_teaching_load"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6aca4ac467c2a4b79df54038",
+    "advanced_role_key": "legacy_6aca4ac467c2a4b79df54038",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.535000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.567000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 7,
+    "legacy_role_id": "6aca4ac467c2a4b79df54038",
+    "legacy_role_name": "مسؤول الاستيراد والبيانات",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "view_courses",
+      "view_students",
+      "view_teachers"
+    ],
+    "missing_coverage_count": 3,
+    "notes": [],
+    "permission_keys_count": 15,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "technical",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "enrollments_ser_import_enrollments_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_courses_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_lectures_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_get_teachers_template": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_courses_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_lectures_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "general_tools_ser_import_teachers_from_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_export_selected_teachers": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teachers_ser_export_selected_teachers_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-10T14:25:08.130000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "export_reports",
+      "export_students",
+      "import_data",
+      "teachers_export",
+      "view_courses",
+      "view_students",
+      "view_teachers"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6aca4ac467c2a4b79df54039",
+    "advanced_role_key": "legacy_6aca4ac467c2a4b79df54039",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.537000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.569000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 8,
+    "legacy_role_id": "6aca4ac467c2a4b79df54039",
+    "legacy_role_name": "مدقق السجلات (اطّلاع)",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "view_courses",
+      "view_students",
+      "view_teachers"
+    ],
+    "missing_coverage_count": 3,
+    "notes": [],
+    "permission_keys_count": 20,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_attendance_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_summary_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_attendance_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_get_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_diagnose_roles": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_preview_backfill_sections": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_preview_ghost_completions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_preview_orphan_attendance": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-10T14:25:08.131000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "export_reports",
+      "manage_trash",
+      "system_diagnostics",
+      "view_activity_logs",
+      "view_courses",
+      "view_reports",
+      "view_students",
+      "view_teachers"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6aca4ac467c2a4b79df5403a",
+    "advanced_role_key": "legacy_6aca4ac467c2a4b79df5403a",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.540000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.570000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 9,
+    "legacy_role_id": "6aca4ac467c2a4b79df5403a",
+    "legacy_role_name": "مهندس نظام",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "lectures_purge"
+    ],
+    "missing_coverage_count": 1,
+    "notes": [],
+    "permission_keys_count": 36,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [
+      "system_tools_ser_clear_all_trash",
+      "system_tools_ser_delete_activity_logs",
+      "system_tools_ser_permanent_delete_trash_item",
+      "system_users_ser_delete_user",
+      "system_users_ser_delete_user_permission",
+      "system_users_ser_reset_user_password"
+    ],
+    "sensitive_linked_count": 6,
+    "status": "not_reviewed",
+    "suggested_category": "technical",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "notifications_ser_create_manual_notification": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_admin_find_user_by_username": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_admin_fix_user": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_backfill_sections": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_cleanup_duplicate_roles": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_cleanup_duplicate_roles_now": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_cleanup_ghost_completions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_cleanup_orphan_attendance": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_cleanup_orphan_enrollments": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_clear_all_trash": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_delete_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_diagnose_roles": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_fix_courses_without_semester": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_fix_custom_roles": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_fix_faculty_ids": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_fix_student_sections": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_activity_logs_stats": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_get_trash_items": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_permanent_delete_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_preview_backfill_sections": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_preview_ghost_completions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_preview_orphan_attendance": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_restore_trash_item": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_add_user_permission": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_create_user": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_delete_user": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_delete_user_permission": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_get_user_permissions_endpoint_v2": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_get_users": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_reset_user_password": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_reset_user_permissions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_toggle_user_active": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_update_all_user_permissions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_update_user": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_users_ser_update_user_custom_permissions": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-10T14:25:08.132000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "delete_activity_logs",
+      "lectures_purge",
+      "manage_trash",
+      "manage_user_permissions",
+      "manage_users",
+      "purge_trash",
+      "system_diagnostics",
+      "system_tools",
+      "view_activity_logs"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6aca4ac467c2a4b79df5403b",
+    "advanced_role_key": "legacy_6aca4ac467c2a4b79df5403b",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.541000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.571000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 5,
+    "legacy_role_id": "6aca4ac467c2a4b79df5403b",
+    "legacy_role_name": "مسؤول طباعة البطاقات",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "hr_approve_photos",
+      "view_students"
+    ],
+    "missing_coverage_count": 2,
+    "notes": [],
+    "permission_keys_count": 3,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "cards_hr_card_print_get_back_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "certificates_statements_set_verify_base": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "system_tools_ser_update_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-10T14:25:08.133000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "hr_approve_photos",
+      "hr_print_cards",
+      "hr_view_employees",
+      "manage_settings",
+      "view_students"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6aca4ac467c2a4b79df5403c",
+    "advanced_role_key": "legacy_6aca4ac467c2a4b79df5403c",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.543000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.573000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 4,
+    "legacy_role_id": "6aca4ac467c2a4b79df5403c",
+    "legacy_role_name": "مسؤول المراسلات",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "hr_manage_correspondence",
+      "issue_letters"
+    ],
+    "missing_coverage_count": 2,
+    "notes": [],
+    "permission_keys_count": 2,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "teaching_load_overtime_letter_get_templates": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "teaching_load_overtime_letter_put_templates": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-10T14:25:08.135000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "hr_manage_correspondence",
+      "hr_view_employees",
+      "issue_letters",
+      "manage_letter_settings"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6ae12b45b4d7a835c4c9b5fe",
+    "advanced_role_key": "legacy_6ae12b45b4d7a835c4c9b5fe",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.545000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.574000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 7,
+    "legacy_role_id": "6ae12b45b4d7a835c4c9b5fe",
+    "legacy_role_name": "المدير المالي",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "dashboard_alerts",
+      "dashboard_finance",
+      "issue_statements",
+      "manage_fee_receipts",
+      "report_student",
+      "view_fee_receipts"
+    ],
+    "missing_coverage_count": 6,
+    "notes": [],
+    "permission_keys_count": 6,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "financial",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "reports_ser_export_department_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_department_report_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_students_to_excel": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_pdf": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      },
+      "reports_ser_export_teacher_delays_report": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-27T22:52:53.428000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "dashboard_alerts",
+      "dashboard_finance",
+      "export_reports",
+      "issue_statements",
+      "manage_fee_receipts",
+      "report_student",
+      "view_fee_receipts"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6ae12b45b4d7a835c4c9b5ff",
+    "advanced_role_key": "legacy_6ae12b45b4d7a835c4c9b5ff",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.547000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.576000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 8,
+    "legacy_role_id": "6ae12b45b4d7a835c4c9b5ff",
+    "legacy_role_name": "مدير الخدمات",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "dashboard_alerts",
+      "dashboard_hr",
+      "hr_approve_photos",
+      "hr_manage_attendance",
+      "hr_manage_locations",
+      "manage_rooms"
+    ],
+    "missing_coverage_count": 6,
+    "notes": [],
+    "permission_keys_count": 1,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {
+      "cards_hr_card_print_get_back_settings": {
+        "decision": "pending",
+        "note": null,
+        "by_username": null,
+        "at": null
+      }
+    },
+    "role_definition_created_at": "2026-10-27T22:52:53.429000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "dashboard_alerts",
+      "dashboard_hr",
+      "hr_approve_photos",
+      "hr_manage_attendance",
+      "hr_manage_locations",
+      "hr_print_cards",
+      "hr_view_employees",
+      "manage_rooms"
+    ],
+    "has_zero_mapped_permissions": false
+  },
+  {
+    "_id": "legacy_6ae12b45b4d7a835c4c9b600",
+    "advanced_role_key": "legacy_6ae12b45b4d7a835c4c9b600",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.550000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.577000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 3,
+    "legacy_role_id": "6ae12b45b4d7a835c4c9b600",
+    "legacy_role_name": "سكرتير المدير",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [
+      "hr_manage_correspondence",
+      "issue_letters"
+    ],
+    "missing_coverage_count": 2,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-10-27T22:52:53.430000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [
+      "hr_manage_correspondence",
+      "hr_view_employees",
+      "issue_letters"
+    ],
+    "has_zero_mapped_permissions": true
+  },
+  {
+    "_id": "legacy_6ae12b45b4d7a835c4c9b601",
+    "advanced_role_key": "legacy_6ae12b45b4d7a835c4c9b601",
+    "approvals": [],
+    "approved": false,
+    "computed_at": "2026-10-29T21:56:28.551000",
+    "confirmed_category": null,
+    "confirmed_scope": null,
+    "created_at": "2026-10-29T21:29:03.578000",
+    "excess_flags": [],
+    "excess_flags_count": 0,
+    "legacy_permission_keys_count": 0,
+    "legacy_role_id": "6ae12b45b4d7a835c4c9b601",
+    "legacy_role_name": "الموظف العادي",
+    "legacy_role_system_key": null,
+    "linked_users": [],
+    "linked_users_count": 0,
+    "missing_coverage": [],
+    "missing_coverage_count": 0,
+    "notes": [],
+    "permission_keys_count": 0,
+    "reviewed_at": null,
+    "reviewed_by": null,
+    "sensitive_linked": [],
+    "sensitive_linked_count": 0,
+    "status": "not_reviewed",
+    "suggested_category": "administrative",
+    "suggested_scope": null,
+    "completion_percentage": 0,
+    "permission_decisions": {},
+    "role_definition_created_at": "2026-10-27T22:52:53.430000",
+    "role_definition_updated_at": null,
+    "usage_note": "لا يوجد مستخدم مرتبط حاليًا بهذا الدور. لا تتوفر بيانات استخدام تاريخي موثوقة (لا يوجد سجل بتغييرات تكليف الأدوار عبر الزمن) — القرار بالإبقاء أو الدمج أو الإلغاء متروك لمدير النظام.",
+    "usage_status": "unused_pending_review",
+    "legacy_permission_keys": [],
+    "has_zero_mapped_permissions": true
+  }
+]

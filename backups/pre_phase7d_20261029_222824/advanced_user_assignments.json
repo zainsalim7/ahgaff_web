@@ -1,0 +1,2749 @@
+[
+  {
+    "_id": "6ae35378cf3499c33b0d521c",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:08:56.535000",
+    "ended_at": "2026-10-29T14:08:58.275000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:08:56.535000"
+  },
+  {
+    "_id": "6ae35378cf3499c33b0d521f",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:08:56.664000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:08:56.664000"
+  },
+  {
+    "_id": "6ae353c00b1c7fcb7d0a7703",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:08.782000",
+    "ended_at": "2026-10-29T14:10:10.262000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:08.782000"
+  },
+  {
+    "_id": "6ae353c00b1c7fcb7d0a7706",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:08.946000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:08.946000"
+  },
+  {
+    "_id": "6ae353d774efd4ac7dd7b80e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:31.690000",
+    "ended_at": "2026-10-29T14:10:33.488000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:31.690000"
+  },
+  {
+    "_id": "6ae353d774efd4ac7dd7b811",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:31.929000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:31.929000"
+  },
+  {
+    "_id": "6ae353e7e00a3aca74eaa502",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:47.993000",
+    "ended_at": "2026-10-29T14:10:49.421000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:47.993000"
+  },
+  {
+    "_id": "6ae353e8e00a3aca74eaa505",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:48.113000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:48.113000"
+  },
+  {
+    "_id": "6ae353eee00a3aca74eaa520",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:54.924000",
+    "ended_at": "2026-10-29T14:10:56.499000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:54.924000"
+  },
+  {
+    "_id": "6ae353efe00a3aca74eaa523",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:10:55.047000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:10:55.047000"
+  },
+  {
+    "_id": "6ae353ffe00a3aca74eaa541",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:11:11.480000",
+    "ended_at": "2026-10-29T14:11:13.129000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:11:11.480000"
+  },
+  {
+    "_id": "6ae353ffe00a3aca74eaa544",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:11:11.634000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:11:11.634000"
+  },
+  {
+    "_id": "6ae3547ee00a3aca74eaa8e5",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:13:18.097000",
+    "ended_at": "2026-10-29T14:13:19.752000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:13:18.097000"
+  },
+  {
+    "_id": "6ae3547ee00a3aca74eaa8e8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:13:18.291000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:13:18.291000"
+  },
+  {
+    "_id": "6ae354ffe00a3aca74eaad26",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:15:27.621000",
+    "ended_at": "2026-10-29T14:15:28.878000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:15:27.621000"
+  },
+  {
+    "_id": "6ae354ffe00a3aca74eaad29",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:15:27.769000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:15:27.769000"
+  },
+  {
+    "_id": "6ae3570ee00a3aca74eab3d1",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:24:14.252000",
+    "ended_at": "2026-10-29T14:24:15.791000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:24:14.252000"
+  },
+  {
+    "_id": "6ae3570ee00a3aca74eab3d4",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T14:24:14.375000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T14:24:14.375000"
+  },
+  {
+    "_id": "6ae389e7a59ef3da4731c6df",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T18:01:11.477000",
+    "ended_at": "2026-10-29T18:01:12.762000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T18:01:11.477000"
+  },
+  {
+    "_id": "6ae389e7a59ef3da4731c6e2",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T18:01:11.620000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T18:01:11.620000"
+  },
+  {
+    "_id": "6ae397df85c6e517f53de8b8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:00:47.199000",
+    "ended_at": "2026-10-29T19:00:48.580000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:00:47.199000"
+  },
+  {
+    "_id": "6ae397df85c6e517f53de8bb",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:00:47.385000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:00:47.385000"
+  },
+  {
+    "_id": "6ae3982d85c6e517f53de991",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:02:05.405000",
+    "ended_at": "2026-10-29T19:02:06.636000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:02:05.405000"
+  },
+  {
+    "_id": "6ae3982d85c6e517f53de994",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:02:05.632000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:02:05.632000"
+  },
+  {
+    "_id": "6ae39d184f674957269b612d",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:23:04.157000",
+    "ended_at": "2026-10-29T19:23:05.112000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:23:04.157000"
+  },
+  {
+    "_id": "6ae39d184f674957269b6130",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:23:04.240000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:23:04.240000"
+  },
+  {
+    "_id": "6ae39e33a4128f3aae9730f6",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:27:47.403000",
+    "ended_at": "2026-10-29T19:27:48.321000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:27:47.403000"
+  },
+  {
+    "_id": "6ae39e33a4128f3aae9730f9",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:27:47.500000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:27:47.500000"
+  },
+  {
+    "_id": "6ae39e86a4128f3aae9731d1",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:29:10.536000",
+    "ended_at": "2026-10-29T19:29:11.534000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:29:10.536000"
+  },
+  {
+    "_id": "6ae39e86a4128f3aae9731d4",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T19:29:10.622000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T19:29:10.622000"
+  },
+  {
+    "_id": "6ae3a6af99a22a1f7be20a8b",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:03:59.274000",
+    "ended_at": "2026-10-29T20:04:00.287000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:03:59.274000"
+  },
+  {
+    "_id": "6ae3a6af99a22a1f7be20a8e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:03:59.392000",
+    "ended_at": "2026-10-29T20:05:09.589000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:03:59.392000"
+  },
+  {
+    "_id": "6ae3a6f909a54be1b66774df",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:05:13.303000",
+    "ended_at": "2026-10-29T20:05:14.324000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:05:13.303000"
+  },
+  {
+    "_id": "6ae3a6f909a54be1b66774e2",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:05:13.387000",
+    "ended_at": "2026-10-29T20:05:14.681000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:05:13.387000"
+  },
+  {
+    "_id": "6ae3a71d09a54be1b66775bc",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:05:49.198000",
+    "ended_at": "2026-10-29T20:05:50.135000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:05:49.198000"
+  },
+  {
+    "_id": "6ae3a71d09a54be1b66775bf",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:05:49.296000",
+    "ended_at": "2026-10-29T20:05:50.509000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:05:49.296000"
+  },
+  {
+    "_id": "6ae3a8c0f528dc53389cc59f",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:12:48.661000",
+    "ended_at": "2026-10-29T20:12:49.692000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:12:48.661000"
+  },
+  {
+    "_id": "6ae3a8c0f528dc53389cc5a2",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T20:12:48.781000",
+    "ended_at": "2026-10-29T20:12:50.091000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T20:12:48.781000"
+  },
+  {
+    "_id": "6ae3a8cbf528dc53389cc5b6",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3a8cbf528dc53389cc5b5",
+    "context_label_ar": "PILOT_عميد كلية الشريعة والقانون",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "active",
+    "started_at": "2026-10-29T20:12:59.442000",
+    "ended_at": null,
+    "created_by": "pilot_runner",
+    "created_at": "2026-10-29T20:12:59.442000"
+  },
+  {
+    "_id": "6ae3a8cbf528dc53389cc5b9",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3a8cbf528dc53389cc5b8",
+    "context_label_ar": "PILOT_رئيس قسم الدراسات الإسلامية",
+    "scope": {
+      "scope_type": "department",
+      "scope_ref_ids": [
+        "698e501d97fef774e66e93a9"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "active",
+    "started_at": "2026-10-29T20:12:59.496000",
+    "ended_at": null,
+    "created_by": "pilot_runner",
+    "created_at": "2026-10-29T20:12:59.496000"
+  },
+  {
+    "_id": "6ae3a8cbf528dc53389cc5bc",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3a8cbf528dc53389cc5bb",
+    "context_label_ar": "PILOT_عضو إداري — رئاسة الجامعة",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "active",
+    "started_at": "2026-10-29T20:12:59.511000",
+    "ended_at": null,
+    "created_by": "pilot_runner",
+    "created_at": "2026-10-29T20:12:59.511000"
+  },
+  {
+    "_id": "6ae3a8cbf528dc53389cc5bf",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3a8cbf528dc53389cc5be",
+    "context_label_ar": "PILOT_عضو لجنة جامعية",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "active",
+    "started_at": "2026-10-29T20:12:59.526000",
+    "ended_at": null,
+    "created_by": "pilot_runner",
+    "created_at": "2026-10-29T20:12:59.526000"
+  },
+  {
+    "_id": "6ae3a8cbf528dc53389cc5c5",
+    "user_id": "698f671431cfba92c49a550e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3a8cbf528dc53389cc5c4",
+    "context_label_ar": "PILOT_أستاذ مقرر دراسات حضرموت",
+    "scope": {
+      "scope_type": "course",
+      "scope_ref_ids": [
+        "698f0000d803b27aab0120af"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "active",
+    "started_at": "2026-10-29T20:12:59.641000",
+    "ended_at": null,
+    "created_by": "pilot_runner",
+    "created_at": "2026-10-29T20:12:59.641000"
+  },
+  {
+    "_id": "6ae3b7dcc4cec73d16f351b5",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:16.775000",
+    "ended_at": "2026-10-29T21:17:17.710000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:16.775000"
+  },
+  {
+    "_id": "6ae3b7dcc4cec73d16f351b8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:16.858000",
+    "ended_at": "2026-10-29T21:17:18.034000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:16.858000"
+  },
+  {
+    "_id": "6ae3b7e0c4cec73d16f351cb",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "TEST_isolation_salim",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:20.626000",
+    "ended_at": "2026-10-29T21:17:21.415000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:20.626000"
+  },
+  {
+    "_id": "6ae3b7e6c4cec73d16f351d9",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7e5c4cec73d16f351d6",
+    "context_label_ar": "TEST_scope_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:26.009000",
+    "ended_at": "2026-10-29T21:17:43.850000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:26.009000"
+  },
+  {
+    "_id": "6ae3b7e6c4cec73d16f351e1",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7e6c4cec73d16f351de",
+    "context_label_ar": "TEST_university_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:26.401000",
+    "ended_at": "2026-10-29T21:17:43.954000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:26.401000"
+  },
+  {
+    "_id": "6ae3b7e6c4cec73d16f351e8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7e6c4cec73d16f351e5",
+    "context_label_ar": "TEST_single_perm_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:26.669000",
+    "ended_at": "2026-10-29T21:17:44.053000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:26.669000"
+  },
+  {
+    "_id": "6ae3b7e7c4cec73d16f351f5",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7e6c4cec73d16f351ec",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:27.175000",
+    "ended_at": "2026-10-29T21:17:44.145000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:27.175000"
+  },
+  {
+    "_id": "6ae3b7e7c4cec73d16f351f8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3b7e6c4cec73d16f351ef",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:27.374000",
+    "ended_at": "2026-10-29T21:17:44.239000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:27.374000"
+  },
+  {
+    "_id": "6ae3b7e7c4cec73d16f351fb",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3b7e7c4cec73d16f351f2",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:27.455000",
+    "ended_at": "2026-10-29T21:17:44.332000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:27.455000"
+  },
+  {
+    "_id": "6ae3b7e8c4cec73d16f3520f",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7e8c4cec73d16f35209",
+    "context_label_ar": "TEST_end_assignment_x",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:28.782000",
+    "ended_at": "2026-10-29T21:17:44.458000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:28.782000"
+  },
+  {
+    "_id": "6ae3b7e8c4cec73d16f35212",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7e8c4cec73d16f3520c",
+    "context_label_ar": "TEST_end_assignment_y",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:28.872000",
+    "ended_at": "2026-10-29T21:17:44.548000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:28.872000"
+  },
+  {
+    "_id": "6ae3b7f1c4cec73d16f3522b",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7f1c4cec73d16f35228",
+    "context_label_ar": "TEST_impersonation_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:37.716000",
+    "ended_at": "2026-10-29T21:17:44.622000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:37.716000"
+  },
+  {
+    "_id": "6ae3b7f1c4cec73d16f35232",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7f1c4cec73d16f3522f",
+    "context_label_ar": "TEST_idor_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:37.986000",
+    "ended_at": "2026-10-29T21:17:44.718000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:37.986000"
+  },
+  {
+    "_id": "6ae3b7f4c4cec73d16f35240",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7f4c4cec73d16f3523d",
+    "context_label_ar": "TEST_scope_bypass_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:40.146000",
+    "ended_at": "2026-10-29T21:17:44.799000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:40.146000"
+  },
+  {
+    "_id": "6ae3b7f5c4cec73d16f35248",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7f5c4cec73d16f35245",
+    "context_label_ar": "TEST_compare_no_legacy_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:41.148000",
+    "ended_at": "2026-10-29T21:17:44.879000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:41.148000"
+  },
+  {
+    "_id": "6ae3b7f5c4cec73d16f35255",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3b7f5c4cec73d16f3524c",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:41.588000",
+    "ended_at": "2026-10-29T21:17:44.955000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:41.588000"
+  },
+  {
+    "_id": "6ae3b7f5c4cec73d16f35258",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3b7f5c4cec73d16f3524f",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:41.661000",
+    "ended_at": "2026-10-29T21:17:45.042000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:41.661000"
+  },
+  {
+    "_id": "6ae3b7f5c4cec73d16f3525b",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3b7f5c4cec73d16f35252",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:17:41.750000",
+    "ended_at": "2026-10-29T21:17:45.154000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:17:41.750000"
+  },
+  {
+    "_id": "6ae3bb9f7364712bf8ac141d",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:19.478000",
+    "ended_at": "2026-10-29T21:33:20.395000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:19.478000"
+  },
+  {
+    "_id": "6ae3bb9f7364712bf8ac1420",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:19.570000",
+    "ended_at": "2026-10-29T21:33:20.760000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:19.570000"
+  },
+  {
+    "_id": "6ae3bba37364712bf8ac1433",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "TEST_isolation_salim",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:23.436000",
+    "ended_at": "2026-10-29T21:33:24.167000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:23.436000"
+  },
+  {
+    "_id": "6ae3bba87364712bf8ac1441",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bba87364712bf8ac143e",
+    "context_label_ar": "TEST_scope_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:28.673000",
+    "ended_at": "2026-10-29T21:33:41.025000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:28.673000"
+  },
+  {
+    "_id": "6ae3bba97364712bf8ac1449",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bba87364712bf8ac1446",
+    "context_label_ar": "TEST_university_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:29.063000",
+    "ended_at": "2026-10-29T21:33:41.110000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:29.063000"
+  },
+  {
+    "_id": "6ae3bba97364712bf8ac1450",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bba97364712bf8ac144d",
+    "context_label_ar": "TEST_single_perm_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:29.317000",
+    "ended_at": "2026-10-29T21:33:41.202000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:29.317000"
+  },
+  {
+    "_id": "6ae3bba97364712bf8ac145d",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bba97364712bf8ac1454",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:29.727000",
+    "ended_at": "2026-10-29T21:33:41.288000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:29.727000"
+  },
+  {
+    "_id": "6ae3bba97364712bf8ac1460",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bba97364712bf8ac1457",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:29.805000",
+    "ended_at": "2026-10-29T21:33:41.375000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:29.805000"
+  },
+  {
+    "_id": "6ae3bba97364712bf8ac1463",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bba97364712bf8ac145a",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:29.897000",
+    "ended_at": "2026-10-29T21:33:41.444000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:29.897000"
+  },
+  {
+    "_id": "6ae3bbab7364712bf8ac1477",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bbaa7364712bf8ac1471",
+    "context_label_ar": "TEST_end_assignment_x",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:31.136000",
+    "ended_at": "2026-10-29T21:33:41.537000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:31.136000"
+  },
+  {
+    "_id": "6ae3bbab7364712bf8ac147a",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bbab7364712bf8ac1474",
+    "context_label_ar": "TEST_end_assignment_y",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:31.212000",
+    "ended_at": "2026-10-29T21:33:41.636000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:31.212000"
+  },
+  {
+    "_id": "6ae3bbac7364712bf8ac1493",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bbac7364712bf8ac1490",
+    "context_label_ar": "TEST_impersonation_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:32.684000",
+    "ended_at": "2026-10-29T21:33:41.747000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:32.684000"
+  },
+  {
+    "_id": "6ae3bbad7364712bf8ac149a",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bbac7364712bf8ac1497",
+    "context_label_ar": "TEST_idor_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:33.008000",
+    "ended_at": "2026-10-29T21:33:41.848000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:33.008000"
+  },
+  {
+    "_id": "6ae3bbb17364712bf8ac14a8",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bbb07364712bf8ac14a5",
+    "context_label_ar": "TEST_scope_bypass_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:37.338000",
+    "ended_at": "2026-10-29T21:33:41.940000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:37.338000"
+  },
+  {
+    "_id": "6ae3bbb27364712bf8ac14b0",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bbb27364712bf8ac14ad",
+    "context_label_ar": "TEST_compare_no_legacy_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:38.362000",
+    "ended_at": "2026-10-29T21:33:42.036000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:38.362000"
+  },
+  {
+    "_id": "6ae3bbb27364712bf8ac14bd",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bbb27364712bf8ac14b4",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:38.797000",
+    "ended_at": "2026-10-29T21:33:42.148000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:38.797000"
+  },
+  {
+    "_id": "6ae3bbb27364712bf8ac14c0",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bbb27364712bf8ac14b7",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:38.910000",
+    "ended_at": "2026-10-29T21:33:42.239000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:38.910000"
+  },
+  {
+    "_id": "6ae3bbb37364712bf8ac14c3",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bbb27364712bf8ac14ba",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:33:39.001000",
+    "ended_at": "2026-10-29T21:33:42.326000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:33:39.001000"
+  },
+  {
+    "_id": "6ae3bc00d9005c435332f35e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:34:56.145000",
+    "ended_at": "2026-10-29T21:34:56.990000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:34:56.145000"
+  },
+  {
+    "_id": "6ae3bc00d9005c435332f361",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:34:56.216000",
+    "ended_at": "2026-10-29T21:34:57.314000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:34:56.216000"
+  },
+  {
+    "_id": "6ae3bc03d9005c435332f374",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "TEST_isolation_salim",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:34:59.660000",
+    "ended_at": "2026-10-29T21:35:00.416000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:34:59.660000"
+  },
+  {
+    "_id": "6ae3bc08d9005c435332f382",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc08d9005c435332f37f",
+    "context_label_ar": "TEST_scope_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:04.985000",
+    "ended_at": "2026-10-29T21:35:15.985000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:04.985000"
+  },
+  {
+    "_id": "6ae3bc09d9005c435332f38a",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc09d9005c435332f387",
+    "context_label_ar": "TEST_university_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:05.355000",
+    "ended_at": "2026-10-29T21:35:16.095000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:05.355000"
+  },
+  {
+    "_id": "6ae3bc09d9005c435332f391",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc09d9005c435332f38e",
+    "context_label_ar": "TEST_single_perm_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:05.725000",
+    "ended_at": "2026-10-29T21:35:16.191000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:05.725000"
+  },
+  {
+    "_id": "6ae3bc0ad9005c435332f39e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc09d9005c435332f395",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:06.222000",
+    "ended_at": "2026-10-29T21:35:16.286000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:06.222000"
+  },
+  {
+    "_id": "6ae3bc0ad9005c435332f3a1",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bc09d9005c435332f398",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:06.345000",
+    "ended_at": "2026-10-29T21:35:16.361000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:06.345000"
+  },
+  {
+    "_id": "6ae3bc0ad9005c435332f3a4",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bc0ad9005c435332f39b",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:06.446000",
+    "ended_at": "2026-10-29T21:35:16.449000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:06.446000"
+  },
+  {
+    "_id": "6ae3bc0bd9005c435332f3b8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc0bd9005c435332f3b2",
+    "context_label_ar": "TEST_end_assignment_x",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:07.695000",
+    "ended_at": "2026-10-29T21:35:16.553000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:07.695000"
+  },
+  {
+    "_id": "6ae3bc0bd9005c435332f3bb",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc0bd9005c435332f3b5",
+    "context_label_ar": "TEST_end_assignment_y",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:07.777000",
+    "ended_at": "2026-10-29T21:35:16.634000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:07.777000"
+  },
+  {
+    "_id": "6ae3bc0dd9005c435332f3d4",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc0dd9005c435332f3d1",
+    "context_label_ar": "TEST_impersonation_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:09.600000",
+    "ended_at": "2026-10-29T21:35:16.717000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:09.600000"
+  },
+  {
+    "_id": "6ae3bc0dd9005c435332f3db",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc0dd9005c435332f3d8",
+    "context_label_ar": "TEST_idor_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:09.882000",
+    "ended_at": "2026-10-29T21:35:16.801000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:09.882000"
+  },
+  {
+    "_id": "6ae3bc10d9005c435332f3e9",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc0fd9005c435332f3e6",
+    "context_label_ar": "TEST_scope_bypass_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:12.058000",
+    "ended_at": "2026-10-29T21:35:16.882000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:12.058000"
+  },
+  {
+    "_id": "6ae3bc11d9005c435332f3f1",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc11d9005c435332f3ee",
+    "context_label_ar": "TEST_compare_no_legacy_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:13.096000",
+    "ended_at": "2026-10-29T21:35:16.972000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:13.096000"
+  },
+  {
+    "_id": "6ae3bc11d9005c435332f3fe",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bc11d9005c435332f3f5",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:13.653000",
+    "ended_at": "2026-10-29T21:35:17.060000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:13.653000"
+  },
+  {
+    "_id": "6ae3bc11d9005c435332f401",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bc11d9005c435332f3f8",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:13.748000",
+    "ended_at": "2026-10-29T21:35:17.127000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:13.748000"
+  },
+  {
+    "_id": "6ae3bc11d9005c435332f404",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bc11d9005c435332f3fb",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:35:13.840000",
+    "ended_at": "2026-10-29T21:35:17.223000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:35:13.840000"
+  },
+  {
+    "_id": "6ae3bf4d81553f1fb0c9450b",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:01.211000",
+    "ended_at": "2026-10-29T21:49:02.274000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:01.211000"
+  },
+  {
+    "_id": "6ae3bf4d81553f1fb0c9450e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:01.314000",
+    "ended_at": "2026-10-29T21:49:02.715000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:01.314000"
+  },
+  {
+    "_id": "6ae3bf5181553f1fb0c94521",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "TEST_isolation_salim",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:05.485000",
+    "ended_at": "2026-10-29T21:49:06.331000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:05.485000"
+  },
+  {
+    "_id": "6ae3bf5681553f1fb0c9452f",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5681553f1fb0c9452c",
+    "context_label_ar": "TEST_scope_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:10.847000",
+    "ended_at": "2026-10-29T21:49:22.594000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:10.847000"
+  },
+  {
+    "_id": "6ae3bf5781553f1fb0c94537",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5781553f1fb0c94534",
+    "context_label_ar": "TEST_university_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:11.227000",
+    "ended_at": "2026-10-29T21:49:22.686000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:11.227000"
+  },
+  {
+    "_id": "6ae3bf5781553f1fb0c9453e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5781553f1fb0c9453b",
+    "context_label_ar": "TEST_single_perm_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:11.654000",
+    "ended_at": "2026-10-29T21:49:22.808000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:11.654000"
+  },
+  {
+    "_id": "6ae3bf5881553f1fb0c9454b",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5781553f1fb0c94542",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:12.165000",
+    "ended_at": "2026-10-29T21:49:22.968000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:12.165000"
+  },
+  {
+    "_id": "6ae3bf5881553f1fb0c9454e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bf5781553f1fb0c94545",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:12.276000",
+    "ended_at": "2026-10-29T21:49:23.147000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:12.276000"
+  },
+  {
+    "_id": "6ae3bf5881553f1fb0c94551",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bf5881553f1fb0c94548",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:12.381000",
+    "ended_at": "2026-10-29T21:49:23.245000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:12.381000"
+  },
+  {
+    "_id": "6ae3bf5981553f1fb0c94565",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5981553f1fb0c9455f",
+    "context_label_ar": "TEST_end_assignment_x",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:13.696000",
+    "ended_at": "2026-10-29T21:49:23.367000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:13.696000"
+  },
+  {
+    "_id": "6ae3bf5981553f1fb0c94568",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5981553f1fb0c94562",
+    "context_label_ar": "TEST_end_assignment_y",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:13.848000",
+    "ended_at": "2026-10-29T21:49:23.495000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:13.848000"
+  },
+  {
+    "_id": "6ae3bf5b81553f1fb0c94581",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5b81553f1fb0c9457e",
+    "context_label_ar": "TEST_impersonation_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:15.667000",
+    "ended_at": "2026-10-29T21:49:23.577000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:15.667000"
+  },
+  {
+    "_id": "6ae3bf5b81553f1fb0c94588",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5b81553f1fb0c94585",
+    "context_label_ar": "TEST_idor_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:15.933000",
+    "ended_at": "2026-10-29T21:49:23.739000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:15.933000"
+  },
+  {
+    "_id": "6ae3bf5e81553f1fb0c94596",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5e81553f1fb0c94593",
+    "context_label_ar": "TEST_scope_bypass_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:18.333000",
+    "ended_at": "2026-10-29T21:49:23.824000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:18.333000"
+  },
+  {
+    "_id": "6ae3bf5f81553f1fb0c9459e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5f81553f1fb0c9459b",
+    "context_label_ar": "TEST_compare_no_legacy_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:19.581000",
+    "ended_at": "2026-10-29T21:49:23.901000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:19.581000"
+  },
+  {
+    "_id": "6ae3bf6081553f1fb0c945ab",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3bf5f81553f1fb0c945a2",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:20.244000",
+    "ended_at": "2026-10-29T21:49:24.011000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:20.244000"
+  },
+  {
+    "_id": "6ae3bf6081553f1fb0c945ae",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bf6081553f1fb0c945a5",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:20.337000",
+    "ended_at": "2026-10-29T21:49:24.100000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:20.337000"
+  },
+  {
+    "_id": "6ae3bf6081553f1fb0c945b1",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3bf6081553f1fb0c945a8",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:49:20.449000",
+    "ended_at": "2026-10-29T21:49:24.172000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:49:20.449000"
+  },
+  {
+    "_id": "6ae3c062cca559fda59acc94",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:38.485000",
+    "ended_at": "2026-10-29T21:53:39.467000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:38.485000"
+  },
+  {
+    "_id": "6ae3c062cca559fda59acc97",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:38.600000",
+    "ended_at": "2026-10-29T21:53:39.888000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:38.600000"
+  },
+  {
+    "_id": "6ae3c066cca559fda59accaa",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "TEST_isolation_salim",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:42.519000",
+    "ended_at": "2026-10-29T21:53:43.386000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:42.519000"
+  },
+  {
+    "_id": "6ae3c06ccca559fda59accb8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c06ccca559fda59accb5",
+    "context_label_ar": "TEST_scope_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:48.233000",
+    "ended_at": "2026-10-29T21:54:05.664000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:48.233000"
+  },
+  {
+    "_id": "6ae3c06ccca559fda59accc0",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c06ccca559fda59accbd",
+    "context_label_ar": "TEST_university_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:48.618000",
+    "ended_at": "2026-10-29T21:54:05.794000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:48.618000"
+  },
+  {
+    "_id": "6ae3c06ccca559fda59accc7",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c06ccca559fda59accc4",
+    "context_label_ar": "TEST_single_perm_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:48.958000",
+    "ended_at": "2026-10-29T21:54:05.898000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:48.958000"
+  },
+  {
+    "_id": "6ae3c06dcca559fda59accd4",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c06dcca559fda59acccb",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:49.435000",
+    "ended_at": "2026-10-29T21:54:05.996000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:49.435000"
+  },
+  {
+    "_id": "6ae3c06dcca559fda59accd7",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c06dcca559fda59accce",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:49.522000",
+    "ended_at": "2026-10-29T21:54:06.093000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:49.522000"
+  },
+  {
+    "_id": "6ae3c06dcca559fda59accda",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c06dcca559fda59accd1",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:49.639000",
+    "ended_at": "2026-10-29T21:54:06.225000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:49.639000"
+  },
+  {
+    "_id": "6ae3c06ecca559fda59accee",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c06ecca559fda59acce8",
+    "context_label_ar": "TEST_end_assignment_x",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:50.927000",
+    "ended_at": "2026-10-29T21:54:06.335000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:50.927000"
+  },
+  {
+    "_id": "6ae3c06fcca559fda59accf1",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c06ecca559fda59acceb",
+    "context_label_ar": "TEST_end_assignment_y",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:51.027000",
+    "ended_at": "2026-10-29T21:54:06.456000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:51.027000"
+  },
+  {
+    "_id": "6ae3c070cca559fda59acd0a",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c070cca559fda59acd07",
+    "context_label_ar": "TEST_impersonation_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:52.630000",
+    "ended_at": "2026-10-29T21:54:06.613000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:52.630000"
+  },
+  {
+    "_id": "6ae3c070cca559fda59acd11",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c070cca559fda59acd0e",
+    "context_label_ar": "TEST_idor_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:53:52.907000",
+    "ended_at": "2026-10-29T21:54:06.721000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:53:52.907000"
+  },
+  {
+    "_id": "6ae3c079cca559fda59acd1f",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c078cca559fda59acd1c",
+    "context_label_ar": "TEST_scope_bypass_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:54:01.375000",
+    "ended_at": "2026-10-29T21:54:06.846000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:54:01.375000"
+  },
+  {
+    "_id": "6ae3c07acca559fda59acd27",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c07acca559fda59acd24",
+    "context_label_ar": "TEST_compare_no_legacy_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:54:02.601000",
+    "ended_at": "2026-10-29T21:54:06.930000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:54:02.601000"
+  },
+  {
+    "_id": "6ae3c07bcca559fda59acd34",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c07acca559fda59acd2b",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:54:03.077000",
+    "ended_at": "2026-10-29T21:54:07.041000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:54:03.077000"
+  },
+  {
+    "_id": "6ae3c07bcca559fda59acd37",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c07acca559fda59acd2e",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:54:03.177000",
+    "ended_at": "2026-10-29T21:54:07.134000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:54:03.177000"
+  },
+  {
+    "_id": "6ae3c07bcca559fda59acd3a",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c07acca559fda59acd31",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:54:03.297000",
+    "ended_at": "2026-10-29T21:54:07.243000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:54:03.297000"
+  },
+  {
+    "_id": "6ae3c0e81d439a3c9d269d32",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عميد تجريبي — الكلية الأولى",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:55:52.154000",
+    "ended_at": "2026-10-29T21:55:53.110000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:55:52.154000"
+  },
+  {
+    "_id": "6ae3c0e81d439a3c9d269d35",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "عضو لجنة تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4fb497fef774e66e93a6"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:55:52.244000",
+    "ended_at": "2026-10-29T21:55:53.468000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:55:52.244000"
+  },
+  {
+    "_id": "6ae3c0ec1d439a3c9d269d48",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3531b47b09cfe5eaf0d37",
+    "context_label_ar": "TEST_isolation_salim",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:55:56.041000",
+    "ended_at": "2026-10-29T21:55:56.795000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:55:56.041000"
+  },
+  {
+    "_id": "6ae3c0f11d439a3c9d269d56",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f11d439a3c9d269d53",
+    "context_label_ar": "TEST_scope_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:01.292000",
+    "ended_at": "2026-10-29T21:56:12.765000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:01.292000"
+  },
+  {
+    "_id": "6ae3c0f11d439a3c9d269d5e",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f11d439a3c9d269d5b",
+    "context_label_ar": "TEST_university_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:01.809000",
+    "ended_at": "2026-10-29T21:56:12.851000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:01.809000"
+  },
+  {
+    "_id": "6ae3c0f21d439a3c9d269d65",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f21d439a3c9d269d62",
+    "context_label_ar": "TEST_single_perm_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:02.125000",
+    "ended_at": "2026-10-29T21:56:12.921000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:02.125000"
+  },
+  {
+    "_id": "6ae3c0f21d439a3c9d269d72",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f21d439a3c9d269d69",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:02.672000",
+    "ended_at": "2026-10-29T21:56:13.003000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:02.672000"
+  },
+  {
+    "_id": "6ae3c0f21d439a3c9d269d75",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c0f21d439a3c9d269d6c",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:02.757000",
+    "ended_at": "2026-10-29T21:56:13.134000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:02.757000"
+  },
+  {
+    "_id": "6ae3c0f21d439a3c9d269d78",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c0f21d439a3c9d269d6f",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:02.847000",
+    "ended_at": "2026-10-29T21:56:13.262000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:02.847000"
+  },
+  {
+    "_id": "6ae3c0f41d439a3c9d269d8c",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f41d439a3c9d269d86",
+    "context_label_ar": "TEST_end_assignment_x",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:04.315000",
+    "ended_at": "2026-10-29T21:56:13.352000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:04.315000"
+  },
+  {
+    "_id": "6ae3c0f41d439a3c9d269d8f",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f41d439a3c9d269d89",
+    "context_label_ar": "TEST_end_assignment_y",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:04.416000",
+    "ended_at": "2026-10-29T21:56:13.446000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:04.416000"
+  },
+  {
+    "_id": "6ae3c0f61d439a3c9d269da8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f61d439a3c9d269da5",
+    "context_label_ar": "TEST_impersonation_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:06.208000",
+    "ended_at": "2026-10-29T21:56:13.583000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:06.208000"
+  },
+  {
+    "_id": "6ae3c0f61d439a3c9d269daf",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f61d439a3c9d269dac",
+    "context_label_ar": "TEST_idor_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:06.486000",
+    "ended_at": "2026-10-29T21:56:13.667000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:06.486000"
+  },
+  {
+    "_id": "6ae3c0f81d439a3c9d269dbd",
+    "user_id": "698f71ba5c5620a4449eeb7e",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f81d439a3c9d269dba",
+    "context_label_ar": "TEST_scope_bypass_assignment",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:08.837000",
+    "ended_at": "2026-10-29T21:56:13.754000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:08.837000"
+  },
+  {
+    "_id": "6ae3c0f91d439a3c9d269dc5",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0f91d439a3c9d269dc2",
+    "context_label_ar": "TEST_compare_no_legacy_assignment",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:09.861000",
+    "ended_at": "2026-10-29T21:56:13.851000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:09.861000"
+  },
+  {
+    "_id": "6ae3c0fa1d439a3c9d269dd2",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "academic",
+    "advanced_role_id": "6ae3c0fa1d439a3c9d269dc9",
+    "context_label_ar": "TEST_عميد_تجريبي",
+    "scope": {
+      "scope_type": "faculty",
+      "scope_ref_ids": [
+        "698e4f9297fef774e66e93a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:10.413000",
+    "ended_at": "2026-10-29T21:56:13.964000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:10.413000"
+  },
+  {
+    "_id": "6ae3c0fa1d439a3c9d269dd5",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c0fa1d439a3c9d269dcc",
+    "context_label_ar": "TEST_مسؤول_إداري_تجريبي",
+    "scope": {
+      "scope_type": "university",
+      "scope_ref_ids": []
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:10.513000",
+    "ended_at": "2026-10-29T21:56:14.079000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:10.513000"
+  },
+  {
+    "_id": "6ae3c0fa1d439a3c9d269dd8",
+    "user_id": "698f79d75c5620a4449eeb89",
+    "assignment_type": "administrative",
+    "advanced_role_id": "6ae3c0fa1d439a3c9d269dcf",
+    "context_label_ar": "TEST_مسؤول_وحدة_تجريبي",
+    "scope": {
+      "scope_type": "unit",
+      "scope_ref_ids": [
+        "6ab3ec870186d4c5e32749a4"
+      ]
+    },
+    "direct_permissions": [],
+    "status": "ended",
+    "started_at": "2026-10-29T21:56:10.609000",
+    "ended_at": "2026-10-29T21:56:14.210000",
+    "created_by": "698dc4d65076e00e781884f8",
+    "created_at": "2026-10-29T21:56:10.609000"
+  }
+]

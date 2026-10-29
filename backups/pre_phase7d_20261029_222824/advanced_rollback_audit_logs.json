@@ -1,0 +1,200 @@
+[
+  {
+    "_id": "6ae3b7cfc4cec73d16f3519d",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "master_flag_updated",
+    "reason": "اختبار آلي Phase 6B",
+    "before": false,
+    "after": true,
+    "timestamp": "2026-10-29T21:17:03.950000"
+  },
+  {
+    "_id": "6ae3b7d0c4cec73d16f351a0",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "scope_activation_attempt_rejected",
+    "reason": "اختبار",
+    "before": null,
+    "after": {
+      "scope_type": "user",
+      "ref_id": "x"
+    },
+    "timestamp": "2026-10-29T21:17:04.600000"
+  },
+  {
+    "_id": "6ae3b7d1c4cec73d16f351a5",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "master_flag_updated",
+    "reason": "إعادة ضبط بعد الاختبار الآلي",
+    "before": true,
+    "after": false,
+    "timestamp": "2026-10-29T21:17:05.699000"
+  },
+  {
+    "_id": "6ae3bbb77364712bf8ac14f0",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "master_flag_updated",
+    "reason": "اختبار آلي Phase 6B",
+    "before": false,
+    "after": true,
+    "timestamp": "2026-10-29T21:33:43.314000"
+  },
+  {
+    "_id": "6ae3bbb77364712bf8ac14f3",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "scope_activation_attempt_rejected",
+    "reason": "اختبار",
+    "before": null,
+    "after": {
+      "scope_type": "user",
+      "ref_id": "x"
+    },
+    "timestamp": "2026-10-29T21:33:43.820000"
+  },
+  {
+    "_id": "6ae3bbb87364712bf8ac14f8",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "master_flag_updated",
+    "reason": "إعادة ضبط بعد الاختبار الآلي",
+    "before": true,
+    "after": false,
+    "timestamp": "2026-10-29T21:33:44.641000"
+  },
+  {
+    "_id": "6ae3bc16d9005c435332f431",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "master_flag_updated",
+    "reason": "اختبار آلي Phase 6B",
+    "before": false,
+    "after": true,
+    "timestamp": "2026-10-29T21:35:18.145000"
+  },
+  {
+    "_id": "6ae3bc16d9005c435332f434",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "scope_activation_attempt_rejected",
+    "reason": "اختبار",
+    "before": null,
+    "after": {
+      "scope_type": "user",
+      "ref_id": "x"
+    },
+    "timestamp": "2026-10-29T21:35:18.715000"
+  },
+  {
+    "_id": "6ae3bc17d9005c435332f439",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "master_flag_updated",
+    "reason": "إعادة ضبط بعد الاختبار الآلي",
+    "before": true,
+    "after": false,
+    "timestamp": "2026-10-29T21:35:19.580000"
+  },
+  {
+    "_id": "6ae3bf6581553f1fb0c945de",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "master_flag_updated",
+    "reason": "اختبار آلي Phase 6B",
+    "before": false,
+    "after": true,
+    "timestamp": "2026-10-29T21:49:25.244000"
+  },
+  {
+    "_id": "6ae3bf6581553f1fb0c945e1",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "scope_activation_attempt_rejected",
+    "reason": "اختبار",
+    "before": null,
+    "after": {
+      "scope_type": "user",
+      "ref_id": "x"
+    },
+    "timestamp": "2026-10-29T21:49:25.821000"
+  },
+  {
+    "_id": "6ae3bf6681553f1fb0c945e6",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "master_flag_updated",
+    "reason": "إعادة ضبط بعد الاختبار الآلي",
+    "before": true,
+    "after": false,
+    "timestamp": "2026-10-29T21:49:26.755000"
+  },
+  {
+    "_id": "6ae3c080cca559fda59acd67",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "master_flag_updated",
+    "reason": "اختبار آلي Phase 6B",
+    "before": false,
+    "after": true,
+    "timestamp": "2026-10-29T21:54:08.228000"
+  },
+  {
+    "_id": "6ae3c080cca559fda59acd6a",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "scope_activation_attempt_rejected",
+    "reason": "اختبار",
+    "before": null,
+    "after": {
+      "scope_type": "user",
+      "ref_id": "x"
+    },
+    "timestamp": "2026-10-29T21:54:08.854000"
+  },
+  {
+    "_id": "6ae3c081cca559fda59acd6f",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "master_flag_updated",
+    "reason": "إعادة ضبط بعد الاختبار الآلي",
+    "before": true,
+    "after": false,
+    "timestamp": "2026-10-29T21:54:09.723000"
+  },
+  {
+    "_id": "6ae3c0ff1d439a3c9d269e05",
+    "actor_user_id": "698f79d75c5620a4449eeb89",
+    "actor_username": "Saeed",
+    "action": "master_flag_updated",
+    "reason": "اختبار آلي Phase 6B",
+    "before": false,
+    "after": true,
+    "timestamp": "2026-10-29T21:56:15.223000"
+  },
+  {
+    "_id": "6ae3c0ff1d439a3c9d269e08",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "scope_activation_attempt_rejected",
+    "reason": "اختبار",
+    "before": null,
+    "after": {
+      "scope_type": "user",
+      "ref_id": "x"
+    },
+    "timestamp": "2026-10-29T21:56:15.862000"
+  },
+  {
+    "_id": "6ae3c1001d439a3c9d269e0d",
+    "actor_user_id": "698dc4d65076e00e781884f8",
+    "actor_username": "admin",
+    "action": "master_flag_updated",
+    "reason": "إعادة ضبط بعد الاختبار الآلي",
+    "before": true,
+    "after": false,
+    "timestamp": "2026-10-29T21:56:16.809000"
+  }
+]
