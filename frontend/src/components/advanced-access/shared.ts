@@ -48,6 +48,16 @@ export const SUB_PERMISSION_LABELS: { [key: string]: string } = {
   manage_roles: 'إدارة الأدوار التجريبية', manage_assignments: 'إدارة التكليفات',
   manage_permissions: 'تعديل الصلاحيات المباشرة', run_tests: 'تشغيل المحاكي والمقارنة',
   view_audit: 'عرض سجل التدقيق', view_pilot: 'عرض نتائج التجربة التشغيلية (المرحلة 5)',
+  manage_rollback: 'التحكم بمفاتيح التفعيل والتراجع (Phase 6B)',
+};
+
+export const ROLLBACK_STOP_LABELS: { [key: string]: string } = {
+  emergency_kill_switch: 'مفتاح الإيقاف الطارئ (متغير بيئة الخادم) — أولوية مطلقة',
+  activation_locked: 'قفل برمجي للتفعيل (Phase 6B) — لم يُرفَع بعد',
+  db_read_failure: 'فشل قراءة مفاتيح التحكم — سلوك آمن افتراضي (النظام القديم)',
+  master_flag_off: 'المفتاح المركزي معطَّل (OFF)',
+  scope_not_activated: 'النطاق غير مُفعَّل ضمن قائمة التفعيل',
+  none: 'غير محجوب (لن يحدث في هذه المرحلة)',
 };
 
 export const PILOT_SEVERITY_LABELS: { [key: string]: { label: string; color: string } } = {

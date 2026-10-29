@@ -17,6 +17,7 @@ import { AdvAuditLog } from '../src/components/advanced-access/AdvAuditLog';
 import { AdvSimulator } from '../src/components/advanced-access/AdvSimulator';
 import { AdvCompare } from '../src/components/advanced-access/AdvCompare';
 import { AdvPilotResults } from '../src/components/advanced-access/AdvPilotResults';
+import { AdvRollbackControl } from '../src/components/advanced-access/AdvRollbackControl';
 
 const TABS = [
   { key: 'dashboard', label: 'لوحة المعلومات', icon: 'speedometer' },
@@ -31,6 +32,7 @@ const TABS = [
   { key: 'simulator', label: 'محاكي الصلاحيات', icon: 'play-circle' },
   { key: 'compare', label: 'مقارنة النظامين', icon: 'git-compare' },
   { key: 'pilot', label: 'نتائج التجربة التشغيلية', icon: 'analytics' },
+  { key: 'rollback', label: 'التحكم والتراجع', icon: 'shield-checkmark' },
 ];
 
 export default function AdvancedAccessControlScreen() {
@@ -66,7 +68,7 @@ export default function AdvancedAccessControlScreen() {
     );
   }
 
-  const subs = isAdmin ? ['view', 'context_switch', 'manage_roles', 'manage_assignments', 'manage_permissions', 'run_tests', 'view_audit', 'view_pilot'] : subPermissions;
+  const subs = isAdmin ? ['view', 'context_switch', 'manage_roles', 'manage_assignments', 'manage_permissions', 'run_tests', 'view_audit', 'view_pilot', 'manage_rollback'] : subPermissions;
 
   const renderTab = () => {
     switch (activeTab) {
@@ -82,6 +84,7 @@ export default function AdvancedAccessControlScreen() {
       case 'simulator': return <AdvSimulator canRun={subs.includes('run_tests')} />;
       case 'compare': return <AdvCompare canRun={subs.includes('run_tests')} />;
       case 'pilot': return <AdvPilotResults isAdmin={isAdmin} canView={isAdmin || subs.includes('view_pilot')} />;
+      case 'rollback': return <AdvRollbackControl isAdmin={isAdmin} canManage={isAdmin || subs.includes('manage_rollback')} canViewAudit={isAdmin || subs.includes('view_audit')} />;
       default: return null;
     }
   };

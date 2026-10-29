@@ -12,7 +12,7 @@ from bson import ObjectId
 
 GEN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "generated")
 
-SUB_PERMISSIONS = ["view", "context_switch", "manage_roles", "manage_assignments", "manage_permissions", "run_tests", "view_audit", "view_pilot"]
+SUB_PERMISSIONS = ["view", "context_switch", "manage_roles", "manage_assignments", "manage_permissions", "run_tests", "view_audit", "view_pilot", "manage_rollback"]
 
 
 def _now():

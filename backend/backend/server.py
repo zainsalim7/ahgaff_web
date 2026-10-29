@@ -286,6 +286,8 @@ from routes.alumni import router as alumni_router
 from routes.student_transfer import router as student_transfer_router
 from routes.advanced_access import router as advanced_access_router  # 🧪 مركز الصلاحيات المتقدم (SHADOW MODE — مستقل تمامًا عن النظام القديم)
 from services.advanced_access_service import create_advanced_access_indexes as _create_adv_access_indexes
+from routes.access_rollback import router as access_rollback_router  # 🔒 التحكم والتراجع الآمن (Phase 6B — مقفل برمجيًا، مستقل عن المحرك والنظام القديم)
+from services.feature_flag_service import ensure_rollback_indexes as _ensure_rollback_indexes
 
 # Create the main app
 app = FastAPI(title="نظام حضور جامعة الأحقاف")
@@ -18673,6 +18675,7 @@ app.include_router(hr_appraisals_router, prefix="/api")
 app.include_router(hr_verify_router, prefix="/api")
 app.include_router(hr_documents_router, prefix="/api")
 app.include_router(advanced_access_router, prefix="/api")  # 🧪 مركز الصلاحيات المتقدم (SHADOW MODE)
+app.include_router(access_rollback_router, prefix="/api")  # 🔒 التحكم والتراجع الآمن (Phase 6B)
 app.include_router(hr_home_router, prefix="/api")
 app.include_router(hr_leave_types_router, prefix="/api")
 app.include_router(handoffs_router, prefix="/api")
@@ -18778,6 +18781,7 @@ async def _startup_db_tasks():
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
         ("migrate_letterheads", lambda: migrate_letterheads(db)),
         ("advanced_access_indexes", lambda: _create_adv_access_indexes(db)),
+        ("rollback_indexes", lambda: _ensure_rollback_indexes(db)),
     ]
     t0 = asyncio.get_event_loop().time()
     for name, fn in steps:

@@ -388,6 +388,12 @@ export const advancedAccessAPI = {
   getPilotSummary: () => api.get('/advanced-access/pilot/summary'),
   getPilotResults: (params?: any) => api.get('/advanced-access/pilot/results', { params: params || {} }),
   exportPilotExcel: () => api.get('/advanced-access/pilot/export.xlsx', { responseType: 'blob' }),
+  // Phase 6B: التحكم والتراجع الآمن (Feature Flags + Emergency Kill Switch)
+  getRollbackStatus: () => api.get('/advanced-access/rollback/status'),
+  updateMasterFlag: (data: { enabled: boolean; reason: string }) => api.put('/advanced-access/rollback/master', data),
+  attemptScopeActivation: (data: { scope_type: string; ref_id: string; reason: string }) => api.post('/advanced-access/rollback/scope-activation', data),
+  getRollbackAudit: (limit = 100) => api.get('/advanced-access/rollback/audit', { params: { limit } }),
+  simulateRollbackDecision: (data: any) => api.post('/advanced-access/rollback/simulate', data),
 };
 
 // Settings API
