@@ -105,5 +105,13 @@
 - Salim: يرى خطابات طلاب كلية الشريعة + موظفي نطاق HR (كلية البنات) + ما أصدره + العامة. Saeed: بلا كلية → العامة + ما أصدره + موظفو كلية البنات.
 - الكليشات/السلاسل: `/api/letterheads`, `/api/letter-series` — المالك أو الأدمن يعدّل؛ الافتراضية العامة «الكليشة العامة»/«الترقيم العام» (system_key=general).
 
+## حساب الاختبار الحي المحدود — مركز الصلاحيات المتقدم SHADOW MODE (2026-10-30)
+- Username: adv_live_test / Password: AdvLiveTest@2026
+- user_id: 6ae47091b29fd2942f1ec74a — role=employee، role_id مخصص بصلاحية قديمة واحدة فقط (view_curriculum) بدل افتراضيات "موظف" الواسعة
+- advanced_role_id: 6ae470f939410912a5f56790 ("دور اختبار حي محدود - عرض الخطة الدراسية فقط") — صلاحيتان SHADOW فقط (عرض مقررات/خطة القسم)
+- advanced_user_assignments._id: 6ae4710139410912a5f56793 — نطاق: قسم "الشريعة والقانون" فقط (698e500997fef774e66e93a8)
+- advanced_access_testers: sub_permissions=[run_tests, context_switch] فقط (لا view/manage) — لإثبات العزل من الداخل
+- هذا الحساب والتكليف تُركا عمدًا كـ"جهاز اختبار حي" دائم بطلب المستخدم — لا تُحذف. 39/39 اختبار (pytest + testing_agent) ناجح عليه، راجع `/app/test_reports/iteration_153.json` و`backend/tests/test_adv_live_test_account.py`.
+
 ## تبادل المحاضرات (2026-10-14)
 - اختبار E2E: `python backend/tests/test_lecture_swaps_flow.py` — يستخدم teacher180156/teacher123 (طالب التبادل)، 9999/teacher123 (الزميل)، Saeed/test1234 (رئيس القسم المعتمد). يزرع محاضرتين مؤقتتين ويحذفهما.

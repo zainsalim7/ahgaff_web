@@ -1,0 +1,27 @@
+{
+  "summary": "Backend-only live-test verification of low-privilege account adv_live_test (Advanced Access SHADOW MODE). Created tests/test_adv_live_test_account.py (18 tests) covering login/legacy perms, me/access, me/contexts, /check allow + out-of-scope deny + ungranted-perm deny, context switch, self-assign 403, admin-only /testers 403, rollback/status 403 for test account, rollback status/scope-activation 423/simulate legacy (admin), Salim/Saeed/admin legacy regression, and legacy HR endpoint deny for test account. All 18 pass; the regression suites (test_advanced_access_control.py, test_adv_access_isolation.py, test_adv_access_structural_976.py) passed 21/21, so 39/39 overall. ACTIVATION_LOCKED_PHASE6B still True. The test account, role and assignment were left in place.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/auth/login and GET /api/auth/me (backend/routes/auth.py ~L161-190, ~L249-278)", "issue": "This issue existed before this session. Login and /auth/me merge only role + custom_permissions, but deps.build_user_context (used for server-side enforcement) also merges users.permissions (direct). Salim's hr_manage_leaves/hr_manage_org/hr_manage_employees/hr_manage_attendance are stored in users.permissions, so they are missing from his login response even though the server enforces them (GET /api/hr/leaves/balances returns 200 for Salim). The UI may therefore hide menus the user can actually use. The review request expected hr_manage_leaves in Salim's login response, and it is not there. Nothing from this session caused this: Salim's user doc and the dean role (updated_at 2026-02-13) were not changed."},
+      {"endpoint": "POST /api/advanced-access/check, /compare, GET /assignments/{id}/context", "issue": "Code review: any holder of the run_tests sub-permission (including adv_live_test) can pass ANY user_id/assignment_id and view other users' permission decisions and effective permissions. This is read-only and shadow-only, but it is a small information exposure. Consider limiting non-admin testers to their own assignments."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_adv_live_test_account.py", "/app/test_reports/pytest/pytest_adv_live.xml"],
+  "action_items": [
+    "Optional: make auth.py login and /auth/me merge users.permissions the same way deps.build_user_context does, so the displayed permissions match what the server enforces (affects Salim's HR perms).",
+    "Optional: restrict /advanced-access/check, /compare and /assignments/{id}/context for non-admin testers to their own user_id/assignments."
+  ],
+  "critical_code_review_comments": [
+    "The legacy permission resolution is duplicated in three places (auth.py login, auth.py me, deps.build_user_context) and they disagree: two ignore users.permissions. Extract one shared function.",
+    "POST /assignments self-escalation is blocked twice: first by the manage_assignments sub-permission gate, then by an explicit user_id==self check. This is correct."
+  ],
+  "updated_files": ["/app/backend/tests/test_adv_live_test_account.py"],
+  "success_rate": {"backend": "100% (39/39) for shadow-mode enforcement. One review expectation not met: Salim's login response lacks hr_manage_leaves (an existing display inconsistency that this session did not cause)", "frontend": "not tested (backend only requested)"},
+  "seed_data_creation": "None. Two scope-activation attempts by admin (reason TEST_live) were rejected with 423 and recorded in advanced_rollback_audit_logs.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Live fixture: adv_live_test/AdvLiveTest@2026 (user 6ae47091b29fd2942f1ec74a, assignment 6ae4710139410912a5f56793, dept scope 698e500997fef774e66e93a8). Do not delete. Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_adv_live_test_account.py backend/backend/tests/test_advanced_access_control.py backend/tests/test_adv_access_isolation.py backend/tests/test_adv_access_structural_976.py",
+  "rca of the issue": "Salim's missing hr_manage_leaves in the login response: the HR perms were granted as direct users.permissions, not custom_permissions. auth.py (login and /me) merges only custom_permissions, while deps.build_user_context merges both. Server-side enforcement is correct; only the displayed list is incomplete."
+}
