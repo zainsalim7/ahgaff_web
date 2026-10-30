@@ -1,0 +1,87 @@
+{
+  "theme": "Inherits from app (Light/Dark mode support). Incorporates existing dark blue header context.",
+  "typography": {
+    "primary_font": "System Arabic sans-serif (e.g., Cairo, Tajawal, IBM Plex Sans Arabic).",
+    "headings": "text-lg font-bold tracking-tight (AR)",
+    "body": "text-sm text-textMuted",
+    "code": "font-mono text-xs text-textMuted opacity-80",
+    "hierarchy": {
+      "card_title": "text-base sm:text-lg font-semibold text-text leading-snug",
+      "filter_group": "text-sm font-semibold text-textMuted uppercase tracking-wider mb-2",
+      "badge_text": "text-[10px] md:text-xs font-bold px-2 py-0.5 rounded-full"
+    }
+  },
+  "colors": {
+    "backgrounds": {
+      "page": "bg-background",
+      "sidebar": "bg-card/50",
+      "card": "bg-card hover:bg-card/80 transition-colors"
+    },
+    "borders": "border-border/60",
+    "badges": {
+      "low": "bg-success/10 text-success border border-success/20",
+      "medium": "bg-warning/10 text-warning border border-warning/20",
+      "high": "bg-danger/10 text-danger border border-danger/20",
+      "count_bubble": "bg-primary/10 text-primary"
+    },
+    "interactions": {
+      "filter_active": "bg-primary text-primary-foreground shadow-sm",
+      "filter_inactive": "bg-background text-textMuted border border-border/50 hover:border-primary/50"
+    }
+  },
+  "grids": {
+    "page_layout": "grid grid-cols-1 lg:grid-cols-12 gap-6 items-start (RTL optimized)",
+    "sidebar": "lg:col-span-3 lg:col-start-10 flex flex-col gap-6 sticky top-4 max-h-[90vh] overflow-y-auto custom-scrollbar",
+    "main_content": "lg:col-span-9 lg:col-start-1 flex flex-col gap-4",
+    "cards_grid": "grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3 gap-3 md:gap-4 auto-rows-max",
+    "chips_grid": "flex flex-wrap gap-2"
+  },
+  "layouts": {
+    "overall": "Bento-inspired Dashboard layout adapted for RTL. A dedicated Filter Sidebar on the right (logical start in RTL) and a High-Density Grid of permission cards on the left.",
+    "sidebar_structure": "Search Bar (sticky top) -> Operation Types (Wrap flex chips) -> Permission Groups (Vertical dense list of buttons with right-aligned counts).",
+    "card_structure": "Flex column, p-4, rounded-xl, 1px subtle border. Top row: Arabic title (flex-grow) + Sensitivity Badge. Bottom row: ltr-enforced mono API path block + subtle background icon."
+  },
+  "visual_enhancers": {
+    "borders": "Use nested radii (e.g. rounded-2xl for containers, rounded-xl for cards, rounded-md for inner badges).",
+    "shadows": "Minimal. Use shadow-sm on cards only on hover. Rely on 1px borders (border-border) for definition.",
+    "glassmorphism": "Optional for the sticky search bar in the sidebar: backdrop-blur-md bg-background/80.",
+    "icons": "Use lucide-react or Ionicons. Large, extremely subtle (opacity-5) icon in the absolute bottom-left (RTL) of the card to represent the operation type."
+  },
+  "component_name": "AdvPermissionsBrowser",
+  "component_path": "/app/frontend/src/components/advanced-access/AdvPermissionsBrowser.js",
+  "motion": {
+    "hover_card": "transition-all duration-200 ease-in-out hover:-translate-y-[2px] hover:shadow-md",
+    "active_chip": "transition-colors duration-150 active:scale-95",
+    "list_entrance": "Staggered fade-in for cards (optional, if framer-motion is used, otherwise standard CSS transition)."
+  },
+  "accessibility": {
+    "rtl_support": "Ensure all layout classes respect RTL. Use standard Tailwind standard classes with dir='rtl' on parent, or logical properties (ms-, me-, ps-, pe-, text-start, text-end).",
+    "api_path_ltr": "CRITICAL: The API path (e.g., 'GET /api/v1/users') MUST be forced into LTR direction (`dir=\"ltr\" text-left`) even within the RTL card, otherwise slashes and text render incorrectly.",
+    "contrast": "Ensure warning/danger text colors meet 4.5:1 ratio against their 10% opacity backgrounds.",
+    "test_ids": "Add data-testid='perm-search-input', data-testid='perm-card-{id}', data-testid='filter-group-{id}'."
+  },
+  "media": {
+    "icons_required": ["Search", "Shield", "ShieldAlert", "CheckCircle", "Filter", "Database", "Eye", "Edit", "Trash", "Plus"]
+  },
+  "instructions_to_main_agent": [
+    "Redesign AdvPermissionsBrowser.js into a Sidebar + Card Grid layout.",
+    "Implement the right-side (RTL) Filter Sidebar containing Search, Operation filters, and Group filters.",
+    "Do NOT use a cramped horizontal scroll strip for 30 groups. Use a vertical list in the sidebar with notification-style count bubbles.",
+    "Implement the Permission Card design: Flat, distinct, readable. Ensure the Arabic label is prominent.",
+    "Force the API path string into LTR using `<div dir=\"ltr\" className=\"text-left font-mono text-xs text-textMuted\">`.",
+    "Use color-coded badges for sensitivity (Low=Green, Medium=Orange, High/Critical=Red).",
+    "Optimize for performance: If rendering up to 900 items is slow, ensure standard React memoization on the cards, or limit initial render via pagination/virtualization if feasible (though 200 items in a CSS grid is generally performant without virtual lists).",
+    "Use existing color tokens (primary, success, warning, danger, border, card, text, textMuted) directly in className if they are configured in tailwind.config.js, or map them correctly."
+  ],
+  "UNIVERSAL GUIDELINES FOR MAIN AGENT": [
+    "You tend to converge toward generic outputs. Avoid this: make creative, distinctive frontends that surprise and delight.",
+    "Create depth through layered design elements with z-index hierarchy and 1px crisp borders.",
+    "You MUST NOT apply universal transition. Eg: `transition: all`. Always add transitions for specific interactive elements.",
+    "You MUST NOT center align the app container. This disrupts the human natural reading flow of text.",
+    "Always use modern button styles (pill-shaped or rounded-lg) with interaction animations & relevant colors.",
+    "Every interaction needs micro-animations - hover states, transitions. Static = dead.",
+    "Use generous spacing (`gap-4`, `p-4`, `p-6`). Cramped designs look cheap.",
+    "NEVER use placeholder URLs or AI assistant Emoji characters like 🤖🧠 for icons.",
+    "All interactive and key informational elements MUST include a `data-testid` attribute (kebab-case, role-based)."
+  ]
+}
