@@ -367,6 +367,7 @@ export const advancedAccessAPI = {
   updateRole: (id: string, data: any) => api.put(`/advanced-access/roles/${id}`, data),
   getScopeOptions: (scopeType: string) => api.get(`/advanced-access/scope-options/${scopeType}`),
   getLightUsers: () => api.get('/advanced-access/users'),
+  quickFindOrCreateUser: (data: { username: string; full_name: string }) => api.post('/advanced-access/users/quick-find-or-create', data),
   getAllAssignments: (status?: string) => api.get('/advanced-access/assignments', { params: status ? { status } : {} }),
   getUserAssignments: (userId: string) => api.get(`/advanced-access/users/${userId}/assignments`),
   getUserContexts: (userId: string) => api.get(`/advanced-access/users/${userId}/contexts`),

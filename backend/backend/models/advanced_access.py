@@ -13,6 +13,11 @@ class AdvancedRoleCreate(BaseModel):
     permission_keys: List[str] = Field(default_factory=list)
 
 
+class QuickUserFindOrCreate(BaseModel):
+    username: str
+    full_name: str
+
+
 class AdvancedRoleUpdate(BaseModel):
     name_ar: Optional[str] = None
     description: Optional[str] = None

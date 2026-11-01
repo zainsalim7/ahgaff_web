@@ -10,9 +10,10 @@ from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException
 from bson import ObjectId
 
-from .deps import get_db, get_current_user
+from .deps import get_db, get_current_user, get_password_hash
 from models.advanced_access import (
     AdvancedRoleCreate, AdvancedRoleUpdate, AssignmentCreate, TesterGrant, CheckPermissionRequest, DirectPermissionGrant,
+    QuickUserFindOrCreate,
 )
 from services.advanced_access_service import (
     seed_permission_registry, create_advanced_access_indexes, import_legacy_roles_reference,
@@ -191,6 +192,30 @@ async def list_light_users(current_user: dict = Depends(_users_list_access)):
     db = get_db()
     users = await db.users.find({}, {"username": 1, "full_name": 1, "role": 1}).to_list(5000)
     return [{"id": str(u["_id"]), "username": u.get("username"), "full_name": u.get("full_name"), "role": u.get("role")} for u in users]
+
+
+@router.post("/users/quick-find-or-create")
+async def quick_find_or_create_user(data: QuickUserFindOrCreate, current_user: dict = Depends(require_adv_access("manage_assignments"))):
+    """يبحث عن مستخدم بنفس اسم المستخدم؛ إن وُجد يُعاد مباشرة (لإسناد تكليف له)، وإلا يُنشأ حساب جديد صفر-الصلاحيات (موظف، بلا أي صلاحية قديمة) لإسناد التكليف له لاحقًا. لا يمس أي مستخدم موجود."""
+    db = get_db()
+    username = data.username.strip()
+    full_name = data.full_name.strip()
+    if not username or not full_name:
+        raise HTTPException(status_code=400, detail="اسم المستخدم والاسم الكامل مطلوبان")
+    existing = await db.users.find_one({"username": username})
+    if existing:
+        return {
+            "id": str(existing["_id"]), "username": existing.get("username"),
+            "full_name": existing.get("full_name"), "existed": True,
+        }
+    hashed = get_password_hash(username)
+    doc = {
+        "username": username, "full_name": full_name, "password": hashed, "hashed_password": hashed,
+        "role": "employee", "permissions": [], "is_active": True, "must_change_password": True,
+        "created_at": datetime.now(timezone.utc), "created_via": "advanced_access_quick_create",
+    }
+    res = await db.users.insert_one(doc)
+    return {"id": str(res.inserted_id), "username": username, "full_name": full_name, "existed": False, "initial_password": username}
 
 
 # ══════════════ التكليفات المتعددة (الجوهر الفعلي لتعدد المناصب) ══════════════

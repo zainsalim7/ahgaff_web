@@ -16,6 +16,13 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
 
   const [userId, setUserId] = useState('');
   const [userSearch, setUserSearch] = useState('');
+  const [selectedUserLabel, setSelectedUserLabel] = useState('');
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showQuickCreate, setShowQuickCreate] = useState(false);
+  const [quickUsername, setQuickUsername] = useState('');
+  const [quickFullName, setQuickFullName] = useState('');
+  const [quickCreating, setQuickCreating] = useState(false);
+  const [quickResultMsg, setQuickResultMsg] = useState('');
   const [assignmentType, setAssignmentType] = useState('academic');
   const [roleId, setRoleId] = useState('');
   const [label, setLabel] = useState('');
@@ -34,12 +41,38 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
   useEffect(() => { load(); }, [load]);
 
   const openCreate = async () => {
-    setError(''); setUserId(''); setUserSearch(''); setAssignmentType('academic'); setRoleId(''); setLabel(''); setScopeType('university'); setScopeRefIds([]);
+    setError(''); setUserId(''); setUserSearch(''); setSelectedUserLabel(''); setShowUserDropdown(false);
+    setShowQuickCreate(false); setQuickUsername(''); setQuickFullName(''); setQuickResultMsg('');
+    setAssignmentType('academic'); setRoleId(''); setLabel(''); setScopeType('university'); setScopeRefIds([]);
     try {
       const [u, r] = await Promise.all([advancedAccessAPI.getLightUsers(), advancedAccessAPI.getRoles()]);
       setUsers(u.data); setRoles(r.data);
     } catch (e) { /* ignore */ }
     setModalVisible(true);
+  };
+
+  const pickUser = (u: any) => {
+    setUserId(u.id); setSelectedUserLabel(u.full_name || u.username); setUserSearch(''); setShowUserDropdown(false);
+  };
+
+  const clearUserSelection = () => { setUserId(''); setSelectedUserLabel(''); };
+
+  const runQuickFindOrCreate = async () => {
+    if (!quickUsername.trim() || !quickFullName.trim()) { setQuickResultMsg('أدخل اسم المستخدم والاسم الكامل'); return; }
+    setQuickCreating(true); setQuickResultMsg('');
+    try {
+      const res = await advancedAccessAPI.quickFindOrCreateUser({ username: quickUsername.trim(), full_name: quickFullName.trim() });
+      const u = res.data;
+      pickUser(u);
+      setQuickResultMsg(
+        u.existed
+          ? `هذا المستخدم موجود بالفعل (${u.full_name}) — تم اختياره تلقائيًا لإسناد الدور له`
+          : `تم إنشاء مستخدم جديد (${u.full_name}) — كلمة المرور الأولية: ${u.initial_password} (سيُطلب منه تغييرها عند أول دخول)`
+      );
+      setShowQuickCreate(false); setQuickUsername(''); setQuickFullName('');
+    } catch (e: any) {
+      setQuickResultMsg(e?.response?.data?.detail || 'تعذّر تنفيذ العملية');
+    } finally { setQuickCreating(false); }
   };
 
   useEffect(() => {
@@ -127,14 +160,49 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
           </View>
           <ScrollView style={{ padding: 14 }}>
             <Text style={styles.label}>المستخدم</Text>
-            <TextInput style={styles.input} placeholder="ابحث باسم المستخدم..." value={userSearch} onChangeText={setUserSearch} textAlign="right" testID="adv-assignment-user-search" />
-            <ScrollView horizontal style={styles.pickerRow} contentContainerStyle={{ flexDirection: 'row-reverse' }}>
-              {users.filter(u => !userSearch || (u.full_name || u.username || '').includes(userSearch)).map(u => (
-                <TouchableOpacity key={u.id} style={[styles.pickChip, userId === u.id && styles.pickChipActive]} onPress={() => setUserId(u.id)} testID={`adv-assignment-user-${u.id}`}>
-                  <Text style={[styles.pickChipText, userId === u.id && styles.pickChipTextActive]}>{u.full_name || u.username}</Text>
+            {!!selectedUserLabel && (
+              <View style={styles.selectedUserPill} testID="adv-assignment-selected-user">
+                <TouchableOpacity onPress={clearUserSelection} testID="adv-assignment-user-clear"><Ionicons name="close-circle" size={18} color={COLORS.textMuted} /></TouchableOpacity>
+                <Text style={styles.selectedUserText}>{selectedUserLabel}</Text>
+                <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
+              </View>
+            )}
+            {!selectedUserLabel && (
+              <>
+                <TextInput
+                  style={styles.input} placeholder="ابحث باسم المستخدم..." value={userSearch}
+                  onChangeText={(t) => { setUserSearch(t); setShowUserDropdown(true); }}
+                  onFocus={() => setShowUserDropdown(true)} textAlign="right" testID="adv-assignment-user-search"
+                />
+                {showUserDropdown && !!userSearch && (
+                  <View style={styles.dropdown} testID="adv-assignment-user-dropdown">
+                    {users.filter(u => (u.full_name || '').toLowerCase().includes(userSearch.toLowerCase()) || (u.username || '').toLowerCase().includes(userSearch.toLowerCase())).slice(0, 8).map(u => (
+                      <TouchableOpacity key={u.id} style={styles.dropdownRow} onPress={() => pickUser(u)} testID={`adv-assignment-user-${u.id}`}>
+                        <Text style={styles.dropdownRowText}>{u.full_name || u.username}</Text>
+                        <Text style={styles.dropdownRowSub}>{u.username}</Text>
+                      </TouchableOpacity>
+                    ))}
+                    {users.filter(u => (u.full_name || '').toLowerCase().includes(userSearch.toLowerCase()) || (u.username || '').toLowerCase().includes(userSearch.toLowerCase())).length === 0 && (
+                      <Text style={styles.dropdownEmpty}>لا توجد نتائج مطابقة — يمكنك إنشاء مستخدم جديد بالأسفل</Text>
+                    )}
+                  </View>
+                )}
+                <TouchableOpacity onPress={() => setShowQuickCreate(v => !v)} style={styles.quickCreateToggle} testID="adv-assignment-quickcreate-toggle">
+                  <Ionicons name={showQuickCreate ? 'chevron-up' : 'person-add-outline'} size={14} color={COLORS.primary} />
+                  <Text style={styles.quickCreateToggleText}>{showQuickCreate ? 'إخفاء' : 'أو إنشاء مستخدم جديد غير موجود بالنظام'}</Text>
                 </TouchableOpacity>
-              ))}
-            </ScrollView>
+                {showQuickCreate && (
+                  <View style={styles.quickCreateBox}>
+                    <TextInput style={styles.input} placeholder="اسم المستخدم (رقم وظيفي/معرّف فريد)" value={quickUsername} onChangeText={setQuickUsername} textAlign="right" testID="adv-assignment-quick-username" />
+                    <TextInput style={[styles.input, { marginTop: 8 }]} placeholder="الاسم الكامل" value={quickFullName} onChangeText={setQuickFullName} textAlign="right" testID="adv-assignment-quick-fullname" />
+                    <TouchableOpacity style={styles.quickCreateBtn} onPress={runQuickFindOrCreate} disabled={quickCreating} testID="adv-assignment-quick-submit">
+                      {quickCreating ? <ActivityIndicator color="#fff" /> : <Text style={styles.quickCreateBtnText}>بحث / إنشاء</Text>}
+                    </TouchableOpacity>
+                  </View>
+                )}
+              </>
+            )}
+            {!!quickResultMsg && <Text style={styles.quickResultMsg} testID="adv-assignment-quick-result">{quickResultMsg}</Text>}
 
             <Text style={styles.label}>نوع التكليف</Text>
             <View style={styles.pickerRow}>
@@ -220,4 +288,17 @@ const styles = StyleSheet.create({
   errorText: { color: COLORS.danger, textAlign: 'right', marginTop: 8 },
   saveBtn: { backgroundColor: COLORS.primary, borderRadius: 8, padding: 14, alignItems: 'center', marginVertical: 20 },
   saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  selectedUserPill: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', backgroundColor: '#fff', borderWidth: 1.5, borderColor: COLORS.success, borderRadius: 10, padding: 10, gap: 8 },
+  selectedUserText: { flex: 1, fontSize: 14, fontWeight: '600', color: COLORS.text, textAlign: 'right' },
+  dropdown: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, marginTop: 4, maxHeight: 220, overflow: 'hidden' },
+  dropdownRow: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  dropdownRowText: { fontSize: 13, color: COLORS.text, textAlign: 'right' },
+  dropdownRowSub: { fontSize: 11, color: COLORS.textMuted },
+  dropdownEmpty: { fontSize: 12, color: COLORS.textMuted, textAlign: 'center', padding: 12 },
+  quickCreateToggle: { flexDirection: 'row-reverse', alignItems: 'center', gap: 6, marginTop: 10, alignSelf: 'flex-end' },
+  quickCreateToggleText: { fontSize: 12.5, color: COLORS.primary, fontWeight: '600' },
+  quickCreateBox: { backgroundColor: '#fff', borderWidth: 1, borderColor: COLORS.border, borderRadius: 10, padding: 12, marginTop: 10 },
+  quickCreateBtn: { backgroundColor: COLORS.shadow, borderRadius: 8, padding: 10, alignItems: 'center', marginTop: 10 },
+  quickCreateBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 13 },
+  quickResultMsg: { fontSize: 12, color: COLORS.success, textAlign: 'right', marginTop: 8, lineHeight: 18 },
 });
