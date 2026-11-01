@@ -503,7 +503,16 @@ async def select_teachers(db, current_user: dict, teacher_id: Optional[str], fac
         if not rec:
             raise HTTPException(status_code=404, detail="لم يتم العثور على سجل المعلم")
         return [rec]
-    if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_check
+        target_type = "faculty" if faculty_id else ("department" if department_id else None)
+        target_ref = faculty_id or department_id
+        if target_type is None:
+            raise HTTPException(status_code=400, detail="حدد القسم أو الكلية ضمن نطاق صلاحيتك لعرض هذا التقرير")
+        decision = await real_enforce_check(db, current_user, "reports_ser_get_teacher_workload_report", target_type, target_ref)
+        if not decision:
+            raise HTTPException(status_code=403, detail="غير مصرح")
+    elif not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_TEACHER_WORKLOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     q: dict = {"is_active": {"$ne": False}}
     specific_id = ObjectId(teacher_id) if teacher_id and ObjectId.is_valid(teacher_id) else None

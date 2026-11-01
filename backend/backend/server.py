@@ -1010,6 +1010,7 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         # 🔒 ضرورية لفحص ملكية القسم/الكلية في endpoints الحماية
         "faculty_id": str(user["faculty_id"]) if user.get("faculty_id") else None,
         "department_id": str(user["department_id"]) if user.get("department_id") else None,
+        "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False),  # 🆕 Phase 7-Final: مستخدمون جدد فقط، افتراضي False للجميع
     }
 
 def get_user_permissions(user: dict) -> List[str]:
@@ -5992,7 +5993,13 @@ async def get_course_sections(
 
 @api_router.post("/courses")
 async def create_course(course: CourseCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "add_course"):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_check
+        dep = getattr(course, "department_id", None)
+        decision = await real_enforce_check(db, current_user, "courses_courses_create_course", "department" if dep else None, dep)
+        if not decision:
+            raise HTTPException(status_code=403, detail="غير مصرح")
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "add_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بإضافة مقرر")
     
     course_dict = course.dict()
@@ -6753,11 +6760,18 @@ async def restore_course(request: Request, current_user: dict = Depends(get_curr
 
 @api_router.delete("/courses/{course_id}")
 async def delete_course(course_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "delete_course"):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_check
+        course_doc_pre = await db.courses.find_one({"_id": ObjectId(course_id)})
+        dep = str(course_doc_pre.get("department_id")) if course_doc_pre and course_doc_pre.get("department_id") else None
+        decision = await real_enforce_check(db, current_user, "courses_courses_delete_course", "department" if dep else None, dep)
+        if not decision:
+            raise HTTPException(status_code=403, detail="غير مصرح")
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "delete_course"):
         raise HTTPException(status_code=403, detail="غير مصرح لك بحذف المقرر")
 
     # 🔒 ملكية القسم: لا يحذف مقرراً ليس من قسمه/كليته
-    if current_user.get("role") != UserRole.ADMIN:
+    if current_user.get("role") != UserRole.ADMIN and not current_user.get("advanced_access_real_enforcement"):
         course_doc = await db.courses.find_one({"_id": ObjectId(course_id)})
         if course_doc:
             user_dept = current_user.get("department_id")
