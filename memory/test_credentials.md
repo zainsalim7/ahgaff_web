@@ -113,5 +113,8 @@
 - advanced_access_testers: sub_permissions=[run_tests, context_switch] فقط (لا view/manage) — لإثبات العزل من الداخل
 - هذا الحساب والتكليف تُركا عمدًا كـ"جهاز اختبار حي" دائم بطلب المستخدم — لا تُحذف. 39/39 اختبار (pytest + testing_agent) ناجح عليه، راجع `/app/test_reports/iteration_153.json` و`backend/tests/test_adv_live_test_account.py`.
 
+## 🆕 إنفاذ فعلي حقيقي (Phase 7-Final) — 1 نوفمبر 2026
+أي مستخدم جديد يُنشأ عبر شاشة "تكليف جديد" → "أو إنشاء مستخدم جديد" في مركز الصلاحيات المتقدم يحصل تلقائيًا على `advanced_access_real_enforcement=true` — وصوله لـ `GET /curriculum/courses` و`GET /curriculum/by-department/{id}` يُحسم فعليًا (ليس محاكاة) حسب تكليفه في مركز الصلاحيات المتقدم. حساب التحقق المؤقت `real_pilot_emp_001` المُستخدَم للتحقق E2E في هذه الجلسة حُذف بعد التأكد من نجاحه. لا تأثير على أي مستخدم موجود مسبقًا.
+
 ## تبادل المحاضرات (2026-10-14)
 - اختبار E2E: `python backend/tests/test_lecture_swaps_flow.py` — يستخدم teacher180156/teacher123 (طالب التبادل)، 9999/teacher123 (الزميل)، Saeed/test1234 (رئيس القسم المعتمد). يزرع محاضرتين مؤقتتين ويحذفهما.

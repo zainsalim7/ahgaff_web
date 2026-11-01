@@ -213,6 +213,7 @@ async def quick_find_or_create_user(data: QuickUserFindOrCreate, current_user: d
         "username": username, "full_name": full_name, "password": hashed, "hashed_password": hashed,
         "role": "employee", "permissions": [], "is_active": True, "must_change_password": True,
         "created_at": datetime.now(timezone.utc), "created_via": "advanced_access_quick_create",
+        "advanced_access_real_enforcement": True,  # 🆕 إنفاذ فعلي حقيقي (ليس شادو) لهذا المستخدم فقط — بموافقة صريحة من المستخدم، نطاق أولي: عمليات الخطة الدراسية منخفضة الخطورة فقط
     }
     res = await db.users.insert_one(doc)
     return {"id": str(res.inserted_id), "username": username, "full_name": full_name, "existed": False, "initial_password": username}

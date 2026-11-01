@@ -33,10 +33,18 @@ def _has_manage(user: dict) -> bool:
     )
 
 
-def _has_view(user: dict) -> bool:
-    """يقبل صلاحية الخطة (إدارة/عرض)، أو إدارة/عرض المقررات العامة."""
+async def _has_view(db, user: dict, adv_permission_key: Optional[str] = None,
+                     target_scope_type: Optional[str] = None, target_ref_id: Optional[str] = None) -> bool:
+    """يقبل صلاحية الخطة (إدارة/عرض)، أو إدارة/عرض المقررات العامة.
+    🆕 لمستخدمين جدد يحملون advanced_access_real_enforcement=True فقط: القرار يُحسب فعليًا من تكليفاتهم
+    في مركز الصلاحيات المتقدم بدل الصلاحيات القديمة (Phase 7-Final، نطاق محدود: عمليات الخطة الدراسية فقط)."""
     if user.get("role") == "admin":
         return True
+    if adv_permission_key and user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_check
+        decision = await real_enforce_check(db, user, adv_permission_key, target_scope_type, target_ref_id)
+        if decision is not None:
+            return decision
     perms = set(user.get("permissions") or [])
     return any(p in perms for p in [
         Permission.MANAGE_CURRICULUM,
@@ -112,9 +120,10 @@ async def list_curriculum_courses(
     current_user: dict = Depends(get_current_user),
 ):
     """قائمة مقررات الخطة الدراسية مع فلاتر."""
-    if not _has_view(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
+    if not await _has_view(db, current_user, "curriculum_curriculum_list_curriculum_courses",
+                            "department" if department_id else None, department_id):
+        raise HTTPException(status_code=403, detail="غير مصرح")
     q = {}
     if not include_inactive:
         q["is_active"] = {"$ne": False}
@@ -139,9 +148,9 @@ async def get_curriculum_by_department(
     current_user: dict = Depends(get_current_user),
 ):
     """خطة قسم منظمة في شبكة (مستوى × فصل) مع المعلمين المُسنَدين."""
-    if not _has_view(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
+    if not await _has_view(db, current_user, "curriculum_curriculum_get_curriculum_by_department", "department", department_id):
+        raise HTTPException(status_code=403, detail="غير مصرح")
 
     # جلب القسم والكلية
     try:
@@ -240,9 +249,9 @@ async def get_curriculum_course(
     current_user: dict = Depends(get_current_user),
 ):
     """تفاصيل مقرر من الخطة + المُعلمون المُسنَدون + إحصائيات."""
-    if not _has_view(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
+    if not await _has_view(db, current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
     try:
         c = await db.curriculum_courses.find_one({"_id": ObjectId(course_id)})
     except Exception:
@@ -373,9 +382,9 @@ async def list_assignments(
     include_inactive: bool = False,
     current_user: dict = Depends(get_current_user),
 ):
-    if not _has_view(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح")
     db = get_db()
+    if not await _has_view(db, current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح")
     q = {}
     if not include_inactive:
         q["is_active"] = {"$ne": False}

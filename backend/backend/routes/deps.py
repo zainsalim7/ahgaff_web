@@ -332,7 +332,8 @@ async def build_user_context(db, user: dict) -> dict:
         "student_id": user.get("student_id"),
         "teacher_record_id": user.get("teacher_record_id"),
         "role_id": user.get("role_id"),
-        "custom_permissions": user.get("custom_permissions", [])
+        "custom_permissions": user.get("custom_permissions", []),
+        "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False),  # 🆕 Phase 7-Final: مستخدمون جدد فقط، افتراضي False للجميع
     }
 
 

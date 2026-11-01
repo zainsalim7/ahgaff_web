@@ -28,6 +28,7 @@ def _ser(d: dict) -> dict:
 async def rollback_status(current_user: dict = Depends(require_adv_access("view"))):
     db = get_db()
     flags = await get_flags_doc(db)
+    real_enforced_count = await db.users.count_documents({"advanced_access_real_enforcement": True})
     return {
         "emergency_kill_switch_engaged": kill_switch_engaged(),
         "activation_locked": ACTIVATION_LOCKED_PHASE6B,
@@ -37,7 +38,9 @@ async def rollback_status(current_user: dict = Depends(require_adv_access("view"
         "updated_at": flags.get("updated_at"),
         "last_reason": flags.get("last_reason"),
         "effective_decision_source": "legacy",
-        "note": "النظام القديم هو المصدر الوحيد الفعلي لقرارات الصلاحيات حاليًا بصرف النظر عن أي قيمة أعلاه، بسبب القفل البرمجي (activation_locked).",
+        "real_enforcement_new_users_count": real_enforced_count,
+        "note": "النظام القديم هو المصدر الوحيد الفعلي لقرارات الصلاحيات لكل المستخدمين الحاليين والقدامى، بصرف النظر عن أي قيمة أعلاه، بسبب القفل البرمجي (activation_locked). "
+                f"استثناء ضيّق صريح (Phase 7-Final): {real_enforced_count} مستخدم(ين) جديد(ين) أُنشئوا صراحةً عبر شاشة التكليفات يخضعون لإنفاذ فعلي حقيقي، لكن فقط على عمليات الخطة الدراسية منخفضة الخطورة المُختبرة (عرض المقررات/الخطة بالقسم) — لا يمسّ هذا أي مستخدم قديم ولا يرفع القفل العام.",
     }
 
 

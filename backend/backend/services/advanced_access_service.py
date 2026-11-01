@@ -217,6 +217,25 @@ async def check_permission(db, user_id: str, assignment_id: str, permission_key:
     return {"allowed": True, "reason": "مسموح", "effective_permissions_count": len(effective)}
 
 
+# ══════════════ إنفاذ فعلي محدود 🆕 (Phase 7-Final، مستخدمون جدد فقط تحمل علامة advanced_access_real_enforcement) ══════════════
+
+async def real_enforce_check(db, user: dict, permission_key: str,
+                              target_scope_type: Optional[str] = None, target_ref_id: Optional[str] = None) -> Optional[bool]:
+    """لا تُستدعى إلا من مستخدم يحمل advanced_access_real_enforcement=True صراحةً (مستخدمون جدد فقط بموافقة صريحة).
+    تُعيد None إن لم تنطبق (المستدعي يرجع للمنطق القديم كالمعتاد)، أو True/False كقرار فعلي قاطع."""
+    if not user.get("advanced_access_real_enforcement"):
+        return None
+    user_id = _uid(user)
+    assignments = await list_user_work_contexts(db, user_id, active_only=True)
+    if not assignments:
+        return False
+    for a in assignments:
+        result = await check_permission(db, user_id, a["id"], permission_key, target_scope_type, target_ref_id)
+        if result.get("allowed"):
+            return True
+    return False
+
+
 async def list_user_work_contexts(db, user_id: str, active_only: bool = True) -> List[dict]:
     q = {"user_id": user_id}
     if active_only:
