@@ -10399,24 +10399,49 @@ async def change_lecture_room(
 
 
 async def _find_sibling_lectures(lecture: dict) -> list:
-    """🔗 محاضرات الشعب الأخرى لنفس الموعد ضمن مجموعة دمج المقرر (محاضرة مشتركة فعلياً)"""
+    """🔗 محاضرات الشعب الأخرى لنفس الموعد (محاضرة مشتركة فعلياً) — نموذجان:
+    (أ) نفس المقرر (نفس course_id) بمجموعة/شعبة مختلفة ضمن نفس الموعد — «نموذج المقرر الواحد المشترك بين شعب/أقسام».
+    (ب) مقررات أخرى مختلفة مدمجة بالجدول الأسبوعي عبر merge_group_id."""
     cid = lecture.get("course_id", "")
+    my_group = lecture.get("group") or ""
+    out = []
+    seen_ids = {str(lecture.get("_id", ""))}
+
+    # (أ) نفس المقرر — مجموعة/شعبة أخرى لنفس التاريخ والوقت (بلا قيد على course_id مختلف)
+    same_course_sibs = await db.lectures.find({
+        "course_id": cid, "date": lecture.get("date"), "start_time": lecture.get("start_time"),
+        "group": {"$ne": my_group}, "status": {"$ne": LectureStatus.COMPLETED},
+    }).to_list(50)
+    if same_course_sibs:
+        c = await db.courses.find_one({"_id": ObjectId(cid)}, {"name": 1, "section": 1, "level": 1}) if cid else None
+        for s in same_course_sibs:
+            sid = str(s["_id"])
+            if sid in seen_ids:
+                continue
+            seen_ids.add(sid)
+            out.append({"id": sid, "course_id": cid, "course_name": (c or {}).get("name", ""),
+                        "section": s.get("group_name") or s.get("group") or (c or {}).get("section", ""), "level": (c or {}).get("level")})
+
+    # (ب) مقررات أخرى مدمجة بالجدول الأسبوعي عبر merge_group_id
     gids = [s["merge_group_id"] for s in await db.weekly_schedule.find(
         {"course_id": cid, "merge_group_id": {"$nin": [None, ""]}}, {"merge_group_id": 1}).to_list(50)]
     if not gids:
-        return []
+        return out
     partner_cids = {s["course_id"] for s in await db.weekly_schedule.find(
         {"merge_group_id": {"$in": gids}, "course_id": {"$ne": cid}}, {"course_id": 1}).to_list(200)}
     if not partner_cids:
-        return []
+        return out
     sibs = await db.lectures.find({
         "course_id": {"$in": list(partner_cids)}, "date": lecture.get("date"), "start_time": lecture.get("start_time"),
         "status": {"$ne": LectureStatus.COMPLETED},
     }).to_list(50)
-    out = []
     for s in sibs:
+        sid = str(s["_id"])
+        if sid in seen_ids:
+            continue
+        seen_ids.add(sid)
         c = await db.courses.find_one({"_id": ObjectId(s["course_id"])}, {"name": 1, "section": 1, "level": 1}) or {}
-        out.append({"id": str(s["_id"]), "course_id": s["course_id"], "course_name": c.get("name", ""),
+        out.append({"id": sid, "course_id": s["course_id"], "course_name": c.get("name", ""),
                     "section": c.get("section", ""), "level": c.get("level")})
     return out
 
