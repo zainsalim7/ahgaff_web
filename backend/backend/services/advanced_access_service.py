@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any
 
 from bson import ObjectId
+from fastapi import HTTPException
 
 GEN_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "generated")
 
@@ -234,6 +235,23 @@ async def real_enforce_check(db, user: dict, permission_key: str,
         if result.get("allowed"):
             return True
     return False
+
+
+async def real_enforce_guard(db, current_user: dict, adv_permission_key: str,
+                              department_id: Optional[str] = None, faculty_id: Optional[str] = None) -> bool:
+    """🆕 حارس عام لنقاط العرض الحية. يُعيد False إن لم ينطبق الإنفاذ الفعلي على هذا المستخدم (المستدعي يكمل بالمنطق القديم كالمعتاد).
+    إن كان المستخدم مُفعَّلاً فعليًا (مستخدمون جدد فقط): يتطلب department_id أو faculty_id صريحًا ضمن نطاق تكليفه
+    وإلا HTTPException(400)، ثم يتحقق من الصلاحية+النطاق فعليًا وإلا HTTPException(403). عند النجاح يُعيد True (تجاوز الفلترة القديمة بأمان)."""
+    if not current_user.get("advanced_access_real_enforcement"):
+        return False
+    target_type = "faculty" if faculty_id else ("department" if department_id else None)
+    target_ref = faculty_id or department_id
+    if target_type is None:
+        raise HTTPException(status_code=400, detail="حدد القسم أو الكلية ضمن نطاق صلاحيتك لعرض هذه البيانات")
+    decision = await real_enforce_check(db, current_user, adv_permission_key, target_type, target_ref)
+    if not decision:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    return True
 
 
 async def list_user_work_contexts(db, user_id: str, active_only: bool = True) -> List[dict]:

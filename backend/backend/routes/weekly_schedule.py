@@ -899,6 +899,9 @@ async def get_weekly_schedule(
     current_user: dict = Depends(get_current_user),
 ):
     db = get_db()
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "schedule_weekly_schedule_get_weekly_schedule", department_id, faculty_id)
     query = {}
     if semester_id:
         query["semester_id"] = semester_id

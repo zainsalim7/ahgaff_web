@@ -28,6 +28,8 @@ class DepartmentUpdate(BaseModel):
 async def get_departments(faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """الحصول على جميع الأقسام"""
     db = get_db()
+    from services.advanced_access_service import real_enforce_guard
+    await real_enforce_guard(db, current_user, "academic_structure_departments_get_departments", None, faculty_id)
     query = {}
     if faculty_id:
         query["faculty_id"] = faculty_id

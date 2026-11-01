@@ -117,6 +117,8 @@ async def get_students(
 ):
     """الحصول على جميع الطلاب"""
     db = get_db()
+    from services.advanced_access_service import real_enforce_guard
+    await real_enforce_guard(db, current_user, "students_students_get_students", department_id)
     query = {}
     
     if department_id:
