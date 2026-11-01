@@ -110,7 +110,7 @@ class TestReport:
         fiqh = next((c for name, c in courses.items() if "فقه العبادات" in name), None)
         assert fiqh, f"فقه العبادات missing: {list(courses.keys())}"
         assert "من الأسبوع 3" in (fiqh.get("note") or "")
-        assert abs((fiqh.get("expected_hours") or 0) - 9) < 0.5  # 3 × 3 أسابيع كاملة من 29/8
+        assert abs((fiqh.get("expected_hours") or 0) - 15) < 0.5  # 3 × 5 أسابيع (كامل الفترة دائمًا، بصرف النظر عن بداية المحاضرات الفعلية)
         assert abs((fiqh.get("actual_hours") or 0) - 12) < 0.5
 
         maqasid = next((c for name, c in courses.items() if "مقاصد" in name), None)
