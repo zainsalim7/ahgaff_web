@@ -316,6 +316,17 @@ async def sync_real_enforcement_context(db, user: dict) -> set:
         elif stype == "faculty":
             fac_ids.update(refs)
 
+    # 🆕 اشتقاق كلية كل قسم مُكلَّف به أيضًا ضمن fac_ids (تُستخدم من وحدات مستوى-الكلية مثل الشهادات/البيانات
+    # التي تتحقق من faculty_ids مباشرة بلا فرع دور) — إضافي فقط، لا يُزيل department_ids
+    if dept_ids:
+        try:
+            dept_obj_ids = [ObjectId(d) for d in dept_ids if ObjectId.is_valid(d)]
+            async for d in db.departments.find({"_id": {"$in": dept_obj_ids}}, {"faculty_id": 1}):
+                if d.get("faculty_id"):
+                    fac_ids.add(str(d["faculty_id"]))
+        except Exception:
+            pass
+
     updates: Dict[str, Any] = {}
     if dept_ids and set(user.get("department_ids") or []) != dept_ids:
         updates["department_ids"] = list(dept_ids)

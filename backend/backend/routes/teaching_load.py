@@ -90,10 +90,13 @@ async def get_teaching_loads(
     افتراضياً يعرض الفصل النشط فقط. تمرير all_semesters=true لعرض كل الفصول،
     أو semester_id لتحديد فصل معيّن (نشط أو مؤرشف).
     """
-    if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+    db = get_db()
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "teaching_load_teaching_load_get_teaching_loads", department_id)
+    elif not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
-    db = get_db()
     query = {}
     if teacher_id:
         query["teacher_id"] = teacher_id
@@ -1182,10 +1185,12 @@ async def advanced_teaching_load_report(
     - semester_id: فصل أكاديمي محدد
     - term: نوع الفصل (1=أول، 2=ثاني) — يفلتر المقررات حسب term في الخطة
     """
-    if not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-
     db = get_db()
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "teaching_load_teaching_load_advanced_teaching_load_report", department_id, faculty_id)
+    elif not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     # فلتر المعلمين
     teacher_query = {"is_active": {"$ne": False}}

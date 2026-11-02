@@ -114,7 +114,27 @@ async def issue_certificate(data: CertIssueRequest, current_user: dict = Depends
 async def list_certificates(current_user: dict = Depends(get_current_user)):
     db = get_db()
     q = {}
-    if current_user.get("role") != "admin":
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_check
+        fids = set(current_user.get("faculty_ids") or [])
+        if current_user.get("faculty_id"):
+            fids.add(current_user["faculty_id"])
+        if not fids:
+            raise HTTPException(status_code=400, detail="حدد كليتك ضمن نطاق صلاحيتك لعرض الشهادات")
+        allowed = False
+        for did in (current_user.get("department_ids") or []):
+            if await real_enforce_check(db, current_user, "certificates_certificates_list_certificates", "department", did):
+                allowed = True
+                break
+        if not allowed:
+            for fid in fids:
+                if await real_enforce_check(db, current_user, "certificates_certificates_list_certificates", "faculty", fid):
+                    allowed = True
+                    break
+        if not allowed:
+            raise HTTPException(status_code=403, detail="غير مصرح")
+        q["faculty_id"] = {"$in": list(fids)}
+    elif current_user.get("role") != "admin":
         fids = set(current_user.get("faculty_ids") or [])
         if current_user.get("faculty_id"):
             fids.add(current_user["faculty_id"])

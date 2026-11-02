@@ -82,9 +82,12 @@ def _serialize_decision(d: dict) -> dict:
 @router.get("/candidates")
 async def list_candidates(course_id: Optional[str] = None, department_id: Optional[str] = None, faculty_id: Optional[str] = None,
                            current_user: dict = Depends(get_current_user)):
-    if not _can_decide(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "councils_faculty_board_list_candidates", department_id, faculty_id)
+    elif not _can_decide(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     scoped_dep_ids = await _scope_department_ids(db, current_user)
     query = {}
     if course_id:
@@ -271,10 +274,14 @@ async def bulk_create_decisions(session_id: str, payload: BulkDecisionsCreate, c
 
 @router.get("/decisions")
 async def list_decisions(student_id: Optional[str] = None, course_id: Optional[str] = None, session_id: Optional[str] = None,
+                          department_id: Optional[str] = None, faculty_id: Optional[str] = None,
                           current_user: dict = Depends(get_current_user)):
-    if not _can_decide(current_user):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "councils_faculty_board_list_decisions", department_id, faculty_id)
+    elif not _can_decide(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     dep_scope = await _scope_department_ids(db, current_user)
     q = {}
     if student_id:
@@ -283,7 +290,13 @@ async def list_decisions(student_id: Optional[str] = None, course_id: Optional[s
         q["course_id"] = course_id
     if session_id:
         q["session_id"] = session_id
-    if dep_scope is not None:
+    if current_user.get("advanced_access_real_enforcement"):
+        if department_id:
+            q["department_id"] = department_id
+        elif faculty_id:
+            fac_dep_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+            q["department_id"] = {"$in": fac_dep_ids}
+    elif dep_scope is not None:
         q["department_id"] = {"$in": dep_scope}
     items = await db.faculty_board_decisions.find(q).sort("created_at", -1).to_list(1000)
     return {"items": [_serialize_decision(d) for d in items]}

@@ -657,14 +657,42 @@ async def list_statements(
         q["status"] = "draft"
     elif status == "issued":
         q["status"] = {"$ne": "draft"}
-    if current_user.get("role") != "admin":
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_check
+        fids = set(current_user.get("faculty_ids") or [])
+        if current_user.get("faculty_id"):
+            fids.add(current_user["faculty_id"])
+        if not fids:
+            raise HTTPException(status_code=400, detail="حدد كليتك ضمن نطاق صلاحيتك لعرض البيانات")
+        allowed = False
+        for did in (current_user.get("department_ids") or []):
+            if await real_enforce_check(db, current_user, "certificates_statements_list_statements", "department", did):
+                allowed = True
+                break
+        if not allowed:
+            for fid in fids:
+                if await real_enforce_check(db, current_user, "certificates_statements_list_statements", "faculty", fid):
+                    allowed = True
+                    break
+        if not allowed:
+            raise HTTPException(status_code=403, detail="غير مصرح")
+        q["faculty_id"] = {"$in": list(fids)}
+        if faculty_id:
+            if faculty_id not in fids:
+                raise HTTPException(status_code=403, detail="هذه الكلية خارج نطاق صلاحيتك")
+            q["faculty_id"] = faculty_id
+    elif current_user.get("role") != "admin":
         fids = set(current_user.get("faculty_ids") or [])
         if current_user.get("faculty_id"):
             fids.add(current_user["faculty_id"])
         if not fids or current_user.get("role") in ("teacher", "student"):
             raise HTTPException(status_code=403, detail="غير مصرح لك")
         q["faculty_id"] = {"$in": list(fids)}
-    if faculty_id:
+        if faculty_id:
+            if faculty_id not in fids:
+                raise HTTPException(status_code=403, detail="هذه الكلية خارج نطاق صلاحيتك")
+            q["faculty_id"] = faculty_id
+    elif faculty_id:
         q["faculty_id"] = faculty_id
     items = []
     async for s in db.student_statements.find(q, {"inputs": 0}).sort("issued_at", -1).limit(500):

@@ -6963,7 +6963,12 @@ async def get_course_enrollments(course_id: str, current_user: dict = Depends(ge
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
-    
+
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        dep = str(course.get("department_id")) if course.get("department_id") else None
+        await real_enforce_guard(db, current_user, "enrollments_ser_get_course_enrollments", dep)
+
     _enr_q: dict = {"course_id": course_id}
     if current_user["role"] == UserRole.TEACHER:
         _is_owner, _keys = await _teacher_group_scope(course, current_user)
@@ -7395,6 +7400,11 @@ async def get_enrolled_students_for_attendance(
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        dep = str(course.get("department_id")) if course.get("department_id") else None
+        await real_enforce_guard(db, current_user, "enrollments_ser_get_enrolled_students_for_attendance", dep)
 
     enr_q: dict = {"course_id": course_id}
     group_filter = {"group": group} if group else None
@@ -11169,7 +11179,13 @@ async def get_lecture_attendance(
     lecture = await db.lectures.find_one({"_id": ObjectId(lecture_id)})
     if not lecture:
         raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
-    
+
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        course_doc = await db.courses.find_one({"_id": ObjectId(lecture.get("course_id"))}) if ObjectId.is_valid(str(lecture.get("course_id", ""))) else None
+        dep = str(course_doc.get("department_id")) if course_doc and course_doc.get("department_id") else None
+        await real_enforce_guard(db, current_user, "attendance_ser_get_lecture_attendance", dep)
+
     records = await db.attendance.find({"lecture_id": lecture_id}).to_list(1000)
     
     result = []
@@ -11494,6 +11510,12 @@ async def get_course_attendance(
     date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        course_doc = await db.courses.find_one({"_id": ObjectId(course_id)}) if ObjectId.is_valid(course_id) else None
+        dep = str(course_doc.get("department_id")) if course_doc and course_doc.get("department_id") else None
+        await real_enforce_guard(db, current_user, "attendance_ser_get_course_attendance", dep)
+
     # جلب المحاضرات النشطة فقط
     active_lecture_ids = await get_active_lecture_ids(course_id)
     
@@ -11687,6 +11709,12 @@ async def get_student_attendance(
     course_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        student_doc = await db.students.find_one({"_id": ObjectId(student_id)}) if ObjectId.is_valid(student_id) else None
+        dep = str(student_doc.get("department_id")) if student_doc and student_doc.get("department_id") else None
+        await real_enforce_guard(db, current_user, "attendance_ser_get_student_attendance", dep)
+
     query = {"student_id": student_id}
     if course_id:
         query["course_id"] = course_id
@@ -11729,6 +11757,8 @@ async def get_student_attendance(
 
     result = []
     for r in records:
+        if not r.get("course_id"):
+            continue
         course = await db.courses.find_one({"_id": ObjectId(r["course_id"])})
         
         # جلب start_time و end_time من جدول المحاضرات
@@ -11764,6 +11794,12 @@ async def get_student_stats(
     course_id: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        student_doc = await db.students.find_one({"_id": ObjectId(student_id)}) if ObjectId.is_valid(student_id) else None
+        dep = str(student_doc.get("department_id")) if student_doc and student_doc.get("department_id") else None
+        await real_enforce_guard(db, current_user, "attendance_ser_get_student_stats", dep)
+
     query = {"student_id": student_id}
     if course_id:
         query["course_id"] = course_id
@@ -11792,6 +11828,12 @@ async def get_student_stats(
 
 @api_router.get("/attendance/stats/course/{course_id}")
 async def get_course_stats(course_id: str, current_user: dict = Depends(get_current_user)):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        course_doc_scope = await db.courses.find_one({"_id": ObjectId(course_id)}) if ObjectId.is_valid(course_id) else None
+        dep = str(course_doc_scope.get("department_id")) if course_doc_scope and course_doc_scope.get("department_id") else None
+        await real_enforce_guard(db, current_user, "attendance_ser_get_course_stats", dep)
+
     # Get all attendance records for this course
     records = await db.attendance.find({"course_id": course_id}).to_list(10000)
     
@@ -11977,7 +12019,10 @@ async def get_department_report(
     end_date: Optional[str] = None,
     current_user: dict = Depends(get_current_user)
 ):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_reports"):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "reports_ser_get_department_report", dept_id)
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "view_reports"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # Get department
@@ -12074,7 +12119,10 @@ async def get_attendance_overview_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير الحضور الشامل - نسب الحضور لجميع المقررات"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "reports_ser_get_attendance_overview_report", department_id, faculty_id)
+    elif not has_permission(current_user, Permission.VIEW_REPORTS):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # بناء query للمقررات
@@ -12257,8 +12305,9 @@ async def get_student_attendance_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير حضور طالب واحد في جميع مقرراته"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.VIEW_ATTENDANCE):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if not current_user.get("advanced_access_real_enforcement"):
+        if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.VIEW_ATTENDANCE):
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # جلب الطالب
     student = await db.students.find_one({"_id": ObjectId(student_id)}) if ObjectId.is_valid(student_id) else None
@@ -12268,6 +12317,11 @@ async def get_student_attendance_report(
     
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
+
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        dep = str(student.get("department_id")) if student.get("department_id") else None
+        await real_enforce_guard(db, current_user, "reports_ser_get_student_attendance_report", dep)
     
     # جلب المقررات المسجل فيها
     enrollments = await db.enrollments.find({"student_id": str(student["_id"])}).to_list(100)
@@ -12499,12 +12553,18 @@ async def get_course_detailed_report(
     current_user: dict = Depends(get_current_user)
 ):
     """تقرير المقرر التفصيلي - تحليل كامل لمقرر معين"""
-    if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_COURSE):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
+    if not current_user.get("advanced_access_real_enforcement"):
+        if not has_permission(current_user, Permission.VIEW_REPORTS) and not has_permission(current_user, Permission.REPORT_COURSE):
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        dep = str(course.get("department_id")) if course.get("department_id") else None
+        await real_enforce_guard(db, current_user, "reports_ser_get_course_detailed_report", dep)
     
     # المعلم يرى مقرراته فقط
     if current_user["role"] == UserRole.TEACHER:

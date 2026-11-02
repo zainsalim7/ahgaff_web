@@ -301,7 +301,10 @@ async def list_alumni(
 ):
     """قائمة الخريجين مع فلاتر."""
     db = get_db()
-    if not (current_user.get("role") == "admin" or has_any_permission(
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "alumni_alumni_list_alumni", department_id, faculty_id)
+    elif not (current_user.get("role") == "admin" or has_any_permission(
         current_user, [Permission.VIEW_STUDENTS, Permission.MANAGE_STUDENTS]
     )):
         raise HTTPException(status_code=403, detail="ليس لديك صلاحية لعرض الخريجين")

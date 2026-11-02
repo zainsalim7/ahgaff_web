@@ -160,16 +160,23 @@ async def get_archive_summary(semester_id: str, current_user: dict = Depends(get
 
 
 @router.get("/archives/{semester_id}/courses")
-async def get_archive_courses(semester_id: str, current_user: dict = Depends(get_current_user)):
+async def get_archive_courses(semester_id: str, department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """قائمة المقررات في فصل مؤرشف (مع المعلم والقسم والإحصائيات)."""
-    _require_view(current_user)
     db = get_db()
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "archive_archives_get_archive_courses", department_id)
+    else:
+        _require_view(current_user)
     a = await _load_archive(db, semester_id)
+    courses = a.get("courses", [])
+    if current_user.get("advanced_access_real_enforcement") and department_id:
+        courses = [c for c in courses if str(c.get("department_id") or "") == department_id]
     return {
         "semester_id": semester_id,
         "semester_name": a.get("semester_name"),
-        "courses": a.get("courses", []),
-        "total": len(a.get("courses", [])),
+        "courses": courses,
+        "total": len(courses),
     }
 
 
@@ -225,13 +232,19 @@ async def get_archive_course_details(
 
 
 @router.get("/archives/{semester_id}/students")
-async def get_archive_students(semester_id: str, current_user: dict = Depends(get_current_user)):
+async def get_archive_students(semester_id: str, department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
     """قائمة الطلاب في فصل مؤرشف مع نسب حضورهم الإجمالية."""
-    _require_view(current_user)
     db = get_db()
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_guard
+        await real_enforce_guard(db, current_user, "archive_archives_get_archive_students", department_id)
+    else:
+        _require_view(current_user)
     a = await _load_archive(db, semester_id)
 
     students_map = {s["id"]: s for s in a.get("students_snapshot", [])}
+    if current_user.get("advanced_access_real_enforcement") and department_id:
+        students_map = {sid: info for sid, info in students_map.items() if str(info.get("department_id") or "") == department_id}
     attendance = a.get("attendance", [])
     enrollments = a.get("enrollments", [])
 
