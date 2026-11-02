@@ -931,16 +931,7 @@ export default function ManageTeachersScreen() {
               </View>
             </View>
 
-            {/* بطاقة الجدول — لا تُعرض حتى يختار المستخدم فلتراً */}
-            {!hasActiveFilter ? (
-              <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6', padding: 50, alignItems: 'center', gap: 14 }}>
-                <Ionicons name="filter-circle-outline" size={72} color="#cfd6e1" />
-                <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'center' }}>اختر فلتراً لعرض المعلمين</Text>
-                <Text style={{ fontSize: 13, color: '#8a95a8', textAlign: 'center', maxWidth: 460, lineHeight: 22 }}>
-                  حدّد قسماً، أو اكتب اسم/رقم وظيفي معلم في حقل البحث أعلاه لعرض النتائج.
-                </Text>
-              </View>
-            ) : (
+            {/* بطاقة الجدول */}
             <View style={styles.tableCard}>
               <View style={styles.tableCardHeader}>
                 <Text style={styles.tableCardTitle}>قائمة المعلمين</Text>
@@ -1040,7 +1031,6 @@ export default function ManageTeachersScreen() {
                 )}
               </View>
             </View>
-            )}
 
           </ScrollView>
         )}

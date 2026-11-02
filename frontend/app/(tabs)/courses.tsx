@@ -1462,16 +1462,7 @@ export default function AddCourseScreen() {
                     </View>
                   </View>
 
-                  {/* بطاقة الجدول — لا تعرض حتى يختار المستخدم فلتراً */}
-                  {!(filterFaculty || filterDept || searchQuery || filterSemester || filterLevel || filterSection) ? (
-                    <View style={{ backgroundColor: '#fff', borderRadius: 14, borderWidth: 1, borderColor: '#eef1f6', padding: 50, alignItems: 'center', gap: 14 }}>
-                      <Ionicons name="filter-circle-outline" size={72} color="#cfd6e1" />
-                      <Text style={{ fontSize: 17, fontWeight: '700', color: '#1a2540', textAlign: 'center' }}>اختر فلتراً لعرض المقررات</Text>
-                      <Text style={{ fontSize: 13, color: '#8a95a8', textAlign: 'center', maxWidth: 460, lineHeight: 22 }}>
-                        حدّد قسماً أو فصلاً معيناً، أو اكتب اسم/كود مقرر في حقل البحث أعلاه لعرض النتائج.
-                      </Text>
-                    </View>
-                  ) : (
+                  {/* بطاقة الجدول */}
                   <View style={styles.tableCard}>
                     <View style={styles.tableCardHeader}>
                       <Text style={styles.tableCardTitle}>قائمة المقررات</Text>
@@ -1555,7 +1546,6 @@ export default function AddCourseScreen() {
                       </>
                     )}
                   </View>
-                  )}
                 </>
               );
             })()}
