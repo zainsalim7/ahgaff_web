@@ -15,7 +15,7 @@ class TeacherBase(BaseModel):
     specialization: Optional[str] = None
     academic_title: Optional[str] = None
     teaching_load: Optional[int] = None
-    weekly_hours: Optional[int] = 12
+    weekly_hours: Optional[int] = 0
 
 class TeacherCreate(TeacherBase):
     pass

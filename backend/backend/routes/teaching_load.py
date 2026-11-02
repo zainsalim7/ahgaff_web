@@ -1346,7 +1346,7 @@ async def advanced_teaching_load_report(
         course_pool = teacher_courses_list if (teacher_courses_list or teacher_id) else all_courses
         assigned_courses = [c for c in course_pool if c.get("teacher_id") == tid]
         total_weekly = sum(l.get("weekly_hours", 0) for l in t_loads)
-        max_hours = t.get("weekly_hours", 12)
+        max_hours = t.get("weekly_hours", 0)
         usage_pct = round((total_weekly / max_hours * 100), 1) if max_hours > 0 else 0
 
         entry = {

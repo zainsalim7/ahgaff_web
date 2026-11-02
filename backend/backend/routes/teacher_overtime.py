@@ -282,7 +282,8 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
     result = []
     for teacher in teachers:
         tid = str(teacher["_id"])
-        weekly_hours = float(teacher.get("weekly_hours") or 12)
+        _wh_raw = teacher.get("weekly_hours")
+        weekly_hours = float(_wh_raw) if _wh_raw is not None else 0.0
         required_hours = round(weekly_hours * total_weeks, 2)
         dep = dep_docs.get(teacher.get("department_id") or "", {})
         faculty_id = teacher.get("faculty_id") or dep.get("faculty_id") or ""

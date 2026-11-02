@@ -84,7 +84,7 @@ export default function ManageTeachersScreen() {
     specialization: '',
     academic_title: '',
     teaching_load: '',
-    weekly_hours: '12',
+    weekly_hours: '0',
   });
 
   // حذف آمن
@@ -236,14 +236,14 @@ export default function ManageTeachersScreen() {
           specialization: formData.specialization || undefined,
           academic_title: formData.academic_title || undefined,
           teaching_load: formData.teaching_load ? parseInt(formData.teaching_load) : undefined,
-          weekly_hours: formData.weekly_hours ? parseInt(formData.weekly_hours) : 12,
+          weekly_hours: formData.weekly_hours !== '' ? parseInt(formData.weekly_hours) : 0,
         });
         showMessage('نجاح', 'تم تحديث بيانات المعلم بنجاح');
       } else {
         await teachersAPI.create({
           ...formData,
           teaching_load: formData.teaching_load ? parseInt(formData.teaching_load) : undefined,
-          weekly_hours: formData.weekly_hours ? parseInt(formData.weekly_hours) : 12,
+          weekly_hours: formData.weekly_hours !== '' ? parseInt(formData.weekly_hours) : 0,
         });
         showMessage('نجاح', 'تم إضافة المعلم بنجاح');
       }
@@ -269,7 +269,7 @@ export default function ManageTeachersScreen() {
       specialization: '',
       academic_title: '',
       teaching_load: '',
-      weekly_hours: '12',
+      weekly_hours: '0',
     });
   };
 
@@ -288,7 +288,7 @@ export default function ManageTeachersScreen() {
       specialization: teacher.specialization || '',
       academic_title: teacher.academic_title || '',
       teaching_load: teacher.teaching_load ? teacher.teaching_load.toString() : '',
-      weekly_hours: teacher.weekly_hours ? teacher.weekly_hours.toString() : '12',
+      weekly_hours: teacher.weekly_hours != null ? teacher.weekly_hours.toString() : '0',
     });
     setShowForm(true);
   };
@@ -734,7 +734,7 @@ export default function ManageTeachersScreen() {
                 const numericValue = text.replace(/[^0-9]/g, '');
                 setFormData({ ...formData, weekly_hours: numericValue });
               }}
-              placeholder="النصاب الأسبوعي (افتراضي 12 ساعة)"
+              placeholder="0 = بلا نصاب (لا يُحتسب ضمن تقارير العبء)"
               keyboardType="numeric"
               testID="weekly-hours-input"
             />

@@ -4931,7 +4931,7 @@ async def get_teachers(
             "specialization": teacher.get("specialization"),
             "academic_title": teacher.get("academic_title"),
             "user_id": teacher.get("user_id"),
-            "weekly_hours": teacher.get("weekly_hours", 12),
+            "weekly_hours": teacher.get("weekly_hours", 0),
             "teaching_load": teacher.get("teaching_load"),
             "created_at": teacher.get("created_at", get_yemen_time()),
             "is_active": teacher.get("is_active", True),
@@ -5048,7 +5048,7 @@ async def get_my_teacher_profile(current_user: dict = Depends(get_current_user))
         "phone": teacher.get("phone"),
         "specialization": teacher.get("specialization"),
         "academic_title": teacher.get("academic_title"),
-        "weekly_hours": teacher.get("weekly_hours", 12),
+        "weekly_hours": teacher.get("weekly_hours", 0),
         "teaching_load": teacher.get("teaching_load"),
         "department_id": teacher.get("department_id"),
         "department_ids": dept_ids,
@@ -5077,7 +5077,7 @@ async def get_teacher(teacher_id: str, current_user: dict = Depends(get_current_
         "specialization": teacher.get("specialization"),
         "academic_title": teacher.get("academic_title"),
         "user_id": teacher.get("user_id"),
-        "weekly_hours": teacher.get("weekly_hours", 12),
+        "weekly_hours": teacher.get("weekly_hours", 0),
         "teaching_load": teacher.get("teaching_load"),
         "created_at": teacher.get("created_at", get_yemen_time()),
         "is_active": teacher.get("is_active", True)
@@ -5310,7 +5310,7 @@ async def update_teacher(teacher_id: str, request: Request, current_user: dict =
         "specialization": updated.get("specialization"),
         "academic_title": updated.get("academic_title"),
         "user_id": updated.get("user_id"),
-        "weekly_hours": updated.get("weekly_hours", 12),
+        "weekly_hours": updated.get("weekly_hours", 0),
         "teaching_load": updated.get("teaching_load"),
         "is_active": updated.get("is_active", True)
     }
@@ -15683,11 +15683,11 @@ async def import_teachers_from_excel(
                     errors.append(f"الصف {index + 2}: {_ex.detail}")
                     continue
                 
-                weekly_h = 12
+                weekly_h = 0
                 try:
                     weekly_h = int(row['weekly_hours'])
                 except (ValueError, TypeError):
-                    weekly_h = 12
+                    weekly_h = 0
                 
                 teacher_data = {
                     "teacher_id": tid,

@@ -222,7 +222,7 @@ export function AssignTeacherModal({
       totalHoursAdded += hours;
     }
     const currentLoad = teacherCurrentLoadMap[pickedId] || 0;
-    const maxHours = (teachers.find(t => t.id === pickedId) as any)?.weekly_hours ?? 12;
+    const maxHours = (teachers.find(t => t.id === pickedId) as any)?.weekly_hours ?? 0;
     return {
       sameDeptCount,
       crossDeptCount,

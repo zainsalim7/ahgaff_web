@@ -133,7 +133,7 @@ async def get_teacher_full_profile(
         "phone": teacher.get("phone"),
         "specialization": teacher.get("specialization"),
         "academic_title": teacher.get("academic_title"),
-        "weekly_hours": teacher.get("weekly_hours", 12),
+        "weekly_hours": teacher.get("weekly_hours", 0),
         "departments": departments,
         "courses": courses,
         "semester_id": target_sem["id"] if target_sem else None,
