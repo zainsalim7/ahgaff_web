@@ -1192,10 +1192,23 @@ async def advanced_teaching_load_report(
     elif not has_permission(current_user, Permission.VIEW_TEACHING_LOAD) and not has_permission(current_user, Permission.MANAGE_TEACHING_LOAD):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
 
+    # 🆕 للمستخدمين ذوي الإنفاذ الفعلي: استنتاج قائمة الأقسام المسموحة (قسم واحد أو كل أقسام الكلية)
+    # لضمان ألا يسقط فلتر القسم عند تمرير teacher_id (ثغرة تسريب نطاق)
+    real_enforce_dept_ids: Optional[list] = None
+    if current_user.get("advanced_access_real_enforcement"):
+        if department_id:
+            real_enforce_dept_ids = [department_id]
+        elif faculty_id:
+            real_enforce_dept_ids = [str(d["_id"]) async for d in db.departments.find({"faculty_id": faculty_id}, {"_id": 1})]
+        else:
+            real_enforce_dept_ids = []
+
     # فلتر المعلمين
     teacher_query = {"is_active": {"$ne": False}}
     if department_id:
         teacher_query["department_id"] = department_id
+    elif real_enforce_dept_ids is not None:
+        teacher_query["department_id"] = {"$in": real_enforce_dept_ids}
     if teacher_id:
         # عند فلترة معلم واحد، تجاهل الفلاتر الأخرى للمعلم
         try:
@@ -1204,6 +1217,15 @@ async def advanced_teaching_load_report(
             raise HTTPException(status_code=400, detail="معرّف المعلم غير صحيح")
 
     teachers = await db.teachers.find(teacher_query).to_list(500)
+
+    # 🆕 تحقق صريح أن المعلم المطلوب (عبر teacher_id) فعليًا ضمن نطاق المستخدم المُتحقَّق منه أعلاه
+    if real_enforce_dept_ids is not None and teacher_id:
+        if not teachers:
+            raise HTTPException(status_code=404, detail="المعلم غير موجود")
+        t_dept = str(teachers[0].get("department_id") or "")
+        if t_dept not in real_enforce_dept_ids:
+            raise HTTPException(status_code=403, detail="هذا المعلم خارج نطاق صلاحيتك")
+
     teacher_ids = [str(t["_id"]) for t in teachers]
 
     # ⭐ مزامنة تلقائية: إنشاء teaching_load المفقودة للمقررات المسندة
@@ -1247,7 +1269,9 @@ async def advanced_teaching_load_report(
     # الباغ السابق: كنا نستخدم نفس القائمة المفلترة حسب القسم لكل شيء، فإذا كان لمعلم
     # مقررات في أقسام أخرى لا تظهر له. الإصلاح: تفصلهما.
     dept_course_query = {"is_active": True}
-    if department_id and not teacher_id:
+    if real_enforce_dept_ids is not None:
+        dept_course_query["department_id"] = {"$in": real_enforce_dept_ids}
+    elif department_id and not teacher_id:
         dept_course_query["department_id"] = department_id
     if semester_id:
         dept_course_query["semester_id"] = semester_id
@@ -1275,7 +1299,9 @@ async def advanced_teaching_load_report(
             # dept_courses: محدودة بالقسم المختار
             if tc_match:
                 dept_ok = True
-                if department_id and not teacher_id and c.get("department_id") != department_id:
+                if real_enforce_dept_ids is not None and c.get("department_id") not in real_enforce_dept_ids:
+                    dept_ok = False
+                elif department_id and not teacher_id and c.get("department_id") != department_id:
                     dept_ok = False
                 if dept_ok:
                     dept_courses.append(c)

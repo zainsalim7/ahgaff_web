@@ -316,14 +316,16 @@ async def sync_real_enforcement_context(db, user: dict) -> set:
         elif stype == "faculty":
             fac_ids.update(refs)
 
-    # 🆕 اشتقاق كلية كل قسم مُكلَّف به أيضًا ضمن fac_ids (تُستخدم من وحدات مستوى-الكلية مثل الشهادات/البيانات
-    # التي تتحقق من faculty_ids مباشرة بلا فرع دور) — إضافي فقط، لا يُزيل department_ids
+    # 🆕 كلية كل قسم مُكلَّف به — تُخزَّن في حقل منفصل adv_derived_faculty_ids (وليس faculty_ids) حتى لا
+    # تُفعِّل قاعدة "multi-faculty = كلية كاملة" في get_user_scope_filter القديمة لمستخدمين مُكلَّفين بأقسام فقط.
+    # تُستخدم فقط من وحدات مستوى-الكلية الصريحة (الشهادات/البيانات) التي تتحقق من هذا الحقل مباشرةً.
+    derived_fac_ids: set = set()
     if dept_ids:
         try:
             dept_obj_ids = [ObjectId(d) for d in dept_ids if ObjectId.is_valid(d)]
             async for d in db.departments.find({"_id": {"$in": dept_obj_ids}}, {"faculty_id": 1}):
                 if d.get("faculty_id"):
-                    fac_ids.add(str(d["faculty_id"]))
+                    derived_fac_ids.add(str(d["faculty_id"]))
         except Exception:
             pass
 
@@ -332,6 +334,8 @@ async def sync_real_enforcement_context(db, user: dict) -> set:
         updates["department_ids"] = list(dept_ids)
     if fac_ids and set(user.get("faculty_ids") or []) != fac_ids:
         updates["faculty_ids"] = list(fac_ids)
+    if derived_fac_ids and set(user.get("adv_derived_faculty_ids") or []) != derived_fac_ids:
+        updates["adv_derived_faculty_ids"] = list(derived_fac_ids)
 
     org_unit_ids: set = set()
     if dept_ids or fac_ids:

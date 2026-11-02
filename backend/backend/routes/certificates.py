@@ -117,6 +117,7 @@ async def list_certificates(current_user: dict = Depends(get_current_user)):
     if current_user.get("advanced_access_real_enforcement"):
         from services.advanced_access_service import real_enforce_check
         fids = set(current_user.get("faculty_ids") or [])
+        fids |= set(current_user.get("adv_derived_faculty_ids") or [])
         if current_user.get("faculty_id"):
             fids.add(current_user["faculty_id"])
         if not fids:

@@ -335,6 +335,7 @@ async def build_user_context(db, user: dict) -> dict:
         "department_ids": user.get("department_ids") or (
             [user.get("department_id")] if user.get("department_id") else []
         ),
+        "adv_derived_faculty_ids": user.get("adv_derived_faculty_ids") or [],
         "student_id": user.get("student_id"),
         "teacher_record_id": user.get("teacher_record_id"),
         "role_id": user.get("role_id"),

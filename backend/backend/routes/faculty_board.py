@@ -94,6 +94,20 @@ async def list_candidates(course_id: Optional[str] = None, department_id: Option
         if not ObjectId.is_valid(course_id):
             raise HTTPException(status_code=400, detail="مقرر غير صالح")
         query["_id"] = ObjectId(course_id)
+        if current_user.get("advanced_access_real_enforcement"):
+            # تحقق مباشر من انتماء المقرر لنفس القسم/الكلية المُتحقَّق منها أعلاه عبر real_enforce_guard —
+            # لا نعتمد على scoped_dep_ids (غير موثوق لمستخدمي advanced_access_real_enforcement)
+            course_doc = await db.courses.find_one({"_id": ObjectId(course_id)}, {"department_id": 1, "faculty_id": 1})
+            if not course_doc:
+                raise HTTPException(status_code=404, detail="المقرر غير موجود")
+            c_dept = str(course_doc.get("department_id") or "")
+            c_fac = str(course_doc.get("faculty_id") or "")
+            if not c_fac and c_dept and ObjectId.is_valid(c_dept):
+                dep_doc = await db.departments.find_one({"_id": ObjectId(c_dept)}, {"faculty_id": 1})
+                c_fac = str((dep_doc or {}).get("faculty_id") or "")
+            ok = (department_id and c_dept == department_id) or (faculty_id and c_fac == faculty_id)
+            if not ok:
+                raise HTTPException(status_code=403, detail="هذا المقرر خارج نطاق صلاحيتك")
     else:
         sem = await get_active_semester(db)
         if sem:
