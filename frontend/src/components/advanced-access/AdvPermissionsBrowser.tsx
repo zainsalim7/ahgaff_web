@@ -123,6 +123,9 @@ export const AdvPermissionsBrowser: React.FC = () => {
                   <View style={styles.apiPathWrap}>
                     <Text style={styles.permApi}>{p.linked_api}</Text>
                   </View>
+                  {!!p.description_ar && (
+                    <Text style={styles.permDesc} numberOfLines={3}>{p.description_ar}</Text>
+                  )}
                 </View>
               );
             })}
@@ -186,6 +189,7 @@ const styles = StyleSheet.create({
   sensBadgeText: { fontSize: 10, fontWeight: '700' },
   apiPathWrap: { backgroundColor: COLORS.bg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, alignSelf: 'stretch' },
   permApi: { fontSize: 11, color: COLORS.textMuted, textAlign: 'left', writingDirection: 'ltr', fontFamily: 'monospace' },
+  permDesc: { fontSize: 12, color: COLORS.text, textAlign: 'right', lineHeight: 17, opacity: 0.85 },
 
   emptyBox: { alignItems: 'center', justifyContent: 'center', paddingVertical: 50, gap: 8 },
   emptyText: { fontSize: 13, color: COLORS.textMuted },

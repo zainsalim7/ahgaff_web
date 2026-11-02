@@ -85,6 +85,7 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
                   <View style={{ flex: 1 }}>
                     <Text style={styles.permLabel}>{p.label_ar}</Text>
                     <Text style={styles.permApi}>{p.linked_api}</Text>
+                    {!!p.description_ar && <Text style={styles.permDesc}>{p.description_ar}</Text>}
                   </View>
                 </TouchableOpacity>
               ))}
@@ -107,7 +108,8 @@ const styles = StyleSheet.create({
   groupName: { flex: 1, fontSize: 13, fontWeight: '600', color: COLORS.text, textAlign: 'right' },
   groupCount: { fontSize: 11, color: COLORS.textMuted },
   groupCheckbox: { padding: 2 },
-  permRow: { flexDirection: 'row-reverse', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, gap: 8, borderTopWidth: 1, borderTopColor: COLORS.bg },
+  permRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, gap: 8, borderTopWidth: 1, borderTopColor: COLORS.bg },
   permLabel: { fontSize: 12, color: COLORS.text, textAlign: 'right' },
-  permApi: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right' },
+  permApi: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 2 },
+  permDesc: { fontSize: 11, color: COLORS.text, textAlign: 'right', marginTop: 3, lineHeight: 15, opacity: 0.85 },
 });
