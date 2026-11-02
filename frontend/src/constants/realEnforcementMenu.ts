@@ -22,6 +22,7 @@ export const REAL_ENFORCED_MENU_ITEMS: RealEnforcedMenuItem[] = [
   { permissionKey: 'hr_leaves_hr_leaves_list_leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves' },
   { permissionKey: 'letters_letters_list_letters', label: 'الخطابات الرسمية', icon: 'mail-open', path: '/letters' },
   { permissionKey: 'letters_hr_letters_list_letters', label: 'الخطابات الرسمية', icon: 'mail-open', path: '/letters' },
+  { permissionKey: 'dashboard_management_dashboard_management_dashboard_hr', label: 'لوحة التقارير الإدارية', icon: 'bar-chart', path: '/management-dashboard' },
 ];
 
 export function getAccessibleRealEnforcedItems(permissionKeys: string[]): RealEnforcedMenuItem[] {

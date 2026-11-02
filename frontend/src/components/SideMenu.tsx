@@ -154,6 +154,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'hr-employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_list_employees'] },
   { id: 'hr-org-units', label: 'الهيكل التنظيمي', icon: 'git-network', path: '/hr-org-units', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
   { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES], advPermissionKeys: ['hr_leaves_hr_leaves_list_leaves'] },
+  { id: 'management-dashboard', label: 'لوحة التقارير الإدارية', icon: 'bar-chart', path: '/management-dashboard', permissions: [], advPermissionKeys: ['dashboard_management_dashboard_management_dashboard_hr'] },
   { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-work-settings', label: 'إعدادات الدوام والفترات', icon: 'time', path: '/hr-work-settings', permissions: [PERMISSIONS.HR_MANAGE_WORK_SETTINGS] },
   { id: 'hr-leave-settings', label: 'إعدادات الإجازات', icon: 'options', path: '/hr-leave-settings', permissions: [PERMISSIONS.HR_MANAGE_LEAVE_SETTINGS] },
