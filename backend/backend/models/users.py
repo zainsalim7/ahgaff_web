@@ -53,6 +53,7 @@ class UserResponse(UserBase):
     faculty_names: Optional[List[str]] = None
     department_name: Optional[str] = None
     department_names: Optional[List[str]] = None
+    advanced_access_real_enforcement: bool = False
 
 class Token(BaseModel):
     access_token: str

@@ -975,7 +975,8 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
         except Exception:
             pass
     
-    if not user_permissions:
+    # 🆕 مستخدم إنفاذ فعلي: لا رجوع لصلاحيات دور "موظف" الافتراضية — صلاحياته القديمة صفر بالتصميم
+    if not user_permissions and not user.get("advanced_access_real_enforcement"):
         user_role = user.get("role", "employee")
         role_doc = await db.roles.find_one({"system_key": user_role})
         if role_doc:
@@ -1015,7 +1016,11 @@ async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(s
 
 def get_user_permissions(user: dict) -> List[str]:
     """الحصول على صلاحيات المستخدم مع توسيع الصلاحيات الرئيسية"""
-    base_permissions = user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
+    # 🆕 مستخدم إنفاذ فعلي: [] تعني صفر صلاحيات قديمة فعلاً، بلا رجوع لافتراضيات "موظف"
+    if user.get("advanced_access_real_enforcement"):
+        base_permissions = user.get("permissions") or []
+    else:
+        base_permissions = user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
     # توسيع الصلاحيات: manage_lectures يشمل reschedule_lecture, generate_lectures, إلخ
     expanded = set(base_permissions)
     for perm in base_permissions:
@@ -1487,7 +1492,7 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
             "phone": u.get("phone"),
             "created_at": u["created_at"],
             "is_active": u.get("is_active", True),
-            "permissions": u.get("permissions") or DEFAULT_PERMISSIONS.get(u["role"], []),
+            "permissions": [] if u.get("advanced_access_real_enforcement") else (u.get("permissions") or DEFAULT_PERMISSIONS.get(u["role"], [])),
             "custom_permissions": u.get("custom_permissions") or [],
             "university_id": u.get("university_id"),
             "faculty_id": u.get("faculty_id"),

@@ -26,6 +26,8 @@ import {
   teachersAPI,
 } from '../../src/services/api';
 import { ManagementDashboard } from '../../src/components/dashboard/ManagementDashboard';
+import { useRealEnforcementStore } from '../../src/store/realEnforcementStore';
+import { getAccessibleRealEnforcedItems } from '../../src/constants/realEnforcementMenu';
 
 /**
  * 🏛️ الصفحة الرئيسية الموحدة — لوحة الإحصائيات
@@ -99,9 +101,68 @@ interface StatCard {
 
 export default function HomeDashboardScreen() {
   const { user } = useAuthStore();
+  if (user?.advanced_access_real_enforcement) return <RealEnforcementHome />;
   if (user?.role === 'employee') return <HrMyProfile />;
   if (user && user.role !== 'teacher' && user.role !== 'student') return <ManagementDashboard />;
   return <LegacyHomeScreen />;
+}
+
+/** 🆕 الصفحة الرئيسية للمستخدمين الجدد ذوي الإنفاذ الفعلي (مركز الصلاحيات المتقدم) */
+function RealEnforcementHome() {
+  const router = useRouter();
+  const { user } = useAuthStore();
+  const { enabled, permissionKeys, checked, checkAccess } = useRealEnforcementStore();
+
+  useEffect(() => {
+    if (!checked) checkAccess();
+  }, [checked, checkAccess]);
+
+  const items = useMemo(() => getAccessibleRealEnforcedItems(permissionKeys), [permissionKeys]);
+
+  if (!checked) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f9fc', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator size="large" color="#1565c0" />
+      </SafeAreaView>
+    );
+  }
+
+  return (
+    <SafeAreaView style={{ flex: 1, backgroundColor: '#f7f9fc' }} edges={['top']}>
+      <ScrollView contentContainerStyle={{ padding: 20, gap: 16 }} data-testid="real-enforcement-home">
+        <View style={{ backgroundColor: '#1565c0', borderRadius: 18, padding: 22 }}>
+          <Text style={{ color: '#fff', fontSize: 20, fontWeight: '800' }}>أهلًا، {user?.full_name} 👋</Text>
+          <Text style={{ color: '#dbeafe', fontSize: 13, marginTop: 6 }}>
+            هذه الصفحات متاحة لك ضمن نطاق صلاحياتك الحالية
+          </Text>
+        </View>
+
+        {items.length === 0 ? (
+          <View style={{ backgroundColor: '#fff', borderRadius: 16, padding: 30, alignItems: 'center', gap: 10 }} data-testid="real-enforcement-no-access">
+            <Ionicons name="lock-closed-outline" size={44} color="#cbd5e1" />
+            <Text style={{ color: '#64748b', fontSize: 14, textAlign: 'center' }}>
+              لم يتم تكليفك بأي صلاحيات بعد. يرجى التواصل مع الإدارة.
+            </Text>
+          </View>
+        ) : (
+          items.map((item) => (
+            <TouchableOpacity
+              key={item.path}
+              onPress={() => router.push(item.path as any)}
+              style={{ backgroundColor: '#fff', borderRadius: 16, padding: 18, flexDirection: 'row-reverse', alignItems: 'center', gap: 14, borderWidth: 1, borderColor: '#eef1f6' }}
+              data-testid={`real-enforcement-link-${item.path.replace(/\W+/g, '-')}`}
+            >
+              <View style={{ width: 46, height: 46, borderRadius: 12, backgroundColor: '#e3f2fd', justifyContent: 'center', alignItems: 'center' }}>
+                <Ionicons name={item.icon as any} size={22} color="#1565c0" />
+              </View>
+              <Text style={{ flex: 1, fontSize: 15, fontWeight: '700', color: '#1a2540', textAlign: 'right' }}>{item.label}</Text>
+              <Ionicons name="chevron-back" size={18} color="#94a3b8" />
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
+    </SafeAreaView>
+  );
 }
 
 function LegacyHomeScreen() {

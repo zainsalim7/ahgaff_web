@@ -39,6 +39,21 @@ async def my_access(current_user: dict = Depends(get_current_user)):
     }
 
 
+@router.get("/me/effective-access")
+async def my_effective_access(current_user: dict = Depends(get_current_user)):
+    """للمستخدمين الجدد ذوي الإنفاذ الفعلي فقط (advanced_access_real_enforcement): يرجع اتحاد مفاتيح صلاحياتهم
+    الفعّالة عبر كل تكليفاتهم النشطة، لتبني الواجهة (القائمة الجانبية/الصفحة الرئيسية) عناصرها بناءً عليها.
+    لا علاقة لها بوصول مركز الصلاحيات نفسه (/me/access أعلاه خاص بالأدمن/المختبِرين فقط)."""
+    if not current_user.get("advanced_access_real_enforcement"):
+        return {"enabled": False, "permission_keys": []}
+    db = get_db()
+    assignments = await list_user_work_contexts(db, current_user["id"], active_only=True)
+    keys: set = set()
+    for a in assignments:
+        keys |= await compute_effective_permissions(db, a)
+    return {"enabled": True, "permission_keys": sorted(keys)}
+
+
 @router.get("/me/contexts")
 async def my_contexts(current_user: dict = Depends(get_current_user)):
     db = get_db()

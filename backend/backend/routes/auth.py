@@ -160,7 +160,11 @@ async def login(user_data: UserLogin, request: Request):
     # جلب صلاحيات الدور
     user_permissions = []
     
-    if user.get("role_id"):
+    # 🆕 مستخدم إنفاذ فعلي (مركز الصلاحيات المتقدم): صلاحياته القديمة صفر دائمًا بالتصميم —
+    # لا نسمح بالرجوع لصلاحيات دور "موظف" الافتراضية، حتى لا تتسرّب صلاحيات قديمة غير مراجَعة
+    if user.get("advanced_access_real_enforcement"):
+        user_permissions = list(user.get("permissions") or [])
+    elif user.get("role_id"):
         try:
             role_doc = await db.roles.find_one({"_id": ObjectId(user["role_id"])})
             if role_doc:
@@ -168,7 +172,7 @@ async def login(user_data: UserLogin, request: Request):
         except Exception:
             pass
     
-    if not user_permissions:
+    if not user_permissions and not user.get("advanced_access_real_enforcement"):
         user_role = user.get("role", "employee")
         role_doc = await db.roles.find_one({"system_key": user_role})
         if role_doc:
@@ -235,7 +239,8 @@ async def login(user_data: UserLogin, request: Request):
             "faculty_ids": user.get("faculty_ids") or ([user.get("faculty_id")] if user.get("faculty_id") else []),
             "department_ids": user.get("department_ids") or ([user.get("department_id")] if user.get("department_id") else []),
             "faculty_name": faculty_name,
-            "department_name": department_name
+            "department_name": department_name,
+            "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False)
         }
     }
 
@@ -248,7 +253,9 @@ async def get_me(current_user: dict = Depends(get_current_user)):
     
     user_permissions = []
     
-    if user.get("role_id"):
+    if user.get("advanced_access_real_enforcement"):
+        user_permissions = list(user.get("permissions") or [])
+    elif user.get("role_id"):
         try:
             role_doc = await db.roles.find_one({"_id": ObjectId(user["role_id"])})
             if role_doc:
@@ -256,7 +263,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         except Exception:
             pass
     
-    if not user_permissions:
+    if not user_permissions and not user.get("advanced_access_real_enforcement"):
         user_role = user.get("role", "employee")
         role_doc = await db.roles.find_one({"system_key": user_role})
         if role_doc:
@@ -331,5 +338,6 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "department_ids": department_ids,
         "faculty_name": faculty_name,
         "department_name": department_name,
-        "department_names": department_names
+        "department_names": department_names,
+        "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False)
     }

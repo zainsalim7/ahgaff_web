@@ -15,6 +15,7 @@ import { useAuthStore } from '../store/authStore';
 import { useAuth, PERMISSIONS } from '../contexts/AuthContext';
 import { getRoleLabel } from '../utils/roleLabels';
 import { useAdvancedAccessContextStore } from '../store/advancedAccessContextStore';
+import { useRealEnforcementStore } from '../store/realEnforcementStore';
 
 interface MenuItem {
   id: string;
@@ -25,6 +26,7 @@ interface MenuItem {
   adminOnly?: boolean;
   forAll?: boolean;
   roles?: string[]; // يظهر لهذه الأدوار فقط (مثل مراجعي تبرير الغياب)
+  advPermissionKeys?: string[]; // 🆕 للمستخدمين الجدد ذوي الإنفاذ الفعلي: مفاتيح صلاحيات مركز الصلاحيات المتقدم المقابلة
 }
 
 // قائمة العناصر مرتبطة بالصلاحيات
@@ -52,7 +54,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 📚 المقررات — صلاحيات المقررات فقط
   { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
     PERMISSIONS.MANAGE_COURSES, 'view_courses', 'add_course', 'edit_course', 'delete_course'
-  ]},
+  ], advPermissionKeys: ['courses_courses_create_course', 'courses_courses_delete_course'] },
 
   // 🔄 ترحيل المقررات لفصل جديد — صلاحية مستقلة (الأدمن دائماً)
   { id: 'migrate-courses', label: 'ترحيل المقررات', icon: 'swap-horizontal', path: '/migrate-courses', permissions: [
@@ -63,7 +65,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', permissions: [
     PERMISSIONS.MANAGE_CURRICULUM,
     PERMISSIONS.VIEW_CURRICULUM
-  ]},
+  ], advPermissionKeys: ['curriculum_curriculum_list_curriculum_courses', 'curriculum_curriculum_get_curriculum_by_department'] },
 
   // 📅 الجدول الدراسي اليومي — صلاحيات الجداول فقط (لا علاقة بالمقررات!)
   { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', permissions: [
@@ -73,12 +75,12 @@ const MENU_ITEMS: MenuItem[] = [
   // 📆 الجدول الأسبوعي — صلاحيات الجداول فقط
   { id: 'weekly-schedule', label: 'الجدول الأسبوعي', icon: 'calendar', path: '/weekly-schedule', permissions: [
     'view_schedule', 'manage_schedule'
-  ]},
+  ], advPermissionKeys: ['schedule_weekly_schedule_get_weekly_schedule'] },
 
   // 👨‍🎓 إدارة الطلاب
   { id: 'students', label: 'إدارة الطلاب', icon: 'people', path: '/students', permissions: [
     PERMISSIONS.MANAGE_STUDENTS, 'view_students', 'add_student', 'edit_student', 'delete_student'
-  ]},
+  ], advPermissionKeys: ['students_students_get_students'] },
 
   // 🎓 الخريجون
   { id: 'alumni', label: 'الخريجون', icon: 'school', path: '/alumni', permissions: [
@@ -93,7 +95,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 👨‍🏫 إدارة المعلمين
   { id: 'teachers', label: 'إدارة المعلمين', icon: 'school', path: '/manage-teachers', permissions: [
     PERMISSIONS.MANAGE_TEACHERS, 'view_teachers', 'add_teacher', 'edit_teacher', 'delete_teacher'
-  ]},
+  ], advPermissionKeys: ['teachers_teachers_get_teachers'] },
 
   // 📊 العبء التدريسي
   { id: 'teaching-load', label: 'جدول العبء التدريسي', icon: 'grid', path: '/teaching-load', permissions: [
@@ -106,7 +108,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 🏢 إدارة الأقسام
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [
     PERMISSIONS.MANAGE_DEPARTMENTS, 'view_departments', 'add_department', 'edit_department', 'delete_department'
-  ]},
+  ], advPermissionKeys: ['academic_structure_departments_get_departments'] },
 
   // 👤 إدارة المستخدمين
   { id: 'users', label: 'إدارة المستخدمين', icon: 'person-add', path: '/manage-users', permissions: [
@@ -133,7 +135,7 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
   { id: 'report-workload', label: 'نصاب التدريس', icon: 'briefcase', path: '/report-teacher-workload', permissions: [
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
-  ]},
+  ], advPermissionKeys: ['reports_ser_get_teacher_workload_report'] },
   { id: 'overtime-letters', label: 'سجل خطابات الساعات الإضافية', icon: 'albums', path: '/overtime-letters', permissions: [
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
   ]},
@@ -207,10 +209,16 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
   const { hasAnyPermission } = useAuth();
   const isAdmin = userRole === 'admin';
   const { hasAccess: hasAdvAccess, checked: advChecked, checkAccess: checkAdvAccess } = useAdvancedAccessContextStore();
+  const isRealEnforced = !!user?.advanced_access_real_enforcement;
+  const { permissionKeys: realEnforcedKeys, checked: realEnforcedChecked, checkAccess: checkRealEnforcedAccess } = useRealEnforcementStore();
 
   React.useEffect(() => {
     if (user?.id && !advChecked) checkAdvAccess();
   }, [user?.id, advChecked, checkAdvAccess]);
+
+  React.useEffect(() => {
+    if (user?.id && isRealEnforced && !realEnforcedChecked) checkRealEnforcedAccess();
+  }, [user?.id, isRealEnforced, realEnforcedChecked, checkRealEnforcedAccess]);
 
   // فلترة العناصر حسب صلاحيات المستخدم الفردية
   const filteredItems = MENU_ITEMS.filter(item => {
@@ -221,6 +229,8 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
     // العناصر الخاصة بالمعلم فقط
     if ((item as any).teacherOnly && userRole !== 'teacher') return false;
     if (isAdmin) return true;
+    // 🆕 مستخدم جديد ذو إنفاذ فعلي: يظهر العنصر إن طابقت إحدى صلاحياته المتقدمة الفعّالة
+    if (isRealEnforced && item.advPermissionKeys?.some(k => realEnforcedKeys.includes(k))) return true;
     if (item.permissions.length === 0) return false;
     return hasAnyPermission(item.permissions);
   });

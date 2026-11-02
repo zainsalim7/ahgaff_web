@@ -298,7 +298,7 @@ async def build_user_context(db, user: dict) -> dict:
         except Exception:
             pass
     
-    if not user_permissions:
+    if not user_permissions and not user.get("advanced_access_real_enforcement"):
         user_role = user.get("role", "employee")
         role_doc = await db.roles.find_one({"system_key": user_role})
         if role_doc:
@@ -412,7 +412,11 @@ async def log_activity(
 
 def get_user_permissions(user: dict) -> List[str]:
     """الحصول على صلاحيات المستخدم مع توسيع الصلاحيات الكاملة لتشمل الصلاحيات الفرعية"""
-    base_permissions = user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
+    # 🆕 مستخدم إنفاذ فعلي: [] تعني صفر صلاحيات قديمة فعلاً، بلا رجوع لافتراضيات الدور
+    if user.get("advanced_access_real_enforcement"):
+        base_permissions = user.get("permissions") or []
+    else:
+        base_permissions = user.get("permissions") or DEFAULT_PERMISSIONS.get(user["role"], [])
     expanded = set(base_permissions)
     for perm in base_permissions:
         if perm in FULL_PERMISSION_MAPPING:

@@ -14,6 +14,7 @@ export interface User {
   department_id?: string;
   faculty_name?: string;
   department_name?: string;
+  advanced_access_real_enforcement?: boolean;
 }
 
 export interface Department {

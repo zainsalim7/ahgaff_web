@@ -104,7 +104,7 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
             "phone": u.get("phone"),
             "created_at": u["created_at"],
             "is_active": u.get("is_active", True),
-            "permissions": u.get("permissions") or DEFAULT_PERMISSIONS.get(u["role"], []),
+            "permissions": [] if u.get("advanced_access_real_enforcement") else (u.get("permissions") or DEFAULT_PERMISSIONS.get(u["role"], [])),
             "university_id": u.get("university_id"),
             "faculty_id": u.get("faculty_id"),
             "department_id": u.get("department_id"),

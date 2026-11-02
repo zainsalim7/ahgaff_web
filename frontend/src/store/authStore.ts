@@ -3,6 +3,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types';
 import { clearMemCache } from '../services/api';
 import { useAdvancedAccessContextStore } from './advancedAccessContextStore';
+import { useRealEnforcementStore } from './realEnforcementStore';
 
 interface AuthState {
   user: User | null;
@@ -27,6 +28,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     useAdvancedAccessContextStore.setState({
       hasAccess: false, isAdmin: false, subPermissions: [], contexts: [], activeContext: null, checked: false,
     });
+    useRealEnforcementStore.getState().reset();
     set({ user, token, isAuthenticated: true, isLoading: false });
   },
 
@@ -42,6 +44,7 @@ export const useAuthStore = create<AuthState>((set) => ({
     useAdvancedAccessContextStore.setState({
       hasAccess: false, isAdmin: false, subPermissions: [], contexts: [], activeContext: null, checked: false,
     });
+    useRealEnforcementStore.getState().reset();
     set({ user: null, token: null, isAuthenticated: false, isLoading: false });
   },
 

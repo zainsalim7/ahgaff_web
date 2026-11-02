@@ -356,6 +356,7 @@ export const permissionsAPI = {
 // 🧪 مركز الصلاحيات المتقدم (Advanced Access Control — SHADOW MODE، تجريبي ومستقل عن النظام أعلاه)
 export const advancedAccessAPI = {
   myAccess: () => api.get('/advanced-access/me/access'),
+  myEffectiveAccess: () => api.get('/advanced-access/me/effective-access'),
   myContexts: () => api.get('/advanced-access/me/contexts'),
   seedRegistry: () => api.post('/advanced-access/seed-registry'),
   importLegacyRoles: () => api.post('/advanced-access/import-legacy-roles'),
