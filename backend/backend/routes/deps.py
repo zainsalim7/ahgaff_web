@@ -311,6 +311,12 @@ async def build_user_context(db, user: dict) -> dict:
         if perm not in user_permissions:
             user_permissions.append(perm)
     
+    # 🆕 مستخدم إنفاذ فعلي: زامن نطاقه من مركز الصلاحيات المتقدم (شؤون الموظفين/المراسلات/لوحة التقارير)
+    adv_effective_keys: set = set()
+    if user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import sync_real_enforcement_context
+        adv_effective_keys = await sync_real_enforcement_context(db, user)
+    
     return {
         "_id": user["_id"],
         "id": str(user["_id"]),
@@ -334,6 +340,7 @@ async def build_user_context(db, user: dict) -> dict:
         "role_id": user.get("role_id"),
         "custom_permissions": user.get("custom_permissions", []),
         "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False),  # 🆕 Phase 7-Final: مستخدمون جدد فقط، افتراضي False للجميع
+        "_adv_effective_keys": adv_effective_keys,  # 🆕 لجسر has_permission القديمة فقط — لا يُعاد في أي استجابة JSON
     }
 
 
@@ -429,7 +436,12 @@ def has_permission(user: dict, permission: str) -> bool:
     if user["role"] == UserRole.ADMIN:
         return True
     permissions = get_user_permissions(user)
-    return permission in permissions
+    if permission in permissions:
+        return True
+    # 🆕 جسر الإنفاذ الفعلي: لمستخدمي advanced_access_real_enforcement فقط (شؤون الموظفين/المراسلات/لوحة التقارير)
+    if user.get("advanced_access_real_enforcement"):
+        return _check_legacy_bridge(user, permission)
+    return False
 
 
 def has_any_permission(user: dict, perms: List[str]) -> bool:
@@ -437,7 +449,25 @@ def has_any_permission(user: dict, perms: List[str]) -> bool:
     if user["role"] == UserRole.ADMIN:
         return True
     permissions = get_user_permissions(user)
-    return any(p in permissions for p in perms)
+    if any(p in permissions for p in perms):
+        return True
+    if user.get("advanced_access_real_enforcement"):
+        return any(_check_legacy_bridge(user, p) for p in perms)
+    return False
+
+
+_legacy_bridge_sync_map: Optional[dict] = None
+
+
+def _check_legacy_bridge(user: dict, permission: str) -> bool:
+    """يتحقّق مزامنًا إن كانت إحدى صلاحيات المستخدم المتقدمة الفعّالة (محسوبة مسبقًا في build_user_context)
+    تُغني عن هذه الصلاحية القديمة، عبر خريطة الجسر المخزَّنة مسبقًا (تُحمَّل أولًا عند أول مزامنة سياق مستخدم)"""
+    from services.advanced_access_service import get_legacy_bridge_map_cached
+    adv_keys = user.get("_adv_effective_keys") or set()
+    if not adv_keys:
+        return False
+    bridge_map = get_legacy_bridge_map_cached()
+    return any(k in adv_keys for k in bridge_map.get(permission, ()))
 
 
 def require_permission(permission: str):

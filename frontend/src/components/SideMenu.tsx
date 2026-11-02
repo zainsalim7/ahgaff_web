@@ -151,9 +151,9 @@ const MENU_ITEMS: MenuItem[] = [
   ]},
   // 🏢 شؤون الموظفين
   { id: 'hr-divider', label: 'شؤون الموظفين', icon: 'people-circle', path: '', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
-  { id: 'hr-employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
+  { id: 'hr-employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_list_employees'] },
   { id: 'hr-org-units', label: 'الهيكل التنظيمي', icon: 'git-network', path: '/hr-org-units', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
-  { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES] },
+  { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES], advPermissionKeys: ['hr_leaves_hr_leaves_list_leaves'] },
   { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE] },
   { id: 'hr-work-settings', label: 'إعدادات الدوام والفترات', icon: 'time', path: '/hr-work-settings', permissions: [PERMISSIONS.HR_MANAGE_WORK_SETTINGS] },
   { id: 'hr-leave-settings', label: 'إعدادات الإجازات', icon: 'options', path: '/hr-leave-settings', permissions: [PERMISSIONS.HR_MANAGE_LEAVE_SETTINGS] },
@@ -171,7 +171,7 @@ const MENU_ITEMS: MenuItem[] = [
 
   // 📜 المراسلات الرسمية (المرحلة 1) — الصلاحيات تُقيَّم في الخادم حسب العضويات التنظيمية
   { id: 'letter-new', label: 'رسالة جديدة ⚡', icon: 'flash', path: '/letter-new', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'] },
-  { id: 'letters', label: 'الخطابات الرسمية ✉️', icon: 'mail-open', path: '/letters', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'] },
+  { id: 'letters', label: 'الخطابات الرسمية ✉️', icon: 'mail-open', path: '/letters', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_list_letters', 'letters_hr_letters_list_letters'] },
   { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', permissions: [], forAll: true },
   { id: 'corr-quick', label: 'خطاب سريع ⚡', icon: 'flash', path: '/corr-quick', permissions: [], forAll: true },
   { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', permissions: [], forAll: true },

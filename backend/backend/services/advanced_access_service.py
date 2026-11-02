@@ -1,7 +1,10 @@
 """
-خدمة مركز الصلاحيات المتقدم (Advanced Access Control Service) — SHADOW MODE
-مستقلة تمامًا عن routes/deps.py::has_permission/require_permission القديمة؛ لا تُستدعى من أي كود قديم،
-ولا تستدعي أي دالة كتابة في النظام القديم. قراءة فقط من users/faculties/departments/org_units.
+خدمة مركز الصلاحيات المتقدم (Advanced Access Control Service)
+الأساس: مستقلة عن routes/deps.py::has_permission القديمة؛ لا تُستدعى من كود قديم لمستخدمين قدامى.
+🆕 Phase 7-Final (جسر الإدارة/المراسلات): لمستخدمي advanced_access_real_enforcement فقط — تُغذّي جسرًا
+اختياريًا داخل has_permission القديمة (عبر خريطة legacy_permissions_detected المحصورة بمجموعات مُراجَعة)
+وتُزامن حقلي hr_scope/hr_scope_unit_ids + department_ids/faculty_ids على مستند المستخدم نفسه (كتابة مقصودة
+ومحدودة بهذا الصنف من المستخدمين فقط، صفر أثر على أي مستخدم قديم لا يحمل هذا العلم).
 """
 import json
 import os
@@ -265,6 +268,75 @@ async def list_user_work_contexts(db, user_id: str, active_only: bool = True) ->
             continue
         out.append(a)
     return out
+
+
+# ══════════════ جسر الإنفاذ الفعلي ↔ النظام القديم (شؤون الموظفين/المراسلات/لوحة التقارير) ══════════════
+
+# مجموعات مُراجَعة ومُفعَّلة فقط لهذا الجسر — إضافة مجموعة جديدة يتطلب مراجعة صريحة، ليس تلقائيًا
+LEGACY_BRIDGE_GROUPS = {"hr_core", "hr_leaves", "hr_tasks", "letters", "dashboard"}
+
+_legacy_bridge_map_cache: Optional[Dict[str, set]] = None
+
+
+async def get_legacy_bridge_map(db) -> Dict[str, set]:
+    """خريطة: صلاحية قديمة نصية → مجموعة مفاتيح صلاحيات متقدمة تُغني عنها (محصورة بـ LEGACY_BRIDGE_GROUPS)"""
+    global _legacy_bridge_map_cache
+    if _legacy_bridge_map_cache is None:
+        mapping: Dict[str, set] = {}
+        async for p in db.advanced_permissions.find({"group_key": {"$in": list(LEGACY_BRIDGE_GROUPS)}}, {"key": 1, "legacy_permissions_detected": 1}):
+            for legacy in p.get("legacy_permissions_detected") or []:
+                mapping.setdefault(legacy, set()).add(p["key"])
+        _legacy_bridge_map_cache = mapping
+    return _legacy_bridge_map_cache
+
+
+def get_legacy_bridge_map_cached() -> Dict[str, set]:
+    """نسخة مزامنة (sync) من الخريطة أعلاه — تُستخدَم من routes/deps.py::has_permission المزامنة.
+    تُرجع {} إن لم تُحمَّل الخريطة بعد (تُحمَّل عند أول استدعاء لـ sync_real_enforcement_context)."""
+    return _legacy_bridge_map_cache or {}
+
+
+async def sync_real_enforcement_context(db, user: dict) -> set:
+    """لمستخدمي advanced_access_real_enforcement فقط: يحسب صلاحياتهم المتقدمة الفعّالة (اتحاد كل التكليفات
+    النشطة)، ويُزامن نطاقهم الأكاديمي (department_ids/faculty_ids) ونطاق شؤون الموظفين (hr_scope/hr_scope_unit_ids
+    عبر ربط القسم/الكلية بوحدة org_units المقابلة) من نطاق تكليفاتهم — فقط إذا تغيّر، بلا كتابة زائدة.
+    يُرجع مجموعة مفاتيح صلاحياتهم الفعّالة لاستخدامها في جسر has_permission القديمة."""
+    assignments = await list_user_work_contexts(db, str(user["_id"]), active_only=True)
+    await get_legacy_bridge_map(db)  # يضمن تحميل خريطة الجسر مسبقًا (مخزَّنة) قبل أي فحص has_permission مزامن
+    keys: set = set()
+    dept_ids: set = set()
+    fac_ids: set = set()
+    for a in assignments:
+        keys |= await compute_effective_permissions(db, a)
+        scope = a.get("scope") or {}
+        stype = scope.get("scope_type")
+        refs = scope.get("scope_ref_ids") or []
+        if stype == "department":
+            dept_ids.update(refs)
+        elif stype == "faculty":
+            fac_ids.update(refs)
+
+    updates: Dict[str, Any] = {}
+    if dept_ids and set(user.get("department_ids") or []) != dept_ids:
+        updates["department_ids"] = list(dept_ids)
+    if fac_ids and set(user.get("faculty_ids") or []) != fac_ids:
+        updates["faculty_ids"] = list(fac_ids)
+
+    org_unit_ids: set = set()
+    if dept_ids or fac_ids:
+        async for ou in db.org_units.find({"$or": [
+            {"department_id": {"$in": list(dept_ids)}},
+            {"faculty_id": {"$in": list(fac_ids)}},
+        ]}, {"_id": 1}):
+            org_unit_ids.add(str(ou["_id"]))
+    if org_unit_ids and (user.get("hr_scope") != "UNITS" or set(user.get("hr_scope_unit_ids") or []) != org_unit_ids):
+        updates["hr_scope"] = "UNITS"
+        updates["hr_scope_unit_ids"] = list(org_unit_ids)
+
+    if updates:
+        await db.users.update_one({"_id": user["_id"]}, {"$set": updates})
+        user.update(updates)
+    return keys
 
 
 async def write_audit_log(db, actor: dict, action: str, target_user_id: Optional[str] = None,

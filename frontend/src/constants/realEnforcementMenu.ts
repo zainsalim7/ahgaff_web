@@ -17,6 +17,11 @@ export const REAL_ENFORCED_MENU_ITEMS: RealEnforcedMenuItem[] = [
   { permissionKey: 'curriculum_curriculum_list_curriculum_courses', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum' },
   { permissionKey: 'curriculum_curriculum_get_curriculum_by_department', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum' },
   { permissionKey: 'reports_ser_get_teacher_workload_report', label: 'نصاب التدريس', icon: 'briefcase', path: '/report-teacher-workload' },
+  // 🆕 شؤون الموظفين / المراسلات (جسر النظام القديم — راجع advanced_access_service.sync_real_enforcement_context)
+  { permissionKey: 'hr_core_hr_list_employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees' },
+  { permissionKey: 'hr_leaves_hr_leaves_list_leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves' },
+  { permissionKey: 'letters_letters_list_letters', label: 'الخطابات الرسمية', icon: 'mail-open', path: '/letters' },
+  { permissionKey: 'letters_hr_letters_list_letters', label: 'الخطابات الرسمية', icon: 'mail-open', path: '/letters' },
 ];
 
 export function getAccessibleRealEnforcedItems(permissionKeys: string[]): RealEnforcedMenuItem[] {
