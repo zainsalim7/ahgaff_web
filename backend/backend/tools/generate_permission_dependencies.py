@@ -1,11 +1,12 @@
 """
-توليد depends_on لكل صلاحية (طلب المستخدم 3 نوفمبر 2026): اقتراح صلاحيات مرتبطة يُسأل عنها
-المسؤول عند تفعيل صلاحية جديدة — استشاري بحت (لا يُفعَّل تلقائيًا، لا يُغيّر أي حقل أصلي).
+توليد depends_on (مع سبب الربط) لكل صلاحية — طلب المستخدم 3 نوفمبر 2026.
+شكل الحقل: depends_on: [{"key": "...", "reason": "سبب عربي قصير"}].
+استشاري بحت (لا يُفعَّل تلقائيًا، لا يُغيّر أي حقل أصلي آخر).
 1) روابط عالية الثقة: عملية (تعديل/حذف/اعتماد/تصدير/طباعة/نشر/استعادة/نسخ/إعادة تعيين/تحقق) على
-   نفس المورد (أول جزء من المسار) داخل نفس المجموعة → تعتمد على عرض القائمة/التفاصيل لنفس المورد.
-2) اقتراحات AI داخل نفس المجموعة فقط (محافظة، تُرجع فارغة عند عدم الثقة).
-آمن لإعادة التشغيل؛ لا يلمس أي حقل غير depends_on. يكتب لـ Mongo وملف JSON معًا (نفس الخطأ السابق
-في المزامنة بين البيئتين لن يتكرر).
+   نفس المسار الثابت (بعد تطبيع المعرّفات الديناميكية) داخل نفس المجموعة → تعتمد على عرض
+   القائمة/التفاصيل لنفس المسار، بسبب قالب ثابت حسب نوع العملية.
+2) اقتراحات AI داخل نفس المجموعة فقط (محافظة، فارغة عند الشك) مع سبب يكتبه النموذج نفسه.
+آمن لإعادة التشغيل؛ يكتب لـ Mongo وملف JSON معًا (تجنّبًا لتكرار خطأ مزامنة التعريفات السابق).
 """
 import asyncio
 import json
@@ -27,11 +28,23 @@ JSON_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file_
 VIEW_OPS = {"view_list", "view_detail"}
 DEPENDENT_OPS = {"edit", "delete", "approve", "export", "print", "publish", "restore", "clone", "reset", "verify"}
 
+OP_REASON = {
+    "edit": "لا يمكن تعديل عنصر دون القدرة على عرضه والوصول إليه أولاً",
+    "delete": "لا يمكن حذف عنصر دون القدرة على عرضه والوصول إليه أولاً",
+    "approve": "لا يمكن اعتماد أو مراجعة طلب دون القدرة على عرضه أولاً",
+    "export": "التصدير يعمل على نفس البيانات التي تُعرض في القائمة/التفاصيل",
+    "print": "الطباعة تعمل على نفس البيانات التي تُعرض في القائمة/التفاصيل",
+    "publish": "لا يمكن نشر عنصر دون القدرة على عرضه والتحقق منه أولاً",
+    "restore": "الاستعادة تحتاج رؤية العنصر المحذوف/المؤرشف أولاً",
+    "clone": "النسخ يحتاج رؤية العنصر الأصلي أولاً",
+    "reset": "إعادة التعيين تعمل على نفس البيانات المعروضة",
+    "verify": "التحقق يحتاج الوصول لنفس البيانات المعروضة",
+}
+
 
 def resource_of(path: str) -> str:
     """مفتاح مورد دقيق: يُطابق فقط الصلاحيات التي تتشارك نفس المسار الثابت فعليًا (مع تطبيع أي
-    معرّف ديناميكي {id}/{course_id}.. إلى {} وحذف المعرّفات الزائدة من نهاية المسار فقط)،
-    بعكس استخدام أول جزء من المسار فقط الذي كان يجمع أدوات غير مترابطة إطلاقًا تحت نفس "المورد"."""
+    معرّف ديناميكي {id}/{course_id}.. إلى {} وحذف المعرّفات الزائدة من نهاية المسار فقط)."""
     if not path:
         return ""
     segs = path.strip("/").split("/")
@@ -42,7 +55,7 @@ def resource_of(path: str) -> str:
 
 
 def build_rule_based(perms: list) -> dict:
-    """روابط نفس المورد+المجموعة: عملية تعديل/حذف/... تعتمد على عرض القائمة/التفاصيل لنفس المورد."""
+    """روابط نفس المسار+المجموعة مع سبب ثابت حسب نوع العملية."""
     rule_deps: dict = {}
     clusters: dict = {}
     for p in perms:
@@ -56,18 +69,19 @@ def build_rule_based(perms: list) -> dict:
             if p["operation_type"] in DEPENDENT_OPS:
                 deps = [k for k in view_keys if k != p["key"]]
                 if deps:
-                    rule_deps[p["key"]] = deps
+                    reason = OP_REASON.get(p["operation_type"], "هذه الصلاحية تعمل على نفس البيانات المعروضة هنا")
+                    rule_deps[p["key"]] = [{"key": k, "reason": reason} for k in deps]
     return rule_deps
 
 
 async def ai_group_suggestions(chat: LlmChat, group_key: str, items: list) -> dict:
-    """اقتراحات روابط إضافية داخل نفس المجموعة فقط (محافظة — فارغة عند الشك)."""
+    """اقتراحات روابط إضافية داخل نفس المجموعة فقط مع سبب يكتبه النموذج (محافظة — فارغة عند الشك)."""
     lines = [f"- {p['key']}: {p['label_ar']} — {p.get('description_ar', '')}" for p in items]
     prompt = (
         f"لديك كل صلاحيات مجموعة '{group_key}' في نظام جامعي:\n" + "\n".join(lines) + "\n\n"
         "لكل صلاحية فيها علاقة اعتماد واضحة ومنطقية على صلاحية أخرى من نفس القائمة (غير روابط "
-        "عرض القائمة/التفاصيل البديهية التي عولجت مسبقًا)، أعد خريطة JSON: "
-        '{"مفتاح_الصلاحية": ["مفتاح الصلاحية المعتمد عليها", ...]}. '
+        "عرض القائمة/التفاصيل البديهية)، أعد خريطة JSON بالشكل التالي بالضبط:\n"
+        '{"مفتاح_الصلاحية": [{"key": "مفتاح الصلاحية المعتمد عليها", "reason": "سبب عربي قصير (6-12 كلمة) يشرح لماذا"}]}\n'
         "كن محافظًا جدًا: إن لم تكن واثقًا تمامًا من الربط، لا تذكره. "
         "لا تُدرج أي صلاحية ضمن قائمة اعتمادها الخاصة. أعد JSON فقط بلا أي نص آخر، وإن لم توجد أي روابط إضافية أعد {}."
     )
@@ -82,13 +96,26 @@ async def ai_group_suggestions(chat: LlmChat, group_key: str, items: list) -> di
         out = {}
         for k, v in data.items():
             if k in valid_keys and isinstance(v, list):
-                clean = [x for x in v if x in valid_keys and x != k]
+                clean = []
+                for entry in v:
+                    if isinstance(entry, dict) and entry.get("key") in valid_keys and entry["key"] != k:
+                        clean.append({"key": entry["key"], "reason": str(entry.get("reason") or "").strip()[:160]})
+                    elif isinstance(entry, str) and entry in valid_keys and entry != k:
+                        clean.append({"key": entry, "reason": "صلاحية مرتبطة منطقيًا ضمن نفس سياق العمل"})
                 if clean:
                     out[k] = clean
         return out
     except Exception as e:
         print(f"AI_GROUP_ERROR group={group_key} err={e}")
         return {}
+
+
+def _merge(rule_list: list, ai_list: list) -> list:
+    by_key = {}
+    for entry in rule_list + ai_list:
+        if entry["key"] not in by_key:
+            by_key[entry["key"]] = entry
+    return [by_key[k] for k in sorted(by_key.keys())]
 
 
 async def main():
@@ -109,8 +136,8 @@ async def main():
 
     chat = LlmChat(
         api_key=EMERGENT_LLM_KEY,
-        session_id="perm-deps-gen",
-        system_message="أنت خبير تصميم أنظمة صلاحيات. مهمتك اقتراح روابط اعتماد منطقية بين الصلاحيات، بحذر شديد وعدم التخمين.",
+        session_id="perm-deps-gen-v2",
+        system_message="أنت خبير تصميم أنظمة صلاحيات. مهمتك اقتراح روابط اعتماد منطقية بين الصلاحيات مع سبب واضح، بحذر شديد وعدم التخمين.",
     ).with_model("anthropic", "claude-sonnet-5-5")
 
     ai_deps: dict = {}
@@ -119,27 +146,24 @@ async def main():
             chunk = items[i:i + 35]
             result = await ai_group_suggestions(chat, gk, chunk)
             for k, v in result.items():
-                ai_deps.setdefault(k, set()).update(v)
+                ai_deps.setdefault(k, []).extend(v)
             print(f"AI_GROUP_DONE group={gk} chunk={i} suggestions={len(result)}")
 
     final_deps: dict = {}
     for p in perms:
         key = p["key"]
-        merged = set(rule_deps.get(key, [])) | ai_deps.get(key, set())
-        merged.discard(key)
+        merged = _merge(rule_deps.get(key, []), ai_deps.get(key, []))
         if merged:
-            final_deps[key] = sorted(merged)
+            final_deps[key] = merged
 
     print(f"FINAL_DEPS_COUNT={len(final_deps)}")
 
     for key, deps in final_deps.items():
         await db.advanced_permissions.update_one({"key": key}, {"$set": {"depends_on": deps}})
-    # تنظيف: إزالة depends_on من أي صلاحية لم تعد لها روابط (إعادة تشغيل آمنة)
     no_dep_keys = [p["key"] for p in perms if p["key"] not in final_deps]
     if no_dep_keys:
         await db.advanced_permissions.update_many({"key": {"$in": no_dep_keys}}, {"$unset": {"depends_on": ""}})
 
-    # 🆕 كتابة مباشرة لملف السجل المصدري (الدرس المستفاد من مشكلة التعريفات السابقة):
     with open(JSON_PATH, "r", encoding="utf-8") as f:
         json_perms = json.load(f)
     for jp in json_perms:

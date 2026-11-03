@@ -40,19 +40,35 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
   }, [permissions, search]);
 
   const toggleOne = (key: string) => {
+    const perm = permByKey[key];
     if (selectedSet.has(key)) {
-      onChange(selected.filter(k => k !== key));
+      // 🆕 تنبيه عكسي: هل صلاحيات أخرى مفعَّلة حاليًا تعتمد على هذه الصلاحية؟
+      const dependents = selected.filter(k => k !== key && (permByKey[k]?.depends_on || []).some((d: any) => d.key === key));
+      const removeIt = () => onChange(selected.filter(k => k !== key));
+      if (dependents.length === 0) {
+        removeIt();
+        return;
+      }
+      const depLabels = dependents.map(dk => permByKey[dk]?.label_ar).join('، ');
+      const warnMsg = `تحذير: الصلاحيات التالية المُفعَّلة تعتمد على "${perm?.label_ar}":\n${depLabels}\n\nقد لا تعمل بشكل صحيح إن أُلغيت. هل تريد إلغاء تفعيلها مع ذلك؟`;
+      if (Platform.OS === 'web') {
+        if (window.confirm(warnMsg)) removeIt();
+        return;
+      }
+      Alert.alert('تحذير: صلاحية أساسية', warnMsg, [
+        { text: 'تراجع', style: 'cancel' },
+        { text: 'إلغاء التفعيل رغم ذلك', style: 'destructive', onPress: removeIt },
+      ]);
       return;
     }
-    const perm = permByKey[key];
-    const missingDeps: string[] = (perm?.depends_on || []).filter((dk: string) => !selectedSet.has(dk) && permByKey[dk]);
+    const missingDeps: { key: string; reason?: string }[] = (perm?.depends_on || []).filter((d: any) => !selectedSet.has(d.key) && permByKey[d.key]);
     if (missingDeps.length === 0) {
       onChange([...selected, key]);
       return;
     }
-    const depLabels = missingDeps.map(dk => permByKey[dk]?.label_ar).join('، ');
-    const message = `صلاحية "${perm.label_ar}" عادة ما تحتاج أيضًا: ${depLabels}. هل تريد تفعيلها معها؟`;
-    const addWithDeps = () => onChange(Array.from(new Set([...selected, key, ...missingDeps])));
+    const depLines = missingDeps.map(d => `• ${permByKey[d.key]?.label_ar}${d.reason ? ' — ' + d.reason : ''}`).join('\n');
+    const message = `صلاحية "${perm.label_ar}" عادة ما تحتاج أيضًا:\n${depLines}\n\nهل تريد تفعيلها معها؟`;
+    const addWithDeps = () => onChange(Array.from(new Set([...selected, key, ...missingDeps.map(d => d.key)])));
     const addAloneOnly = () => onChange([...selected, key]);
     if (Platform.OS === 'web') {
       if (window.confirm(message)) addWithDeps(); else addAloneOnly();
