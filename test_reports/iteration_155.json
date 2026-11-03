@@ -1,0 +1,27 @@
+{
+  "summary": "Tested the Real Enforcement global guard (Layer1 ASGI middleware) and Layer2 scope checks. Legacy users admin and Saeed are NOT affected. Ran 29 admin GET smoke checks across students, teachers, courses, departments, faculties, enrollments, HR, correspondence, letters, calendar, cards, grades, fees and activity logs, with no 403 or 500 errors. Admin can create and delete a department, create and delete a student (department_id kept as sent), and update a teacher. Saeed can run 15 GET smoke checks and create/delete a student and update a teacher in his department. The guard is never triggered for Saeed (his only 403 is /hr/employees, which comes from hr.py's own _can_view check and is pre-existing: his permissions no longer include hr_view). layer2_test_emp: when creating a student with an out-of-scope department_id, the department is auto-corrected to 698e500997fef774e66e93a8 (checked with GET). Deleting an in-scope student works. Deleting out-of-scope student 698ef706d803b27aab012065 returns 403 'غير مصرح — خارج النطاق المصرَّح به' and the student still exists. POST /teachers, POST /departments and safe-delete are blocked by the guard with 403. No 500 errors on sensitive reads. Older regression suites (adv_live_test_account, real_enforcement_wave2, adv_access_isolation) pass 87/87. layer2_test_emp is the only user with the enforcement flag. One real bug found: self-service GET endpoints are mapped as sensitive reads, so GET /api/auth/me returns 403 for enforcement users. Quick frontend check: admin and Saeed open /students, /manage-teachers and /courses with no 403/500 responses and data shows correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/auth/me (also /api/my-scope, /api/students/me/card, /api/students/me/results, /api/hr/employees/me/card, /api/hr/attendance/my, /api/hr/attendance/devices/my, /api/hr/presence-check/my, /api/fees/my-status)", "issue": "NEW_SENSITIVE_READ_GROUPS includes system_users, cards, grades, finance and hr_attendance, which covers self-service 'me/my' endpoints. Enforcement users (layer2_test_emp) get 403 'غير مصرح لك بهذا الإجراء' on /auth/me and /my-scope unless granted system_users_auth_get_me or system_users_ser_get_my_scope. /my-scope is used by the frontend (add-department.tsx, scopeAPI). Legacy users are not affected."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_real_enforcement_guard_layer2.py", "/app/test_reports/pytest/pytest_real_enforcement.xml"],
+  "action_items": [
+    "In real_enforcement_guard.build_real_enforcement_table, exclude self-service endpoints (source_function in {get_me, get_my_scope, my_card, my_card_download, get_my_card, get_my_results, my_attendance, my_device, my_checks, my_fee_status}, or paths containing '/me' or '/my') from guarded GET reads, or grant them to all enforcement users automatically",
+    "Optional: the middleware runs a db.users.find_one for every request on the 308 mapped routes, including admin requests. Consider caching the flag per uid for a short time, or putting the flag in the JWT"
+  ],
+  "critical_code_review_comments": [
+    "Guard matches the first (method, regex) in the table only. If a route NOT in the table is registered before a table route whose regex also matches, the guard applies the later route's key to a request FastAPI sends to the earlier route. This is low risk today but should be documented.",
+    "real_enforce_write_guard calls real_enforce_check with target None when department_id/faculty_id is missing (e.g. create_department without faculty_id). Whether that is allowed depends on how check_permission handles a missing scope, so check that it cannot get around scope limits.",
+    "Saeed GET /api/hr/employees returns 403 from hr.py _can_view. This is pre-existing and not caused by this change: his permissions no longer contain hr_view_employees, although test_credentials.md says they were added on 2026-10-06. Update the credentials doc or the data."
+  ],
+  "updated_files": ["/app/backend/tests/test_real_enforcement_guard_layer2.py"],
+  "success_rate": {"backend": "98% (62/63; the one failure is the /auth/me self-service bug)", "frontend": "100% (admin and Saeed smoke)"},
+  "seed_data_creation": "None. All TEST_ students and departments were cleaned up (checked: 0 left).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with REACT_APP_BACKEND_URL exported. test_real_enforcement_guard_layer2.py::test_l2_flagged fails on purpose until /auth/me is excluded from the guard. The frontend teachers page is /manage-teachers, not /teachers. The login inputs use the placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور'.",
+  "test_credentials": "admin/admin123, Saeed/test1234, layer2_test_emp/test1234 (from /app/memory/test_credentials.md)"
+}

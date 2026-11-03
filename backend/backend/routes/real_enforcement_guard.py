@@ -20,6 +20,14 @@ ACTIVE_WRITE_GROUPS = {
 }
 # مجموعات حساسة جديدة لم يُفعَّل عليها إنفاذ من قبل — تُضاف لها عمليات القراءة فقط في هذه الدفعة
 NEW_SENSITIVE_READ_GROUPS = {"finance", "cards", "system_users", "grades", "calendar", "hr_attendance"}
+# مسارات "بياناتي الخاصة" (self-service) — يجب أن تبقى متاحة دائمًا لصاحبها بغض النظر عن الصلاحيات المتقدمة
+SELF_SERVICE_EXCLUDE_KEYS = {
+    "system_users_auth_get_me", "system_users_ser_get_my_scope",
+    "finance_fee_receipts_my_fee_status", "grades_grades_get_my_results",
+    "hr_attendance_hr_attendance_my_device", "hr_attendance_hr_attendance_my_attendance",
+    "cards_hr_cards_my_card", "cards_hr_cards_my_card_download",
+    "hr_attendance_hr_presence_my_checks", "cards_student_cards_get_my_card",
+}
 
 
 def build_real_enforcement_table(app):
@@ -37,6 +45,9 @@ def build_real_enforcement_table(app):
     for p in manifest:
         method = p.get("linked_api_method")
         group = p.get("group_key")
+        key = p.get("key")
+        if key in SELF_SERVICE_EXCLUDE_KEYS:
+            continue
         if method in ("POST", "PUT", "DELETE", "PATCH") and group in ACTIVE_WRITE_GROUPS:
             pass
         elif method == "GET" and group in NEW_SENSITIVE_READ_GROUPS:
@@ -45,7 +56,7 @@ def build_real_enforcement_table(app):
             continue
         src = p.get("source_file") or ""
         mod = src[:-3].replace("/", ".") if src.endswith(".py") else src
-        perm_lookup[(method, mod, p.get("source_function"))] = p.get("key")
+        perm_lookup[(method, mod, p.get("source_function"))] = key
 
     table = []
     for route in getattr(app, "routes", []):
