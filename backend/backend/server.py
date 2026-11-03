@@ -1140,7 +1140,31 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
             query["department_id"] = {"$in": _all_dept_ids}
             return query
         # أنواع نطاق أخرى: تسقط لفروع الدور أدناه (سلوك الكلية الأولى) أو الـ fail-safe
-    
+
+    # 🆕 مستخدم إنفاذ فعلي (الدفعة الكبيرة 3 نوفمبر 2026): نطاقه من تكليفاته الجديدة بغض النظر عن نص دوره
+    # (role="employee" غالباً لا يطابق أي فرع أدناه، فكان يسقط إلى نطاق غير مقيَّد بلا قصد = ثغرة أمنية سابقة)
+    if user_data.get("advanced_access_real_enforcement"):
+        if department_ids:
+            if scope_type in ["students", "courses", "teachers", "attendance"]:
+                query["department_id"] = department_ids[0] if len(department_ids) == 1 else {"$in": department_ids}
+            elif scope_type == "departments":
+                query["_id"] = ObjectId(department_ids[0]) if len(department_ids) == 1 else {"$in": [ObjectId(did) for did in department_ids]}
+            return query
+        if faculty_id:
+            if scope_type in ["students", "courses", "teachers", "attendance"]:
+                _dept_ids = await get_faculty_department_ids(faculty_id)
+                if _dept_ids:
+                    query["department_id"] = {"$in": _dept_ids}
+            elif scope_type == "departments":
+                query["faculty_id"] = faculty_id
+            return query
+        # لا تكليف نشط له نطاق أكاديمي إطلاقاً — الأسلم افتراضياً: لا يرى شيئاً بدل رؤية كل شيء
+        if scope_type == "departments":
+            query["_id"] = {"$in": []}
+        else:
+            query["department_id"] = {"$in": []}
+        return query
+
     # Dean (عميد) - يرى بيانات كليته، وإن خُصِّص له قسم/أقسام محددة داخل الكلية فيرى تلك الأقسام فقط
     if role == "dean" and faculty_id:
         if department_ids:

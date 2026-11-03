@@ -101,7 +101,7 @@ interface StatCard {
 
 export default function HomeDashboardScreen() {
   const { user } = useAuthStore();
-  if (user?.advanced_access_real_enforcement) return <RealEnforcementHome />;
+  if (user?.advanced_access_real_enforcement) return <ManagementDashboard />;
   if (user?.role === 'employee') return <HrMyProfile />;
   if (user && user.role !== 'teacher' && user.role !== 'student') return <ManagementDashboard />;
   return <LegacyHomeScreen />;

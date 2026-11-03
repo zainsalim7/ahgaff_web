@@ -46,8 +46,9 @@ SECTION_PERMS = {"alerts": Permission.DASHBOARD_ALERTS, "attendance": Permission
 
 
 def dashboard_sections(user: dict) -> dict:
-    """الأجزاء المسموحة: الأدمن ورئيس الجامعة كل شيء؛ غيرهم حسب صلاحيات فئة «لوحة القيادة» (الأرقام العامة للجميع)"""
-    full = user.get("role") in (UserRole.ADMIN, UserRole.UNIVERSITY_PRESIDENT)
+    """الأجزاء المسموحة: الأدمن ورئيس الجامعة كل شيء؛ غيرهم حسب صلاحيات فئة «لوحة القيادة» (الأرقام العامة للجميع)
+    🆕 مستخدم إنفاذ فعلي: يرى كل الأقسام أيضاً (كالأدمن) — لكن بياناته تبقى مقيَّدة بنطاقه عبر _resolve_scope"""
+    full = user.get("role") in (UserRole.ADMIN, UserRole.UNIVERSITY_PRESIDENT) or bool(user.get("advanced_access_real_enforcement"))
     return {k: (full or has_permission(user, p)) for k, p in SECTION_PERMS.items()}
 
 
@@ -291,7 +292,7 @@ async def build_dashboard(db, user: dict, period: str, faculty_id: Optional[str]
 
     # ── المالية
     finance = None
-    if sections["finance"] and (scope["is_admin"] or has_permission(user, "manage_fee_receipts")):
+    if sections["finance"] and (scope["is_admin"] or user.get("advanced_access_real_enforcement") or has_permission(user, "manage_fee_receipts")):
         from .fee_receipts import _allowed_type_ids
         finance = await _finance(db, dept_ids, active_sem, students_count, await _allowed_type_ids(db, user))
 
