@@ -1,0 +1,183 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="14" skipped="0" tests="93" time="9.560" timestamp="2026-11-03T18:21:44.066782+00:00" hostname="agent-env-09acf16a-7ac0-4f4f-bdd8-550445b492cb"><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/students]" time="3.954" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/teachers]" time="0.038" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/courses]" time="0.072" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/departments]" time="0.065" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/faculties]" time="0.072" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/enrollments]" time="0.043" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/hr/employees]" time="0.041" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/hr/leaves]" time="0.055" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/hr/tasks]" time="0.080" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/hr/attendance/records]" time="0.072" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/hr/org-units]" time="0.034" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/correspondence/dashboard]" time="0.044" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/correspondence/organizations]" time="0.036" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/letters]" time="0.045" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/notifications/history]" time="0.034" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/notifications/stats]" time="0.077" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/notifications/my]" time="0.055" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/notifications]" time="0.038" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/notifications/count]" time="0.039" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/calendar/events]" time="0.038" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/calendar/holidays]" time="0.036" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/cards/batches]" time="0.035" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/cards/print-settings]" time="0.037" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/fees/types]" time="0.079" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/fees/stats]" time="0.079" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/settings]" time="0.030" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/users]" time="0.037" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/roles]" time="0.046" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/activity-logs]" time="0.051" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/semesters]" time="0.076" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/attendance-changes]" time="0.044" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/reports/summary]" time="0.033" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/teacher-preferences]" time="0.070" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/faculty-board/sessions]" time="0.031" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/assistant/sessions]" time="0.032" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/advanced-access/me/access]" time="0.123" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/my-institution]" time="0.072" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/my-scope]" time="0.032" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/auth/me]" time="0.030" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_admin_get_no_403[/dashboard/management]" time="0.062" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/students]" time="0.420" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/teachers]" time="0.050" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/courses]" time="0.079" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/departments]" time="0.032" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/auth/me]" time="0.086" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/my-scope]" time="0.030" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/notifications]" time="0.034" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/notifications/count]" time="0.056" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/notifications/my]" time="0.051" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/calendar/events]" time="0.060" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/correspondence/dashboard]" time="0.050" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/letters]" time="0.050" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/hr/tasks]" time="0.048" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_get_no_guard_403[/my-institution]" time="0.050" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_saeed_hr_leaves_legacy_behavior" time="0.033" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_flagged" time="0.284" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_create_student_scope_autocorrect" time="0.169" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_dashboard_management" time="0.058" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/notifications/send-body0]" time="0.039" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/api/notifications/manual-body1]" time="0.045" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/correspondence/organizations-body2]" time="0.046" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/hr/cards/batch-preview-body3]" time="0.043" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/fees/remind-unpaid-body4]" time="0.081" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/fees/types-body5]" time="0.051" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/calendar/events-body6]" time="0.045" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_new_groups[POST-/teachers-body7]" time="0.030" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/teachers]" time="0.036" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/correspondence/dashboard]" time="0.074" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/cards/batches]" time="0.035" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/fees/types]" time="0.045" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/calendar/events]" time="0.069" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/notifications/history]" time="0.039" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/users]" time="0.072" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_blocked_reads[/activity-logs]" time="0.069" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/auth/me]" time="0.032" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/my-institution]" time="0.068" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/notifications/my]" time="0.103" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/my-scope]" time="0.074" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/notifications]" time="0.044"><failure message="AssertionError: guard blocked self-service /notifications&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/notifications'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /notifications
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/notifications/count]" time="0.038"><failure message="AssertionError: guard blocked self-service /notifications/count&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/notifications/count'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /notifications/count
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/advanced-access/me/access]" time="0.047"><failure message="AssertionError: guard blocked self-service /advanced-access/me/access&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/advanced-access/me/access'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /advanced-access/me/access
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/advanced-access/me/contexts]" time="0.054"><failure message="AssertionError: guard blocked self-service /advanced-access/me/contexts&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/advanced-access/me/contexts'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /advanced-access/me/contexts
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/correspondence/me]" time="0.035"><failure message="AssertionError: guard blocked self-service /correspondence/me&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/correspondence/me'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /correspondence/me
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/hr/attendance/my]" time="0.080" /><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/students/me]" time="0.032"><failure message="AssertionError: guard blocked self-service /students/me&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;, path = '/students/me'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /students/me
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/students/me/courses]" time="0.031"><failure message="AssertionError: guard blocked self-service /students/me/courses&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/students/me/courses'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /students/me/courses
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/students/me/card]" time="0.037"><failure message="AssertionError: guard blocked self-service /students/me/card&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/students/me/card'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /students/me/card
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/teachers/me]" time="0.032"><failure message="AssertionError: guard blocked self-service /teachers/me&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;, path = '/teachers/me'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /teachers/me
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_not_403[/hr/employees/me/card]" time="0.070"><failure message="AssertionError: guard blocked self-service /hr/employees/me/card&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;
+path = '/hr/employees/me/card'
+
+    @pytest.mark.parametrize("path", SELF_SERVICE_GETS)
+    def test_l2_self_service_not_403(l2, path):
+        r = l2.get(f"{API}{path}", timeout=30)
+        print(path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {path}"
+E       AssertionError: guard blocked self-service /hr/employees/me/card
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:152: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_writes_not_guarded[POST-/auth/change-password-body0]" time="0.035"><failure message="AssertionError: guard blocked self-service POST /auth/change-password&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;, method = 'POST'
+path = '/auth/change-password'
+body = {'current_password': 'wrong_pw_x', 'new_password': 'test1234'}
+
+    @pytest.mark.parametrize("method,path,body", SELF_SERVICE_WRITES)
+    def test_l2_self_service_writes_not_guarded(l2, method, path, body):
+        r = l2.request(method, f"{API}{path}", json=body, timeout=30)
+        print(method, path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {method} {path}"
+E       AssertionError: guard blocked self-service POST /auth/change-password
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:168: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_writes_not_guarded[POST-/notifications/register-token-body1]" time="0.070"><failure message="AssertionError: guard blocked self-service POST /notifications/register-token&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;, method = 'POST'
+path = '/notifications/register-token'
+body = {'platform': 'web', 'token': 'TEST_tok'}
+
+    @pytest.mark.parametrize("method,path,body", SELF_SERVICE_WRITES)
+    def test_l2_self_service_writes_not_guarded(l2, method, path, body):
+        r = l2.request(method, f"{API}{path}", json=body, timeout=30)
+        print(method, path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {method} {path}"
+E       AssertionError: guard blocked self-service POST /notifications/register-token
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:168: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_writes_not_guarded[POST-/notifications/mark-all-read-body2]" time="0.027"><failure message="AssertionError: guard blocked self-service POST /notifications/mark-all-read&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;, method = 'POST'
+path = '/notifications/mark-all-read', body = {}
+
+    @pytest.mark.parametrize("method,path,body", SELF_SERVICE_WRITES)
+    def test_l2_self_service_writes_not_guarded(l2, method, path, body):
+        r = l2.request(method, f"{API}{path}", json=body, timeout=30)
+        print(method, path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {method} {path}"
+E       AssertionError: guard blocked self-service POST /notifications/mark-all-read
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:168: AssertionError</failure></testcase><testcase classname="tests.test_real_enforcement_full_activation" name="test_l2_self_service_writes_not_guarded[PUT-/notifications/read-all-body3]" time="0.049"><failure message="AssertionError: guard blocked self-service PUT /notifications/read-all&#10;assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}')&#10; +  where 403 = &lt;Response [403]&gt;.status_code&#10; +  and   '{&quot;detail&quot;: &quot;غير مصرح لك بهذا الإجراء&quot;}' = &lt;Response [403]&gt;.text">l2 = &lt;requests.sessions.Session object at 0xf803d6d32bd0&gt;, method = 'PUT'
+path = '/notifications/read-all', body = {}
+
+    @pytest.mark.parametrize("method,path,body", SELF_SERVICE_WRITES)
+    def test_l2_self_service_writes_not_guarded(l2, method, path, body):
+        r = l2.request(method, f"{API}{path}", json=body, timeout=30)
+        print(method, path, r.status_code, r.text[:120])
+&gt;       assert not (r.status_code == 403 and GUARD_MSG in r.text), f"guard blocked self-service {method} {path}"
+E       AssertionError: guard blocked self-service PUT /notifications/read-all
+E       assert not (403 == 403 and 'غير مصرح لك بهذا الإجراء' in '{"detail": "غير مصرح لك بهذا الإجراء"}')
+E        +  where 403 = &lt;Response [403]&gt;.status_code
+E        +  and   '{"detail": "غير مصرح لك بهذا الإجراء"}' = &lt;Response [403]&gt;.text
+
+tests/test_real_enforcement_full_activation.py:168: AssertionError</failure></testcase></testsuite></testsuites>

@@ -28,6 +28,16 @@ SELF_SERVICE_EXCLUDE_KEYS = {
     "curriculum_study_plans_get_my_course_study_plan", "curriculum_study_plans_get_my_study_plan",
     "students_ser_get_my_student_record", "students_ser_get_my_courses", "teachers_ser_get_my_teacher_profile",
     "academic_structure_ser_get_my_institution",
+    # 🆕 أُضيفت بعد اكتشافها عبر testing_agent (ظل تظليل مسار + صلاحيات شخصية ناقصة)
+    "system_users_ser_change_password", "system_users_ser_force_change_password",
+    "notifications_ser_get_notifications", "notifications_ser_get_unread_notifications_count",
+    "notifications_ser_mark_notification_as_read", "notifications_ser_mark_all_notifications_as_read",
+    "notifications_notifications_mark_notification_read", "notifications_notifications_mark_all_notifications_read",
+    "notifications_notifications_register_device_token", "notifications_notifications_unregister_device_token",
+    "notifications_ser_register_fcm_token", "notifications_ser_unregister_fcm_token",
+    "misc_advanced_access_my_access", "misc_advanced_access_my_contexts",
+    "attendance_absence_excuses_my", "attendance_student_excuses_my_excuses", "attendance_attendance_approval_my_change_requests",
+    "students_ser_my_absence_profile", "assistant_assistant_my_sessions", "hr_attendance_hr_attendance_request_device_change",
 }
 
 
@@ -49,10 +59,12 @@ def build_real_enforcement_table(app):
         method = p.get("linked_api_method")
         group = p.get("group_key")
         key = p.get("key")
-        if key in SELF_SERVICE_EXCLUDE_KEYS or group in LEGACY_BRIDGE_GROUPS:
-            continue
         if method not in ("GET", "POST", "PUT", "DELETE", "PATCH"):
             continue
+        # 🔒 إصلاح ظل التظليل: المسارات المستثناة (بياناتي الخاصة/الجسر القديم) تُدرَج كـ"تمرير" (None)
+        # في نفس موضعها الصحيح في الجدول، بدل حذفها بالكامل — وإلا يطابقها لاحقًا مسار أعمّ بالخطأ (مثل /students/{id})
+        if key in SELF_SERVICE_EXCLUDE_KEYS or group in LEGACY_BRIDGE_GROUPS:
+            key = None
         src = p.get("source_file") or ""
         mod = src[:-3].replace("/", ".") if src.endswith(".py") else src
         perm_lookup[(method, mod, p.get("source_function"))] = key
@@ -70,10 +82,11 @@ def build_real_enforcement_table(app):
             mod = "server"
         name = getattr(endpoint, "__name__", None)
         for m in methods:
-            key = perm_lookup.get((m, mod, name))
-            if key:
-                table.append((m, path_regex, key))
-    logging.info(f"RealEnforcement guard: تم ربط {len(table)} نقطة نهاية بصلاحيات متقدمة")
+            lookup_key = (m, mod, name)
+            if lookup_key in perm_lookup:
+                table.append((m, path_regex, perm_lookup[lookup_key]))
+    gated = sum(1 for _, _, k in table if k)
+    logging.info(f"RealEnforcement guard: تم ربط {gated} نقطة نهاية بصلاحيات متقدمة ({len(table) - gated} مسار تمرير محمي من ظل التظليل)")
     return table
 
 
