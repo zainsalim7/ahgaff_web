@@ -764,6 +764,7 @@ export const hrAPI = {
   createUnit: (data: any) => api.post('/hr/org-units', data),
   updateUnit: (id: string, data: any) => api.put(`/hr/org-units/${id}`, data),
   deleteUnit: (id: string) => api.delete(`/hr/org-units/${id}`),
+  detachUnit: (id: string) => api.post(`/hr/org-units/${id}/detach-academic`),
   employees: (params?: any) => api.get('/hr/employees', { params }),
   employee: (id: string) => api.get(`/hr/employees/${id}`),
   me: () => api.get('/hr/employees/me'),

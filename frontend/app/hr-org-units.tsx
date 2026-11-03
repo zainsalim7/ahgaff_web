@@ -41,6 +41,10 @@ export default function HrOrgUnits() {
     finally { setBusy(false); }
   };
   const remove = async (u: any) => { if (!window.confirm(`حذف الوحدة «${u.name}»؟`)) return; try { await hrAPI.deleteUnit(u.id); load(); } catch (e) { alertMsg(e); } };
+  const detach = async (u: any) => {
+    if (!window.confirm(`فصل «${u.name}» عن الهيكل الأكاديمي؟\n\nستصبح وحدة إدارية مستقلة قابلة للنقل والتعديل بحرية، وستُنشَأ نسخة أكاديمية جديدة لها تلقائياً في مكانها الصحيح عند أول مزامنة قادمة.\n\nهذا لن يؤثر على القسم/الكلية الأكاديمية نفسها إطلاقاً.`)) return;
+    try { const r = await hrAPI.detachUnit(u.id); window.alert(r.data.message); load(); } catch (e) { alertMsg(e); }
+  };
 
   const children = (pid: string | null) => units.filter((u) => (u.parent_id || null) === pid);
   const roots = units.filter((u) => !u.parent_id || !units.some((x) => x.id === u.parent_id));
@@ -55,12 +59,14 @@ export default function HrOrgUnits() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', marginRight: depth * 26, borderRight: `3px solid ${color}`, backgroundColor: depth % 2 ? '#fff' : '#f7f9fc', borderRadius: 8, marginBottom: 6 }} data-testid={`org-unit-${u.id}`}>
           <span style={{ backgroundColor: color + '18', color, fontSize: 10.5, fontWeight: 800, padding: '2px 8px', borderRadius: 8, whiteSpace: 'nowrap' }}>{u.type_label}</span>
           {u.source === 'import' && <span title="أُنشئت تلقائياً من استيراد Excel" style={{ backgroundColor: '#fef3c7', color: '#b45309', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 8, whiteSpace: 'nowrap' }} data-testid={`org-imported-badge-${u.id}`}>مستوردة</span>}
+          {u.detached_from_academic && <span title="كانت وحدة أكاديمية وفُصلت لتصبح إدارية مستقلة" style={{ backgroundColor: '#fff7e6', color: '#b45309', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 8, whiteSpace: 'nowrap' }} data-testid={`org-detached-badge-${u.id}`}>🔓 مفصولة</span>}
           {unlinked(u) && <span title="غير مربوطة بإدارة أم" style={{ backgroundColor: '#ffebee', color: '#c62828', fontSize: 10, fontWeight: 800, padding: '2px 7px', borderRadius: 8, whiteSpace: 'nowrap' }} data-testid={`org-unlinked-badge-${u.id}`}>بلا إدارة</span>}
           <span style={{ flex: 1, fontWeight: 700, color: '#0f2440', fontSize: 13.5, cursor: 'pointer' }} onClick={() => router.push(`/hr-employees?unit=${u.id}`)}>{u.name}{u.code ? <span style={{ color: '#94a3b8', fontWeight: 500, fontSize: 11 }}> · {u.code}</span> : null}</span>
           <span style={{ fontSize: 11.5, color: '#64748b', whiteSpace: 'nowrap' }}>👥 {u.employees_count}</span>
           {canManage && (
             <span style={{ display: 'flex', gap: 4 }}>
               <button onClick={() => openForm(null, u.id)} title="إضافة وحدة فرعية" style={btn('#e3f2fd', '#1565c0', { padding: '3px 8px', fontSize: 11 })} data-testid={`org-add-child-${u.id}`}>+ فرعية</button>
+              {academic && u.type !== 'presidency' && <button onClick={() => detach(u)} title="فصلها عن الأكاديمي لتصبح وحدة إدارية مستقلة قابلة للنقل" style={btn('#fff7e6', '#b45309', { padding: '3px 8px', fontSize: 11 })} data-testid={`org-detach-${u.id}`}>🔓 فصل عن الأكاديمي</button>}
               {!academic && <button onClick={() => openForm(u)} style={btn('#f1f5f9', '#0f2440', { padding: '3px 8px', fontSize: 11 })} data-testid={`org-edit-${u.id}`}>تعديل</button>}
               {!academic && <button onClick={() => remove(u)} style={btn('#ffebee', '#c62828', { padding: '3px 8px', fontSize: 11 })} data-testid={`org-delete-${u.id}`}>حذف</button>}
             </span>

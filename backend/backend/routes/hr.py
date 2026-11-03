@@ -133,7 +133,10 @@ async def sync_academic_units(current_user: dict = Depends(get_current_user)):
     async for f in db.faculties.find({}):
         ex = await db.org_units.find_one({"type": "faculty", "faculty_id": str(f["_id"])})
         if not ex:
-            r = await db.org_units.insert_one({"name": f.get("name", ""), "type": "faculty", "parent_id": root_id, "faculty_id": str(f["_id"]), "code": f.get("code", ""), "order": 10, "is_active": True, "created_at": _now()})
+            doc = {"name": f.get("name", ""), "type": "faculty", "parent_id": root_id, "faculty_id": str(f["_id"]), "order": 10, "is_active": True, "created_at": _now()}
+            if f.get("code"):
+                doc["code"] = f["code"]
+            r = await db.org_units.insert_one(doc)
             fac_map[str(f["_id"])] = str(r.inserted_id); created += 1
         else:
             fac_map[str(f["_id"])] = str(ex["_id"])
@@ -143,13 +146,38 @@ async def sync_academic_units(current_user: dict = Depends(get_current_user)):
         ex = await db.org_units.find_one({"type": "department", "department_id": str(d["_id"])})
         parent = fac_map.get(str(d.get("faculty_id") or ""), root_id)
         if not ex:
-            await db.org_units.insert_one({"name": d.get("name", ""), "type": "department", "parent_id": parent, "department_id": str(d["_id"]), "faculty_id": str(d.get("faculty_id") or ""), "code": d.get("code", ""), "order": 20, "is_active": True, "created_at": _now()})
+            doc = {"name": d.get("name", ""), "type": "department", "parent_id": parent, "department_id": str(d["_id"]), "faculty_id": str(d.get("faculty_id") or ""), "order": 20, "is_active": True, "created_at": _now()}
+            if d.get("code"):
+                doc["code"] = d["code"]
+            await db.org_units.insert_one(doc)
             created += 1
         elif ex.get("name") != d.get("name") or ex.get("parent_id") != parent:
             await db.org_units.update_one({"_id": ex["_id"]}, {"$set": {"name": d.get("name", ""), "parent_id": parent}})
     rl = await relink_teacher_units(db)
     await log_activity(current_user, "hr_sync_org", "org_unit", root_id, "الهيكل التنظيمي", {"created": created, "linked": rl["linked"]})
     return {"created": created, "linked": rl["linked"], "message": f"تمت مزامنة الهيكل — أُضيفت {created} وحدة جديدة" + (f" وربط {rl['linked']} معلماً بوحداتهم" if rl["linked"] else "")}
+
+
+@router.post("/org-units/{unit_id}/detach-academic")
+async def detach_academic_unit(unit_id: str, current_user: dict = Depends(get_current_user)):
+    """🔓 فصل وحدة مربوطة أكاديمياً (كلية/قسم) عن الهيكل الأكاديمي — تصبح وحدة إدارية مستقلة قابلة للنقل والتعديل بحرية.
+    لا يمسّ القسم/الكلية الأكاديمية نفسها إطلاقاً — ستُعاد مزامنتها تلقائياً كوحدة جديدة في مكانها الصحيح عند الضغط على «مزامنة الكليات والأقسام»"""
+    _guard(current_user, P_ORG)
+    db = get_db()
+    oid = _oid(unit_id)
+    unit = await db.org_units.find_one({"_id": oid})
+    if not unit:
+        raise HTTPException(status_code=404, detail="الوحدة غير موجودة")
+    if unit.get("type") == "presidency":
+        raise HTTPException(status_code=400, detail="لا يمكن فصل رئاسة الجامعة")
+    if not (unit.get("faculty_id") or unit.get("department_id")):
+        raise HTTPException(status_code=400, detail="هذه الوحدة غير مربوطة بالأكاديمي أصلاً")
+    await db.org_units.update_one({"_id": oid}, {
+        "$set": {"type": "administration", "detached_from_academic": True, "detached_at": _now(), "updated_at": _now()},
+        "$unset": {"faculty_id": "", "department_id": "", "code": ""},
+    })
+    await log_activity(current_user, "hr_detach_org_unit", "org_unit", unit_id, unit.get("name", ""), {})
+    return {"message": f"تم فصل «{unit.get('name')}» عن الهيكل الأكاديمي — أصبحت وحدة إدارية مستقلة بالكامل. اضغط «مزامنة الكليات والأقسام» لإعادة توليد نسخة أكاديمية جديدة لها في مكانها الصحيح."}
 
 
 _CODE_PREFIX = {"presidency": "PRES", "faculty": "FAC", "department": "DEP", "administration": "ADM", "office": "OFF"}
