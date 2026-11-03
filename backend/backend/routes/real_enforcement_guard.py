@@ -13,25 +13,28 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .deps import SECRET_KEY, ALGORITHM
 
-# مجموعات الوحدات النشطة (مُفعَّل عليها إنفاذ قراءة فعلي مسبقًا) — تُضاف لها عمليات الكتابة كاملة
-ACTIVE_WRITE_GROUPS = {
-    "teachers", "courses", "enrollments", "attendance", "alumni", "teaching_load",
-    "schedule", "councils", "curriculum", "certificates", "students", "academic_structure",
-}
-# مجموعات حساسة جديدة لم يُفعَّل عليها إنفاذ من قبل — تُضاف لها عمليات القراءة فقط في هذه الدفعة
-NEW_SENSITIVE_READ_GROUPS = {"finance", "cards", "system_users", "grades", "calendar", "hr_attendance"}
+# مجموعات مُدارة فعلاً عبر الجسر القديم (has_permission + legacy bridge) — لا حاجة لتكرارها هنا (الدفعة 3)
+LEGACY_BRIDGE_GROUPS = {"hr_core", "hr_leaves", "hr_tasks", "letters", "dashboard"}
 # مسارات "بياناتي الخاصة" (self-service) — يجب أن تبقى متاحة دائمًا لصاحبها بغض النظر عن الصلاحيات المتقدمة
 SELF_SERVICE_EXCLUDE_KEYS = {
     "system_users_auth_get_me", "system_users_ser_get_my_scope",
     "finance_fee_receipts_my_fee_status", "grades_grades_get_my_results",
     "hr_attendance_hr_attendance_my_device", "hr_attendance_hr_attendance_my_attendance",
-    "cards_hr_cards_my_card", "cards_hr_cards_my_card_download",
-    "hr_attendance_hr_presence_my_checks", "cards_student_cards_get_my_card",
+    "cards_hr_cards_my_card", "cards_hr_cards_my_card_download", "cards_hr_cards_upload_my_photo",
+    "hr_attendance_hr_presence_my_checks", "cards_student_cards_get_my_card", "cards_student_cards_upload_my_photo",
+    "correspondence_correspondence_my_access", "correspondence_correspondence_signature_my_signature",
+    "correspondence_correspondence_signature_upload_signature", "correspondence_correspondence_signature_delete_signature",
+    "schedule_day_shift_my_day_shift", "notifications_notifications_get_my_notifications",
+    "curriculum_study_plans_get_my_course_study_plan", "curriculum_study_plans_get_my_study_plan",
+    "students_ser_get_my_student_record", "students_ser_get_my_courses", "teachers_ser_get_my_teacher_profile",
+    "academic_structure_ser_get_my_institution",
 }
 
 
 def build_real_enforcement_table(app):
-    """يبني جدول (طريقة، نمط مسار مُصرَّف، مفتاح صلاحية متقدم) من مسارات التطبيق المسجَّلة فعليًا + سجل الصلاحيات"""
+    """يبني جدول (طريقة، نمط مسار مُصرَّف، مفتاح صلاحية متقدم) من مسارات التطبيق المسجَّلة فعليًا + سجل الصلاحيات
+    🆕 الدفعة 3 (تفعيل الباقي): كل الصلاحيات الـ1026 مُفعَّلة الآن لمستخدمي الإنفاذ الفعلي، باستثناء
+    المجموعات المُدارة أصلاً عبر الجسر القديم (LEGACY_BRIDGE_GROUPS) ومسارات "بياناتي الخاصة" """
     gen_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "tools", "generated")
     manifest_path = os.path.join(gen_dir, "advanced_permissions.json")
     try:
@@ -46,13 +49,9 @@ def build_real_enforcement_table(app):
         method = p.get("linked_api_method")
         group = p.get("group_key")
         key = p.get("key")
-        if key in SELF_SERVICE_EXCLUDE_KEYS:
+        if key in SELF_SERVICE_EXCLUDE_KEYS or group in LEGACY_BRIDGE_GROUPS:
             continue
-        if method in ("POST", "PUT", "DELETE", "PATCH") and group in ACTIVE_WRITE_GROUPS:
-            pass
-        elif method == "GET" and group in NEW_SENSITIVE_READ_GROUPS:
-            pass
-        else:
+        if method not in ("GET", "POST", "PUT", "DELETE", "PATCH"):
             continue
         src = p.get("source_file") or ""
         mod = src[:-3].replace("/", ".") if src.endswith(".py") else src
