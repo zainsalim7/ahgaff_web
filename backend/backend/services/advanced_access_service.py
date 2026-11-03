@@ -257,6 +257,47 @@ async def real_enforce_guard(db, current_user: dict, adv_permission_key: str,
     return True
 
 
+async def get_user_primary_scope(db, user: dict) -> Dict[str, Optional[str]]:
+    """🆕 أول نطاق (قسم/كلية) فعّال لمستخدم إنفاذ فعلي من تكليفاته النشطة — يُستخدم كنطاق افتراضي عند الإنشاء"""
+    assignments = await list_user_work_contexts(db, _uid(user), active_only=True)
+    for a in assignments:
+        scope = a.get("scope") or {}
+        stype = scope.get("scope_type")
+        refs = scope.get("scope_ref_ids") or []
+        if stype in ("department", "faculty") and refs:
+            return {"scope_type": stype, "scope_ref_id": refs[0]}
+    return {"scope_type": None, "scope_ref_id": None}
+
+
+async def real_enforce_write_guard(db, current_user: dict, adv_permission_key: str,
+                                    department_id: Optional[str] = None, faculty_id: Optional[str] = None,
+                                    is_create: bool = False) -> Dict[str, Any]:
+    """🆕 حارس عمليات الكتابة (إنشاء/تعديل/حذف) — الدفعة الشاملة، لمستخدمي advanced_access_real_enforcement فقط.
+    - عند الإنشاء (is_create=True): إن كان النطاق المُرسَل خارج نطاق المستخدم (أو غير محدد)، يُصحَّح تلقائيًا
+      لنطاق المستخدم نفسه بدل الرفض (قرار صريح من المستخدم: "تقييد تلقائي للنطاق").
+    - عند التعديل/الحذف (is_create=False): يتحقق من نطاق السجل الحالي فعليًا، ويرفض (403) إن كان خارج النطاق
+      المصرَّح به (لا يوجد "تصحيح" ممكن لسجل موجود مسبقًا خارج النطاق).
+    يُعيد dict فيه department_id/faculty_id (مُصحَّحَين عند الإنشاء فقط) و_applied (هل انطبق الإنفاذ أصلاً)."""
+    if not current_user.get("advanced_access_real_enforcement"):
+        return {"department_id": department_id, "faculty_id": faculty_id, "_applied": False}
+    target_type = "faculty" if faculty_id else ("department" if department_id else None)
+    target_ref = faculty_id or department_id
+    decision = await real_enforce_check(db, current_user, adv_permission_key, target_type, target_ref)
+    if decision:
+        return {"department_id": department_id, "faculty_id": faculty_id, "_applied": True}
+    if not is_create:
+        raise HTTPException(status_code=403, detail="غير مصرح — خارج النطاق المصرَّح به")
+    own = await get_user_primary_scope(db, current_user)
+    if not own.get("scope_ref_id"):
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    decision2 = await real_enforce_check(db, current_user, adv_permission_key, own["scope_type"], own["scope_ref_id"])
+    if not decision2:
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if own["scope_type"] == "department":
+        return {"department_id": own["scope_ref_id"], "faculty_id": None, "_applied": True, "_corrected": True}
+    return {"department_id": None, "faculty_id": own["scope_ref_id"], "_applied": True, "_corrected": True}
+
+
 async def list_user_work_contexts(db, user_id: str, active_only: bool = True) -> List[dict]:
     q = {"user_id": user_id}
     if active_only:

@@ -113,6 +113,13 @@
 - advanced_access_testers: sub_permissions=[run_tests, context_switch] فقط (لا view/manage) — لإثبات العزل من الداخل
 - هذا الحساب والتكليف تُركا عمدًا كـ"جهاز اختبار حي" دائم بطلب المستخدم — لا تُحذف. 39/39 اختبار (pytest + testing_agent) ناجح عليه، راجع `/app/test_reports/iteration_153.json` و`backend/tests/test_adv_live_test_account.py`.
 
+## 🔒 Real Enforcement — Layer2 Scoped Test User (Phase 7-Final batch, created 2026-11-03)
+- Username: layer2_test_emp / Password: test1234
+- Role: employee, advanced_access_real_enforcement=True
+- Scope: department "الشريعة والقانون" (id 698e500997fef774e66e93a8)
+- Granted advanced permissions: students_ser_create_student, students_ser_delete_student, grades_grades_download_grades_template (NO teacher permissions — used to prove middleware blocks unrelated writes)
+- Use this account to test: create student (auto-corrects department to own scope), delete student outside scope (403), any write lacking permission (403 from global guard)
+
 ## 🆕 إنفاذ فعلي حقيقي (Phase 7-Final) — 1 نوفمبر 2026
 أي مستخدم جديد يُنشأ عبر شاشة "تكليف جديد" → "أو إنشاء مستخدم جديد" في مركز الصلاحيات المتقدم يحصل تلقائيًا على `advanced_access_real_enforcement=true` — وصوله لـ `GET /curriculum/courses` و`GET /curriculum/by-department/{id}` يُحسم فعليًا (ليس محاكاة) حسب تكليفه في مركز الصلاحيات المتقدم. حساب التحقق المؤقت `real_pilot_emp_001` المُستخدَم للتحقق E2E في هذه الجلسة حُذف بعد التأكد من نجاحه. لا تأثير على أي مستخدم موجود مسبقًا.
 

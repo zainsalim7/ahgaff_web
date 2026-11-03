@@ -2248,7 +2248,12 @@ async def update_user_custom_permissions(user_id: str, data: CustomPermissionsUp
 
 @api_router.post("/departments", response_model=DepartmentResponse)
 async def create_department(dept: DepartmentCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "add_department"):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        _res = await real_enforce_write_guard(db, current_user, "academic_structure_ser_create_department", faculty_id=dept.faculty_id, is_create=True)
+        if _res.get("_corrected") and _res.get("faculty_id"):
+            dept.faculty_id = _res["faculty_id"]
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "add_department"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     dept_dict = dept.dict()
@@ -2287,12 +2292,14 @@ async def get_departments(current_user: dict = Depends(get_current_user)):
 
 @api_router.delete("/departments/{dept_id}")
 async def delete_department(dept_id: str, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "delete_department"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     dept = await db.departments.find_one({"_id": ObjectId(dept_id)})
     if not dept:
         raise HTTPException(status_code=404, detail="القسم غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "academic_structure_ser_delete_department", department_id=dept_id)
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "delete_department"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # التحقق من عدم وجود بيانات مرتبطة (الفعالة وغير الفعالة)
     students_count = await db.students.count_documents({"department_id": dept_id})
@@ -2315,12 +2322,14 @@ async def delete_department(dept_id: str, current_user: dict = Depends(get_curre
 
 @api_router.put("/departments/{dept_id}", response_model=DepartmentResponse)
 async def update_department(dept_id: str, dept: DepartmentCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "edit_department"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     existing = await db.departments.find_one({"_id": ObjectId(dept_id)})
     if not existing:
         raise HTTPException(status_code=404, detail="القسم غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "academic_structure_ser_update_department", department_id=dept_id)
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_departments") and not has_permission(current_user, "edit_department"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     await db.departments.update_one(
         {"_id": ObjectId(dept_id)},
@@ -3680,7 +3689,12 @@ async def bulk_change_level(request: Request, current_user: dict = Depends(get_c
 
 @api_router.post("/students", response_model=StudentResponse)
 async def create_student(student: StudentCreate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        _res = await real_enforce_write_guard(db, current_user, "students_ser_create_student", department_id=student.department_id, is_create=True)
+        if _res.get("_corrected"):
+            student.department_id = _res["department_id"]
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # ✅ السماح بتكرار رقم القيد فقط لو القسم مختلف
@@ -4252,12 +4266,14 @@ async def cleanup_orphan_enrollments(current_user: dict = Depends(get_current_us
 
 @api_router.delete("/students/{student_id}")
 async def delete_student(student_id: str, current_user: dict = Depends(get_current_user)):
-    if not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "students_ser_delete_student", department_id=student.get("department_id"))
+    elif not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     # حذف التسجيلات في المقررات (لمنع ghost enrollments)
     enrollments_deleted = await db.enrollments.delete_many({"student_id": student_id})
@@ -4312,11 +4328,14 @@ async def get_student_backup_info(student_id: str, current_user: dict = Depends(
 @api_router.post("/students/{student_id}/safe-delete")
 async def safe_delete_student(student_id: str, current_user: dict = Depends(get_current_user)):
     """حذف آمن للطالب مع نسخة احتياطية"""
-    if not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
     student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "students_ser_safe_delete_student", department_id=student.get("department_id"))
+    elif not has_permission(current_user, "students_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     def clean_doc(doc):
         d = {}
@@ -4424,12 +4443,14 @@ class StudentUpdate(BaseModel):
 
 @api_router.put("/students/{student_id}", response_model=StudentResponse)
 async def update_student(student_id: str, data: StudentUpdate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     student = await db.students.find_one({"_id": ObjectId(student_id)})
     if not student:
         raise HTTPException(status_code=404, detail="الطالب غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "students_ser_update_student", department_id=student.get("department_id"))
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_students"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     
@@ -4948,15 +4969,21 @@ async def get_teachers(
 @api_router.post("/teachers", response_model=TeacherResponse)
 async def create_teacher(request: Request, current_user: dict = Depends(get_current_user)):
     """إضافة معلم جديد"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     body = await request.json()
     
     # دعم department_ids من الفرونت اند (مصفوفة) وتحويلها إلى department_id
     if "department_ids" in body and body["department_ids"]:
         if isinstance(body["department_ids"], list) and len(body["department_ids"]) > 0:
             body["department_id"] = body["department_ids"][0]
+    
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        _res = await real_enforce_write_guard(db, current_user, "teachers_ser_create_teacher", department_id=body.get("department_id"), is_create=True)
+        if _res.get("_corrected"):
+            body["department_id"] = _res["department_id"]
+            body["department_ids"] = [_res["department_id"]] if _res["department_id"] else []
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     teacher = TeacherCreate(**{k: v for k, v in body.items() if k in TeacherCreate.__fields__})
     
@@ -5241,12 +5268,14 @@ async def get_teacher_courses(
 @api_router.put("/teachers/{teacher_id}")
 async def update_teacher(teacher_id: str, request: Request, current_user: dict = Depends(get_current_user)):
     """تحديث بيانات معلم"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
     if not teacher:
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "teachers_ser_update_teacher", department_id=teacher.get("department_id"))
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     body = await request.json()
     
@@ -5342,11 +5371,14 @@ async def get_teacher_backup_info(teacher_id: str, current_user: dict = Depends(
 @api_router.post("/teachers/{teacher_id}/safe-delete")
 async def safe_delete_teacher(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """حذف آمن للمعلم مع نسخة احتياطية"""
-    if not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
     if not teacher:
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "teachers_ser_safe_delete_teacher", department_id=teacher.get("department_id"))
+    elif not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     backup, stats = await _do_safe_delete_teacher(teacher, current_user)
     return {
         "message": "تم حذف المعلم بنجاح",
@@ -5435,12 +5467,14 @@ async def restore_teacher(request: Request, current_user: dict = Depends(get_cur
 @api_router.delete("/teachers/{teacher_id}")
 async def delete_teacher(teacher_id: str, current_user: dict = Depends(get_current_user)):
     """حذف معلم"""
-    if not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     teacher = await db.teachers.find_one({"_id": ObjectId(teacher_id)})
     if not teacher:
         raise HTTPException(status_code=404, detail="المعلم غير موجود")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "teachers_ser_delete_teacher", department_id=teacher.get("department_id"))
+    elif not has_permission(current_user, "teachers_safe_delete") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_teachers")):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
 
     # 🔒 تكامل: منع الحذف إذا كان المعلم مسنداً لمقررات أو له محاضرات في الجدول الأسبوعي
     courses_cnt = await db.courses.count_documents({"teacher_id": teacher_id})
@@ -7196,12 +7230,15 @@ async def enroll_students(
     current_user: dict = Depends(get_current_user)
 ):
     """تسجيل طلاب في مقرر"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك")
-    
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+    
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "enrollments_ser_enroll_students", department_id=course.get("department_id") or None)
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "add_enrollment"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     course_dept = course.get("department_id", "")
     course_level = course.get("level")
@@ -7292,7 +7329,11 @@ async def unenroll_student(
     current_user: dict = Depends(get_current_user)
 ):
     """إلغاء تسجيل طالب من مقرر"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "delete_enrollment"):
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        _course = await db.courses.find_one({"_id": ObjectId(course_id)}) if ObjectId.is_valid(course_id) else None
+        await real_enforce_write_guard(db, current_user, "enrollments_ser_unenroll_student", department_id=(_course or {}).get("department_id"))
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_enrollments") and not has_permission(current_user, "delete_enrollment"):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     
     result = await db.enrollments.delete_one({
@@ -7499,12 +7540,16 @@ async def reassign_lecture_history(data: ReassignHistoryRequest, current_user: d
 
 @api_router.put("/courses/{course_id}")
 async def update_course(course_id: str, data: CourseUpdate, current_user: dict = Depends(get_current_user)):
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "edit_course"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل المقرر")
-
     course = await db.courses.find_one({"_id": ObjectId(course_id)})
     if not course:
         raise HTTPException(status_code=404, detail="المقرر غير موجود")
+
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        _dep = str(course.get("department_id")) if course.get("department_id") else None
+        await real_enforce_write_guard(db, current_user, "courses_ser_update_course", department_id=_dep)
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses") and not has_permission(current_user, "edit_course"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل المقرر")
 
     # 🔒 ملكية القسم: لا يعدّل مقرراً ليس من قسمه/كليته
     if current_user.get("role") != UserRole.ADMIN:
@@ -18115,12 +18160,14 @@ async def update_faculty(
     current_user: dict = Depends(get_current_user)
 ):
     """تحديث بيانات كلية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_faculties"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الكليات")
-    
     faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
     if not faculty:
         raise HTTPException(status_code=404, detail="الكلية غير موجودة")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "academic_structure_ser_update_faculty", faculty_id=faculty_id)
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_faculties"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الكليات")
     
     update_data = {k: v for k, v in faculty_data.dict().items() if v is not None}
     update_data["updated_at"] = get_yemen_time()
@@ -18147,12 +18194,14 @@ async def delete_faculty(
     current_user: dict = Depends(get_current_user)
 ):
     """حذف كلية"""
-    if current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_faculties"):
-        raise HTTPException(status_code=403, detail="غير مصرح لك بحذف الكليات")
-    
     faculty = await db.faculties.find_one({"_id": ObjectId(faculty_id)})
     if not faculty:
         raise HTTPException(status_code=404, detail="الكلية غير موجودة")
+    if current_user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import real_enforce_write_guard
+        await real_enforce_write_guard(db, current_user, "academic_structure_ser_delete_faculty", faculty_id=faculty_id)
+    elif current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_faculties"):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بحذف الكليات")
     
     # التحقق من عدم وجود أقسام مرتبطة
     departments_count = await db.departments.count_documents({"faculty_id": faculty_id})
@@ -18817,6 +18866,11 @@ app.include_router(integration_api_router, prefix="/api")
 app.include_router(curriculum_router, prefix="/api")
 app.include_router(student_status_router, prefix="/api")
 app.include_router(student_transfer_router, prefix="/api")
+
+# 🔒 حارس الإنفاذ الفعلي الشامل (الدفعة الكبيرة) — بعد اكتمال تسجيل كل المسارات
+from routes.real_enforcement_guard import RealEnforcementRouteGuardMiddleware, build_real_enforcement_table
+_real_enforcement_table = build_real_enforcement_table(app)
+app.add_middleware(RealEnforcementRouteGuardMiddleware, route_table=_real_enforcement_table, db_getter=lambda: db)
 
 async def migrate_teacher_prefs_defaults_v2():
     """مرة واحدة: تحديث كل تفضيلات المعلمين الموجودة إلى (أقصى يومي 3 + السماح بالمتتالية)"""
