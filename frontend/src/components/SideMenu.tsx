@@ -16,6 +16,7 @@ import { useAuth, PERMISSIONS } from '../contexts/AuthContext';
 import { getRoleLabel } from '../utils/roleLabels';
 import { useAdvancedAccessContextStore } from '../store/advancedAccessContextStore';
 import { useRealEnforcementStore } from '../store/realEnforcementStore';
+import { correspondenceAPI } from '../services/api';
 
 interface MenuItem {
   id: string;
@@ -27,6 +28,7 @@ interface MenuItem {
   forAll?: boolean;
   roles?: string[]; // يظهر لهذه الأدوار فقط (مثل مراجعي تبرير الغياب)
   advPermissionKeys?: string[]; // 🆕 للمستخدمين الجدد ذوي الإنفاذ الفعلي: مفاتيح صلاحيات مركز الصلاحيات المتقدم المقابلة
+  corrMembershipOnly?: boolean; // 🆕 لا يظهر إلا لمن لديه عضوية/دور فعلي في نظام المراسلات (أو أدمن)
 }
 
 // قائمة العناصر مرتبطة بالصلاحيات
@@ -175,11 +177,11 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'letters', label: 'الخطابات الرسمية ✉️', icon: 'mail-open', path: '/letters', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_list_letters', 'letters_hr_letters_list_letters'] },
   { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', permissions: [], forAll: true },
   { id: 'corr-quick', label: 'خطاب سريع ⚡', icon: 'flash', path: '/corr-quick', permissions: [], forAll: true },
-  { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', permissions: [], forAll: true },
-  { id: 'corr-list', label: 'سجل المراسلات', icon: 'documents', path: '/corr-list', permissions: [], forAll: true },
-  { id: 'corr-templates', label: 'قوالب وترويسات الخطابات', icon: 'copy', path: '/corr-templates', permissions: [], forAll: true },
-  { id: 'corr-positions', label: 'المناصب والأسماء', icon: 'people-circle', path: '/corr-positions', permissions: [], forAll: true },
-  { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', permissions: [], forAll: true },
+  { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-list', label: 'سجل المراسلات', icon: 'documents', path: '/corr-list', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-templates', label: 'قوالب وترويسات الخطابات', icon: 'copy', path: '/corr-templates', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-positions', label: 'المناصب والأسماء', icon: 'people-circle', path: '/corr-positions', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', permissions: [], corrMembershipOnly: true },
 
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
   { id: 'university-calendar', label: 'التقويم الجامعي والعطل', icon: 'calendar', path: '/university-calendar', permissions: ['manage_calendar'] },
@@ -212,6 +214,15 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
   const { hasAccess: hasAdvAccess, checked: advChecked, checkAccess: checkAdvAccess } = useAdvancedAccessContextStore();
   const isRealEnforced = !!user?.advanced_access_real_enforcement;
   const { permissionKeys: realEnforcedKeys, checked: realEnforcedChecked, checkAccess: checkRealEnforcedAccess } = useRealEnforcementStore();
+  const [hasCorrAccess, setHasCorrAccess] = useState<boolean | null>(null);
+
+  React.useEffect(() => {
+    if (user?.id && hasCorrAccess === null) {
+      correspondenceAPI.myAccess()
+        .then(res => setHasCorrAccess(res.data?.is_super || (res.data?.grants || []).length > 0))
+        .catch(() => setHasCorrAccess(false));
+    }
+  }, [user?.id, hasCorrAccess]);
 
   React.useEffect(() => {
     if (user?.id && !advChecked) checkAdvAccess();
@@ -224,6 +235,7 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
   // فلترة العناصر حسب صلاحيات المستخدم الفردية
   const filteredItems = MENU_ITEMS.filter(item => {
     if ((item as any).advancedAccessOnly) return hasAdvAccess;
+    if ((item as any).corrMembershipOnly) return isAdmin || !!hasCorrAccess;
     if (item.forAll) return true;
     if (item.roles) return item.roles.includes(userRole);
     if (item.adminOnly) return isAdmin;

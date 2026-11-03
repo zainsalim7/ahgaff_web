@@ -54,7 +54,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تقديم الطالب طلب عذر لتبرير غياب محدد عن محاضرة مع إرفاق السبب والمستندات"
+    "description_ar": "تقديم الطالب طلب عذر لتبرير غياب محدد عن محاضرة مع إرفاق السبب والمستندات",
+    "depends_on": [
+      "attendance_absence_excuses_eligible"
+    ]
   },
   {
     "key": "attendance_absence_excuses_my",
@@ -111,7 +114,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل المفتاح الرئيسي الذي يتحكم في تفعيل نظام الصلاحيات المتقدمة أو التراجع عنه"
+    "description_ar": "تعديل المفتاح الرئيسي الذي يتحكم في تفعيل نظام الصلاحيات المتقدمة أو التراجع عنه",
+    "depends_on": [
+      "misc_access_rollback_rollback_status"
+    ]
   },
   {
     "key": "misc_access_rollback_attempt_scope_activation",
@@ -295,7 +301,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ إسناد الفصل الدراسي (semester_id) للمحاضرات القديمة التي لا تحمل فصلًا دراسيًا"
+    "description_ar": "تنفيذ إسناد الفصل الدراسي (semester_id) للمحاضرات القديمة التي لا تحمل فصلًا دراسيًا",
+    "depends_on": [
+      "system_tools_admin_tools_preview_backfill"
+    ]
   },
   {
     "key": "system_tools_admin_tools_list_unmatched_lectures",
@@ -365,7 +374,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "معالجة المحاضرات اليتيمة يدويًا بإسنادها إلى فصل دراسي مناسب بقرار من المسؤول"
+    "description_ar": "معالجة المحاضرات اليتيمة يدويًا بإسنادها إلى فصل دراسي مناسب بقرار من المسؤول",
+    "depends_on": [
+      "system_tools_admin_tools_list_unmatched_lectures"
+    ]
   },
   {
     "key": "system_tools_admin_tools_preview_student_refs",
@@ -435,7 +447,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "توليد أرقام مرجعية للطلاب المستوفين للشروط ممن لا يملكون رقمًا مرجعيًا سابقًا"
+    "description_ar": "توليد أرقام مرجعية للطلاب المستوفين للشروط ممن لا يملكون رقمًا مرجعيًا سابقًا",
+    "depends_on": [
+      "system_tools_admin_tools_preview_student_refs"
+    ]
   },
   {
     "key": "system_tools_admin_tools_reconcile_preview",
@@ -505,7 +520,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد رقم القيد المُدخل رقمًا مرجعيًا للطلاب غير المحجوزين مع حفظ الرقم القديم في reference_history"
+    "description_ar": "اعتماد رقم القيد المُدخل رقمًا مرجعيًا للطلاب غير المحجوزين مع حفظ الرقم القديم في reference_history",
+    "depends_on": [
+      "system_tools_admin_tools_reconcile_preview"
+    ]
   },
   {
     "key": "system_tools_admin_tools_reconcile_export",
@@ -540,7 +558,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير Excel بمقارنة الرقم المرجعي برقم القيد، قبل التنفيذ أو بعده"
+    "description_ar": "تصدير تقرير Excel بمقارنة الرقم المرجعي برقم القيد، قبل التنفيذ أو بعده",
+    "depends_on": [
+      "system_tools_admin_tools_reconcile_preview"
+    ]
   },
   {
     "key": "system_tools_admin_tools_preview_student_autofill",
@@ -610,7 +631,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "ملء عام الالتحاق (enrollment_year) ورمز البرنامج (program_code) تلقائيًا للطلاب الذين تنقصهم هذه البيانات"
+    "description_ar": "ملء عام الالتحاق (enrollment_year) ورمز البرنامج (program_code) تلقائيًا للطلاب الذين تنقصهم هذه البيانات",
+    "depends_on": [
+      "system_tools_admin_tools_preview_student_autofill"
+    ]
   },
   {
     "key": "misc_advanced_access_my_access",
@@ -781,7 +805,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء دور جديد في نظام الصلاحيات المتقدمة وتحديد صلاحياته ونطاقه"
+    "description_ar": "إنشاء دور جديد في نظام الصلاحيات المتقدمة وتحديد صلاحياته ونطاقه",
+    "depends_on": [
+      "misc_advanced_access_list_permissions"
+    ]
   },
   {
     "key": "misc_advanced_access_update_advanced_role",
@@ -800,7 +827,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل دور قائم في نظام الصلاحيات المتقدمة، كاسمه وصلاحياته ونطاقه"
+    "description_ar": "تعديل دور قائم في نظام الصلاحيات المتقدمة، كاسمه وصلاحياته ونطاقه",
+    "depends_on": [
+      "misc_advanced_access_get_advanced_role",
+      "misc_advanced_access_list_advanced_roles",
+      "misc_advanced_access_list_permissions"
+    ]
   },
   {
     "key": "misc_advanced_access_scope_options",
@@ -914,7 +946,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إسناد تكليف جديد لمستخدم بدور ونطاق محددين في نظام الصلاحيات المتقدمة"
+    "description_ar": "إسناد تكليف جديد لمستخدم بدور ونطاق محددين في نظام الصلاحيات المتقدمة",
+    "depends_on": [
+      "misc_advanced_access_list_advanced_roles",
+      "misc_advanced_access_list_light_users",
+      "misc_advanced_access_scope_options"
+    ]
   },
   {
     "key": "misc_advanced_access_end_assignment",
@@ -933,7 +970,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنهاء تكليف محدد لمستخدم فتتوقف الصلاحيات المرتبطة به"
+    "description_ar": "إنهاء تكليف محدد لمستخدم فتتوقف الصلاحيات المرتبطة به",
+    "depends_on": [
+      "misc_advanced_access_list_all_assignments"
+    ]
   },
   {
     "key": "misc_advanced_access_get_assignment_context",
@@ -971,7 +1011,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "منح صلاحية مباشرة إضافية ضمن تكليف محدد فوق صلاحيات دوره"
+    "description_ar": "منح صلاحية مباشرة إضافية ضمن تكليف محدد فوق صلاحيات دوره",
+    "depends_on": [
+      "misc_advanced_access_get_user_assignments",
+      "misc_advanced_access_list_permissions"
+    ]
   },
   {
     "key": "misc_advanced_access_revoke_direct_permission",
@@ -990,7 +1034,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "سحب صلاحية مباشرة محددة من تكليف بحسب مفتاح الصلاحية"
+    "description_ar": "سحب صلاحية مباشرة محددة من تكليف بحسب مفتاح الصلاحية",
+    "depends_on": [
+      "misc_advanced_access_get_user_assignments"
+    ]
   },
   {
     "key": "misc_advanced_access_run_check",
@@ -1106,7 +1153,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "منح مستخدم صفة مختبر ليتمكن من تجربة نظام الصلاحيات المتقدمة"
+    "description_ar": "منح مستخدم صفة مختبر ليتمكن من تجربة نظام الصلاحيات المتقدمة",
+    "depends_on": [
+      "misc_advanced_access_list_light_users"
+    ]
   },
   {
     "key": "misc_advanced_access_revoke_tester",
@@ -1125,7 +1175,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "سحب صفة المختبر من مستخدم محدد فلا يعود يجرّب نظام الصلاحيات المتقدمة"
+    "description_ar": "سحب صفة المختبر من مستخدم محدد فلا يعود يجرّب نظام الصلاحيات المتقدمة",
+    "depends_on": [
+      "misc_advanced_access_list_testers"
+    ]
   },
   {
     "key": "misc_advanced_access_list_audit_logs",
@@ -1182,7 +1235,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إيقاف التجربة فورًا بإنهاء التكليفات التجريبية وحذف أدوارها ونتائجها دون المساس بالنظام القديم"
+    "description_ar": "إيقاف التجربة فورًا بإنهاء التكليفات التجريبية وحذف أدوارها ونتائجها دون المساس بالنظام القديم",
+    "depends_on": [
+      "misc_advanced_access_pilot_summary"
+    ]
   },
   {
     "key": "misc_advanced_access_pilot_summary",
@@ -1239,7 +1295,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير نتائج التجربة الميدانية لنظام الصلاحيات المتقدمة إلى ملف Excel للمراجعة"
+    "description_ar": "تصدير نتائج التجربة الميدانية لنظام الصلاحيات المتقدمة إلى ملف Excel للمراجعة",
+    "depends_on": [
+      "misc_advanced_access_pilot_results"
+    ]
   },
   {
     "key": "alumni_alumni_graduate_student",
@@ -1393,7 +1452,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة خريج إلى قائمة الطلاب الحاليين لتصحيح تخريج تم بالخطأ"
+    "description_ar": "إعادة خريج إلى قائمة الطلاب الحاليين لتصحيح تخريج تم بالخطأ",
+    "depends_on": [
+      "alumni_alumni_list_alumni"
+    ]
   },
   {
     "key": "alumni_alumni_update_alumni",
@@ -1421,7 +1483,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات تخرج الخريج: السنة والمعدل والشهادة والتقدير والفصل والملاحظات"
+    "description_ar": "تعديل بيانات تخرج الخريج: السنة والمعدل والشهادة والتقدير والفصل والملاحظات",
+    "depends_on": [
+      "alumni_alumni_get_alumni",
+      "alumni_alumni_list_alumni"
+    ]
   },
   {
     "key": "alumni_alumni_export_alumni_excel",
@@ -1456,7 +1522,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير قائمة الخريجين الحالية بعد التصفية إلى ملف Excel للمراجعة أو الإحصاء"
+    "description_ar": "تصدير قائمة الخريجين الحالية بعد التصفية إلى ملف Excel للمراجعة أو الإحصاء",
+    "depends_on": [
+      "alumni_alumni_list_alumni"
+    ]
   },
   {
     "key": "alumni_alumni_export_alumni_pdf",
@@ -1491,7 +1560,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير قائمة الخريجين إلى ملف PDF مهيأ للعربية بتنسيق من اليمين إلى اليسار"
+    "description_ar": "تصدير قائمة الخريجين إلى ملف PDF مهيأ للعربية بتنسيق من اليمين إلى اليسار",
+    "depends_on": [
+      "alumni_alumni_list_alumni"
+    ]
   },
   {
     "key": "system_tools_app_versions_list_app_versions",
@@ -1529,7 +1601,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديث أو حفظ بيانات إصدار تطبيق محدد بحسب اسمه، مثل رقم النسخة المعتمدة"
+    "description_ar": "تحديث أو حفظ بيانات إصدار تطبيق محدد بحسب اسمه، مثل رقم النسخة المعتمدة",
+    "depends_on": [
+      "system_tools_app_versions_list_app_versions"
+    ]
   },
   {
     "key": "archive_archive_pdf_archive_student_report_pdf",
@@ -1548,7 +1623,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير حضور طالب محدد خلال فصل دراسي مؤرشف بصيغة PDF"
+    "description_ar": "تصدير تقرير حضور طالب محدد خلال فصل دراسي مؤرشف بصيغة PDF",
+    "depends_on": [
+      "archive_archives_get_archive_student_report"
+    ]
   },
   {
     "key": "archive_archive_pdf_archive_teacher_report_pdf",
@@ -1567,7 +1645,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير نصاب معلم محدد من الساعات والمحاضرات في فصل مؤرشف بصيغة PDF"
+    "description_ar": "تصدير تقرير نصاب معلم محدد من الساعات والمحاضرات في فصل مؤرشف بصيغة PDF",
+    "depends_on": [
+      "archive_archives_get_archive_teacher_report"
+    ]
   },
   {
     "key": "archive_archive_pdf_archive_student_history_pdf",
@@ -1586,7 +1667,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير السجل الأكاديمي الكامل للطالب عبر جميع الفصول المؤرشفة بصيغة PDF"
+    "description_ar": "تصدير السجل الأكاديمي الكامل للطالب عبر جميع الفصول المؤرشفة بصيغة PDF",
+    "depends_on": [
+      "archive_archives_get_archive_student_history"
+    ]
   },
   {
     "key": "archive_archive_pdf_archive_teacher_history_pdf",
@@ -1605,7 +1689,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير السجل التدريسي الكامل للمعلم عبر جميع الفصول المؤرشفة بصيغة PDF"
+    "description_ar": "تصدير السجل التدريسي الكامل للمعلم عبر جميع الفصول المؤرشفة بصيغة PDF",
+    "depends_on": [
+      "archive_archives_get_archive_teacher_history"
+    ]
   },
   {
     "key": "archive_archive_pdf_archive_course_history_pdf",
@@ -1624,7 +1711,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تاريخ مقرر دراسي محدد وتطوره عبر الفصول المؤرشفة بصيغة PDF"
+    "description_ar": "تصدير تاريخ مقرر دراسي محدد وتطوره عبر الفصول المؤرشفة بصيغة PDF",
+    "depends_on": [
+      "archive_archives_get_archive_course_history"
+    ]
   },
   {
     "key": "archive_archives_list_archives",
@@ -1966,7 +2056,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات إعدادات المساعد الذكي مثل المزود المعتمد والنموذج وخيارات التشغيل"
+    "description_ar": "حفظ تعديلات إعدادات المساعد الذكي مثل المزود المعتمد والنموذج وخيارات التشغيل",
+    "depends_on": [
+      "assistant_assistant_read_settings"
+    ]
   },
   {
     "key": "assistant_assistant_set_provider_key",
@@ -1985,7 +2078,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ أو تحديث مفتاح الوصول (API key) لمزود خدمة الذكاء الاصطناعي المحدد"
+    "description_ar": "حفظ أو تحديث مفتاح الوصول (API key) لمزود خدمة الذكاء الاصطناعي المحدد",
+    "depends_on": [
+      "assistant_assistant_read_settings"
+    ]
   },
   {
     "key": "assistant_assistant_delete_provider_key",
@@ -2004,7 +2100,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مفتاح الوصول المخزن لمزود خدمة ذكاء اصطناعي محدد من النظام"
+    "description_ar": "حذف مفتاح الوصول المخزن لمزود خدمة ذكاء اصطناعي محدد من النظام",
+    "depends_on": [
+      "assistant_assistant_read_settings"
+    ]
   },
   {
     "key": "assistant_assistant_search_users",
@@ -2099,7 +2198,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض رسائل جلسة محادثة محددة مع المساعد الذكي بالتفصيل"
+    "description_ar": "عرض رسائل جلسة محادثة محددة مع المساعد الذكي بالتفصيل",
+    "depends_on": [
+      "assistant_assistant_my_sessions"
+    ]
   },
   {
     "key": "assistant_assistant_test_model",
@@ -2230,7 +2332,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير طلبات تعديل الحضور المفلترة إلى ملف Excel"
+    "description_ar": "تصدير طلبات تعديل الحضور المفلترة إلى ملف Excel",
+    "depends_on": [
+      "attendance_attendance_approval_list_change_requests"
+    ]
   },
   {
     "key": "attendance_attendance_approval_pending_count",
@@ -2324,7 +2429,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد عدة طلبات تعديل حضور دفعة واحدة وتطبيق التعديلات على سجلات الحضور"
+    "description_ar": "اعتماد عدة طلبات تعديل حضور دفعة واحدة وتطبيق التعديلات على سجلات الحضور",
+    "depends_on": [
+      "attendance_attendance_approval_list_change_requests"
+    ]
   },
   {
     "key": "attendance_attendance_approval_batch_reject",
@@ -2352,7 +2460,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض عدة طلبات تعديل حضور دفعة واحدة دون تطبيق التعديلات المطلوبة"
+    "description_ar": "رفض عدة طلبات تعديل حضور دفعة واحدة دون تطبيق التعديلات المطلوبة",
+    "depends_on": [
+      "attendance_attendance_approval_list_change_requests"
+    ]
   },
   {
     "key": "attendance_attendance_approval_approve_change",
@@ -2380,7 +2491,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد طلب تعديل حضور واحد وتطبيق التعديل المطلوب على سجل الحضور"
+    "description_ar": "اعتماد طلب تعديل حضور واحد وتطبيق التعديل المطلوب على سجل الحضور",
+    "depends_on": [
+      "attendance_attendance_approval_list_change_requests"
+    ]
   },
   {
     "key": "attendance_attendance_approval_reject_change",
@@ -2408,7 +2522,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض طلب تعديل حضور واحد مع إبقاء سجل الحضور الأصلي دون تغيير"
+    "description_ar": "رفض طلب تعديل حضور واحد مع إبقاء سجل الحضور الأصلي دون تغيير",
+    "depends_on": [
+      "attendance_attendance_approval_list_change_requests"
+    ]
   },
   {
     "key": "attendance_attendance_approval_cancel_request",
@@ -2427,7 +2544,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء مقدّم الطلب لطلب تعديل حضور ما زال معلّقًا بنفسه"
+    "description_ar": "إلغاء مقدّم الطلب لطلب تعديل حضور ما زال معلّقًا بنفسه",
+    "depends_on": [
+      "attendance_attendance_approval_list_change_requests",
+      "attendance_attendance_approval_my_change_requests"
+    ]
   },
   {
     "key": "system_users_auth_get_me",
@@ -2559,7 +2680,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات حدث قائم في التقويم الأكاديمي مثل عنوانه أو تاريخه، للأدمن فقط"
+    "description_ar": "تعديل بيانات حدث قائم في التقويم الأكاديمي مثل عنوانه أو تاريخه، للأدمن فقط",
+    "depends_on": [
+      "calendar_calendar_events_list_calendar_events"
+    ]
   },
   {
     "key": "calendar_calendar_events_delete_calendar_event",
@@ -2587,7 +2711,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف حدث واحد محدد من التقويم الأكاديمي، وهي متاحة للأدمن فقط"
+    "description_ar": "حذف حدث واحد محدد من التقويم الأكاديمي، وهي متاحة للأدمن فقط",
+    "depends_on": [
+      "calendar_calendar_events_list_calendar_events"
+    ]
   },
   {
     "key": "calendar_calendar_events_clear_all_events",
@@ -2615,7 +2742,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف جميع أحداث التقويم دفعة واحدة، وتُستخدم قبل استيراد تقويم جديد، للأدمن فقط"
+    "description_ar": "حذف جميع أحداث التقويم دفعة واحدة، وتُستخدم قبل استيراد تقويم جديد، للأدمن فقط",
+    "depends_on": [
+      "calendar_calendar_events_list_calendar_events"
+    ]
   },
   {
     "key": "calendar_calendar_events_import_calendar_from_excel",
@@ -2700,7 +2830,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء شهادة صادرة وإبطال اعتمادها مع بقاء سجلها في النظام"
+    "description_ar": "إلغاء شهادة صادرة وإبطال اعتمادها مع بقاء سجلها في النظام",
+    "depends_on": [
+      "certificates_certificates_list_certificates"
+    ]
   },
   {
     "key": "certificates_certificates_restore_certificate",
@@ -2719,7 +2852,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة تفعيل شهادة سبق إلغاؤها لتصبح معتمدة وصالحة مرة أخرى"
+    "description_ar": "إعادة تفعيل شهادة سبق إلغاؤها لتصبح معتمدة وصالحة مرة أخرى",
+    "depends_on": [
+      "certificates_certificates_list_certificates"
+    ]
   },
   {
     "key": "certificates_certificates_certificate_pdf",
@@ -2738,7 +2874,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير شهادة محددة بصيغة PDF جاهزة للطباعة أو التسليم للمستفيد"
+    "description_ar": "تصدير شهادة محددة بصيغة PDF جاهزة للطباعة أو التسليم للمستفيد",
+    "depends_on": [
+      "certificates_certificates_list_certificates"
+    ]
   },
   {
     "key": "correspondence_correspondence_meta",
@@ -2852,7 +2991,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات جهة مسجلة في المراسلات، مثل اسمها ورمزها وحالة تفعيلها"
+    "description_ar": "تعديل بيانات جهة مسجلة في المراسلات، مثل اسمها ورمزها وحالة تفعيلها",
+    "depends_on": [
+      "correspondence_correspondence_list_organizations"
+    ]
   },
   {
     "key": "correspondence_correspondence_list_roles",
@@ -2909,7 +3051,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل اسم دور في المراسلات وصلاحياته أو حالة تفعيله"
+    "description_ar": "تعديل اسم دور في المراسلات وصلاحياته أو حالة تفعيله",
+    "depends_on": [
+      "correspondence_correspondence_list_roles"
+    ]
   },
   {
     "key": "correspondence_correspondence_list_memberships",
@@ -2947,7 +3092,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إسناد مستخدم إلى جهة بدور محدد ليتمكن من المراسلات باسمها"
+    "description_ar": "إسناد مستخدم إلى جهة بدور محدد ليتمكن من المراسلات باسمها",
+    "depends_on": [
+      "correspondence_correspondence_list_organizations",
+      "correspondence_correspondence_list_roles",
+      "correspondence_correspondence_users_lookup"
+    ]
   },
   {
     "key": "correspondence_correspondence_update_membership",
@@ -2966,7 +3116,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل عضوية مستخدم في جهة مراسلات، كتغيير دوره أو جهته"
+    "description_ar": "تعديل عضوية مستخدم في جهة مراسلات، كتغيير دوره أو جهته",
+    "depends_on": [
+      "correspondence_correspondence_list_memberships",
+      "correspondence_correspondence_list_roles"
+    ]
   },
   {
     "key": "correspondence_correspondence_deactivate_membership",
@@ -2985,7 +3139,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إيقاف عضوية مستخدم في جهة مراسلات وسحب صلاحياته عبرها"
+    "description_ar": "إيقاف عضوية مستخدم في جهة مراسلات وسحب صلاحياته عبرها",
+    "depends_on": [
+      "correspondence_correspondence_list_memberships"
+    ]
   },
   {
     "key": "correspondence_correspondence_users_lookup",
@@ -3061,7 +3218,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات نوع وثيقة في المراسلات، مثل اسمه أو حالة تفعيله"
+    "description_ar": "تعديل بيانات نوع وثيقة في المراسلات، مثل اسمه أو حالة تفعيله",
+    "depends_on": [
+      "correspondence_correspondence_list_document_types"
+    ]
   },
   {
     "key": "correspondence_correspondence_list_schemes",
@@ -3118,7 +3278,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل صيغة نظام ترقيم المراسلات أو إعداداته أو حالة تفعيله"
+    "description_ar": "تعديل صيغة نظام ترقيم المراسلات أو إعداداته أو حالة تفعيله",
+    "depends_on": [
+      "correspondence_correspondence_list_schemes"
+    ]
   },
   {
     "key": "correspondence_correspondence_dashboard",
@@ -3156,7 +3319,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء مراسلة جديدة صادرة أو واردة وتسجيلها بترقيم نظامي في النظام"
+    "description_ar": "إنشاء مراسلة جديدة صادرة أو واردة وتسجيلها بترقيم نظامي في النظام",
+    "depends_on": [
+      "correspondence_correspondence_meta"
+    ]
   },
   {
     "key": "correspondence_correspondence_list_correspondence",
@@ -3213,7 +3379,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مراسلة قائمة جزئيًا، مثل الموضوع أو المحتوى أو الأولوية أو الحالة"
+    "description_ar": "تعديل بيانات مراسلة قائمة جزئيًا، مثل الموضوع أو المحتوى أو الأولوية أو الحالة",
+    "depends_on": [
+      "correspondence_correspondence_get_correspondence"
+    ]
   },
   {
     "key": "correspondence_correspondence_soft_delete_draft",
@@ -3232,7 +3401,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مسودة مراسلة حذفًا ناعمًا بإخفائها من القوائم مع بقاء سجلها في النظام"
+    "description_ar": "حذف مسودة مراسلة حذفًا ناعمًا بإخفائها من القوائم مع بقاء سجلها في النظام",
+    "depends_on": [
+      "correspondence_correspondence_get_correspondence",
+      "correspondence_correspondence_list_correspondence"
+    ]
   },
   {
     "key": "correspondence_correspondence_add_recipient",
@@ -3251,7 +3424,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إضافة مستلم جديد إلى مراسلة محددة ليصله نسخة منها"
+    "description_ar": "إضافة مستلم جديد إلى مراسلة محددة ليصله نسخة منها",
+    "depends_on": [
+      "correspondence_correspondence_get_correspondence",
+      "correspondence_correspondence_users_lookup"
+    ]
   },
   {
     "key": "correspondence_correspondence_remove_recipient",
@@ -3270,7 +3447,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إزالة مستلم محدد من قائمة مستلمي مراسلة"
+    "description_ar": "إزالة مستلم محدد من قائمة مستلمي مراسلة",
+    "depends_on": [
+      "correspondence_correspondence_get_correspondence"
+    ]
   },
   {
     "key": "correspondence_correspondence_add_entity",
@@ -3289,7 +3469,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "ربط مراسلة بكيان في النظام، مثل طالب أو مقرر أو معلم، للرجوع إليه"
+    "description_ar": "ربط مراسلة بكيان في النظام، مثل طالب أو مقرر أو معلم، للرجوع إليه",
+    "depends_on": [
+      "correspondence_correspondence_get_correspondence"
+    ]
   },
   {
     "key": "correspondence_correspondence_remove_entity",
@@ -3308,7 +3491,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "فك ارتباط مراسلة بكيان مرتبط بها مسبقًا، مثل طالب أو مقرر"
+    "description_ar": "فك ارتباط مراسلة بكيان مرتبط بها مسبقًا، مثل طالب أو مقرر",
+    "depends_on": [
+      "correspondence_correspondence_get_correspondence"
+    ]
   },
   {
     "key": "correspondence_correspondence_history",
@@ -3422,7 +3608,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات ترويسة مراسلات قائمة، مثل نصوصها وتنسيقها أو حالة تفعيلها"
+    "description_ar": "تعديل بيانات ترويسة مراسلات قائمة، مثل نصوصها وتنسيقها أو حالة تفعيلها",
+    "depends_on": [
+      "correspondence_correspondence_content_list_letterheads"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_set_default_letterhead",
@@ -3555,7 +3744,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل الإصدار الحالي غير المنشور من القالب فقط، مع بقاء الإصدارات المنشورة ثابتة"
+    "description_ar": "تعديل الإصدار الحالي غير المنشور من القالب فقط، مع بقاء الإصدارات المنشورة ثابتة",
+    "depends_on": [
+      "correspondence_correspondence_content_get_template"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_create_version",
@@ -3574,7 +3766,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء إصدار جديد لقالب مراسلة لإجراء تعديلات عليه دون المساس بالإصدارات المنشورة"
+    "description_ar": "إنشاء إصدار جديد لقالب مراسلة لإجراء تعديلات عليه دون المساس بالإصدارات المنشورة",
+    "depends_on": [
+      "correspondence_correspondence_content_get_template"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_validate_template",
@@ -3593,7 +3788,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "فحص صحة قالب المراسلة والتحقق من سلامة متغيراته قبل نشره"
+    "description_ar": "فحص صحة قالب المراسلة والتحقق من سلامة متغيراته قبل نشره",
+    "depends_on": [
+      "correspondence_correspondence_content_get_template"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_publish_template",
@@ -3612,7 +3810,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "نشر إصدار قالب المراسلة ليصبح معتمدًا وقابلًا للاستخدام وغير قابل للتعديل"
+    "description_ar": "نشر إصدار قالب المراسلة ليصبح معتمدًا وقابلًا للاستخدام وغير قابل للتعديل",
+    "depends_on": [
+      "correspondence_correspondence_content_get_template"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_deactivate_template",
@@ -3631,7 +3832,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعطيل قالب مراسلة لمنع استخدامه في المراسلات الجديدة مع بقاء المراسلات السابقة"
+    "description_ar": "تعطيل قالب مراسلة لمنع استخدامه في المراسلات الجديدة مع بقاء المراسلات السابقة",
+    "depends_on": [
+      "correspondence_correspondence_content_list_templates"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_clone_template",
@@ -3650,7 +3854,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء نسخة جديدة من قالب مراسلة قائم لتعديلها واستخدامها قالبًا مستقلًا"
+    "description_ar": "إنشاء نسخة جديدة من قالب مراسلة قائم لتعديلها واستخدامها قالبًا مستقلًا",
+    "depends_on": [
+      "correspondence_correspondence_content_get_template"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_placeholders",
@@ -3707,7 +3914,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "ربط مسودة مراسلة بقالب منشور وتثبيت إصداره وترويسته دون تعديل القالب نفسه"
+    "description_ar": "ربط مسودة مراسلة بقالب منشور وتثبيت إصداره وترويسته دون تعديل القالب نفسه",
+    "depends_on": [
+      "correspondence_correspondence_content_list_templates"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_get_content",
@@ -3745,7 +3955,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل محتوى مسودة مراسلة جزئيًا، مثل نص الخطاب وحقول القالب"
+    "description_ar": "تعديل محتوى مسودة مراسلة جزئيًا، مثل نص الخطاب وحقول القالب",
+    "depends_on": [
+      "correspondence_correspondence_content_get_content"
+    ]
   },
   {
     "key": "correspondence_correspondence_content_verify_snapshot",
@@ -3821,7 +4034,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض معلومات ملف PDF الخاص بمراسلة محددة، مثل جاهزيته وبياناته الوصفية"
+    "description_ar": "عرض معلومات ملف PDF الخاص بمراسلة محددة، مثل جاهزيته وبياناته الوصفية",
+    "depends_on": [
+      "correspondence_correspondence_pdf_get_pdf"
+    ]
   },
   {
     "key": "correspondence_correspondence_positions_list_positions",
@@ -3878,7 +4094,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات منصب وظيفي معرّف في المراسلات، مثل مسماه أو حالة تفعيله"
+    "description_ar": "تعديل بيانات منصب وظيفي معرّف في المراسلات، مثل مسماه أو حالة تفعيله",
+    "depends_on": [
+      "correspondence_correspondence_positions_list_positions"
+    ]
   },
   {
     "key": "correspondence_correspondence_positions_delete_position",
@@ -3897,7 +4116,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف منصب وظيفي من نظام المراسلات حتى لا يُستخدم في التوقيع أو التوجيه"
+    "description_ar": "حذف منصب وظيفي من نظام المراسلات حتى لا يُستخدم في التوقيع أو التوجيه",
+    "depends_on": [
+      "correspondence_correspondence_positions_list_positions"
+    ]
   },
   {
     "key": "correspondence_correspondence_signature_my_signature",
@@ -3935,7 +4157,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفع صورة توقيع المستخدم الحالي وحفظها لاعتمادها في المراسلات الرسمية"
+    "description_ar": "رفع صورة توقيع المستخدم الحالي وحفظها لاعتمادها في المراسلات الرسمية",
+    "depends_on": [
+      "correspondence_correspondence_signature_my_signature"
+    ]
   },
   {
     "key": "correspondence_correspondence_signature_delete_signature",
@@ -3954,7 +4179,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف توقيع المستخدم الحالي المحفوظ حتى لا يُدرج في المراسلات"
+    "description_ar": "حذف توقيع المستخدم الحالي المحفوظ حتى لا يُدرج في المراسلات",
+    "depends_on": [
+      "correspondence_correspondence_signature_my_signature"
+    ]
   },
   {
     "key": "correspondence_correspondence_signature_suggestions",
@@ -4034,7 +4262,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعريف مجموعات المقرر وتحديث أسمائها وبنيتها دفعة واحدة"
+    "description_ar": "حفظ تعريف مجموعات المقرر وتحديث أسمائها وبنيتها دفعة واحدة",
+    "depends_on": [
+      "courses_course_groups_get_course_groups"
+    ]
   },
   {
     "key": "courses_course_groups_assign_group",
@@ -4076,7 +4307,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إسناد طالب أو عدة طلاب إلى مجموعة محددة داخل المقرر"
+    "description_ar": "إسناد طالب أو عدة طلاب إلى مجموعة محددة داخل المقرر",
+    "depends_on": [
+      "courses_course_groups_get_course_groups"
+    ]
   },
   {
     "key": "courses_course_groups_auto_distribute",
@@ -4118,7 +4352,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "توزيع طلاب المقرر تلقائيًا على المجموعات بأعداد متقاربة دون إسناد يدوي"
+    "description_ar": "توزيع طلاب المقرر تلقائيًا على المجموعات بأعداد متقاربة دون إسناد يدوي",
+    "depends_on": [
+      "courses_course_groups_get_course_groups"
+    ]
   },
   {
     "key": "courses_course_groups_student_groups",
@@ -4179,7 +4416,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ توزيع المقرر الحالي بمجموعاته وطلابه قالبًا لنفس القسم والمستوى"
+    "description_ar": "حفظ توزيع المقرر الحالي بمجموعاته وطلابه قالبًا لنفس القسم والمستوى",
+    "depends_on": [
+      "courses_course_groups_get_course_groups"
+    ]
   },
   {
     "key": "courses_course_groups_list_group_templates",
@@ -4240,7 +4480,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تطبيق قالب مجموعات على المقرر بإنشاء مجموعاته وتعيين الطلاب المتطابقين تلقائيًا"
+    "description_ar": "تطبيق قالب مجموعات على المقرر بإنشاء مجموعاته وتعيين الطلاب المتطابقين تلقائيًا",
+    "depends_on": [
+      "courses_course_groups_list_group_templates"
+    ]
   },
   {
     "key": "courses_course_groups_delete_group_template",
@@ -4282,7 +4525,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قالب توزيع مجموعات محفوظ حتى لا يُعرض عند تطبيق القوالب على المقررات"
+    "description_ar": "حذف قالب توزيع مجموعات محفوظ حتى لا يُعرض عند تطبيق القوالب على المقررات",
+    "depends_on": [
+      "courses_course_groups_list_group_templates"
+    ]
   },
   {
     "key": "courses_course_groups_groups_attendance",
@@ -4461,7 +4707,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد ملف توزيع المجموعات المرفوع وتطبيق إسناد الطلاب إلى مجموعات المقرر"
+    "description_ar": "اعتماد ملف توزيع المجموعات المرفوع وتطبيق إسناد الطلاب إلى مجموعات المقرر",
+    "depends_on": [
+      "courses_course_groups_tools_import_preview"
+    ]
   },
   {
     "key": "courses_course_groups_tools_students_groups_map",
@@ -4571,7 +4820,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "ترحيل المقررات المحددة بنسخها إلى الفصل الهدف مع تخطي المكرر، وآمن للإعادة"
+    "description_ar": "ترحيل المقررات المحددة بنسخها إلى الفصل الهدف مع تخطي المكرر، وآمن للإعادة",
+    "depends_on": [
+      "courses_course_migration_migration_preview"
+    ]
   },
   {
     "key": "courses_courses_get_courses",
@@ -4679,7 +4931,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مقرر دراسي محدد من النظام وإزالته من قوائم المقررات"
+    "description_ar": "حذف مقرر دراسي محدد من النظام وإزالته من قوائم المقررات",
+    "depends_on": [
+      "courses_courses_get_course",
+      "courses_courses_get_courses"
+    ]
   },
   {
     "key": "curriculum_curriculum_list_curriculum_courses",
@@ -4864,7 +5120,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مقرر في الخطة الدراسية، مثل مستواه وفصله وساعاته"
+    "description_ar": "تعديل بيانات مقرر في الخطة الدراسية، مثل مستواه وفصله وساعاته",
+    "depends_on": [
+      "curriculum_curriculum_get_curriculum_course",
+      "curriculum_curriculum_list_curriculum_courses"
+    ]
   },
   {
     "key": "curriculum_curriculum_delete_curriculum_course",
@@ -4883,7 +5143,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف ناعم لمقرر من الخطة الدراسية بتعطيله، مع الحفاظ على الروابط القديمة"
+    "description_ar": "حذف ناعم لمقرر من الخطة الدراسية بتعطيله، مع الحفاظ على الروابط القديمة",
+    "depends_on": [
+      "curriculum_curriculum_get_curriculum_course",
+      "curriculum_curriculum_list_curriculum_courses"
+    ]
   },
   {
     "key": "curriculum_curriculum_list_assignments",
@@ -4970,7 +5234,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء إسناد معلم من مقرر إلغاءً ناعمًا مع بقاء السجل للتاريخ"
+    "description_ar": "إلغاء إسناد معلم من مقرر إلغاءً ناعمًا مع بقاء السجل للتاريخ",
+    "depends_on": [
+      "curriculum_curriculum_list_assignments"
+    ]
   },
   {
     "key": "curriculum_curriculum_generate_offerings_from_curriculum",
@@ -5046,7 +5313,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف المقررات المولّدة تلقائيًا لتنظيف النظام بعد توليد خاطئ"
+    "description_ar": "حذف المقررات المولّدة تلقائيًا لتنظيف النظام بعد توليد خاطئ",
+    "depends_on": [
+      "curriculum_curriculum_list_auto_generated_courses"
+    ]
   },
   {
     "key": "curriculum_curriculum_backfill_curriculum_from_active_courses",
@@ -5190,7 +5460,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفع الخطة الدراسية لقسم من ملف Excel أو CSV وحفظ مقرراتها في النظام"
+    "description_ar": "رفع الخطة الدراسية لقسم من ملف Excel أو CSV وحفظ مقرراتها في النظام",
+    "depends_on": [
+      "curriculum_curriculum_preview_curriculum_upload"
+    ]
   },
   {
     "key": "curriculum_curriculum_export_curriculum",
@@ -5322,7 +5595,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ إزاحة يوم دراسي بنقل محاضرات يوم محدد إلى يوم آخر وحفظ التغيير"
+    "description_ar": "تنفيذ إزاحة يوم دراسي بنقل محاضرات يوم محدد إلى يوم آخر وحفظ التغيير",
+    "depends_on": [
+      "schedule_day_shift_preview_day_shift"
+    ]
   },
   {
     "key": "schedule_day_shift_list_day_shifts",
@@ -5388,7 +5664,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "التراجع عن إزاحة يوم دراسي منفذة وإعادة المحاضرات إلى مواعيدها الأصلية"
+    "description_ar": "التراجع عن إزاحة يوم دراسي منفذة وإعادة المحاضرات إلى مواعيدها الأصلية",
+    "depends_on": [
+      "schedule_day_shift_list_day_shifts"
+    ]
   },
   {
     "key": "system_tools_default_credentials_preview",
@@ -5426,7 +5705,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير بيانات الدخول الافتراضية للحسابات إلى ملف Excel لتوزيعها على أصحابها"
+    "description_ar": "تصدير بيانات الدخول الافتراضية للحسابات إلى ملف Excel لتوزيعها على أصحابها",
+    "depends_on": [
+      "system_tools_default_credentials_preview"
+    ]
   },
   {
     "key": "academic_structure_departments_get_departments",
@@ -5520,7 +5802,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات قسم أكاديمي قائم، مثل اسمه أو رمزه أو كليته"
+    "description_ar": "تعديل بيانات قسم أكاديمي قائم، مثل اسمه أو رمزه أو كليته",
+    "depends_on": [
+      "academic_structure_departments_get_department",
+      "academic_structure_departments_get_departments"
+    ]
   },
   {
     "key": "academic_structure_departments_delete_department",
@@ -5548,7 +5834,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قسم أكاديمي محدد من الهيكل الأكاديمي للنظام"
+    "description_ar": "حذف قسم أكاديمي محدد من الهيكل الأكاديمي للنظام",
+    "depends_on": [
+      "academic_structure_departments_get_department",
+      "academic_structure_departments_get_departments"
+    ]
   },
   {
     "key": "general_tools_entity_details_get_teacher_full_profile",
@@ -5681,7 +5971,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء جلسة جديدة لمجلس الكلية وتحديد موعدها وأعضائها وجدول أعمالها"
+    "description_ar": "إنشاء جلسة جديدة لمجلس الكلية وتحديد موعدها وأعضائها وجدول أعمالها",
+    "depends_on": [
+      "councils_faculty_board_list_candidates"
+    ]
   },
   {
     "key": "councils_faculty_board_delete_session",
@@ -5700,7 +5993,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف جلسة محددة من جلسات مجلس الكلية وإزالتها من سجل الجلسات"
+    "description_ar": "حذف جلسة محددة من جلسات مجلس الكلية وإزالتها من سجل الجلسات",
+    "depends_on": [
+      "councils_faculty_board_list_sessions"
+    ]
   },
   {
     "key": "councils_faculty_board_create_decision",
@@ -5719,7 +6015,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل قرار منفرد صادر عن مجلس الكلية بحق طالب أو حالة محددة"
+    "description_ar": "تسجيل قرار منفرد صادر عن مجلس الكلية بحق طالب أو حالة محددة",
+    "depends_on": [
+      "councils_faculty_board_list_sessions"
+    ]
   },
   {
     "key": "councils_faculty_board_bulk_create_decisions",
@@ -5738,7 +6037,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل عدة قرارات دفعة واحدة ضمن جلسة محددة من جلسات مجلس الكلية"
+    "description_ar": "تسجيل عدة قرارات دفعة واحدة ضمن جلسة محددة من جلسات مجلس الكلية",
+    "depends_on": [
+      "councils_faculty_board_list_sessions"
+    ]
   },
   {
     "key": "councils_faculty_board_list_decisions",
@@ -5776,7 +6078,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قرار محدد من قرارات مجلس الكلية وإزالته من السجل"
+    "description_ar": "حذف قرار محدد من قرارات مجلس الكلية وإزالته من السجل",
+    "depends_on": [
+      "councils_faculty_board_list_decisions"
+    ]
   },
   {
     "key": "councils_faculty_board_session_minutes_pdf",
@@ -5795,7 +6100,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إصدار محضر جلسة مجلس الكلية بصيغة PDF متضمنًا قراراتها للطباعة أو الحفظ"
+    "description_ar": "إصدار محضر جلسة مجلس الكلية بصيغة PDF متضمنًا قراراتها للطباعة أو الحفظ",
+    "depends_on": [
+      "councils_faculty_board_list_sessions"
+    ]
   },
   {
     "key": "councils_faculty_board_decision_letter_pdf",
@@ -5814,7 +6122,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إصدار خطاب رسمي بصيغة PDF لقرار محدد من قرارات مجلس الكلية"
+    "description_ar": "إصدار خطاب رسمي بصيغة PDF لقرار محدد من قرارات مجلس الكلية",
+    "depends_on": [
+      "councils_faculty_board_list_decisions"
+    ]
   },
   {
     "key": "finance_fee_receipts_list_fee_types",
@@ -5887,7 +6198,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تبديل نوع الرسوم بين سنوي ومتكرر شهري، وهي متاحة للأدمن فقط"
+    "description_ar": "تبديل نوع الرسوم بين سنوي ومتكرر شهري، وهي متاحة للأدمن فقط",
+    "depends_on": [
+      "finance_fee_receipts_list_fee_types"
+    ]
   },
   {
     "key": "finance_fee_receipts_create_fee_type",
@@ -5925,7 +6239,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف نوع رسوم دراسية من النظام حتى لا يُطلب سداده"
+    "description_ar": "حذف نوع رسوم دراسية من النظام حتى لا يُطلب سداده",
+    "depends_on": [
+      "finance_fee_receipts_list_fee_types"
+    ]
   },
   {
     "key": "finance_fee_receipts_upload_receipt",
@@ -6052,7 +6369,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد سند سداد رسوم مرفوع وتسجيل الرسوم المقابلة له مسددة للطالب"
+    "description_ar": "اعتماد سند سداد رسوم مرفوع وتسجيل الرسوم المقابلة له مسددة للطالب",
+    "depends_on": [
+      "finance_fee_receipts_list_receipts"
+    ]
   },
   {
     "key": "finance_fee_receipts_reject_receipt",
@@ -6071,7 +6391,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض سند سداد رسوم مرفوع مع إبقاء الرسوم غير مسددة وإبلاغ الطالب"
+    "description_ar": "رفض سند سداد رسوم مرفوع مع إبقاء الرسوم غير مسددة وإبلاغ الطالب",
+    "depends_on": [
+      "finance_fee_receipts_list_receipts"
+    ]
   },
   {
     "key": "finance_fee_receipts_bulk_review",
@@ -6099,7 +6422,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد أو رفض مجموعة سندات رسوم معلقة دفعة واحدة مع التحقق من النطاق وإرجاع تقرير بالنتائج"
+    "description_ar": "اعتماد أو رفض مجموعة سندات رسوم معلقة دفعة واحدة مع التحقق من النطاق وإرجاع تقرير بالنتائج",
+    "depends_on": [
+      "finance_fee_receipts_list_receipts"
+    ]
   },
   {
     "key": "finance_fee_receipts_fee_stats",
@@ -6225,7 +6551,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتبار مجموعة طلاب دافعين دفعة واحدة مع تخطي من سدد مسبقاً أو خرج عن النطاق"
+    "description_ar": "اعتبار مجموعة طلاب دافعين دفعة واحدة مع تخطي من سدد مسبقاً أو خرج عن النطاق",
+    "depends_on": [
+      "finance_fee_receipts_unpaid_students"
+    ]
   },
   {
     "key": "finance_fee_receipts_export_unpaid",
@@ -6260,7 +6589,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير ملف Excel بالطلاب غير الدافعين لنوع رسوم محدد لتسليمه لإدارة المالية"
+    "description_ar": "تصدير ملف Excel بالطلاب غير الدافعين لنوع رسوم محدد لتسليمه لإدارة المالية",
+    "depends_on": [
+      "finance_fee_receipts_unpaid_students"
+    ]
   },
   {
     "key": "finance_fee_receipts_unapprove_receipt",
@@ -6288,7 +6620,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "التراجع عن اعتماد سند رسوم تم بالخطأ وإعادته إلى حالة قيد المراجعة"
+    "description_ar": "التراجع عن اعتماد سند رسوم تم بالخطأ وإعادته إلى حالة قيد المراجعة",
+    "depends_on": [
+      "finance_fee_receipts_list_receipts"
+    ]
   },
   {
     "key": "finance_fee_receipts_renewal_status",
@@ -6405,7 +6740,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إرسال تذكير بسداد الرسوم إلى الطلاب غير الدافعين لنوع رسوم محدد"
+    "description_ar": "إرسال تذكير بسداد الرسوم إلى الطلاب غير الدافعين لنوع رسوم محدد",
+    "depends_on": [
+      "finance_fee_receipts_unpaid_students"
+    ]
   },
   {
     "key": "general_tools_global_search_global_search",
@@ -6622,7 +6960,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض تحليل نتائج عملية استيراد كشف درجات محددة، مثل النجاح والرسوب وتوزيع التقديرات"
+    "description_ar": "عرض تحليل نتائج عملية استيراد كشف درجات محددة، مثل النجاح والرسوب وتوزيع التقديرات",
+    "depends_on": [
+      "grades_grades_list_grade_imports"
+    ]
   },
   {
     "key": "grades_grades_cumulative_analysis",
@@ -6762,7 +7103,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف عملية استيراد كشف درجات محددة من سجل الاستيرادات مع ما ارتبط بها من درجات"
+    "description_ar": "حذف عملية استيراد كشف درجات محددة من سجل الاستيرادات مع ما ارتبط بها من درجات",
+    "depends_on": [
+      "grades_grades_list_grade_imports"
+    ]
   },
   {
     "key": "grades_grades_get_my_results",
@@ -6865,7 +7209,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل سجل درجة مستورد لطالب في مقرر محدد، لتصحيح الدرجة أو التقدير"
+    "description_ar": "تعديل سجل درجة مستورد لطالب في مقرر محدد، لتصحيح الدرجة أو التقدير",
+    "depends_on": [
+      "grades_grades_get_academic_record"
+    ]
   },
   {
     "key": "grades_grades_issue_grade_statement",
@@ -6893,7 +7240,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إصدار بيان حالة ودرجات رسمي بصيغة PDF مع تسجيله ورمز QR للتحقق من صحته"
+    "description_ar": "إصدار بيان حالة ودرجات رسمي بصيغة PDF مع تسجيله ورمز QR للتحقق من صحته",
+    "depends_on": [
+      "grades_grades_search_grade_students"
+    ]
   },
   {
     "key": "grades_grades_export_analysis_excel",
@@ -6921,7 +7271,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تحليل نتائج استيراد كشف درجات محدد إلى ملف Excel"
+    "description_ar": "تصدير تحليل نتائج استيراد كشف درجات محدد إلى ملف Excel",
+    "depends_on": [
+      "grades_grades_analyze_import"
+    ]
   },
   {
     "key": "grades_grades_export_analysis_pdf",
@@ -6949,7 +7302,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تحليل نتائج استيراد كشف درجات محدد إلى ملف PDF للطباعة"
+    "description_ar": "تصدير تحليل نتائج استيراد كشف درجات محدد إلى ملف PDF للطباعة",
+    "depends_on": [
+      "grades_grades_analyze_import"
+    ]
   },
   {
     "key": "hr_core_hr_list_org_units",
@@ -7066,7 +7422,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديد نطاق وحدات الهيكل التنظيمي المسند لمستخدم محدد لضبط حدود وصوله للبيانات"
+    "description_ar": "تحديد نطاق وحدات الهيكل التنظيمي المسند لمستخدم محدد لضبط حدود وصوله للبيانات",
+    "depends_on": [
+      "hr_core_hr_get_user_scope",
+      "hr_core_hr_list_org_units"
+    ]
   },
   {
     "key": "hr_core_hr_sync_academic_units",
@@ -7131,7 +7491,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "إضافة وحدة جديدة إلى الهيكل التنظيمي، مثل إدارة أو قسم إداري، وربطها بوحدتها الأم"
+    "description_ar": "إضافة وحدة جديدة إلى الهيكل التنظيمي، مثل إدارة أو قسم إداري، وربطها بوحدتها الأم",
+    "depends_on": [
+      "hr_core_hr_list_org_units"
+    ]
   },
   {
     "key": "hr_core_hr_update_org_unit",
@@ -7176,7 +7539,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "تعديل بيانات وحدة في الهيكل التنظيمي، مثل اسمها أو نوعها أو وحدتها الأم"
+    "description_ar": "تعديل بيانات وحدة في الهيكل التنظيمي، مثل اسمها أو نوعها أو وحدتها الأم",
+    "depends_on": [
+      "hr_core_hr_list_org_units"
+    ]
   },
   {
     "key": "hr_core_hr_delete_org_unit",
@@ -7204,7 +7570,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف وحدة من الهيكل التنظيمي للجامعة وإزالتها من التسلسل الإداري"
+    "description_ar": "حذف وحدة من الهيكل التنظيمي للجامعة وإزالتها من التسلسل الإداري",
+    "depends_on": [
+      "hr_core_hr_list_org_units"
+    ]
   },
   {
     "key": "hr_core_hr_employees_meta",
@@ -7258,7 +7627,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير سجل الموظفين إلى ملف Excel بنفس الفلاتر المطبقة على القائمة"
+    "description_ar": "تصدير سجل الموظفين إلى ملف Excel بنفس الفلاتر المطبقة على القائمة",
+    "depends_on": [
+      "hr_core_hr_list_employees"
+    ]
   },
   {
     "key": "hr_core_hr_list_employees",
@@ -7340,7 +7712,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ إجراء واحد على عدة موظفين محددين دفعة واحدة بدل تكراره لكل موظف"
+    "description_ar": "تنفيذ إجراء واحد على عدة موظفين محددين دفعة واحدة بدل تكراره لكل موظف",
+    "depends_on": [
+      "hr_core_hr_list_employees"
+    ]
   },
   {
     "key": "hr_core_hr_get_employee",
@@ -7466,7 +7841,11 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "تعديل بيانات موظف في سجل الموارد البشرية، مثل المسمى الوظيفي أو الوحدة التنظيمية"
+    "description_ar": "تعديل بيانات موظف في سجل الموارد البشرية، مثل المسمى الوظيفي أو الوحدة التنظيمية",
+    "depends_on": [
+      "hr_core_hr_get_employee",
+      "hr_core_hr_list_employees"
+    ]
   },
   {
     "key": "hr_core_hr_delete_employee",
@@ -7503,7 +7882,11 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "حذف موظف من سجل الموارد البشرية وإزالة ملفه الإداري من النظام"
+    "description_ar": "حذف موظف من سجل الموارد البشرية وإزالة ملفه الإداري من النظام",
+    "depends_on": [
+      "hr_core_hr_get_employee",
+      "hr_core_hr_list_employees"
+    ]
   },
   {
     "key": "hr_core_hr_link_units",
@@ -7615,7 +7998,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء حساب دخول للموظف باسم مستخدم هو رقمه الوظيفي وكلمة مرور أولية تُغيَّر إلزاميًا"
+    "description_ar": "إنشاء حساب دخول للموظف باسم مستخدم هو رقمه الوظيفي وكلمة مرور أولية تُغيَّر إلزاميًا",
+    "depends_on": [
+      "hr_core_hr_get_employee"
+    ]
   },
   {
     "key": "hr_core_hr_set_account_role",
@@ -7643,7 +8029,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تغيير دور حساب الموظف أو إزالته ليعود موظفًا عاديًا دون دور"
+    "description_ar": "تغيير دور حساب الموظف أو إزالته ليعود موظفًا عاديًا دون دور",
+    "depends_on": [
+      "hr_core_hr_get_employee",
+      "hr_core_hr_hr_roles"
+    ]
   },
   {
     "key": "hr_core_hr_import_template",
@@ -7727,7 +8117,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد استيراد ملف الموظفين المرفوع وإضافة سجلاتهم إلى النظام"
+    "description_ar": "اعتماد استيراد ملف الموظفين المرفوع وإضافة سجلاتهم إلى النظام",
+    "depends_on": [
+      "hr_core_hr_import_preview"
+    ]
   },
   {
     "key": "hr_core_hr_alerts_summary",
@@ -7976,7 +8369,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "بدء تقييم أداء جديد بحالة مسودة لموظف، ويتاح للمدير المباشر أو الموارد البشرية"
+    "description_ar": "بدء تقييم أداء جديد بحالة مسودة لموظف، ويتاح للمدير المباشر أو الموارد البشرية",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_appraisals_meta"
+    ]
   },
   {
     "key": "hr_tasks_hr_appraisals_get_appraisal",
@@ -8014,7 +8410,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ درجات بنود التقييم وملاحظاته على تقييم محدد أثناء إعداده كمسودة"
+    "description_ar": "حفظ درجات بنود التقييم وملاحظاته على تقييم محدد أثناء إعداده كمسودة",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_get_appraisal"
+    ]
   },
   {
     "key": "hr_tasks_hr_appraisals_submit",
@@ -8033,7 +8432,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إرسال التقييم المكتمل من المقيّم لينتقل من المسودة إلى مرحلة المراجعة والاعتماد"
+    "description_ar": "إرسال التقييم المكتمل من المقيّم لينتقل من المسودة إلى مرحلة المراجعة والاعتماد",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_get_appraisal"
+    ]
   },
   {
     "key": "hr_tasks_hr_appraisals_approve",
@@ -8070,7 +8472,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "اعتماد تقييم الأداء المرسل رسميًا وتثبيت نتيجته النهائية للموظف"
+    "description_ar": "اعتماد تقييم الأداء المرسل رسميًا وتثبيت نتيجته النهائية للموظف",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_get_appraisal"
+    ]
   },
   {
     "key": "hr_tasks_hr_appraisals_return_to_draft",
@@ -8107,7 +8512,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "إعادة التقييم المرسل إلى حالة المسودة ليعدّل المقيّم الدرجات أو الملاحظات"
+    "description_ar": "إعادة التقييم المرسل إلى حالة المسودة ليعدّل المقيّم الدرجات أو الملاحظات",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_get_appraisal"
+    ]
   },
   {
     "key": "hr_tasks_hr_appraisals_acknowledge",
@@ -8126,7 +8534,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل إقرار الموظف بالاطلاع على تقييمه المعتمد وعلمه بنتيجته"
+    "description_ar": "تسجيل إقرار الموظف بالاطلاع على تقييمه المعتمد وعلمه بنتيجته",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_get_appraisal"
+    ]
   },
   {
     "key": "hr_tasks_hr_appraisals_delete_appraisal",
@@ -8163,7 +8574,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "حذف تقييم أداء محدد نهائيًا من النظام"
+    "description_ar": "حذف تقييم أداء محدد نهائيًا من النظام",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_get_appraisal"
+    ]
   },
   {
     "key": "hr_tasks_hr_appraisals_appraisal_pdf",
@@ -8182,7 +8596,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير ملف PDF موقّع للتقييم المعتمد مع رمز تحقق عام لإثبات صحته"
+    "description_ar": "تصدير ملف PDF موقّع للتقييم المعتمد مع رمز تحقق عام لإثبات صحته",
+    "depends_on": [
+      "hr_tasks_hr_appraisals_get_appraisal"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_attendance_meta",
@@ -8248,7 +8665,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديث إعدادات الحضور العامة وأوقات الفترة الأساسية (أسلوب قديم، والإدارة الكاملة في إعدادات العمل)"
+    "description_ar": "تحديث إعدادات الحضور العامة وأوقات الفترة الأساسية (أسلوب قديم، والإدارة الكاملة في إعدادات العمل)",
+    "depends_on": [
+      "hr_attendance_hr_attendance_get_settings"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_daily_sheet",
@@ -8320,7 +8740,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "تسجيل حالة حضور أو غياب أو تأخر لموظف محدد في يوم معين"
+    "description_ar": "تسجيل حالة حضور أو غياب أو تأخر لموظف محدد في يوم معين",
+    "depends_on": [
+      "hr_attendance_hr_attendance_daily_sheet"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_mark_all_present",
@@ -8348,7 +8771,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل جميع الموظفين غير المسجلين وغير المجازين حاضرين بوقت الدوام الرسمي دفعة واحدة"
+    "description_ar": "تسجيل جميع الموظفين غير المسجلين وغير المجازين حاضرين بوقت الدوام الرسمي دفعة واحدة",
+    "depends_on": [
+      "hr_attendance_hr_attendance_daily_sheet"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_delete_record",
@@ -8376,7 +8802,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف سجل حضور موظف محدد في يوم معين، لتصحيح تسجيل خاطئ أو مكرر"
+    "description_ar": "حذف سجل حضور موظف محدد في يوم معين، لتصحيح تسجيل خاطئ أو مكرر",
+    "depends_on": [
+      "hr_attendance_hr_attendance_daily_sheet"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_monthly_report",
@@ -8446,7 +8875,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير الحضور الشهري إلى ملف لاستخدامه في الطباعة أو المراجعة الخارجية"
+    "description_ar": "تصدير تقرير الحضور الشهري إلى ملف لاستخدامه في الطباعة أو المراجعة الخارجية",
+    "depends_on": [
+      "hr_attendance_hr_attendance_monthly_report"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_employee_records",
@@ -8551,7 +8983,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير التقرير التفصيلي للحضور إلى Excel، لكل النتائج المطابقة أو لسجلات مختارة فقط"
+    "description_ar": "تصدير التقرير التفصيلي للحضور إلى Excel، لكل النتائج المطابقة أو لسجلات مختارة فقط",
+    "depends_on": [
+      "hr_attendance_hr_attendance_attendance_details"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_list_devices",
@@ -8614,7 +9049,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة تعيين جهاز موظف مسجّل ليتمكن من تسجيل جهاز جديد عند أول تحضير"
+    "description_ar": "إعادة تعيين جهاز موظف مسجّل ليتمكن من تسجيل جهاز جديد عند أول تحضير",
+    "depends_on": [
+      "hr_attendance_hr_attendance_list_devices"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_my_device",
@@ -8652,7 +9090,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تقديم الموظف طلب تغيير جهاز التحضير من جهازه الجديد لتوافق عليه شؤون الموظفين"
+    "description_ar": "تقديم الموظف طلب تغيير جهاز التحضير من جهازه الجديد لتوافق عليه شؤون الموظفين",
+    "depends_on": [
+      "hr_attendance_hr_attendance_my_device"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_list_device_requests",
@@ -8706,7 +9147,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "الموافقة على طلب تغيير الجهاز واستبدال جهاز الموظف المسجّل بالجهاز الجديد فورًا"
+    "description_ar": "الموافقة على طلب تغيير الجهاز واستبدال جهاز الموظف المسجّل بالجهاز الجديد فورًا",
+    "depends_on": [
+      "hr_attendance_hr_attendance_list_device_requests"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_reject_device_request",
@@ -8725,7 +9169,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض طلب تغيير جهاز التحضير مع إبقاء الجهاز المسجّل للموظف دون تغيير"
+    "description_ar": "رفض طلب تغيير جهاز التحضير مع إبقاء الجهاز المسجّل للموظف دون تغيير",
+    "depends_on": [
+      "hr_attendance_hr_attendance_list_device_requests"
+    ]
   },
   {
     "key": "hr_attendance_hr_attendance_my_attendance",
@@ -8978,7 +9425,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ الخطوة التالية من مهمة طباعة البطاقات ومعالجة جزء من الموظفين وتحديث التقدم"
+    "description_ar": "تنفيذ الخطوة التالية من مهمة طباعة البطاقات ومعالجة جزء من الموظفين وتحديث التقدم",
+    "depends_on": [
+      "cards_hr_card_print_create_hr_print_job"
+    ]
   },
   {
     "key": "cards_hr_card_print_hr_print_job_download",
@@ -9013,7 +9463,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنزيل ملف البطاقات الناتج عن مهمة طباعة مكتملة بعد انتهاء معالجة جميع الخطوات"
+    "description_ar": "تنزيل ملف البطاقات الناتج عن مهمة طباعة مكتملة بعد انتهاء معالجة جميع الخطوات",
+    "depends_on": [
+      "cards_hr_card_print_create_hr_print_job"
+    ]
   },
   {
     "key": "cards_hr_card_print_batch_pdf",
@@ -9118,7 +9571,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض تفاصيل دفعة طباعة محددة بحسب رقمها، بما فيها الموظفون الذين شملتهم"
+    "description_ar": "عرض تفاصيل دفعة طباعة محددة بحسب رقمها، بما فيها الموظفون الذين شملتهم",
+    "depends_on": [
+      "cards_hr_card_print_list_batches"
+    ]
   },
   {
     "key": "cards_hr_card_print_reset_batch_marks",
@@ -9153,7 +9609,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء وسم «مطبوع» عن موظفي دفعة (مثل تلف الورقة) ليظهروا في الدفعات القادمة"
+    "description_ar": "إلغاء وسم «مطبوع» عن موظفي دفعة (مثل تلف الورقة) ليظهروا في الدفعات القادمة",
+    "depends_on": [
+      "cards_hr_card_print_list_batches"
+    ]
   },
   {
     "key": "cards_hr_card_print_print_report",
@@ -9271,7 +9730,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات تصميم الوجه الخلفي لبطاقة الموظف ومواضع عناصره على البطاقة"
+    "description_ar": "حفظ تعديلات تصميم الوجه الخلفي لبطاقة الموظف ومواضع عناصره على البطاقة",
+    "depends_on": [
+      "cards_hr_card_print_get_back_settings"
+    ]
   },
   {
     "key": "cards_hr_card_print_back_preview",
@@ -9617,7 +10079,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد الصورة المعلّقة التي رفعها الموظف لتصبح صورته الرسمية على بطاقته"
+    "description_ar": "اعتماد الصورة المعلّقة التي رفعها الموظف لتصبح صورته الرسمية على بطاقته",
+    "depends_on": [
+      "cards_hr_cards_pending_photos"
+    ]
   },
   {
     "key": "cards_hr_cards_reject_photo",
@@ -9652,7 +10117,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض صورة موظف معلّقة، ويفتح ذلك للموظف فرصة رفع صورة جديدة تلقائيًا"
+    "description_ar": "رفض صورة موظف معلّقة، ويفتح ذلك للموظف فرصة رفع صورة جديدة تلقائيًا",
+    "depends_on": [
+      "cards_hr_cards_pending_photos"
+    ]
   },
   {
     "key": "cards_hr_cards_allow_upload",
@@ -9722,7 +10190,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف صورة موظف محدد من النظام وإزالتها من بطاقته"
+    "description_ar": "حذف صورة موظف محدد من النظام وإزالتها من بطاقته",
+    "depends_on": [
+      "cards_hr_cards_employee_photo"
+    ]
   },
   {
     "key": "cards_hr_cards_bulk_photos",
@@ -9757,7 +10228,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد أو رفض مجموعة من الصور المعلّقة دفعة واحدة بتحديد المعرّفات والإجراء"
+    "description_ar": "اعتماد أو رفض مجموعة من الصور المعلّقة دفعة واحدة بتحديد المعرّفات والإجراء",
+    "depends_on": [
+      "cards_hr_cards_pending_photos"
+    ]
   },
   {
     "key": "cards_hr_cards_my_card_download",
@@ -9874,7 +10348,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات إعدادات بطاقات الموظفين العامة كالقالب والبيانات التي تظهر عليها"
+    "description_ar": "حفظ تعديلات إعدادات بطاقات الموظفين العامة كالقالب والبيانات التي تظهر عليها",
+    "depends_on": [
+      "cards_hr_cards_get_hr_card_settings"
+    ]
   },
   {
     "key": "letters_hr_correspondence_corr_meta",
@@ -9931,7 +10408,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إرسال الموظف مراسلة إلى شؤون الموظفين، كطلب أو شكوى، مع إمكانية إرفاق ملف"
+    "description_ar": "إرسال الموظف مراسلة إلى شؤون الموظفين، كطلب أو شكوى، مع إمكانية إرفاق ملف",
+    "depends_on": [
+      "letters_hr_correspondence_corr_meta"
+    ]
   },
   {
     "key": "letters_hr_correspondence_corr_attachment",
@@ -10001,7 +10481,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "ردّ شؤون الموظفين على مراسلة موظف، فيصله إشعار ويطّلع على الرد في بوابته"
+    "description_ar": "ردّ شؤون الموظفين على مراسلة موظف، فيصله إشعار ويطّلع على الرد في بوابته",
+    "depends_on": [
+      "letters_hr_correspondence_list_corr"
+    ]
   },
   {
     "key": "letters_hr_correspondence_my_correspondence",
@@ -10039,7 +10522,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل إقرار الموظف بالاطلاع على مراسلة أو تعميم موجه إليه لإثبات علمه به"
+    "description_ar": "تسجيل إقرار الموظف بالاطلاع على مراسلة أو تعميم موجه إليه لإثبات علمه به",
+    "depends_on": [
+      "letters_hr_correspondence_my_correspondence"
+    ]
   },
   {
     "key": "letters_hr_correspondence_list_corr",
@@ -10109,7 +10595,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء مراسلة أو تعميم جديد وتوجيهه لموظف أو وحدة أو لجميع الموظفين"
+    "description_ar": "إنشاء مراسلة أو تعميم جديد وتوجيهه لموظف أو وحدة أو لجميع الموظفين",
+    "depends_on": [
+      "letters_hr_correspondence_corr_meta"
+    ]
   },
   {
     "key": "letters_hr_correspondence_get_corr",
@@ -10179,7 +10668,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مراسلة قائمة، كالموضوع والنص والجهة الموجهة إليها"
+    "description_ar": "تعديل بيانات مراسلة قائمة، كالموضوع والنص والجهة الموجهة إليها",
+    "depends_on": [
+      "letters_hr_correspondence_get_corr"
+    ]
   },
   {
     "key": "letters_hr_correspondence_set_status",
@@ -10207,7 +10699,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تغيير حالة مراسلة محددة، مثل قيد المعالجة أو مكتملة أو مغلقة، لمتابعة سير معالجتها"
+    "description_ar": "تغيير حالة مراسلة محددة، مثل قيد المعالجة أو مكتملة أو مغلقة، لمتابعة سير معالجتها",
+    "depends_on": [
+      "letters_hr_correspondence_list_corr"
+    ]
   },
   {
     "key": "letters_hr_correspondence_delete_corr",
@@ -10235,7 +10730,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مراسلة محددة من سجل المراسلات الإدارية بحسب معرّفها"
+    "description_ar": "حذف مراسلة محددة من سجل المراسلات الإدارية بحسب معرّفها",
+    "depends_on": [
+      "letters_hr_correspondence_get_corr",
+      "letters_hr_correspondence_list_corr"
+    ]
   },
   {
     "key": "hr_core_hr_documents_docs_meta",
@@ -10327,7 +10826,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنزيل ملف وثيقة موظف محددة بحسب معرّف الوثيقة لعرضها أو الاحتفاظ بنسخة منها"
+    "description_ar": "تنزيل ملف وثيقة موظف محددة بحسب معرّف الوثيقة لعرضها أو الاحتفاظ بنسخة منها",
+    "depends_on": [
+      "hr_core_hr_documents_list_docs"
+    ]
   },
   {
     "key": "hr_core_hr_documents_list_docs",
@@ -10383,7 +10885,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "رفع وثيقة جديدة لملف موظف محدد، كعقد أو هوية أو شهادة، مع بياناتها"
+    "description_ar": "رفع وثيقة جديدة لملف موظف محدد، كعقد أو هوية أو شهادة، مع بياناتها",
+    "depends_on": [
+      "hr_core_hr_documents_docs_meta"
+    ]
   },
   {
     "key": "hr_core_hr_documents_update_doc",
@@ -10420,7 +10925,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "تعديل بيانات وثيقة موظف مرفوعة، كنوعها أو تاريخ انتهائها أو ملاحظاتها"
+    "description_ar": "تعديل بيانات وثيقة موظف مرفوعة، كنوعها أو تاريخ انتهائها أو ملاحظاتها",
+    "depends_on": [
+      "hr_core_hr_documents_list_docs"
+    ]
   },
   {
     "key": "hr_core_hr_documents_delete_doc",
@@ -10457,7 +10965,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "حذف وثيقة محددة من ملف الموظف بحسب معرّف الوثيقة"
+    "description_ar": "حذف وثيقة محددة من ملف الموظف بحسب معرّف الوثيقة",
+    "depends_on": [
+      "hr_core_hr_documents_list_docs"
+    ]
   },
   {
     "key": "hr_core_hr_home_home_summary",
@@ -10567,7 +11078,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات نوع إجازة قائم بحسب مفتاحه، كاسمه ورصيده السنوي وشروطه"
+    "description_ar": "تعديل بيانات نوع إجازة قائم بحسب مفتاحه، كاسمه ورصيده السنوي وشروطه",
+    "depends_on": [
+      "hr_leaves_hr_leave_types_list_types"
+    ]
   },
   {
     "key": "hr_leaves_hr_leave_types_delete_type",
@@ -10595,7 +11109,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف نوع إجازة محدد من النظام بحسب مفتاحه حين لا تعود الحاجة إليه"
+    "description_ar": "حذف نوع إجازة محدد من النظام بحسب مفتاحه حين لا تعود الحاجة إليه",
+    "depends_on": [
+      "hr_leaves_hr_leave_types_list_types"
+    ]
   },
   {
     "key": "hr_leaves_hr_leaves_leaves_meta",
@@ -10652,7 +11169,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تقديم الموظف طلب إجازة لنفسه ليمر بمسار الاعتماد من المدير المباشر ثم شؤون الموظفين"
+    "description_ar": "تقديم الموظف طلب إجازة لنفسه ليمر بمسار الاعتماد من المدير المباشر ثم شؤون الموظفين",
+    "depends_on": [
+      "hr_leaves_hr_leaves_leaves_meta"
+    ]
   },
   {
     "key": "hr_leaves_hr_leaves_on_leave_today",
@@ -10757,7 +11277,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير Excel سنوي لأرصدة الإجازات: الاستحقاق والمرحَّل والمستخدم والمعلّق والمتبقي لكل موظف"
+    "description_ar": "تصدير تقرير Excel سنوي لأرصدة الإجازات: الاستحقاق والمرحَّل والمستخدم والمعلّق والمتبقي لكل موظف",
+    "depends_on": [
+      "hr_leaves_hr_leaves_all_balances"
+    ]
   },
   {
     "key": "hr_leaves_hr_leaves_set_balance",
@@ -10785,7 +11308,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل رصيد إجازات موظف محدد يدويًا لضبط استحقاقه أو تصحيح الرصيد المرحَّل"
+    "description_ar": "تعديل رصيد إجازات موظف محدد يدويًا لضبط استحقاقه أو تصحيح الرصيد المرحَّل",
+    "depends_on": [
+      "hr_leaves_hr_leaves_all_balances"
+    ]
   },
   {
     "key": "hr_leaves_hr_leaves_list_leaves",
@@ -10848,7 +11374,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل إجازة بالنيابة عن موظف من شؤون الموظفين، وتُعتمد مباشرة دون مسار موافقات"
+    "description_ar": "تسجيل إجازة بالنيابة عن موظف من شؤون الموظفين، وتُعتمد مباشرة دون مسار موافقات",
+    "depends_on": [
+      "hr_leaves_hr_leaves_leaves_meta"
+    ]
   },
   {
     "key": "hr_leaves_hr_leaves_get_leave",
@@ -10920,7 +11449,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "اتخاذ قرار الموافقة أو الرفض على طلب إجازة، من المدير المباشر ثم شؤون الموظفين"
+    "description_ar": "اتخاذ قرار الموافقة أو الرفض على طلب إجازة، من المدير المباشر ثم شؤون الموظفين",
+    "depends_on": [
+      "hr_leaves_hr_leaves_list_leaves"
+    ]
   },
   {
     "key": "hr_leaves_hr_leaves_cancel_leave",
@@ -10948,7 +11480,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء طلب إجازة محدد وإعادة الأيام المحجوزة إلى رصيد الموظف"
+    "description_ar": "إلغاء طلب إجازة محدد وإعادة الأيام المحجوزة إلى رصيد الموظف",
+    "depends_on": [
+      "hr_leaves_hr_leaves_list_leaves"
+    ]
   },
   {
     "key": "hr_leaves_hr_leaves_upload_leave_attachment",
@@ -11043,7 +11578,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تقديم الموظف طلب خطاب رسمي، كتعريف بالراتب أو بالعمل، لتعتمده شؤون الموظفين"
+    "description_ar": "تقديم الموظف طلب خطاب رسمي، كتعريف بالراتب أو بالعمل، لتعتمده شؤون الموظفين",
+    "depends_on": [
+      "letters_hr_letters_meta"
+    ]
   },
   {
     "key": "letters_hr_letters_cancel_letter",
@@ -11062,7 +11600,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء الموظف طلب خطاب رسمي قدّمه سابقًا قبل اعتماده"
+    "description_ar": "إلغاء الموظف طلب خطاب رسمي قدّمه سابقًا قبل اعتماده",
+    "depends_on": [
+      "letters_hr_letters_my_letters"
+    ]
   },
   {
     "key": "letters_hr_letters_list_letters",
@@ -11160,7 +11701,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات إعدادات الخطابات الرسمية، كبيانات الجهة والمسؤول الموقّع وصيغة الترقيم"
+    "description_ar": "حفظ تعديلات إعدادات الخطابات الرسمية، كبيانات الجهة والمسؤول الموقّع وصيغة الترقيم",
+    "depends_on": [
+      "letters_hr_letters_letter_settings"
+    ]
   },
   {
     "key": "letters_hr_letters_upload_setting_image",
@@ -11188,7 +11732,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفع كليشة الخطاب (صفحة A4 بالشعار والترويسة) أو صورة التوقيع أو الختم"
+    "description_ar": "رفع كليشة الخطاب (صفحة A4 بالشعار والترويسة) أو صورة التوقيع أو الختم",
+    "depends_on": [
+      "letters_hr_letters_letter_settings"
+    ]
   },
   {
     "key": "letters_hr_letters_delete_setting_image",
@@ -11216,7 +11763,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف صورة محددة من إعدادات الخطابات، كالكليشة أو التوقيع أو الختم"
+    "description_ar": "حذف صورة محددة من إعدادات الخطابات، كالكليشة أو التوقيع أو الختم",
+    "depends_on": [
+      "letters_hr_letters_letter_settings"
+    ]
   },
   {
     "key": "letters_hr_letters_setting_image",
@@ -11288,7 +11838,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "إصدار خطاب رسمي مباشرة من شؤون الموظفين دون طلب من الموظف، ويُعتمد فورًا"
+    "description_ar": "إصدار خطاب رسمي مباشرة من شؤون الموظفين دون طلب من الموظف، ويُعتمد فورًا",
+    "depends_on": [
+      "letters_hr_letters_meta"
+    ]
   },
   {
     "key": "letters_hr_letters_get_letter",
@@ -11344,7 +11897,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "اعتماد طلب خطاب رسمي مقدّم من موظف وإصداره برقم مرجعي نهائي"
+    "description_ar": "اعتماد طلب خطاب رسمي مقدّم من موظف وإصداره برقم مرجعي نهائي",
+    "depends_on": [
+      "letters_hr_letters_list_letters"
+    ]
   },
   {
     "key": "letters_hr_letters_reject_letter",
@@ -11381,7 +11937,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "رفض طلب خطاب رسمي مقدّم من موظف مع إبقائه غير مُصدر"
+    "description_ar": "رفض طلب خطاب رسمي مقدّم من موظف مع إبقائه غير مُصدر",
+    "depends_on": [
+      "letters_hr_letters_list_letters"
+    ]
   },
   {
     "key": "letters_hr_letters_delete_letter",
@@ -11418,7 +11977,11 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "حذف خطاب أو طلب خطاب محدد من سجل الخطابات الرسمية"
+    "description_ar": "حذف خطاب أو طلب خطاب محدد من سجل الخطابات الرسمية",
+    "depends_on": [
+      "letters_hr_letters_get_letter",
+      "letters_hr_letters_list_letters"
+    ]
   },
   {
     "key": "letters_hr_letters_letter_preview_pdf",
@@ -11474,7 +12037,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير الخطاب المعتمد بصيغة PDF على الكليشة الرسمية لطباعته أو تسليمه للموظف"
+    "description_ar": "تصدير الخطاب المعتمد بصيغة PDF على الكليشة الرسمية لطباعته أو تسليمه للموظف",
+    "depends_on": [
+      "letters_hr_letters_list_letters"
+    ]
   },
   {
     "key": "hr_attendance_hr_locations_list_active",
@@ -11598,7 +12164,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات موقع دوام قائم، كاسمه وإحداثياته ونطاق التحضير المسموح وحالة تفعيله"
+    "description_ar": "تعديل بيانات موقع دوام قائم، كاسمه وإحداثياته ونطاق التحضير المسموح وحالة تفعيله",
+    "depends_on": [
+      "hr_attendance_hr_locations_list_locations"
+    ]
   },
   {
     "key": "hr_attendance_hr_locations_delete_location",
@@ -11633,7 +12202,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف موقع دوام محدد من النظام فلا يُعتمد بعدها للتحقق من تحضير الموظفين"
+    "description_ar": "حذف موقع دوام محدد من النظام فلا يُعتمد بعدها للتحقق من تحضير الموظفين",
+    "depends_on": [
+      "hr_attendance_hr_locations_list_locations"
+    ]
   },
   {
     "key": "hr_attendance_hr_locations_list_exemptions",
@@ -11709,7 +12281,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تفعيل أو إلغاء استثناء موظف محدد من التقيد بموقع الدوام عند تسجيل حضوره"
+    "description_ar": "تفعيل أو إلغاء استثناء موظف محدد من التقيد بموقع الدوام عند تسجيل حضوره",
+    "depends_on": [
+      "hr_attendance_hr_locations_list_exemptions"
+    ]
   },
   {
     "key": "hr_attendance_hr_locations_locations_report",
@@ -11791,7 +12366,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديث إعدادات التحقق من التواجد، كالتفعيل وأوقات الإرسال ومهلة تأكيد الموظف"
+    "description_ar": "تحديث إعدادات التحقق من التواجد، كالتفعيل وأوقات الإرسال ومهلة تأكيد الموظف",
+    "depends_on": [
+      "hr_attendance_hr_presence_read_settings"
+    ]
   },
   {
     "key": "hr_attendance_hr_presence_post_settings",
@@ -11810,7 +12388,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ إعدادات التحقق من التواجد عبر الإرسال، كالتفعيل وأوقات الإرسال ومهلة التأكيد"
+    "description_ar": "حفظ إعدادات التحقق من التواجد عبر الإرسال، كالتفعيل وأوقات الإرسال ومهلة التأكيد",
+    "depends_on": [
+      "hr_attendance_hr_presence_read_settings"
+    ]
   },
   {
     "key": "hr_attendance_hr_presence_send_now",
@@ -11932,7 +12513,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تأكيد الموظف تواجده في موقع الدوام ردًا على طلب تحقق محدد خلال المهلة"
+    "description_ar": "تأكيد الموظف تواجده في موقع الدوام ردًا على طلب تحقق محدد خلال المهلة",
+    "depends_on": [
+      "hr_attendance_hr_presence_my_checks"
+    ]
   },
   {
     "key": "hr_core_hr_profile_requests_meta",
@@ -11989,7 +12573,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تقديم الموظف طلب تعديل لبياناته الشخصية، كالهاتف أو العنوان، لتراجعه شؤون الموظفين"
+    "description_ar": "تقديم الموظف طلب تعديل لبياناته الشخصية، كالهاتف أو العنوان، لتراجعه شؤون الموظفين",
+    "depends_on": [
+      "hr_core_hr_profile_requests_meta"
+    ]
   },
   {
     "key": "hr_core_hr_profile_requests_cancel_request",
@@ -12024,7 +12611,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء الموظف طلب تعديل بياناته الشخصية الذي قدمه قبل مراجعته"
+    "description_ar": "إلغاء الموظف طلب تعديل بياناته الشخصية الذي قدمه قبل مراجعته",
+    "depends_on": [
+      "hr_core_hr_profile_requests_my_requests"
+    ]
   },
   {
     "key": "hr_core_hr_profile_requests_list_requests",
@@ -12087,7 +12677,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد طلب موظف لتعديل بياناته الشخصية وتطبيق التغيير على ملفه"
+    "description_ar": "اعتماد طلب موظف لتعديل بياناته الشخصية وتطبيق التغيير على ملفه",
+    "depends_on": [
+      "hr_core_hr_profile_requests_list_requests"
+    ]
   },
   {
     "key": "hr_core_hr_profile_requests_reject_request",
@@ -12115,7 +12708,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض طلب موظف لتعديل بياناته الشخصية مع إبقاء بيانات ملفه دون تغيير"
+    "description_ar": "رفض طلب موظف لتعديل بياناته الشخصية مع إبقاء بيانات ملفه دون تغيير",
+    "depends_on": [
+      "hr_core_hr_profile_requests_list_requests"
+    ]
   },
   {
     "key": "hr_core_hr_reports_annual",
@@ -12185,7 +12781,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير التقرير السنوي للموارد البشرية إلى ملف للطباعة أو المراجعة والأرشفة"
+    "description_ar": "تصدير التقرير السنوي للموارد البشرية إلى ملف للطباعة أو المراجعة والأرشفة",
+    "depends_on": [
+      "hr_core_hr_reports_annual"
+    ]
   },
   {
     "key": "hr_attendance_hr_shifts_read",
@@ -12259,7 +12858,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديث إعدادات الدوام العامة، كأيام العمل ومهلة التأخير وقواعد احتساب الحضور"
+    "description_ar": "تحديث إعدادات الدوام العامة، كأيام العمل ومهلة التأخير وقواعد احتساب الحضور",
+    "depends_on": [
+      "hr_attendance_hr_shifts_read"
+    ]
   },
   {
     "key": "hr_attendance_hr_shifts_add_shift",
@@ -12315,7 +12917,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل فترة دوام قائمة، كاسمها ووقت بدايتها ونهايتها وحالة تفعيلها"
+    "description_ar": "تعديل فترة دوام قائمة، كاسمها ووقت بدايتها ونهايتها وحالة تفعيلها",
+    "depends_on": [
+      "hr_attendance_hr_shifts_read"
+    ]
   },
   {
     "key": "hr_attendance_hr_shifts_delete_shift",
@@ -12343,7 +12948,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف فترة دوام محددة من النظام بحسب معرّفها وإلغاء تكليف موظفيها بها"
+    "description_ar": "حذف فترة دوام محددة من النظام بحسب معرّفها وإلغاء تكليف موظفيها بها",
+    "depends_on": [
+      "hr_attendance_hr_shifts_read"
+    ]
   },
   {
     "key": "hr_attendance_hr_shifts_set_shift_employees",
@@ -12371,7 +12979,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استبدال قائمة موظفي فترة دوام محددة بإضافة التكليف أو إزالته دون المساس بفتراتهم الأخرى"
+    "description_ar": "استبدال قائمة موظفي فترة دوام محددة بإضافة التكليف أو إزالته دون المساس بفتراتهم الأخرى",
+    "depends_on": [
+      "hr_attendance_hr_shifts_read"
+    ]
   },
   {
     "key": "hr_attendance_hr_shifts_set_employee_shifts",
@@ -12406,7 +13017,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديد فترات الدوام المكلف بها موظف محدد، وتعديل تكليفه بها دفعة واحدة"
+    "description_ar": "تحديد فترات الدوام المكلف بها موظف محدد، وتعديل تكليفه بها دفعة واحدة",
+    "depends_on": [
+      "hr_attendance_hr_shifts_read"
+    ]
   },
   {
     "key": "hr_tasks_hr_tasks_tasks_meta",
@@ -12532,7 +13146,11 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "إنشاء مهمة جديدة وإسنادها إلى موظف مع تحديد عنوانها وموعد تسليمها وأولويتها"
+    "description_ar": "إنشاء مهمة جديدة وإسنادها إلى موظف مع تحديد عنوانها وموعد تسليمها وأولويتها",
+    "depends_on": [
+      "hr_tasks_hr_tasks_assignable",
+      "hr_tasks_hr_tasks_tasks_meta"
+    ]
   },
   {
     "key": "hr_tasks_hr_tasks_get_task",
@@ -12604,7 +13222,10 @@
     ],
     "requires_admin_scope": true,
     "is_active": true,
-    "description_ar": "تعديل بيانات مهمة قائمة، كعنوانها ووصفها والمسند إليه وموعد التسليم وحالتها"
+    "description_ar": "تعديل بيانات مهمة قائمة، كعنوانها ووصفها والمسند إليه وموعد التسليم وحالتها",
+    "depends_on": [
+      "hr_tasks_hr_tasks_get_task"
+    ]
   },
   {
     "key": "hr_tasks_hr_tasks_task_progress",
@@ -12623,7 +13244,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل تقدم تنفيذ مهمة محددة، كتحديث نسبة الإنجاز أو حالتها مع ملاحظة المنفّذ"
+    "description_ar": "تسجيل تقدم تنفيذ مهمة محددة، كتحديث نسبة الإنجاز أو حالتها مع ملاحظة المنفّذ",
+    "depends_on": [
+      "hr_tasks_hr_tasks_get_task"
+    ]
   },
   {
     "key": "hr_tasks_hr_tasks_delete_task",
@@ -12642,7 +13266,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مهمة محددة من قائمة المهام بحسب معرّفها"
+    "description_ar": "حذف مهمة محددة من قائمة المهام بحسب معرّفها",
+    "depends_on": [
+      "hr_tasks_hr_tasks_get_task",
+      "hr_tasks_hr_tasks_list_tasks"
+    ]
   },
   {
     "key": "schedule_lecture_swaps_read_settings",
@@ -12680,7 +13308,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل إعدادات تبادل المحاضرات والإنابة، كالضوابط والشروط التي تحكم إنشاء التبادل"
+    "description_ar": "تعديل إعدادات تبادل المحاضرات والإنابة، كالضوابط والشروط التي تحكم إنشاء التبادل",
+    "depends_on": [
+      "schedule_lecture_swaps_read_settings"
+    ]
   },
   {
     "key": "schedule_lecture_swaps_teachers_in_scope",
@@ -12718,7 +13349,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض محاضرات الأستاذ المجدولة القادمة القابلة للتبادل أو الإنابة، خلال 30 يومًا أو نطاق محدد"
+    "description_ar": "عرض محاضرات الأستاذ المجدولة القادمة القابلة للتبادل أو الإنابة، خلال 30 يومًا أو نطاق محدد",
+    "depends_on": [
+      "schedule_lecture_swaps_teachers_in_scope"
+    ]
   },
   {
     "key": "schedule_lecture_swaps_candidates",
@@ -12737,7 +13371,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض الزملاء المتاحين وقت المحاضرة في الكلية نفسها، مع محاضراتهم في الأسبوع ذاته التي يمكن للأستاذ الأصلي تنفيذها"
+    "description_ar": "عرض الزملاء المتاحين وقت المحاضرة في الكلية نفسها، مع محاضراتهم في الأسبوع ذاته التي يمكن للأستاذ الأصلي تنفيذها",
+    "depends_on": [
+      "schedule_lecture_swaps_teacher_lectures"
+    ]
   },
   {
     "key": "schedule_lecture_swaps_create_swap",
@@ -12756,7 +13393,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء تبادل أو إنابة بين أستاذين وتطبيقه فورًا على المحاضرتين كإجراء إداري"
+    "description_ar": "إنشاء تبادل أو إنابة بين أستاذين وتطبيقه فورًا على المحاضرتين كإجراء إداري",
+    "depends_on": [
+      "schedule_lecture_swaps_candidates",
+      "schedule_lecture_swaps_teacher_lectures",
+      "schedule_lecture_swaps_teachers_in_scope"
+    ]
   },
   {
     "key": "schedule_lecture_swaps_list_swaps",
@@ -12794,7 +13436,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء تبادل أو إنابة قبل تنفيذها لتعود كل محاضرة إلى أستاذها الأصلي"
+    "description_ar": "إلغاء تبادل أو إنابة قبل تنفيذها لتعود كل محاضرة إلى أستاذها الأصلي",
+    "depends_on": [
+      "schedule_lecture_swaps_list_swaps"
+    ]
   },
   {
     "key": "schedule_lecture_swaps_report",
@@ -12851,7 +13496,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ مسح المحاضرات وسجلات حضورها نهائيًا دون المساس بالمقررات والإسنادات والجدول الأسبوعي"
+    "description_ar": "تنفيذ مسح المحاضرات وسجلات حضورها نهائيًا دون المساس بالمقررات والإسنادات والجدول الأسبوعي",
+    "depends_on": [
+      "schedule_lectures_purge_purge_preview"
+    ]
   },
   {
     "key": "letters_letterheads_roles_meta",
@@ -13019,7 +13667,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء كليشة ترويسة رسمية جديدة وتحديد الأدوار المسموح لها برؤيتها"
+    "description_ar": "إنشاء كليشة ترويسة رسمية جديدة وتحديد الأدوار المسموح لها برؤيتها",
+    "depends_on": [
+      "letters_letterheads_roles_meta"
+    ]
   },
   {
     "key": "letters_letterheads_update_letterhead",
@@ -13061,7 +13712,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل كليشة ترويسة قائمة، كتصميمها أو بياناتها أو الأدوار المسموح لها برؤيتها"
+    "description_ar": "تعديل كليشة ترويسة قائمة، كتصميمها أو بياناتها أو الأدوار المسموح لها برؤيتها",
+    "depends_on": [
+      "letters_letterheads_get_letterhead",
+      "letters_letterheads_list_letterheads",
+      "letters_letterheads_roles_meta"
+    ]
   },
   {
     "key": "letters_letterheads_patch_letterhead_sections",
@@ -13145,7 +13801,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف كليشة ترويسة محددة بحسب معرّفها فلا تعود متاحة لإصدار الخطابات"
+    "description_ar": "حذف كليشة ترويسة محددة بحسب معرّفها فلا تعود متاحة لإصدار الخطابات",
+    "depends_on": [
+      "letters_letterheads_get_letterhead",
+      "letters_letterheads_list_letterheads"
+    ]
   },
   {
     "key": "letters_letterheads_set_default_letterhead",
@@ -13290,7 +13950,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل سلسلة ترقيم خطابات قائمة، كاسمها وبادئتها وصيغة التسلسل وأدوار الرؤية"
+    "description_ar": "تعديل سلسلة ترقيم خطابات قائمة، كاسمها وبادئتها وصيغة التسلسل وأدوار الرؤية",
+    "depends_on": [
+      "letters_letterheads_list_series"
+    ]
   },
   {
     "key": "letters_letterheads_delete_series",
@@ -13332,7 +13995,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف سلسلة ترقيم خطابات محددة بحسب معرّفها من النظام"
+    "description_ar": "حذف سلسلة ترقيم خطابات محددة بحسب معرّفها من النظام",
+    "depends_on": [
+      "letters_letterheads_list_series"
+    ]
   },
   {
     "key": "letters_letterheads_set_default_series",
@@ -13351,7 +14017,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعيين سلسلة ترقيم محددة كسلسلة افتراضية تُستخدم عند إنشاء الخطابات الجديدة"
+    "description_ar": "تعيين سلسلة ترقيم محددة كسلسلة افتراضية تُستخدم عند إنشاء الخطابات الجديدة",
+    "depends_on": [
+      "letters_letterheads_list_series"
+    ]
   },
   {
     "key": "letters_letters_get_settings",
@@ -13449,7 +14118,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات إعدادات الخطابات العامة، كالكليشة الافتراضية وخيارات الإصدار"
+    "description_ar": "حفظ تعديلات إعدادات الخطابات العامة، كالكليشة الافتراضية وخيارات الإصدار",
+    "depends_on": [
+      "letters_letters_get_settings"
+    ]
   },
   {
     "key": "letters_letters_list_templates",
@@ -13589,7 +14261,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل قالب خطاب قائم، كاسمه ونصه ومحتوى أقسامه الافتراضي"
+    "description_ar": "تعديل قالب خطاب قائم، كاسمه ونصه ومحتوى أقسامه الافتراضي",
+    "depends_on": [
+      "letters_letters_list_templates"
+    ]
   },
   {
     "key": "letters_letters_delete_template",
@@ -13638,7 +14313,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قالب خطاب محدد بحسب معرّفه من قائمة قوالب الخطابات"
+    "description_ar": "حذف قالب خطاب محدد بحسب معرّفه من قائمة قوالب الخطابات",
+    "depends_on": [
+      "letters_letters_list_templates"
+    ]
   },
   {
     "key": "letters_letters_recipients",
@@ -13951,7 +14629,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنزيل ملف PDF واحد يجمع خطابات الدفعة متتابعة، ويبدأ كل خطاب بصفحة جديدة"
+    "description_ar": "تنزيل ملف PDF واحد يجمع خطابات الدفعة متتابعة، ويبدأ كل خطاب بصفحة جديدة",
+    "depends_on": [
+      "letters_letters_issue_batch"
+    ]
   },
   {
     "key": "letters_letters_save_draft",
@@ -14035,7 +14716,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد المسودة وإصدارها، فتأخذ النسخة نفسها الرقم الرسمي ورمز QR وتُؤرشف"
+    "description_ar": "اعتماد المسودة وإصدارها، فتأخذ النسخة نفسها الرقم الرسمي ورمز QR وتُؤرشف",
+    "depends_on": [
+      "letters_letters_save_draft"
+    ]
   },
   {
     "key": "letters_letters_delete_draft",
@@ -14077,7 +14761,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف خطاب محدد، وهو في الغالب مسودة، من سجل الخطابات بحسب معرّفه"
+    "description_ar": "حذف خطاب محدد، وهو في الغالب مسودة، من سجل الخطابات بحسب معرّفه",
+    "depends_on": [
+      "letters_letters_get_letter",
+      "letters_letters_list_letters"
+    ]
   },
   {
     "key": "letters_letters_preview_letter_pdf",
@@ -14245,7 +14933,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "سحب خطاب صادر وإبطال مفعوله رسميًا مع بقائه في الأرشيف"
+    "description_ar": "سحب خطاب صادر وإبطال مفعوله رسميًا مع بقائه في الأرشيف",
+    "depends_on": [
+      "letters_letters_list_letters"
+    ]
   },
   {
     "key": "letters_letters_restore",
@@ -14287,7 +14978,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استعادة خطاب مسحوب سابقًا وإعادته صالحًا ضمن سجل الخطابات"
+    "description_ar": "استعادة خطاب مسحوب سابقًا وإعادته صالحًا ضمن سجل الخطابات",
+    "depends_on": [
+      "letters_letters_list_letters"
+    ]
   },
   {
     "key": "letters_letters_letter_pdf",
@@ -14329,7 +15023,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير خطاب محدد بصيغة PDF على الكليشة الرسمية للطباعة أو التسليم"
+    "description_ar": "تصدير خطاب محدد بصيغة PDF على الكليشة الرسمية للطباعة أو التسليم",
+    "depends_on": [
+      "letters_letters_list_letters"
+    ]
   },
   {
     "key": "letters_letters_letter_docx",
@@ -14371,7 +15068,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير الخطاب إلى ملف Word قابل للتحرير بالأقسام والكليشة نفسيهما"
+    "description_ar": "تصدير الخطاب إلى ملف Word قابل للتحرير بالأقسام والكليشة نفسيهما",
+    "depends_on": [
+      "letters_letters_list_letters"
+    ]
   },
   {
     "key": "dashboard_management_dashboard_management_dashboard",
@@ -14467,7 +15167,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير بيانات لوحة الإدارة العليا ومؤشراتها إلى ملف للمراجعة والتقارير"
+    "description_ar": "تصدير بيانات لوحة الإدارة العليا ومؤشراتها إلى ملف للمراجعة والتقارير",
+    "depends_on": [
+      "dashboard_management_dashboard_management_dashboard"
+    ]
   },
   {
     "key": "dashboard_management_dashboard_management_dashboard_hr",
@@ -14669,7 +15372,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير بيانات لوحة الموارد البشرية الإدارية ومؤشراتها إلى ملف للمراجعة والتقارير"
+    "description_ar": "تصدير بيانات لوحة الموارد البشرية الإدارية ومؤشراتها إلى ملف للمراجعة والتقارير",
+    "depends_on": [
+      "dashboard_management_dashboard_management_dashboard_hr"
+    ]
   },
   {
     "key": "notifications_notifications_get_my_notifications",
@@ -14707,7 +15413,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعليم إشعار محدد بحسب معرّفه كمقروء بعد اطلاع المستخدم عليه"
+    "description_ar": "تعليم إشعار محدد بحسب معرّفه كمقروء بعد اطلاع المستخدم عليه",
+    "depends_on": [
+      "notifications_notifications_get_my_notifications"
+    ]
   },
   {
     "key": "notifications_notifications_mark_all_notifications_read",
@@ -14802,7 +15511,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إرسال إشعار إلى طلاب أو معلمين أو مقررات محددة، ويتطلب صلاحية إرسال الإشعارات"
+    "description_ar": "إرسال إشعار إلى طلاب أو معلمين أو مقررات محددة، ويتطلب صلاحية إرسال الإشعارات",
+    "depends_on": [
+      "notifications_notifications_get_courses_for_notification",
+      "notifications_notifications_search_students_for_notification",
+      "notifications_notifications_search_teachers_for_notification"
+    ]
   },
   {
     "key": "notifications_notifications_delete_notification",
@@ -14821,7 +15535,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف إشعار محدد بحسب معرّفه من قائمة إشعارات المستخدم"
+    "description_ar": "حذف إشعار محدد بحسب معرّفه من قائمة إشعارات المستخدم",
+    "depends_on": [
+      "notifications_notifications_get_my_notifications"
+    ]
   },
   {
     "key": "notifications_notifications_get_notification_history",
@@ -14972,7 +15689,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات قوالب خطابات كشوف الساعات الإضافية المستخدمة في تقرير نصاب الأساتذة"
+    "description_ar": "حفظ تعديلات قوالب خطابات كشوف الساعات الإضافية المستخدمة في تقرير نصاب الأساتذة",
+    "depends_on": [
+      "teaching_load_overtime_letter_get_templates"
+    ]
   },
   {
     "key": "teaching_load_overtime_letter_letter_status",
@@ -15094,7 +15814,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنزيل مرفق محدد من مرفقات خطاب بحسب معرّفي الخطاب والمرفق، كالكشف أو المستحقات"
+    "description_ar": "تنزيل مرفق محدد من مرفقات خطاب بحسب معرّفي الخطاب والمرفق، كالكشف أو المستحقات",
+    "depends_on": [
+      "teaching_load_overtime_letter_overtime_letters_register"
+    ]
   },
   {
     "key": "teaching_load_overtime_letter_pdf_with_attachments",
@@ -15113,7 +15836,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير الخطاب مع مرفقاته بصيغة PDF في ملف واحد جاهز للطباعة أو الإرسال"
+    "description_ar": "تصدير الخطاب مع مرفقاته بصيغة PDF في ملف واحد جاهز للطباعة أو الإرسال",
+    "depends_on": [
+      "teaching_load_overtime_letter_overtime_letters_register"
+    ]
   },
   {
     "key": "calendar_prep_leave_list_prep_periods",
@@ -15170,7 +15896,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف فترة إجازة تحضير محددة من التقويم الأكاديمي بحسب معرّفها"
+    "description_ar": "حذف فترة إجازة تحضير محددة من التقويم الأكاديمي بحسب معرّفها",
+    "depends_on": [
+      "calendar_prep_leave_list_prep_periods"
+    ]
   },
   {
     "key": "misc_role_permission_review_review_meta",
@@ -15265,7 +15994,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مراجعة دور محدد، كحالة المراجعة والتوصية العامة للدور"
+    "description_ar": "تعديل بيانات مراجعة دور محدد، كحالة المراجعة والتوصية العامة للدور",
+    "depends_on": [
+      "misc_role_permission_review_get_role_review",
+      "misc_role_permission_review_list_role_reviews"
+    ]
   },
   {
     "key": "misc_role_permission_review_decide_role_permission",
@@ -15284,7 +16017,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل قرار المراجعة على صلاحية محددة داخل دور، كإبقائها أو إزالتها أو تقييدها"
+    "description_ar": "تسجيل قرار المراجعة على صلاحية محددة داخل دور، كإبقائها أو إزالتها أو تقييدها",
+    "depends_on": [
+      "misc_role_permission_review_get_role_review"
+    ]
   },
   {
     "key": "misc_role_permission_review_add_role_note",
@@ -15303,7 +16039,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إضافة ملاحظة مراجعة على دور محدد لتوثيق ما رُصد حول صلاحياته"
+    "description_ar": "إضافة ملاحظة مراجعة على دور محدد لتوثيق ما رُصد حول صلاحياته",
+    "depends_on": [
+      "misc_role_permission_review_get_role_review"
+    ]
   },
   {
     "key": "misc_role_permission_review_approve_role_review",
@@ -15322,7 +16061,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد مراجعة دور محدد بعد استكمال قرارات صلاحياته وإقرارها نهائيًا"
+    "description_ar": "اعتماد مراجعة دور محدد بعد استكمال قرارات صلاحياته وإقرارها نهائيًا",
+    "depends_on": [
+      "misc_role_permission_review_get_role_review"
+    ]
   },
   {
     "key": "misc_role_permission_review_list_sensitive_permission_reviews",
@@ -15360,7 +16102,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مراجعة صلاحية حساسة محددة بحسب مفتاحها، كحالتها والتوصية بشأنها"
+    "description_ar": "تعديل بيانات مراجعة صلاحية حساسة محددة بحسب مفتاحها، كحالتها والتوصية بشأنها",
+    "depends_on": [
+      "misc_role_permission_review_list_sensitive_permission_reviews"
+    ]
   },
   {
     "key": "misc_role_permission_review_add_sensitive_permission_note",
@@ -15379,7 +16124,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إضافة ملاحظة مراجعة على صلاحية حساسة محددة لتوثيق مخاطرها وسبب القرار"
+    "description_ar": "إضافة ملاحظة مراجعة على صلاحية حساسة محددة لتوثيق مخاطرها وسبب القرار",
+    "depends_on": [
+      "misc_role_permission_review_list_sensitive_permission_reviews"
+    ]
   },
   {
     "key": "misc_role_permission_review_approve_sensitive_permission_review",
@@ -15398,7 +16146,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد مراجعة صلاحية حساسة محددة بعد استكمالها وإقرار قرارها نهائيًا"
+    "description_ar": "اعتماد مراجعة صلاحية حساسة محددة بعد استكمالها وإقرار قرارها نهائيًا",
+    "depends_on": [
+      "misc_role_permission_review_list_sensitive_permission_reviews"
+    ]
   },
   {
     "key": "misc_role_permission_review_review_audit",
@@ -15455,7 +16206,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء دور جديد في النظام وتحديد الصلاحيات الممنوحة لمن يُسند إليه"
+    "description_ar": "إنشاء دور جديد في النظام وتحديد الصلاحيات الممنوحة لمن يُسند إليه",
+    "depends_on": [
+      "system_users_roles_get_all_permissions"
+    ]
   },
   {
     "key": "system_users_roles_get_role",
@@ -15493,7 +16247,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل دور قائم، كاسمه ووصفه والصلاحيات الممنوحة له"
+    "description_ar": "تعديل دور قائم، كاسمه ووصفه والصلاحيات الممنوحة له",
+    "depends_on": [
+      "system_users_roles_get_all_permissions",
+      "system_users_roles_get_all_roles",
+      "system_users_roles_get_role"
+    ]
   },
   {
     "key": "system_users_roles_delete_role",
@@ -15512,7 +16271,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف دور محدد من النظام بحسب معرّفه فلا يعود متاحًا للإسناد"
+    "description_ar": "حذف دور محدد من النظام بحسب معرّفه فلا يعود متاحًا للإسناد",
+    "depends_on": [
+      "system_users_roles_get_all_roles",
+      "system_users_roles_get_role"
+    ]
   },
   {
     "key": "system_users_roles_init_default_roles",
@@ -15690,7 +16453,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ إصلاح مشكلات سلامة الجدول الأسبوعي المكتشفة وتصحيح التعارضات في بياناته"
+    "description_ar": "تنفيذ إصلاح مشكلات سلامة الجدول الأسبوعي المكتشفة وتصحيح التعارضات في بياناته",
+    "depends_on": [
+      "schedule_schedule_integrity_integrity_check"
+    ]
   },
   {
     "key": "schedule_schedule_resolver_resolver_preview",
@@ -15760,7 +16526,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ خطة الحلحلة المعتمدة للمحاضرات غير المجدولة، مع التحقق من كل خطوة وإيقاف التنفيذ قبل البدء عند أي خلل"
+    "description_ar": "تنفيذ خطة الحلحلة المعتمدة للمحاضرات غير المجدولة، مع التحقق من كل خطوة وإيقاف التنفيذ قبل البدء عند أي خلل",
+    "depends_on": [
+      "schedule_schedule_resolver_resolver_preview"
+    ]
   },
   {
     "key": "certificates_statements_statement_layout_defaults",
@@ -15817,7 +16586,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات إعدادات إفادات الطلاب لكلية محددة، كالترويسة والتوقيع وبيانات الجهة"
+    "description_ar": "حفظ تعديلات إعدادات إفادات الطلاب لكلية محددة، كالترويسة والتوقيع وبيانات الجهة",
+    "depends_on": [
+      "certificates_statements_get_statement_settings"
+    ]
   },
   {
     "key": "certificates_statements_read_verify_base",
@@ -15864,7 +16636,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل الرابط الأساسي لصفحة التحقق من صحة الإفادات الذي يُضمَّن في رمز QR"
+    "description_ar": "تعديل الرابط الأساسي لصفحة التحقق من صحة الإفادات الذي يُضمَّن في رمز QR",
+    "depends_on": [
+      "certificates_statements_read_verify_base"
+    ]
   },
   {
     "key": "certificates_statements_issue_statement",
@@ -15921,7 +16696,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد مسودة الإفادة، فيأخذ السجل نفسه الرقم الرسمي ورمز QR"
+    "description_ar": "اعتماد مسودة الإفادة، فيأخذ السجل نفسه الرقم الرسمي ورمز QR",
+    "depends_on": [
+      "certificates_statements_save_statement_draft"
+    ]
   },
   {
     "key": "certificates_statements_delete_statement_draft",
@@ -15940,7 +16718,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مسودة إفادة محددة بحسب معرّفها قبل اعتمادها وإصدارها رسميًا"
+    "description_ar": "حذف مسودة إفادة محددة بحسب معرّفها قبل اعتمادها وإصدارها رسميًا",
+    "depends_on": [
+      "certificates_statements_get_statement",
+      "certificates_statements_list_statements"
+    ]
   },
   {
     "key": "certificates_statements_preview_statement_pdf",
@@ -16035,7 +16817,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل قالب إفادة قائم، كاسمه ونص متنه والمتغيرات المستخدمة فيه"
+    "description_ar": "تعديل قالب إفادة قائم، كاسمه ونص متنه والمتغيرات المستخدمة فيه",
+    "depends_on": [
+      "certificates_statements_list_statement_templates"
+    ]
   },
   {
     "key": "certificates_statements_delete_statement_template",
@@ -16054,7 +16839,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قالب إفادة محدد بحسب معرّفه من قائمة قوالب الإفادات"
+    "description_ar": "حذف قالب إفادة محدد بحسب معرّفه من قائمة قوالب الإفادات",
+    "depends_on": [
+      "certificates_statements_list_statement_templates"
+    ]
   },
   {
     "key": "certificates_statements_preview_statement_body",
@@ -16149,7 +16937,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "سحب إفادة صادرة وإبطال مفعولها رسميًا مع بقائها مسجلة في السجل"
+    "description_ar": "سحب إفادة صادرة وإبطال مفعولها رسميًا مع بقائها مسجلة في السجل",
+    "depends_on": [
+      "certificates_statements_list_statements"
+    ]
   },
   {
     "key": "certificates_statements_restore_statement",
@@ -16168,7 +16959,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استعادة إفادة مسحوبة سابقًا وإعادتها سارية ضمن سجل الإفادات"
+    "description_ar": "استعادة إفادة مسحوبة سابقًا وإعادتها سارية ضمن سجل الإفادات",
+    "depends_on": [
+      "certificates_statements_list_statements"
+    ]
   },
   {
     "key": "certificates_statements_statement_pdf",
@@ -16187,7 +16981,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير إفادة محددة بصيغة PDF لطباعتها أو تسليمها للطالب"
+    "description_ar": "تصدير إفادة محددة بصيغة PDF لطباعتها أو تسليمها للطالب",
+    "depends_on": [
+      "certificates_statements_list_statements"
+    ]
   },
   {
     "key": "cards_student_cards_get_card_settings",
@@ -16235,7 +17032,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات إعدادات بطاقات الطلاب لكلية محددة، كالقالب والبيانات الظاهرة على البطاقة"
+    "description_ar": "حفظ تعديلات إعدادات بطاقات الطلاب لكلية محددة، كالقالب والبيانات الظاهرة على البطاقة",
+    "depends_on": [
+      "cards_student_cards_get_card_settings"
+    ]
   },
   {
     "key": "cards_student_cards_get_my_card",
@@ -16383,7 +17183,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء اعتماد صورة طالب وسحبها من بطاقته، مع فتح فرصة رفع جديدة له"
+    "description_ar": "إلغاء اعتماد صورة طالب وسحبها من بطاقته، مع فتح فرصة رفع جديدة له",
+    "depends_on": [
+      "cards_student_cards_list_approved_photos"
+    ]
   },
   {
     "key": "cards_student_cards_approve_student_photo",
@@ -16407,7 +17210,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد صورة الطالب المعلّقة لتظهر رسميًا على بطاقته الجامعية"
+    "description_ar": "اعتماد صورة الطالب المعلّقة لتظهر رسميًا على بطاقته الجامعية",
+    "depends_on": [
+      "cards_student_cards_list_pending_photos"
+    ]
   },
   {
     "key": "cards_student_cards_reject_student_photo",
@@ -16431,7 +17237,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض صورة طالب معلّقة لعدم مطابقتها الشروط، ليتمكن من رفع صورة بديلة"
+    "description_ar": "رفض صورة طالب معلّقة لعدم مطابقتها الشروط، ليتمكن من رفع صورة بديلة",
+    "depends_on": [
+      "cards_student_cards_list_pending_photos"
+    ]
   },
   {
     "key": "cards_student_cards_bulk_photo_decision",
@@ -16455,7 +17264,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد أو رفض مجموعة من صور الطلاب المعلّقة دفعة واحدة"
+    "description_ar": "اعتماد أو رفض مجموعة من صور الطلاب المعلّقة دفعة واحدة",
+    "depends_on": [
+      "cards_student_cards_list_pending_photos"
+    ]
   },
   {
     "key": "cards_student_cards_allow_photo_upload",
@@ -16574,7 +17386,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رسم الدفعة التالية من البطاقات وتخزينها، وعند الاكتمال تركيب PDF النهائي وتسجيل الدفعة"
+    "description_ar": "رسم الدفعة التالية من البطاقات وتخزينها، وعند الاكتمال تركيب PDF النهائي وتسجيل الدفعة",
+    "depends_on": [
+      "cards_student_cards_create_print_job"
+    ]
   },
   {
     "key": "cards_student_cards_print_job_download",
@@ -16593,7 +17408,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنزيل ملف PDF الناتج عن مهمة طباعة بطاقات الطلاب بعد اكتمال معالجة جميع خطواتها"
+    "description_ar": "تنزيل ملف PDF الناتج عن مهمة طباعة بطاقات الطلاب بعد اكتمال معالجة جميع خطواتها",
+    "depends_on": [
+      "cards_student_cards_create_print_job"
+    ]
   },
   {
     "key": "cards_student_cards_list_print_batches",
@@ -16631,7 +17449,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض تفاصيل دفعة طباعة بطاقات محددة بحسب رقمها، بما فيها الطلاب الذين شملتهم"
+    "description_ar": "عرض تفاصيل دفعة طباعة بطاقات محددة بحسب رقمها، بما فيها الطلاب الذين شملتهم",
+    "depends_on": [
+      "cards_student_cards_list_print_batches"
+    ]
   },
   {
     "key": "cards_student_cards_delete_print_batch",
@@ -16650,7 +17471,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف دفعة طباعة من السجل، مع خيار إعادة طلابها إلى قائمة المطلوب طباعتهم بإلغاء وسم مطبوع"
+    "description_ar": "حذف دفعة طباعة من السجل، مع خيار إعادة طلابها إلى قائمة المطلوب طباعتهم بإلغاء وسم مطبوع",
+    "depends_on": [
+      "cards_student_cards_get_print_batch",
+      "cards_student_cards_list_print_batches"
+    ]
   },
   {
     "key": "cards_student_cards_clear_print_batches",
@@ -16669,7 +17494,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنظيف سجل دفعات الطباعة بعد اكتمالها، بحذف السجلات فقط مع إبقاء وسم مطبوع على الطلاب"
+    "description_ar": "تنظيف سجل دفعات الطباعة بعد اكتمالها، بحذف السجلات فقط مع إبقاء وسم مطبوع على الطلاب",
+    "depends_on": [
+      "cards_student_cards_get_print_batch",
+      "cards_student_cards_list_print_batches"
+    ]
   },
   {
     "key": "cards_student_cards_cards_print_report",
@@ -16736,7 +17565,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحرير خلفية بطاقة الطالب، عامة بصلاحية مدير النظام أو مخصّصة لكلية بصلاحية مسؤولها"
+    "description_ar": "تحرير خلفية بطاقة الطالب، عامة بصلاحية مدير النظام أو مخصّصة لكلية بصلاحية مسؤولها",
+    "depends_on": [
+      "cards_student_cards_get_back_settings"
+    ]
   },
   {
     "key": "cards_student_cards_reset_faculty_back_settings",
@@ -16760,7 +17592,10 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء تخصيص خلفية بطاقة الطالب لكلية والعودة إلى الإعداد العام"
+    "description_ar": "إلغاء تخصيص خلفية بطاقة الطالب لكلية والعودة إلى الإعداد العام",
+    "depends_on": [
+      "cards_student_cards_get_back_settings"
+    ]
   },
   {
     "key": "cards_student_cards_back_preview",
@@ -16926,7 +17761,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تسجيل عذر غياب لطالب عن محاضرات أو فترة محددة مع بيان سببه ليُراجع ويُعتمد"
+    "description_ar": "تسجيل عذر غياب لطالب عن محاضرات أو فترة محددة مع بيان سببه ليُراجع ويُعتمد",
+    "depends_on": [
+      "attendance_student_excuses_search_students"
+    ]
   },
   {
     "key": "attendance_student_excuses_my_excuses",
@@ -16973,7 +17811,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء عذر غياب سبق تقديمه قبل البت فيه من الجهة المختصة"
+    "description_ar": "إلغاء عذر غياب سبق تقديمه قبل البت فيه من الجهة المختصة",
+    "depends_on": [
+      "attendance_student_excuses_my_excuses"
+    ]
   },
   {
     "key": "attendance_student_excuses_add_attachments",
@@ -17104,7 +17945,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اتخاذ قرار قبول أو رفض عذر غياب طالب، فيُحتسب غيابه مبررًا عند القبول"
+    "description_ar": "اتخاذ قرار قبول أو رفض عذر غياب طالب، فيُحتسب غيابه مبررًا عند القبول",
+    "depends_on": [
+      "attendance_student_excuses_get_excuse"
+    ]
   },
   {
     "key": "reports_student_report_student_detailed_report",
@@ -17142,7 +17986,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير التقرير التفصيلي لطالب إلى ملف، إما تفصيليًا بكل المحاضرات أو ملخصًا بجدول واحد لكل المقررات"
+    "description_ar": "تصدير التقرير التفصيلي لطالب إلى ملف، إما تفصيليًا بكل المحاضرات أو ملخصًا بجدول واحد لكل المقررات",
+    "depends_on": [
+      "reports_student_report_student_detailed_report"
+    ]
   },
   {
     "key": "students_student_status_bulk_change_status",
@@ -17161,7 +18008,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تغيير حالة مجموعة طلاب دفعة واحدة، كالتجميد أو الفصل أو الإعادة"
+    "description_ar": "تغيير حالة مجموعة طلاب دفعة واحدة، كالتجميد أو الفصل أو الإعادة",
+    "depends_on": [
+      "students_student_status_list_students_by_status"
+    ]
   },
   {
     "key": "students_student_status_change_student_status",
@@ -17256,7 +18106,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة طالب غير مستمر إلى الحالة النشطة مع اختيار مستواه وشعبته"
+    "description_ar": "إعادة طالب غير مستمر إلى الحالة النشطة مع اختيار مستواه وشعبته",
+    "depends_on": [
+      "students_student_status_get_available_sections",
+      "students_student_status_list_students_by_status"
+    ]
   },
   {
     "key": "students_student_status_get_available_sections",
@@ -17454,7 +18308,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات طالب مسجل، كاسمه وقسمه ومستواه وشعبته ومعلومات التواصل"
+    "description_ar": "تعديل بيانات طالب مسجل، كاسمه وقسمه ومستواه وشعبته ومعلومات التواصل",
+    "depends_on": [
+      "students_students_get_student",
+      "students_students_get_students"
+    ]
   },
   {
     "key": "students_students_delete_student",
@@ -17473,7 +18331,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف طالب محدد من النظام بحسب معرّفه مع سجلاته المرتبطة"
+    "description_ar": "حذف طالب محدد من النظام بحسب معرّفه مع سجلاته المرتبطة",
+    "depends_on": [
+      "students_students_get_student",
+      "students_students_get_students"
+    ]
   },
   {
     "key": "curriculum_study_plans_get_study_plan",
@@ -17546,7 +18408,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء الخطة الدراسية لمقرر أو تحديثها بمواضيعها الأسبوعية"
+    "description_ar": "إنشاء الخطة الدراسية لمقرر أو تحديثها بمواضيعها الأسبوعية",
+    "depends_on": [
+      "curriculum_study_plans_get_study_plan"
+    ]
   },
   {
     "key": "curriculum_study_plans_get_study_plan_template",
@@ -17658,7 +18523,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "اعتماد الخطة الدراسية للمقرر من الأدمن، واستبدال الخطة الأصلية بالمعلقة إن وُجدت"
+    "description_ar": "اعتماد الخطة الدراسية للمقرر من الأدمن، واستبدال الخطة الأصلية بالمعلقة إن وُجدت",
+    "depends_on": [
+      "curriculum_study_plans_get_study_plan"
+    ]
   },
   {
     "key": "curriculum_study_plans_unapprove_study_plan",
@@ -17686,7 +18554,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء اعتماد الخطة الدراسية للمقرر من الأدمن فتختفي عن الطلاب"
+    "description_ar": "إلغاء اعتماد الخطة الدراسية للمقرر من الأدمن فتختفي عن الطلاب",
+    "depends_on": [
+      "curriculum_study_plans_get_study_plan"
+    ]
   },
   {
     "key": "curriculum_study_plans_reject_pending_study_plan",
@@ -17714,7 +18585,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "رفض الخطة الدراسية المعلّقة التي رفعها المعلم لمقرر، ويتاح هذا الإجراء للأدمن فقط"
+    "description_ar": "رفض الخطة الدراسية المعلّقة التي رفعها المعلم لمقرر، ويتاح هذا الإجراء للأدمن فقط",
+    "depends_on": [
+      "curriculum_study_plans_get_study_plan"
+    ]
   },
   {
     "key": "curriculum_study_plans_confirm_study_plan_topics",
@@ -17742,7 +18616,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تأكيد المعلم يدويًا إكمال مواضيع ماضية من الخطة الدراسية للمقرر"
+    "description_ar": "تأكيد المعلم يدويًا إكمال مواضيع ماضية من الخطة الدراسية للمقرر",
+    "depends_on": [
+      "curriculum_study_plans_get_study_plan"
+    ]
   },
   {
     "key": "curriculum_study_plans_study_plans_overview",
@@ -17848,7 +18725,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ سياسة احتساب النصاب والساعات الإضافية لكلية محددة، كحد النصاب وسعر الساعة"
+    "description_ar": "حفظ سياسة احتساب النصاب والساعات الإضافية لكلية محددة، كحد النصاب وسعر الساعة",
+    "depends_on": [
+      "teaching_load_teacher_overtime_list_policies"
+    ]
   },
   {
     "key": "teaching_load_teacher_overtime_delete_policy",
@@ -17867,7 +18747,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف سياسة النصاب الخاصة بكلية وإعادتها إلى الإعداد الافتراضي العام"
+    "description_ar": "حذف سياسة النصاب الخاصة بكلية وإعادتها إلى الإعداد الافتراضي العام",
+    "depends_on": [
+      "teaching_load_teacher_overtime_list_policies"
+    ]
   },
   {
     "key": "teaching_load_teacher_overtime_get_workload_exceptions",
@@ -17905,7 +18788,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ قائمة المقررات المستثناة مؤقتًا من احتساب النصاب لفترة التقرير الحالية"
+    "description_ar": "حفظ قائمة المقررات المستثناة مؤقتًا من احتساب النصاب لفترة التقرير الحالية",
+    "depends_on": [
+      "teaching_load_teacher_overtime_get_workload_exceptions"
+    ]
   },
   {
     "key": "teaching_load_teacher_overtime_export_sheet_pdf",
@@ -18095,7 +18981,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف معلم محدد من النظام بحسب معرّفه مع سجلاته المرتبطة"
+    "description_ar": "حذف معلم محدد من النظام بحسب معرّفه مع سجلاته المرتبطة",
+    "depends_on": [
+      "teachers_teachers_get_teacher",
+      "teachers_teachers_get_teachers"
+    ]
   },
   {
     "key": "teaching_load_teaching_load_get_teaching_loads",
@@ -18158,7 +19048,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إضافة عبء تدريسي جديد بإسناد مقرر إلى معلم وتحديد ساعاته الأسبوعية"
+    "description_ar": "إضافة عبء تدريسي جديد بإسناد مقرر إلى معلم وتحديد ساعاته الأسبوعية",
+    "depends_on": [
+      "teaching_load_teaching_load_search_courses_for_load"
+    ]
   },
   {
     "key": "teaching_load_teaching_load_update_teaching_load",
@@ -18186,7 +19079,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل عبء تدريسي قائم، كالمعلم المسند إليه أو المقرر أو الساعات الأسبوعية"
+    "description_ar": "تعديل عبء تدريسي قائم، كالمعلم المسند إليه أو المقرر أو الساعات الأسبوعية",
+    "depends_on": [
+      "teaching_load_teaching_load_get_teaching_loads"
+    ]
   },
   {
     "key": "teaching_load_teaching_load_delete_teaching_load",
@@ -18214,7 +19110,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف عبء تدريسي محدد بعد التحقق من تبعية المقرر لقسم المستخدم أو كليته"
+    "description_ar": "حذف عبء تدريسي محدد بعد التحقق من تبعية المقرر لقسم المستخدم أو كليته",
+    "depends_on": [
+      "teaching_load_teaching_load_get_teaching_loads"
+    ]
   },
   {
     "key": "teaching_load_teaching_load_get_teacher_courses_for_load",
@@ -18312,7 +19211,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ مجموعة من سجلات العبء التدريسي دفعة واحدة بدل إدخالها فرديًا"
+    "description_ar": "حفظ مجموعة من سجلات العبء التدريسي دفعة واحدة بدل إدخالها فرديًا",
+    "depends_on": [
+      "teaching_load_teaching_load_search_courses_for_load"
+    ]
   },
   {
     "key": "teaching_load_teaching_load_cleanup_orphan_teaching_loads",
@@ -18585,7 +19487,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تطبيق قالب إسنادات محفوظ على فصل دراسي مستهدف لإنشاء الأعباء التدريسية دفعة واحدة"
+    "description_ar": "تطبيق قالب إسنادات محفوظ على فصل دراسي مستهدف لإنشاء الأعباء التدريسية دفعة واحدة",
+    "depends_on": [
+      "teaching_load_teaching_load_list_templates"
+    ]
   },
   {
     "key": "teaching_load_teaching_load_delete_template",
@@ -18613,7 +19518,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قالب إسنادات تدريسية محفوظ بحسب معرّفه من قائمة القوالب"
+    "description_ar": "حذف قالب إسنادات تدريسية محفوظ بحسب معرّفه من قائمة القوالب",
+    "depends_on": [
+      "teaching_load_teaching_load_list_templates"
+    ]
   },
   {
     "key": "system_users_users_create_user",
@@ -18670,7 +19578,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف حساب مستخدم محدد من النظام بحسب معرّفه"
+    "description_ar": "حذف حساب مستخدم محدد من النظام بحسب معرّفه",
+    "depends_on": [
+      "system_users_users_get_users"
+    ]
   },
   {
     "key": "system_users_users_update_user",
@@ -18689,7 +19600,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مستخدم قائم، كاسمه وبريده ودوره ونطاق صلاحياته"
+    "description_ar": "تعديل بيانات مستخدم قائم، كاسمه وبريده ودوره ونطاق صلاحياته",
+    "depends_on": [
+      "system_users_users_get_users"
+    ]
   },
   {
     "key": "system_users_users_reset_user_password",
@@ -18708,7 +19622,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة تعيين كلمة مرور مستخدم محدد عند نسيانها أو فقدان الوصول إلى حسابه"
+    "description_ar": "إعادة تعيين كلمة مرور مستخدم محدد عند نسيانها أو فقدان الوصول إلى حسابه",
+    "depends_on": [
+      "system_users_users_get_users"
+    ]
   },
   {
     "key": "system_users_users_toggle_user_active",
@@ -18727,7 +19644,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تفعيل حساب مستخدم أو إيقافه دون حذفه، للتحكم في قدرته على الدخول"
+    "description_ar": "تفعيل حساب مستخدم أو إيقافه دون حذفه، للتحكم في قدرته على الدخول",
+    "depends_on": [
+      "system_users_users_get_users"
+    ]
   },
   {
     "key": "notifications_weekly_digest_list_digests",
@@ -18765,7 +19685,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "عرض أو تنزيل ملف ملخص أسبوعي محدد بحسب معرّفه"
+    "description_ar": "عرض أو تنزيل ملف ملخص أسبوعي محدد بحسب معرّفه",
+    "depends_on": [
+      "notifications_weekly_digest_list_digests"
+    ]
   },
   {
     "key": "notifications_weekly_digest_send_now",
@@ -19000,7 +19923,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات قاعة دراسية قائمة، كاسمها وسعتها وحالتها"
+    "description_ar": "تعديل بيانات قاعة دراسية قائمة، كاسمها وسعتها وحالتها",
+    "depends_on": [
+      "schedule_weekly_schedule_get_rooms"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_delete_room",
@@ -19035,7 +19961,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قاعة دراسية محددة من النظام بحسب معرّفها"
+    "description_ar": "حذف قاعة دراسية محددة من النظام بحسب معرّفها",
+    "depends_on": [
+      "schedule_weekly_schedule_get_rooms"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_get_schedule_settings",
@@ -19089,7 +20018,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل إعدادات الجدول الأسبوعي العامة، كمدة المحاضرة وقواعد التجدول المعتمدة"
+    "description_ar": "تعديل إعدادات الجدول الأسبوعي العامة، كمدة المحاضرة وقواعد التجدول المعتمدة",
+    "depends_on": [
+      "schedule_weekly_schedule_get_schedule_settings"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_save_time_slots",
@@ -19124,7 +20056,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ الفترات الزمنية للمحاضرات في الجدول الأسبوعي بتحديد وقتي بداية كل فترة ونهايتها"
+    "description_ar": "حفظ الفترات الزمنية للمحاضرات في الجدول الأسبوعي بتحديد وقتي بداية كل فترة ونهايتها",
+    "depends_on": [
+      "schedule_weekly_schedule_get_schedule_settings"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_save_working_days",
@@ -19159,7 +20094,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ أيام العمل المعتمدة في الجدول الأسبوعي لكلية محددة أو بشكل عام"
+    "description_ar": "حفظ أيام العمل المعتمدة في الجدول الأسبوعي لكلية محددة أو بشكل عام",
+    "depends_on": [
+      "schedule_weekly_schedule_get_schedule_settings"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_list_teacher_preferences_summary",
@@ -19257,7 +20195,11 @@
     ],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حفظ تعديلات تفضيلات التجدول لمعلم محدد، كالأيام والفترات التي يفضلها أو يتجنبها"
+    "description_ar": "حفظ تعديلات تفضيلات التجدول لمعلم محدد، كالأيام والفترات التي يفضلها أو يتجنبها",
+    "depends_on": [
+      "schedule_weekly_schedule_get_teacher_preferences",
+      "schedule_weekly_schedule_list_teacher_preferences_summary"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_get_schedule_sections",
@@ -19349,7 +20291,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إضافة خانة محاضرة جديدة في الجدول الأسبوعي بتحديد المقرر والأستاذ والقاعة والوقت"
+    "description_ar": "إضافة خانة محاضرة جديدة في الجدول الأسبوعي بتحديد المقرر والأستاذ والقاعة والوقت",
+    "depends_on": [
+      "schedule_weekly_schedule_get_weekly_schedule"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_update_schedule_slot",
@@ -19440,7 +20385,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل خانة محاضرة في الجدول الأسبوعي، كالمقرر أو الأستاذ أو القاعة أو الوقت"
+    "description_ar": "تعديل خانة محاضرة في الجدول الأسبوعي، كالمقرر أو الأستاذ أو القاعة أو الوقت",
+    "depends_on": [
+      "schedule_weekly_schedule_get_weekly_schedule"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_apply_rebalance",
@@ -19633,7 +20581,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "فك دمج مقرر مشترك بفصل قسم أو مستوى أو شعبة إلى مقرر مستقل بخاناته وطلابه"
+    "description_ar": "فك دمج مقرر مشترك بفصل قسم أو مستوى أو شعبة إلى مقرر مستقل بخاناته وطلابه",
+    "depends_on": [
+      "schedule_weekly_schedule_get_course_shared_details"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_shared_links_integrity",
@@ -19703,7 +20654,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة مزامنة روابط المقررات المشتركة من خانات الجدول مع إزالة الروابط اليتيمة"
+    "description_ar": "إعادة مزامنة روابط المقررات المشتركة من خانات الجدول مع إزالة الروابط اليتيمة",
+    "depends_on": [
+      "schedule_weekly_schedule_shared_links_integrity"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_delete_schedule_slot",
@@ -19738,7 +20692,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف خانة محاضرة محددة من الجدول الأسبوعي بحسب معرّفها"
+    "description_ar": "حذف خانة محاضرة محددة من الجدول الأسبوعي بحسب معرّفها",
+    "depends_on": [
+      "schedule_weekly_schedule_get_weekly_schedule"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_clear_schedule",
@@ -19773,7 +20730,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "مسح الجدول الأسبوعي بالكامل أو جدول كلية أو قسم محدد دفعة واحدة"
+    "description_ar": "مسح الجدول الأسبوعي بالكامل أو جدول كلية أو قسم محدد دفعة واحدة",
+    "depends_on": [
+      "schedule_weekly_schedule_get_weekly_schedule"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_auto_generate_schedule",
@@ -19913,7 +20873,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف نسخة احتياطية محفوظة من الجدول بحسب معرّفها"
+    "description_ar": "حذف نسخة احتياطية محفوظة من الجدول بحسب معرّفها",
+    "depends_on": [
+      "schedule_weekly_schedule_list_drafts"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_restore_draft",
@@ -19948,7 +20911,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استرجاع نسخة محفوظة لتحل محل الجدول الحالي ضمن النطاق نفسه"
+    "description_ar": "استرجاع نسخة محفوظة لتحل محل الجدول الحالي ضمن النطاق نفسه",
+    "depends_on": [
+      "schedule_weekly_schedule_list_drafts"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_compare_draft",
@@ -19983,7 +20949,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "مقارنة نسخة محفوظة بالجدول الحالي خانة بخانة لإظهار الفروق الفعلية بينهما"
+    "description_ar": "مقارنة نسخة محفوظة بالجدول الحالي خانة بخانة لإظهار الفروق الفعلية بينهما",
+    "depends_on": [
+      "schedule_weekly_schedule_list_drafts"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_export_visual_pdf",
@@ -20002,7 +20971,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير الجدول الأسبوعي بصيغة PDF بتصميم بصري احترافي بحسب الفلاتر المحددة"
+    "description_ar": "تصدير الجدول الأسبوعي بصيغة PDF بتصميم بصري احترافي بحسب الفلاتر المحددة",
+    "depends_on": [
+      "schedule_weekly_schedule_get_weekly_schedule"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_export_visual_excel",
@@ -20021,7 +20993,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير الجدول الأسبوعي إلى Excel بحسب الفلاتر نفسها المستخدمة في تصدير PDF"
+    "description_ar": "تصدير الجدول الأسبوعي إلى Excel بحسب الفلاتر نفسها المستخدمة في تصدير PDF",
+    "depends_on": [
+      "schedule_weekly_schedule_get_weekly_schedule"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_rooms_availability",
@@ -20395,7 +21370,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "نقل محاضرة إلى خلية فارغة بيوم وفترة جديدين مع فحص كامل للتعارضات"
+    "description_ar": "نقل محاضرة إلى خلية فارغة بيوم وفترة جديدين مع فحص كامل للتعارضات",
+    "depends_on": [
+      "schedule_weekly_schedule_get_valid_slots"
+    ]
   },
   {
     "key": "schedule_weekly_schedule_swap_schedule_slots",
@@ -20625,7 +21603,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف حساب مستخدم محدد من النظام عبر واجهة API بحسب معرّفه"
+    "description_ar": "حذف حساب مستخدم محدد من النظام عبر واجهة API بحسب معرّفه",
+    "depends_on": [
+      "system_users_ser_get_users"
+    ]
   },
   {
     "key": "system_tools_ser_admin_find_user_by_username",
@@ -20709,7 +21690,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مستخدم قائم عبر واجهة API، كاسمه وبريده ودوره"
+    "description_ar": "تعديل بيانات مستخدم قائم عبر واجهة API، كاسمه وبريده ودوره",
+    "depends_on": [
+      "system_users_ser_get_users"
+    ]
   },
   {
     "key": "system_users_ser_reset_user_password",
@@ -20737,7 +21721,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة تعيين كلمة مرور مستخدم محدد عبر واجهة API عند نسيانها"
+    "description_ar": "إعادة تعيين كلمة مرور مستخدم محدد عبر واجهة API عند نسيانها",
+    "depends_on": [
+      "system_users_ser_get_users"
+    ]
   },
   {
     "key": "system_users_ser_toggle_user_active",
@@ -20772,7 +21759,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تفعيل حساب مستخدم أو إيقافه عبر واجهة API دون حذفه، للتحكم في قدرته على الدخول"
+    "description_ar": "تفعيل حساب مستخدم أو إيقافه عبر واجهة API دون حذفه، للتحكم في قدرته على الدخول",
+    "depends_on": [
+      "system_users_ser_get_users"
+    ]
   },
   {
     "key": "system_users_ser_get_all_roles",
@@ -20819,7 +21809,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إنشاء دور جديد عبر واجهة API وتحديد الصلاحيات الممنوحة لمن يُسند إليه"
+    "description_ar": "إنشاء دور جديد عبر واجهة API وتحديد الصلاحيات الممنوحة لمن يُسند إليه",
+    "depends_on": [
+      "system_users_ser_get_all_permissions"
+    ]
   },
   {
     "key": "system_users_ser_get_role",
@@ -20866,7 +21859,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل دور قائم عبر واجهة API، كاسمه ووصفه والصلاحيات الممنوحة له"
+    "description_ar": "تعديل دور قائم عبر واجهة API، كاسمه ووصفه والصلاحيات الممنوحة له",
+    "depends_on": [
+      "system_users_ser_get_all_permissions",
+      "system_users_ser_get_all_roles",
+      "system_users_ser_get_role"
+    ]
   },
   {
     "key": "system_users_ser_delete_role",
@@ -20894,7 +21892,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف دور محدد من النظام بحسب معرّفه فلا يعود متاحًا للإسناد"
+    "description_ar": "حذف دور محدد من النظام بحسب معرّفه فلا يعود متاحًا للإسناد",
+    "depends_on": [
+      "system_users_ser_get_all_roles",
+      "system_users_ser_get_role"
+    ]
   },
   {
     "key": "system_users_ser_create_hr_role_presets",
@@ -21026,7 +22028,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إسناد دور محدد إلى مستخدم ليحصل على الصلاحيات المرتبطة بذلك الدور"
+    "description_ar": "إسناد دور محدد إلى مستخدم ليحصل على الصلاحيات المرتبطة بذلك الدور",
+    "depends_on": [
+      "system_users_ser_get_all_roles",
+      "system_users_ser_get_users"
+    ]
   },
   {
     "key": "system_users_ser_reset_user_permissions",
@@ -21061,7 +22067,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إعادة صلاحيات المستخدم إلى الافتراضية بحسب دوره، بإلغاء ما أُضيف له يدويًا"
+    "description_ar": "إعادة صلاحيات المستخدم إلى الافتراضية بحسب دوره، بإلغاء ما أُضيف له يدويًا",
+    "depends_on": [
+      "system_users_ser_get_user_permissions_endpoint"
+    ]
   },
   {
     "key": "system_users_ser_update_user_custom_permissions",
@@ -21089,7 +22098,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "منح مستخدم صلاحيات إضافية فردية فوق صلاحيات دوره دون المساس بدوره أو صلاحياته الأصلية"
+    "description_ar": "منح مستخدم صلاحيات إضافية فردية فوق صلاحيات دوره دون المساس بدوره أو صلاحياته الأصلية",
+    "depends_on": [
+      "system_users_ser_get_all_permissions",
+      "system_users_ser_get_user_permissions_endpoint"
+    ]
   },
   {
     "key": "academic_structure_ser_create_department",
@@ -21178,7 +22191,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف قسم أكاديمي محدد من الهيكل الأكاديمي بحسب معرّفه"
+    "description_ar": "حذف قسم أكاديمي محدد من الهيكل الأكاديمي بحسب معرّفه",
+    "depends_on": [
+      "academic_structure_ser_get_departments"
+    ]
   },
   {
     "key": "academic_structure_ser_update_department",
@@ -21213,7 +22229,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات قسم أكاديمي قائم، كاسمه والكلية التابع لها"
+    "description_ar": "تعديل بيانات قسم أكاديمي قائم، كاسمه والكلية التابع لها",
+    "depends_on": [
+      "academic_structure_ser_get_department_details",
+      "academic_structure_ser_get_departments"
+    ]
   },
   {
     "key": "academic_structure_ser_get_department_details",
@@ -21384,7 +22404,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعليم إشعار محدد بحسب معرّفه كمقروء بعد اطلاع المستخدم عليه"
+    "description_ar": "تعليم إشعار محدد بحسب معرّفه كمقروء بعد اطلاع المستخدم عليه",
+    "depends_on": [
+      "notifications_ser_get_notifications"
+    ]
   },
   {
     "key": "notifications_ser_mark_all_notifications_as_read",
@@ -21756,7 +22779,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف إشعار محدد أُرسل لطالب، ويتاح لمن يملك صلاحية إرسال الإشعارات"
+    "description_ar": "حذف إشعار محدد أُرسل لطالب، ويتاح لمن يملك صلاحية إرسال الإشعارات",
+    "depends_on": [
+      "students_ser_get_student_notifications"
+    ]
   },
   {
     "key": "students_ser_get_students_unread_notifications_counts",
@@ -21819,7 +22845,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تغيير المستوى الدراسي لمجموعة من الطلاب دفعة واحدة"
+    "description_ar": "تغيير المستوى الدراسي لمجموعة من الطلاب دفعة واحدة",
+    "depends_on": [
+      "students_ser_get_students"
+    ]
   },
   {
     "key": "students_ser_create_student",
@@ -21988,7 +23017,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استثناء طالب من مقرر غير مطالب به بفصل تسجيله ومنع إعادة تسجيله تلقائيًا"
+    "description_ar": "استثناء طالب من مقرر غير مطالب به بفصل تسجيله ومنع إعادة تسجيله تلقائيًا",
+    "depends_on": [
+      "students_ser_get_student_courses_admin"
+    ]
   },
   {
     "key": "students_ser_unexclude_student_from_course",
@@ -22030,7 +23062,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء استثناء طالب من مقرر وإعادة تسجيله فيه"
+    "description_ar": "إلغاء استثناء طالب من مقرر وإعادة تسجيله فيه",
+    "depends_on": [
+      "students_ser_get_student_courses_admin"
+    ]
   },
   {
     "key": "students_ser_get_student",
@@ -22131,7 +23166,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف طالب محدد من النظام بحسب معرّفه مع سجلاته المرتبطة"
+    "description_ar": "حذف طالب محدد من النظام بحسب معرّفه مع سجلاته المرتبطة",
+    "depends_on": [
+      "students_ser_get_student",
+      "students_ser_get_students"
+    ]
   },
   {
     "key": "students_ser_get_student_backup_info",
@@ -22201,7 +23240,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف طالب حذفًا آمنًا مع حفظ نسخة احتياطية من بياناته يمكن استعادتها"
+    "description_ar": "حذف طالب حذفًا آمنًا مع حفظ نسخة احتياطية من بياناته يمكن استعادتها",
+    "depends_on": [
+      "students_ser_get_student_backup_info"
+    ]
   },
   {
     "key": "students_ser_restore_student",
@@ -22264,7 +23306,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات طالب مسجل، كاسمه وقسمه ومستواه وشعبته ومعلومات التواصل"
+    "description_ar": "تعديل بيانات طالب مسجل، كاسمه وقسمه ومستواه وشعبته ومعلومات التواصل",
+    "depends_on": [
+      "students_ser_get_student",
+      "students_ser_get_students"
+    ]
   },
   {
     "key": "students_ser_activate_student_account",
@@ -22615,7 +23661,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات معلم مسجل، كاسمه وقسمه ومعلومات التواصل والبيانات الوظيفية"
+    "description_ar": "تعديل بيانات معلم مسجل، كاسمه وقسمه ومعلومات التواصل والبيانات الوظيفية",
+    "depends_on": [
+      "teachers_ser_get_teacher",
+      "teachers_ser_get_teachers"
+    ]
   },
   {
     "key": "teachers_ser_get_teacher_backup_info",
@@ -22685,7 +23735,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف معلم حذفًا آمنًا مع حفظ نسخة احتياطية من بياناته يمكن استعادتها"
+    "description_ar": "حذف معلم حذفًا آمنًا مع حفظ نسخة احتياطية من بياناته يمكن استعادتها",
+    "depends_on": [
+      "teachers_ser_get_teacher_backup_info"
+    ]
   },
   {
     "key": "teachers_ser_restore_teacher",
@@ -22755,7 +23808,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف معلم محدد من النظام بحسب معرّفه مع سجلاته المرتبطة"
+    "description_ar": "حذف معلم محدد من النظام بحسب معرّفه مع سجلاته المرتبطة",
+    "depends_on": [
+      "teachers_ser_get_teacher",
+      "teachers_ser_get_teachers"
+    ]
   },
   {
     "key": "teachers_ser_activate_teacher_account",
@@ -22895,7 +23952,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنفيذ إجراء جماعي على معلمين: تفعيل أو إلغاء تفعيل أو إعادة كلمة المرور أو حذف آمن أو إضافة قسم"
+    "description_ar": "تنفيذ إجراء جماعي على معلمين: تفعيل أو إلغاء تفعيل أو إعادة كلمة المرور أو حذف آمن أو إضافة قسم",
+    "depends_on": [
+      "teachers_ser_get_teachers"
+    ]
   },
   {
     "key": "teachers_ser_export_selected_teachers",
@@ -22930,7 +23990,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير بيانات المعلمين المحددين إلى ملف Excel"
+    "description_ar": "تصدير بيانات المعلمين المحددين إلى ملف Excel",
+    "depends_on": [
+      "teachers_ser_get_teachers"
+    ]
   },
   {
     "key": "teachers_ser_export_selected_teachers_pdf",
@@ -22965,7 +24028,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير بيانات المعلمين المحددين إلى ملف PDF"
+    "description_ar": "تصدير بيانات المعلمين المحددين إلى ملف PDF",
+    "depends_on": [
+      "teachers_ser_get_teachers"
+    ]
   },
   {
     "key": "system_users_ser_change_password",
@@ -23263,7 +24329,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مقرر حذفًا آمنًا بإرجاع نسخة احتياطية ثم حذف المقرر وكل بياناته المرتبطة"
+    "description_ar": "حذف مقرر حذفًا آمنًا بإرجاع نسخة احتياطية ثم حذف المقرر وكل بياناته المرتبطة",
+    "depends_on": [
+      "courses_ser_get_course_backup_info"
+    ]
   },
   {
     "key": "courses_ser_restore_course",
@@ -23326,7 +24395,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف مقرر محدد من النظام بحسب معرّفه"
+    "description_ar": "حذف مقرر محدد من النظام بحسب معرّفه",
+    "depends_on": [
+      "courses_ser_get_course",
+      "courses_ser_get_courses"
+    ]
   },
   {
     "key": "enrollments_ser_bulk_copy_students",
@@ -23445,7 +24518,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "نقل مجموعة طلاب من مقرر إلى مقرر آخر بإلغاء تسجيلهم في الأول وتسجيلهم في الثاني"
+    "description_ar": "نقل مجموعة طلاب من مقرر إلى مقرر آخر بإلغاء تسجيلهم في الأول وتسجيلهم في الثاني",
+    "depends_on": [
+      "enrollments_ser_get_courses_of_students"
+    ]
   },
   {
     "key": "enrollments_ser_get_course_enrollments",
@@ -23646,7 +24722,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إلغاء تسجيل طالب محدد من مقرر معين"
+    "description_ar": "إلغاء تسجيل طالب محدد من مقرر معين",
+    "depends_on": [
+      "enrollments_ser_get_course_enrollments"
+    ]
   },
   {
     "key": "enrollments_ser_import_enrollments_excel",
@@ -23770,7 +24849,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات مقرر قائم، كاسمه وكوده وقسمه ومستواه وشعبته ومعلمه"
+    "description_ar": "تعديل بيانات مقرر قائم، كاسمه وكوده وقسمه ومستواه وشعبته ومعلمه",
+    "depends_on": [
+      "courses_ser_get_course",
+      "courses_ser_get_courses"
+    ]
   },
   {
     "key": "reports_ser_get_lesson_completion_report",
@@ -23826,7 +24909,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير إنجاز الدروس المخططة مقابل المنجزة إلى ملف Excel"
+    "description_ar": "تصدير تقرير إنجاز الدروس المخططة مقابل المنجزة إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_lesson_completion_report"
+    ]
   },
   {
     "key": "reports_ser_get_lesson_completion_comparison",
@@ -23910,7 +24996,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعبئة حقل الشعبة الفارغ في المقررات من اسم المقرر أو من المقررات الشقيقة له"
+    "description_ar": "تعبئة حقل الشعبة الفارغ في المقررات من اسم المقرر أو من المقررات الشقيقة له",
+    "depends_on": [
+      "system_tools_ser_preview_backfill_sections"
+    ]
   },
   {
     "key": "schedule_ser_get_today_lectures",
@@ -24228,7 +25317,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات محاضرة قائمة، كتاريخها ووقتها وقاعتها"
+    "description_ar": "تعديل بيانات محاضرة قائمة، كتاريخها ووقتها وقاعتها",
+    "depends_on": [
+      "schedule_ser_get_course_lectures"
+    ]
   },
   {
     "key": "schedule_ser_delete_lecture",
@@ -24263,7 +25355,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف محاضرة محددة من جدول المحاضرات بحسب معرّفها"
+    "description_ar": "حذف محاضرة محددة من جدول المحاضرات بحسب معرّفها",
+    "depends_on": [
+      "schedule_ser_get_course_lectures"
+    ]
   },
   {
     "key": "system_tools_ser_preview_orphan_attendance",
@@ -24319,7 +25414,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف سجلات الحضور اليتيمة التي فقدت ارتباطها بمحاضرة أو طالب من النظام"
+    "description_ar": "حذف سجلات الحضور اليتيمة التي فقدت ارتباطها بمحاضرة أو طالب من النظام",
+    "depends_on": [
+      "system_tools_ser_preview_orphan_attendance"
+    ]
   },
   {
     "key": "system_tools_ser_preview_ghost_completions",
@@ -24375,7 +25473,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تنظيف الإنجازات الوهمية وإعادة المحاضرات والمواضيع المؤكدة إلى وضعها الصحيح"
+    "description_ar": "تنظيف الإنجازات الوهمية وإعادة المحاضرات والمواضيع المؤكدة إلى وضعها الصحيح",
+    "depends_on": [
+      "system_tools_ser_preview_ghost_completions"
+    ]
   },
   {
     "key": "schedule_ser_change_lecture_room",
@@ -25060,7 +26161,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير ملخص المعلم ومقرراته ونسب الحضور إلى ملف Excel"
+    "description_ar": "تصدير تقرير ملخص المعلم ومقرراته ونسب الحضور إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_teacher_summary_report"
+    ]
   },
   {
     "key": "reports_ser_get_teacher_delays_report",
@@ -25116,7 +26220,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير تأخر المعلمين في بدء التحضير بصيغة PDF احترافية"
+    "description_ar": "تصدير تقرير تأخر المعلمين في بدء التحضير بصيغة PDF احترافية",
+    "depends_on": [
+      "reports_ser_get_teacher_delays_report"
+    ]
   },
   {
     "key": "reports_ser_export_attendance_overview_pdf",
@@ -25144,7 +26251,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير الحضور الشامل بنسب الحضور لجميع المقررات بصيغة PDF"
+    "description_ar": "تصدير تقرير الحضور الشامل بنسب الحضور لجميع المقررات بصيغة PDF",
+    "depends_on": [
+      "reports_ser_get_attendance_overview_report"
+    ]
   },
   {
     "key": "reports_ser_export_warnings_pdf",
@@ -25172,7 +26282,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير الإنذارات والطلاب المرشحين للحرمان بصيغة PDF"
+    "description_ar": "تصدير تقرير الإنذارات والطلاب المرشحين للحرمان بصيغة PDF",
+    "depends_on": [
+      "reports_ser_get_warnings_report"
+    ]
   },
   {
     "key": "reports_ser_export_absent_students_pdf",
@@ -25200,7 +26313,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير الطلاب المتغيبين الذين تجاوزوا نسبة غياب معينة بصيغة PDF"
+    "description_ar": "تصدير تقرير الطلاب المتغيبين الذين تجاوزوا نسبة غياب معينة بصيغة PDF",
+    "depends_on": [
+      "reports_ser_get_absent_students_report"
+    ]
   },
   {
     "key": "reports_ser_export_daily_pdf",
@@ -25228,7 +26344,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير التقرير اليومي بملخص الحضور ليوم محدد بصيغة PDF"
+    "description_ar": "تصدير التقرير اليومي بملخص الحضور ليوم محدد بصيغة PDF",
+    "depends_on": [
+      "reports_ser_get_daily_report"
+    ]
   },
   {
     "key": "reports_ser_export_course_detailed_pdf",
@@ -25256,7 +26375,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير التقرير التفصيلي لمقرر محدد بصيغة PDF لطباعته أو أرشفته"
+    "description_ar": "تصدير التقرير التفصيلي لمقرر محدد بصيغة PDF لطباعته أو أرشفته",
+    "depends_on": [
+      "reports_ser_get_course_detailed_report"
+    ]
   },
   {
     "key": "reports_ser_export_teacher_summary_pdf",
@@ -25284,7 +26406,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير ملخص المعلم ومقرراته ونسب الحضور بصيغة PDF"
+    "description_ar": "تصدير ملخص المعلم ومقرراته ونسب الحضور بصيغة PDF",
+    "depends_on": [
+      "reports_ser_get_teacher_summary_report"
+    ]
   },
   {
     "key": "reports_ser_export_teacher_delays_report",
@@ -25312,7 +26437,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير تأخر المعلمين في بدء التحضير إلى ملف Excel"
+    "description_ar": "تصدير تقرير تأخر المعلمين في بدء التحضير إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_teacher_delays_report"
+    ]
   },
   {
     "key": "reports_ser_get_teacher_attendance_report",
@@ -25382,7 +26510,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير حضور الأساتذة وتنفيذ محاضراتهم إلى ملف Excel"
+    "description_ar": "تصدير تقرير حضور الأساتذة وتنفيذ محاضراتهم إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_teacher_attendance_report"
+    ]
   },
   {
     "key": "reports_ser_export_teacher_attendance_pdf",
@@ -25417,7 +26548,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير حضور الأساتذة وتنفيذ محاضراتهم إلى ملف PDF"
+    "description_ar": "تصدير تقرير حضور الأساتذة وتنفيذ محاضراتهم إلى ملف PDF",
+    "depends_on": [
+      "reports_ser_get_teacher_attendance_report"
+    ]
   },
   {
     "key": "reports_ser_get_teacher_workload_report",
@@ -25464,7 +26598,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير الإنذارات والطلاب المرشحين للحرمان إلى ملف Excel"
+    "description_ar": "تصدير تقرير الإنذارات والطلاب المرشحين للحرمان إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_warnings_report"
+    ]
   },
   {
     "key": "reports_ser_export_absent_students_excel",
@@ -25492,7 +26629,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير الطلاب المتغيبين الذين تجاوزوا نسبة غياب معينة إلى ملف Excel"
+    "description_ar": "تصدير تقرير الطلاب المتغيبين الذين تجاوزوا نسبة غياب معينة إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_absent_students_report"
+    ]
   },
   {
     "key": "reports_ser_export_teacher_workload_pdf",
@@ -25511,7 +26651,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير نصاب المدرسين وساعاتهم الإضافية إلى ملف PDF احترافي"
+    "description_ar": "تصدير تقرير نصاب المدرسين وساعاتهم الإضافية إلى ملف PDF احترافي",
+    "depends_on": [
+      "reports_ser_get_teacher_workload_report"
+    ]
   },
   {
     "key": "reports_ser_export_teacher_workload_excel",
@@ -25539,7 +26682,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير نصاب المدرسين وساعاتهم الإضافية إلى ملف Excel"
+    "description_ar": "تصدير تقرير نصاب المدرسين وساعاتهم الإضافية إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_teacher_workload_report"
+    ]
   },
   {
     "key": "reports_ser_export_daily_excel",
@@ -25567,7 +26713,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير التقرير اليومي بملخص الحضور ليوم محدد إلى ملف Excel"
+    "description_ar": "تصدير التقرير اليومي بملخص الحضور ليوم محدد إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_daily_report"
+    ]
   },
   {
     "key": "reports_ser_export_student_report_excel",
@@ -25595,7 +26744,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير حضور طالب محدد في جميع مقرراته إلى ملف Excel"
+    "description_ar": "تصدير تقرير حضور طالب محدد في جميع مقرراته إلى ملف Excel",
+    "depends_on": [
+      "reports_ser_get_student_attendance_report"
+    ]
   },
   {
     "key": "reports_ser_export_student_report_pdf",
@@ -25623,7 +26775,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تصدير تقرير حضور طالب محدد في جميع مقرراته إلى ملف PDF"
+    "description_ar": "تصدير تقرير حضور طالب محدد في جميع مقرراته إلى ملف PDF",
+    "depends_on": [
+      "reports_ser_get_student_attendance_report"
+    ]
   },
   {
     "key": "reports_ser_export_course_report_excel",
@@ -25796,7 +26951,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل موعد محدد في جدول المحاضرات، كيومه أو وقته أو مقرره"
+    "description_ar": "تعديل موعد محدد في جدول المحاضرات، كيومه أو وقته أو مقرره",
+    "depends_on": [
+      "schedule_ser_get_schedule"
+    ]
   },
   {
     "key": "schedule_ser_delete_schedule",
@@ -25831,7 +26989,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف موعد محدد من جدول المحاضرات بحسب معرّفه"
+    "description_ar": "حذف موعد محدد من جدول المحاضرات بحسب معرّفه",
+    "depends_on": [
+      "schedule_ser_get_schedule"
+    ]
   },
   {
     "key": "schedule_ser_get_today_schedule",
@@ -25904,7 +27065,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استيراد الطلاب من ملف Excel وتسجيلهم في مقرر محدد بحسب معرّفه"
+    "description_ar": "استيراد الطلاب من ملف Excel وتسجيلهم في مقرر محدد بحسب معرّفه",
+    "depends_on": [
+      "students_ser_preview_import_students"
+    ]
   },
   {
     "key": "general_tools_ser_import_students_from_excel",
@@ -25939,7 +27103,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استيراد بيانات الطلاب من ملف Excel لإضافتهم دفعة واحدة إلى النظام"
+    "description_ar": "استيراد بيانات الطلاب من ملف Excel لإضافتهم دفعة واحدة إلى النظام",
+    "depends_on": [
+      "general_tools_ser_get_students_template"
+    ]
   },
   {
     "key": "general_tools_ser_get_teachers_template",
@@ -26044,7 +27211,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استيراد محاضرات من ملف Excel وتوليد محاضراتها الأسبوعية تلقائيًا"
+    "description_ar": "استيراد محاضرات من ملف Excel وتوليد محاضراتها الأسبوعية تلقائيًا",
+    "depends_on": [
+      "general_tools_ser_get_lectures_template"
+    ]
   },
   {
     "key": "general_tools_ser_get_courses_template",
@@ -26114,7 +27284,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استيراد مقررات دراسية دفعة واحدة من ملف Excel إلى النظام"
+    "description_ar": "استيراد مقررات دراسية دفعة واحدة من ملف Excel إلى النظام",
+    "depends_on": [
+      "general_tools_ser_get_courses_template"
+    ]
   },
   {
     "key": "general_tools_ser_import_teachers_from_excel",
@@ -26149,7 +27322,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استيراد المعلمين من ملف Excel مع تفعيل حساباتهم تلقائيًا"
+    "description_ar": "استيراد المعلمين من ملف Excel مع تفعيل حساباتهم تلقائيًا",
+    "depends_on": [
+      "general_tools_ser_get_teachers_template"
+    ]
   },
   {
     "key": "reports_ser_export_students_to_excel",
@@ -26477,7 +27653,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات فصل دراسي قائم، كاسمه وتاريخي بدايته ونهايته"
+    "description_ar": "تعديل بيانات فصل دراسي قائم، كاسمه وتاريخي بدايته ونهايته",
+    "depends_on": [
+      "academic_structure_ser_get_all_semesters"
+    ]
   },
   {
     "key": "academic_structure_ser_activate_semester",
@@ -26512,7 +27691,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تفعيل فصل دراسي محدد وجعله الفصل الحالي المعتمد في النظام"
+    "description_ar": "تفعيل فصل دراسي محدد وجعله الفصل الحالي المعتمد في النظام",
+    "depends_on": [
+      "academic_structure_ser_get_all_semesters"
+    ]
   },
   {
     "key": "academic_structure_ser_close_semester",
@@ -26547,7 +27729,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "إغلاق فصل دراسي محدد بعد انتهائه فلا تُجرى عليه عمليات جديدة"
+    "description_ar": "إغلاق فصل دراسي محدد بعد انتهائه فلا تُجرى عليه عمليات جديدة",
+    "depends_on": [
+      "academic_structure_ser_get_all_semesters"
+    ]
   },
   {
     "key": "academic_structure_ser_archive_semester",
@@ -26582,7 +27767,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "أرشفة فصل دراسي بشكل شامل بحفظ بياناته ومقرراته وسجلاته في الأرشيف"
+    "description_ar": "أرشفة فصل دراسي بشكل شامل بحفظ بياناته ومقرراته وسجلاته في الأرشيف",
+    "depends_on": [
+      "academic_structure_ser_get_all_semesters"
+    ]
   },
   {
     "key": "academic_structure_ser_restore_semester_from_archive",
@@ -26671,7 +27859,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف فصل دراسي محدد، ولا يُسمح به إلا إذا لم يكن له مقررات"
+    "description_ar": "حذف فصل دراسي محدد، ولا يُسمح به إلا إذا لم يكن له مقررات",
+    "depends_on": [
+      "academic_structure_ser_get_all_semesters"
+    ]
   },
   {
     "key": "system_tools_ser_get_settings",
@@ -26725,7 +27916,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديث إعدادات النظام العامة، ويتاح للمدير فقط"
+    "description_ar": "تحديث إعدادات النظام العامة، ويتاح للمدير فقط",
+    "depends_on": [
+      "system_tools_ser_get_settings"
+    ]
   },
   {
     "key": "system_tools_ser_add_academic_year",
@@ -26861,7 +28055,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات المؤسسة الخاصة بالمستخدم الحالي، كاسمها وبيانات التواصل"
+    "description_ar": "تعديل بيانات المؤسسة الخاصة بالمستخدم الحالي، كاسمها وبيانات التواصل",
+    "depends_on": [
+      "academic_structure_ser_get_my_institution"
+    ]
   },
   {
     "key": "system_users_ser_get_available_permissions",
@@ -26950,7 +28147,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "منح صلاحية إضافية محددة لمستخدم معين"
+    "description_ar": "منح صلاحية إضافية محددة لمستخدم معين",
+    "depends_on": [
+      "system_users_ser_get_available_permissions",
+      "system_users_ser_get_user_permissions_endpoint_v2"
+    ]
   },
   {
     "key": "system_users_ser_delete_user_permission",
@@ -26985,7 +28186,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "سحب صلاحية محددة من مستخدم معين بحسب معرّف الصلاحية"
+    "description_ar": "سحب صلاحية محددة من مستخدم معين بحسب معرّف الصلاحية",
+    "depends_on": [
+      "system_users_ser_get_user_permissions_endpoint",
+      "system_users_ser_get_user_permissions_endpoint_v2"
+    ]
   },
   {
     "key": "system_users_ser_update_all_user_permissions",
@@ -27020,7 +28225,12 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استبدال جميع صلاحيات مستخدم محدد بالقائمة الجديدة المرسلة دفعة واحدة"
+    "description_ar": "استبدال جميع صلاحيات مستخدم محدد بالقائمة الجديدة المرسلة دفعة واحدة",
+    "depends_on": [
+      "system_users_ser_get_available_permissions",
+      "system_users_ser_get_user_permissions_endpoint",
+      "system_users_ser_get_user_permissions_endpoint_v2"
+    ]
   },
   {
     "key": "academic_structure_ser_get_university",
@@ -27159,7 +28369,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تحديث إعدادات كلية محددة، كالقواعد واللوائح الخاصة بها"
+    "description_ar": "تحديث إعدادات كلية محددة، كالقواعد واللوائح الخاصة بها",
+    "depends_on": [
+      "academic_structure_ser_get_faculty"
+    ]
   },
   {
     "key": "academic_structure_ser_create_faculty",
@@ -27215,7 +28428,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تعديل بيانات كلية قائمة، كاسمها ورمزها"
+    "description_ar": "تعديل بيانات كلية قائمة، كاسمها ورمزها",
+    "depends_on": [
+      "academic_structure_ser_get_faculties",
+      "academic_structure_ser_get_faculty"
+    ]
   },
   {
     "key": "academic_structure_ser_delete_faculty",
@@ -27243,7 +28460,11 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف كلية محددة من الهيكل الأكاديمي بحسب معرّفها"
+    "description_ar": "حذف كلية محددة من الهيكل الأكاديمي بحسب معرّفها",
+    "depends_on": [
+      "academic_structure_ser_get_faculties",
+      "academic_structure_ser_get_faculty"
+    ]
   },
   {
     "key": "system_tools_ser_fix_courses_without_semester",
@@ -27439,7 +28660,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف سجلات الأنشطة حسب الفلاتر المحددة أو كلها، ويتاح لمدير النظام فقط"
+    "description_ar": "حذف سجلات الأنشطة حسب الفلاتر المحددة أو كلها، ويتاح لمدير النظام فقط",
+    "depends_on": [
+      "system_tools_ser_get_activity_logs"
+    ]
   },
   {
     "key": "system_tools_ser_get_activity_logs_stats",
@@ -27591,7 +28815,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "استعادة عنصر محذوف من سلة المحذوفات وإعادته إلى النظام"
+    "description_ar": "استعادة عنصر محذوف من سلة المحذوفات وإعادته إلى النظام",
+    "depends_on": [
+      "system_tools_ser_get_trash_items"
+    ]
   },
   {
     "key": "system_tools_ser_permanent_delete_trash_item",
@@ -27640,7 +28867,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "حذف عنصر محدد من سلة المحذوفات حذفًا نهائيًا لا يمكن التراجع عنه"
+    "description_ar": "حذف عنصر محدد من سلة المحذوفات حذفًا نهائيًا لا يمكن التراجع عنه",
+    "depends_on": [
+      "system_tools_ser_get_trash_items"
+    ]
   },
   {
     "key": "system_tools_ser_clear_all_trash",
@@ -27689,7 +28919,10 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تفريغ سلة المحذوفات بالكامل وحذف جميع عناصرها نهائيًا"
+    "description_ar": "تفريغ سلة المحذوفات بالكامل وحذف جميع عناصرها نهائيًا",
+    "depends_on": [
+      "system_tools_ser_get_trash_items"
+    ]
   },
   {
     "key": "system_tools_ser_diagnose_roles",
@@ -27745,6 +28978,9 @@
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
     "is_active": true,
-    "description_ar": "تشغيل فوري لدمج الأدوار المكررة وإصلاح المستخدمين المرتبطين بها"
+    "description_ar": "تشغيل فوري لدمج الأدوار المكررة وإصلاح المستخدمين المرتبطين بها",
+    "depends_on": [
+      "system_tools_ser_diagnose_roles"
+    ]
   }
 ]

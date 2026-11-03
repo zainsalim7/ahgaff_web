@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator, TextInput, Platform, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { advancedAccessAPI } from '../../services/api';
 import { COLORS, OP_TYPE_LABELS } from './shared';
@@ -25,6 +25,11 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
   }, []);
 
   const selectedSet = new Set(selected);
+  const permByKey = useMemo(() => {
+    const m: { [k: string]: any } = {};
+    permissions.forEach(p => { m[p.key] = p; });
+    return m;
+  }, [permissions]);
   const byGroup = useMemo(() => {
     const m: { [k: string]: any[] } = {};
     permissions.forEach(p => {
@@ -35,7 +40,28 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
   }, [permissions, search]);
 
   const toggleOne = (key: string) => {
-    onChange(selectedSet.has(key) ? selected.filter(k => k !== key) : [...selected, key]);
+    if (selectedSet.has(key)) {
+      onChange(selected.filter(k => k !== key));
+      return;
+    }
+    const perm = permByKey[key];
+    const missingDeps: string[] = (perm?.depends_on || []).filter((dk: string) => !selectedSet.has(dk) && permByKey[dk]);
+    if (missingDeps.length === 0) {
+      onChange([...selected, key]);
+      return;
+    }
+    const depLabels = missingDeps.map(dk => permByKey[dk]?.label_ar).join('، ');
+    const message = `صلاحية "${perm.label_ar}" عادة ما تحتاج أيضًا: ${depLabels}. هل تريد تفعيلها معها؟`;
+    const addWithDeps = () => onChange(Array.from(new Set([...selected, key, ...missingDeps])));
+    const addAloneOnly = () => onChange([...selected, key]);
+    if (Platform.OS === 'web') {
+      if (window.confirm(message)) addWithDeps(); else addAloneOnly();
+      return;
+    }
+    Alert.alert('صلاحية مرتبطة', message, [
+      { text: 'لا، فعّل هذه فقط', style: 'cancel', onPress: addAloneOnly },
+      { text: 'نعم، فعّلهما أيضًا', onPress: addWithDeps },
+    ]);
   };
 
   const toggleGroup = (groupKey: string) => {

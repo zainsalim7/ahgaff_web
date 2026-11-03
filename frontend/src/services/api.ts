@@ -354,6 +354,10 @@ export const permissionsAPI = {
 };
 
 // 🧪 مركز الصلاحيات المتقدم (Advanced Access Control — SHADOW MODE، تجريبي ومستقل عن النظام أعلاه)
+export const correspondenceAPI = {
+  myAccess: () => api.get('/correspondence/me'),
+};
+
 export const advancedAccessAPI = {
   myAccess: () => api.get('/advanced-access/me/access'),
   myEffectiveAccess: () => api.get('/advanced-access/me/effective-access'),
