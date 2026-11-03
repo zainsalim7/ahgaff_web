@@ -27,7 +27,7 @@ import time as time_module
 
 # توقيت اليمن (عدن) UTC+3
 YEMEN_TIMEZONE = timezone(timedelta(hours=3))
-OFFLINE_SYNC_MAX_HOURS = 12  # 🔐 أقصى عمر لسجل تحضير أوفلاين قبل رفضه
+OFFLINE_SYNC_MAX_HOURS = 72  # 🔐 أقصى عمر لسجل تحضير أوفلاين قبل رفضه
 
 def get_yemen_time():
     """الحصول على الوقت الحالي بتوقيت اليمن (UTC+3)"""
@@ -11338,7 +11338,7 @@ async def record_attendance_session(
     lecture_start = lecture_start.replace(tzinfo=YEMEN_TIMEZONE)
     lecture_end = lecture_end.replace(tzinfo=YEMEN_TIMEZONE)
 
-    # 🔐 تسجيل أوفلاين: التحقق بوقت السيرفر — حد 12 ساعة + وجوب وقوع الوقت ضمن نافذة المحاضرة
+    # 🔐 تسجيل أوفلاين: التحقق بوقت السيرفر — حد OFFLINE_SYNC_MAX_HOURS ساعة + وجوب وقوع الوقت ضمن نافذة المحاضرة
     check_time = now
     is_offline_sync = False
     if session.offline_recorded_at:
@@ -12004,7 +12004,7 @@ async def sync_offline_attendance(
 
             lecture_id = record.get("lecture_id")
 
-            # 🔐 فحص زمني بوقت السيرفر: المحاضرة موجودة + بدأت فعلاً + لم تمضِ 12 ساعة على نهايتها
+            # 🔐 فحص زمني بوقت السيرفر: المحاضرة موجودة + بدأت فعلاً + لم تمضِ OFFLINE_SYNC_MAX_HOURS ساعة على نهايتها
             if not lecture_id:
                 errors.append("سجل بلا معرف محاضرة — مرفوض")
                 continue
