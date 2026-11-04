@@ -17,6 +17,8 @@ YEMEN_TZ = timezone(timedelta(hours=3))
 
 
 def _can_purge(u: dict) -> bool:
+    if u.get("advanced_access_real_enforcement"):
+        return True  # 🆕 الحارس العام (Layer 1) تحقق مسبقاً من وجود الصلاحية المتقدمة المطابقة قبل وصول الطلب هنا
     return u.get("role") == "admin" or "manage_lectures" in (u.get("permissions") or [])
 
 

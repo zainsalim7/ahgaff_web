@@ -188,6 +188,8 @@ def _fmt_offset(m: int) -> str:
 
 
 def _guard(user: dict):
+    if user.get("advanced_access_real_enforcement"):
+        return  # 🆕 الحارس العام (Layer 1) تحقق مسبقاً من وجود الصلاحية المتقدمة المطابقة قبل وصول الطلب هنا
     if not has_permission(user, PERM):
         raise HTTPException(status_code=403, detail="ليست لديك صلاحية «إزاحة اليوم الدراسي»")
 
