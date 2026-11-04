@@ -61,17 +61,7 @@ export default function ScheduleScreen() {
   const [filterDept, setFilterDept] = useState('');
   const [filterTime, setFilterTime] = useState('');
   const [filterStatus, setFilterStatus] = useState<'' | 'completed' | 'scheduled' | 'cancelled'>('');
-  const [purgeModal, setPurgeModal] = useState(false);
-  const [purgeScope, setPurgeScope] = useState<'faculty' | 'department' | 'course'>('department');
-  const [purgeFaculty, setPurgeFaculty] = useState('');
-  const [purgeDept, setPurgeDept] = useState('');
-  const [purgeCourse, setPurgeCourse] = useState('');
-  const [purgeFutureOnly, setPurgeFutureOnly] = useState(false);
-  const [purgeLists, setPurgeLists] = useState<{ faculties: any[]; departments: any[]; courses: any[] }>({ faculties: [], departments: [], courses: [] });
-  const [purgePreview, setPurgePreview] = useState<any>(null);
-  const [purging, setPurging] = useState(false);
 
-  const canPurge = user?.role === 'admin' || user?.permissions?.includes('manage_lectures');
   const canShiftDay = user?.role === 'admin' || user?.permissions?.includes('shift_day');
   const [shiftModal, setShiftModal] = useState(false);
   const [dayShifts, setDayShifts] = useState<any[]>([]);
@@ -94,46 +84,6 @@ export default function ScheduleScreen() {
     } catch (e: any) {
       window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'فشل التراجع');
     } finally { setReverting(''); }
-  };
-
-  const openPurgeModal = async () => {
-    setPurgePreview(null); setPurgeModal(true);
-    try {
-      const [f, d, c] = await Promise.all([api.get('/faculties'), api.get('/departments'), api.get('/courses')]);
-      setPurgeLists({ faculties: f.data || [], departments: d.data || [], courses: c.data || [] });
-    } catch { setPurgeLists({ faculties: [], departments: [], courses: [] }); }
-  };
-
-  const purgeBody = () => ({
-    scope: purgeScope,
-    faculty_id: purgeFaculty || null,
-    department_id: purgeDept || null,
-    course_id: purgeCourse || null,
-    future_only: purgeFutureOnly,
-  });
-
-  const runPurgePreview = async () => {
-    setPurging(true);
-    try {
-      const res = await api.post('/lectures/purge/preview', purgeBody());
-      setPurgePreview(res.data);
-    } catch (e: any) {
-      window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'خطأ في المعاينة');
-    } finally { setPurging(false); }
-  };
-
-  const runPurge = async () => {
-    if (!purgePreview) return;
-    if (!window.confirm(`⚠️ تأكيد نهائي: ${purgePreview.message}\n\nهذا الإجراء لا يمكن التراجع عنه. المقررات والإسنادات والجدول الأسبوعي لن تُمس. متابعة؟`)) return;
-    setPurging(true);
-    try {
-      const res = await api.post('/lectures/purge', purgeBody());
-      window.alert(res.data.message);
-      setPurgeModal(false);
-      fetchLectures(selectedDate);
-    } catch (e: any) {
-      window.alert(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'فشل المسح');
-    } finally { setPurging(false); }
   };
 
   const fetchLectures = useCallback(async (date: string) => {
@@ -259,6 +209,16 @@ export default function ScheduleScreen() {
   }, [lectures, filterFaculty]);
 
   useEffect(() => { setFilterDept(''); }, [filterFaculty]);
+
+  // 🔒 مستخدم مقيَّد بكلية/قسم واحد (عميد/رئيس قسم/مسجِّل...): يُقفل الفلتر تلقائياً على نطاقه بدل عرض «كل الكليات»
+  useEffect(() => {
+    if (user?.role === 'admin') return;
+    if (!filterFaculty && filterOptions.faculties.length === 1) setFilterFaculty(filterOptions.faculties[0].id);
+  }, [filterOptions.faculties, user?.role, filterFaculty]);
+  useEffect(() => {
+    if (user?.role === 'admin') return;
+    if (!filterDept && filterOptions.departments.length === 1) setFilterDept(filterOptions.departments[0].id);
+  }, [filterOptions.departments, user?.role, filterDept]);
 
   const activeFiltersCount = [filterFaculty, filterDept, filterTime, filterStatus].filter(Boolean).length;
   const clearFilters = () => { setFilterFaculty(''); setFilterDept(''); setFilterTime(''); setFilterStatus(''); };
@@ -432,11 +392,6 @@ export default function ScheduleScreen() {
             <View style={n.quickBox} testID="quick-actions">
               <View style={n.quickHead}><Ionicons name="flash-outline" size={14} color="#5b6678" /><Text style={n.quickTitle}>إجراءات سريعة</Text></View>
               <View style={n.quickRow}>
-                {canPurge && Platform.OS === 'web' && (
-                  <TouchableOpacity style={[n.qBtn, { backgroundColor: '#ffebee' }]} onPress={openPurgeModal} testID="purge-lectures-btn">
-                    <Ionicons name="trash-outline" size={14} color="#c62828" /><Text style={[n.qBtnText, { color: '#c62828' }]}>مسح المحاضرات</Text>
-                  </TouchableOpacity>
-                )}
                 {canShiftDay && Platform.OS === 'web' && (
                   <TouchableOpacity style={[n.qBtn, { backgroundColor: '#1565c0' }]} onPress={() => setShiftModal(true)} testID="day-shift-open-btn">
                     <Ionicons name="time-outline" size={14} color="#fff" /><Text style={[n.qBtnText, { color: '#fff' }]}>إزاحة اليوم الدراسي</Text>
@@ -629,93 +584,6 @@ export default function ScheduleScreen() {
         onClose={() => setCancelModal(null)}
         onConfirm={confirmCancelLecture}
       />
-      {purgeModal && Platform.OS === 'web' && (
-        <div style={{
-          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100,
-          backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl',
-        }} onClick={() => !purging && setPurgeModal(false)}>
-          <div onClick={(ev: any) => ev.stopPropagation()} style={{
-            backgroundColor: '#fff', borderRadius: 12, padding: 20, width: 520, maxWidth: '94%', maxHeight: '85vh', overflowY: 'auto',
-            boxShadow: '0 8px 32px rgba(0,0,0,0.25)',
-          }} data-testid="purge-modal">
-            <div style={{ fontSize: 15, fontWeight: 800, color: '#c62828', marginBottom: 4, textAlign: 'right' }}>🗑️ مسح المحاضرات المولدة</div>
-            <div style={{ fontSize: 11.5, color: '#5b6678', marginBottom: 12, textAlign: 'right', lineHeight: 1.7 }}>
-              يحذف <b>المحاضرات وسجلات حضورها فقط</b> — لا يمس المقررات ولا الإسنادات ولا الجدول الأسبوعي.
-            </div>
-
-            <div style={{ fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 6, textAlign: 'right' }}>النطاق:</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
-              {[['faculty', 'كلية كاملة'], ['department', 'قسم'], ['course', 'مقرر واحد']].map(([v, l]) => (
-                <button key={v} onClick={() => { setPurgeScope(v as any); setPurgePreview(null); }} style={{
-                  flex: 1, padding: '8px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12.5, fontWeight: 700,
-                  border: purgeScope === v ? '2px solid #c62828' : '1px solid #ddd',
-                  backgroundColor: purgeScope === v ? '#ffebee' : '#fff', color: purgeScope === v ? '#c62828' : '#555',
-                }} data-testid={`purge-scope-${v}`}>{l}</button>
-              ))}
-            </div>
-
-            <select value={purgeFaculty} onChange={(ev: any) => { setPurgeFaculty(ev.target.value); setPurgeDept(''); setPurgeCourse(''); setPurgePreview(null); }} style={{
-              width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc', marginBottom: 8,
-            }} data-testid="purge-faculty-select">
-              <option value="">-- اختر الكلية --</option>
-              {purgeLists.faculties.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
-            </select>
-            {purgeScope !== 'faculty' && (
-              <select value={purgeDept} onChange={(ev: any) => { setPurgeDept(ev.target.value); setPurgeCourse(''); setPurgePreview(null); }} style={{
-                width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc', marginBottom: 8,
-              }} data-testid="purge-dept-select">
-                <option value="">-- اختر القسم --</option>
-                {purgeLists.departments.filter((d: any) => !purgeFaculty || d.faculty_id === purgeFaculty).map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-              </select>
-            )}
-            {purgeScope === 'course' && (
-              <select value={purgeCourse} onChange={(ev: any) => { setPurgeCourse(ev.target.value); setPurgePreview(null); }} style={{
-                width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc', marginBottom: 8,
-              }} data-testid="purge-course-select">
-                <option value="">-- اختر المقرر --</option>
-                {purgeLists.courses.filter((c: any) => !purgeDept || c.department_id === purgeDept).map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.name}{c.level ? ` (م${c.level}${c.section ? '/' + c.section : ''})` : ''}</option>
-                ))}
-              </select>
-            )}
-
-            <div style={{ display: 'flex', gap: 8, marginBottom: 12, marginTop: 4 }}>
-              {[[false, 'كل المحاضرات'], [true, 'المستقبلية فقط']].map(([v, l]: any) => (
-                <button key={String(v)} onClick={() => { setPurgeFutureOnly(v); setPurgePreview(null); }} style={{
-                  flex: 1, padding: '7px 0', borderRadius: 8, cursor: 'pointer', fontSize: 12, fontWeight: 700,
-                  border: purgeFutureOnly === v ? '2px solid #e65100' : '1px solid #ddd',
-                  backgroundColor: purgeFutureOnly === v ? '#fff3e0' : '#fff', color: purgeFutureOnly === v ? '#e65100' : '#555',
-                }} data-testid={`purge-time-${v ? 'future' : 'all'}`}>{l}</button>
-              ))}
-            </div>
-
-            <button onClick={runPurgePreview} disabled={purging || (purgeScope === 'faculty' ? !purgeFaculty : purgeScope === 'department' ? !purgeDept : !purgeCourse)} style={{
-              width: '100%', padding: '10px 0', borderRadius: 8, border: 'none', cursor: 'pointer', marginBottom: 8,
-              backgroundColor: '#e65100', color: '#fff', fontSize: 13, fontWeight: 700, opacity: purging ? 0.6 : 1,
-            }} data-testid="purge-preview-btn">{purging ? 'جاري الفحص...' : '🔍 معاينة ما سيُحذف'}</button>
-
-            {purgePreview && (
-              <div data-testid="purge-preview-report">
-                <div style={{
-                  padding: '10px 12px', borderRadius: 8, marginBottom: 8, fontSize: 12.5, fontWeight: 700, textAlign: 'right', lineHeight: 1.8,
-                  backgroundColor: purgePreview.total > 0 ? '#ffebee' : '#f5f5f5', color: purgePreview.total > 0 ? '#b71c1c' : '#666',
-                }}>{purgePreview.message}</div>
-                {purgePreview.total > 0 && (
-                  <button onClick={runPurge} disabled={purging} style={{
-                    width: '100%', padding: '11px 0', borderRadius: 8, border: 'none', cursor: 'pointer', marginBottom: 8,
-                    backgroundColor: '#c62828', color: '#fff', fontSize: 13.5, fontWeight: 800,
-                  }} data-testid="purge-confirm-btn">{purging ? 'جاري المسح...' : `🗑️ تأكيد مسح ${purgePreview.total} محاضرة نهائياً`}</button>
-                )}
-              </div>
-            )}
-
-            <button onClick={() => setPurgeModal(false)} disabled={purging} style={{
-              width: '100%', padding: '9px 0', borderRadius: 8, border: '1px solid #ddd', cursor: 'pointer',
-              backgroundColor: '#fff', color: '#555', fontSize: 13, fontWeight: 600,
-            }} data-testid="purge-close-btn">إغلاق</button>
-          </div>
-        </div>
-      )}
     </SafeAreaView>
   );
 }

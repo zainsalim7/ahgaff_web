@@ -338,6 +338,7 @@ async def _notify(db, moves: list, cancels: list, days: list, reason: str) -> in
 
 @router.get("/day-shift")
 async def list_day_shifts(date: Optional[str] = None, status: Optional[str] = "active", limit: int = 50, current_user: dict = Depends(get_current_user)):
+    """🔒 يُعيد فقط الإزاحات التي تخص نطاق المستخدم (كليته/قسمه) أو إزاحات «كل الجامعة» — يمنع تسرّب شارة إزاحة كلية أخرى لمستخدم لا تخصه."""
     db = get_db()
     q: dict = {}
     if status:
@@ -345,8 +346,16 @@ async def list_day_shifts(date: Optional[str] = None, status: Optional[str] = "a
     if date:
         q["date_from"] = {"$lte": date}
         q["date_to"] = {"$gte": date}
+    own_dept_ids = await get_own_department_ids(current_user)
+    fac_dept_cache: dict = {}
     out = []
     async for s in db.day_shifts.find(q, {"changes": 0}).sort("created_at", -1).limit(limit):
+        if own_dept_ids is not None and s.get("faculty_id"):
+            fid = s["faculty_id"]
+            if fid not in fac_dept_cache:
+                fac_dept_cache[fid] = {str(d["_id"]) for d in await db.departments.find({"faculty_id": fid}, {"_id": 1}).to_list(500)}
+            if not fac_dept_cache[fid] & set(own_dept_ids):
+                continue
         s["id"] = str(s.pop("_id"))
         out.append(s)
     return out
@@ -384,7 +393,11 @@ async def my_day_shift(date: Optional[str] = None, current_user: dict = Depends(
                 if ok_courses[cid]:
                     mine.append(l)
     else:
-        mine = lecs
+        own_dept_ids = await get_own_department_ids(current_user)
+        if own_dept_ids is None:
+            mine = lecs  # أدمن/غير مقيَّد
+        else:
+            mine = [l for l in lecs if courses.get(l["course_id"], {}).get("department_id") in own_dept_ids]
     if not mine:
         return {"shifted": False, "date": day}
 
