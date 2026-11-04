@@ -203,6 +203,20 @@ async def get_scope_filter(current_user: dict, scope_type: str) -> dict:
         return {}
 
 
+async def get_own_department_ids(current_user: dict):
+    """🔒 قائمة معرّفات الأقسام المسموحة لمستخدم مقيَّد (عميد/رئيس قسم/...)، أو None إن كان غير مقيَّد (أدمن).
+    تُستخدم لمنع عمليات خطيرة (إزاحة اليوم الدراسي، مسح المحاضرات) من تجاوز نطاق المستخدم إلى كليات/أقسام أخرى."""
+    sf = await get_scope_filter(current_user, "courses")
+    if not sf:
+        return None
+    dep = sf.get("department_id")
+    if dep is None:
+        return []
+    if isinstance(dep, dict) and "$in" in dep:
+        return list(dep["$in"])
+    return [dep]
+
+
 # ترجمة أنواع الأنشطة إلى العربية
 ACTION_TRANSLATIONS = {
     "hr_create_employee": "إضافة موظف", "hr_update_employee": "تعديل بيانات موظف", "hr_delete_employee": "حذف موظف", "hr_sync_teachers": "مزامنة المعلمين مع سجل الموظفين",

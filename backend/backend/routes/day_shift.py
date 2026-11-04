@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, has_permission, log_activity, build_course_student_query
+from .deps import get_db, get_current_user, has_permission, log_activity, build_course_student_query, get_own_department_ids
 from .schedule_notify import _dispatch, _user_ids_for_teachers
 
 router = APIRouter(tags=["إزاحة اليوم الدراسي"])
@@ -50,11 +50,16 @@ def _dates(a: str, b: Optional[str]) -> list:
     return [(d1 + timedelta(days=i)).isoformat() for i in range((d2 - d1).days + 1)]
 
 
-async def _course_map(db, faculty_id: Optional[str]) -> dict:
+async def _course_map(db, faculty_id: Optional[str], own_dept_ids: Optional[list] = None) -> dict:
     q: dict = {}
     if faculty_id:
         depts = [str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(500)]
+        if own_dept_ids is not None:
+            depts = [d for d in depts if d in own_dept_ids]
         q["department_id"] = {"$in": depts}
+    elif own_dept_ids is not None:
+        # 🔒 مستخدم مقيَّد لم يحدد كلية (أو حاول طلب «كل الجامعة») — يُقصر دائماً على أقسامه الخاصة
+        q["department_id"] = {"$in": own_dept_ids}
     return {str(c["_id"]): c for c in await db.courses.find(q, {"name": 1, "teacher_id": 1, "department_id": 1, "level": 1, "section": 1, "shared_links": 1}).to_list(20000)}
 
 
@@ -92,7 +97,7 @@ def _slot_of(start: str, slots: dict) -> Optional[int]:
     return best if best is not None else min(slots)
 
 
-async def _compute(db, data: DayShiftRequest):
+async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = None):
     """القواعد: تُزاح الفترات الصباحية (قبل الرابعة) فقط وتتقلص إلى 60 د باستراحة 10 د،
     الرابعة تبقى، وما بعدها يُلغى. يعيد (الأيام، الإزاحات، الإلغاءات، المستثناة، التحذيرات)"""
     if not data.new_start_time and data.offset_minutes is None:
@@ -101,7 +106,7 @@ async def _compute(db, data: DayShiftRequest):
         raise HTTPException(status_code=400, detail="صيغة وقت البداية غير صحيحة (HH:MM)")
     from .weekly_schedule import _faculty_slot_times
     dates = _dates(data.date_from, data.date_to)
-    courses = await _course_map(db, data.faculty_id)
+    courses = await _course_map(db, data.faculty_id, own_dept_ids)
     c2f = await _faculty_of_courses(db, courses)
     slot_cache: dict = {}
 
@@ -187,11 +192,26 @@ def _guard(user: dict):
         raise HTTPException(status_code=403, detail="ليست لديك صلاحية «إزاحة اليوم الدراسي»")
 
 
+async def _check_faculty_scope(db, faculty_id: Optional[str], own_dept_ids: Optional[list]):
+    """🔒 يمنع مستخدماً مقيَّداً (عميد/رئيس قسم) من اختيار «كل الجامعة» أو كلية أخرى خارج نطاقه."""
+    if own_dept_ids is None:
+        return  # أدمن أو من في حكمه — غير مقيَّد
+    if not faculty_id:
+        raise HTTPException(status_code=403, detail="حسابك مقيَّد بنطاق كليتك/قسمك فقط — لا يمكنك اختيار «كل الجامعة»")
+    if not ObjectId.is_valid(faculty_id):
+        raise HTTPException(status_code=400, detail="معرّف كلية غير صحيح")
+    fac_dept_ids = {str(d["_id"]) for d in await db.departments.find({"faculty_id": faculty_id}, {"_id": 1}).to_list(500)}
+    if not fac_dept_ids & set(own_dept_ids):
+        raise HTTPException(status_code=403, detail="هذه الكلية خارج نطاق صلاحياتك")
+
+
 @router.post("/day-shift/preview")
 async def preview_day_shift(data: DayShiftRequest, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
-    days, moves, cancels, skipped, warnings = await _compute(db, data)
+    own_dept_ids = await get_own_department_ids(current_user)
+    await _check_faculty_scope(db, data.faculty_id, own_dept_ids)
+    days, moves, cancels, skipped, warnings = await _compute(db, data, own_dept_ids)
     fac = None
     if data.faculty_id and ObjectId.is_valid(data.faculty_id):
         fac = await db.faculties.find_one({"_id": ObjectId(data.faculty_id)}, {"name": 1})
@@ -220,7 +240,9 @@ async def preview_day_shift(data: DayShiftRequest, current_user: dict = Depends(
 async def apply_day_shift(data: DayShiftRequest, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
     db = get_db()
-    days, moves, cancels, skipped, warnings = await _compute(db, data)
+    own_dept_ids = await get_own_department_ids(current_user)
+    await _check_faculty_scope(db, data.faculty_id, own_dept_ids)
+    days, moves, cancels, skipped, warnings = await _compute(db, data, own_dept_ids)
     if not moves and not cancels:
         raise HTTPException(status_code=400, detail="لا توجد محاضرات قابلة للإزاحة في هذا النطاق")
     now = datetime.now(YEMEN_TZ)
@@ -396,6 +418,8 @@ async def revert_day_shift(shift_id: str, current_user: dict = Depends(get_curre
     s = await db.day_shifts.find_one({"_id": ObjectId(shift_id)})
     if not s:
         raise HTTPException(status_code=404, detail="سجل الإزاحة غير موجود")
+    own_dept_ids = await get_own_department_ids(current_user)
+    await _check_faculty_scope(db, s.get("faculty_id"), own_dept_ids)
     if s.get("status") != "active":
         raise HTTPException(status_code=400, detail="تم التراجع عن هذه الإزاحة مسبقاً")
     reverted, kept = 0, 0

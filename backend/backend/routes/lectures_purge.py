@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from bson import ObjectId
 
-from .deps import get_db, get_current_user, log_activity
+from .deps import get_db, get_current_user, log_activity, get_own_department_ids
 
 router = APIRouter(tags=["مسح المحاضرات"])
 
@@ -28,7 +28,28 @@ class PurgeRequest(BaseModel):
     future_only: bool = False
 
 
-async def _resolve_scope(db, data: PurgeRequest):
+async def _enforce_scope(db, data: PurgeRequest, own_dept_ids: Optional[list]):
+    """🔒 يمنع مستخدماً مقيَّداً (عميد/رئيس قسم) من مسح محاضرات خارج كليته/قسمه."""
+    if own_dept_ids is None:
+        return  # أدمن أو من في حكمه — غير مقيَّد
+    if data.scope == "course":
+        if not data.course_id or not ObjectId.is_valid(data.course_id):
+            raise HTTPException(status_code=400, detail="حدد المقرر")
+        c = await db.courses.find_one({"_id": ObjectId(data.course_id)}, {"department_id": 1})
+        if not c or c.get("department_id") not in own_dept_ids:
+            raise HTTPException(status_code=403, detail="هذا المقرر خارج نطاق صلاحياتك")
+    elif data.scope == "department":
+        if not data.department_id or data.department_id not in own_dept_ids:
+            raise HTTPException(status_code=403, detail="هذا القسم خارج نطاق صلاحياتك")
+    elif data.scope == "faculty":
+        if not data.faculty_id:
+            raise HTTPException(status_code=403, detail="حدد كلية ضمن نطاق صلاحياتك")
+        fac_dept_ids = {str(d["_id"]) for d in await db.departments.find({"faculty_id": data.faculty_id}, {"_id": 1}).to_list(500)}
+        if not fac_dept_ids & set(own_dept_ids):
+            raise HTTPException(status_code=403, detail="هذه الكلية خارج نطاق صلاحياتك")
+
+
+async def _resolve_scope(db, data: PurgeRequest, own_dept_ids: Optional[list] = None):
     """يعيد (قائمة معرفات المقررات، وصف النطاق)"""
     if data.scope == "course":
         if not data.course_id:
@@ -52,6 +73,9 @@ async def _resolve_scope(db, data: PurgeRequest):
         if not f:
             raise HTTPException(status_code=404, detail="الكلية غير موجودة")
         depts = [str(d["_id"]) for d in await db.departments.find({"faculty_id": data.faculty_id}, {"_id": 1}).to_list(500)]
+        if own_dept_ids is not None:
+            # 🔒 دفاع إضافي: حتى عند السماح بالكلية، يُقصر على الأقسام الخاصة بنطاق المستخدم فعلياً
+            depts = [d for d in depts if d in own_dept_ids]
         courses = await db.courses.find({"department_id": {"$in": depts}}, {"_id": 1}).to_list(20000)
         return [str(c["_id"]) for c in courses], f"كلية '{f.get('name', '')}'"
     raise HTTPException(status_code=400, detail="نطاق غير صحيح")
@@ -70,7 +94,9 @@ async def purge_preview(data: PurgeRequest, current_user: dict = Depends(get_cur
     if not _can_purge(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    course_ids, scope_desc = await _resolve_scope(db, data)
+    own_dept_ids = await get_own_department_ids(current_user)
+    await _enforce_scope(db, data, own_dept_ids)
+    course_ids, scope_desc = await _resolve_scope(db, data, own_dept_ids)
     if not course_ids:
         return {"scope_desc": scope_desc, "total": 0, "future": 0, "with_attendance": 0, "attendance_records": 0,
                 "message": f"لا توجد مقررات في {scope_desc}"}
@@ -100,7 +126,9 @@ async def purge_lectures(data: PurgeRequest, current_user: dict = Depends(get_cu
     if not _can_purge(current_user):
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     db = get_db()
-    course_ids, scope_desc = await _resolve_scope(db, data)
+    own_dept_ids = await get_own_department_ids(current_user)
+    await _enforce_scope(db, data, own_dept_ids)
+    course_ids, scope_desc = await _resolve_scope(db, data, own_dept_ids)
     if not course_ids:
         return {"deleted_lectures": 0, "deleted_attendance": 0, "message": f"لا توجد مقررات في {scope_desc}"}
     q = _lectures_query(course_ids, data.future_only)

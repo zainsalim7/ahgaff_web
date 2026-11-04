@@ -6,13 +6,14 @@ interface Props {
   onClose: () => void;
   initialDate: string;
   onApplied: () => void;
+  isAdmin?: boolean;
 }
 
 const QUICK_STARTS = ['08:30', '09:00', '09:30', '10:00', '10:30'];
 const inp: React.CSSProperties = { width: '100%', padding: '8px 10px', borderRadius: 8, border: '1px solid #ddd', fontSize: 13, direction: 'rtl', backgroundColor: '#f7f9fc', boxSizing: 'border-box' };
 const lbl: React.CSSProperties = { fontSize: 12, fontWeight: 700, color: '#333', marginBottom: 5, textAlign: 'right' };
 
-export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onApplied }) => {
+export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onApplied, isAdmin = false }) => {
   const [dateFrom, setDateFrom] = useState(initialDate);
   const [dateTo, setDateTo] = useState('');
   const [rangeMode, setRangeMode] = useState(false);
@@ -28,8 +29,13 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
   useEffect(() => {
     if (!open) return;
     setDateFrom(initialDate); setDateTo(''); setPreview(null); setErr(''); setReason('');
-    api.get('/faculties').then((r) => setFaculties(r.data || [])).catch(() => setFaculties([]));
-  }, [open, initialDate]);
+    api.get('/faculties').then((r) => {
+      const list = r.data || [];
+      setFaculties(list);
+      // 🔒 مستخدم غير أدمن (عميد/رئيس قسم): يُقفل دائماً على كليته الوحيدة — لا خيار «كل الجامعة»
+      if (!isAdmin && list.length >= 1) setFacultyId(list[0].id);
+    }).catch(() => setFaculties([]));
+  }, [open, initialDate, isAdmin]);
 
   if (!open) return null;
 
@@ -96,10 +102,11 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
         </div>
 
         <div style={lbl}>الكلية</div>
-        <select value={facultyId} onChange={(e) => { setFacultyId(e.target.value); reset(); }} style={{ ...inp, marginBottom: 12 }} data-testid="day-shift-faculty-select">
-          <option value="">كل الجامعة (جميع الكليات)</option>
+        <select value={facultyId} onChange={(e) => { setFacultyId(e.target.value); reset(); }} disabled={!isAdmin} style={{ ...inp, marginBottom: 12, opacity: isAdmin ? 1 : 0.75 }} data-testid="day-shift-faculty-select">
+          {isAdmin && <option value="">كل الجامعة (جميع الكليات)</option>}
           {faculties.map((f: any) => <option key={f.id} value={f.id}>{f.name}</option>)}
         </select>
+        {!isAdmin && <div style={{ fontSize: 10.5, color: '#8a95a8', textAlign: 'right', marginTop: -8, marginBottom: 12 }}>الإزاحة مقتصرة على نطاق كليتك فقط</div>}
 
         <div style={lbl}>وقت بداية اليوم الجديد</div>
         <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>

@@ -620,7 +620,7 @@ export default function ScheduleScreen() {
         </ScrollView>
       </KeyboardAvoidingView>
       {Platform.OS === 'web' && (
-        <DayShiftModal open={shiftModal} onClose={() => setShiftModal(false)} initialDate={selectedDate} onApplied={() => { fetchLectures(selectedDate); fetchDayShifts(selectedDate); }} />
+        <DayShiftModal open={shiftModal} onClose={() => setShiftModal(false)} initialDate={selectedDate} onApplied={() => { fetchLectures(selectedDate); fetchDayShifts(selectedDate); }} isAdmin={user?.role === 'admin'} />
       )}
       <CancelLectureModal
         visible={!!cancelModal}
