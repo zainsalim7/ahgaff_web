@@ -465,14 +465,15 @@ export default function ScheduleScreen() {
             {dayShifts.map((sh) => {
               const d = (sh.days || []).find((x: any) => x.date === selectedDate);
               if (!d || !d.lectures) return null;
+              const canRevertThis = canShiftDay && (user?.role === 'admin' || !!sh.faculty_id);
               return (
                 <View key={sh.id} style={n.shiftStrip} testID={`day-shift-badge-${sh.id}`}>
                   <Text style={n.shiftText} numberOfLines={2}>
                     {d.old_first} ← {d.new_first} ({d.offset_minutes > 0 ? '+' : ''}{d.offset_minutes} د · {d.lectures} محاضرة){sh.reason ? ` — ${sh.reason}` : ''}{sh.created_by_name ? ` · ${sh.created_by_name}` : ''}
                   </Text>
-                  <TouchableOpacity onPress={() => canShiftDay && revertShift(sh.id)} disabled={!canShiftDay || reverting === sh.id} style={n.shiftBtn} testID={`day-shift-revert-${sh.id}`}>
-                    <Ionicons name={canShiftDay ? 'arrow-undo' : 'time'} size={13} color="#fff" />
-                    <Text style={n.shiftBtnText}>{reverting === sh.id ? '...' : canShiftDay ? 'بداية مؤخَّرة · تراجع' : 'بداية مؤخَّرة'}</Text>
+                  <TouchableOpacity onPress={() => canRevertThis && revertShift(sh.id)} disabled={!canRevertThis || reverting === sh.id} style={n.shiftBtn} testID={`day-shift-revert-${sh.id}`}>
+                    <Ionicons name={canRevertThis ? 'arrow-undo' : 'time'} size={13} color="#fff" />
+                    <Text style={n.shiftBtnText}>{reverting === sh.id ? '...' : canRevertThis ? 'بداية مؤخَّرة · تراجع' : 'بداية مؤخَّرة'}</Text>
                   </TouchableOpacity>
                 </View>
               );
