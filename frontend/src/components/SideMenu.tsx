@@ -56,7 +56,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 📚 المقررات — صلاحيات المقررات فقط
   { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
     PERMISSIONS.MANAGE_COURSES, 'view_courses', 'add_course', 'edit_course', 'delete_course'
-  ], advPermissionKeys: ['courses_courses_create_course', 'courses_courses_delete_course'] },
+  ], advPermissionKeys: ['courses_ser_create_course', 'courses_ser_delete_course', 'courses_ser_get_courses', 'courses_courses_create_course', 'courses_courses_delete_course'] },
 
   // 🔄 ترحيل المقررات لفصل جديد — صلاحية مستقلة (الأدمن دائماً)
   { id: 'migrate-courses', label: 'ترحيل المقررات', icon: 'swap-horizontal', path: '/migrate-courses', permissions: [
@@ -82,7 +82,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 👨‍🎓 إدارة الطلاب
   { id: 'students', label: 'إدارة الطلاب', icon: 'people', path: '/students', permissions: [
     PERMISSIONS.MANAGE_STUDENTS, 'view_students', 'add_student', 'edit_student', 'delete_student'
-  ], advPermissionKeys: ['students_students_get_students'] },
+  ], advPermissionKeys: ['students_ser_get_students', 'students_ser_create_student', 'students_students_get_students'] },
 
   // 🎓 الخريجون
   { id: 'alumni', label: 'الخريجون', icon: 'school', path: '/alumni', permissions: [
@@ -92,12 +92,12 @@ const MENU_ITEMS: MenuItem[] = [
   // 📋 إدارة التسجيلات — صفحة مستقلة لتسجيل الطلاب في المقررات
   { id: 'enrollments', label: 'إدارة التسجيلات', icon: 'clipboard', path: '/manage-enrollments', permissions: [
     PERMISSIONS.MANAGE_ENROLLMENTS, 'view_enrollments', 'add_enrollment', 'delete_enrollment'
-  ]},
+  ], advPermissionKeys: ['enrollments_ser_enroll_students', 'enrollments_ser_unenroll_student', 'enrollments_ser_get_course_enrollments'] },
 
   // 👨‍🏫 إدارة المعلمين
   { id: 'teachers', label: 'إدارة المعلمين', icon: 'school', path: '/manage-teachers', permissions: [
     PERMISSIONS.MANAGE_TEACHERS, 'view_teachers', 'add_teacher', 'edit_teacher', 'delete_teacher'
-  ], advPermissionKeys: ['teachers_teachers_get_teachers'] },
+  ], advPermissionKeys: ['teachers_ser_get_teachers', 'teachers_teachers_get_teachers'] },
 
   // 📊 العبء التدريسي
   { id: 'teaching-load', label: 'جدول العبء التدريسي', icon: 'grid', path: '/teaching-load', permissions: [
@@ -110,7 +110,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 🏢 إدارة الأقسام
   { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [
     PERMISSIONS.MANAGE_DEPARTMENTS, 'view_departments', 'add_department', 'edit_department', 'delete_department'
-  ], advPermissionKeys: ['academic_structure_departments_get_departments'] },
+  ], advPermissionKeys: ['academic_structure_ser_get_departments', 'academic_structure_departments_get_departments'] },
 
   // 👤 إدارة المستخدمين
   { id: 'users', label: 'إدارة المستخدمين', icon: 'person-add', path: '/manage-users', permissions: [
