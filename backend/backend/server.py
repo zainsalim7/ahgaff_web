@@ -4825,7 +4825,7 @@ async def get_teachers(
     role = current_user.get("role", "")
     if current_user.get("advanced_access_real_enforcement"):
         from services.advanced_access_service import real_enforce_guard
-        await real_enforce_guard(db, current_user, "teachers_teachers_get_teachers", department_id)
+        await real_enforce_guard(db, current_user, "teachers_ser_get_teachers", department_id)
         scope_filter = {}
     elif cross_university and (
         role == UserRole.ADMIN or has_permission(current_user, "cross_university_assignment")

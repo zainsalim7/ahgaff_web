@@ -13,6 +13,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
   const [roles, setRoles] = useState<any[]>([]);
   const [modalVisible, setModalVisible] = useState(false);
   const [detail, setDetail] = useState<any>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [userId, setUserId] = useState('');
   const [userSearch, setUserSearch] = useState('');
@@ -41,12 +42,25 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
   useEffect(() => { load(); }, [load]);
 
   const openCreate = async () => {
-    setError(''); setUserId(''); setUserSearch(''); setSelectedUserLabel(''); setShowUserDropdown(false);
+    setError(''); setEditingId(null); setUserId(''); setUserSearch(''); setSelectedUserLabel(''); setShowUserDropdown(false);
     setShowQuickCreate(false); setQuickUsername(''); setQuickFullName(''); setQuickResultMsg('');
     setAssignmentType('academic'); setRoleId(''); setLabel(''); setScopeType('university'); setScopeRefIds([]);
     try {
       const [u, r] = await Promise.all([advancedAccessAPI.getLightUsers(), advancedAccessAPI.getRoles()]);
       setUsers(u.data); setRoles(r.data);
+    } catch (e) { /* ignore */ }
+    setModalVisible(true);
+  };
+
+  const openEdit = async (a: any) => {
+    setError(''); setEditingId(a.id);
+    setUserId(a.user_id); setSelectedUserLabel(a.user_name); setUserSearch(''); setShowUserDropdown(false);
+    setShowQuickCreate(false); setQuickUsername(''); setQuickFullName(''); setQuickResultMsg('');
+    setAssignmentType(a.assignment_type); setRoleId(a.advanced_role_id); setLabel(a.context_label_ar);
+    setScopeType(a.scope?.scope_type || 'university'); setScopeRefIds(a.scope?.scope_ref_ids || []);
+    try {
+      const r = await advancedAccessAPI.getRoles();
+      setRoles(r.data);
     } catch (e) { /* ignore */ }
     setModalVisible(true);
   };
@@ -88,14 +102,21 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
     if (!userId || !roleId || !label.trim()) { setError('جميع الحقول مطلوبة (المستخدم، الدور، تسمية السياق)'); return; }
     setSaving(true);
     try {
-      await advancedAccessAPI.createAssignment({
-        user_id: userId, assignment_type: assignmentType, advanced_role_id: roleId, context_label_ar: label,
-        scope: { scope_type: scopeType, scope_ref_ids: scopeRefIds }, direct_permissions: [],
-      });
+      if (editingId) {
+        await advancedAccessAPI.updateAssignment(editingId, {
+          assignment_type: assignmentType, advanced_role_id: roleId, context_label_ar: label,
+          scope: { scope_type: scopeType, scope_ref_ids: scopeRefIds },
+        });
+      } else {
+        await advancedAccessAPI.createAssignment({
+          user_id: userId, assignment_type: assignmentType, advanced_role_id: roleId, context_label_ar: label,
+          scope: { scope_type: scopeType, scope_ref_ids: scopeRefIds }, direct_permissions: [],
+        });
+      }
       setModalVisible(false);
       load();
     } catch (e: any) {
-      setError(e?.response?.data?.detail || 'تعذّر إنشاء التكليف');
+      setError(e?.response?.data?.detail || (editingId ? 'تعذّر تحديث التكليف' : 'تعذّر إنشاء التكليف'));
     } finally { setSaving(false); }
   };
 
@@ -135,6 +156,9 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
           <View style={styles.actions}>
             <TouchableOpacity onPress={() => viewContext(a)} testID={`adv-assignment-view-${a.id}`}><Ionicons name="eye-outline" size={20} color={COLORS.primary} /></TouchableOpacity>
             {canManage && a.status === 'active' && (
+              <TouchableOpacity onPress={() => openEdit(a)} testID={`adv-assignment-edit-${a.id}`}><Ionicons name="create-outline" size={20} color={COLORS.success} /></TouchableOpacity>
+            )}
+            {canManage && a.status === 'active' && (
               <TouchableOpacity onPress={() => endAssignment(a)} testID={`adv-assignment-end-${a.id}`}><Ionicons name="stop-circle-outline" size={20} color={COLORS.danger} /></TouchableOpacity>
             )}
           </View>
@@ -155,19 +179,19 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
       <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalContainer}>
           <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>تكليف جديد</Text>
+            <Text style={styles.modalTitle}>{editingId ? 'تعديل التكليف' : 'تكليف جديد'}</Text>
             <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-assignment-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
           </View>
           <ScrollView style={{ padding: 14 }}>
             <Text style={styles.label}>المستخدم</Text>
             {!!selectedUserLabel && (
               <View style={styles.selectedUserPill} testID="adv-assignment-selected-user">
-                <TouchableOpacity onPress={clearUserSelection} testID="adv-assignment-user-clear"><Ionicons name="close-circle" size={18} color={COLORS.textMuted} /></TouchableOpacity>
+                {!editingId && <TouchableOpacity onPress={clearUserSelection} testID="adv-assignment-user-clear"><Ionicons name="close-circle" size={18} color={COLORS.textMuted} /></TouchableOpacity>}
                 <Text style={styles.selectedUserText}>{selectedUserLabel}</Text>
                 <Ionicons name="checkmark-circle" size={18} color={COLORS.success} />
               </View>
             )}
-            {!selectedUserLabel && (
+            {!selectedUserLabel && !editingId && (
               <>
                 <TextInput
                   style={styles.input} placeholder="ابحث باسم المستخدم..." value={userSearch}
@@ -250,7 +274,7 @@ export const AdvAssignmentsManager: React.FC<{ canManage: boolean }> = ({ canMan
 
             {!!error && <Text style={styles.errorText}>{error}</Text>}
             <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} testID="adv-assignment-save-btn">
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>إنشاء التكليف</Text>}
+              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>{editingId ? 'حفظ التعديلات' : 'إنشاء التكليف'}</Text>}
             </TouchableOpacity>
           </ScrollView>
         </View>

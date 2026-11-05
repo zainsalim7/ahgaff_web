@@ -160,7 +160,11 @@ async def login(user_data: UserLogin, request: Request):
     # 🩹 إصلاح ذاتي: مستخدم له تكليف فعّال في مركز الصلاحيات المتقدم لكن علم الإنفاذ الفعلي لم يُفعَّل
     # (تكليف أُسند لمستخدم موجود مسبقًا قبل أن يصبح تفعيل العلم تلقائيًا عند الإسناد) — نفعّله الآن تلقائيًا
     if not user.get("advanced_access_real_enforcement"):
-        _has_active_assignment = await db.advanced_user_assignments.find_one({"user_id": str(user["_id"]), "status": "active"})
+        # 🔒 تُستبعد تكليفات "التجربة التشغيلية المحدودة" (PILOT_*) عمداً — هي محاكاة شادو مؤقتة فقط
+        # (قد تبقى active لو لم تُصفَّر الاختبار) ولا يجوز أن تُفعِّل الإنفاذ الفعلي على حساب حقيقي قديم
+        _has_active_assignment = await db.advanced_user_assignments.find_one({
+            "user_id": str(user["_id"]), "status": "active", "created_by": {"$ne": "pilot_runner"},
+        })
         if _has_active_assignment:
             await db.users.update_one({"_id": user["_id"]}, {"$set": {"advanced_access_real_enforcement": True}})
             user["advanced_access_real_enforcement"] = True

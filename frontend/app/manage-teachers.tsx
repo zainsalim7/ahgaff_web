@@ -24,6 +24,7 @@ import { API_URL } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { SortableHeader } from '../src/components/SortableHeader';
 import { useAuth } from '../src/contexts/AuthContext';
+import { getMyScope } from '../src/utils/scopeDefaults';
 
 interface Teacher {
   id: string;
@@ -180,11 +181,23 @@ export default function ManageTeachersScreen() {
     }
   };
 
+  // 🔒 مستخدم إنفاذ فعلي مقيَّد بأقسام محددة: GET /teachers يتطلب department_id صريحاً
+  // وإلا يُرفض 400 — بلا هذا الجلب يبقى بلا بيانات صامتاً رغم امتلاك الصلاحية فعلياً.
+  const { restricted: isScopeRestricted, departmentIds: myDeptIds } = getMyScope(authUser);
+
+  const fetchTeachersScoped = useCallback(async () => {
+    if (!isScopeRestricted) return teachersAPI.getAll();
+    const perDept = await Promise.all(myDeptIds.map((d) => teachersAPI.getAll({ department_id: d }).catch(() => ({ data: [] }))));
+    const map = new Map<string, Teacher>();
+    perDept.forEach((r) => (r.data || []).forEach((t: Teacher) => map.set(t.id, t)));
+    return { data: Array.from(map.values()) };
+  }, [isScopeRestricted, myDeptIds]);
+
   const fetchData = useCallback(async () => {
     try {
       // 🛡️ Promise.allSettled: لو فشل أي API (مثلاً 403)، البقية تكمل عملها
       const results = await Promise.allSettled([
-        teachersAPI.getAll(),
+        fetchTeachersScoped(),
         departmentsAPI.getAll(),
         facultiesAPI.getAll(),
       ]);
@@ -212,11 +225,22 @@ export default function ManageTeachersScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fetchTeachersScoped]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // 🔒 تثبيت فلتر «القسم» على قسم المستخدم المقيَّد الوحيد تلقائياً (بدل «الكل» غير المجدي)
+  useEffect(() => {
+    if (isScopeRestricted && myDeptIds.length === 1 && !filterDepartment && departments.length) {
+      const dept = departments.find((d) => d.id === myDeptIds[0]);
+      if (dept) {
+        setFilterDepartment(dept.id);
+        setFilterFaculty((dept as any).faculty_id || '');
+      }
+    }
+  }, [isScopeRestricted, myDeptIds, departments]);
 
   const handleSubmit = async () => {
     if (!formData.teacher_id || !formData.full_name) {

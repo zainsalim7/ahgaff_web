@@ -14,6 +14,9 @@ export interface User {
   department_id?: string;
   faculty_name?: string;
   department_name?: string;
+  faculty_ids?: string[];
+  department_ids?: string[];
+  department_names?: string[];
   advanced_access_real_enforcement?: boolean;
 }
 

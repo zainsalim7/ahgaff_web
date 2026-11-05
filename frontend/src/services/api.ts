@@ -377,6 +377,7 @@ export const advancedAccessAPI = {
   getUserAssignments: (userId: string) => api.get(`/advanced-access/users/${userId}/assignments`),
   getUserContexts: (userId: string) => api.get(`/advanced-access/users/${userId}/contexts`),
   createAssignment: (data: any) => api.post('/advanced-access/assignments', data),
+  updateAssignment: (id: string, data: any) => api.put(`/advanced-access/assignments/${id}`, data),
   endAssignment: (id: string) => api.post(`/advanced-access/assignments/${id}/end`),
   getAssignmentContext: (id: string) => api.get(`/advanced-access/assignments/${id}/context`),
   grantDirectPermission: (assignmentId: string, data: any) => api.post(`/advanced-access/assignments/${assignmentId}/direct-permissions`, data),

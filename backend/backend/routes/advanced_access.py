@@ -12,7 +12,7 @@ from bson import ObjectId
 
 from .deps import get_db, get_current_user, get_password_hash
 from models.advanced_access import (
-    AdvancedRoleCreate, AdvancedRoleUpdate, AssignmentCreate, TesterGrant, CheckPermissionRequest, DirectPermissionGrant,
+    AdvancedRoleCreate, AdvancedRoleUpdate, AssignmentCreate, AssignmentUpdate, TesterGrant, CheckPermissionRequest, DirectPermissionGrant,
     QuickUserFindOrCreate,
 )
 from services.advanced_access_service import (
@@ -296,6 +296,34 @@ async def create_assignment(data: AssignmentCreate, current_user: dict = Depends
     audit_doc = {k: v for k, v in doc.items() if k != "_id"}
     await write_audit_log(db, current_user, "assignment_created", target_user_id=data.user_id, assignment_id=str(res.inserted_id), after=audit_doc)
     return {"id": str(res.inserted_id)}
+
+
+@router.put("/assignments/{assignment_id}")
+async def update_assignment(assignment_id: str, data: AssignmentUpdate, current_user: dict = Depends(require_adv_access("manage_assignments"))):
+    db = get_db()
+    assignment = await db.advanced_user_assignments.find_one({"_id": _oid(assignment_id, "التكليف")})
+    if not assignment:
+        raise HTTPException(status_code=404, detail="التكليف غير موجود")
+    if assignment.get("status") != "active":
+        raise HTTPException(status_code=400, detail="لا يمكن تعديل تكليف منتهٍ — أنشئ تكليفًا جديدًا بدلاً من ذلك")
+    update = {}
+    if data.advanced_role_id is not None:
+        if not await db.advanced_roles.find_one({"_id": _oid(data.advanced_role_id, "الدور")}):
+            raise HTTPException(status_code=404, detail="الدور المتقدم غير موجود")
+        update["advanced_role_id"] = data.advanced_role_id
+    if data.assignment_type is not None:
+        update["assignment_type"] = data.assignment_type
+    if data.context_label_ar is not None:
+        update["context_label_ar"] = data.context_label_ar
+    if data.scope is not None:
+        update["scope"] = data.scope.dict()
+    if not update:
+        return {"message": "لا تغييرات"}
+    before = {k: assignment.get(k) for k in update}
+    await db.advanced_user_assignments.update_one({"_id": assignment["_id"]}, {"$set": update})
+    await write_audit_log(db, current_user, "assignment_updated", target_user_id=assignment["user_id"], assignment_id=assignment_id, before=before, after=update)
+    return {"message": "تم تحديث التكليف"}
+
 
 
 @router.post("/assignments/{assignment_id}/end")

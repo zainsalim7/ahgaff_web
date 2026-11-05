@@ -1,6 +1,6 @@
 """
 نماذج مركز الصلاحيات المتقدم (Advanced Access Control) — مستقل تمامًا عن models/permissions.py القديم
-SHADOW MODE: لا تُستخدم هذه النماذج في أي تحقق وصول حقيقي بالنظام القديم
+الإنفاذ الفعلي: الحارس العام (real_enforcement_guard) يُطبَّق فورًا على كل مستخدم له تكليف نشط هنا
 """
 from typing import List, Optional, Dict, Any
 from datetime import datetime
@@ -47,6 +47,13 @@ class AssignmentCreate(BaseModel):
     direct_permissions: List[DirectPermissionGrant] = Field(default_factory=list)
     started_at: Optional[datetime] = None
     ended_at: Optional[datetime] = None
+
+
+class AssignmentUpdate(BaseModel):
+    assignment_type: Optional[str] = None
+    advanced_role_id: Optional[str] = None
+    context_label_ar: Optional[str] = None
+    scope: Optional[AssignmentScope] = None
 
 
 class TesterGrant(BaseModel):
