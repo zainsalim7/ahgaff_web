@@ -31,6 +31,7 @@ class SystemSettings(BaseModel):
     primary_color: str = "#1565c0"
     secondary_color: str = "#ff9800"
     academic_years: List[str] = []
+    offline_sync_max_hours: int = 72
 
 class SettingsUpdate(BaseModel):
     college_name: Optional[str] = None
@@ -48,3 +49,4 @@ class SettingsUpdate(BaseModel):
     primary_color: Optional[str] = None
     secondary_color: Optional[str] = None
     academic_years: Optional[List[str]] = None
+    offline_sync_max_hours: Optional[int] = None

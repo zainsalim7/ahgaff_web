@@ -27,7 +27,13 @@ import time as time_module
 
 # توقيت اليمن (عدن) UTC+3
 YEMEN_TIMEZONE = timezone(timedelta(hours=3))
-OFFLINE_SYNC_MAX_HOURS = 72  # 🔐 أقصى عمر لسجل تحضير أوفلاين قبل رفضه
+OFFLINE_SYNC_MAX_HOURS = 72  # 🔐 القيمة الافتراضية (تُستبدَل بإعداد قابل للتعديل من لوحة المدير إن وُجد)
+
+async def get_offline_sync_max_hours() -> float:
+    """أقصى عمر لسجل تحضير أوفلاين قبل رفضه — من إعدادات النظام، أو الافتراضي 72 ساعة"""
+    settings = await db.settings.find_one({"_id": "system_settings"}, {"offline_sync_max_hours": 1})
+    val = (settings or {}).get("offline_sync_max_hours")
+    return val if isinstance(val, (int, float)) and val > 0 else OFFLINE_SYNC_MAX_HOURS
 
 def get_yemen_time():
     """الحصول على الوقت الحالي بتوقيت اليمن (UTC+3)"""
@@ -11379,11 +11385,12 @@ async def record_attendance_session(
         except Exception:
             offline_time = None
         if offline_time is not None:
+            _max_hours = await get_offline_sync_max_hours()
             age_seconds = (now - offline_time).total_seconds()
-            if age_seconds > OFFLINE_SYNC_MAX_HOURS * 3600:
+            if age_seconds > _max_hours * 3600:
                 raise HTTPException(
                     status_code=400,
-                    detail=f"سجل التحضير الأوفلاين أقدم من {OFFLINE_SYNC_MAX_HOURS} ساعة — لا يمكن قبوله"
+                    detail=f"سجل التحضير الأوفلاين أقدم من {_max_hours} ساعة — لا يمكن قبوله"
                 )
             if age_seconds < -600:
                 raise HTTPException(status_code=400, detail="وقت التسجيل الأوفلاين في المستقبل — تحقق من ساعة الجهاز")
@@ -12005,6 +12012,7 @@ async def sync_offline_attendance(
     course_owner_cache = {}
     lecture_cache = {}
     completed_lecture_ids = set()
+    _sync_max_hours = await get_offline_sync_max_hours()
 
     for record in data.attendance_records:
         try:
@@ -12054,8 +12062,8 @@ async def sync_offline_attendance(
             if _srv_now < _lstart:
                 errors.append(f"محاضرة {_lec['date']} {_lec['start_time']} لم تبدأ بعد — مرفوض")
                 continue
-            if (_srv_now - _lend).total_seconds() > OFFLINE_SYNC_MAX_HOURS * 3600:
-                errors.append(f"انتهت مهلة المزامنة ({OFFLINE_SYNC_MAX_HOURS} ساعة) لمحاضرة {_lec['date']} — مرفوض")
+            if (_srv_now - _lend).total_seconds() > _sync_max_hours * 3600:
+                errors.append(f"انتهت مهلة المزامنة ({_sync_max_hours} ساعة) لمحاضرة {_lec['date']} — مرفوض")
                 continue
 
             # 🧹 منع التكرار: حذف أي سجل سابق لنفس (المحاضرة، الطالب)
@@ -17359,6 +17367,7 @@ async def get_settings(current_user: dict = Depends(get_current_user)):
         "primary_color": settings.get("primary_color", "#1565c0"),
         "secondary_color": settings.get("secondary_color", "#ff9800"),
         "academic_years": settings.get("academic_years", []),
+        "offline_sync_max_hours": settings.get("offline_sync_max_hours", 72),
         "updated_at": settings.get("updated_at"),
     }
 
@@ -17367,6 +17376,9 @@ async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get
     """تحديث إعدادات النظام - للمدير فقط"""
     if not has_permission(current_user, "manage_settings") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الإعدادات")
+    
+    if data.offline_sync_max_hours is not None and not (1 <= data.offline_sync_max_hours <= 720):
+        raise HTTPException(status_code=400, detail="مدة المزامنة الأوفلاين يجب أن تكون بين 1 و720 ساعة")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     update_data["updated_at"] = get_yemen_time()

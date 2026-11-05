@@ -86,6 +86,7 @@ interface Settings {
   primary_color: string;
   secondary_color: string;
   academic_years: string[];
+  offline_sync_max_hours: number;
 }
 
 const STATUS_LABELS: Record<string, { label: string; color: string; bg: string; icon: string }> = {
@@ -165,8 +166,11 @@ export default function GeneralSettingsScreen() {
     primary_color: '#1565c0',
     secondary_color: '#ff9800',
     academic_years: [],
+    offline_sync_max_hours: 72,
   });
   const [sectionsInput, setSectionsInput] = useState('');
+  const [savingOfflineSync, setSavingOfflineSync] = useState(false);
+  const [offlineSyncHoursInput, setOfflineSyncHoursInput] = useState('72');
   
   // Faculty settings states
   const [selectedFacultyId, setSelectedFacultyId] = useState<string>('');
@@ -257,6 +261,7 @@ export default function GeneralSettingsScreen() {
       // Settings data
       setSettings(settingsRes.data);
       setSectionsInput(settingsRes.data.sections?.join('، ') || '');
+      setOfflineSyncHoursInput(String(settingsRes.data.offline_sync_max_hours || 72));
       
     } catch (error) {
       console.error('Error fetching data:', error);
@@ -534,6 +539,24 @@ export default function GeneralSettingsScreen() {
   };
 
   // ==================== Settings Functions ====================
+  const handleSaveOfflineSyncHours = async () => {
+    const hours = parseInt(offlineSyncHoursInput, 10);
+    if (!hours || hours < 1 || hours > 720) {
+      showMessage('خطأ', 'الرجاء إدخال رقم ساعات صحيح بين 1 و720 (30 يوماً)');
+      return;
+    }
+    setSavingOfflineSync(true);
+    try {
+      await settingsAPI.update({ offline_sync_max_hours: hours });
+      setSettings({ ...settings, offline_sync_max_hours: hours });
+      showMessage('نجاح', `تم تحديث مهلة المزامنة الأوفلاين إلى ${hours} ساعة`);
+    } catch (error: any) {
+      showMessage('خطأ', error.response?.data?.detail || 'فشل في حفظ الإعداد');
+    } finally {
+      setSavingOfflineSync(false);
+    }
+  };
+
   const handleSaveSettings = async () => {
     setSaving(true);
     try {
@@ -1150,6 +1173,48 @@ export default function GeneralSettingsScreen() {
 
     return (
       <ScrollView style={styles.tabContent}>
+        {/* مهلة مزامنة الحضور الأوفلاين (إعداد عام للجامعة) */}
+        <View style={styles.card} testID="offline-sync-settings-card">
+          <View style={styles.cardSectionHeader}>
+            <Ionicons name="cloud-offline" size={22} color="#1565c0" />
+            <Text style={styles.cardSectionTitle}>مهلة مزامنة الحضور الأوفلاين</Text>
+          </View>
+          <Text style={{ fontSize: 12, color: '#888', marginBottom: 8 }}>
+            أقصى عمر لسجل تحضير سُجِّل أوفلاين من تطبيق الأستاذ قبل أن يُرفَض عند المزامنة. القيمة الجديدة تُطبَّق فوراً على أي مزامنة قادمة.
+          </Text>
+          <View style={styles.optionsRow}>
+            {[12, 72, 168].map(h => (
+              <TouchableOpacity
+                key={h}
+                testID={`offline-sync-preset-${h}`}
+                style={[styles.optionBtn, offlineSyncHoursInput === String(h) && styles.optionBtnActive]}
+                onPress={() => setOfflineSyncHoursInput(String(h))}
+              >
+                <Text style={[styles.optionText, offlineSyncHoursInput === String(h) && styles.optionTextActive]}>
+                  {h === 168 ? '7 أيام' : `${h} ساعة`}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.label}>أو أدخل عدد الساعات مباشرة</Text>
+          <TextInput
+            style={styles.input}
+            value={offlineSyncHoursInput}
+            onChangeText={setOfflineSyncHoursInput}
+            placeholder="72"
+            keyboardType="number-pad"
+            testID="offline-sync-hours-input"
+          />
+          <TouchableOpacity
+            style={[styles.saveBtn, savingOfflineSync && styles.savingBtn]}
+            onPress={handleSaveOfflineSyncHours}
+            disabled={savingOfflineSync}
+            testID="offline-sync-save-btn"
+          >
+            {savingOfflineSync ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>حفظ المهلة</Text>}
+          </TouchableOpacity>
+        </View>
+
         {/* اختيار الكلية */}
         <View style={styles.card}>
           <View style={styles.cardSectionHeader}>
