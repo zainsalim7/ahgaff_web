@@ -17394,8 +17394,8 @@ async def update_settings(data: SettingsUpdate, current_user: dict = Depends(get
     if not has_permission(current_user, "manage_settings") and (current_user["role"] != UserRole.ADMIN and not has_permission(current_user, "manage_courses")):
         raise HTTPException(status_code=403, detail="غير مصرح لك بتعديل الإعدادات")
     
-    if data.offline_sync_max_hours is not None and not (1 <= data.offline_sync_max_hours <= 720):
-        raise HTTPException(status_code=400, detail="مدة المزامنة الأوفلاين يجب أن تكون بين 1 و720 ساعة")
+    if data.offline_sync_max_hours is not None and not (1 <= data.offline_sync_max_hours <= 8760):
+        raise HTTPException(status_code=400, detail="مدة المزامنة الأوفلاين يجب أن تكون بين 1 و8760 ساعة (سنة واحدة)")
     
     update_data = {k: v for k, v in data.dict().items() if v is not None}
     update_data["updated_at"] = get_yemen_time()

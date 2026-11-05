@@ -541,8 +541,8 @@ export default function GeneralSettingsScreen() {
   // ==================== Settings Functions ====================
   const handleSaveOfflineSyncHours = async () => {
     const hours = parseInt(offlineSyncHoursInput, 10);
-    if (!hours || hours < 1 || hours > 720) {
-      showMessage('خطأ', 'الرجاء إدخال رقم ساعات صحيح بين 1 و720 (30 يوماً)');
+    if (!hours || hours < 1 || hours > 8760) {
+      showMessage('خطأ', 'الرجاء إدخال رقم ساعات صحيح بين 1 و8760 (سنة واحدة)');
       return;
     }
     setSavingOfflineSync(true);
@@ -1183,7 +1183,7 @@ export default function GeneralSettingsScreen() {
             أقصى عمر لسجل تحضير سُجِّل أوفلاين من تطبيق الأستاذ قبل أن يُرفَض عند المزامنة. القيمة الجديدة تُطبَّق فوراً على أي مزامنة قادمة.
           </Text>
           <View style={styles.optionsRow}>
-            {[12, 72, 168].map(h => (
+            {[72, 168, 720].map(h => (
               <TouchableOpacity
                 key={h}
                 testID={`offline-sync-preset-${h}`}
@@ -1191,7 +1191,7 @@ export default function GeneralSettingsScreen() {
                 onPress={() => setOfflineSyncHoursInput(String(h))}
               >
                 <Text style={[styles.optionText, offlineSyncHoursInput === String(h) && styles.optionTextActive]}>
-                  {h === 168 ? '7 أيام' : `${h} ساعة`}
+                  {h === 720 ? 'شهر' : h === 168 ? '7 أيام' : '3 أيام'}
                 </Text>
               </TouchableOpacity>
             ))}
