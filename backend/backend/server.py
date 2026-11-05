@@ -1150,13 +1150,18 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
             elif scope_type == "departments":
                 query["_id"] = ObjectId(department_ids[0]) if len(department_ids) == 1 else {"$in": [ObjectId(did) for did in department_ids]}
             return query
-        if faculty_id:
+        # 🔧 تكليف بنطاق "كلية" (faculty_ids الجديد الجمعي) — كان يُقرَأ فقط faculty_id المفرد القديم
+        # فيسقط لمستخدم بلا نطاق أكاديمي إطلاقاً (0 نتائج دائماً) لأي تكليف من نوع "كلية"
+        _real_enforce_faculty_ids = [f for f in (user_data.get("faculty_ids") or []) if f] or ([faculty_id] if faculty_id else [])
+        if _real_enforce_faculty_ids:
             if scope_type in ["students", "courses", "teachers", "attendance"]:
-                _dept_ids = await get_faculty_department_ids(faculty_id)
+                _dept_ids = []
+                for _fid in _real_enforce_faculty_ids:
+                    _dept_ids.extend(await get_faculty_department_ids(_fid))
                 if _dept_ids:
                     query["department_id"] = {"$in": _dept_ids}
             elif scope_type == "departments":
-                query["faculty_id"] = faculty_id
+                query["faculty_id"] = _real_enforce_faculty_ids[0] if len(_real_enforce_faculty_ids) == 1 else {"$in": _real_enforce_faculty_ids}
             return query
         # لا تكليف نشط له نطاق أكاديمي إطلاقاً — الأسلم افتراضياً: لا يرى شيئاً بدل رؤية كل شيء
         if scope_type == "departments":
@@ -4813,6 +4818,7 @@ async def reset_student_password(student_id: str, current_user: dict = Depends(g
 @api_router.get("/teachers")
 async def get_teachers(
     department_id: Optional[str] = None,
+    faculty_id: Optional[str] = None,
     cross_university: bool = False,
     current_user: dict = Depends(get_current_user)
 ):
@@ -4825,8 +4831,14 @@ async def get_teachers(
     role = current_user.get("role", "")
     if current_user.get("advanced_access_real_enforcement"):
         from services.advanced_access_service import real_enforce_guard
-        await real_enforce_guard(db, current_user, "teachers_ser_get_teachers", department_id)
+        await real_enforce_guard(db, current_user, "teachers_ser_get_teachers", department_id, faculty_id)
         scope_filter = {}
+        # 🔧 نطاق "كلية" بلا department_id محدد: نترجمه لأقسام تلك الكلية (وإلا 0 نتائج دائماً)
+        if faculty_id and not department_id:
+            _dept_ids = await get_faculty_department_ids(faculty_id)
+            if _dept_ids:
+                department_id = None  # يبقى غير محدد في الفلتر الفردي أدناه
+                scope_filter["department_id"] = {"$in": _dept_ids}
     elif cross_university and (
         role == UserRole.ADMIN or has_permission(current_user, "cross_university_assignment")
     ):

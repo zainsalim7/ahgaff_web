@@ -181,21 +181,28 @@ export default function ManageTeachersScreen() {
     }
   };
 
-  // 🔒 مستخدم إنفاذ فعلي مقيَّد بأقسام محددة: GET /teachers يتطلب department_id صريحاً
+  // 🔒 مستخدم إنفاذ فعلي مقيَّد بأقسام أو كليات محددة: GET /teachers يتطلب department_id أو faculty_id صريحاً
   // وإلا يُرفض 400 — بلا هذا الجلب يبقى بلا بيانات صامتاً رغم امتلاك الصلاحية فعلياً.
   const _myScope = getMyScope(authUser);
   const isScopeRestricted = _myScope.restricted;
   // ⚠️ مصفوفة ثابتة المرجع (useMemo بمفتاح نصي) — وإلا تتغير كل render فتُعاد useCallback/useEffect → حلقة جلب لا نهائية
   const _myDeptKey = _myScope.departmentIds.join(',');
   const myDeptIds = useMemo(() => (_myDeptKey ? _myDeptKey.split(',') : []), [_myDeptKey]);
+  const _myFacKey = _myScope.facultyIds.join(',');
+  const myFacultyIds = useMemo(() => (_myFacKey ? _myFacKey.split(',') : []), [_myFacKey]);
 
   const fetchTeachersScoped = useCallback(async () => {
     if (!isScopeRestricted) return teachersAPI.getAll();
-    const perDept = await Promise.all(myDeptIds.map((d) => teachersAPI.getAll({ department_id: d }).catch(() => ({ data: [] }))));
+    // نطاق أقسام محددة: نجلب لكل قسم على حدة وندمج النتائج
+    // نطاق كليات محددة (بلا أقسام): نجلب لكل كلية على حدة وندمج النتائج
+    const calls = myDeptIds.length
+      ? myDeptIds.map((d) => teachersAPI.getAll({ department_id: d }).catch(() => ({ data: [] })))
+      : myFacultyIds.map((f) => teachersAPI.getAll({ faculty_id: f }).catch(() => ({ data: [] })));
+    const results = await Promise.all(calls);
     const map = new Map<string, Teacher>();
-    perDept.forEach((r) => (r.data || []).forEach((t: Teacher) => map.set(t.id, t)));
+    results.forEach((r) => (r.data || []).forEach((t: Teacher) => map.set(t.id, t)));
     return { data: Array.from(map.values()) };
-  }, [isScopeRestricted, myDeptIds]);
+  }, [isScopeRestricted, myDeptIds, myFacultyIds]);
 
   const fetchData = useCallback(async () => {
     if (!authUser) return; // ⏳ ننتظر تحميل بيانات المستخدم أولاً لتفادي طلب GET /teachers بلا نطاق يُرفض 400

@@ -511,7 +511,7 @@ export const alumniAPI = {
 // Teachers API (المعلمين)
 export const teachersAPI = {
   create: (data: any) => api.post('/teachers', data),
-  getAll: (params?: { department_id?: string }) =>
+  getAll: (params?: { department_id?: string; faculty_id?: string }) =>
     api.get('/teachers', { params }),
   getById: (id: string) => api.get(`/teachers/${id}`),
   getCourses: (teacherId: string, params?: { include_all?: boolean; semester_id?: string }) =>
