@@ -169,6 +169,14 @@ async def login(user_data: UserLogin, request: Request):
             await db.users.update_one({"_id": user["_id"]}, {"$set": {"advanced_access_real_enforcement": True}})
             user["advanced_access_real_enforcement"] = True
 
+    # 🩹 إصلاح ذاتي ثانٍ: نطاق الإنفاذ الفعلي (faculty_ids/department_ids) يُزامَن عادة فقط عبر get_current_user
+    # (routes/deps.build_user_context) — فأول تسجيل دخول بعد إسناد تكليف جديد كان يُرجع نطاقاً فارغاً [[]]
+    # حتى يُزامَن لاحقاً، فيظهر للمستخدم 0/0 بيانات رغم امتلاكه الصلاحية فعلياً. نُزامن الآن قبل بناء الاستجابة.
+    if user.get("advanced_access_real_enforcement"):
+        from services.advanced_access_service import sync_real_enforcement_context
+        await sync_real_enforcement_context(db, user)
+        user = await db.users.find_one({"_id": user["_id"]})
+
     # جلب صلاحيات الدور
     user_permissions = []
     

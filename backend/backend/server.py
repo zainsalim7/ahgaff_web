@@ -1158,8 +1158,8 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
                 _dept_ids = []
                 for _fid in _real_enforce_faculty_ids:
                     _dept_ids.extend(await get_faculty_department_ids(_fid))
-                if _dept_ids:
-                    query["department_id"] = {"$in": _dept_ids}
+                # 🔒 fail-closed: كلية بلا أقسام فعلياً يجب ألا تعني "بلا قيود" بل "لا يرى شيئاً"
+                query["department_id"] = {"$in": _dept_ids}
             elif scope_type == "departments":
                 query["faculty_id"] = _real_enforce_faculty_ids[0] if len(_real_enforce_faculty_ids) == 1 else {"$in": _real_enforce_faculty_ids}
             return query
@@ -4833,12 +4833,14 @@ async def get_teachers(
         from services.advanced_access_service import real_enforce_guard
         await real_enforce_guard(db, current_user, "teachers_ser_get_teachers", department_id, faculty_id)
         scope_filter = {}
-        # 🔧 نطاق "كلية" بلا department_id محدد: نترجمه لأقسام تلك الكلية (وإلا 0 نتائج دائماً)
-        if faculty_id and not department_id:
+        # 🔧 نطاق "كلية": نترجمه دوماً لأقسام تلك الكلية (fail-closed لو بلا أقسام) ونتحقق أن أي department_id
+        # مُرسَل فعلاً ضمنها — وإلا يمكن لمستخدم ممنوح faculty_id فقط تمرير department_id من كلية أخرى والتحايل
+        if faculty_id:
             _dept_ids = await get_faculty_department_ids(faculty_id)
-            if _dept_ids:
-                department_id = None  # يبقى غير محدد في الفلتر الفردي أدناه
-                scope_filter["department_id"] = {"$in": _dept_ids}
+            if department_id and department_id not in _dept_ids:
+                raise HTTPException(status_code=403, detail="القسم المحدد خارج نطاق الكلية المصرَّح بها")
+            scope_filter["department_id"] = {"$in": _dept_ids}
+            department_id = None  # الفلتر النهائي يُبنى من scope_filter أعلاه فقط
     elif cross_university and (
         role == UserRole.ADMIN or has_permission(current_user, "cross_university_assignment")
     ):

@@ -1,0 +1,55 @@
+{
+  "summary": "Iter158 retest of faculty-scoped real-enforcement fix (get_user_scope_filter faculty_ids + GET /teachers?faculty_id + manage-teachers fetchTeachersScoped faculty branch). Created temp TEST_ user + all-996-keys role + scope_type=faculty assignment on كلية الشريعة والقانون (698e4f92...a4). Steady state WORKS: after the user's faculty_ids gets synced, GET /students=19, /courses=29, /departments=3 (exact faculty depts), /teachers?faculty_id=own=200 with 13 (12 in-faculty plus 1 cross-dept teacher حسن صالح added through teaching_load, as designed), other faculty=403, random faculty=403, department_id inside own faculty=403 (strict scope_type). The UI /manage-teachers shows 13/13 and calls /teachers?faculty_id=... Regression PASSES: admin sees 15 teachers, faculty/department filters work (البنات 3, الشريعة 12, dept 12); Saeed sees 4 teachers (72 students, 4 courses, 1 dept); Salim sees 13 teachers (19 students, 29 courses, 3 depts); layer2_test_emp still gets exactly 12 teachers via department_id in both API and UI, gets 403 for faculty_id (own and foreign), and students, courses and departments stay limited to its own dept. I found 3 real bugs: 2 security leaks introduced or exposed by the new faculty_id path, and 1 first-login sync bug that reproduces the user's exact symptom (0/0) for a freshly assigned user.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/teachers?faculty_id=<own>&department_id=<dept in OTHER faculty>", "issue": "SCOPE LEAK. real_enforce_guard only checks faculty_id when both params are present (target_type='faculty'), so it passes. The new block at server.py ~4837 only builds scope_filter when `faculty_id and not department_id`. With both params set, scope_filter stays {}, and line 4857 sets query.department_id to the foreign dept. Reproduced: a faculty-A user got 3 teachers from كلية البنات dept 698e501d97fef774e66e93a9. Fix: whenever faculty_id is given, always set scope_filter['department_id']={'$in': faculty_dept_ids}, or reject (403) a department_id that is not in that faculty's depts.", "priority": "CRITICAL"},
+      {"endpoint": "get_user_scope_filter (server.py ~1156-1165) + GET /api/teachers (~4838-4841)", "issue": "FAIL-OPEN LEAK when the scoped faculty has ZERO departments. `if _dept_ids:` is skipped, the query stays {}, and the user sees EVERYTHING. Reproduced with a temp TEST_ faculty with no depts: that user got all 15 teachers, 91 students and 34 courses. Before this change it was fail-closed (0 results). Fix: when _dept_ids is empty, set query['department_id']={'$in': []} in both places.", "priority": "CRITICAL"},
+      {"endpoint": "POST /api/auth/login + server.py get_current_user (used by /students, /courses, /departments, /teachers)", "issue": "faculty_ids/department_ids are synced from assignments only inside routes/deps.build_user_context (sync_real_enforcement_context). Login (routes/auth.py ~263) and server.get_current_user never sync. So on a freshly assigned user's first login: (1) the login response has faculty_ids=[] and the frontend stores it; (2) GET /students returns 0 until some deps-based route (e.g. /auth/me or the dashboard) happens to trigger the sync; (3) in the UI, getMyScope() sees restricted=false, so manage-teachers calls GET /teachers with no params, gets 400 and shows 0/0 for the whole session. Re-login fixes it. Reproduced in UI on the first login. Fix: call sync_real_enforcement_context(db, user) in the login handler before building the response for real-enforcement users (and ideally in server.get_current_user too), and/or have the frontend refresh /auth/me after login.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "GET /api/teachers?faculty_id= and GET /api/students?faculty_id= (legacy/admin)", "issue": "faculty_id is silently ignored for non-real-enforcement users: admin gets all 15 teachers for any faculty_id, and /students has no faculty_id param at all. Not a regression, but inconsistent."},
+      {"endpoint": "sync_real_enforcement_context", "issue": "Only writes faculty_ids/department_ids when the new set is non-empty, so a stale scope is never cleared when an assignment ends or changes type. The user keeps the old scope in get_user_scope_filter."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "manage-teachers (first login of a newly assigned faculty-scoped user)", "issue": "Shows 0/0 teachers. Caused by the stale faculty_ids=[] in the login response (see backend HIGH issue). getMyScope gives restricted=false, so the page calls GET /teachers without params and gets 400.", "selector": "/manage-teachers", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "manage-teachers (faculty-scoped user)", "issues": ["The faculty filter still lists out-of-scope faculties (كلية البنات), and choosing one gives an empty list. Consider limiting the options to myFacultyIds."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_faculty_scope_real_enforce_iter158.py",
+    "/app/backend/tests/test_empty_faculty_scope_iter158.py",
+    "/app/backend/tests/ui158_setup.py",
+    "/app/backend/tests/l2_role158.py",
+    "/app/test_reports/pytest/iter158.xml"
+  ],
+  "action_items": [
+    "CRITICAL: GET /teachers (real-enforcement branch), when faculty_id is given, always restrict department_id to that faculty's depts (or 403 a department_id outside it). Today faculty_id=own plus department_id=foreign leaks.",
+    "CRITICAL: In get_user_scope_filter and GET /teachers, fail closed ({'$in': []}) when the scoped faculty resolves to zero departments. Today it returns the whole university.",
+    "HIGH: Sync the real-enforcement scope (sync_real_enforcement_context) in POST /auth/login before returning user.faculty_ids/department_ids, and in server.get_current_user, so the first session works without a re-login.",
+    "Minor: sync_real_enforcement_context should clear faculty_ids/department_ids when no active assignment of that type remains."
+  ],
+  "critical_code_review_comments": [
+    "server.py 4837: `if faculty_id and not department_id` misses the both-params case, which is the leak.",
+    "server.py 1161 and 4839: `if _dept_ids:` makes the code fail open.",
+    "manage-teachers.tsx: if restricted but both arrays are empty, calls=[] gives 0 silently (fine). If not restricted because the auth user is stale, the page falls back to the no-param call and gets 400. Consider refreshing authUser via /auth/me on app start.",
+    "server.py is ~19.8k lines and should be split into modules."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_faculty_scope_real_enforce_iter158.py",
+    "/app/backend/tests/test_empty_faculty_scope_iter158.py",
+    "/app/backend/tests/ui158_setup.py",
+    "/app/backend/tests/l2_role158.py",
+    "/app/backend/tests/explore_iter158.py"
+  ],
+  "success_rate": {"backend": "~89% (24/27 checks; 3 real bugs: 2 leaks + first-login sync)", "frontend": "~83% (5/6 flows; first-login manage-teachers 0/0)"},
+  "seed_data_creation": "None left behind. Temp TEST_facscope158, TEST_facscope158ui and TEST_emptyfac158 users, their TEST_role_* roles and assignments, and the TEST_كلية فارغة 158 faculty were all deleted by id. The layer2 role 6ae98be3fbf74b036f42a7a7 was restored to its exact 3 original keys (verified). Note: 152 pre-existing TEST_* assignments from earlier runs are in advanced_user_assignments. They are not mine and were left untouched.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run with: cd /app/backend && REACT_APP_BACKEND_URL=... python3 -m pytest tests/test_faculty_scope_real_enforce_iter158.py tests/test_empty_faculty_scope_iter158.py -p no:xdist -o addopts=''. The fixtures create and clean their own TEST_ user, role and assignment (and an empty faculty). The fixture calls /auth/me to trigger the sync; the test_scope_available_without_me_call test captures the pre-sync bug. Faculties: A=698e4f9297fef774e66e93a4 (Sharia, 3 depts, 19 students, 12 teachers), B=698e4fb497fef774e66e93a6 (Banat, 1 dept 698e501d97fef774e66e93a9, 3 teachers). UI: login placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور', button text 'تسجيل الدخول'. Filters: data-testid teachers-faculty-filter / teachers-department-filter (native selects). For layer2 UI, grant via tests/l2_role158.py grant, then restore.",
+  "rca of the issue": "Leak 1: guard validates faculty_id only, and the filter is built only when department_id is absent, so a caller-chosen department_id bypasses scope. Leak 2: an empty dept list leaves the query unfiltered. First-login 0/0: the scope sync lives only in routes/deps.build_user_context, while login and server.get_current_user read the unsynced user doc. Repro: create an assignment for a new user, log in, open /manage-teachers: GET /teachers (no params) returns 400 and the page shows 0/0; after re-login it shows 13/13."
+}
