@@ -1,0 +1,18 @@
+{
+  "summary": "Narrow confirmation round for the 2 HIGH leaks found in iteration_159. Both are fixed. get_user_scope_filter now checks university scope live and per key, through real_enforce_check(db, user, <key per scope_type>, 'university', None). (1) User with dept assignment A ['students_ser_get_students'] on 698e500997fef774e66e93a8 plus university assignment B ['grades_grades_download_grades_template'] only: GET /api/students with no params returns 200 with 19 students, all from that department (admin sees 91). /teachers, /departments and /courses return 403, not widened. (2) Ending A as admin and calling again with the same token: GET /api/students returns 403, so the check is live and not cached. Sanity: a true university user with all 4 read keys gets full counts (teachers 15, students 91, departments 4, courses 34). layer2_test_emp is still department-restricted: /teachers with no params returns 400, faculty_id returns 403, students and departments are limited to its department. The faculty-scoped user is still limited to FAC_A. admin, Saeed and Salim are unaffected. The 4 previously-relevant iter159 tests (TestUniversityEdge x3 and TestStaleWithRemainingAssignment) now pass too.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": ["/app/backend/tests/test_uni_scope_keyaware_live_iter160.py", "/app/backend/tests/test_university_scope_real_enforce_iter159.py", "/app/test_reports/pytest/iter160.xml"],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "The _univ_key_by_scope map in get_user_scope_filter has no 'attendance' entry. A real-enforcement university-scoped user calling an attendance path that uses scope_type='attendance' never gets the unrestricted university branch. It falls to the department_ids or fail-safe branch, so access is narrower than granted. That is safe, but it is a functional gap if university attendance viewers are expected.",
+    "This leftover from iter159 is still open: routes/students.py and routes/departments.py use the keys students_students_get_students and academic_structure_departments_get_departments, which do not exist in the registry. Those routes are shadowed by server.py, so they are dead code. Clean them up or align the keys.",
+    "The iter159 test TestUniversityScope::test_login_real_enforcement asserts the user-doc flag adv_has_university_scope. If that flag is retired, update or drop that assertion."
+  ],
+  "updated_files": ["/app/backend/tests/test_uni_scope_keyaware_live_iter160.py (new)"],
+  "success_rate": {"backend": "100% (8/8 iter160 + 4/4 targeted iter159)", "frontend": "not tested (backend-only request)"},
+  "seed_data_creation": "Created temporary TEST_*160 and TEST_*159 users, roles and assignments, then deleted them by id. A DB check after the run found 0 left. The layer2 role 6ae98be3fbf74b036f42a7a7 is restored to its original 3 keys (verified).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run with: cd /app/backend && REACT_APP_BACKEND_URL=... python -m pytest tests/test_uni_scope_keyaware_live_iter160.py -p no:xdist -v -s. It imports helpers from the iter159 file. Admin counts at this time: teachers 15, students 91, departments 4, courses 34. Dept 698e500997fef774e66e93a8 has 19 students. The running server code is /app/backend/backend/server.py; /app/backend/server.py is a small shim."
+}
