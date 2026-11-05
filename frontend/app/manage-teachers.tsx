@@ -183,7 +183,11 @@ export default function ManageTeachersScreen() {
 
   // 🔒 مستخدم إنفاذ فعلي مقيَّد بأقسام محددة: GET /teachers يتطلب department_id صريحاً
   // وإلا يُرفض 400 — بلا هذا الجلب يبقى بلا بيانات صامتاً رغم امتلاك الصلاحية فعلياً.
-  const { restricted: isScopeRestricted, departmentIds: myDeptIds } = getMyScope(authUser);
+  const _myScope = getMyScope(authUser);
+  const isScopeRestricted = _myScope.restricted;
+  // ⚠️ مصفوفة ثابتة المرجع (useMemo بمفتاح نصي) — وإلا تتغير كل render فتُعاد useCallback/useEffect → حلقة جلب لا نهائية
+  const _myDeptKey = _myScope.departmentIds.join(',');
+  const myDeptIds = useMemo(() => (_myDeptKey ? _myDeptKey.split(',') : []), [_myDeptKey]);
 
   const fetchTeachersScoped = useCallback(async () => {
     if (!isScopeRestricted) return teachersAPI.getAll();
@@ -194,6 +198,7 @@ export default function ManageTeachersScreen() {
   }, [isScopeRestricted, myDeptIds]);
 
   const fetchData = useCallback(async () => {
+    if (!authUser) return; // ⏳ ننتظر تحميل بيانات المستخدم أولاً لتفادي طلب GET /teachers بلا نطاق يُرفض 400
     try {
       // 🛡️ Promise.allSettled: لو فشل أي API (مثلاً 403)، البقية تكمل عملها
       const results = await Promise.allSettled([
@@ -225,7 +230,7 @@ export default function ManageTeachersScreen() {
     } finally {
       setLoading(false);
     }
-  }, [fetchTeachersScoped]);
+  }, [fetchTeachersScoped, authUser]);
 
   useEffect(() => {
     fetchData();
@@ -233,12 +238,10 @@ export default function ManageTeachersScreen() {
 
   // 🔒 تثبيت فلتر «القسم» على قسم المستخدم المقيَّد الوحيد تلقائياً (بدل «الكل» غير المجدي)
   useEffect(() => {
-    if (isScopeRestricted && myDeptIds.length === 1 && !filterDepartment && departments.length) {
+    if (isScopeRestricted && myDeptIds.length === 1 && !filterDepartment) {
+      setFilterDepartment(myDeptIds[0]);
       const dept = departments.find((d) => d.id === myDeptIds[0]);
-      if (dept) {
-        setFilterDepartment(dept.id);
-        setFilterFaculty((dept as any).faculty_id || '');
-      }
+      if (dept) setFilterFaculty((dept as any).faculty_id || '');
     }
   }, [isScopeRestricted, myDeptIds, departments]);
 
@@ -542,7 +545,11 @@ export default function ManageTeachersScreen() {
   const getDepartmentName = (deptId?: string) => {
     if (!deptId) return 'غير محدد';
     const dept = departments.find(d => d.id === deptId);
-    return dept?.name || 'غير محدد';
+    if (dept?.name) return dept.name;
+    // 🆕 احتياطي عند تقييد صلاحية قراءة الأقسام (403 على /departments): نستخدم أسماء الأقسام المرسلة مع تسجيل الدخول
+    const idx = _myScope.departmentIds.indexOf(deptId);
+    if (idx !== -1 && (authUser as any)?.department_names?.[idx]) return (authUser as any).department_names[idx];
+    return 'غير محدد';
   };
 
   // Pagination
@@ -889,7 +896,7 @@ export default function ManageTeachersScreen() {
                 </View>
                 <View style={styles.statTextCol}>
                   <Text style={styles.statLabel}>القسم</Text>
-                  <Text style={styles.statValue} numberOfLines={1}>{filterDepartment ? (departments.find(d => d.id === filterDepartment)?.name || 'الكل') : 'الكل'}</Text>
+                  <Text style={styles.statValue} numberOfLines={1}>{filterDepartment ? getDepartmentName(filterDepartment) : 'الكل'}</Text>
                   <Text style={styles.statSubLabel}>القسم الحالي</Text>
                 </View>
               </View>

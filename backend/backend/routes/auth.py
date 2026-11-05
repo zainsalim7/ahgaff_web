@@ -231,6 +231,18 @@ async def login(user_data: UserLogin, request: Request):
         except Exception:
             pass
 
+    # 🆕 أسماء كل الأقسام المسندة (لعرضها في الـ UI كبديل احتياطي حتى لو عجز المستخدم عن قراءة GET /departments)
+    login_department_ids = user.get("department_ids") or ([user.get("department_id")] if user.get("department_id") else [])
+    department_names = []
+    if login_department_ids:
+        try:
+            dept_object_ids = [ObjectId(d) for d in login_department_ids if d]
+            dept_docs = await db.departments.find({"_id": {"$in": dept_object_ids}}).to_list(50)
+            name_map = {str(d["_id"]): d.get("name") for d in dept_docs}
+            department_names = [name_map.get(str(d)) for d in login_department_ids if name_map.get(str(d))]
+        except Exception:
+            pass
+
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -252,6 +264,7 @@ async def login(user_data: UserLogin, request: Request):
             "department_ids": user.get("department_ids") or ([user.get("department_id")] if user.get("department_id") else []),
             "faculty_name": faculty_name,
             "department_name": department_name,
+            "department_names": department_names,
             "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False)
         }
     }

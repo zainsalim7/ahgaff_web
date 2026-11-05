@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the fixes for GET /teachers real-enforcement scoping and the Saeed self-heal regression, on both backend and frontend. Backend: 21/21 pytest tests pass. The legacy users (admin, Saeed, Salim, teacher180156, 1001) can log in and read their normal data. Saeed has role=department_head, RE=False and 76 effective permissions; /teachers returns 4, /students 72, /departments 1, /courses 4; only /hr/employees gives 403, which is expected. For layer2_test_emp with teachers_ser_get_teachers temporarily granted: /teachers with no params gives 400, with its own department 200 (12 teachers, all in 698e500997fef774e66e93a8), with another department 403. Without the grant it gives 403. The role was restored to its original 3 keys and checked in the DB. No PILOT assignments or roles remain. Frontend: found and fixed a CRITICAL regression introduced by this session's manage-teachers.tsx change: an endless fetch loop. getMyScope() returned a new departmentIds array on every render, so the useCallback, fetchData and the useEffect re-ran every render. Measured: about 216 /api/teachers requests in 8s for admin, still running. After the fix: 1 request for admin and 2 for layer2/Saeed. After the fix, layer2 /manage-teachers shows 12 teachers from its department, admin sees 15/15 and the faculty filter narrows to 3, Saeed sees 4/4, and the students page loads with no 403s.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/departments, /api/faculties (layer2_test_emp)", "issue": "These return 403 because the account has no read permission for departments or faculties. This is expected for its grants, but on /manage-teachers it means the Department column shows 'غير محدد' and the faculty/department dropdowns stay empty."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "manage-teachers.tsx fetchTeachersScoped/fetchData", "issue": "FIXED by the testing agent. An endless re-fetch loop of GET /api/teachers (plus departments and faculties) about 27 times per second for every user, admin included. Cause: myDeptIds from getMyScope() was a new array on every render and was used in useCallback/useEffect deps.", "selector": "app/manage-teachers.tsx line ~186", "priority": "CRITICAL"}
+    ],
+    "integration_issues": [
+      {"flow": "Restricted user auto-lock of the department filter", "issue": "The auto-lock effect needs departmentsAPI.getAll() to include the user's department. For real-enforcement users without department read permission (layer2_test_emp gets 403), departments stays [] and the filter never locks; it shows 'الكل' / 'اختر الكلية أولاً' and the stat card shows 'القسم: الكل'. The teacher list is still correctly scoped by the server. Login also returns department_names=null, so there is no name to fall back on.", "affected_selectors": ["teachers-faculty-filter", "teachers-department-filter"]},
+      {"flow": "Restricted user first render", "issue": "One redundant GET /api/teachers with no params returns 400 on mount. It runs before authUser is ready or before isScopeRestricted resolves, then the scoped call follows. It is harmless but adds noise to the logs.", "affected_selectors": []}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_scope_autoselect_teachers_iter157.py", "/app/test_reports/pytest/iter157.xml"],
+  "action_items": [
+    "Review the testing agent's fix in manage-teachers.tsx: myDeptIds is now built with useMemo keyed on departmentIds.join(','). Apply the same stable-reference pattern wherever else getMyScope() output is used in hook deps.",
+    "Optional: make the auto-lock work when /departments is 403. Return department_names in the /auth/login user payload (currently null) and use user.department_ids/department_names as a fallback for the filter label, the stat card and the Department column.",
+    "Optional: avoid the initial no-params GET /teachers (400) for restricted users. Wait for authUser before the first fetch."
+  ],
+  "critical_code_review_comments": [
+    "getMyScope() returns new arrays on every call. Any consumer that puts them in React deps will loop. Consider memoizing inside a useMyScope() hook.",
+    "The auto-lock useEffect deps leave out filterDepartment on purpose. That works, but the 'إعادة تعيين' reset does not re-lock until departments change, so a restricted user can go back to 'الكل' (the list is still scoped by the server).",
+    "routes/advanced_access.py:281 still sets advanced_access_real_enforcement=True on ANY assignment creation, including assigning legacy users like Saeed or Salim through the UI. That is by design, but it is the same risk that hit Saeed. Consider a confirmation step or a guard for legacy accounts.",
+    "manage-teachers.tsx is about 1830 lines and should be split."
+  ],
+  "updated_files": ["/app/frontend/app/manage-teachers.tsx", "/app/backend/tests/test_scope_autoselect_teachers_iter157.py"],
+  "success_rate": {"backend": "100% (21/21)", "frontend": "100% after the testing agent's loop fix (the loop was a critical regression before the fix)"},
+  "test_credentials": "Used the credentials from /app/memory/test_credentials.md and the review request. Web login for teacher180156 and 1001 returns 403 'app-only'. This is an existing rule, not a regression; their API login works.",
+  "seed_data_creation": "None. Role 6ae98be3fbf74b036f42a7a7 was granted teachers_ser_get_teachers temporarily and restored to its original 3 keys; checked in the DB.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Real-enforcement users: only layer2_test_emp. Pilot assignments and roles: 0. Re-run with: REACT_APP_BACKEND_URL=... pytest tests/test_scope_autoselect_teachers_iter157.py -p no:xdist -o addopts=''. The pytest test grants and restores the role permission itself, in a finally block. Web login uses placeholder selectors and the button text 'تسجيل الدخول'. Frontend is served by the supervisor program 'expo'.",
+  "rca of the issue": "Fetch loop: getMyScope(authUser) does (u.department_ids||[]).filter(Boolean), which makes a new array on every render. fetchTeachersScoped=useCallback(...,[isScopeRestricted,myDeptIds]) then changes every render, so fetchData changes, so useEffect([fetchData]) fires again, and setTeachers triggers another render. Repro: open /manage-teachers as admin and count /api/teachers requests (about 27/s). Fix: a stable myDeptIds via useMemo on the joined key."
+}

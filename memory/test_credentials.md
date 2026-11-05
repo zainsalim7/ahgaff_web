@@ -1,3 +1,8 @@
+# ⚠️ تنبيه حرج (5 نوفمبر 2026): لا تُشغِّل أبداً services/pilot_service.py::run_pilot() بدون استدعاء reset_pilot() فوراً بعد الاختبار
+# تسبب تشغيل Pilot قديم (29 أكتوبر) نُسي تصفيره في تفعيل advanced_access_real_enforcement=True فعلياً على حساب "Saeed" الحقيقي
+# (عبر الإصلاح الذاتي في routes/auth.py الذي كان يرى أي تكليف active بما فيها PILOT_* وهمية) مما حجب كل صلاحياته القديمة بـ403.
+# تم الإصلاح: استُبعدت تكليفات created_by='pilot_runner' من فحص الإصلاح الذاتي + أُعيد Saeed لحالته الطبيعية + حُذفت كل بيانات PILOT_* المتبقية.
+
 # Test Credentials
 
 ## Admin
