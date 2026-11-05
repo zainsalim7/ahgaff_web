@@ -18,6 +18,7 @@ import { Stack } from 'expo-router';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useAuthStore } from '../src/store/authStore';
+import { getMyScope } from '../src/utils/scopeDefaults';
 import { downloadBlob } from '../src/utils/exportName';
 
 interface Candidate {
@@ -116,9 +117,12 @@ export default function FacultyBoardScreen() {
   const fetchSessions = useCallback(async () => {
     setLoading(true);
     try {
+      const decParams: any = {};
+      if (filterDepartment) decParams.department_id = filterDepartment;
+      else if (filterFaculty) decParams.faculty_id = filterFaculty;
       const [sr, dr] = await Promise.all([
         api.get('/faculty-board/sessions'),
-        api.get('/faculty-board/decisions'),
+        api.get('/faculty-board/decisions', { params: decParams }),
       ]);
       setSessions(sr.data.items || []);
       setSessionDecisions({});
@@ -129,7 +133,7 @@ export default function FacultyBoardScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [filterDepartment, filterFaculty]);
 
   useEffect(() => {
     if (!user) return;
@@ -137,8 +141,12 @@ export default function FacultyBoardScreen() {
       showAlert('غير مصرح', 'هذه الصفحة للإدارة فقط');
       return;
     }
-    fetchCandidates();
-    fetchSessions();
+    // 🆕 مستخدم إنفاذ فعلي مُقيَّد بنطاق: نعبّئ قسمه/كليته افتراضياً كي لا يُرفض الطلب (400) لعدم تحديد نطاق
+    const scope = getMyScope(user);
+    if (scope.restricted) {
+      if (scope.departmentIds.length === 1) setFilterDepartment((p) => p || scope.departmentIds[0]);
+      else if (scope.facultyIds.length === 1) setFilterFaculty((p) => p || scope.facultyIds[0]);
+    }
     api.get('/faculties').then((r) => setFaculties((r.data || []).map((f: any) => ({ id: f.id, name: f.name })))).catch(() => {});
     api.get('/departments').then((r) => setDepartments((r.data || []).map((d: any) => ({ id: d.id, name: d.name })))).catch(() => {});
     api.get('/semesters/current').then((sr) => {
@@ -149,6 +157,13 @@ export default function FacultyBoardScreen() {
       setCourses(list.map((c: any) => ({ id: c.id, name: `${c.name}${c.code ? ` (${c.code})` : ''}` })));
     }).catch(() => {});
   }, [user, canManage]);
+
+  // 🆕 يُطلَق بعد تعبئة نطاق المستخدم المُقيَّد (إن وُجد) أو فوراً للمستخدم غير المُقيَّد
+  useEffect(() => {
+    if (!user || !canManage) return;
+    fetchCandidates();
+    fetchSessions();
+  }, [user, canManage, filterDepartment, filterFaculty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleSelect = (sid: string) => setSelected((p) => ({ ...p, [sid]: !p[sid] }));
   const selectedCandidates = candidates.filter((c) => selected[`${c.student_id}_${c.course_id}`]);

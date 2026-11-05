@@ -237,6 +237,19 @@ async def real_enforce_check(db, user: dict, permission_key: str,
         result = await check_permission(db, user_id, a["id"], permission_key, target_scope_type, target_ref_id)
         if result.get("allowed"):
             return True
+    # 🔧 نطاق هرمي: هدف من نوع "قسم" محدَّد يُغطّى أيضاً بتكليف "كلية" ذلك القسم بالذات (وليس أي كلية أخرى) —
+    # وإلا يبقى أي مستخدم مُكلَّف بنطاق كلية عاجزاً تماماً عن نقاط تتحقق من department_id محدَّد (تسجيل/حضور/تقارير)
+    if target_scope_type == "department" and target_ref_id:
+        try:
+            dept = await db.departments.find_one({"_id": ObjectId(target_ref_id)})
+            parent_faculty_id = str(dept["faculty_id"]) if dept and dept.get("faculty_id") else None
+        except Exception:
+            parent_faculty_id = None
+        if parent_faculty_id:
+            for a in assignments:
+                result = await check_permission(db, user_id, a["id"], permission_key, "faculty", parent_faculty_id)
+                if result.get("allowed"):
+                    return True
     return False
 
 
@@ -247,19 +260,22 @@ async def real_enforce_guard(db, current_user: dict, adv_permission_key: str,
     وإلا HTTPException(400)، ثم يتحقق من الصلاحية+النطاق فعليًا وإلا HTTPException(403). عند النجاح يُعيد True (تجاوز الفلترة القديمة بأمان)."""
     if not current_user.get("advanced_access_real_enforcement"):
         return False
-    target_type = "faculty" if faculty_id else ("department" if department_id else None)
-    target_ref = faculty_id or department_id
-    if target_type is None:
+    if department_id is None and faculty_id is None:
         # 🆕 تكليف بنطاق "الجامعة كاملة": لا يحتاج تحديد قسم/كلية إطلاقاً. نتحقق مباشرة وحيّاً من قاعدة
         # البيانات (بدل الاعتماد على current_user.get('adv_has_university_scope') الذي قد يغيب من بعض
         # نسخ get_current_user القديمة في server.py التي لا تمر عبر routes/deps.build_user_context)
         if await real_enforce_check(db, current_user, adv_permission_key, "university", None):
             return True
         raise HTTPException(status_code=400, detail="حدد القسم أو الكلية ضمن نطاق صلاحيتك لعرض هذه البيانات")
-    decision = await real_enforce_check(db, current_user, adv_permission_key, target_type, target_ref)
-    if not decision:
-        raise HTTPException(status_code=403, detail="غير مصرح")
-    return True
+    # 🔧 تجربة department_id ثم faculty_id (OR) بدل أولوية faculty_id فقط — صفحات كثيرة (الجدول الأسبوعي مثلاً)
+    # ترسل faculty_id دائماً + department_id اختيارياً، فمستخدم مُقيَّد بقسم فقط (بلا نطاق كلية) كان يُرفض دوماً
+    if department_id:
+        if await real_enforce_check(db, current_user, adv_permission_key, "department", department_id):
+            return True
+    if faculty_id:
+        if await real_enforce_check(db, current_user, adv_permission_key, "faculty", faculty_id):
+            return True
+    raise HTTPException(status_code=403, detail="غير مصرح")
 
 
 async def get_user_primary_scope(db, user: dict) -> Dict[str, Optional[str]]:

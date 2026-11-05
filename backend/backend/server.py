@@ -18053,7 +18053,17 @@ async def get_faculties(current_user: dict = Depends(get_current_user)):
 
             # تطبيق الفلتر فقط إن كان المستخدم في دور مقيَّد بكلية
             scoped_roles = {"dean", "department_head", "registration_manager", "registrar", "custom"}
-            if role in scoped_roles and allowed_faculty_ids:
+            # 🆕 مستخدم إنفاذ فعلي (نظام الوصول المتقدم): يُقيَّد بنفس allowed_faculty_ids المُشتقَّة أعلاه،
+            # إلا لو كان تكليفه بنطاق "الجامعة كاملة" (بصلاحية فعلية لقراءة الكليات تحديداً)
+            if user_data.get("advanced_access_real_enforcement"):
+                from services.advanced_access_service import real_enforce_check
+                if await real_enforce_check(db, user_data, "academic_structure_ser_get_faculties", "university", None):
+                    pass  # بلا أي قيد — نطاق جامعة كاملة فعلي
+                elif allowed_faculty_ids:
+                    query["_id"] = {"$in": [ObjectId(fid) for fid in allowed_faculty_ids]}
+                else:
+                    return []
+            elif role in scoped_roles and allowed_faculty_ids:
                 try:
                     query["_id"] = {"$in": [ObjectId(fid) for fid in allowed_faculty_ids]}
                 except Exception:

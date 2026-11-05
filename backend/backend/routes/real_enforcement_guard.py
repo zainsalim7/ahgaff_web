@@ -38,6 +38,9 @@ SELF_SERVICE_EXCLUDE_KEYS = {
     "misc_advanced_access_my_access", "misc_advanced_access_my_contexts",
     "attendance_absence_excuses_my", "attendance_student_excuses_my_excuses", "attendance_attendance_approval_my_change_requests",
     "students_ser_my_absence_profile", "assistant_assistant_my_sessions", "hr_attendance_hr_attendance_request_device_change",
+    # 🆕 قوائم مرجعية (أسماء كليات/أقسام) للاستخدام في فلاتر الواجهة — ليست بيانات حساسة بذاتها،
+    # والنتيجة المُرجَعة تبقى محصورة بنطاق المستخدم فعلياً عبر منطق الدالة نفسها (get_user_scope_filter/allowed_faculty_ids)
+    "academic_structure_ser_get_faculties", "academic_structure_ser_get_departments",
 }
 
 

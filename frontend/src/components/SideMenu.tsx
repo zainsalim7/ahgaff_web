@@ -29,6 +29,7 @@ interface MenuItem {
   roles?: string[]; // يظهر لهذه الأدوار فقط (مثل مراجعي تبرير الغياب)
   advPermissionKeys?: string[]; // 🆕 للمستخدمين الجدد ذوي الإنفاذ الفعلي: مفاتيح صلاحيات مركز الصلاحيات المتقدم المقابلة
   corrMembershipOnly?: boolean; // 🆕 لا يظهر إلا لمن لديه عضوية/دور فعلي في نظام المراسلات (أو أدمن)
+  category?: 'academic' | 'administrative'; // 🆕 تصنيف للعرض فقط (لا يؤثر إطلاقاً على منطق الصلاحيات أعلاه)
 }
 
 // قائمة العناصر مرتبطة بالصلاحيات
@@ -36,7 +37,7 @@ interface MenuItem {
 const MENU_ITEMS: MenuItem[] = [
   { id: 'home', label: 'الرئيسية', icon: 'home', path: '/(tabs)', permissions: [], forAll: true },
   
-  { id: 'admin', label: 'الإعدادات الأساسية', icon: 'settings', path: '/(tabs)/admin', permissions: [
+  { id: 'admin', label: 'الإعدادات الأساسية', icon: 'settings', path: '/(tabs)/admin', category: 'administrative', permissions: [
     PERMISSIONS.MANAGE_USERS, PERMISSIONS.MANAGE_DEPARTMENTS, PERMISSIONS.MANAGE_COURSES,
     PERMISSIONS.MANAGE_STUDENTS, PERMISSIONS.MANAGE_TEACHERS,
     PERMISSIONS.MANAGE_CURRICULUM, PERMISSIONS.MANAGE_SETTINGS, PERMISSIONS.MANAGE_ROLES,
@@ -46,159 +47,159 @@ const MENU_ITEMS: MenuItem[] = [
     PERMISSIONS.REPORT_DAILY, PERMISSIONS.REPORT_LESSON_COMPLETION
   ]},
   
-  { id: 'my-lectures', label: 'محاضراتي', icon: 'calendar', path: '/(tabs)/my-lectures', permissions: [], teacherOnly: true },
+  { id: 'my-lectures', label: 'محاضراتي', icon: 'calendar', path: '/(tabs)/my-lectures', category: 'academic', permissions: [], teacherOnly: true },
 
   // 📋 إدارة الحضور — صفحة مستقلة للموظف الإداري لتسجيل/تعديل حضور الطلاب في المحاضرات
-  { id: 'manage-attendance', label: 'إدارة الحضور', icon: 'checkbox', path: '/manage-attendance', permissions: [
+  { id: 'manage-attendance', label: 'إدارة الحضور', icon: 'checkbox', path: '/manage-attendance', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_ATTENDANCE, 'record_attendance', 'take_attendance', 'edit_attendance', 'view_attendance'
   ]},
   
   // 📚 المقررات — صلاحيات المقررات فقط
-  { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', permissions: [
+  { id: 'courses', label: 'المقررات', icon: 'book', path: '/(tabs)/courses', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_COURSES, 'view_courses', 'add_course', 'edit_course', 'delete_course'
   ], advPermissionKeys: ['courses_ser_create_course', 'courses_ser_delete_course', 'courses_ser_get_courses', 'courses_courses_create_course', 'courses_courses_delete_course'] },
 
   // 🔄 ترحيل المقررات لفصل جديد — صلاحية مستقلة (الأدمن دائماً)
-  { id: 'migrate-courses', label: 'ترحيل المقررات', icon: 'swap-horizontal', path: '/migrate-courses', permissions: [
+  { id: 'migrate-courses', label: 'ترحيل المقررات', icon: 'swap-horizontal', path: '/migrate-courses', category: 'academic', permissions: [
     'migrate_courses'
   ]},
 
   // 📖 الخطة الدراسية — صلاحية الخطة الدراسية (إدارة أو عرض)
-  { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', permissions: [
+  { id: 'curriculum', label: 'الخطة الدراسية', icon: 'library', path: '/curriculum', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_CURRICULUM,
     PERMISSIONS.VIEW_CURRICULUM
   ], advPermissionKeys: ['curriculum_curriculum_list_curriculum_courses', 'curriculum_curriculum_get_curriculum_by_department'] },
 
   // 📅 الجدول الدراسي اليومي — صلاحيات الجداول فقط (لا علاقة بالمقررات!)
-  { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', permissions: [
+  { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', category: 'academic', permissions: [
     'view_schedule', 'manage_schedule'
   ]},
 
   // 📆 الجدول الأسبوعي — صلاحيات الجداول فقط
-  { id: 'weekly-schedule', label: 'الجدول الأسبوعي', icon: 'calendar', path: '/weekly-schedule', permissions: [
+  { id: 'weekly-schedule', label: 'الجدول الأسبوعي', icon: 'calendar', path: '/weekly-schedule', category: 'academic', permissions: [
     'view_schedule', 'manage_schedule'
   ], advPermissionKeys: ['schedule_weekly_schedule_get_weekly_schedule'] },
 
   // 👨‍🎓 إدارة الطلاب
-  { id: 'students', label: 'إدارة الطلاب', icon: 'people', path: '/students', permissions: [
+  { id: 'students', label: 'إدارة الطلاب', icon: 'people', path: '/students', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_STUDENTS, 'view_students', 'add_student', 'edit_student', 'delete_student'
   ], advPermissionKeys: ['students_ser_get_students', 'students_ser_create_student', 'students_students_get_students'] },
 
   // 🎓 الخريجون
-  { id: 'alumni', label: 'الخريجون', icon: 'school', path: '/alumni', permissions: [
+  { id: 'alumni', label: 'الخريجون', icon: 'school', path: '/alumni', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_STUDENTS, 'view_students'
   ], advPermissionKeys: ['alumni_alumni_list_alumni']},
 
   // 📋 إدارة التسجيلات — صفحة مستقلة لتسجيل الطلاب في المقررات
-  { id: 'enrollments', label: 'إدارة التسجيلات', icon: 'clipboard', path: '/manage-enrollments', permissions: [
+  { id: 'enrollments', label: 'إدارة التسجيلات', icon: 'clipboard', path: '/manage-enrollments', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_ENROLLMENTS, 'view_enrollments', 'add_enrollment', 'delete_enrollment'
   ], advPermissionKeys: ['enrollments_ser_enroll_students', 'enrollments_ser_unenroll_student', 'enrollments_ser_get_course_enrollments'] },
 
   // 👨‍🏫 إدارة المعلمين
-  { id: 'teachers', label: 'إدارة المعلمين', icon: 'school', path: '/manage-teachers', permissions: [
+  { id: 'teachers', label: 'إدارة المعلمين', icon: 'school', path: '/manage-teachers', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_TEACHERS, 'view_teachers', 'add_teacher', 'edit_teacher', 'delete_teacher'
   ], advPermissionKeys: ['teachers_ser_get_teachers', 'teachers_teachers_get_teachers'] },
 
   // 📊 العبء التدريسي
-  { id: 'teaching-load', label: 'جدول العبء التدريسي', icon: 'grid', path: '/teaching-load', permissions: [
+  { id: 'teaching-load', label: 'جدول العبء التدريسي', icon: 'grid', path: '/teaching-load', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
   ]},
-  { id: 'teaching-load-report', label: 'تقارير العبء', icon: 'analytics', path: '/teaching-load-report', permissions: [
+  { id: 'teaching-load-report', label: 'تقارير العبء', icon: 'analytics', path: '/teaching-load-report', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_TEACHING_LOAD, PERMISSIONS.VIEW_TEACHING_LOAD
   ]},
 
   // 🏢 إدارة الأقسام
-  { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', permissions: [
+  { id: 'departments', label: 'إدارة الأقسام', icon: 'business', path: '/add-department', category: 'academic', permissions: [
     PERMISSIONS.MANAGE_DEPARTMENTS, 'view_departments', 'add_department', 'edit_department', 'delete_department'
   ], advPermissionKeys: ['academic_structure_ser_get_departments', 'academic_structure_departments_get_departments'] },
 
   // 👤 إدارة المستخدمين
-  { id: 'users', label: 'إدارة المستخدمين', icon: 'person-add', path: '/manage-users', permissions: [
+  { id: 'users', label: 'إدارة المستخدمين', icon: 'person-add', path: '/manage-users', category: 'administrative', permissions: [
     PERMISSIONS.MANAGE_USERS, 'view_users', 'add_user', 'edit_user', 'delete_user'
   ]},
   
-  { id: 'reports-divider', label: 'التقارير', icon: 'stats-chart', path: '', permissions: [
+  { id: 'reports-divider', label: 'التقارير', icon: 'stats-chart', path: '', category: 'academic', permissions: [
     PERMISSIONS.VIEW_REPORTS, PERMISSIONS.EXPORT_REPORTS, PERMISSIONS.REPORT_STUDENT,
     PERMISSIONS.REPORT_ATTENDANCE_OVERVIEW, PERMISSIONS.REPORT_WARNINGS, PERMISSIONS.REPORT_COURSE,
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
   ]},
-  { id: 'absence-justifications', label: 'تبرير غياب الأساتذة 🩺', icon: 'medkit', path: '/absence-justifications', permissions: [], roles: ['admin', 'dean', 'department_head'] },
-  { id: 'lecture-swaps', label: 'تبادل / إنابة المحاضرات 🔁', icon: 'swap-horizontal', path: '/lecture-swaps', permissions: [], roles: ['admin', 'dean', 'department_head', 'registrar', 'registration_manager'] },
-  { id: 'student-excuses', label: 'أعذار غياب الطلاب 📄', icon: 'document-attach', path: '/student-excuses', permissions: [], roles: ['admin', 'dean', 'department_head', 'registrar', 'registration_manager'] },
-  { id: 'attendance-locations', label: 'مواقع تحضير المحاضرات 📍', icon: 'location', path: '/attendance-locations', permissions: [], roles: ['admin', 'dean', 'department_head'] },
-  { id: 'reports', label: 'جميع التقارير', icon: 'document-text', path: '/reports', permissions: [
+  { id: 'absence-justifications', label: 'تبرير غياب الأساتذة 🩺', icon: 'medkit', path: '/absence-justifications', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
+  { id: 'lecture-swaps', label: 'تبادل / إنابة المحاضرات 🔁', icon: 'swap-horizontal', path: '/lecture-swaps', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head', 'registrar', 'registration_manager'] },
+  { id: 'student-excuses', label: 'أعذار غياب الطلاب 📄', icon: 'document-attach', path: '/student-excuses', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head', 'registrar', 'registration_manager'] },
+  { id: 'attendance-locations', label: 'مواقع تحضير المحاضرات 📍', icon: 'location', path: '/attendance-locations', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
+  { id: 'reports', label: 'جميع التقارير', icon: 'document-text', path: '/reports', category: 'academic', permissions: [
     PERMISSIONS.VIEW_REPORTS, PERMISSIONS.EXPORT_REPORTS
   ]},
-  { id: 'report-attendance', label: 'تقرير الحضور', icon: 'checkmark-circle', path: '/report-attendance-overview', permissions: [
+  { id: 'report-attendance', label: 'تقرير الحضور', icon: 'checkmark-circle', path: '/report-attendance-overview', category: 'academic', permissions: [
     PERMISSIONS.REPORT_ATTENDANCE_OVERVIEW
   ]},
-  { id: 'report-student', label: 'تقرير الطالب', icon: 'person', path: '/report-student', permissions: [
+  { id: 'report-student', label: 'تقرير الطالب', icon: 'person', path: '/report-student', category: 'academic', permissions: [
     PERMISSIONS.REPORT_STUDENT
   ]},
-  { id: 'report-workload', label: 'نصاب التدريس', icon: 'briefcase', path: '/report-teacher-workload', permissions: [
+  { id: 'report-workload', label: 'نصاب التدريس', icon: 'briefcase', path: '/report-teacher-workload', category: 'academic', permissions: [
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
   ], advPermissionKeys: ['reports_ser_get_teacher_workload_report'] },
-  { id: 'overtime-letters', label: 'سجل خطابات الساعات الإضافية', icon: 'albums', path: '/overtime-letters', permissions: [
+  { id: 'overtime-letters', label: 'سجل خطابات الساعات الإضافية', icon: 'albums', path: '/overtime-letters', category: 'academic', permissions: [
     PERMISSIONS.REPORT_TEACHER_WORKLOAD
   ]},
-  { id: 'report-warnings', label: 'الإنذارات', icon: 'warning', path: '/report-warnings', permissions: [
+  { id: 'report-warnings', label: 'الإنذارات', icon: 'warning', path: '/report-warnings', category: 'academic', permissions: [
     PERMISSIONS.REPORT_WARNINGS
   ]},
-  { id: 'report-teacher-delays', label: 'تأخر المعلمين', icon: 'alarm', path: '/report-teacher-delays', permissions: [
+  { id: 'report-teacher-delays', label: 'تأخر المعلمين', icon: 'alarm', path: '/report-teacher-delays', category: 'academic', permissions: [
     PERMISSIONS.REPORT_TEACHER_DELAYS, PERMISSIONS.VIEW_REPORTS
   ]},
   
-  { id: 'notifications', label: 'إدارة الإشعارات', icon: 'notifications', path: '/manage-notifications', permissions: [
+  { id: 'notifications', label: 'إدارة الإشعارات', icon: 'notifications', path: '/manage-notifications', category: 'administrative', permissions: [
     PERMISSIONS.SEND_NOTIFICATIONS, 'manage_notifications'
   ]},
   // 🏢 شؤون الموظفين
-  { id: 'hr-divider', label: 'شؤون الموظفين', icon: 'people-circle', path: '', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
-  { id: 'hr-employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_list_employees'] },
-  { id: 'hr-org-units', label: 'الهيكل التنظيمي', icon: 'git-network', path: '/hr-org-units', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG], advPermissionKeys: ['hr_core_hr_list_org_units'] },
-  { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES], advPermissionKeys: ['hr_leaves_hr_leaves_list_leaves'] },
-  { id: 'management-dashboard', label: 'لوحة التقارير الإدارية', icon: 'bar-chart', path: '/management-dashboard', permissions: [], advPermissionKeys: ['dashboard_management_dashboard_management_dashboard_hr'] },
-  { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_attendance_daily_sheet'] },
-  { id: 'hr-work-settings', label: 'إعدادات الدوام والفترات', icon: 'time', path: '/hr-work-settings', permissions: [PERMISSIONS.HR_MANAGE_WORK_SETTINGS], advPermissionKeys: ['hr_attendance_hr_shifts_read'] },
-  { id: 'hr-leave-settings', label: 'إعدادات الإجازات', icon: 'options', path: '/hr-leave-settings', permissions: [PERMISSIONS.HR_MANAGE_LEAVE_SETTINGS], advPermissionKeys: ['hr_leaves_hr_leave_types_list_types'] },
-  { id: 'hr-locations', label: 'مواقع العمل (Geofencing)', icon: 'location', path: '/hr-locations', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_locations_list_locations'] },
-  { id: 'hr-presence-checks', label: 'تأكيد التواجد العشوائي', icon: 'notifications', path: '/hr-presence-checks', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_presence_read_settings'] },
-  { id: 'hr-annual-report', label: 'التقرير السنوي HR', icon: 'stats-chart', path: '/hr-annual-report', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_reports_annual'] },
-  { id: 'hr-letters', label: 'الخطابات الرسمية', icon: 'document-text', path: '/hr-letters', permissions: [], forAll: true },
-  { id: 'hr-profile-requests', label: 'طلبات تعديل البيانات', icon: 'create', path: '/hr-profile-requests', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
-  { id: 'hr-photo-approvals', label: 'اعتماد صور البطاقات', icon: 'images', path: '/hr-photo-approvals', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_approve_photos'], advPermissionKeys: ['cards_hr_cards_pending_photos'] },
-  { id: 'hr-card-print', label: 'طباعة بطاقات الموظفين', icon: 'print', path: '/hr-card-print', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_print_cards'], advPermissionKeys: ['cards_hr_card_print_get_print_settings'] },
-  { id: 'hr-tasks', label: 'المهام', icon: 'checkbox', path: '/hr-tasks', permissions: [], forAll: true },
-  { id: 'hr-appraisals', label: 'التقييم السنوي', icon: 'star', path: '/hr-appraisals', permissions: [], forAll: true },
-  { id: 'hr-my-profile', label: 'ملفي الإداري', icon: 'person-circle', path: '/hr-my-profile', permissions: [], forAll: true },
-  { id: 'hr-my-leaves', label: 'إجازاتي', icon: 'calendar', path: '/hr-my-leaves', permissions: [], forAll: true },
+  { id: 'hr-divider', label: 'شؤون الموظفين', icon: 'people-circle', path: '', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
+  { id: 'hr-employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_list_employees'] },
+  { id: 'hr-org-units', label: 'الهيكل التنظيمي', icon: 'git-network', path: '/hr-org-units', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG], advPermissionKeys: ['hr_core_hr_list_org_units'] },
+  { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES], advPermissionKeys: ['hr_leaves_hr_leaves_list_leaves'] },
+  { id: 'management-dashboard', label: 'لوحة التقارير الإدارية', icon: 'bar-chart', path: '/management-dashboard', category: 'administrative', permissions: [], advPermissionKeys: ['dashboard_management_dashboard_management_dashboard_hr'] },
+  { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_attendance_daily_sheet'] },
+  { id: 'hr-work-settings', label: 'إعدادات الدوام والفترات', icon: 'time', path: '/hr-work-settings', category: 'administrative', permissions: [PERMISSIONS.HR_MANAGE_WORK_SETTINGS], advPermissionKeys: ['hr_attendance_hr_shifts_read'] },
+  { id: 'hr-leave-settings', label: 'إعدادات الإجازات', icon: 'options', path: '/hr-leave-settings', category: 'administrative', permissions: [PERMISSIONS.HR_MANAGE_LEAVE_SETTINGS], advPermissionKeys: ['hr_leaves_hr_leave_types_list_types'] },
+  { id: 'hr-locations', label: 'مواقع العمل (Geofencing)', icon: 'location', path: '/hr-locations', category: 'administrative', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_locations_list_locations'] },
+  { id: 'hr-presence-checks', label: 'تأكيد التواجد العشوائي', icon: 'notifications', path: '/hr-presence-checks', category: 'administrative', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_presence_read_settings'] },
+  { id: 'hr-annual-report', label: 'التقرير السنوي HR', icon: 'stats-chart', path: '/hr-annual-report', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_reports_annual'] },
+  { id: 'hr-letters', label: 'الخطابات الرسمية', icon: 'document-text', path: '/hr-letters', category: 'administrative', permissions: [], forAll: true },
+  { id: 'hr-profile-requests', label: 'طلبات تعديل البيانات', icon: 'create', path: '/hr-profile-requests', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
+  { id: 'hr-photo-approvals', label: 'اعتماد صور البطاقات', icon: 'images', path: '/hr-photo-approvals', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_approve_photos'], advPermissionKeys: ['cards_hr_cards_pending_photos'] },
+  { id: 'hr-card-print', label: 'طباعة بطاقات الموظفين', icon: 'print', path: '/hr-card-print', category: 'administrative', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_print_cards'], advPermissionKeys: ['cards_hr_card_print_get_print_settings'] },
+  { id: 'hr-tasks', label: 'المهام', icon: 'checkbox', path: '/hr-tasks', category: 'administrative', permissions: [], forAll: true },
+  { id: 'hr-appraisals', label: 'التقييم السنوي', icon: 'star', path: '/hr-appraisals', category: 'administrative', permissions: [], forAll: true },
+  { id: 'hr-my-profile', label: 'ملفي الإداري', icon: 'person-circle', path: '/hr-my-profile', category: 'administrative', permissions: [], forAll: true },
+  { id: 'hr-my-leaves', label: 'إجازاتي', icon: 'calendar', path: '/hr-my-leaves', category: 'administrative', permissions: [], forAll: true },
 
   // 📜 المراسلات الرسمية (المرحلة 1) — الصلاحيات تُقيَّم في الخادم حسب العضويات التنظيمية
-  { id: 'letter-new', label: 'رسالة جديدة ⚡', icon: 'flash', path: '/letter-new', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_issue_letter'] },
-  { id: 'letters', label: 'الخطابات الرسمية ✉️', icon: 'mail-open', path: '/letters', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_list_letters', 'letters_hr_letters_list_letters'] },
-  { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', permissions: [], forAll: true },
-  { id: 'corr-quick', label: 'خطاب سريع ⚡', icon: 'flash', path: '/corr-quick', permissions: [], forAll: true },
-  { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', permissions: [], corrMembershipOnly: true },
-  { id: 'corr-list', label: 'سجل المراسلات', icon: 'documents', path: '/corr-list', permissions: [], corrMembershipOnly: true },
-  { id: 'corr-templates', label: 'قوالب وترويسات الخطابات', icon: 'copy', path: '/corr-templates', permissions: [], corrMembershipOnly: true },
-  { id: 'corr-positions', label: 'المناصب والأسماء', icon: 'people-circle', path: '/corr-positions', permissions: [], corrMembershipOnly: true },
-  { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', permissions: [], corrMembershipOnly: true },
+  { id: 'letter-new', label: 'رسالة جديدة ⚡', icon: 'flash', path: '/letter-new', category: 'administrative', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_issue_letter'] },
+  { id: 'letters', label: 'الخطابات الرسمية ✉️', icon: 'mail-open', path: '/letters', category: 'administrative', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_list_letters', 'letters_hr_letters_list_letters'] },
+  { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', category: 'administrative', permissions: [], forAll: true },
+  { id: 'corr-quick', label: 'خطاب سريع ⚡', icon: 'flash', path: '/corr-quick', category: 'administrative', permissions: [], forAll: true },
+  { id: 'corr-dashboard', label: 'لوحة المراسلات', icon: 'speedometer', path: '/corr-dashboard', category: 'administrative', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-list', label: 'سجل المراسلات', icon: 'documents', path: '/corr-list', category: 'administrative', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-templates', label: 'قوالب وترويسات الخطابات', icon: 'copy', path: '/corr-templates', category: 'administrative', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-positions', label: 'المناصب والأسماء', icon: 'people-circle', path: '/corr-positions', category: 'administrative', permissions: [], corrMembershipOnly: true },
+  { id: 'corr-admin', label: 'إعدادات المراسلات', icon: 'construct', path: '/corr-roles', category: 'administrative', permissions: [], corrMembershipOnly: true },
 
-  { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
-  { id: 'university-calendar', label: 'التقويم الجامعي والعطل', icon: 'calendar', path: '/university-calendar', permissions: ['manage_calendar'] },
-  { id: 'prep-leave-periods', label: 'إجازة التحضير', icon: 'book', path: '/prep-leave-periods', permissions: [], roles: ['admin', 'dean', 'department_head'] },
-  { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', path: '/faculty-board', permissions: [], roles: ['admin', 'dean', 'department_head'] },
-  { id: 'assistant-settings', label: 'مرشد الأحقاف (الذكاء الاصطناعي) 🤖', icon: 'sparkles', path: '/assistant-settings', permissions: [], roles: ['admin'] },
-  { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
-  { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', permissions: [], adminOnly: true },
-  { id: 'default-credentials', label: 'بيانات الدخول الافتراضية 🔑', icon: 'key', path: '/default-credentials', permissions: [], adminOnly: true },
-  { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', permissions: [PERMISSIONS.MANAGE_ROLES] },
-  { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', permissions: ['view_activity_logs'] },
+  { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', category: 'administrative', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
+  { id: 'university-calendar', label: 'التقويم الجامعي والعطل', icon: 'calendar', path: '/university-calendar', category: 'academic', permissions: ['manage_calendar'] },
+  { id: 'prep-leave-periods', label: 'إجازة التحضير', icon: 'book', path: '/prep-leave-periods', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
+  { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', path: '/faculty-board', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
+  { id: 'assistant-settings', label: 'مرشد الأحقاف (الذكاء الاصطناعي) 🤖', icon: 'sparkles', path: '/assistant-settings', category: 'administrative', permissions: [], roles: ['admin'] },
+  { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', category: 'administrative', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
+  { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', category: 'administrative', permissions: [], adminOnly: true },
+  { id: 'default-credentials', label: 'بيانات الدخول الافتراضية 🔑', icon: 'key', path: '/default-credentials', category: 'administrative', permissions: [], adminOnly: true },
+  { id: 'roles', label: 'الأدوار والصلاحيات', icon: 'key', path: '/manage-roles', category: 'administrative', permissions: [PERMISSIONS.MANAGE_ROLES] },
+  { id: 'activity-logs', label: 'سجلات النشاط', icon: 'list', path: '/activity-logs', category: 'administrative', permissions: ['view_activity_logs'] },
   // الأرشيف الدراسي
-  { id: 'archives-divider', label: 'الأرشيف الدراسي', icon: 'archive', path: '', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
-  { id: 'archives', label: 'الفصول المؤرشفة', icon: 'archive', path: '/archives', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
-  { id: 'archive-search', label: 'البحث في الأرشيف', icon: 'search', path: '/archive-search', permissions: [PERMISSIONS.SEARCH_ARCHIVE] },
-  { id: 'trash', label: 'سلة المحذوفات', icon: 'trash', path: '/trash', permissions: ['manage_trash', 'purge_trash'] },
-  { id: 'advanced-access-control', label: 'مركز الصلاحيات المتقدم 🧪', icon: 'shield-half', path: '/advanced-access-control', permissions: [], advancedAccessOnly: true } as any,
+  { id: 'archives-divider', label: 'الأرشيف الدراسي', icon: 'archive', path: '', category: 'academic', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
+  { id: 'archives', label: 'الفصول المؤرشفة', icon: 'archive', path: '/archives', category: 'academic', permissions: [PERMISSIONS.VIEW_ARCHIVE] },
+  { id: 'archive-search', label: 'البحث في الأرشيف', icon: 'search', path: '/archive-search', category: 'academic', permissions: [PERMISSIONS.SEARCH_ARCHIVE] },
+  { id: 'trash', label: 'سلة المحذوفات', icon: 'trash', path: '/trash', category: 'administrative', permissions: ['manage_trash', 'purge_trash'] },
+  { id: 'advanced-access-control', label: 'مركز الصلاحيات المتقدم 🧪', icon: 'shield-half', path: '/advanced-access-control', category: 'administrative', permissions: [], advancedAccessOnly: true } as any,
 ];
 
 interface SideMenuProps {

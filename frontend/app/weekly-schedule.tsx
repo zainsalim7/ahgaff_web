@@ -8,6 +8,8 @@ import { Picker } from '@react-native-picker/picker';
 import { scheduleAPI, departmentsAPI, teachersAPI, coursesAPI } from '../src/services/api';
 import api, { courseGroupsAPI } from '../src/services/api';
 import { MasterScheduleView } from '../src/components/MasterScheduleView';
+import { useAuth } from '../src/contexts/AuthContext';
+import { getMyScope } from '../src/utils/scopeDefaults';
 
 const DAYS = ['السبت', 'الأحد', 'الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس'];
 const COLORS = ['#1565c0', '#2e7d32', '#e65100', '#6a1b9a', '#c62828', '#00838f', '#4e342e', '#37474f'];
@@ -64,6 +66,7 @@ function TeacherSearchBox({ teachers, selectedId, onSelect, placeholder }: { tea
 }
 
 export default function WeeklySchedulePage() {
+  const { user } = useAuth();
   const [activeTab, setActiveTab] = useState<'schedule' | 'rooms' | 'settings' | 'prefs'>('schedule');
   const [faculties, setFaculties] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -155,6 +158,18 @@ export default function WeeklySchedulePage() {
         setTimeSlots(settRes.data.time_slots || []);
         setEditSlots(settRes.data.time_slots || []);
         setEditWorkingDays(settRes.data.working_days || []);
+        // 🆕 مستخدم إنفاذ فعلي مُقيَّد بنطاق: الصفحة تتطلب faculty_id دائماً — نعبّئه تلقائياً من نطاقه
+        // بدل تركه يرفض (400) أو يضطر للاختيار يدوياً في كل مرة
+        const scope = getMyScope(user);
+        if (scope.restricted) {
+          if (scope.facultyIds.length === 1) {
+            setSelectedFaculty(scope.facultyIds[0]);
+          } else if (scope.departmentIds.length === 1) {
+            const deptRes = await departmentsAPI.getAll();
+            const d = (deptRes.data || []).find((x: any) => x.id === scope.departmentIds[0]);
+            if (d?.faculty_id) { setSelectedFaculty(d.faculty_id); setSelectedDept(d.id); }
+          }
+        }
       } catch (e) { console.error(e); }
     })();
   }, []);

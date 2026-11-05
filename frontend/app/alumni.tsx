@@ -19,6 +19,7 @@ import { alumniAPI, facultiesAPI, departmentsAPI } from '../src/services/api';
 import api from '../src/services/api';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { SortableHeader } from '../src/components/SortableHeader';
+import { getMyScope } from '../src/utils/scopeDefaults';
 
 interface AlumniRow {
   id: string;
@@ -60,7 +61,7 @@ const STATUS_OPTIONS = [
 
 export default function AlumniScreen() {
   const router = useRouter();
-  const { hasAnyPermission, isLoading: authLoading, isAdmin } = useAuth();
+  const { hasAnyPermission, isLoading: authLoading, isAdmin, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<AlumniRow[]>([]);
   const [byYear, setByYear] = useState<Record<string, number>>({});
@@ -126,6 +127,12 @@ export default function AlumniScreen() {
     Promise.allSettled([facultiesAPI.getAll(), departmentsAPI.getAll()]).then(([fRes, dRes]: any[]) => {
       setFaculties(fRes.status === 'fulfilled' ? (fRes.value.data || []) : []);
       setDepartments(dRes.status === 'fulfilled' ? (dRes.value.data || []) : []);
+      // 🆕 مستخدم إنفاذ فعلي مُقيَّد بنطاق: نعبّئ قسمه/كليته افتراضياً كي لا يُرفض الطلب (400) لعدم تحديد نطاق
+      const scope = getMyScope(user);
+      if (scope.restricted) {
+        if (scope.departmentIds.length === 1) setDeptFilter((p) => p || scope.departmentIds[0]);
+        else if (scope.facultyIds.length === 1) setFacultyFilter((p) => p || scope.facultyIds[0]);
+      }
     });
   }, [canView]);
 

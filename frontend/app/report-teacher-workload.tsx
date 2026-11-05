@@ -15,6 +15,7 @@ import { useAuth } from '../src/contexts/AuthContext';
 import { exportName, filenameFromResponse } from '../src/utils/exportName';
 import { DASH, NUM_FONT, dashStyles } from '../src/components/dashboard/dashTheme';
 import { ReportKpis } from '../src/components/reports/ReportShell';
+import { getMyScope } from '../src/utils/scopeDefaults';
 
 interface Course { course_name: string; course_code: string; level?: number; section?: string; weekly_hours?: number; expected_hours?: number; shortfall_hours?: number; completion_rate?: number; is_low?: boolean; note?: string; scheduled_lectures: number; executed_lectures: number; scheduled_hours: number; actual_hours: number; excluded_from_load?: boolean }
 interface TeacherWL { teacher_id: string; teacher_db_id?: string; teacher_name: string; academic_title?: string; department_id: string; department_name?: string; faculty_id?: string; weekly_hours: number; courses: Course[];
@@ -92,6 +93,12 @@ export default function TeacherWorkloadReport() {
     if (isTeacher) return;
     Promise.all([teachersAPI.getAll(), departmentsAPI.getAll(), facultiesAPI.getAll()]).then(([t, d, f]) => {
       setTeachers(t.data || []); setDepartments(d.data || []); setFaculties(f.data || []);
+      // 🆕 مستخدم إنفاذ فعلي مُقيَّد بنطاق: نعبّئ قسمه/كليته افتراضياً كي لا يُرفض الطلب (400) لعدم تحديد نطاق
+      const scope = getMyScope(user);
+      if (scope.restricted) {
+        if (scope.departmentIds.length === 1) setDept((p) => p || scope.departmentIds[0]);
+        else if (scope.facultyIds.length === 1) setFac((p) => p || scope.facultyIds[0]);
+      }
     }).catch(() => {});
   }, [isTeacher]);
 
