@@ -300,8 +300,8 @@ export default function WeeklySchedulePage() {
         if (!deptIds.length) return;
         // get all teachers and courses for all departments of this faculty (in parallel)
         const [tRes, cRes] = await Promise.all([
-          teachersAPI.getAll({}),
-          coursesAPI.getAll({}),
+          teachersAPI.getAll({ faculty_id: selectedFaculty }),
+          coursesAPI.getAll({ faculty_id: selectedFaculty }),
         ]);
         const teachersInFaculty = (tRes.data || []).filter((t: any) => deptIds.includes(t.department_id));
         const coursesInFaculty = (cRes.data || []).filter((c: any) => deptIds.includes(c.department_id));

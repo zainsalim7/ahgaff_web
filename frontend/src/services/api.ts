@@ -255,7 +255,7 @@ api.interceptors.response.use(
     //    تعرض Alert/Toast مناسب ولا داعي لطرد المستخدم خارج الصفحة.
     const reqMethod = (error.config?.method || '').toLowerCase();
     const isWriteOp = ['post', 'put', 'patch', 'delete'].includes(reqMethod);
-    if (status === 403 && !isAuthCall && !isWriteOp) {
+    if (status === 403 && !isAuthCall && !isWriteOp && !error.config?.skip403Redirect) {
       try {
         const w: any = (typeof globalThis !== 'undefined' ? globalThis : {});
         const now = Date.now();

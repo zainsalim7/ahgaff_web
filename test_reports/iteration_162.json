@@ -1,0 +1,38 @@
+{
+  "summary": "Re-test of the iteration_161 security and frontend fixes. All 3 security fixes and both frontend fixes are verified. Backend pytest: 35 of 36 pass. The one failure is Saeed getting 403 on /teaching-load/report/advanced. That is an old legacy permission check (VIEW/MANAGE_TEACHING_LOAD, unchanged since April 2026) and not a regression from this session. FIX1: a faculty-A user sending department_id from faculty B plus their own faculty_id now gets 403 on teaching-load/report/advanced, teachers, weekly-schedule, faculty-board/candidates and faculty-board/decisions. Legit cases return 200 (own child department + own faculty; faculty_id alone, which widens to the whole faculty). FIX2: a department-only user sending their own department plus the parent faculty_id (or a foreign faculty_id) gets 12 teachers, exactly the admin baseline for that department, with 0 leaked; faculty_id alone returns 403. FIX3: on faculty-board/candidates, a foreign course_id sent with the user's own department_id plus the course's real faculty_id returns 403; own course returns 200; a faculty user asking for a foreign course returns 403. Frontend, hard refresh as a department-scoped real-enforcement user: on /weekly-schedule the faculty and department fill in automatically and the schedule loads (200). On /report-teacher-workload the department fills in, teachers load with department_id (200), and running the report returns 200 with no bounce, provided the role includes the extra keys described below. Admin and Saeed navigation to students, courses, manage-teachers, weekly-schedule and report-teacher-workload works, with no errors and no crashes.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/teaching-load/report/advanced", "issue": "Saeed (legacy department_head) gets 403 'غير مصرح لك' because he lacks VIEW_TEACHING_LOAD/MANAGE_TEACHING_LOAD. This check has existed since April 2026, so it is NOT a regression. It contradicts the request's assumption that Saeed gets 200. Admin and Salim get 200."},
+      {"endpoint": "GET /api/teachers (faculty_id only, faculty-scoped user)", "issue": "Informational, by design: the result includes a teacher administratively in faculty B's department (حسن صالح, 698e501d...). He appears through the existing 'cross-department teachers' exception because he has 4 teaching_loads in faculty A courses. This is intended behaviour, not a leak."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "report-teacher-workload.tsx", "issue": "If the role has reports_ser_get_teacher_workload_report but not teaching_load_overtime_letter_raised_teachers or teaching_load_teacher_overtime_get_workload_exceptions, the report runs (200). The secondary calls /raised and /exceptions then get 403 from the default-deny RealEnforcement middleware, and the global 403 interceptor in api.ts sends the user to /no-permission even though the report loaded. Fix: treat these two keys as implied by the report key in the middleware or role builder, or have the page skip the global 403 redirect for these background calls.", "selector": "[data-testid='tw-run-btn']", "priority": "MEDIUM"},
+      {"component": "report-teacher-workload.tsx", "issue": "On a cold load the effect first runs with user=null and calls GET /teachers with no params (400), then runs again with department_id (200). The two calls can race: if the 400 resolves last, setTeachers([]) wipes the list. Fix: return early when !user, or add a cancelled flag.", "selector": "[data-testid='tw-teacher-input']", "priority": "LOW"},
+      {"component": "weekly-schedule.tsx (lines ~295-312)", "issue": "Pre-existing and out of scope: the all-faculty teachers/courses effect calls teachersAPI.getAll({}), which returns 400 for real-enforcement users. allTeachers/allCourses stay empty, so the 'بالأستاذ' and 'بالمقرر' view-mode pickers are empty for scoped users. Fix: pass department_id or faculty_id.", "selector": "[data-testid='view-mode-teacher']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_real_enforce_exclusive_iter162.py", "/app/backend/tests/ui162_setup.py", "/app/test_reports/pytest/pytest_iter162.xml"],
+  "action_items": [
+    "report-teacher-workload: stop the /no-permission bounce when only the auxiliary /raised or /exceptions calls return 403 (imply those keys from the report key, or suppress the global redirect for these background calls).",
+    "report-teacher-workload: skip the initial effect run while user is null, to avoid a 400 and a possible race that empties the teacher list.",
+    "(Optional, pre-existing) weekly-schedule: pass scope params to teachersAPI.getAll and coursesAPI.getAll in the all-faculty effect so the teacher and course view modes work for real-enforcement users.",
+    "Still open as a known follow-up, not a regression: alumni.tsx and faculty-board.tsx auto-fill cannot be reached because legacy canView/canManage gates block role=employee real-enforcement users."
+  ],
+  "critical_code_review_comments": [
+    "real_enforce_guard: exclusive priority is implemented correctly; when department_id is sent, faculty_id is ignored. The parent-faculty hierarchy inside real_enforce_check still lets a faculty-scoped user reach their own child departments.",
+    "GET /teachers: the widening branch now requires faculty_id AND no department_id AND an independent real_enforce_check on the faculty. Correct.",
+    "faculty_board list_candidates: the course ownership check mirrors the exclusive priority. Correct."
+  ],
+  "updated_files": ["/app/backend/tests/test_real_enforce_exclusive_iter162.py", "/app/backend/tests/ui162_setup.py"],
+  "success_rate": {"backend": "97% (35/36; the single failure is pre-existing legacy behaviour)", "frontend": "100% for the 2 requested fixes (with complete role keys); 1 medium UX issue found"},
+  "seed_data_creation": "Temporary users TEST_dept162, TEST_fac162 and TEST_uidept162 (created twice) with their assignments were all ended and deleted; 0 users matching '162' remain. Orphan TEST_role_* advanced_access roles remain because no DELETE endpoint exists (accepted pattern).",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_real_enforce_exclusive_iter162.py -p no:xdist -o addopts=''. UI: python3 backend/tests/ui162_setup.py setup|cleanup creates a department-scoped user (password = username), with the aux keys for raised/exceptions/conflicts/sections. To find missing adv keys, grep the backend log for 'RealEnforcement guard blocked ... key=...'. Backend code is in /app/backend/backend/ (not /app/backend/).",
+  "rca of the issue": "The /no-permission bounce on report-teacher-workload comes from the default-deny RealEnforcement middleware (routes/real_enforcement_guard.py) returning 403 for /reports/teacher-workload/raised and /exceptions when their keys are not in the role. The global axios 403 interceptor (src/services/api.ts ~L258) then redirects 1.5 s later, because no successful request follows."
+}

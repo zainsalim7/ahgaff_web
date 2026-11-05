@@ -50,7 +50,7 @@ export default function TeacherWorkloadReport() {
   const [raised, setRaised] = useState<any[]>([]);
   const raisedMap = useMemo(() => Object.fromEntries(raised.map((r) => [r.teacher_id, r.letters])), [raised]);
   const loadRaised = async (p: any) => {
-    try { const r = await api.get('/reports/teacher-workload/raised', { params: { start_date: p.start_date, end_date: p.end_date, faculty_id: p.faculty_id, department_id: p.department_id, teach_department_id: p.teach_department_id, teacher_id: p.teacher_id } }); setRaised(r.data.items || []); }
+    try { const r = await api.get('/reports/teacher-workload/raised', { params: { start_date: p.start_date, end_date: p.end_date, faculty_id: p.faculty_id, department_id: p.department_id, teach_department_id: p.teach_department_id, teacher_id: p.teacher_id }, skip403Redirect: true } as any); setRaised(r.data.items || []); }
     catch { setRaised([]); }
   };
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -90,7 +90,7 @@ export default function TeacherWorkloadReport() {
   const [customExporting, setCustomExporting] = useState('');
 
   useEffect(() => {
-    if (isTeacher) return;
+    if (isTeacher || !user) return;
     (async () => {
       const scope = getMyScope(user);
       const teacherParams = (scope.restricted && scope.departmentIds.length === 1) ? { department_id: scope.departmentIds[0] } : undefined;
@@ -125,7 +125,7 @@ export default function TeacherWorkloadReport() {
     try {
       const r = await api.get('/reports/teacher-workload', { params });
       setData(r.data.teachers || []); setPeriod(r.data.period); setRan(true);
-      if (!isTeacher) { loadRaised(params); api.get('/reports/teacher-workload/exceptions', { params: { start_date: from, end_date: to } }).then((r2) => setExcIds(r2.data.course_ids || [])).catch(() => {}); }
+      if (!isTeacher) { loadRaised(params); api.get('/reports/teacher-workload/exceptions', { params: { start_date: from, end_date: to }, skip403Redirect: true } as any).then((r2) => setExcIds(r2.data.course_ids || [])).catch(() => {}); }
     } catch (e: any) { Alert.alert('خطأ', e?.response?.data?.detail || 'فشل تنفيذ التقرير'); }
     finally { setLoading(false); }
   }, [params, isTeacher, from, to]);
