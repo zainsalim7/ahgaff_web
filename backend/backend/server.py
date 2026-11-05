@@ -1144,6 +1144,9 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
     # 🆕 مستخدم إنفاذ فعلي (الدفعة الكبيرة 3 نوفمبر 2026): نطاقه من تكليفاته الجديدة بغض النظر عن نص دوره
     # (role="employee" غالباً لا يطابق أي فرع أدناه، فكان يسقط إلى نطاق غير مقيَّد بلا قصد = ثغرة أمنية سابقة)
     if user_data.get("advanced_access_real_enforcement"):
+        # 🆕 تكليف بنطاق "الجامعة كاملة": بلا أي قيد إطلاقاً (تطابق كامل مع صلاحيات admin نطاقياً)
+        if user_data.get("adv_has_university_scope"):
+            return query
         if department_ids:
             if scope_type in ["students", "courses", "teachers", "attendance"]:
                 query["department_id"] = department_ids[0] if len(department_ids) == 1 else {"$in": department_ids}

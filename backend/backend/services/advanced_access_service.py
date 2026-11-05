@@ -250,6 +250,11 @@ async def real_enforce_guard(db, current_user: dict, adv_permission_key: str,
     target_type = "faculty" if faculty_id else ("department" if department_id else None)
     target_ref = faculty_id or department_id
     if target_type is None:
+        # 🆕 تكليف بنطاق "الجامعة كاملة": لا يحتاج تحديد قسم/كلية إطلاقاً. نتحقق مباشرة وحيّاً من قاعدة
+        # البيانات (بدل الاعتماد على current_user.get('adv_has_university_scope') الذي قد يغيب من بعض
+        # نسخ get_current_user القديمة في server.py التي لا تمر عبر routes/deps.build_user_context)
+        if await real_enforce_check(db, current_user, adv_permission_key, "university", None):
+            return True
         raise HTTPException(status_code=400, detail="حدد القسم أو الكلية ضمن نطاق صلاحيتك لعرض هذه البيانات")
     decision = await real_enforce_check(db, current_user, adv_permission_key, target_type, target_ref)
     if not decision:
@@ -347,6 +352,7 @@ async def sync_real_enforcement_context(db, user: dict) -> set:
     keys: set = set()
     dept_ids: set = set()
     fac_ids: set = set()
+    has_university_scope = False
     for a in assignments:
         keys |= await compute_effective_permissions(db, a)
         scope = a.get("scope") or {}
@@ -356,6 +362,8 @@ async def sync_real_enforcement_context(db, user: dict) -> set:
             dept_ids.update(refs)
         elif stype == "faculty":
             fac_ids.update(refs)
+        elif stype == "university":
+            has_university_scope = True
 
     # 🆕 كلية كل قسم مُكلَّف به — تُخزَّن في حقل منفصل adv_derived_faculty_ids (وليس faculty_ids) حتى لا
     # تُفعِّل قاعدة "multi-faculty = كلية كاملة" في get_user_scope_filter القديمة لمستخدمين مُكلَّفين بأقسام فقط.
@@ -371,12 +379,15 @@ async def sync_real_enforcement_context(db, user: dict) -> set:
             pass
 
     updates: Dict[str, Any] = {}
-    if dept_ids and set(user.get("department_ids") or []) != dept_ids:
+    # 🔧 نقارن دوماً (وليس فقط لو non-empty) حتى يُصفَّر النطاق القديم إن انتهى تكليفه أو تغيّر نوعه
+    if set(user.get("department_ids") or []) != dept_ids:
         updates["department_ids"] = list(dept_ids)
-    if fac_ids and set(user.get("faculty_ids") or []) != fac_ids:
+    if set(user.get("faculty_ids") or []) != fac_ids:
         updates["faculty_ids"] = list(fac_ids)
-    if derived_fac_ids and set(user.get("adv_derived_faculty_ids") or []) != derived_fac_ids:
+    if set(user.get("adv_derived_faculty_ids") or []) != derived_fac_ids:
         updates["adv_derived_faculty_ids"] = list(derived_fac_ids)
+    if bool(user.get("adv_has_university_scope")) != has_university_scope:
+        updates["adv_has_university_scope"] = has_university_scope
 
     org_unit_ids: set = set()
     if dept_ids or fac_ids:
