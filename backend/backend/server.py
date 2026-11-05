@@ -1144,8 +1144,18 @@ async def get_user_scope_filter(current_user: dict, scope_type: str = "students"
     # 🆕 مستخدم إنفاذ فعلي (الدفعة الكبيرة 3 نوفمبر 2026): نطاقه من تكليفاته الجديدة بغض النظر عن نص دوره
     # (role="employee" غالباً لا يطابق أي فرع أدناه، فكان يسقط إلى نطاق غير مقيَّد بلا قصد = ثغرة أمنية سابقة)
     if user_data.get("advanced_access_real_enforcement"):
-        # 🆕 تكليف بنطاق "الجامعة كاملة": بلا أي قيد إطلاقاً (تطابق كامل مع صلاحيات admin نطاقياً)
-        if user_data.get("adv_has_university_scope"):
+        # 🆕 تكليف بنطاق "الجامعة كاملة": بلا أي قيد — لكن فحص حيّ ومرتبط بمفتاح الصلاحية المطلوب تحديداً
+        # (وليس علماً عاماً على المستخدم) حتى لا يتسرّب نطاق تكليف آخر لا علاقة له بهذا المورد، ولا يبقى
+        # عالقاً بعد انتهاء ذلك التكليف تحديداً (سبق أن عولجت نفس الثغرتين لمستخدمي الكلية أعلاه)
+        from services.advanced_access_service import real_enforce_check
+        _univ_key_by_scope = {
+            "students": "students_ser_get_students",
+            "teachers": "teachers_ser_get_teachers",
+            "courses": "courses_ser_get_courses",
+            "departments": "academic_structure_ser_get_departments",
+        }
+        _univ_key = _univ_key_by_scope.get(scope_type)
+        if _univ_key and await real_enforce_check(db, user_data, _univ_key, "university", None):
             return query
         if department_ids:
             if scope_type in ["students", "courses", "teachers", "attendance"]:
