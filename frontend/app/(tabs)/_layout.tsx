@@ -15,6 +15,9 @@ export default function TabsLayout() {
   const permissions = user?.permissions || [];
   const pendingCount = useOfflineSyncStore((state) => state.getPendingRecordsCount());
   const [institutionName, setInstitutionName] = useState('نظام الحضور');
+  // 🆕 عنوان الصفحة الرئيسية: اسم نطاق المستخدم الفعلي (قسمه/كليته) إن كان مُقيَّداً، وإلا اسم المؤسسة العام
+  // (كان يظهر اسم المؤسسة العام ثابتاً للجميع بغض النظر عن نطاقهم الحقيقي — مُربك لمستخدمي الصلاحيات المتقدمة)
+  const scopeHeaderTitle = user?.department_name || user?.faculty_name || institutionName;
 
   // 🆕 عدد طلبات اعتماد الحضور المعلّقة (للعميد + المدير)
   const [approvalCount, setApprovalCount] = useState(0);
@@ -164,7 +167,7 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
-          headerTitle: institutionName,
+          headerTitle: scopeHeaderTitle,
         }}
       />
       

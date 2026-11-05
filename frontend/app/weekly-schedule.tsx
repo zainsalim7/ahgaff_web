@@ -166,7 +166,7 @@ export default function WeeklySchedulePage() {
   // لأن `user` قد يتأخر تحميله من AsyncStorage (بعد أول render)؛ تعتمد على [user] لتُعاد عند توفره فعلياً
   useEffect(() => {
     if (!user || selectedFaculty) return;
-    const scope = getMyScope(user);
+    const scope = getMyScope(user as any);
     if (!scope.restricted) return;
     (async () => {
       try {
@@ -301,7 +301,7 @@ export default function WeeklySchedulePage() {
         // get all teachers and courses for all departments of this faculty (in parallel)
         const [tRes, cRes] = await Promise.all([
           teachersAPI.getAll({ faculty_id: selectedFaculty }),
-          coursesAPI.getAll({ faculty_id: selectedFaculty }),
+          coursesAPI.getAll({}),
         ]);
         const teachersInFaculty = (tRes.data || []).filter((t: any) => deptIds.includes(t.department_id));
         const coursesInFaculty = (cRes.data || []).filter((c: any) => deptIds.includes(c.department_id));

@@ -46,9 +46,10 @@ SECTION_PERMS = {"alerts": Permission.DASHBOARD_ALERTS, "attendance": Permission
 
 
 def dashboard_sections(user: dict) -> dict:
-    """الأجزاء المسموحة: الأدمن ورئيس الجامعة كل شيء؛ غيرهم حسب صلاحيات فئة «لوحة القيادة» (الأرقام العامة للجميع)
-    🆕 مستخدم إنفاذ فعلي: يرى كل الأقسام أيضاً (كالأدمن) — لكن بياناته تبقى مقيَّدة بنطاقه عبر _resolve_scope"""
-    full = user.get("role") in (UserRole.ADMIN, UserRole.UNIVERSITY_PRESIDENT) or bool(user.get("advanced_access_real_enforcement"))
+    """الأجزاء المسموحة: الأدمن ورئيس الجامعة كل شيء؛ غيرهم (شاملاً مستخدمي الإنفاذ الفعلي) حسب صلاحياتهم
+    الفعلية عبر has_permission (يدعم «جسر الإنفاذ الفعلي» تلقائياً لمن مُنح مفتاح صلاحية متقدمة مرتبط
+    بلوحة القيادة فعلاً — لا يُمنَح أي قسم فقط لكون advanced_access_real_enforcement مفعَّلاً بلا صلاحية حقيقية)"""
+    full = user.get("role") in (UserRole.ADMIN, UserRole.UNIVERSITY_PRESIDENT)
     return {k: (full or has_permission(user, p)) for k, p in SECTION_PERMS.items()}
 
 
@@ -580,6 +581,8 @@ async def management_dashboard(period: str = "week", faculty_id: Optional[str] =
                                current_user: dict = Depends(get_current_user)):
     if not _is_management(current_user):
         raise HTTPException(status_code=403, detail="لوحة القيادة متاحة للإدارة فقط")
+    if not any(dashboard_sections(current_user).values()):
+        raise HTTPException(status_code=403, detail="ليس لديك صلاحية عرض أي قسم في لوحة القيادة")
     return await build_dashboard(get_db(), current_user, period, faculty_id or None, department_id or None)
 
 

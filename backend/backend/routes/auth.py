@@ -241,7 +241,9 @@ async def login(user_data: UserLogin, request: Request):
 
     # 🆕 أسماء كل الأقسام المسندة (لعرضها في الـ UI كبديل احتياطي حتى لو عجز المستخدم عن قراءة GET /departments)
     login_department_ids = user.get("department_ids") or ([user.get("department_id")] if user.get("department_id") else [])
+    login_faculty_ids = user.get("faculty_ids") or ([user.get("faculty_id")] if user.get("faculty_id") else [])
     department_names = []
+    faculty_names = []
     if login_department_ids:
         try:
             dept_object_ids = [ObjectId(d) for d in login_department_ids if d]
@@ -250,6 +252,21 @@ async def login(user_data: UserLogin, request: Request):
             department_names = [name_map.get(str(d)) for d in login_department_ids if name_map.get(str(d))]
         except Exception:
             pass
+    # 🆕 أسماء كل الكليات المسندة — تُستخدم أيضاً كبديل لـ faculty_name عندما يكون نطاق المستخدم مبنياً فقط على
+    # مصفوفة faculty_ids (مستخدمو الإنفاذ الفعلي) بلا الحقل المفرد القديم faculty_id (كان يبقى فارغاً سابقاً
+    # فيظهر اسم المؤسسة العام بدل كلية المستخدم الفعلية في رأس الصفحة)
+    if login_faculty_ids:
+        try:
+            fac_object_ids = [ObjectId(f) for f in login_faculty_ids if f]
+            fac_docs = await db.faculties.find({"_id": {"$in": fac_object_ids}}).to_list(50)
+            fac_name_map = {str(d["_id"]): d.get("name") for d in fac_docs}
+            faculty_names = [fac_name_map.get(str(f)) for f in login_faculty_ids if fac_name_map.get(str(f))]
+        except Exception:
+            pass
+    if not faculty_name and len(faculty_names) == 1:
+        faculty_name = faculty_names[0]
+    if not department_name and len(department_names) == 1:
+        department_name = department_names[0]
 
     return {
         "access_token": access_token,
@@ -271,6 +288,7 @@ async def login(user_data: UserLogin, request: Request):
             "faculty_ids": user.get("faculty_ids") or ([user.get("faculty_id")] if user.get("faculty_id") else []),
             "department_ids": user.get("department_ids") or ([user.get("department_id")] if user.get("department_id") else []),
             "faculty_name": faculty_name,
+            "faculty_names": faculty_names,
             "department_name": department_name,
             "department_names": department_names,
             "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False)
@@ -352,6 +370,21 @@ async def get_me(current_user: dict = Depends(get_current_user)):
             department_names = [name_map.get(str(d)) for d in department_ids if name_map.get(str(d))]
         except Exception:
             pass
+    # 🆕 أسماء الكليات (نفس منطق department_names) — وبديل لـ faculty_name عندما نطاق المستخدم مبني فقط
+    # على مصفوفة faculty_ids بلا الحقل المفرد القديم (مستخدمو الإنفاذ الفعلي)
+    faculty_names = []
+    if faculty_ids:
+        try:
+            fac_object_ids = [ObjectId(f) for f in faculty_ids if f]
+            fac_docs = await db.faculties.find({"_id": {"$in": fac_object_ids}}).to_list(50)
+            fac_name_map = {str(d["_id"]): d.get("name") for d in fac_docs}
+            faculty_names = [fac_name_map.get(str(f)) for f in faculty_ids if fac_name_map.get(str(f))]
+        except Exception:
+            pass
+    if not faculty_name and len(faculty_names) == 1:
+        faculty_name = faculty_names[0]
+    if not department_name and len(department_names) == 1:
+        department_name = department_names[0]
 
     return {
         "id": str(user["_id"]),
@@ -370,6 +403,7 @@ async def get_me(current_user: dict = Depends(get_current_user)):
         "faculty_ids": faculty_ids,
         "department_ids": department_ids,
         "faculty_name": faculty_name,
+        "faculty_names": faculty_names,
         "department_name": department_name,
         "department_names": department_names,
         "advanced_access_real_enforcement": user.get("advanced_access_real_enforcement", False)

@@ -54,6 +54,7 @@ export default function ScheduleScreen() {
   const user = useAuthStore((state) => state.user);
   const [lectures, setLectures] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState('');
   const [selectedDate, setSelectedDate] = useState(getToday);
   const [semesterSettings, setSemesterSettings] = useState<any>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -89,11 +90,14 @@ export default function ScheduleScreen() {
   const fetchLectures = useCallback(async (date: string) => {
     try {
       setLoading(true);
+      setFetchError('');
       const res = await api.get(`/lectures/all-schedule?date=${date}`);
       setLectures(res.data?.lectures || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching lectures:', error);
       setLectures([]);
+      // 🆕 رسالة واضحة عند 403/401 بدل عرض "لا توجد محاضرات" بصمت — لا يُفرَّق بين "لا بيانات" و"ممنوع"
+      setFetchError(error?.response?.status === 403 ? (error?.response?.data?.detail || 'غير مصرح لك بعرض محاضرات هذا اليوم') : '');
     } finally {
       setLoading(false);
     }
@@ -543,6 +547,12 @@ export default function ScheduleScreen() {
 
             {loading ? (
               <View style={s.center}><LoadingScreen /></View>
+            ) : fetchError ? (
+              <View style={s.emptyState} data-testid="schedule-forbidden-error">
+                <Ionicons name="lock-closed-outline" size={56} color="#dc2626" />
+                <Text style={[s.emptyTitle, { color: '#dc2626' }]}>غير مصرح لك</Text>
+                <Text style={s.emptySubtitle}>{fetchError}</Text>
+              </View>
             ) : filteredLectures.length === 0 ? (
               <View style={s.emptyState}>
                 <Ionicons name="calendar-outline" size={56} color="#cfd6e1" />
