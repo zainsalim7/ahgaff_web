@@ -58,7 +58,7 @@ export const AdvDashboard: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   return (
     <View testID="adv-dashboard">
       <Text style={styles.sectionTitle}>لوحة معلومات مركز الصلاحيات المتقدم</Text>
-      <Text style={styles.sectionDesc}>الأعداد محدَّثة مباشرة من قاعدة البيانات (SHADOW MODE — لا تؤثر على النظام الحالي)</Text>
+      <Text style={styles.sectionDesc}>الأعداد محدَّثة مباشرة من قاعدة البيانات — النظام فعّال وحقيقي (ليس وضع ظل) لكل مستخدم له تكليف نشط</Text>
       <View style={styles.grid}>
         {cards.map((c, i) => (
           <View key={i} style={styles.card} testID={`adv-dashboard-card-${c.label}`}>

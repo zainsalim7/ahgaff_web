@@ -102,7 +102,7 @@ export default function AdvancedAccessControlScreen() {
         </TouchableOpacity>
         <View style={{ flex: 1, marginHorizontal: 10 }}>
           <Text style={styles.headerTitle}>مركز الصلاحيات المتقدم</Text>
-          <View style={styles.shadowBadge}><Text style={styles.shadowBadgeText}>SHADOW MODE — تجريبي، لا يؤثر على النظام الحالي</Text></View>
+          <View style={styles.shadowBadge}><Text style={styles.shadowBadgeText}>فعّال حقيقي ⚡ — يُطبَّق فوراً على أي مستخدم له تكليف نشط</Text></View>
         </View>
         <TouchableOpacity style={styles.ctxBtn} onPress={() => setShowContextModal(true)} testID="adv-context-switcher-btn">
           <Ionicons name="swap-horizontal" size={16} color="#fff" />
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.bg },
   header: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: COLORS.primary, padding: 14, paddingTop: Platform.OS === 'ios' ? 8 : Platform.OS === 'web' ? 56 : 14 },
   headerTitle: { color: '#fff', fontSize: 17, fontWeight: 'bold', textAlign: 'right' },
-  shadowBadge: { backgroundColor: COLORS.shadow, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginTop: 4, alignSelf: 'flex-end' },
+  shadowBadge: { backgroundColor: COLORS.success, borderRadius: 6, paddingHorizontal: 6, paddingVertical: 2, marginTop: 4, alignSelf: 'flex-end' },
   shadowBadgeText: { color: '#fff', fontSize: 10 },
   ctxBtn: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.2)', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 6, maxWidth: 140, gap: 4 },
   ctxBtnText: { color: '#fff', fontSize: 11, marginRight: 4 },

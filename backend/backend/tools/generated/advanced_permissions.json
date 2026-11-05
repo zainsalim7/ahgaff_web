@@ -5082,10 +5082,12 @@
     "source_function": "get_courses",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض جميع المقررات الدراسية المسجلة في النظام ضمن نطاق صلاحية المستخدم"
   },
   {
@@ -5116,11 +5118,12 @@
         "confidence": "direct",
         "gate_function": "has_permission",
         "enforcement": "confirmed_conditional_raise"
-      }
+      },
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
     ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "إنشاء مقرر دراسي جديد في النظام بإدخال بياناته الأساسية"
   },
   {
@@ -5136,10 +5139,12 @@
     "source_function": "get_course",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض تفاصيل مقرر دراسي محدد، مثل بياناته الأساسية ومعلمه وقسمه"
   },
   {
@@ -5170,11 +5175,12 @@
         "confidence": "direct",
         "gate_function": "has_permission",
         "enforcement": "confirmed_conditional_raise"
-      }
+      },
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
     ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "حذف مقرر دراسي محدد من النظام وإزالته من قوائم المقررات",
     "depends_on": [
       {
@@ -6009,10 +6015,12 @@
     "source_function": "get_departments",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض جميع الأقسام الأكاديمية المسجلة في النظام مع بياناتها الأساسية"
   },
   {
@@ -6036,11 +6044,12 @@
         "confidence": "direct",
         "gate_function": "has_permission",
         "enforcement": "confirmed_conditional_raise"
-      }
+      },
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
     ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "إنشاء قسم أكاديمي جديد وربطه بكلية في الهيكل الأكاديمي"
   },
   {
@@ -6083,11 +6092,12 @@
         "confidence": "direct",
         "gate_function": "has_permission",
         "enforcement": "confirmed_conditional_raise"
-      }
+      },
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
     ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "تعديل بيانات قسم أكاديمي قائم، مثل اسمه أو رمزه أو كليته",
     "depends_on": [
       {
@@ -6121,11 +6131,12 @@
         "confidence": "direct",
         "gate_function": "has_permission",
         "enforcement": "confirmed_conditional_raise"
-      }
+      },
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
     ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "حذف قسم أكاديمي محدد من الهيكل الأكاديمي للنظام",
     "depends_on": [
       {
@@ -16982,10 +16993,12 @@
     "source_function": "get_all_roles",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض جميع الأدوار المعرّفة في النظام لإدارة صلاحيات المستخدمين وتوزيعها"
   },
   {
@@ -17001,10 +17014,12 @@
     "source_function": "create_role",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "إنشاء دور جديد في النظام وتحديد الصلاحيات الممنوحة لمن يُسند إليه",
     "depends_on": [
       {
@@ -17026,10 +17041,12 @@
     "source_function": "get_role",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض تفاصيل دور محدد بحسب معرّفه، بما فيها اسمه والصلاحيات المرتبطة به"
   },
   {
@@ -17045,10 +17062,12 @@
     "source_function": "update_role",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "تعديل دور قائم، كاسمه ووصفه والصلاحيات الممنوحة له",
     "depends_on": [
       {
@@ -17078,10 +17097,12 @@
     "source_function": "delete_role",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "حذف دور محدد من النظام بحسب معرّفه فلا يعود متاحًا للإسناد",
     "depends_on": [
       {
@@ -17107,10 +17128,12 @@
     "source_function": "init_default_roles",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "إنشاء الأدوار الافتراضية للنظام بصلاحياتها الأساسية عند التهيئة الأولى"
   },
   {
@@ -17126,10 +17149,12 @@
     "source_function": "get_all_permissions",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض قائمة جميع الصلاحيات المتاحة في النظام لاختيارها عند إنشاء الأدوار وتعديلها"
   },
   {
@@ -19177,10 +19202,12 @@
     "source_function": "get_students",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض قائمة الطلاب المسجلين في النظام مع بياناتهم الأساسية للبحث والتصفية"
   },
   {
@@ -19196,10 +19223,12 @@
     "source_function": "create_student",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "تسجيل طالب جديد في النظام بإدخال بياناته الشخصية والأكاديمية"
   },
   {
@@ -19215,10 +19244,12 @@
     "source_function": "get_student",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض تفاصيل طالب محدد بحسب معرّفه، بما فيها بياناته الشخصية والأكاديمية"
   },
   {
@@ -19234,10 +19265,12 @@
     "source_function": "update_student",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "تعديل بيانات طالب مسجل، كاسمه وقسمه ومستواه وشعبته ومعلومات التواصل",
     "depends_on": [
       {
@@ -19263,10 +19296,12 @@
     "source_function": "delete_student",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "حذف طالب محدد من النظام بحسب معرّفه مع سجلاته المرتبطة",
     "depends_on": [
       {
@@ -19886,10 +19921,12 @@
     "source_function": "get_teachers",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض قائمة جميع المعلمين المسجلين في النظام مع بياناتهم الأساسية"
   },
   {
@@ -19905,10 +19942,12 @@
     "source_function": "create_teacher",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "تسجيل معلم جديد في النظام بإدخال بياناته الشخصية والوظيفية"
   },
   {
@@ -19924,10 +19963,12 @@
     "source_function": "get_teacher",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض تفاصيل معلم محدد بحسب معرّفه، بما فيها بياناته الشخصية والوظيفية"
   },
   {
@@ -19943,10 +19984,12 @@
     "source_function": "delete_teacher",
     "legacy_permissions_detected": [],
     "admin_only_detected": true,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "حذف معلم محدد من النظام بحسب معرّفه مع سجلاته المرتبطة",
     "depends_on": [
       {
@@ -20520,10 +20563,12 @@
     "source_function": "create_user",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "إنشاء حساب مستخدم جديد في النظام وتحديد بيانات دخوله ودوره"
   },
   {
@@ -20539,10 +20584,12 @@
     "source_function": "get_users",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "عرض قائمة مستخدمي النظام مع أدوارهم وحالة تفعيل حساباتهم"
   },
   {
@@ -20558,10 +20605,12 @@
     "source_function": "delete_user",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "حذف حساب مستخدم محدد من النظام بحسب معرّفه",
     "depends_on": [
       {
@@ -20583,10 +20632,12 @@
     "source_function": "update_user",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "تعديل بيانات مستخدم قائم، كاسمه وبريده ودوره ونطاق صلاحياته",
     "depends_on": [
       {
@@ -20608,10 +20659,12 @@
     "source_function": "reset_user_password",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "إعادة تعيين كلمة مرور مستخدم محدد عند نسيانها أو فقدان الوصول إلى حسابه"
   },
   {
@@ -20627,10 +20680,12 @@
     "source_function": "toggle_user_active",
     "legacy_permissions_detected": [],
     "admin_only_detected": false,
-    "resolution_detail": [],
+    "resolution_detail": [
+      "مسار مُظلَّل: نسخة مكررة غير مستخدمة فعليًا، المسار الحي محمي بمفتاح آخر (راجع PRD)"
+    ],
     "unresolved_dynamic_refs": [],
     "requires_admin_scope": false,
-    "is_active": true,
+    "is_active": false,
     "description_ar": "تفعيل حساب مستخدم أو إيقافه دون حذفه، للتحكم في قدرته على الدخول"
   },
   {
