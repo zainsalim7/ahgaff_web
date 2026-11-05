@@ -548,7 +548,7 @@ export default function ScheduleScreen() {
             {loading ? (
               <View style={s.center}><LoadingScreen /></View>
             ) : fetchError ? (
-              <View style={s.emptyState} data-testid="schedule-forbidden-error">
+              <View style={s.emptyState} testID="schedule-forbidden-error">
                 <Ionicons name="lock-closed-outline" size={56} color="#dc2626" />
                 <Text style={[s.emptyTitle, { color: '#dc2626' }]}>غير مصرح لك</Text>
                 <Text style={s.emptySubtitle}>{fetchError}</Text>

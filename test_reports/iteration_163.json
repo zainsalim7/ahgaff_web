@@ -1,0 +1,35 @@
+{
+  "summary": "Verified dashboard/header/schedule trust fixes end-to-end. Backend 13/13 pytest pass (after correcting a test assertion for a trailing space in the DB faculty name). FIX1: HR-only real-enforcement user (hr_core_hr_my_scope) -> GET /dashboard/management 403 with exact message; a user with dashboard_management_dashboard_management_dashboard_hr -> 200 with sections.hr=true. Admin/Saeed/Salim still 200 (Saeed/Salim hr=false, others true; admin all true). FIX2: the 403 shows up on the home page as the dash-error panel with the message. FIX3: login + /auth/me return faculty_name and faculty_names=[...] from faculty_ids when the legacy faculty_id is null. Admin gets null and []. FIX4: header shows 'كلية الشريعة والقانون' for the faculty-scoped user, 'الشريعة والقانون' (department) for the dept-scoped user, 'الدراسات الإسلامية' for Saeed, 'كلية الشريعة والقانون' for Salim, and 'جامعة الأحقاف' for admin. FIX5: /lectures/all-schedule returns 403 for real-enforcement users with no lectures key, and /schedule shows the red 'غير مصرح لك' panel. Admin/Saeed/Salim get the normal empty state ('لا توجد محاضرات'), with no forbidden panel. Regression smoke (Saeed, Salim): /students, /courses, /manage-teachers, /weekly-schedule, /report-teacher-workload render with no page errors and no no-permission redirect.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/dashboard/management (legacy bridge map)", "issue": "Over-broad bridge: in advanced_permissions.json, the keys dashboard_management_dashboard_management_dashboard_hr / _export / _hr_export each list ALL 8 dashboard_* legacy perms in legacy_permissions_detected. A user granted ONLY the '/dashboard/management/hr' key got every section: alerts, attendance, teachers, students, rooms, finance, hr and export. Meanwhile the main key dashboard_management_dashboard_management_dashboard has legacy_permissions_detected=[] and so grants nothing via the bridge. Not a regression from this round, but it undercuts the per-section intent: granting 'HR dashboard' also exposes finance and academic sections."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "schedule.tsx forbidden panel", "issue": "Used a raw data-testid prop on an RN <View>, which react-native-web does not render to the DOM. FIXED by tester: changed to testID='schedule-forbidden-error' (now renders as data-testid).", "selector": "[data-testid='schedule-forbidden-error']", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Home (ManagementDashboard dash-error) for a 403", "issues": ["The permission denial uses the gray 'cloud-offline-outline' icon and a 'إعادة المحاولة' retry button, which looks like a network error. Use a lock icon and hide retry when the status is 403."]},
+      {"screen": "/schedule when forbidden", "issues": ["The stats cards (0/0/0/0) and the day strip still render above the red forbidden panel. Consider hiding them on 403."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_dashboard_scope_iter163.py", "/app/backend/tests/ui163_setup.py", "/app/test_reports/pytest/iter163.xml"],
+  "action_items": [
+    "(Optional, security tightening) Review the legacy bridge for dashboard keys: map dashboard_management_dashboard_management_dashboard_hr only to dashboard_hr (and _export to dashboard_export), and give the main dashboard_management_dashboard_management_dashboard key a sensible mapping. Otherwise granting the 'HR dashboard' key grants finance/students/etc. sections.",
+    "(Minor UX) In ManagementDashboard, render 403 errors with a lock icon and no retry button; on schedule.tsx, hide the stats cards when fetchError is set."
+  ],
+  "critical_code_review_comments": [
+    "management_dashboard.py: dashboard_sections() is computed up to 3 times per request (route guard, build_dashboard line ~129, payload line ~607). It's cheap and synchronous, but could be computed once and passed in.",
+    "DB faculty name 'كلية الشريعة والقانون ' has a trailing space, which flows into faculty_name / the header. Consider .strip() in auth.py's name maps.",
+    "auth.py login/get_me duplicate the department_names/faculty_names derivation block (~20 lines each). Extract a helper."
+  ],
+  "updated_files": ["/app/frontend/app/schedule.tsx (data-testid -> testID)", "/app/backend/tests/test_dashboard_scope_iter163.py", "/app/backend/tests/ui163_setup.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created and cleaned up the TEST_hronly163, TEST_dash163, TEST_uihr163 and TEST_uidash163 users and their assignments (ended assignments, deleted users; all 200). TEST_role_* advanced roles remain because there is no delete endpoint for advanced-access roles.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run: REACT_APP_BACKEND_URL=... pytest backend/tests/test_dashboard_scope_iter163.py -p no:xdist. For UI: python backend/tests/ui163_setup.py setup|cleanup (password = username for TEST users). The login button needs a click ('تسجيل الدخول'); Enter does not submit."
+}
