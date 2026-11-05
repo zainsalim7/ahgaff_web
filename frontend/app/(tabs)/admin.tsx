@@ -334,6 +334,15 @@ const SECTIONS: Section[] = [
         teacherOnly: true,
       },
       {
+        id: 'offline-sync-report',
+        label: 'تقرير مزامنة الأوفلاين',
+        description: 'من يُزامن متأخراً، مدة التأخر، ونجاح/فشل كل محاولة',
+        icon: 'time',
+        color: '#0891b2',
+        bg: '#cffafe',
+        route: '/offline-sync-report',
+      },
+      {
         id: 'permissions-tree',
         label: 'شجرة الصلاحيات',
         description: 'عرض جميع الصلاحيات والعلاقات بينها',

@@ -11310,6 +11310,21 @@ async def get_lecture_attendance(
 
 # ==================== Attendance Routes ====================
 
+async def _log_offline_sync(db, *, current_user, lecture, course, session, now, lecture_end, status, reason="", records_count=0):
+    """📝 سجل تدقيق لمحاولات مزامنة الحضور الأوفلاين (نجاح/فشل) — لتقرير /reports/offline-sync"""
+    try:
+        await db.offline_sync_log.insert_one({
+            "teacher_id": current_user["id"], "teacher_name": current_user.get("full_name", ""),
+            "course_id": lecture["course_id"], "course_name": course.get("name", ""),
+            "lecture_id": session.lecture_id, "lecture_date": lecture.get("date"), "lecture_end_time": lecture.get("end_time"),
+            "offline_recorded_at": session.offline_recorded_at,
+            "synced_at": now.isoformat(),
+            "delay_seconds": (now - lecture_end).total_seconds(),
+            "status": status, "reason": reason, "records_count": records_count,
+        })
+    except Exception as _e:
+        logger.warning(f"offline_sync_log insert failed: {_e}")
+
 @api_router.post("/attendance/session")
 async def record_attendance_session(
     session: AttendanceSessionCreate,
@@ -11388,18 +11403,18 @@ async def record_attendance_session(
             _max_hours = await get_offline_sync_max_hours()
             age_seconds = (now - offline_time).total_seconds()
             if age_seconds > _max_hours * 3600:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"سجل التحضير الأوفلاين أقدم من {_max_hours} ساعة — لا يمكن قبوله"
-                )
+                _reason = f"سجل التحضير الأوفلاين أقدم من {_max_hours} ساعة — لا يمكن قبوله"
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records))
+                raise HTTPException(status_code=400, detail=_reason)
             if age_seconds < -600:
-                raise HTTPException(status_code=400, detail="وقت التسجيل الأوفلاين في المستقبل — تحقق من ساعة الجهاز")
+                _reason = "وقت التسجيل الأوفلاين في المستقبل — تحقق من ساعة الجهاز"
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records))
+                raise HTTPException(status_code=400, detail=_reason)
             offline_window_end = lecture_end + timedelta(minutes=attendance_duration + max_delay)
             if offline_time < lecture_start or offline_time > offline_window_end:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"وقت التسجيل الأوفلاين خارج نافذة المحاضرة ({lecture['date']} {lecture['start_time']}-{lecture['end_time']}) — مرفوض"
-                )
+                _reason = f"وقت التسجيل الأوفلاين خارج نافذة المحاضرة ({lecture['date']} {lecture['start_time']}-{lecture['end_time']}) — مرفوض"
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records))
+                raise HTTPException(status_code=400, detail=_reason)
             check_time = offline_time
             is_offline_sync = True
     
@@ -11537,6 +11552,8 @@ async def record_attendance_session(
         "records_count": len(attendance_records), "offline_recorded_at": session.offline_recorded_at, "location": loc_doc,
         "recorded_at": get_yemen_time().isoformat(),
     })
+    if is_offline_sync:
+        await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="success", records_count=len(attendance_records))
     # 🔔 تحضير خارج النطاق → إشعار رؤساء قسم المقرر (in-app + Push)
     if loc_doc and loc_doc.get("inside_campus") is False:
         try:
@@ -18845,6 +18862,10 @@ app.include_router(build_absence_reminders_router(db, get_current_user, has_perm
 # 📍 النطاق الجغرافي لتحضير المحاضرات (geofence_attendance.py)
 from geofence_attendance import build_router as build_geofence_router
 app.include_router(build_geofence_router(db, get_current_user), prefix="/api")
+
+# ⏱️ تقرير مزامنة الحضور الأوفلاين (offline_sync_report.py)
+from offline_sync_report import build_router as build_offline_sync_report_router
+app.include_router(build_offline_sync_report_router(db, get_current_user), prefix="/api")
 
 # 🔐 الدخول الموحّد إلى منصة الأحقاف (المكتبة الرقمية)
 from sso_platform import build_router as build_sso_router
