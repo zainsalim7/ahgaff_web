@@ -277,6 +277,8 @@ async def create_assignment(data: AssignmentCreate, current_user: dict = Depends
         raise HTTPException(status_code=404, detail="المستخدم غير موجود")
     if not await db.advanced_roles.find_one({"_id": _oid(data.advanced_role_id, "الدور")}):
         raise HTTPException(status_code=404, detail="الدور المتقدم غير موجود")
+    # 🆕 تفعيل الإنفاذ الفعلي فوراً عند إسناد أول تكليف — وإلا يبقى التكليف بلا أثر (المستخدم يظل بوضع النظام القديم)
+    await db.users.update_one({"_id": ObjectId(data.user_id)}, {"$set": {"advanced_access_real_enforcement": True}})
     doc = {
         "user_id": data.user_id,
         "assignment_type": data.assignment_type,

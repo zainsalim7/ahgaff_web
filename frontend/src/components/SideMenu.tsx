@@ -87,7 +87,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 🎓 الخريجون
   { id: 'alumni', label: 'الخريجون', icon: 'school', path: '/alumni', permissions: [
     PERMISSIONS.MANAGE_STUDENTS, 'view_students'
-  ]},
+  ], advPermissionKeys: ['alumni_alumni_list_alumni']},
 
   // 📋 إدارة التسجيلات — صفحة مستقلة لتسجيل الطلاب في المقررات
   { id: 'enrollments', label: 'إدارة التسجيلات', icon: 'clipboard', path: '/manage-enrollments', permissions: [
@@ -154,26 +154,26 @@ const MENU_ITEMS: MenuItem[] = [
   // 🏢 شؤون الموظفين
   { id: 'hr-divider', label: 'شؤون الموظفين', icon: 'people-circle', path: '', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
   { id: 'hr-employees', label: 'سجل الموظفين', icon: 'id-card', path: '/hr-employees', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_list_employees'] },
-  { id: 'hr-org-units', label: 'الهيكل التنظيمي', icon: 'git-network', path: '/hr-org-units', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG] },
+  { id: 'hr-org-units', label: 'الهيكل التنظيمي', icon: 'git-network', path: '/hr-org-units', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ORG], advPermissionKeys: ['hr_core_hr_list_org_units'] },
   { id: 'hr-leaves', label: 'إدارة الإجازات', icon: 'airplane', path: '/hr-leaves', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_LEAVES], advPermissionKeys: ['hr_leaves_hr_leaves_list_leaves'] },
   { id: 'management-dashboard', label: 'لوحة التقارير الإدارية', icon: 'bar-chart', path: '/management-dashboard', permissions: [], advPermissionKeys: ['dashboard_management_dashboard_management_dashboard_hr'] },
-  { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE] },
-  { id: 'hr-work-settings', label: 'إعدادات الدوام والفترات', icon: 'time', path: '/hr-work-settings', permissions: [PERMISSIONS.HR_MANAGE_WORK_SETTINGS] },
-  { id: 'hr-leave-settings', label: 'إعدادات الإجازات', icon: 'options', path: '/hr-leave-settings', permissions: [PERMISSIONS.HR_MANAGE_LEAVE_SETTINGS] },
-  { id: 'hr-locations', label: 'مواقع العمل (Geofencing)', icon: 'location', path: '/hr-locations', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE] },
-  { id: 'hr-presence-checks', label: 'تأكيد التواجد العشوائي', icon: 'notifications', path: '/hr-presence-checks', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE] },
-  { id: 'hr-annual-report', label: 'التقرير السنوي HR', icon: 'stats-chart', path: '/hr-annual-report', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
+  { id: 'hr-attendance', label: 'الحضور الإداري', icon: 'finger-print', path: '/hr-attendance', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_attendance_daily_sheet'] },
+  { id: 'hr-work-settings', label: 'إعدادات الدوام والفترات', icon: 'time', path: '/hr-work-settings', permissions: [PERMISSIONS.HR_MANAGE_WORK_SETTINGS], advPermissionKeys: ['hr_attendance_hr_shifts_read'] },
+  { id: 'hr-leave-settings', label: 'إعدادات الإجازات', icon: 'options', path: '/hr-leave-settings', permissions: [PERMISSIONS.HR_MANAGE_LEAVE_SETTINGS], advPermissionKeys: ['hr_leaves_hr_leave_types_list_types'] },
+  { id: 'hr-locations', label: 'مواقع العمل (Geofencing)', icon: 'location', path: '/hr-locations', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_locations_list_locations'] },
+  { id: 'hr-presence-checks', label: 'تأكيد التواجد العشوائي', icon: 'notifications', path: '/hr-presence-checks', permissions: [PERMISSIONS.HR_MANAGE_ATTENDANCE], advPermissionKeys: ['hr_attendance_hr_presence_read_settings'] },
+  { id: 'hr-annual-report', label: 'التقرير السنوي HR', icon: 'stats-chart', path: '/hr-annual-report', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES], advPermissionKeys: ['hr_core_hr_reports_annual'] },
   { id: 'hr-letters', label: 'الخطابات الرسمية', icon: 'document-text', path: '/hr-letters', permissions: [], forAll: true },
   { id: 'hr-profile-requests', label: 'طلبات تعديل البيانات', icon: 'create', path: '/hr-profile-requests', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES] },
-  { id: 'hr-photo-approvals', label: 'اعتماد صور البطاقات', icon: 'images', path: '/hr-photo-approvals', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_approve_photos'] },
-  { id: 'hr-card-print', label: 'طباعة بطاقات الموظفين', icon: 'print', path: '/hr-card-print', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_print_cards'] },
+  { id: 'hr-photo-approvals', label: 'اعتماد صور البطاقات', icon: 'images', path: '/hr-photo-approvals', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_approve_photos'], advPermissionKeys: ['cards_hr_cards_pending_photos'] },
+  { id: 'hr-card-print', label: 'طباعة بطاقات الموظفين', icon: 'print', path: '/hr-card-print', permissions: [PERMISSIONS.HR_VIEW_EMPLOYEES, PERMISSIONS.HR_MANAGE_EMPLOYEES, 'hr_print_cards'], advPermissionKeys: ['cards_hr_card_print_get_print_settings'] },
   { id: 'hr-tasks', label: 'المهام', icon: 'checkbox', path: '/hr-tasks', permissions: [], forAll: true },
   { id: 'hr-appraisals', label: 'التقييم السنوي', icon: 'star', path: '/hr-appraisals', permissions: [], forAll: true },
   { id: 'hr-my-profile', label: 'ملفي الإداري', icon: 'person-circle', path: '/hr-my-profile', permissions: [], forAll: true },
   { id: 'hr-my-leaves', label: 'إجازاتي', icon: 'calendar', path: '/hr-my-leaves', permissions: [], forAll: true },
 
   // 📜 المراسلات الرسمية (المرحلة 1) — الصلاحيات تُقيَّم في الخادم حسب العضويات التنظيمية
-  { id: 'letter-new', label: 'رسالة جديدة ⚡', icon: 'flash', path: '/letter-new', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'] },
+  { id: 'letter-new', label: 'رسالة جديدة ⚡', icon: 'flash', path: '/letter-new', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_issue_letter'] },
   { id: 'letters', label: 'الخطابات الرسمية ✉️', icon: 'mail-open', path: '/letters', permissions: ['issue_letters', 'hr_manage_correspondence', 'hr_manage_employees'], advPermissionKeys: ['letters_letters_list_letters', 'letters_hr_letters_list_letters'] },
   { id: 'corr-divider', label: 'المراسلات الرسمية', icon: 'mail', path: '', permissions: [], forAll: true },
   { id: 'corr-quick', label: 'خطاب سريع ⚡', icon: 'flash', path: '/corr-quick', permissions: [], forAll: true },

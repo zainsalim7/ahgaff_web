@@ -157,6 +157,14 @@ async def login(user_data: UserLogin, request: Request):
     
     access_token = create_access_token(data={"sub": str(user["_id"])})
     
+    # 🩹 إصلاح ذاتي: مستخدم له تكليف فعّال في مركز الصلاحيات المتقدم لكن علم الإنفاذ الفعلي لم يُفعَّل
+    # (تكليف أُسند لمستخدم موجود مسبقًا قبل أن يصبح تفعيل العلم تلقائيًا عند الإسناد) — نفعّله الآن تلقائيًا
+    if not user.get("advanced_access_real_enforcement"):
+        _has_active_assignment = await db.advanced_user_assignments.find_one({"user_id": str(user["_id"]), "status": "active"})
+        if _has_active_assignment:
+            await db.users.update_one({"_id": user["_id"]}, {"$set": {"advanced_access_real_enforcement": True}})
+            user["advanced_access_real_enforcement"] = True
+
     # جلب صلاحيات الدور
     user_permissions = []
     
