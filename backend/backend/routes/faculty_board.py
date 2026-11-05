@@ -105,7 +105,16 @@ async def list_candidates(course_id: Optional[str] = None, department_id: Option
             if not c_fac and c_dept and ObjectId.is_valid(c_dept):
                 dep_doc = await db.departments.find_one({"_id": ObjectId(c_dept)}, {"faculty_id": 1})
                 c_fac = str((dep_doc or {}).get("faculty_id") or "")
-            ok = (department_id and c_dept == department_id) or (faculty_id and c_fac == faculty_id)
+            # 🔒 نفس أولوية real_enforce_guard الحصرية: إن أُرسل department_id فهو وحده أساس التفويض (تجاهل
+            # faculty_id تمامًا) — وإلا faculty_id وحده. لا OR مباشر بين قيمتين خامتين من الطلب، وإلا يمكن
+            # لمستخدم مُكلَّف بقسمه فقط أن يمرّر department_id=قسمه (ينجح الحارس) + faculty_id=كلية المقرر
+            # الهدف الفعلية (مهما كانت) فيتطابق الشرط الثاني خطأً رغم أن الحارس لم يتحقق من تلك الكلية أصلاً
+            if department_id:
+                ok = (c_dept == department_id)
+            elif faculty_id:
+                ok = (c_fac == faculty_id)
+            else:
+                ok = False
             if not ok:
                 raise HTTPException(status_code=403, detail="هذا المقرر خارج نطاق صلاحيتك")
     else:

@@ -4843,15 +4843,15 @@ async def get_teachers(
     # 🌐 وضع "عابر للجامعة" — يتطلب إذناً صريحاً
     role = current_user.get("role", "")
     if current_user.get("advanced_access_real_enforcement"):
-        from services.advanced_access_service import real_enforce_guard
+        from services.advanced_access_service import real_enforce_guard, real_enforce_check
         await real_enforce_guard(db, current_user, "teachers_ser_get_teachers", department_id, faculty_id)
         scope_filter = {}
-        # 🔧 نطاق "كلية": نترجمه دوماً لأقسام تلك الكلية (fail-closed لو بلا أقسام) ونتحقق أن أي department_id
-        # مُرسَل فعلاً ضمنها — وإلا يمكن لمستخدم ممنوح faculty_id فقط تمرير department_id من كلية أخرى والتحايل
-        if faculty_id:
+        # 🔒 التوسيع لكل أقسام الكلية يتطلب تحقّقاً مستقلاً أن المستخدم يملك فعلاً نطاق "كلية" لهذا المفتاح
+        # تحديداً — وليس فقط لأن real_enforce_guard نجح عبر department_id (أولوية حصرية الآن، راجع
+        # real_enforce_guard). وإلا يمكن لمستخدم مُكلَّف بقسم فقط أن يُرسِل faculty_id عرَضًا (كما تفعل
+        # بعض صفحات الواجهة) فيتوسّع نطاقه خطأً لكل أقسام تلك الكلية.
+        if faculty_id and not department_id and await real_enforce_check(db, current_user, "teachers_ser_get_teachers", "faculty", faculty_id):
             _dept_ids = await get_faculty_department_ids(faculty_id)
-            if department_id and department_id not in _dept_ids:
-                raise HTTPException(status_code=403, detail="القسم المحدد خارج نطاق الكلية المصرَّح بها")
             scope_filter["department_id"] = {"$in": _dept_ids}
             department_id = None  # الفلتر النهائي يُبنى من scope_filter أعلاه فقط
     elif cross_university and (

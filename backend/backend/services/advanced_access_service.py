@@ -267,14 +267,20 @@ async def real_enforce_guard(db, current_user: dict, adv_permission_key: str,
         if await real_enforce_check(db, current_user, adv_permission_key, "university", None):
             return True
         raise HTTPException(status_code=400, detail="حدد القسم أو الكلية ضمن نطاق صلاحيتك لعرض هذه البيانات")
-    # 🔧 تجربة department_id ثم faculty_id (OR) بدل أولوية faculty_id فقط — صفحات كثيرة (الجدول الأسبوعي مثلاً)
-    # ترسل faculty_id دائماً + department_id اختيارياً، فمستخدم مُقيَّد بقسم فقط (بلا نطاق كلية) كان يُرفض دوماً
+    # 🔒 الأولوية الحصرية للمعامل الأكثر تحديدًا: إن أُرسل department_id يُفحَص **وحده** (مع هرمية الكلية
+    # الأم المضمَّنة أصلاً داخل real_enforce_check) ويُتجاهَل faculty_id تمامًا لأغراض التفويض؛ وإلا يُفحَص
+    # faculty_id وحده. هذا ليس OR بين فحصين مستقلين — لأن المستدعيات تستخدم بعدها القيمة الخام المرسلة
+    # كفلتر فعلي، فلا يجوز أن ينجح التفويض عبر معامل مختلف عن الذي ستُبنى عليه الاستعلام لاحقًا (كان هذا
+    # يسمح لمستخدم مُكلَّف بكلية A بإرسال department_id من كلية B + faculty_id=A فينجح الفحص عبر A بينما
+    # الاستعلام الفعلي يُصفّي بقسم كلية B — ثغرة تسرّب حقيقية). المستدعي الذي يحتاج "عرّض النطاق لكل أقسام
+    # الكلية" (مثل GET /teachers) يجب أن يتحقق بنفسه عبر real_enforce_check(..., "faculty", faculty_id)
+    # قبل التوسيع، وليس فقط لأن department_id نجح.
     if department_id:
         if await real_enforce_check(db, current_user, adv_permission_key, "department", department_id):
             return True
-    if faculty_id:
-        if await real_enforce_check(db, current_user, adv_permission_key, "faculty", faculty_id):
-            return True
+        raise HTTPException(status_code=403, detail="غير مصرح")
+    if await real_enforce_check(db, current_user, adv_permission_key, "faculty", faculty_id):
+        return True
     raise HTTPException(status_code=403, detail="غير مصرح")
 
 

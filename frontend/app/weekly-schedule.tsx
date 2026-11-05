@@ -146,7 +146,7 @@ export default function WeeklySchedulePage() {
     })();
   }, [viewMode, selectedDept, selectedLevel]);
 
-  // Load initial data
+  // Load initial data (كلية/وقت الإعدادات — لا يعتمد على المستخدم)
   useEffect(() => {
     (async () => {
       try {
@@ -158,38 +158,47 @@ export default function WeeklySchedulePage() {
         setTimeSlots(settRes.data.time_slots || []);
         setEditSlots(settRes.data.time_slots || []);
         setEditWorkingDays(settRes.data.working_days || []);
-        // 🆕 مستخدم إنفاذ فعلي مُقيَّد بنطاق: الصفحة تتطلب faculty_id دائماً — نعبّئه تلقائياً من نطاقه
-        // بدل تركه يرفض (400) أو يضطر للاختيار يدوياً في كل مرة
-        const scope = getMyScope(user);
-        if (scope.restricted) {
-          if (scope.facultyIds.length === 1) {
-            setSelectedFaculty(scope.facultyIds[0]);
-          } else if (scope.departmentIds.length === 1) {
-            const deptRes = await departmentsAPI.getAll();
-            const d = (deptRes.data || []).find((x: any) => x.id === scope.departmentIds[0]);
-            if (d?.faculty_id) { setSelectedFaculty(d.faculty_id); setSelectedDept(d.id); }
-          }
-        }
       } catch (e) { console.error(e); }
     })();
   }, []);
+
+  // 🆕 تعبئة افتراضية للكلية/القسم من نطاق مستخدم الإنفاذ الفعلي المُقيَّد — منفصلة عن التحميل الأولي
+  // لأن `user` قد يتأخر تحميله من AsyncStorage (بعد أول render)؛ تعتمد على [user] لتُعاد عند توفره فعلياً
+  useEffect(() => {
+    if (!user || selectedFaculty) return;
+    const scope = getMyScope(user);
+    if (!scope.restricted) return;
+    (async () => {
+      try {
+        if (scope.facultyIds.length === 1) {
+          setSelectedFaculty(scope.facultyIds[0]);
+        } else if (scope.departmentIds.length === 1) {
+          const deptRes = await departmentsAPI.getAll();
+          const d = (deptRes.data || []).find((x: any) => x.id === scope.departmentIds[0]);
+          if (d?.faculty_id) { setSelectedFaculty(d.faculty_id); setSelectedDept(d.id); }
+        }
+      } catch (e) { console.error(e); }
+    })();
+  }, [user, selectedFaculty]);
 
   // Load departments, rooms, and settings when faculty changes
   useEffect(() => {
     if (!selectedFaculty) { setDepartments([]); setRooms([]); return; }
     (async () => {
-      try {
-        const [deptRes, roomRes, settRes] = await Promise.all([
-          departmentsAPI.getAll(),
-          scheduleAPI.getRooms(selectedFaculty),
-          scheduleAPI.getSettings(selectedFaculty),
-        ]);
-        setDepartments(deptRes.data.filter((d: any) => d.faculty_id === selectedFaculty));
-        setRooms(roomRes.data);
-        setTimeSlots(settRes.data.time_slots || []);
-        setEditSlots(settRes.data.time_slots || []);
-        setEditWorkingDays(settRes.data.working_days || []);
-      } catch (e) { console.error(e); }
+      const [deptRes, roomRes, settRes] = await Promise.allSettled([
+        departmentsAPI.getAll(),
+        scheduleAPI.getRooms(selectedFaculty),
+        scheduleAPI.getSettings(selectedFaculty),
+      ]);
+      if (deptRes.status === 'fulfilled') {
+        setDepartments(deptRes.value.data.filter((d: any) => d.faculty_id === selectedFaculty));
+      } else { setDepartments([]); console.error(deptRes.reason); }
+      if (roomRes.status === 'fulfilled') setRooms(roomRes.value.data); else { setRooms([]); console.error(roomRes.reason); }
+      if (settRes.status === 'fulfilled') {
+        setTimeSlots(settRes.value.data.time_slots || []);
+        setEditSlots(settRes.value.data.time_slots || []);
+        setEditWorkingDays(settRes.value.data.working_days || []);
+      } else { console.error(settRes.reason); }
     })();
   }, [selectedFaculty]);
 

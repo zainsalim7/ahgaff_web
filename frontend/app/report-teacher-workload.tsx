@@ -91,16 +91,20 @@ export default function TeacherWorkloadReport() {
 
   useEffect(() => {
     if (isTeacher) return;
-    Promise.all([teachersAPI.getAll(), departmentsAPI.getAll(), facultiesAPI.getAll()]).then(([t, d, f]) => {
-      setTeachers(t.data || []); setDepartments(d.data || []); setFaculties(f.data || []);
-      // 🆕 مستخدم إنفاذ فعلي مُقيَّد بنطاق: نعبّئ قسمه/كليته افتراضياً كي لا يُرفض الطلب (400) لعدم تحديد نطاق
+    (async () => {
       const scope = getMyScope(user);
+      const teacherParams = (scope.restricted && scope.departmentIds.length === 1) ? { department_id: scope.departmentIds[0] } : undefined;
+      const [t, d, f] = await Promise.allSettled([teachersAPI.getAll(teacherParams), departmentsAPI.getAll(), facultiesAPI.getAll()]);
+      setTeachers(t.status === 'fulfilled' ? (t.value.data || []) : []);
+      setDepartments(d.status === 'fulfilled' ? (d.value.data || []) : []);
+      setFaculties(f.status === 'fulfilled' ? (f.value.data || []) : []);
+      // 🆕 مستخدم إنفاذ فعلي مُقيَّد بنطاق: نعبّئ قسمه/كليته افتراضياً كي لا يُرفض الطلب (400) لعدم تحديد نطاق
       if (scope.restricted) {
         if (scope.departmentIds.length === 1) setDept((p) => p || scope.departmentIds[0]);
         else if (scope.facultyIds.length === 1) setFac((p) => p || scope.facultyIds[0]);
       }
-    }).catch(() => {});
-  }, [isTeacher]);
+    })();
+  }, [isTeacher, user]);
 
   const deptScoped = !isTeacher && deptMode === 'teach' && !!dept;
   const showFull = !deptScoped || revealDeptNumbers;
