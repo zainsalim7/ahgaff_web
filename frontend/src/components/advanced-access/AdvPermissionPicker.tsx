@@ -10,6 +10,9 @@ interface Props {
 }
 
 const QUICK_OPS = ['view_list', 'view_detail', 'add', 'edit', 'delete', 'export', 'approve', 'publish'];
+// 🆕 ترتيب الأهمية داخل كل مجموعة: العرض أولاً (الأكثر أماناً) ثم الإضافة/التعديل ثم الأشد خطورة أخيراً
+const OP_PRIORITY = ['view_list', 'view_detail', 'add', 'edit', 'clone', 'approve', 'bulk', 'generate', 'import', 'export', 'publish', 'delete'];
+const opRank = (op: string) => { const i = OP_PRIORITY.indexOf(op); return i === -1 ? OP_PRIORITY.length : i; };
 
 export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => {
   const [loading, setLoading] = useState(true);
@@ -36,6 +39,8 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
       if (search && !p.label_ar.includes(search)) return;
       (m[p.group_key] = m[p.group_key] || []).push(p);
     });
+    // 🆕 ترتيب كل مجموعة حسب الأهمية: عرض أولاً، ثم إضافة/تعديل، ثم الأشد خطورة (حذف) أخيراً
+    Object.keys(m).forEach(k => m[k].sort((a, b) => opRank(a.operation_type) - opRank(b.operation_type)));
     return m;
   }, [permissions, search]);
 
@@ -97,15 +102,17 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
   return (
     <View testID="adv-permission-picker">
       <Text style={styles.countLabel}>المختار: {selected.length} / {permissions.length}</Text>
-      <TextInput style={styles.search} placeholder="بحث سريع عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-picker-search" />
-      <View style={styles.quickRow}>
-        {QUICK_OPS.map(op => (
-          <TouchableOpacity key={op} style={styles.quickChip} onPress={() => selectByOp(op)} testID={`adv-picker-quick-${op}`}>
-            <Text style={styles.quickChipText}>{OP_TYPE_LABELS[op]} فقط</Text>
-          </TouchableOpacity>
-        ))}
+      <View style={styles.topBar}>
+        <TextInput style={styles.search} placeholder="بحث سريع عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-picker-search" />
+        <View style={styles.quickRow}>
+          {QUICK_OPS.map(op => (
+            <TouchableOpacity key={op} style={styles.quickChip} onPress={() => selectByOp(op)} testID={`adv-picker-quick-${op}`}>
+              <Text style={styles.quickChipText}>{OP_TYPE_LABELS[op]} فقط</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
       </View>
-      <ScrollView style={{ maxHeight: 420 }} nestedScrollEnabled>
+      <ScrollView style={{ maxHeight: 460 }} nestedScrollEnabled>
         {groups.map(g => {
           const items = byGroup[g.key] || [];
           if (search && items.length === 0) return null;
@@ -121,16 +128,26 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
                 </TouchableOpacity>
                 <Text style={styles.groupName}>{g.name_ar}</Text>
               </TouchableOpacity>
-              {isOpen && items.map(p => (
-                <TouchableOpacity key={p.key} style={styles.permRow} onPress={() => toggleOne(p.key)} testID={`adv-picker-perm-${p.key}`}>
-                  <Ionicons name={selectedSet.has(p.key) ? 'checkbox' : 'square-outline'} size={18} color={COLORS.primary} />
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.permLabel}>{p.label_ar}</Text>
-                    <Text style={styles.permApi}>{p.linked_api}</Text>
-                    {!!p.description_ar && <Text style={styles.permDesc}>{p.description_ar}</Text>}
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {isOpen && (
+                <View style={styles.permGrid}>
+                  {items.map(p => {
+                    const checked = selectedSet.has(p.key);
+                    return (
+                      <TouchableOpacity key={p.key} style={[styles.permCard, checked && styles.permCardChecked]} onPress={() => toggleOne(p.key)} testID={`adv-picker-perm-${p.key}`}>
+                        <View style={styles.permCardTop}>
+                          <Ionicons name={checked ? 'checkbox' : 'square-outline'} size={18} color={COLORS.primary} />
+                          <View style={[styles.opBadge, { backgroundColor: checked ? COLORS.primary : COLORS.bg }]}>
+                            <Text style={[styles.opBadgeText, { color: checked ? '#fff' : COLORS.textMuted }]}>{OP_TYPE_LABELS[p.operation_type] || p.operation_type}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.permLabel}>{p.label_ar}</Text>
+                        <Text style={styles.permApi}>{p.linked_api}</Text>
+                        {!!p.description_ar && <Text style={styles.permDesc}>{p.description_ar}</Text>}
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              )}
             </View>
           );
         })}
@@ -141,8 +158,9 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
 
 const styles = StyleSheet.create({
   countLabel: { fontSize: 13, fontWeight: 'bold', color: COLORS.primary, textAlign: 'right', marginBottom: 8 },
-  search: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, padding: 8, marginBottom: 8 },
-  quickRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, marginBottom: 10 },
+  topBar: { flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 10 },
+  search: { flexGrow: 1, flexBasis: 220, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, padding: 8 },
+  quickRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, flexShrink: 1 },
   quickChip: { backgroundColor: COLORS.primaryLight, borderRadius: 14, paddingHorizontal: 8, paddingVertical: 4 },
   quickChipText: { fontSize: 11, color: COLORS.primary },
   groupBox: { backgroundColor: '#fff', borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: COLORS.border },
@@ -150,8 +168,14 @@ const styles = StyleSheet.create({
   groupName: { flex: 1, fontSize: 13, fontWeight: '600', color: COLORS.text, textAlign: 'right' },
   groupCount: { fontSize: 11, color: COLORS.textMuted },
   groupCheckbox: { padding: 2 },
-  permRow: { flexDirection: 'row-reverse', alignItems: 'flex-start', paddingVertical: 8, paddingHorizontal: 14, gap: 8, borderTopWidth: 1, borderTopColor: COLORS.bg },
-  permLabel: { fontSize: 12, color: COLORS.text, textAlign: 'right' },
-  permApi: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 2 },
-  permDesc: { fontSize: 11, color: COLORS.text, textAlign: 'right', marginTop: 3, lineHeight: 15, opacity: 0.85 },
+  // 🆕 شبكة بطاقات متوازية بدل قائمة عمودية واحدة — تسهّل الاختيار بصرياً
+  permGrid: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, padding: 10, borderTopWidth: 1, borderTopColor: COLORS.bg },
+  permCard: { flexGrow: 1, flexBasis: '31%', minWidth: 230, backgroundColor: COLORS.bg, borderRadius: 10, borderWidth: 1, borderColor: COLORS.border, padding: 10 },
+  permCardChecked: { backgroundColor: COLORS.primaryLight, borderColor: COLORS.primary },
+  permCardTop: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  opBadge: { borderRadius: 10, paddingHorizontal: 7, paddingVertical: 2 },
+  opBadgeText: { fontSize: 10, fontWeight: '600' },
+  permLabel: { fontSize: 12.5, fontWeight: '600', color: COLORS.text, textAlign: 'right' },
+  permApi: { fontSize: 10, color: COLORS.textMuted, textAlign: 'right', marginTop: 3 },
+  permDesc: { fontSize: 11, color: COLORS.text, textAlign: 'right', marginTop: 5, lineHeight: 15, opacity: 0.85 },
 });
