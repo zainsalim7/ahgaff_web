@@ -100,7 +100,7 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
   if (loading) return <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />;
 
   return (
-    <View testID="adv-permission-picker">
+    <View testID="adv-permission-picker" style={{ flex: 1 }}>
       <View style={styles.toolbar}>
         <TextInput style={styles.search} placeholder="بحث سريع عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-picker-search" />
         <View style={styles.counterBadge}>
@@ -114,7 +114,7 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
           ))}
         </View>
       </View>
-      <ScrollView style={{ maxHeight: 460 }} nestedScrollEnabled>
+      <ScrollView style={{ flex: 1 }} nestedScrollEnabled>
         {groups.map(g => {
           const items = byGroup[g.key] || [];
           if (search && items.length === 0) return null;

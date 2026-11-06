@@ -94,20 +94,24 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
               <Text style={styles.modalTitle}>{editing ? 'تعديل دور' : 'دور جديد'}</Text>
               <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-role-modal-close"><Ionicons name="close" size={22} color={COLORS.textMuted} /></TouchableOpacity>
             </View>
-            <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 8 }}>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>اسم الدور</Text>
-                <TextInput style={styles.input} value={name} onChangeText={setName} textAlign="right" testID="adv-role-name-input" />
+            <View style={styles.modalBody}>
+              <View style={styles.nameRow}>
+                <View style={[styles.fieldGroup, styles.nameCol]}>
+                  <Text style={styles.label}>اسم الدور</Text>
+                  <TextInput style={styles.input} value={name} onChangeText={setName} textAlign="right" testID="adv-role-name-input" />
+                </View>
+                <View style={[styles.fieldGroup, styles.nameCol]}>
+                  <Text style={styles.label}>الوصف</Text>
+                  <TextInput style={styles.input} value={description} onChangeText={setDescription} textAlign="right" testID="adv-role-desc-input" />
+                </View>
               </View>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>الوصف</Text>
-                <TextInput style={styles.textArea} value={description} onChangeText={setDescription} textAlign="right" multiline testID="adv-role-desc-input" />
+              <View style={styles.permWrap}>
+                <AdvPermissionPicker selected={selectedPerms} onChange={setSelectedPerms} />
               </View>
-              <Text style={[styles.label, { marginTop: 4 }]}>الصلاحيات</Text>
-              <AdvPermissionPicker selected={selectedPerms} onChange={setSelectedPerms} />
-              {!!error && <Text style={styles.errorText}>{error}</Text>}
-            </ScrollView>
+            </View>
             <View style={styles.modalFooter}>
+              {!!error && <Text style={styles.errorText} testID="adv-role-error">{error}</Text>}
+              <View style={{ flex: 1 }} />
               <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} testID="adv-role-modal-cancel">
                 <Text style={styles.cancelBtnText}>إلغاء</Text>
               </TouchableOpacity>
@@ -136,16 +140,20 @@ const styles = StyleSheet.create({
   roleActions: { flexDirection: 'row', gap: 10 },
   // 🆕 نافذة مُمركزة احترافية بعرض محدود (بدل امتداد كامل الشاشة) + خلفية معتمة
   modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.6)', padding: 24 },
-  modalCard: { width: '100%', maxWidth: 800, maxHeight: '90%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0px 8px 24px rgba(0,0,0,0.15)' } as any,
-  modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  modalTitle: { fontSize: 17, fontWeight: 'bold', color: COLORS.text },
-  modalBody: { padding: 24 },
+  modalCard: { width: '100%', maxWidth: 800, height: '88%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0px 8px 24px rgba(0,0,0,0.15)' } as any,
+  modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  modalTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
+  modalBody: { flex: 1, padding: 20 },
+  // 🆕 الاسم والوصف بجانب بعضهما بسطر واحد مضغوط، لترك أقصى مساحة ممكنة لشبكة الصلاحيات
+  nameRow: { flexDirection: 'row-reverse', gap: 12, marginBottom: 14 },
+  nameCol: { flex: 1, marginBottom: 0 },
+  permWrap: { flex: 1 },
   modalFooter: { flexDirection: 'row-reverse', justifyContent: 'flex-start', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.bg, gap: 12 },
   fieldGroup: { marginBottom: 16 },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.text, textAlign: 'right', marginBottom: 8 },
-  input: { height: 46, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, fontSize: 14, color: COLORS.text, textAlign: 'right' },
+  label: { fontSize: 12.5, fontWeight: '600', color: COLORS.text, textAlign: 'right', marginBottom: 6 },
+  input: { height: 42, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, fontSize: 13.5, color: COLORS.text, textAlign: 'right' },
   textArea: { minHeight: 90, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: COLORS.text, textAlign: 'right', textAlignVertical: 'top' },
-  errorText: { color: COLORS.danger, textAlign: 'right', marginTop: 8 },
+  errorText: { color: COLORS.danger, fontSize: 12.5, textAlign: 'right' },
   cancelBtn: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' },
   cancelBtnText: { color: COLORS.textMuted, fontWeight: '600', fontSize: 14 },
   saveBtn: { backgroundColor: COLORS.primary, borderRadius: 8, paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' },
