@@ -84,55 +84,76 @@ def build_router(db, get_current_user) -> APIRouter:
         if not ObjectId.is_valid(log_id):
             raise HTTPException(status_code=404, detail="السجل غير موجود")
 
-        log = await db.offline_sync_log.find_one({"_id": ObjectId(log_id)})
+        # 🔒 تثبيت ذرّي: يمنع تجاوز نفس السجل مرتين بطلبين متزامنين (TOCTOU)
+        log = await db.offline_sync_log.find_one_and_update(
+            {"_id": ObjectId(log_id), "status": "failed"}, {"$set": {"status": "overriding"}}
+        )
         if not log:
-            raise HTTPException(status_code=404, detail="السجل غير موجود")
-        if log.get("status") != "failed":
-            raise HTTPException(status_code=400, detail="هذا السجل ليس محاولة فاشلة")
-        payload = log.get("pending_payload")
-        if not payload:
-            raise HTTPException(status_code=400, detail="تعذّر التجاوز — بيانات المحاولة الأصلية غير محفوظة لهذا السجل")
+            existing = await db.offline_sync_log.find_one({"_id": ObjectId(log_id)})
+            if not existing:
+                raise HTTPException(status_code=404, detail="السجل غير موجود")
+            raise HTTPException(status_code=400, detail="هذا السجل ليس محاولة فاشلة (ربما جرى التعامل معه للتو)")
 
-        lecture = await db.lectures.find_one({"_id": ObjectId(log["lecture_id"])})
-        if not lecture:
-            raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
+        try:
+            payload = log.get("pending_payload")
+            if not payload or not ObjectId.is_valid(log.get("lecture_id", "")):
+                raise HTTPException(status_code=400, detail="تعذّر التجاوز — بيانات المحاولة الأصلية غير محفوظة لهذا السجل")
 
-        now = datetime.now(timezone.utc)
-        attendance_records = []
-        for r in payload.get("records", []):
-            attendance_records.append({
+            lecture = await db.lectures.find_one({"_id": ObjectId(log["lecture_id"])})
+            if not lecture:
+                raise HTTPException(status_code=404, detail="المحاضرة غير موجودة")
+
+            # محاضرة سُجِّل حضورها فعلاً (مثلاً من محاولة override أخرى لنفس المحاضرة) — لا نكتب فوقها
+            existing_attendance = await db.attendance.count_documents({"lecture_id": log["lecture_id"]})
+            if existing_attendance > 0:
+                now = datetime.now(timezone.utc)
+                await db.offline_sync_log.update_one({"_id": ObjectId(log_id)}, {"$set": {
+                    "status": "overridden", "overridden_by": current_user["id"],
+                    "overridden_by_name": current_user.get("full_name", ""),
+                    "override_reason": f"{data.reason.strip()} (تم تجاهل الكتابة — الحضور مسجَّل مسبقاً لهذه المحاضرة من محاولة أخرى)",
+                    "overridden_at": now.isoformat(),
+                }})
+                return {"status": "overridden", "records_count": 0, "note": "الحضور كان مسجَّلاً مسبقاً لهذه المحاضرة"}
+
+            now = datetime.now(timezone.utc)
+            attendance_records = []
+            for r in payload.get("records", []):
+                attendance_records.append({
+                    "lecture_id": log["lecture_id"], "course_id": lecture["course_id"],
+                    "student_id": r["student_id"], "status": r["status"],
+                    "date": now, "recorded_by": current_user["id"], "method": "manual_override",
+                    "notes": payload.get("notes"), "created_at": now,
+                })
+
+            if attendance_records:
+                await db.attendance.insert_many(attendance_records)
+
+            lecture_update = {"status": "completed"}
+            if payload.get("lesson_title"):
+                lecture_update["lesson_title"] = payload["lesson_title"]
+            if payload.get("plan_topic_id"):
+                lecture_update["plan_topic_id"] = payload["plan_topic_id"]
+            await db.lectures.update_one({"_id": ObjectId(log["lecture_id"])}, {"$set": lecture_update})
+
+            await db.attendance_operations.insert_one({
                 "lecture_id": log["lecture_id"], "course_id": lecture["course_id"],
-                "student_id": r["student_id"], "status": r["status"],
-                "date": now, "recorded_by": current_user["id"], "method": "manual_override",
-                "notes": payload.get("notes"), "created_at": now,
+                "user_id": log.get("teacher_id"), "user_name": log.get("teacher_name", ""),
+                "records_count": len(attendance_records), "offline_recorded_at": log.get("offline_recorded_at"),
+                "recorded_at": now.isoformat(),
+                "manual_override_by": current_user["id"], "manual_override_by_name": current_user.get("full_name", ""),
+                "manual_override_reason": data.reason.strip(),
             })
 
-        await db.attendance.delete_many({"lecture_id": log["lecture_id"]})
-        if attendance_records:
-            await db.attendance.insert_many(attendance_records)
+            await db.offline_sync_log.update_one({"_id": ObjectId(log_id)}, {"$set": {
+                "status": "overridden", "overridden_by": current_user["id"],
+                "overridden_by_name": current_user.get("full_name", ""),
+                "override_reason": data.reason.strip(), "overridden_at": now.isoformat(),
+            }})
 
-        lecture_update = {"status": "completed"}
-        if payload.get("lesson_title"):
-            lecture_update["lesson_title"] = payload["lesson_title"]
-        if payload.get("plan_topic_id"):
-            lecture_update["plan_topic_id"] = payload["plan_topic_id"]
-        await db.lectures.update_one({"_id": ObjectId(log["lecture_id"])}, {"$set": lecture_update})
-
-        await db.attendance_operations.insert_one({
-            "lecture_id": log["lecture_id"], "course_id": lecture["course_id"],
-            "user_id": log.get("teacher_id"), "user_name": log.get("teacher_name", ""),
-            "records_count": len(attendance_records), "offline_recorded_at": log.get("offline_recorded_at"),
-            "recorded_at": now.isoformat(),
-            "manual_override_by": current_user["id"], "manual_override_by_name": current_user.get("full_name", ""),
-            "manual_override_reason": data.reason.strip(),
-        })
-
-        await db.offline_sync_log.update_one({"_id": ObjectId(log_id)}, {"$set": {
-            "status": "overridden", "overridden_by": current_user["id"],
-            "overridden_by_name": current_user.get("full_name", ""),
-            "override_reason": data.reason.strip(), "overridden_at": now.isoformat(),
-        }})
-
-        return {"status": "overridden", "records_count": len(attendance_records)}
+            return {"status": "overridden", "records_count": len(attendance_records)}
+        except HTTPException:
+            # فشل بعد التثبيت الذرّي — أعد السجل إلى "فشلت" حتى لا يبقى عالقاً في "overriding"
+            await db.offline_sync_log.update_one({"_id": ObjectId(log_id), "status": "overriding"}, {"$set": {"status": "failed"}})
+            raise
 
     return router

@@ -17,17 +17,18 @@ export default function OfflineSyncReportPage() {
   const [data, setData] = useState<any>({ items: [], summary: { success: 0, failed: 0, avg_delay_minutes: 0, max_delay_minutes: 0 } });
   const [loading, setLoading] = useState(true); const [err, setErr] = useState('');
   const [q, setQ] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'' | 'success' | 'failed'>('');
+  const [statusFilter, setStatusFilter] = useState<'' | 'success' | 'failed' | 'overridden'>('');
   const [overrideItem, setOverrideItem] = useState<any>(null);
   const [overrideReason, setOverrideReason] = useState('');
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [overrideErr, setOverrideErr] = useState('');
+  const [overrideOk, setOverrideOk] = useState('');
 
   const submitOverride = () => {
     if (!overrideItem || !overrideReason.trim()) return;
     setOverrideSaving(true); setOverrideErr('');
     api.post(`/reports/offline-sync/${overrideItem.id}/override`, { reason: overrideReason.trim() })
-      .then(() => { setOverrideItem(null); setOverrideReason(''); load(); })
+      .then(() => { setOverrideItem(null); setOverrideReason(''); setOverrideOk('تم قبول السجل وتسجيل الحضور بنجاح ✓'); load(); setTimeout(() => setOverrideOk(''), 4000); })
       .catch((e) => setOverrideErr(errOf(e, 'تعذّر القبول اليدوي')))
       .finally(() => setOverrideSaving(false));
   };
@@ -64,12 +65,13 @@ export default function OfflineSyncReportPage() {
   return (
     <CorrPage title="⏱️ تقرير مزامنة الحضور الأوفلاين" subtitle="من يُزامن متأخراً عن نهاية المحاضرة، مدة التأخر، ونجاح أو فشل كل محاولة مزامنة" testID="offline-sync-report-page" hideNav>
       {!!err && <div style={{ ...card, color: '#b91c1c', fontWeight: 700 }} data-testid="osr-error">{err}</div>}
+      {!!overrideOk && <div style={{ ...card, color: '#16a34a', fontWeight: 700 }} data-testid="osr-override-success">{overrideOk}</div>}
       <div style={card}>
         <div style={{ display: 'grid', gridTemplateColumns: 'auto auto 1fr auto', gap: 8, alignItems: 'center' }} data-testid="osr-filters">
           <label style={{ fontSize: 12, color: '#475569' }}>من <input type="date" style={{ ...inp, width: 'auto', padding: '6px 8px' }} value={from} onChange={(e) => setFrom(e.target.value)} data-testid="osr-from" /></label>
           <label style={{ fontSize: 12, color: '#475569' }}>إلى <input type="date" style={{ ...inp, width: 'auto', padding: '6px 8px' }} value={to} onChange={(e) => setTo(e.target.value)} data-testid="osr-to" /></label>
           <div />
-          <button onClick={load} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 10px', fontSize: 12 })} data-testid="osr-refresh">↻</button>
+          <button onClick={load} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 12px', fontSize: 16 })} title="تحديث" data-testid="osr-refresh">⟳ تحديث</button>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 8, alignItems: 'center', flexWrap: 'wrap' }}>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="🔍 بحث باسم الأستاذ أو المقرر…" style={{ ...inp, flex: 1, minWidth: 220 }} data-testid="osr-search" />
@@ -77,7 +79,7 @@ export default function OfflineSyncReportPage() {
           <span style={{ fontSize: 12, color: '#64748b' }} data-testid="osr-count">{hasLocal ? `${shown.length} من ${data.items.length}` : `${data.items.length} محاولة مزامنة`}</span>
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }} data-testid="osr-summary">
-          {([['success', s.success], ['failed', s.failed]] as const).map(([k, v]) => { const active = statusFilter === k; return (
+          {([['success', s.success], ['failed', s.failed], ['overridden', s.overridden]] as const).map(([k, v]) => { const active = statusFilter === k; return (
             <div key={k} role="button" onClick={() => setStatusFilter(active ? '' : k)} title={active ? 'إلغاء الفلترة' : `عرض ${STATUS[k].label} فقط`}
               style={{ flex: 1, minWidth: 140, borderRadius: 12, padding: 12, cursor: 'pointer', userSelect: 'none', background: active ? STATUS[k].color : STATUS[k].color + '12', border: `1.5px solid ${active ? STATUS[k].color : STATUS[k].color + '44'}`, boxShadow: active ? `0 4px 14px ${STATUS[k].color}55` : 'none', transition: 'background-color .15s, box-shadow .15s' }} data-testid={`osr-summary-${k}`}>
               <div style={{ fontSize: 26, fontWeight: 900, color: active ? '#fff' : STATUS[k].color }}>{v ?? 0}</div>
@@ -105,8 +107,8 @@ export default function OfflineSyncReportPage() {
                 <td style={{ ...td, fontWeight: 800, color: it.delay_minutes > 60 ? '#b91c1c' : it.delay_minutes > 0 ? '#92400e' : '#16a34a' }}>{fmtDelay(it.delay_minutes)}</td>
                 <td style={td}>{String(it.synced_at || '').slice(0, 16).replace('T', ' ')}</td>
                 <td style={td}>{it.records_count}</td>
-                <td style={{ ...td, fontSize: 11.5, color: '#b91c1c', maxWidth: 320 }}>{it.diagnosis || it.reason || '—'}
-                  {it.status === 'overridden' && <div style={{ color: '#2563eb', marginTop: 4 }}>قُبل يدوياً بواسطة {it.overridden_by_name || '—'} — السبب: {it.override_reason}</div>}
+                <td style={{ ...td, fontSize: 11.5, color: it.status === 'overridden' ? '#64748b' : '#b91c1c', maxWidth: 320 }}>{it.diagnosis || it.reason || '—'}
+                  {it.status === 'overridden' && <div style={{ color: '#2563eb', marginTop: 4, fontWeight: 700 }}>✓ قُبل يدوياً بواسطة {it.overridden_by_name || '—'} — السبب: {it.override_reason}</div>}
                 </td>
                 <td style={td}>{it.can_override && <button onClick={() => { setOverrideItem(it); setOverrideReason(''); setOverrideErr(''); }} style={btn('#2563eb', { padding: '5px 10px', fontSize: 11.5 })} data-testid={`osr-override-btn-${it.id}`}>قبول يدوياً</button>}</td>
               </tr>); })}</tbody>

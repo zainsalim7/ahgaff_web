@@ -1,0 +1,44 @@
+{
+  "summary": "Offline Sync Report manual override + diagnosis: tested end to end. Backend: 12 of 13 pytest tests pass. Real failed offline syncs (sent by teacher180156 to POST /attendance/session for a TEST lecture) produce failed logs with diagnosis and pending_payload, in both the outside-window case and the older-than-168h case. GET returns can_override correctly. Override rules work: empty reason 400, missing field 422, bad or unknown id 404, second override 400, failed log with no/null/empty payload 400 (can_override=false), success-status log 400, teacher/dean 403, no auth 401/403. A successful override writes a real attendance row (method=manual_override), sets the lecture to completed, writes an attendance_operations audit row and marks the log overridden. UI (admin login, then /offline-sync-report): the diagnosis column shows; the button appears only when can_override=true; the modal shows the diagnosis; submit stays disabled for empty or whitespace-only reasons; cancel and reopen clears the reason; confirming turns the badge blue ('قُبلت يدوياً'), hides the button, shows who accepted it and why, and lowers the failed count. Found: a 500 on a malformed lecture_id and a race condition that allows two overrides of one log.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "POST /api/reports/offline-sync/{log_id}/override", "issue": "Race condition (TOCTOU). The status=='failed' check and the later update are not atomic. With 5 concurrent requests on the same log, 2 return 200 in every trial (3 of 3 trials). This creates duplicate attendance_operations audit rows, and in one trial 2 attendance rows for the same student and lecture. Fix: claim the log first with find_one_and_update({_id, status:'failed'}, {$set:{status:'overriding'}}) and stop if nothing comes back.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/reports/offline-sync/{log_id}/override", "issue": "If the log's lecture_id is not a valid ObjectId, ObjectId(log['lecture_id']) raises InvalidId and the endpoint returns 500. It should check ObjectId.is_valid and return 404."},
+      {"endpoint": "POST /api/reports/offline-sync/{log_id}/override", "issue": "The override runs db.attendance.delete_many({lecture_id}) without any check. If the lecture already has attendance (for example the teacher later recorded it online, or another override already ran), that attendance is silently replaced. It should refuse, or warn, when the lecture is already completed or has attendance."},
+      {"endpoint": "POST /api/reports/offline-sync/{log_id}/override", "issue": "The override does not match the normal /attendance/session path: it skips the late->present and excused normalisation (_excused_students_for_lecture), the absence notifications (check_and_create_absence_notifications), the lecture teacher_id stamp, attendance_started_at and the stored location. It sets attendance.date to the override time instead of the lecture or offline time, and sets recorded_by to the admin instead of the teacher. Reports that use attendance.date or recorded_by may count these rows wrongly."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/offline-sync-report", "issues": [
+        "There is no summary card for 'قُبلت يدوياً' (overridden). After an override the failed count drops but the overridden count (summary.overridden) is not shown anywhere, and statusFilter only supports success/failed.",
+        "No success toast or feedback after the override; the modal just closes.",
+        "The diagnosis text stays red for overridden rows, which looks like an active error.",
+        "The last column header is empty and the refresh button '↻' is a tiny glyph that is hard to see."
+      ]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_offline_sync_override.py", "/app/backend/tests/osr_ui_seed.py", "/app/backend/tests/osr_race_check.py", "/app/test_reports/pytest/offline_sync_override.xml"],
+  "action_items": [
+    "Make the override atomic with find_one_and_update on status:'failed' to prevent double overrides and duplicate attendance rows",
+    "Validate lecture_id with ObjectId.is_valid in the override endpoint (it currently returns 500)",
+    "Guard against overwriting existing attendance when the lecture is already completed or has rows",
+    "Consider reusing the normal attendance-session logic in the override (excused normalisation, absence notifications, date = offline_recorded_at or lecture time)",
+    "Add an 'overridden' summary card and filter in the UI"
+  ],
+  "critical_code_review_comments": [
+    "offline_sync_report.py override: the check-then-act race on status is not atomic",
+    "offline_sync_report.py: ObjectId(log['lecture_id']) has no validation",
+    "Duplicated attendance-writing logic, and it drifts from server.py record_attendance_session; extract a shared helper"
+  ],
+  "updated_files": ["/app/backend/tests/test_offline_sync_override.py", "/app/backend/tests/osr_ui_seed.py", "/app/backend/tests/osr_race_check.py"],
+  "success_rate": {"backend": "92% (12/13; plus race test failed)", "frontend": "100%"},
+  "seed_data_creation": "TEST lectures (room TEST_OSR / TEST_OSR_UI) on course 698f0000d803b27aab0120af, plus offline_sync_log, attendance and attendance_operations rows for TESTSTUDENT1. All of it was deleted by lecture_id afterwards; verified 0 left.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest tests/test_offline_sync_override.py -p no:xdist (it creates and cleans up its own TEST lecture). For UI: run python osr_ui_seed.py seed, then log in as admin by clicking the 'تسجيل الدخول' text (pressing Enter does not submit), go to /offline-sync-report, then run osr_ui_seed.py clean. osr_race_check.py needs the seeded state at /tmp/osr_ui_state.json."
+}
