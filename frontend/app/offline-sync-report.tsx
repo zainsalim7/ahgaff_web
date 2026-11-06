@@ -23,6 +23,18 @@ export default function OfflineSyncReportPage() {
   const [overrideSaving, setOverrideSaving] = useState(false);
   const [overrideErr, setOverrideErr] = useState('');
   const [overrideOk, setOverrideOk] = useState('');
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkDeleting, setBulkDeleting] = useState(false);
+  const [bulkErr, setBulkErr] = useState('');
+  const [confirmBulkDelete, setConfirmBulkDelete] = useState(false);
+
+  const bulkDelete = () => {
+    setBulkDeleting(true); setBulkErr('');
+    api.delete('/reports/offline-sync/bulk', { data: { ids: Array.from(selected) } })
+      .then(() => { setSelected(new Set()); setConfirmBulkDelete(false); load(); })
+      .catch((e) => setBulkErr(errOf(e, 'تعذّر حذف السجلات المحددة')))
+      .finally(() => setBulkDeleting(false));
+  };
 
   const submitOverride = () => {
     if (!overrideItem || !overrideReason.trim()) return;
@@ -48,6 +60,11 @@ export default function OfflineSyncReportPage() {
     (!q || norm(`${it.teacher_name} ${it.course_name}`).includes(norm(q)))
   ), [data, q, statusFilter]);
   const hasLocal = !!q || !!statusFilter;
+
+  const toggleSelect = (id: string) => setSelected((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const allShownSelected = shown.length > 0 && shown.every((it: any) => selected.has(it.id));
+  const toggleSelectAll = () => setSelected(allShownSelected ? new Set() : new Set(shown.map((it: any) => it.id)));
+  useEffect(() => { setSelected(new Set()); }, [q, statusFilter, from, to]);
 
   const topLate = useMemo(() => {
     const m = new Map<string, { name: string; count: number; maxDelay: number }>();
@@ -97,11 +114,23 @@ export default function OfflineSyncReportPage() {
         {topLate.length > 0 && <div style={{ marginTop: 10, fontSize: 12.5, color: '#475569' }} data-testid="osr-top-late"><b>الأكثر تأخراً:</b> {topLate.map((t, i) => <React.Fragment key={t.name}>{i > 0 ? ' — ' : ' '}<a onClick={() => setQ(q === t.name ? '' : t.name)} style={{ cursor: 'pointer', color: q === t.name ? '#b91c1c' : '#1d4ed8', fontWeight: q === t.name ? 800 : 500 }} data-testid={`osr-teacher-link-${i}`}>{t.name}</a> ({t.count} مرة، أقصى تأخر {fmtDelay(t.maxDelay)})</React.Fragment>)}</div>}
       </div>
       <div style={card} data-testid="osr-list">
+        {selected.size > 0 && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, padding: 10, borderRadius: 8, background: '#fff5f5', border: '1px solid #fecaca' }} data-testid="osr-bulk-bar">
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#991b1b' }}>{selected.size} سجل محدَّد</span>
+            <button onClick={() => setConfirmBulkDelete(true)} style={btn('#b91c1c', { padding: '6px 14px', fontSize: 12.5 })} data-testid="osr-bulk-delete-btn">🗑 حذف المحدد</button>
+            <button onClick={() => setSelected(new Set())} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 14px', fontSize: 12.5 })} data-testid="osr-bulk-clear-btn">إلغاء التحديد</button>
+          </div>
+        )}
+        {!!bulkErr && <div style={{ color: '#b91c1c', fontSize: 12, marginBottom: 8 }} data-testid="osr-bulk-error">{bulkErr}</div>}
         {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>جاري التحميل…</div> : shown.length === 0 ? <Empty text={hasLocal ? 'لا نتائج مطابقة للفلاتر' : 'لا توجد محاولات مزامنة أوفلاين في هذه الفترة'} /> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead><tr>{['تاريخ المحاضرة', 'المقرر', 'الأستاذ', 'الحالة', 'التأخر عن نهاية المحاضرة', 'وقت المزامنة', 'عدد السجلات', 'السبب الحقيقي (إن فشلت)', ''].map((h) => <th key={h} style={th}>{h}</th>)}</tr></thead>
+            <thead><tr>
+              <th style={th}><input type="checkbox" checked={allShownSelected} onChange={toggleSelectAll} data-testid="osr-select-all" /></th>
+              {['تاريخ المحاضرة', 'المقرر', 'الأستاذ', 'الحالة', 'التأخر عن نهاية المحاضرة', 'وقت المزامنة', 'عدد السجلات', 'السبب الحقيقي (إن فشلت)', ''].map((h) => <th key={h} style={th}>{h}</th>)}
+            </tr></thead>
             <tbody>{shown.map((it: any) => { const st = STATUS[it.status] || STATUS.failed; return (
-              <tr key={it.id} data-testid={`osr-row-${it.id}`} style={it.status === 'failed' ? { background: '#fff5f5' } : undefined}>
+              <tr key={it.id} data-testid={`osr-row-${it.id}`} style={it.status === 'failed' ? { background: '#fff5f5' } : selected.has(it.id) ? { background: '#eff6ff' } : undefined}>
+                <td style={td}><input type="checkbox" checked={selected.has(it.id)} onChange={() => toggleSelect(it.id)} data-testid={`osr-row-checkbox-${it.id}`} /></td>
                 <td style={td}>{it.lecture_date}</td><td style={td}>{it.course_name}</td><td style={td}>{it.teacher_name || '—'}</td>
                 <td style={td}><Badge text={st.label} color={st.color} /></td>
                 <td style={{ ...td, fontWeight: 800, color: it.delay_minutes > 60 ? '#b91c1c' : it.delay_minutes > 0 ? '#92400e' : '#16a34a' }}>{fmtDelay(it.delay_minutes)}</td>
@@ -129,6 +158,17 @@ export default function OfflineSyncReportPage() {
           <div style={{ display: 'flex', gap: 8, marginTop: 14, justifyContent: 'flex-start' }}>
             <button onClick={submitOverride} disabled={overrideSaving || !overrideReason.trim()} style={btn('#2563eb', { opacity: overrideSaving || !overrideReason.trim() ? 0.6 : 1 })} data-testid="osr-override-submit">{overrideSaving ? 'جارٍ القبول…' : 'تأكيد القبول وتسجيل الحضور'}</button>
             <button onClick={() => setOverrideItem(null)} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="osr-override-cancel">إلغاء</button>
+          </div>
+        </Modal>
+      )}
+      {confirmBulkDelete && (
+        <Modal title="تأكيد حذف السجلات المحددة" onClose={() => setConfirmBulkDelete(false)} testID="osr-bulk-confirm-modal">
+          <div style={{ fontSize: 13, color: '#334155', marginBottom: 14 }}>
+            سيتم حذف <b>{selected.size}</b> سجل من هذا التقرير نهائياً. هذا يحذف سجل المزامنة فقط من التقرير — <b>لا يمسّ أي بيانات حضور فعلية مسجَّلة</b>. هل أنت متأكد؟
+          </div>
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-start' }}>
+            <button onClick={bulkDelete} disabled={bulkDeleting} style={btn('#b91c1c', { opacity: bulkDeleting ? 0.6 : 1 })} data-testid="osr-bulk-confirm-btn">{bulkDeleting ? 'جارٍ الحذف…' : 'نعم، احذف'}</button>
+            <button onClick={() => setConfirmBulkDelete(false)} style={btn('#f1f5f9', { color: '#0f2440' })} data-testid="osr-bulk-cancel-btn">إلغاء</button>
           </div>
         </Modal>
       )}

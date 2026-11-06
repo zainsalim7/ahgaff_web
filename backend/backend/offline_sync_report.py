@@ -15,6 +15,10 @@ class OverrideRequest(BaseModel):
     reason: str
 
 
+class BulkDeleteRequest(BaseModel):
+    ids: list[str]
+
+
 def build_router(db, get_current_user) -> APIRouter:
     router = APIRouter(tags=["offline-sync-report"])
 
@@ -71,6 +75,21 @@ def build_router(db, get_current_user) -> APIRouter:
             summary["avg_delay_minutes"] = round(delay_sum / delay_count)
 
         return {"items": items, "summary": summary}
+
+    @router.delete("/reports/offline-sync/bulk")
+    async def bulk_delete_offline_sync(
+        data: BulkDeleteRequest, current_user: dict = Depends(get_current_user),
+    ):
+        """حذف جماعي لسجلات تقرير المزامنة المحدَّدة (تنظيم التقرير فقط — لا يمسّ أي سجل حضور فعلي)"""
+        if current_user["role"] != "admin":
+            raise HTTPException(status_code=403, detail="غير مصرح لك")
+        if not data.ids:
+            raise HTTPException(status_code=400, detail="لم يتم تحديد أي سجل للحذف")
+        valid_ids = [ObjectId(i) for i in data.ids if ObjectId.is_valid(i)]
+        if not valid_ids:
+            raise HTTPException(status_code=400, detail="معرّفات غير صالحة")
+        result = await db.offline_sync_log.delete_many({"_id": {"$in": valid_ids}})
+        return {"deleted": result.deleted_count}
 
     @router.post("/reports/offline-sync/{log_id}/override")
     async def override_offline_sync(
