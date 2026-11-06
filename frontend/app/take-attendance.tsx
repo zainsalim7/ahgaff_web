@@ -25,6 +25,7 @@ import { useOfflineSyncStore } from '../src/store/offlineSyncStore';
 import { useAuthStore } from '../src/store/authStore';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth, PERMISSIONS, PermissionGate } from '../src/contexts/AuthContext';
+import { useRealEnforcementStore } from '../src/store/realEnforcementStore';
 import OfflineIndicator from '../src/components/OfflineIndicator';
 import AbsenceReminderButton from '../src/components/AbsenceReminderButton';
 import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR } from '../src/utils/dateUtils';
@@ -72,16 +73,25 @@ export default function TakeAttendanceScreen() {
   
   const { hasPermission, user: authUser, isLoading: authLoading } = useAuth();
   const user = useAuthStore((state) => state.user);
-  
+
+  // 🆕 دعم المستخدمين ذوي الإنفاذ الحقيقي (Advanced Access) الذين لا يملكون صلاحيات قديمة لكن لديهم صلاحية حضور فعلية
+  const isRealEnforced = !!user?.advanced_access_real_enforcement;
+  const { permissionKeys: realEnforcedKeys, checked: realEnforcedChecked, checkAccess: checkRealEnforcedAccess } = useRealEnforcementStore();
+  useEffect(() => {
+    if (user?.id && isRealEnforced && !realEnforcedChecked) checkRealEnforcedAccess();
+  }, [user?.id, isRealEnforced, realEnforcedChecked, checkRealEnforcedAccess]);
+
   // الطالب لا يمكنه الوصول لهذه الصفحة
   const isStudent = user?.role === 'student' || authUser?.role === 'student';
   
   // المعلم فقط يمكنه تسجيل الحضور - ليس المدير
   const canRecordAttendance = !isStudent && (hasPermission(PERMISSIONS.RECORD_ATTENDANCE) || 
                               hasPermission(PERMISSIONS.TAKE_ATTENDANCE) || 
-                              user?.role === 'teacher');
+                              user?.role === 'teacher' ||
+                              (isRealEnforced && realEnforcedKeys.includes('attendance_ser_record_attendance_session')));
   // تعديل الحضور يتطلب صلاحية edit_attendance صراحة
-  const canEditAttendance = hasPermission(PERMISSIONS.EDIT_ATTENDANCE);
+  const canEditAttendance = hasPermission(PERMISSIONS.EDIT_ATTENDANCE) ||
+                              (isRealEnforced && realEnforcedKeys.includes('attendance_ser_update_attendance_status'));
   
   // إعادة توجيه الطالب
   useEffect(() => {

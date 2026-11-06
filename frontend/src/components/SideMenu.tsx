@@ -73,7 +73,7 @@ const MENU_ITEMS: MenuItem[] = [
   // 📅 الجدول الدراسي اليومي — صلاحيات الجداول فقط (لا علاقة بالمقررات!)
   { id: 'schedule', label: 'الجدول الدراسي', icon: 'calendar-outline', path: '/schedule', category: 'academic', permissions: [
     'view_schedule', 'manage_schedule'
-  ]},
+  ], advPermissionKeys: ['schedule_ser_get_all_schedule_lectures'] },
 
   // 📆 الجدول الأسبوعي — صلاحيات الجداول فقط
   { id: 'weekly-schedule', label: 'الجدول الأسبوعي', icon: 'calendar', path: '/weekly-schedule', category: 'academic', permissions: [
