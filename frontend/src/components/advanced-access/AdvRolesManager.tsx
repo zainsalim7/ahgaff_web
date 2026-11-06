@@ -87,24 +87,35 @@ export const AdvRolesManager: React.FC<{ canManage: boolean }> = ({ canManage })
         </View>
       ))}
 
-      <Modal visible={modalVisible} animationType="slide" onRequestClose={() => setModalVisible(false)}>
-        <View style={styles.modalContainer}>
-          <View style={styles.modalHeader}>
-            <Text style={styles.modalTitle}>{editing ? 'تعديل دور' : 'دور جديد'}</Text>
-            <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-role-modal-close"><Ionicons name="close" size={24} color={COLORS.text} /></TouchableOpacity>
+      <Modal visible={modalVisible} animationType="fade" transparent onRequestClose={() => setModalVisible(false)}>
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>{editing ? 'تعديل دور' : 'دور جديد'}</Text>
+              <TouchableOpacity onPress={() => setModalVisible(false)} testID="adv-role-modal-close"><Ionicons name="close" size={22} color={COLORS.textMuted} /></TouchableOpacity>
+            </View>
+            <ScrollView style={styles.modalBody} contentContainerStyle={{ paddingBottom: 8 }}>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>اسم الدور</Text>
+                <TextInput style={styles.input} value={name} onChangeText={setName} textAlign="right" testID="adv-role-name-input" />
+              </View>
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>الوصف</Text>
+                <TextInput style={styles.textArea} value={description} onChangeText={setDescription} textAlign="right" multiline testID="adv-role-desc-input" />
+              </View>
+              <Text style={[styles.label, { marginTop: 4 }]}>الصلاحيات</Text>
+              <AdvPermissionPicker selected={selectedPerms} onChange={setSelectedPerms} />
+              {!!error && <Text style={styles.errorText}>{error}</Text>}
+            </ScrollView>
+            <View style={styles.modalFooter}>
+              <TouchableOpacity style={styles.cancelBtn} onPress={() => setModalVisible(false)} testID="adv-role-modal-cancel">
+                <Text style={styles.cancelBtnText}>إلغاء</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={[styles.saveBtn, saving && { opacity: 0.7 }]} onPress={save} disabled={saving} testID="adv-role-save-btn">
+                {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>حفظ</Text>}
+              </TouchableOpacity>
+            </View>
           </View>
-          <ScrollView style={{ padding: 14 }}>
-            <Text style={styles.label}>اسم الدور</Text>
-            <TextInput style={styles.input} value={name} onChangeText={setName} textAlign="right" testID="adv-role-name-input" />
-            <Text style={styles.label}>الوصف</Text>
-            <TextInput style={[styles.input, { height: 60 }]} value={description} onChangeText={setDescription} textAlign="right" multiline testID="adv-role-desc-input" />
-            <Text style={styles.label}>الصلاحيات</Text>
-            <AdvPermissionPicker selected={selectedPerms} onChange={setSelectedPerms} />
-            {!!error && <Text style={styles.errorText}>{error}</Text>}
-            <TouchableOpacity style={styles.saveBtn} onPress={save} disabled={saving} testID="adv-role-save-btn">
-              {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveBtnText}>حفظ</Text>}
-            </TouchableOpacity>
-          </ScrollView>
         </View>
       </Modal>
     </View>
@@ -123,12 +134,20 @@ const styles = StyleSheet.create({
   statusBadge: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4 },
   statusBadgeText: { color: '#fff', fontSize: 10 },
   roleActions: { flexDirection: 'row', gap: 10 },
-  modalContainer: { flex: 1, backgroundColor: COLORS.bg },
-  modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', padding: 14, backgroundColor: '#fff', borderBottomWidth: 1, borderBottomColor: COLORS.border },
-  modalTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
-  label: { fontSize: 13, fontWeight: '600', color: COLORS.text, textAlign: 'right', marginBottom: 6, marginTop: 10 },
-  input: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, padding: 10 },
+  // 🆕 نافذة مُمركزة احترافية بعرض محدود (بدل امتداد كامل الشاشة) + خلفية معتمة
+  modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.6)', padding: 24 },
+  modalCard: { width: '100%', maxWidth: 800, maxHeight: '90%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0px 8px 24px rgba(0,0,0,0.15)' } as any,
+  modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 18, borderBottomWidth: 1, borderBottomColor: COLORS.border },
+  modalTitle: { fontSize: 17, fontWeight: 'bold', color: COLORS.text },
+  modalBody: { padding: 24 },
+  modalFooter: { flexDirection: 'row-reverse', justifyContent: 'flex-start', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14, borderTopWidth: 1, borderTopColor: COLORS.border, backgroundColor: COLORS.bg, gap: 12 },
+  fieldGroup: { marginBottom: 16 },
+  label: { fontSize: 13, fontWeight: '600', color: COLORS.text, textAlign: 'right', marginBottom: 8 },
+  input: { height: 46, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, fontSize: 14, color: COLORS.text, textAlign: 'right' },
+  textArea: { minHeight: 90, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 14, paddingVertical: 10, fontSize: 14, color: COLORS.text, textAlign: 'right', textAlignVertical: 'top' },
   errorText: { color: COLORS.danger, textAlign: 'right', marginTop: 8 },
-  saveBtn: { backgroundColor: COLORS.primary, borderRadius: 8, padding: 14, alignItems: 'center', marginVertical: 20 },
-  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 15 },
+  cancelBtn: { backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 20, paddingVertical: 12, alignItems: 'center' },
+  cancelBtnText: { color: COLORS.textMuted, fontWeight: '600', fontSize: 14 },
+  saveBtn: { backgroundColor: COLORS.primary, borderRadius: 8, paddingHorizontal: 24, paddingVertical: 12, alignItems: 'center' },
+  saveBtnText: { color: '#fff', fontWeight: 'bold', fontSize: 14 },
 });

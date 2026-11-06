@@ -101,9 +101,11 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
 
   return (
     <View testID="adv-permission-picker">
-      <Text style={styles.countLabel}>المختار: {selected.length} / {permissions.length}</Text>
-      <View style={styles.topBar}>
+      <View style={styles.toolbar}>
         <TextInput style={styles.search} placeholder="بحث سريع عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-picker-search" />
+        <View style={styles.counterBadge}>
+          <Text style={styles.counterText}>المختار: {selected.length} / {permissions.length}</Text>
+        </View>
         <View style={styles.quickRow}>
           {QUICK_OPS.map(op => (
             <TouchableOpacity key={op} style={styles.quickChip} onPress={() => selectByOp(op)} testID={`adv-picker-quick-${op}`}>
@@ -157,12 +159,14 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
 };
 
 const styles = StyleSheet.create({
-  countLabel: { fontSize: 13, fontWeight: 'bold', color: COLORS.primary, textAlign: 'right', marginBottom: 8 },
-  topBar: { flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginBottom: 10 },
-  search: { flexGrow: 1, flexBasis: 220, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, padding: 8 },
-  quickRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 6, flexShrink: 1 },
-  quickChip: { backgroundColor: COLORS.primaryLight, borderRadius: 14, paddingHorizontal: 8, paddingVertical: 4 },
-  quickChipText: { fontSize: 11, color: COLORS.primary },
+  // 🆕 شريط أدوات موحّد للبحث + العدّاد + الفلاتر السريعة بخلفية ناعمة
+  toolbar: { flexDirection: 'row-reverse', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', backgroundColor: COLORS.bg, padding: 16, borderRadius: 12, borderWidth: 1, borderColor: COLORS.border, marginBottom: 16, gap: 12 },
+  search: { flexGrow: 1, flexBasis: 200, height: 40, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 12, fontSize: 13 },
+  counterBadge: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border },
+  counterText: { fontSize: 12.5, fontWeight: '700', color: COLORS.primary },
+  quickRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, flexShrink: 1 },
+  quickChip: { backgroundColor: '#fff', borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border },
+  quickChipText: { fontSize: 11.5, fontWeight: '500', color: COLORS.textMuted },
   groupBox: { backgroundColor: '#fff', borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: COLORS.border },
   groupHeader: { flexDirection: 'row-reverse', alignItems: 'center', padding: 10, gap: 8 },
   groupName: { flex: 1, fontSize: 13, fontWeight: '600', color: COLORS.text, textAlign: 'right' },
