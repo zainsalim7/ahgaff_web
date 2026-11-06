@@ -162,7 +162,7 @@ export default function ManageUsersScreen() {
       if (deptsRes.status === 'fulfilled') setDepartments(deptsRes.value.data);
       if (coursesRes.status === 'fulfilled') setCourses(coursesRes.value.data);
       if (facultiesRes.status === 'fulfilled') setFaculties(facultiesRes.value.data || []);
-      if (orgUnitsRes.status === 'fulfilled') setOrgUnits((orgUnitsRes.value.data || []).map((u: any) => ({ ...u, id: u.id || u._id })));
+      if (orgUnitsRes.status === 'fulfilled') setOrgUnits((orgUnitsRes.value.data?.units || []).map((u: any) => ({ ...u, id: u.id || u._id })));
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
