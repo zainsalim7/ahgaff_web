@@ -105,6 +105,7 @@ export default function StudentsScreen() {
   const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+  const [studentsUnauthorized, setStudentsUnauthorized] = useState(false);
   
   // فلاتر
   const [selectedFacultyFilter, setSelectedFacultyFilter] = useState<string>('');
@@ -309,6 +310,7 @@ export default function StudentsScreen() {
     try {
       const studentsRes = await studentsAPI.getAll();
       setStudents(studentsRes.data);
+      setStudentsUnauthorized(false);
       // 👥 خريطة مجموعات الطلاب (شارة لمن هو موزّع في مجموعة)
       courseGroupsAPI.studentsMap((studentsRes.data || []).map((s: any) => s.id)).then(r => setGroupsMap(r.data || {})).catch(() => {});
       // 💰 حالة تجديد القيد للشارة (لا توقف الصفحة عند الفشل)
@@ -319,9 +321,15 @@ export default function StudentsScreen() {
           setRenewalStatuses(fr.data.statuses || {});
         }
       } catch { /* صلاحية غير متاحة أو خطأ — تجاهل */ }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching students:', error);
-      showMessage('خطأ', 'فشل في تحميل بيانات الطلاب');
+      setStudents([]);
+      // 🆕 رسالة واضحة عند 403 بدل عرض "لا يوجد طلاب" بصمت
+      if (error?.response?.status === 403) {
+        setStudentsUnauthorized(true);
+      } else {
+        showMessage('خطأ', 'فشل في تحميل بيانات الطلاب');
+      }
     } finally {
       setLoading(false);
     }
@@ -1773,8 +1781,8 @@ export default function StudentsScreen() {
           {/* الصفوف */}
           {filteredStudents.length === 0 ? (
             <View style={styles.tableEmpty}>
-              <Ionicons name="people-outline" size={48} color="#cfd6e1" />
-              <Text style={styles.tableEmptyText}>{hasAnyFilter ? 'لا توجد نتائج للفلاتر المطبّقة' : 'لا يوجد طلاب'}</Text>
+              <Ionicons name={studentsUnauthorized ? 'lock-closed-outline' : 'people-outline'} size={48} color={studentsUnauthorized ? '#dc2626' : '#cfd6e1'} />
+              <Text style={[styles.tableEmptyText, studentsUnauthorized && { color: '#dc2626', fontWeight: '700' }]}>{studentsUnauthorized ? 'غير مصرح لك بعرض الطلاب' : (hasAnyFilter ? 'لا توجد نتائج للفلاتر المطبّقة' : 'لا يوجد طلاب')}</Text>
             </View>
           ) : (
             <View>

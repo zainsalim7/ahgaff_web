@@ -209,6 +209,7 @@ export default function AddCourseScreen() {
   const SECTION_LABELS = ['أ', 'ب', 'ج', 'د', 'ه', 'و', 'ز', 'ح', 'ط', 'ي'];
 
   const [coursesLoading, setCoursesLoading] = useState(false);
+  const [coursesUnauthorized, setCoursesUnauthorized] = useState(false);
 
   const fetchBaseData = useCallback(async () => {
     try {
@@ -236,6 +237,7 @@ export default function AddCourseScreen() {
 
   const fetchCourses = useCallback(async (deptId?: string) => {
     setCoursesLoading(true);
+    setCoursesUnauthorized(false);
     try {
       const params: any = {};
       if (deptId && deptId !== 'all') {
@@ -253,8 +255,11 @@ export default function AddCourseScreen() {
       }
       const res = await coursesAPI.getAll(params);
       setCourses(res.data);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching courses:', error);
+      setCourses([]);
+      // 🆕 رسالة واضحة عند 403 بدل عرض "لا توجد نتائج" بصمت
+      setCoursesUnauthorized(error?.response?.status === 403);
     } finally {
       setCoursesLoading(false);
     }
@@ -1489,8 +1494,8 @@ export default function AddCourseScreen() {
                         </View>
                         {paged.length === 0 ? (
                           <View style={styles.tableEmpty}>
-                            <Ionicons name="book-outline" size={48} color="#cfd6e1" />
-                            <Text style={styles.tableEmptyText}>لا توجد نتائج</Text>
+                            <Ionicons name={coursesUnauthorized ? 'lock-closed-outline' : 'book-outline'} size={48} color={coursesUnauthorized ? '#dc2626' : '#cfd6e1'} />
+                            <Text style={[styles.tableEmptyText, coursesUnauthorized && { color: '#dc2626', fontWeight: '700' }]}>{coursesUnauthorized ? 'غير مصرح لك بعرض المقررات' : 'لا توجد نتائج'}</Text>
                           </View>
                         ) : (
                           <View>

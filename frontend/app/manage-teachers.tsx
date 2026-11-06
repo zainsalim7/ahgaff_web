@@ -64,6 +64,7 @@ export default function ManageTeachersScreen() {
   const [departments, setDepartments] = useState<Department[]>([]);
   const [faculties, setFaculties] = useState<{ id: string; name: string }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [teachersUnauthorized, setTeachersUnauthorized] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingTeacher, setEditingTeacher] = useState<Teacher | null>(null);
@@ -216,9 +217,12 @@ export default function ManageTeachersScreen() {
       const [teachersRes, deptsRes, facsRes] = results;
       if (teachersRes.status === 'fulfilled') {
         setTeachers(teachersRes.value.data || []);
+        setTeachersUnauthorized(false);
       } else {
         console.warn('Failed to fetch teachers:', teachersRes.reason);
         setTeachers([]);
+        // 🆕 رسالة واضحة عند 403 بدل عرض "لا توجد نتائج" بصمت
+        setTeachersUnauthorized((teachersRes.reason as any)?.response?.status === 403);
       }
       if (deptsRes.status === 'fulfilled') {
         setDepartments(deptsRes.value.data || []);
@@ -1005,8 +1009,8 @@ export default function ManageTeachersScreen() {
 
               {filteredTeachers.length === 0 ? (
                 <View style={styles.tableEmpty}>
-                  <Ionicons name="people-outline" size={48} color="#cfd6e1" />
-                  <Text style={styles.tableEmptyText}>لا توجد نتائج للفلاتر المطبّقة</Text>
+                  <Ionicons name={teachersUnauthorized ? 'lock-closed-outline' : 'people-outline'} size={48} color={teachersUnauthorized ? '#dc2626' : '#cfd6e1'} />
+                  <Text style={[styles.tableEmptyText, teachersUnauthorized && { color: '#dc2626', fontWeight: '700' }]}>{teachersUnauthorized ? 'غير مصرح لك بعرض المعلمين' : 'لا توجد نتائج للفلاتر المطبّقة'}</Text>
                 </View>
               ) : (
                 <View>

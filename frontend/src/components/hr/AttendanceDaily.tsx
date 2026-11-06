@@ -14,8 +14,15 @@ export const AttendanceDaily: React.FC<{ canManage: boolean; units: any[]; meta:
   const [edits, setEdits] = useState<Record<string, any>>({});
   const [busy, setBusy] = useState(false);
   const [statusF, setStatusF] = useState('');
+  const [unauthorized, setUnauthorized] = useState(false);
 
-  const load = useCallback(async () => { try { setD((await hrAPI.attDaily({ date, org_unit_id: unit || undefined })).data); setEdits({}); } catch (e) { alertErr(e); } }, [date, unit]);
+  const load = useCallback(async () => {
+    try { setD((await hrAPI.attDaily({ date, org_unit_id: unit || undefined })).data); setEdits({}); setUnauthorized(false); }
+    catch (e: any) {
+      // 🆕 رسالة واضحة عند 403 بدل نافذة تنبيه مبهمة "حدث خطأ"
+      if (e?.response?.status === 403) { setUnauthorized(true); setD(null); } else { alertErr(e); }
+    }
+  }, [date, unit]);
   useEffect(() => { load(); }, [load]);
 
   const edit = (id: string, k: string, v: any) => setEdits((p) => ({ ...p, [id]: { ...(p[id] || {}), [k]: v } }));
@@ -60,7 +67,7 @@ export const AttendanceDaily: React.FC<{ canManage: boolean; units: any[]; meta:
       )}
       {d && <ListToolbar t={lt} total={d.rows.length} testID="att-daily" fileName={`الكشف-اليومي-${date}`} exportRows={exportRows} />}
     </View>
-    {!d ? <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text> : d.rows.length === 0 ? <ReportEmpty text="لا يوجد موظفون" icon="people-outline" /> : (
+    {!d ? (unauthorized ? <ReportEmpty text="غير مصرح لك بعرض الحضور الإداري" icon="lock-closed-outline" /> : <Text style={{ textAlign: 'center', color: '#94a3b8', padding: 20 }}>جاري التحميل...</Text>) : d.rows.length === 0 ? <ReportEmpty text="لا يوجد موظفون" icon="people-outline" /> : (
       <View style={[reportPage.card, { padding: 0, overflow: 'hidden' }]}>
         <table style={table} data-testid="att-daily-table">
           <thead><tr style={{ backgroundColor: '#0f2440', color: '#fff' }}><th style={{ padding: '10px 8px' }}><SelBox checked={lt.allPage} onChange={lt.togglePage} testID="att-daily-sel-all" /></th>{['الموظف', 'الوحدة', ...(multi ? ['الفترة'] : []), 'الحالة', 'حضور', 'انصراف', 'تأخير', 'الموقع', 'ملاحظة', ''].map((c, i) => <th key={i} style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, whiteSpace: 'nowrap' }}>{c}</th>)}</tr></thead>
