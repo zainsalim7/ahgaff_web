@@ -63,6 +63,11 @@ export default function HrEmployees() {
   const linkUnits = async () => { const force = window.confirm('ربط المعلمين بوحدات أقسامهم/كلياتهم.\n«موافق» = إعادة الربط للجميع وفق بيانات المعلم · «إلغاء» = ربط من لا وحدة له فقط'); try { const r = await hrAPI.linkUnits(force); window.alert(r.data.message + (r.data.unresolved?.length ? '\n\nبلا وحدة: ' + r.data.unresolved.map((u: any) => `${u.name} (${u.reason})`).join('، ') : '')); load(); } catch (e) { alertMsg(e); } };
   const syncTeachers = async () => { if (!window.confirm('إنشاء ملف إداري لكل معلم ليس له ملف؟')) return; try { const r = await hrAPI.syncTeachers(); window.alert(r.data.message); load(); } catch (e) { alertMsg(e); } };
   const createAccount = (emp: any) => setAcct({ emp, mode: 'create' });
+  const toggleAccount = async (emp: any) => {
+    const msg = emp.account_is_active ? `تعطيل حساب دخول ${emp.full_name}؟ لن يستطيع تسجيل الدخول بعدها.` : `تفعيل حساب دخول ${emp.full_name}؟`;
+    if (!window.confirm(msg)) return;
+    try { const r = await hrAPI.toggleAccountActive(emp.id); window.alert(r.data.message); openDetail(emp.id); } catch (e) { alertMsg(e); }
+  };
   const remove = async (emp: any) => { const msg = emp.teacher_id ? `حذف الملف الإداري للمعلم ${emp.full_name}؟\nيبقى سجله الأكاديمي في شاشة المعلمين، ويمكن استعادة الملف من سلة المحذوفات.` : `حذف الموظف ${emp.full_name}؟ (يمكن استعادته من سلة المحذوفات، ويُعطَّل حسابه)`; if (!window.confirm(msg)) return; try { const r = await hrAPI.deleteEmployee(emp.id, !!emp.teacher_id); window.alert(r.data.message); setDetail(null); load(); } catch (e) { alertMsg(e); } };
   const exportXlsx = async () => { setExporting(true); try { const r = await hrAPI.exportEmployees(Object.fromEntries(Object.entries(q).filter(([k, v]) => v && k !== 'page'))); const url = URL.createObjectURL(r.data); const a = document.createElement('a'); a.href = url; a.download = 'سجل الموظفين.xlsx'; a.click(); URL.revokeObjectURL(url); } catch (e) { alertMsg(e); } finally { setExporting(false); } };
   const toggleSel = (e: any) => setSel((p) => { const n = { ...p }; if (n[e.id]) delete n[e.id]; else n[e.id] = e.full_name; return n; });
@@ -201,7 +206,7 @@ export default function HrEmployees() {
             {detail.teacher && <div style={{ marginTop: 10, backgroundColor: '#ede9fe', color: '#5b21b6', padding: '8px 10px', borderRadius: 8, fontSize: 12 }}>🎓 عضو هيئة تدريس · الرقم الأكاديمي {detail.teacher.teacher_id} · {detail.teacher.courses_count} مقرر نشط</div>}
             {detail.subordinates?.length > 0 && <div style={{ marginTop: 12 }}><div style={{ fontSize: 12, fontWeight: 800, color: '#5b6678', marginBottom: 4 }}>يرأس ({detail.subordinates.length})</div>{detail.subordinates.map((s: any) => <div key={s.id} style={{ fontSize: 12, padding: '4px 0', borderBottom: '1px solid #f1f5f9' }}>{s.full_name}{s.job_title ? ` — ${s.job_title}` : ''}</div>)}</div>}
             {detail.notes && <div style={{ marginTop: 10, fontSize: 12, color: '#475569', backgroundColor: '#fafafa', padding: 8, borderRadius: 8 }}>{detail.notes}</div>}
-            {detail.has_account && <div style={{ marginTop: 10, fontSize: 12.5, backgroundColor: '#f3e8ff', color: '#4c1d95', padding: '8px 10px', borderRadius: 8, textAlign: 'right' }} data-testid="hr-detail-role">حساب الدخول: <b>{detail.account_username}</b> · الدور: <b>{detail.role_name || 'موظف (خدمة ذاتية فقط)'}</b></div>}
+            {detail.has_account && <div style={{ marginTop: 10, fontSize: 12.5, backgroundColor: '#f3e8ff', color: '#4c1d95', padding: '8px 10px', borderRadius: 8, textAlign: 'right' }} data-testid="hr-detail-role">حساب الدخول: <b>{detail.account_username}</b> · الدور: <b>{detail.role_name || 'موظف (خدمة ذاتية فقط)'}</b> · الحالة: <b style={{ color: detail.account_is_active ? '#16a34a' : '#dc2626' }}>{detail.account_is_active ? 'مفعّل' : 'معطّل'}</b></div>}
             <EmployeePhotoPanel employeeId={detail.id} canManage={canManage} />
             <EmployeeDocuments employeeId={detail.id} canManage={canManage} />
             {canManage && (
@@ -209,6 +214,7 @@ export default function HrEmployees() {
                 <button onClick={() => setForm({ open: true, emp: detail })} style={btn('#1565c0')} data-testid="hr-detail-edit">تعديل</button>
                 {!detail.has_account && !detail.teacher_id && <button onClick={() => createAccount(detail)} style={btn('#16a34a')} data-testid="hr-detail-create-account">إنشاء حساب دخول</button>}
                 {detail.has_account && <button onClick={() => setAcct({ emp: detail, mode: 'change' })} style={btn('#ede9fe', '#6d28d9')} data-testid="hr-detail-change-role">تغيير الدور</button>}
+                {detail.has_account && <button onClick={() => toggleAccount(detail)} style={btn(detail.account_is_active ? '#fff3e0' : '#e8f5e9', detail.account_is_active ? '#e65100' : '#2e7d32')} data-testid="hr-detail-toggle-account">{detail.account_is_active ? 'تعطيل الحساب' : 'تفعيل الحساب'}</button>}
                 <button onClick={() => remove(detail)} style={btn('#ffebee', '#c62828')} data-testid="hr-detail-delete">{detail.teacher_id ? 'حذف الملف الإداري' : 'حذف'}</button>
               </div>
             )}

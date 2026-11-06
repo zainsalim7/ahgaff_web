@@ -15,18 +15,6 @@ from .deps import (
 router = APIRouter(tags=["المصادقة"])
 
 
-def _employee_has_no_granted_access(user: dict) -> bool:
-    """موظف أُنشئ له حساب دخول ذاتي (من ملفه الإداري) لكن لم يُمنح أي دور/صلاحية إدارية بعد
-    (لا role_id من الأدوار القديمة، ولا custom_permissions، ولا تكليف فعلي من مركز الصلاحيات المتقدم)"""
-    if user.get("role") != "employee":
-        return False
-    has_role_id = bool(user.get("role_id"))
-    custom_permissions = user.get("custom_permissions")
-    has_custom_permissions = isinstance(custom_permissions, list) and len(custom_permissions) > 0
-    has_real_enforcement = user.get("advanced_access_real_enforcement") is True
-    return not (has_role_id or has_custom_permissions or has_real_enforcement)
-
-
 @router.post("/auth/login")
 async def login(user_data: UserLogin, request: Request):
     """تسجيل الدخول مع حماية Rate Limiting
@@ -134,15 +122,6 @@ async def login(user_data: UserLogin, request: Request):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN,
                                 detail="لا يمكنك الدخول — لقد تخرجت من الجامعة، نبارك لك التخرج 🎓 لأي مستندات راجع شؤون الخريجين")
     
-    # 🔐 موظف مُنشأ له حساب دخول ذاتي من ملفه الإداري لكن بلا أي دور/صلاحية إدارية ممنوحة بعد — يُمنع دخوله
-    # للنظام حتى يُمنح دوراً من «الأدوار» أو صلاحية مخصصة أو تكليفاً من مركز الصلاحيات المتقدم
-    if _employee_has_no_granted_access(user):
-        record_login_attempt(client_ip, False)
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="لم تُمنح أي صلاحية إدارية بعد — يرجى مراجعة الإدارة لتفعيل صلاحياتك قبل الدخول"
-        )
-
     # منع المعلمين والطلاب من دخول الويب - لهم تطبيق خاص
     user_agent = request.headers.get("user-agent", "").lower()
     platform = request.headers.get("x-platform", "").lower()

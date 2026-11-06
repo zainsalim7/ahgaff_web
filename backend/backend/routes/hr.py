@@ -513,11 +513,12 @@ async def get_employee(emp_id: str, current_user: dict = Depends(get_current_use
     d = (await _enrich(db, [e]))[0]
     d["subordinates"] = [{"id": str(s["_id"]), "full_name": s.get("full_name", ""), "job_title": s.get("job_title", "")} for s in await db.employees.find({"manager_employee_id": emp_id}, {"full_name": 1, "job_title": 1}).to_list(200)]
     d["history"] = [_ser(h) for h in await db.employee_history.find({"employee_id": emp_id}).sort("at", -1).limit(50).to_list(50)]
-    d["role_id"], d["role_name"], d["account_username"] = None, None, None
+    d["role_id"], d["role_name"], d["account_username"], d["account_is_active"] = None, None, None, None
     if d.get("user_id") and ObjectId.is_valid(d["user_id"]):
-        u = await db.users.find_one({"_id": ObjectId(d["user_id"])}, {"role_id": 1, "role": 1, "username": 1})
+        u = await db.users.find_one({"_id": ObjectId(d["user_id"])}, {"role_id": 1, "role": 1, "username": 1, "is_active": 1})
         if u:
             d["account_username"] = u.get("username")
+            d["account_is_active"] = u.get("is_active", True)
             if u.get("role_id") and ObjectId.is_valid(u["role_id"]):
                 rd = await db.roles.find_one({"_id": ObjectId(u["role_id"])}, {"name": 1})
                 d["role_id"], d["role_name"] = u["role_id"], (rd or {}).get("name")
@@ -717,6 +718,29 @@ async def create_employee_account(emp_id: str, data: AccountIn = None, current_u
     await log_activity(current_user, "hr_create_account", "employee", emp_id, e.get("full_name", ""), {"role": role["name"] if role else "موظف"})
     return {"username": username, "temp_password": username, "must_change_password": True, "role_name": role["name"] if role else None,
             "message": f"تم إنشاء الحساب: اسم المستخدم وكلمة المرور الأولية = {username}" + (f" — بدور «{role['name']}»" if role else "") + " (يُطلب تغييرها عند أول دخول)"}
+
+
+@router.post("/employees/{emp_id}/account/toggle-active")
+async def toggle_employee_account(emp_id: str, current_user: dict = Depends(get_current_user)):
+    """🔐 تفعيل/تعطيل حساب دخول الموظف مباشرة من ملفه الإداري (بديل شاشة إدارة المستخدمين)"""
+    _guard(current_user, P_MANAGE)
+    db = get_db()
+    e = await db.employees.find_one({"_id": _oid(emp_id)})
+    if not e:
+        raise HTTPException(status_code=404, detail="الموظف غير موجود")
+    await assert_in_scope(db, current_user, employee_id=emp_id)
+    if not e.get("user_id") or not ObjectId.is_valid(e["user_id"]):
+        raise HTTPException(status_code=400, detail="لا يوجد حساب دخول لهذا الموظف")
+    u = await db.users.find_one({"_id": ObjectId(e["user_id"])})
+    if not u:
+        raise HTTPException(status_code=404, detail="حساب الموظف غير موجود")
+    if u.get("role") == "admin":
+        raise HTTPException(status_code=400, detail="لا يمكن تعطيل حساب مدير النظام")
+    new_status = not u.get("is_active", True)
+    await db.users.update_one({"_id": u["_id"]}, {"$set": {"is_active": new_status}})
+    await _history(db, emp_id, "account_activated" if new_status else "account_deactivated", current_user)
+    await log_activity(current_user, "hr_toggle_account", "employee", emp_id, e.get("full_name", ""), {"is_active": new_status})
+    return {"message": f"تم {'تفعيل' if new_status else 'تعطيل'} حساب الموظف بنجاح", "is_active": new_status}
 
 
 @router.put("/employees/{emp_id}/account-role")

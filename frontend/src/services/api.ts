@@ -812,6 +812,7 @@ export const hrAPI = {
   linkUnits: (force = false) => api.post(`/hr/employees/link-units?force=${force}`),
   createAccount: (id: string, role_id: string | null = null) => api.post(`/hr/employees/${id}/account`, { role_id }),
   setAccountRole: (id: string, role_id: string | null) => api.put(`/hr/employees/${id}/account-role`, { role_id }),
+  toggleAccountActive: (id: string) => api.post(`/hr/employees/${id}/account/toggle-active`),
   hrRoles: () => api.get('/hr/roles'),
   myScope: () => api.get('/hr/my-scope'),
   importPreview: (form: FormData, createUnits = true) => api.post(`/hr/employees/import/preview?create_units=${createUnits}`, form, { headers: { 'Content-Type': 'multipart/form-data' } }),

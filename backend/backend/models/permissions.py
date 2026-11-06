@@ -251,17 +251,9 @@ DEFAULT_PERMISSIONS = {
         Permission.REPORT_COURSE,
         Permission.REPORT_TEACHER_WORKLOAD,
     ],
-    UserRole.EMPLOYEE: [
-        Permission.MANAGE_STUDENTS,
-        Permission.VIEW_ATTENDANCE,
-        Permission.VIEW_REPORTS,
-        Permission.EXPORT_REPORTS,
-        Permission.IMPORT_DATA,
-        Permission.VIEW_LECTURES,
-        Permission.REPORT_STUDENT,
-        Permission.REPORT_ABSENT_STUDENTS,
-        Permission.REPORT_WARNINGS,
-    ],
+    # 🔐 موظف "خدمة ذاتية" (بلا role_id من شاشة الأدوار) — بلا أي صلاحيات إدارية افتراضياً
+    # (يحصل فقط على ملفه/حضوره/إجازاته/مهامه الشخصية عبر شاشات «خدماتي» المستقلة عن نظام الصلاحيات)
+    UserRole.EMPLOYEE: [],
     UserRole.STUDENT: [
         Permission.VIEW_ATTENDANCE,
         Permission.VIEW_LECTURES,
