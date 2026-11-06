@@ -11310,17 +11310,21 @@ async def get_lecture_attendance(
 
 # ==================== Attendance Routes ====================
 
-async def _log_offline_sync(db, *, current_user, lecture, course, session, now, lecture_end, status, reason="", records_count=0):
-    """📝 سجل تدقيق لمحاولات مزامنة الحضور الأوفلاين (نجاح/فشل) — لتقرير /reports/offline-sync"""
+async def _log_offline_sync(db, *, current_user, lecture, course, session, now, lecture_end, status, reason="", records_count=0, diagnosis=None, pending_payload=None):
+    """📝 سجل تدقيق لمحاولات مزامنة الحضور الأوفلاين (نجاح/فشل) — لتقرير /reports/offline-sync
+    diagnosis: شرح دقيق للسبب الحقيقي للرفض (مقارنة وقت الجهاز بنافذة المحاضرة)
+    pending_payload: نسخة من بيانات الطلب المرفوض (السجلات) لإتاحة «القبول اليدوي» لاحقاً من التقرير"""
     try:
         await db.offline_sync_log.insert_one({
             "teacher_id": current_user["id"], "teacher_name": current_user.get("full_name", ""),
             "course_id": lecture["course_id"], "course_name": course.get("name", ""),
-            "lecture_id": session.lecture_id, "lecture_date": lecture.get("date"), "lecture_end_time": lecture.get("end_time"),
+            "lecture_id": session.lecture_id, "lecture_date": lecture.get("date"),
+            "lecture_start_time": lecture.get("start_time"), "lecture_end_time": lecture.get("end_time"),
             "offline_recorded_at": session.offline_recorded_at,
             "synced_at": now.isoformat(),
             "delay_seconds": (now - lecture_end).total_seconds(),
-            "status": status, "reason": reason, "records_count": records_count,
+            "status": status, "reason": reason, "diagnosis": diagnosis, "records_count": records_count,
+            "pending_payload": pending_payload,
         })
     except Exception as _e:
         logger.warning(f"offline_sync_log insert failed: {_e}")
@@ -11399,21 +11403,34 @@ async def record_attendance_session(
                 offline_time = offline_time.astimezone(YEMEN_TIMEZONE)
         except Exception:
             offline_time = None
+        _pending_payload = {
+            "records": [{"student_id": r.student_id, "status": r.status} for r in records],
+            "notes": session.notes, "lesson_title": session.lesson_title,
+            "plan_topic_id": session.plan_topic_id, "location": session.location,
+        }
         if offline_time is not None:
             _max_hours = await get_offline_sync_max_hours()
             age_seconds = (now - offline_time).total_seconds()
             if age_seconds > _max_hours * 3600:
                 _reason = f"سجل التحضير الأوفلاين أقدم من {_max_hours} ساعة — لا يمكن قبوله"
-                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records))
+                _diag = f"وقت التسجيل على جهاز الأستاذ كان {offline_time.strftime('%Y-%m-%d %H:%M')} — أي قبل لحظة المزامنة بأكثر من {_max_hours} ساعة (الحد الأقصى المسموح حالياً من الإعدادات)"
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload)
                 raise HTTPException(status_code=400, detail=_reason)
             if age_seconds < -600:
                 _reason = "وقت التسجيل الأوفلاين في المستقبل — تحقق من ساعة الجهاز"
-                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records))
+                _diag = f"ساعة جهاز الأستاذ تُظهر وقتاً مستقبلياً ({offline_time.strftime('%Y-%m-%d %H:%M')}) بينما وقت السيرفر الفعلي {now.strftime('%Y-%m-%d %H:%M')} — الأرجح أن توقيت/تاريخ الجهاز غير مضبوط"
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload)
                 raise HTTPException(status_code=400, detail=_reason)
             offline_window_end = lecture_end + timedelta(minutes=attendance_duration + max_delay)
             if offline_time < lecture_start or offline_time > offline_window_end:
                 _reason = f"وقت التسجيل الأوفلاين خارج نافذة المحاضرة ({lecture['date']} {lecture['start_time']}-{lecture['end_time']}) — مرفوض"
-                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records))
+                if offline_time < lecture_start:
+                    _gap_min = int((lecture_start - offline_time).total_seconds() // 60)
+                    _diag = f"سجّل جهاز الأستاذ وقت الحضور {offline_time.strftime('%Y-%m-%d %H:%M')} — أي قبل بداية المحاضرة ({lecture_start.strftime('%Y-%m-%d %H:%M')}) بـ {_gap_min} دقيقة. السبب غالباً: ساعة/تاريخ الجهاز غير صحيحة."
+                else:
+                    _gap_min = int((offline_time - offline_window_end).total_seconds() // 60)
+                    _diag = f"سجّل جهاز الأستاذ وقت الحضور فعلياً {offline_time.strftime('%Y-%m-%d %H:%M')} — أي بعد نهاية نافذة السماح لهذه المحاضرة ({offline_window_end.strftime('%Y-%m-%d %H:%M')}) بـ {_gap_min} دقيقة ({round(_gap_min/60)} ساعة تقريباً). السبب غالباً: الأستاذ حاول تسجيل حضور محاضرة قديمة بعد أيام من انتهائها وهو أوفلاين، فسجّل التطبيق الوقت الحقيقي للجهاز (وليس وقت المحاضرة) — وهذا رفض مقصود لحماية دقة سجل الحضور، وليس خللاً في النظام."
+                await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload)
                 raise HTTPException(status_code=400, detail=_reason)
             check_time = offline_time
             is_offline_sync = True
