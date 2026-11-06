@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { hrAPI } from '../../services/api';
 import { inp, btn, opt, alertErr } from './ui';
 
-const ACTIONS: Record<string, string> = { move_unit: 'نقل إلى وحدة تنظيمية', set_status: 'تغيير الحالة الوظيفية', set_manager: 'تعيين المدير المباشر', set_category: 'تغيير الفئة', set_contract_type: 'تغيير نوع التعاقد', register_leave: 'تسجيل إجازة (معتمدة)', delete: 'حذف (إلى سلة المحذوفات)' };
+const ACTIONS: Record<string, string> = { create_accounts: 'إنشاء حسابات دخول (خدمة ذاتية)', move_unit: 'نقل إلى وحدة تنظيمية', set_status: 'تغيير الحالة الوظيفية', set_manager: 'تعيين المدير المباشر', set_category: 'تغيير الفئة', set_contract_type: 'تغيير نوع التعاقد', register_leave: 'تسجيل إجازة (معتمدة)', delete: 'حذف (إلى سلة المحذوفات)' };
 
 interface Props { ids: string[]; names: string[]; meta: any; units: any[]; onDone: () => void; onClear: () => void; }
 

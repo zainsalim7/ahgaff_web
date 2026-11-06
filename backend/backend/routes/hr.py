@@ -434,12 +434,12 @@ async def my_employee_profile(current_user: dict = Depends(get_current_user)):
 
 class BulkIn(BaseModel):
     ids: List[str]
-    action: str  # move_unit | set_status | set_manager | set_category | set_contract_type | delete | register_leave
+    action: str  # move_unit | set_status | set_manager | set_category | set_contract_type | delete | register_leave | create_accounts
     value: Optional[str] = None
     leave: Optional[dict] = None
 
 
-BULK_LABELS = {"move_unit": "نقل إلى وحدة", "set_status": "تغيير الحالة", "set_manager": "تعيين مدير مباشر", "set_category": "تغيير الفئة", "set_contract_type": "تغيير نوع التعاقد", "delete": "حذف", "register_leave": "تسجيل إجازة"}
+BULK_LABELS = {"move_unit": "نقل إلى وحدة", "set_status": "تغيير الحالة", "set_manager": "تعيين مدير مباشر", "set_category": "تغيير الفئة", "set_contract_type": "تغيير نوع التعاقد", "delete": "حذف", "register_leave": "تسجيل إجازة", "create_accounts": "إنشاء حسابات دخول (خدمة ذاتية)"}
 
 
 @router.post("/employees/bulk")
@@ -484,6 +484,20 @@ async def bulk_action(data: BulkIn, current_user: dict = Depends(get_current_use
                 await _delete_employee(db, e, current_user, force=True)
             elif data.action == "register_leave":
                 await _create_request(db, e, LeaveIn(employee_id=eid, type=lv.get("type", "annual"), start_date=lv["start_date"], end_date=lv["end_date"], reason=lv.get("reason", "")), current_user, auto_approve=True)
+            elif data.action == "create_accounts":
+                if e.get("user_id"):
+                    raise HTTPException(status_code=400, detail="لديه حساب بالفعل")
+                if e.get("teacher_id"):
+                    raise HTTPException(status_code=400, detail="حساب المعلم يُفعَّل من شاشة المعلمين")
+                username = e["employee_no"]
+                if await db.users.find_one({"username": username}):
+                    raise HTTPException(status_code=400, detail="يوجد مستخدم بهذا الرقم الوظيفي")
+                user_doc = {"username": username, "password": get_password_hash(username), "hashed_password": get_password_hash(username), "full_name": e.get("full_name", ""), "role": "employee",
+                            "role_id": None, "email": e.get("email") or None, "phone": e.get("phone") or "", "employee_record_id": eid, "permissions": [], "custom_permissions": [],
+                            "must_change_password": True, "is_active": True, "created_at": datetime.now(YEMEN_TZ)}
+                r = await db.users.insert_one(user_doc)
+                await db.employees.update_one({"_id": e["_id"]}, {"$set": {"user_id": str(r.inserted_id)}})
+                await _history(db, eid, "account_created", current_user, {"username": username, "bulk": True})
             else:
                 field = {"move_unit": "org_unit_id", "set_status": "status", "set_manager": "manager_employee_id", "set_category": "category", "set_contract_type": "contract_type"}[data.action]
                 if data.action == "set_manager" and data.value == eid:
