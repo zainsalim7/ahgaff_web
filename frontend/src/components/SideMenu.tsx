@@ -239,16 +239,22 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
     if ((item as any).advancedAccessOnly) return hasAdvAccess;
     if ((item as any).corrMembershipOnly) return isAdmin || !!hasCorrAccess;
     if (item.forAll) return true;
-    if (isAdmin) return true;
-    // العناصر الخاصة بالمعلم فقط
+    // العناصر الخاصة بالمعلم فقط (يجب أن تُفحص قبل isAdmin لإخفائها عن الأدمن أيضاً، كالسابق)
     if ((item as any).teacherOnly && userRole !== 'teacher') return false;
+    if (isAdmin) return true;
 
-    // 🆕 مستخدم إنفاذ فعلي جديد: فحص عام (الجسر داخل hasAnyPermission يتحقق من الصلاحيات المتقدمة تلقائياً)
-    // بدل الاعتماد حصرياً على roles/adminOnly القديمة التي لا تعرف شيئاً عن هذا المستخدم
+    // 🆕 مستخدم إنفاذ فعلي جديد
     if (isRealEnforced) {
-      if (item.advPermissionKeys?.some(k => realEnforcedKeys.includes(k))) return true;
-      if (item.advGroups?.some(g => realEnforcedKeys.some(k => k.startsWith(g + '_')))) return true;
-      if (item.permissions.length > 0 && hasAnyPermission(item.permissions)) return true;
+      // إن كان للعنصر مفاتيح/مجموعات دقيقة مُحدَّدة يدوياً، يُعتمَد عليها حصرياً (بلا رجوع للجسر العام
+      // الأوسع) — لتفادي ظهور عناصر لا يملك المستخدم صلاحياتها الحقيقية (مثل المقررات/المعلمين/الخريجين)
+      if (item.advPermissionKeys || item.advGroups) {
+        return !!(
+          item.advPermissionKeys?.some(k => realEnforcedKeys.includes(k)) ||
+          item.advGroups?.some(g => realEnforcedKeys.some(k => k.startsWith(g + '_')))
+        );
+      }
+      // وإلا: الجسر العام عبر hasAnyPermission (الآن يفحص مجموعة واحدة دقيقة مكافئة لكل صلاحية قديمة)
+      if (item.permissions.length > 0) return hasAnyPermission(item.permissions);
       return false;
     }
 

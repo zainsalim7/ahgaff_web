@@ -18,6 +18,7 @@ import { useRouter, Stack } from 'expo-router';
 import { alumniAPI, facultiesAPI, departmentsAPI } from '../src/services/api';
 import api from '../src/services/api';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
+import { useRealEnforcementStore } from '../src/store/realEnforcementStore';
 import { SortableHeader } from '../src/components/SortableHeader';
 import { getMyScope } from '../src/utils/scopeDefaults';
 
@@ -94,8 +95,15 @@ export default function AlumniScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRestoring, setBulkRestoring] = useState(false);
 
-  const canView = isAdmin || hasAnyPermission(['view_students', PERMISSIONS.MANAGE_STUDENTS]);
-  const canManage = isAdmin || hasAnyPermission([PERMISSIONS.MANAGE_STUDENTS]);
+  // 🆕 الخريجون مجموعة مستقلة (alumni_*) في مركز الصلاحيات المتقدم — لا تُستمَد من صلاحية الطلاب العامة
+  const isRealEnforced = !!user?.advanced_access_real_enforcement;
+  const { permissionKeys: advKeys, checked: advChecked, checkAccess: checkAdvAccess } = useRealEnforcementStore();
+  useEffect(() => {
+    if (user?.id && isRealEnforced && !advChecked) checkAdvAccess();
+  }, [user?.id, isRealEnforced, advChecked, checkAdvAccess]);
+  const hasAlumniAdvAccess = isRealEnforced && advKeys.some(k => k.startsWith('alumni_'));
+  const canView = isAdmin || hasAnyPermission(['view_students', PERMISSIONS.MANAGE_STUDENTS]) || hasAlumniAdvAccess;
+  const canManage = isAdmin || hasAnyPermission([PERMISSIONS.MANAGE_STUDENTS]) || hasAlumniAdvAccess;
 
   useEffect(() => {
     if (!authLoading && !canView) router.replace('/no-permission?from=/alumni' as any);
