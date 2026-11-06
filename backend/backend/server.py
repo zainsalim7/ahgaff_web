@@ -1509,6 +1509,8 @@ async def create_user(user: UserCreate, current_user: dict = Depends(get_current
         "faculty_id": user_dict.get("faculty_id"),
         "department_id": user_dict.get("department_id"),
         "department_ids": user_dict.get("department_ids", []),
+        "hr_scope": user_dict.get("hr_scope"),
+        "hr_scope_unit_ids": user_dict.get("hr_scope_unit_ids", []),
     }
 
 @api_router.get("/users", response_model=List[UserResponse])
@@ -1551,6 +1553,8 @@ async def get_users(role: Optional[str] = None, current_user: dict = Depends(get
             "faculty_ids": u.get("faculty_ids", []),
             "department_id": u.get("department_id"),
             "department_ids": u.get("department_ids", []),
+            "hr_scope": u.get("hr_scope"),
+            "hr_scope_unit_ids": u.get("hr_scope_unit_ids", []),
         }
         
         # جلب اسم الكلية إذا موجود
@@ -1680,6 +1684,8 @@ class UserUpdate(BaseModel):
     faculty_ids: Optional[List[str]] = None  # 🏛️ تعدد الكليات (كليات كاملة فقط)
     department_id: Optional[str] = None  # للتوافق مع القديم
     department_ids: Optional[List[str]] = None  # قائمة الأقسام المتعددة
+    hr_scope: Optional[str] = None  # ALL | MY_UNIT | UNITS — نطاق الوحدات الإدارية
+    hr_scope_unit_ids: Optional[List[str]] = None  # الوحدات الإدارية الجذرية المُسنَدة
 
 @api_router.put("/users/{user_id}", response_model=UserResponse)
 async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depends(get_current_user)):
@@ -1737,6 +1743,12 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
                 update_data["department_id"] = None
                 update_data["department_ids"] = []
     
+    # 🏢 نطاق الوحدات الإدارية (مستقل عن الكلية/القسم الأكاديمي) — يُسنَد صراحة من واجهة تعديل المستخدم
+    if data.hr_scope is not None:
+        update_data["hr_scope"] = data.hr_scope if data.hr_scope else None
+    if data.hr_scope_unit_ids is not None:
+        update_data["hr_scope_unit_ids"] = data.hr_scope_unit_ids
+
     # تحديث الدور إذا تم تحديده (فقط لغير المدير)
     if data.role_id and user.get("role") != UserRole.ADMIN:
         role = await db.roles.find_one({"_id": ObjectId(data.role_id)})
@@ -1816,7 +1828,9 @@ async def update_user(user_id: str, data: UserUpdate, current_user: dict = Depen
         "university_id": updated.get("university_id"),
         "faculty_id": updated.get("faculty_id"),
         "department_id": updated.get("department_id"),
-        "department_ids": updated.get("department_ids", [])
+        "department_ids": updated.get("department_ids", []),
+        "hr_scope": updated.get("hr_scope"),
+        "hr_scope_unit_ids": updated.get("hr_scope_unit_ids", []),
     }
 
 # ==================== User Management Actions ====================

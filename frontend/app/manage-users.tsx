@@ -17,7 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
-import { usersAPI, permissionsAPI, departmentsAPI, coursesAPI, rolesAPI, facultiesAPI } from '../src/services/api';
+import { usersAPI, permissionsAPI, departmentsAPI, coursesAPI, rolesAPI, facultiesAPI, hrAPI } from '../src/services/api';
 import { LoadingScreen } from '../src/components/LoadingScreen';
 import { useAuth } from '../src/contexts/AuthContext';
 import { ROLE_LABELS, ROLE_COLORS } from '../src/utils/roleLabels';
@@ -40,6 +40,8 @@ interface User {
   faculty_name?: string;
   department_name?: string;
   department_names?: string[];
+  hr_scope?: string;
+  hr_scope_unit_ids?: string[];
 }
 
 interface Permission {
@@ -72,6 +74,18 @@ export default function ManageUsersScreen() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [courses, setCourses] = useState<any[]>([]);
   const [faculties, setFaculties] = useState<any[]>([]);
+  const [orgUnits, setOrgUnits] = useState<any[]>([]);
+  // 🏢 ترتيب الوحدات الإدارية هرمياً مع حساب العمق للإزاحة البصرية (الجذر أولاً ثم فروعه)
+  const orgUnitsHierarchical = useMemo(() => {
+    const byParent: Record<string, any[]> = {};
+    orgUnits.forEach(u => { const p = u.parent_id || ''; (byParent[p] = byParent[p] || []).push(u); });
+    const out: any[] = [];
+    const walk = (parentKey: string, depth: number) => {
+      (byParent[parentKey] || []).forEach(u => { out.push({ ...u, depth }); walk(u.id, depth + 1); });
+    };
+    walk('', 0);
+    return out;
+  }, [orgUnits]);
   
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -101,7 +115,8 @@ export default function ManageUsersScreen() {
     faculty_ids: [] as string[], // 🏛️ تعدد الكليات (كليات كاملة فقط)
     department_id: '', // معرف القسم (للتوافق)
     department_ids: [] as string[], // قائمة الأقسام المتعددة
-    permission_level: '', // مستوى الصلاحية (university, faculty, department)
+    hr_scope_unit_ids: [] as string[], // 🏢 الوحدات الإدارية الجذرية المُسنَدة (نطاق مستقل عن الكلية/القسم)
+    permission_level: '', // مستوى الصلاحية (university, faculty, department, org_unit)
     permissions: [] as string[], // صلاحيات مخصصة
   });
   
@@ -123,9 +138,10 @@ export default function ManageUsersScreen() {
         coursesAPI.getAll(),
         rolesAPI.getAll(),
         facultiesAPI.getAll(),
+        hrAPI.orgUnits(),
       ]);
 
-      const [usersRes, permsRes, deptsRes, coursesRes, rolesRes, facultiesRes] = results;
+      const [usersRes, permsRes, deptsRes, coursesRes, rolesRes, facultiesRes, orgUnitsRes] = results;
 
       if (usersRes.status === 'fulfilled') {
         setUsers(usersRes.value.data);
@@ -146,6 +162,7 @@ export default function ManageUsersScreen() {
       if (deptsRes.status === 'fulfilled') setDepartments(deptsRes.value.data);
       if (coursesRes.status === 'fulfilled') setCourses(coursesRes.value.data);
       if (facultiesRes.status === 'fulfilled') setFaculties(facultiesRes.value.data || []);
+      if (orgUnitsRes.status === 'fulfilled') setOrgUnits((orgUnitsRes.value.data || []).map((u: any) => ({ ...u, id: u.id || u._id })));
     } catch (error) {
       console.error('Error fetching data:', error);
     } finally {
@@ -210,12 +227,20 @@ export default function ManageUsersScreen() {
     const roleName = selectedRole?.name?.toLowerCase() || '';
     const isAdmin = systemKey === 'admin' || systemKey === 'university_president' || roleName.includes('مدير النظام');
     
-    if (!isAdmin && !formData.faculty_id && formData.faculty_ids.length === 0) {
+    if (!isAdmin && formData.permission_level !== 'org_unit' && !formData.faculty_id && formData.faculty_ids.length === 0) {
       if (Platform.OS === 'web') {
         window.alert('يرجى اختيار الكلية للمستخدم');
       } else {
         Alert.alert('خطأ', 'يرجى اختيار الكلية للمستخدم');
       }
+      return;
+    }
+
+    // 🏢 التحقق من اختيار وحدة إدارية واحدة على الأقل عند اختيار هذا المستوى
+    if (formData.permission_level === 'org_unit' && formData.hr_scope_unit_ids.length === 0) {
+      const msg = 'يرجى اختيار وحدة إدارية واحدة على الأقل';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('خطأ', msg);
       return;
     }
     
@@ -240,6 +265,7 @@ export default function ManageUsersScreen() {
     
     setSaving(true);
     try {
+      const isOrgUnit = formData.permission_level === 'org_unit';
       await usersAPI.create({
         username: formData.username,
         password: formData.password,
@@ -247,10 +273,12 @@ export default function ManageUsersScreen() {
         role_id: formData.role_id,
         email: formData.email || undefined,
         phone: formData.phone || undefined,
-        faculty_id: formData.faculty_id || undefined,
-        faculty_ids: formData.faculty_ids.length > 0 ? formData.faculty_ids : undefined,
-        department_id: formData.faculty_ids.length > 1 ? undefined : (formData.department_ids.length > 0 ? formData.department_ids[0] : undefined),
-        department_ids: formData.faculty_ids.length > 1 ? undefined : (formData.department_ids.length > 0 ? formData.department_ids : undefined),
+        faculty_id: isOrgUnit ? undefined : (formData.faculty_id || undefined),
+        faculty_ids: isOrgUnit ? undefined : (formData.faculty_ids.length > 0 ? formData.faculty_ids : undefined),
+        department_id: isOrgUnit || formData.faculty_ids.length > 1 ? undefined : (formData.department_ids.length > 0 ? formData.department_ids[0] : undefined),
+        department_ids: isOrgUnit || formData.faculty_ids.length > 1 ? undefined : (formData.department_ids.length > 0 ? formData.department_ids : undefined),
+        hr_scope: isOrgUnit ? 'UNITS' : undefined,
+        hr_scope_unit_ids: isOrgUnit ? formData.hr_scope_unit_ids : undefined,
       });
       
       if (Platform.OS === 'web') {
@@ -272,6 +300,7 @@ export default function ManageUsersScreen() {
         faculty_ids: [],
         department_id: '',
         department_ids: [],
+        hr_scope_unit_ids: [],
         permission_level: '',
         permissions: [],
       });
@@ -310,6 +339,12 @@ export default function ManageUsersScreen() {
       else Alert.alert('خطأ', msg);
       return;
     }
+    if (formData.permission_level === 'org_unit' && formData.hr_scope_unit_ids.length === 0) {
+      const msg = 'يرجى اختيار وحدة إدارية واحدة على الأقل';
+      if (Platform.OS === 'web') window.alert(msg);
+      else Alert.alert('خطأ', msg);
+      return;
+    }
     
     setSaving(true);
     try {
@@ -318,15 +353,16 @@ export default function ManageUsersScreen() {
       // ملاحظة: Backend يعامل "" و null على أنهما مسح — لكن يتجاهل الحقل كلياً إن كان undefined
       // لذا نمرر "" صراحةً للمسح.
       const level = formData.permission_level;
+      const isOrgUnit = level === 'org_unit';
       const isMultiFaculty = formData.faculty_ids.length > 1;
-      const cleanDeptIds = !isMultiFaculty && level === 'department' && formData.department_ids.length > 0
+      const cleanDeptIds = !isOrgUnit && !isMultiFaculty && level === 'department' && formData.department_ids.length > 0
         ? formData.department_ids
         : [];
-      const cleanDeptId = !isMultiFaculty && level === 'department'
+      const cleanDeptId = !isOrgUnit && !isMultiFaculty && level === 'department'
         ? (cleanDeptIds[0] || formData.department_id || '')
         : '';
-      const cleanFacultyId = level === 'university' ? '' : (formData.faculty_id || '');
-      const cleanFacultyIds = level === 'university' ? [] : formData.faculty_ids;
+      const cleanFacultyId = isOrgUnit || level === 'university' ? '' : (formData.faculty_id || '');
+      const cleanFacultyIds = isOrgUnit || level === 'university' ? [] : formData.faculty_ids;
 
       await usersAPI.update(selectedUser.id, {
         full_name: formData.full_name,
@@ -337,6 +373,8 @@ export default function ManageUsersScreen() {
         faculty_ids: cleanFacultyIds,
         department_id: cleanDeptId,
         department_ids: cleanDeptIds,
+        hr_scope: isOrgUnit ? 'UNITS' : '',
+        hr_scope_unit_ids: isOrgUnit ? formData.hr_scope_unit_ids : [],
       });
       
       if (Platform.OS === 'web') {
@@ -467,6 +505,8 @@ export default function ManageUsersScreen() {
       permissionLevel = 'department';
     } else if (user.faculty_id) {
       permissionLevel = 'faculty';
+    } else if ((user as any).hr_scope === 'UNITS' && ((user as any).hr_scope_unit_ids || []).length > 0) {
+      permissionLevel = 'org_unit';
     } else if (user.role === 'admin' || (user as any).role_id) {
       permissionLevel = 'university';
     }
@@ -486,6 +526,7 @@ export default function ManageUsersScreen() {
         : (user.faculty_id ? [user.faculty_id] : []),
       department_id: user.department_id || '',
       department_ids: userDeptIds,
+      hr_scope_unit_ids: (user as any).hr_scope_unit_ids || [],
       permission_level: permissionLevel,
       permissions: [],
     });
@@ -873,12 +914,67 @@ export default function ManageUsersScreen() {
                               قسم محدد
                             </Text>
                           </TouchableOpacity>
+
+                          <TouchableOpacity
+                            testID="level-btn-org-unit"
+                            style={[
+                              styles.levelBtn,
+                              formData.permission_level === 'org_unit' && styles.levelBtnActive
+                            ]}
+                            onPress={() => setFormData(prev => ({
+                              ...prev,
+                              permission_level: 'org_unit',
+                              faculty_id: '', faculty_ids: [], department_id: '', department_ids: []
+                            }))}
+                          >
+                            <Ionicons name="git-network" size={20} color={formData.permission_level === 'org_unit' ? '#fff' : '#666'} />
+                            <Text style={[styles.levelText, formData.permission_level === 'org_unit' && styles.levelTextActive]}>
+                              وحدة إدارية
+                            </Text>
+                          </TouchableOpacity>
                         </View>
                       </View>
                     )}
                     
+                    {/* 🏢 اختيار الوحدات الإدارية (نطاق مستقل عن الكلية/القسم الأكاديمي — HR) */}
+                    {formData.permission_level === 'org_unit' && (
+                      <>
+                        <Text style={styles.inputLabel}>الوحدات الإدارية المسؤول عنها *</Text>
+                        <Text style={styles.hintText}>
+                          اختر الوحدة الجذرية فقط — تُضاف كل الوحدات الفرعية تحتها تلقائياً للنطاق
+                        </Text>
+                        <View style={styles.scopeSelector}>
+                          {orgUnitsHierarchical.map((unit: any) => {
+                            const isSelected = formData.hr_scope_unit_ids.includes(unit.id);
+                            return (
+                              <TouchableOpacity
+                                key={unit.id}
+                                testID={`org-unit-toggle-${unit.id}`}
+                                style={[styles.scopeItem, isSelected && styles.scopeItemActive, { marginRight: unit.depth * 14 }]}
+                                onPress={() => setFormData(prev => {
+                                  const cur = prev.hr_scope_unit_ids;
+                                  return { ...prev, hr_scope_unit_ids: cur.includes(unit.id) ? cur.filter(id => id !== unit.id) : [...cur, unit.id] };
+                                })}
+                              >
+                                <View style={styles.checkboxContainer}>
+                                  <Ionicons name={isSelected ? 'checkbox' : 'square-outline'} size={18} color={isSelected ? '#1565c0' : '#999'} />
+                                  <Text style={[styles.scopeItemText, isSelected && styles.scopeItemTextActive]}>{unit.name}</Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        {formData.hr_scope_unit_ids.length === 0 && (
+                          <Text style={styles.requiredHint}>⚠️ يجب اختيار وحدة إدارية واحدة على الأقل</Text>
+                        )}
+                        {formData.hr_scope_unit_ids.length > 0 && (
+                          <Text style={styles.selectedCountText}>تم اختيار {formData.hr_scope_unit_ids.length} وحدة (مع كل ما تحتها تلقائياً)</Text>
+                        )}
+                      </>
+                    )}
+                    
                     {/* اختيار الكلية (يدعم تعدد الكليات — كليات كاملة فقط) */}
-                    {needsFacultySelection && formData.permission_level && formData.permission_level !== 'university' && (
+                    {needsFacultySelection && formData.permission_level && formData.permission_level !== 'university' && formData.permission_level !== 'org_unit' && (
                       <>
                         <Text style={styles.inputLabel}>
                           {formData.permission_level === 'faculty' ? 'الكلية/الكليات المسؤول عنها *' : 'الكلية *'}
@@ -1143,11 +1239,63 @@ export default function ManageUsersScreen() {
                             قسم محدد
                           </Text>
                         </TouchableOpacity>
+
+                        <TouchableOpacity
+                          testID="edit-level-btn-org-unit"
+                          style={[
+                            styles.levelBtn,
+                            formData.permission_level === 'org_unit' && styles.levelBtnActive
+                          ]}
+                          onPress={() => setFormData(prev => ({
+                            ...prev,
+                            permission_level: 'org_unit',
+                            faculty_id: '', faculty_ids: [], department_id: '', department_ids: []
+                          }))}
+                        >
+                          <Ionicons name="git-network" size={20} color={formData.permission_level === 'org_unit' ? '#fff' : '#666'} />
+                          <Text style={[styles.levelText, formData.permission_level === 'org_unit' && styles.levelTextActive]}>
+                            وحدة إدارية
+                          </Text>
+                        </TouchableOpacity>
                       </View>
                     </View>
+
+                    {/* 🏢 اختيار الوحدات الإدارية (نطاق مستقل عن الكلية/القسم الأكاديمي — HR) */}
+                    {formData.permission_level === 'org_unit' && (
+                      <>
+                        <Text style={styles.inputLabel}>الوحدات الإدارية المسؤول عنها</Text>
+                        <Text style={styles.hintText}>
+                          اختر الوحدة الجذرية فقط — تُضاف كل الوحدات الفرعية تحتها تلقائياً للنطاق
+                        </Text>
+                        <View style={styles.scopeSelector}>
+                          {orgUnitsHierarchical.map((unit: any) => {
+                            const isSelected = formData.hr_scope_unit_ids.includes(unit.id);
+                            return (
+                              <TouchableOpacity
+                                key={unit.id}
+                                testID={`edit-org-unit-toggle-${unit.id}`}
+                                style={[styles.scopeItem, isSelected && styles.scopeItemActive, { marginRight: unit.depth * 14 }]}
+                                onPress={() => setFormData(prev => {
+                                  const cur = prev.hr_scope_unit_ids;
+                                  return { ...prev, hr_scope_unit_ids: cur.includes(unit.id) ? cur.filter(id => id !== unit.id) : [...cur, unit.id] };
+                                })}
+                              >
+                                <View style={styles.checkboxContainer}>
+                                  <Ionicons name={isSelected ? 'checkbox' : 'square-outline'} size={18} color={isSelected ? '#1565c0' : '#999'} />
+                                  <Text style={[styles.scopeItemText, isSelected && styles.scopeItemTextActive]}>{unit.name}</Text>
+                                </View>
+                              </TouchableOpacity>
+                            );
+                          })}
+                        </View>
+                        {formData.hr_scope_unit_ids.length > 0 && (
+                          <Text style={styles.selectedCountText}>تم اختيار {formData.hr_scope_unit_ids.length} وحدة (مع كل ما تحتها تلقائياً)</Text>
+                        )}
+                      </>
+                    )}
                     
                     {/* اختيار الكلية (يدعم تعدد الكليات — كليات كاملة فقط) */}
-                    {formData.permission_level && formData.permission_level !== 'university' && (
+                    {formData.permission_level && formData.permission_level !== 'university' && formData.permission_level !== 'org_unit' && (
                       <>
                         <Text style={styles.inputLabel}>
                           {formData.permission_level === 'faculty' ? 'الكلية/الكليات المسؤول عنها' : 'الكلية'}

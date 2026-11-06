@@ -35,6 +35,8 @@ class UserBase(BaseModel):
     department_ids: Optional[List[str]] = None
     course_ids: Optional[List[str]] = None
     permission_level: Optional[str] = None
+    hr_scope: Optional[str] = None  # ALL | MY_UNIT | UNITS — نطاق الوحدات الإدارية (مستقل عن الكلية/القسم الأكاديمي)
+    hr_scope_unit_ids: Optional[List[str]] = None  # الوحدات الإدارية الجذرية المُسنَدة (تُوسَّع تلقائياً لكل الوحدات الفرعية)
 
 class UserCreate(UserBase):
     password: str
