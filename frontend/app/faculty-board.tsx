@@ -18,6 +18,7 @@ import { Stack } from 'expo-router';
 import api from '../src/services/api';
 import { useAuth } from '../src/contexts/AuthContext';
 import { useAuthStore } from '../src/store/authStore';
+import { useRealEnforcementStore } from '../src/store/realEnforcementStore';
 import { getMyScope } from '../src/utils/scopeDefaults';
 import { downloadBlob } from '../src/utils/exportName';
 
@@ -67,7 +68,13 @@ export default function FacultyBoardScreen() {
   const { user: ctxUser } = useAuth();
   const storeUser = useAuthStore((s) => s.user);
   const user: any = ctxUser || storeUser;
-  const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head';
+  const isRealEnforced = !!user?.advanced_access_real_enforcement;
+  const { permissionKeys: advKeys, checked: advChecked, checkAccess: checkAdvAccess } = useRealEnforcementStore();
+  useEffect(() => {
+    if (user?.id && isRealEnforced && !advChecked) checkAdvAccess();
+  }, [user?.id, isRealEnforced, advChecked, checkAdvAccess]);
+  const canManage = user?.role === 'admin' || user?.role === 'dean' || user?.role === 'department_head'
+    || (isRealEnforced && advKeys.some((k: string) => k.startsWith('councils_')));
 
   const [view, setView] = useState<'candidates' | 'sessions'>('candidates');
   const [loading, setLoading] = useState(false);

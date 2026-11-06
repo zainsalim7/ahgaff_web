@@ -1,6 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { authAPI } from '../services/api';
+import { useRealEnforcementStore } from '../store/realEnforcementStore';
+import { hasAdvancedAccessForLegacy, hasAdvancedAccessForAnyLegacy } from '../constants/legacyPermissionBridge';
 
 interface User {
   id: string;
@@ -8,6 +10,7 @@ interface User {
   full_name: string;
   role: string;
   permissions: string[];
+  advanced_access_real_enforcement?: boolean;
 }
 
 interface AuthContextType {
@@ -117,10 +120,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 🌉 الجسر العام: صلاحيات مركز الصلاحيات المتقدم الفعّالة لمستخدم الإنفاذ الفعلي الحالي
+  const { permissionKeys: advPermissionKeys, checked: advChecked, checkAccess: checkAdvAccess } = useRealEnforcementStore();
+
   // تحميل البيانات المخزنة عند بدء التطبيق
   useEffect(() => {
     loadStoredAuth();
   }, []);
+
+  // تحميل الصلاحيات المتقدمة الفعّالة تلقائياً لأي مستخدم إنفاذ فعلي (مرة واحدة لكل جلسة)
+  useEffect(() => {
+    const currentUser = cachedUser || user;
+    if (currentUser?.advanced_access_real_enforcement && !advChecked) {
+      checkAdvAccess();
+    }
+  }, [user, advChecked, checkAdvAccess]);
 
   const loadStoredAuth = async () => {
     try {
@@ -242,9 +256,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return true;
     }
     
-    // تحقق من الصلاحيات المخزنة
-    return currentUser.permissions?.includes(permission) || false;
-  }, [user, isLoading]);
+    // تحقق من الصلاحيات المخزنة (النظام القديم)
+    if (currentUser.permissions?.includes(permission)) return true;
+
+    // 🌉 الجسر العام: مستخدم إنفاذ فعلي يملك صلاحية متقدمة مكافئة لهذه الصلاحية القديمة
+    if (currentUser.advanced_access_real_enforcement && hasAdvancedAccessForLegacy(permission, advPermissionKeys)) {
+      return true;
+    }
+
+    return false;
+  }, [user, isLoading, advPermissionKeys]);
 
   // التحقق من وجود أي صلاحية من القائمة
   const hasAnyPermission = useCallback((permissions: string[]): boolean => {
@@ -266,9 +287,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!currentUser) return false;
     // المدير لديه جميع الصلاحيات بلا استثناء
     if (currentUser.role === 'admin') return true;
-    
-    return permissions.some(p => currentUser.permissions?.includes(p));
-  }, [user, isLoading]);
+
+    if (permissions.some(p => currentUser.permissions?.includes(p))) return true;
+
+    // 🌉 الجسر العام لمستخدمي الإنفاذ الفعلي
+    if (currentUser.advanced_access_real_enforcement && hasAdvancedAccessForAnyLegacy(permissions, advPermissionKeys)) {
+      return true;
+    }
+
+    return false;
+  }, [user, isLoading, advPermissionKeys]);
 
   // التحقق من وجود جميع الصلاحيات في القائمة
   const hasAllPermissions = useCallback((permissions: string[]): boolean => {
@@ -290,8 +318,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!currentUser) return false;
     if (currentUser.role === 'admin') return true;
     
-    return permissions.every(p => currentUser.permissions?.includes(p));
-  }, [user, isLoading]);
+    return permissions.every(p =>
+      currentUser.permissions?.includes(p) ||
+      (currentUser.advanced_access_real_enforcement && hasAdvancedAccessForLegacy(p, advPermissionKeys))
+    );
+  }, [user, isLoading, advPermissionKeys]);
 
   // استخدم التخزين المؤقت للتحقق من admin
   const isAdmin = (cachedUser || user)?.role === 'admin';

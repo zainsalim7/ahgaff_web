@@ -94,7 +94,7 @@ export default function AlumniScreen() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkRestoring, setBulkRestoring] = useState(false);
 
-  const canView = isAdmin || hasAnyPermission([PERMISSIONS.VIEW_STUDENTS, PERMISSIONS.MANAGE_STUDENTS]);
+  const canView = isAdmin || hasAnyPermission(['view_students', PERMISSIONS.MANAGE_STUDENTS]);
   const canManage = isAdmin || hasAnyPermission([PERMISSIONS.MANAGE_STUDENTS]);
 
   useEffect(() => {

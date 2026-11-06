@@ -27,7 +27,8 @@ interface MenuItem {
   adminOnly?: boolean;
   forAll?: boolean;
   roles?: string[]; // يظهر لهذه الأدوار فقط (مثل مراجعي تبرير الغياب)
-  advPermissionKeys?: string[]; // 🆕 للمستخدمين الجدد ذوي الإنفاذ الفعلي: مفاتيح صلاحيات مركز الصلاحيات المتقدم المقابلة
+  advPermissionKeys?: string[]; // 🆕 للمستخدمين الجدد ذوي الإنفاذ الفعلي: مفاتيح صلاحيات مركز الصلاحيات المتقدم المقابلة (مطابقة دقيقة)
+  advGroups?: string[]; // 🆕 بديل عام: يكفي أن يملك المستخدم أي مفتاح صلاحية متقدمة من إحدى هذه المجموعات (لعناصر مبنية على roles فقط بلا صلاحية قديمة مكافئة)
   corrMembershipOnly?: boolean; // 🆕 لا يظهر إلا لمن لديه عضوية/دور فعلي في نظام المراسلات (أو أدمن)
   category?: 'academic' | 'administrative'; // 🆕 تصنيف للعرض فقط (لا يؤثر إطلاقاً على منطق الصلاحيات أعلاه)
 }
@@ -187,7 +188,7 @@ const MENU_ITEMS: MenuItem[] = [
   { id: 'settings-divider', label: 'الإعدادات', icon: 'settings', path: '', category: 'administrative', permissions: [PERMISSIONS.MANAGE_SETTINGS] },
   { id: 'university-calendar', label: 'التقويم الجامعي والعطل', icon: 'calendar', path: '/university-calendar', category: 'academic', permissions: ['manage_calendar'] },
   { id: 'prep-leave-periods', label: 'إجازة التحضير', icon: 'book', path: '/prep-leave-periods', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
-  { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', path: '/faculty-board', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'] },
+  { id: 'faculty-board', label: 'مجلس الكلية', icon: 'shield-checkmark', path: '/faculty-board', category: 'academic', permissions: [], roles: ['admin', 'dean', 'department_head'], advGroups: ['councils'] },
   { id: 'assistant-settings', label: 'مرشد الأحقاف (الذكاء الاصطناعي) 🤖', icon: 'sparkles', path: '/assistant-settings', category: 'administrative', permissions: [], roles: ['admin'] },
   { id: 'general-settings', label: 'الإعدادات العامة', icon: 'options', path: '/general-settings', category: 'administrative', permissions: ['manage_settings', 'manage_semesters', 'manage_academic_years', 'manage_institution'] },
   { id: 'app-versions', label: 'إعدادات تحديث التطبيقات', icon: 'phone-portrait', path: '/app-versions', category: 'administrative', permissions: [], adminOnly: true },
@@ -238,13 +239,21 @@ export const SideMenu: React.FC<SideMenuProps> = ({ visible, onClose }) => {
     if ((item as any).advancedAccessOnly) return hasAdvAccess;
     if ((item as any).corrMembershipOnly) return isAdmin || !!hasCorrAccess;
     if (item.forAll) return true;
-    if (item.roles) return item.roles.includes(userRole);
-    if (item.adminOnly) return isAdmin;
+    if (isAdmin) return true;
     // العناصر الخاصة بالمعلم فقط
     if ((item as any).teacherOnly && userRole !== 'teacher') return false;
-    if (isAdmin) return true;
-    // 🆕 مستخدم جديد ذو إنفاذ فعلي: يظهر العنصر إن طابقت إحدى صلاحياته المتقدمة الفعّالة
-    if (isRealEnforced && item.advPermissionKeys?.some(k => realEnforcedKeys.includes(k))) return true;
+
+    // 🆕 مستخدم إنفاذ فعلي جديد: فحص عام (الجسر داخل hasAnyPermission يتحقق من الصلاحيات المتقدمة تلقائياً)
+    // بدل الاعتماد حصرياً على roles/adminOnly القديمة التي لا تعرف شيئاً عن هذا المستخدم
+    if (isRealEnforced) {
+      if (item.advPermissionKeys?.some(k => realEnforcedKeys.includes(k))) return true;
+      if (item.advGroups?.some(g => realEnforcedKeys.some(k => k.startsWith(g + '_')))) return true;
+      if (item.permissions.length > 0 && hasAnyPermission(item.permissions)) return true;
+      return false;
+    }
+
+    if (item.roles) return item.roles.includes(userRole);
+    if (item.adminOnly) return isAdmin;
     if (item.permissions.length === 0) return false;
     return hasAnyPermission(item.permissions);
   });
