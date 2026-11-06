@@ -139,8 +139,8 @@ const styles = StyleSheet.create({
   statusBadgeText: { color: '#fff', fontSize: 10 },
   roleActions: { flexDirection: 'row', gap: 10 },
   // 🆕 نافذة مُمركزة احترافية بعرض محدود (بدل امتداد كامل الشاشة) + خلفية معتمة
-  modalBackdrop: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(15, 23, 42, 0.6)', padding: 24 },
-  modalCard: { width: '100%', maxWidth: 800, height: '88%', backgroundColor: '#fff', borderRadius: 16, overflow: 'hidden', boxShadow: '0px 8px 24px rgba(0,0,0,0.15)' } as any,
+  modalBackdrop: { flex: 1, backgroundColor: '#fff' },
+  modalCard: { width: '100%', height: '100%', backgroundColor: '#fff', borderRadius: 0, overflow: 'hidden' } as any,
   modalHeader: { flexDirection: 'row-reverse', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 24, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: COLORS.border },
   modalTitle: { fontSize: 16, fontWeight: 'bold', color: COLORS.text },
   modalBody: { flex: 1, padding: 20 },

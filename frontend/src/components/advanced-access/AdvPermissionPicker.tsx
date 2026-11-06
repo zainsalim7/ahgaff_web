@@ -9,7 +9,6 @@ interface Props {
   onChange: (keys: string[]) => void;
 }
 
-const QUICK_OPS = ['view_list', 'view_detail', 'add', 'edit', 'delete', 'export', 'approve', 'publish'];
 // 🆕 ترتيب الأهمية داخل كل مجموعة: العرض أولاً (الأكثر أماناً) ثم الإضافة/التعديل ثم الأشد خطورة أخيراً
 const OP_PRIORITY = ['view_list', 'view_detail', 'add', 'edit', 'clone', 'approve', 'bulk', 'generate', 'import', 'export', 'publish', 'delete'];
 const opRank = (op: string) => { const i = OP_PRIORITY.indexOf(op); return i === -1 ? OP_PRIORITY.length : i; };
@@ -91,12 +90,6 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
     onChange(allSelected ? selected.filter(k => !keys.includes(k)) : Array.from(new Set([...selected, ...keys])));
   };
 
-  const selectByOp = (op: string) => {
-    const keys = permissions.filter(p => p.operation_type === op).map(p => p.key);
-    const allSelected = keys.every(k => selectedSet.has(k));
-    onChange(allSelected ? selected.filter(k => !keys.includes(k)) : Array.from(new Set([...selected, ...keys])));
-  };
-
   if (loading) return <ActivityIndicator color={COLORS.primary} style={{ marginVertical: 20 }} />;
 
   return (
@@ -105,13 +98,6 @@ export const AdvPermissionPicker: React.FC<Props> = ({ selected, onChange }) => 
         <TextInput style={styles.search} placeholder="بحث سريع عن صلاحية..." value={search} onChangeText={setSearch} textAlign="right" testID="adv-picker-search" />
         <View style={styles.counterBadge}>
           <Text style={styles.counterText}>المختار: {selected.length} / {permissions.length}</Text>
-        </View>
-        <View style={styles.quickRow}>
-          {QUICK_OPS.map(op => (
-            <TouchableOpacity key={op} style={styles.quickChip} onPress={() => selectByOp(op)} testID={`adv-picker-quick-${op}`}>
-              <Text style={styles.quickChipText}>{OP_TYPE_LABELS[op]} فقط</Text>
-            </TouchableOpacity>
-          ))}
         </View>
       </View>
       <ScrollView style={{ flex: 1 }} nestedScrollEnabled>
@@ -164,9 +150,6 @@ const styles = StyleSheet.create({
   search: { flexGrow: 1, flexBasis: 200, height: 40, backgroundColor: '#fff', borderRadius: 8, borderWidth: 1, borderColor: COLORS.border, paddingHorizontal: 12, fontSize: 13 },
   counterBadge: { flexDirection: 'row-reverse', alignItems: 'center', backgroundColor: '#fff', paddingHorizontal: 12, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: COLORS.border },
   counterText: { fontSize: 12.5, fontWeight: '700', color: COLORS.primary },
-  quickRow: { flexDirection: 'row-reverse', flexWrap: 'wrap', gap: 8, flexShrink: 1 },
-  quickChip: { backgroundColor: '#fff', borderRadius: 9999, paddingHorizontal: 12, paddingVertical: 6, borderWidth: 1, borderColor: COLORS.border },
-  quickChipText: { fontSize: 11.5, fontWeight: '500', color: COLORS.textMuted },
   groupBox: { backgroundColor: '#fff', borderRadius: 8, marginBottom: 6, borderWidth: 1, borderColor: COLORS.border },
   groupHeader: { flexDirection: 'row-reverse', alignItems: 'center', padding: 10, gap: 8 },
   groupName: { flex: 1, fontSize: 13, fontWeight: '600', color: COLORS.text, textAlign: 'right' },
