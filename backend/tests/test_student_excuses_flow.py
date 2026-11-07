@@ -1,4 +1,4 @@
-"""📄 اختبار مسار أعذار غياب الطلاب (المرحلة 2) — يزرع محاضرات مؤقتة وينظفها"""
+"""📄 اختبار مسار أعذار غياب الطلاب (المرحلة 2 + مسجل الكلية أولاً) — يزرع محاضرات مؤقتة وينظفها"""
 import os, io, asyncio, requests
 from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
@@ -68,17 +68,18 @@ async def main():
         if other:
             a4 = await db.attendance.find_one({"lecture_id": str(l3), "student_id": other["student_id"]}); ok(a4["status"] == "present", "late → present")
 
-        # عذر غير مرضي 2 أيام → العميد؛ 3 أيام → المجلس (يتطلب رقم جلسة)
+        # الآن تصل جميع الطلبات إلى مسار التسجيل أولاً بصرف النظر عن النوع/المدة؛ التحويل للعميد/المجلس يدوي عبر /forward
         await db.student_excuses.update_many({"_id": {"$in": [ObjectId(i) for i in exc_ids]}}, {"$set": {"status": "cancelled"}})
         r = requests.post(f"{B}/api/student-excuses", headers=A, data={"from_date": d1, "to_date": d2, "excuse_type": "family", "description": "ظرف", "student_db_id": sid}, files=[("files", ("r.png", io.BytesIO(PNG), "image/png"))])
-        ok(r.ok and r.json()["request"]["route"] == "dean", "الأدمن نيابةً: غير مرضي يومان → العميد"); exc_ids.append(r.json()["request"]["id"])
+        ok(r.ok and r.json()["request"]["route"] == "registration", "الأدمن نيابةً: غير مرضي يومان → يصل أيضاً للتسجيل أولاً"); exc_ids.append(r.json()["request"]["id"])
         await db.student_excuses.update_one({"_id": ObjectId(exc_ids[-1])}, {"$set": {"status": "cancelled"}})
         r = requests.post(f"{B}/api/student-excuses", headers=A, data={"from_date": d1, "to_date": d3, "excuse_type": "official", "description": "مهمة", "student_db_id": sid}, files=[("files", ("r.png", io.BytesIO(PNG), "image/png"))])
-        e3 = r.json()["request"]; exc_ids.append(e3["id"]); ok(e3["route"] == "board", "3 أيام غير مرضي → مجلس الكلية")
+        e3 = r.json()["request"]; exc_ids.append(e3["id"]); ok(e3["route"] == "registration", "3 أيام غير مرضي → يصل أيضاً للتسجيل أولاً")
+        r = requests.post(f"{B}/api/student-excuses/{e3['id']}/forward", headers=A, json={"to": "board"}); ok(r.ok, f"المسجل يحوّل الطلب إلى مجلس الكلية: {r.text[:120]}")
         r = requests.post(f"{B}/api/student-excuses/{e3['id']}/decide", headers=A, json={"decision": "rejected", "note": "غير مقنع"}); ok(r.status_code == 400 and "جلسة" in r.text, "مجلس بلا رقم جلسة → 400")
         r = requests.post(f"{B}/api/student-excuses/{e3['id']}/decide", headers=A, json={"decision": "rejected", "note": "غير مقنع", "board_session_no": "7", "board_session_date": d3}); ok(r.ok, "رفض بقرار مجلس مع رقم جلسة")
         r = requests.post(f"{B}/api/student-excuses", headers=S, data={"from_date": d3, "to_date": d3, "excuse_type": "exam", "description": "اختبار"}, files=[("files", ("r.png", io.BytesIO(PNG), "image/png"))])
-        ok(r.ok and r.json()["request"]["route"] == "board", "عذر عن اختبار يوم واحد → المجلس"); exc_ids.append(r.json()["request"]["id"])
+        ok(r.ok and r.json()["request"]["route"] == "registration", "عذر عن اختبار يصل أيضاً للتسجيل أولاً"); exc_ids.append(r.json()["request"]["id"])
         r = requests.post(f"{B}/api/student-excuses/{exc_ids[-1]}/cancel", headers=S); ok(r.ok, "الطالب يلغي طلبه المعلّق")
         ok(requests.get(f"{B}/api/student-excuses/students/search?q=1001", headers=H).status_code == 200, "بحث الطلاب لرئيس القسم (نطاقه)")
         print("ALL PASSED")
@@ -86,7 +87,7 @@ async def main():
         await db.lectures.delete_many({"_id": {"$in": lec_ids}})
         await db.attendance.delete_many({"lecture_id": {"$in": [str(i) for i in lec_ids]}})
         await db.student_excuses.delete_many({"_id": {"$in": [ObjectId(i) for i in exc_ids]}})
-        await db.notifications.delete_many({"type": "student_excuse"})
+        await db.notifications.delete_many({"type": "student_excuse", "data.id": {"$in": exc_ids}})
         print("cleaned")
 
 asyncio.run(main())

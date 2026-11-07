@@ -154,7 +154,8 @@ async def create(data: ExcuseIn, current_user: dict = Depends(get_current_user))
     dept = await db.departments.find_one({"_id": ObjectId(st["department_id"])}) if ObjectId.is_valid(st.get("department_id") or "") else None
     fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])}, {"name": 1}) if dept and ObjectId.is_valid(dept.get("faculty_id") or "") else None
     now = _now()
-    seq = await db.student_excuses.count_documents({}) + 1
+    counter = await db.counters.find_one_and_update({"_id": f"student_excuse_{now.year}"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    seq = counter["seq"]
     route = "registration"
     course_ids = {i["course_id"] for i in items}
     doc = {

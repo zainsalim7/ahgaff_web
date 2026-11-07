@@ -39,7 +39,7 @@ export const ExcuseDetail: React.FC<{ sel: any; token: string; onDecided: () => 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, fontSize: 13 }}>
         <div><label style={lbl}>الحالة</label><Badge text={STATUS_LABEL[sel.status]} color={STATUS_COLOR[sel.status]} testID="se-detail-status" /></div>
         <div><label style={lbl}>المسار</label><b data-testid="se-detail-route">{ROUTE_LABEL[sel.route]}</b></div>
-        {sel.forwarded_to && <div><label style={lbl}>تحويل مسجل الكلية</label><b data-testid="se-detail-forwarded">↳ {sel.forwarded_to_label} ({sel.forwarded_by_name}، {fmt(sel.forwarded_at)})</b></div>}
+        {sel.forwarded_to && <div><label style={lbl}>تحويل مسجل الكلية</label><b data-testid="se-detail-forwarded">محوَّل إلى {sel.forwarded_to_label} ({sel.forwarded_by_name}، {fmt(sel.forwarded_at)})</b></div>}
         <div><label style={lbl}>نوع العذر</label>{sel.excuse_type_label}</div>
         <div><label style={lbl}>الطالب</label>{sel.student?.full_name} · {sel.student?.student_id}</div>
         <div><label style={lbl}>القسم / المستوى</label>{sel.department_name || '—'} · م{sel.student?.level}/{sel.student?.section}</div>

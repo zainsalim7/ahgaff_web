@@ -130,3 +130,7 @@
 
 ## تبادل المحاضرات (2026-10-14)
 - اختبار E2E: `python backend/tests/test_lecture_swaps_flow.py` — يستخدم teacher180156/teacher123 (طالب التبادل)، 9999/teacher123 (الزميل)، Saeed/test1234 (رئيس القسم المعتمد). يزرع محاضرتين مؤقتتين ويحذفهما.
+
+## test_registrar (مسجل كلية تجريبي)
+- Username: test_registrar / Password: test1234 (أُعيد تعيينها 7 نوفمبر 2026 لاختبار مسار «مسجل الكلية أولاً» لأعذار الطلاب)
+- role: registrar — faculty_id: 698e4f9297fef774e66e93a4 (كلية الشريعة والقانون، نفس كلية العميد Salim)

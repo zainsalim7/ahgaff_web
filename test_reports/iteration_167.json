@@ -1,0 +1,41 @@
+{
+  "summary": "Tested the registrar-first excuse workflow end to end: backend pytest (21 tests) plus Playwright UI runs as registrar, dean and dept head. The new behaviour works. Every excuse type (exam/family/official/sick, from the web or the mobile /api/absence-excuses endpoint) lands at route=registration. The registrar gets both the decide block and the forward block (se-decide + se-forward). He can decide an exam-type excuse himself. Forward to board or dean works (invalid target returns 400, a second forward returns 403). After forwarding, the row stays in the registrar's list with the se-row-forwarded badge and the se-detail-forwarded field. The dean can decide only after forwarding: on a registration-route item his decide and forward calls return 403, and approving a board item without a session number/date returns 400. After the dean approved, the registrar saw the item as معتمد with the board session number. The mobile /my response has a 'forwarded' boolean that turns true after forwarding. Faculty/department scoping is fixed for the default list, get, decide, forward and student search: Saeed (dept head) now sees only his own department's items, read-only. ONE SECURITY BUG: the optional faculty_id / department_id query params on GET /api/student-excuses overwrite the user's scope filter instead of being combined with it, so any registrar, dean or dept head can list other faculties' and departments' excuses. Backend 19/21 pass; the 2 failures are this bug.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /api/student-excuses?faculty_id=<other>&department_id=<other>", "issue": "Scope bypass. In list_excuses(), lines 447-450 run `if faculty_id: f['faculty_id'] = faculty_id` and `if department_id: f['department_id'] = department_id` AFTER the role-scope filter, so they replace it. Reproduced: test_registrar (sharia faculty) with ?faculty_id=698e4fb497fef774e66e93a6 got a girls-faculty excuse; Saeed (dept head) with ?department_id=698e500997fef774e66e93a8 got the sharia department's excuses. The pending_by_route counts leak the same way because they reuse the same filter. Fix: for non-admin users, keep the scope and only narrow it, e.g. if faculty_id is not in the user's faculty ids use an empty match (or return 403).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "POST /api/student-excuses and POST /api/absence-excuses", "issue": "ref_no is built as count_documents({})+1. It produces duplicate ref numbers once any document is deleted, and when two requests are created at the same time. This already happened in this session: SE-2026-0002 and SE-2026-0003 were reused. Use an atomic counter collection instead."},
+      {"endpoint": "_in_scope / list_excuses (non-dept-head roles)", "issue": "A dean/registrar with no faculty_id (`not fids`) sees and can act on every faculty. This may be intended for university-wide registration managers; confirm it is."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/student-excuses header filter tabs", "issues": ["The active filter tab uses background #0f2440, the same colour as the page header bar. The selected tab (e.g. 'الكل') therefore looks like plain text with no button, so the active state is not visible."]},
+      {"screen": "ExcuseSubmitForm / ExcuseDetail board session", "issues": ["Dates (se-form-from, se-form-to, se-board-date) use the browser's native input type=date (mm/dd/yyyy, in English) instead of an RTL/Arabic date picker component."]},
+      {"screen": "student-excuses.tsx subtitle fallback", "issues": ["The fallback subtitle (shown only when meta.rule is missing) still describes the old routing ('تُوجَّه حسب النوع والمدة'). The header comment on line 1 of student_excuses.py is also stale."]},
+      {"screen": "ExcuseDetail se-detail-forwarded", "issues": ["In RTL the '↳' glyph renders mirrored/odd at the end of the line; consider a plain Arabic label or an RTL-friendly arrow."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_excuse_registrar_forwarding.py", "/app/test_reports/pytest/pytest_results_167.xml"],
+  "action_items": [
+    "HIGH: Fix the scope bypass in list_excuses(): faculty_id/department_id query params must narrow, not replace, the non-admin scope filter (faculty_id at line 447, department_id at line 450). Also apply this to the pending_by_route aggregation.",
+    "Update or retire the legacy /app/backend/tests/test_student_excuses_flow.py. It still asserts the old auto-routing (family 2 days -> dean, official -> board, exam -> board), so it now fails. Its cleanup also runs an UNFILTERED `db.notifications.delete_many({'type': 'student_excuse'})`, which wipes real users' excuse notifications. Change it to delete only the notification ids it created.",
+    "Replace count-based ref_no generation with an atomic counter.",
+    "Make the active filter tab distinguishable from the header background; update the stale fallback subtitle."
+  ],
+  "critical_code_review_comments": [
+    "student_excuses.py list_excuses(): the user-supplied faculty_id/department_id params override the role scope (security bug, see above).",
+    "_reviewer_ids() also notifies users with no faculty (faculty_id None/'' and no faculty_ids) for every faculty. That is fine for a central registration manager, but registrars with no faculty will get notified for every faculty's requests.",
+    "forward_excuse() takes the raw request.json() with no Pydantic model. The `to` value is validated manually, but a Pydantic body would be more consistent.",
+    "A forwarded request that the dean puts into needs_info returns to pending on the same route (dean/board) when the student adds attachments, so it does not go back to the registrar. This seems correct, but confirm it is intended."
+  ],
+  "updated_files": ["/app/backend/tests/test_excuse_registrar_forwarding.py"],
+  "success_rate": {"backend": "90% (19/21; the 2 failures are the same scope-bypass bug)", "frontend": "100% of tested flows (registrar submit+forward, badge/detail, dean board approve, registrar sees outcome, dept-head scoped read-only view, submit hint text)"},
+  "seed_data_creation": "Created temporary TEST_ excuses, plus one temporary lecture and attendance record for student 1001 for the mobile test. All were deleted by id afterwards; only the pre-existing SE-2026-0001 (6aef573781ca6d060ce1d1b6) remains. Side effects: (1) test notifications were sent to students 1001-1004/12345 and to the reviewers. (2) I ran the legacy tests/test_student_excuses_flow.py once to check for regressions. It failed on the old routing assertions, left one excuse (deleted by me afterwards), and its built-in cleanup ran the unfiltered delete_many on notifications with type='student_excuse'. Any existing student_excuse notifications in the DB were therefore removed. This is a data defect caused by that legacy script.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `cd /app/backend && python -m pytest tests/test_excuse_registrar_forwarding.py -v`. It is self-cleaning (deletes created excuses by id) and uses dates in 2031 to avoid overlaps. Its 2 scope-bypass tests should pass once list_excuses is fixed. Creds: test_registrar/test1234 and Salim/test1234 (faculty 698e4f9297fef774e66e93a4); Saeed/test1234 (dept head, dept 698e501d97fef774e66e93a9, girls faculty 698e4fb497fef774e66e93a6); student 1001/test1234. Web login: fill the two inputs by placeholder, then click the text 'تسجيل الدخول' (Enter does not submit). Do NOT run tests/test_student_excuses_flow.py until it is fixed: its expectations are obsolete and it wipes notifications."
+}

@@ -26,9 +26,9 @@ export default function StudentExcusesPage() {
   const totalPending = useMemo(() => Object.values(pendingByRoute).reduce((a, b) => a + b, 0), [pendingByRoute]);
 
   return (
-    <CorrPage title="📄 أعذار غياب الطلاب" subtitle={meta?.rule || 'طلبات الأعذار بوثيقة — تُوجَّه حسب النوع والمدة إلى التسجيل أو العميد أو مجلس الكلية. الاعتماد يحوّل الغياب ضمن الفترة إلى «بعذر».'} testID="se-page" hideNav
+    <CorrPage title="📄 أعذار غياب الطلاب" subtitle={meta?.rule || 'تصل جميع الطلبات أولاً إلى مسجل الكلية، وهو من يقرر الاعتماد مباشرة أو التحويل إلى عميد الكلية أو مجلس الكلية. الاعتماد يحوّل الغياب ضمن الفترة إلى «بعذر».'} testID="se-page" hideNav
       actions={<div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-        {STATUS_TABS.map(([k, l]) => <button key={k} onClick={() => setStatus(k)} style={btn(status === k ? '#0f2440' : '#f1f5f9', { color: status === k ? '#fff' : '#0f2440' })} data-testid={`se-filter-${k || 'all'}`}>{l}{k === 'pending' && totalPending ? ` (${totalPending})` : ''}</button>)}
+        {STATUS_TABS.map(([k, l]) => <button key={k} onClick={() => setStatus(k)} style={btn(status === k ? '#2563eb' : '#f1f5f9', { color: status === k ? '#fff' : '#0f2440' })} data-testid={`se-filter-${k || 'all'}`}>{l}{k === 'pending' && totalPending ? ` (${totalPending})` : ''}</button>)}
         <button onClick={() => setShowForm(true)} style={btn('#16a34a')} data-testid="se-new-btn">+ تقديم عذر نيابةً عن طالب</button>
       </div>}>
       {!!err && !sel && <div style={{ ...card, color: '#b91c1c', fontWeight: 700 }} data-testid="se-error">{err}</div>}
@@ -54,7 +54,7 @@ export default function StudentExcusesPage() {
                 <td style={td}>{it.student?.full_name}<div style={{ fontSize: 10.5, color: '#64748b' }}>{it.student?.student_id} · م{it.student?.level}/{it.student?.section}</div></td>
                 <td style={td}>{it.department_name || '—'}</td><td style={td}>{it.excuse_type_label}</td>
                 <td style={td}>{it.from_date} → {it.to_date}<div style={{ fontSize: 10.5, color: '#64748b' }}>{(it.items || []).length ? `📱 ${it.items.length} غياب من التطبيق` : `${it.days} يوم`}{it.course_name ? ` · ${it.course_name}` : ''}</div></td>
-                <td style={td}>{it.route_label}{it.forwarded_to && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }} data-testid={`se-row-forwarded-${it.id}`}>↳ محوَّل من المسجل</div>}</td><td style={td}>{(it.attachments || []).length}</td><td style={td}>{fmt(it.created_at)}</td>
+                <td style={td}>{it.route_label}{it.forwarded_to && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }} data-testid={`se-row-forwarded-${it.id}`}>(محوَّل من المسجل)</div>}</td><td style={td}>{(it.attachments || []).length}</td><td style={td}>{fmt(it.created_at)}</td>
                 <td style={td}><Badge text={STATUS_LABEL[it.status]} color={STATUS_COLOR[it.status]} /></td>
                 <td style={{ ...td, whiteSpace: 'nowrap' }}><button onClick={() => open(it)} style={btn(it.can_decide ? '#0f2440' : '#64748b', { padding: '5px 10px', fontSize: 12 })} data-testid={`se-open-${it.id}`}>{it.can_decide ? 'مراجعة' : 'التفاصيل'}</button></td>
               </tr>

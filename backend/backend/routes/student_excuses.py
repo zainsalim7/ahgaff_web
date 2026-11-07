@@ -1,4 +1,4 @@
-"""📄 أعذار غياب الطلاب — طلب بوثيقة يُوجَّه حسب النوع والمدة: التسجيل (مرضي) / العميد (غير مرضي ≤ يومين) / مجلس الكلية (أطول أو عن اختبار)"""
+"""📄 أعذار غياب الطلاب — تصل جميع الطلبات أولاً إلى مسجل الكلية (مسؤول التسجيل)، وهو من يقرر الاعتماد مباشرة أو التحويل إلى عميد الكلية أو مجلس الكلية"""
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional
@@ -271,7 +271,8 @@ async def create_excuse(
     dept = await db.departments.find_one({"_id": ObjectId(st["department_id"])}) if st.get("department_id") and ObjectId.is_valid(st["department_id"]) else None
     fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])}, {"name": 1}) if dept and dept.get("faculty_id") and ObjectId.is_valid(dept["faculty_id"]) else None
     now = _now()
-    seq = await db.student_excuses.count_documents({}) + 1
+    counter = await db.counters.find_one_and_update({"_id": f"student_excuse_{now.year}"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    seq = counter["seq"]
     route = "registration"
     doc = {
         "ref_no": f"SE-{now.year}-{seq:04d}", "student_db_id": sid, "student_no": st.get("student_id"), "student_name": st.get("full_name"),
@@ -438,16 +439,20 @@ async def list_excuses(status: Optional[str] = None, route: Optional[str] = None
         f["status"] = {"$in": status.split(",")}
     if route:
         f["route"] = route
+    scope_fac_ids: Optional[List[str]] = None
+    scope_dept_ids: Optional[List[str]] = None
     if current_user["role"] == UserRole.DEPARTMENT_HEAD:
-        f["department_id"] = {"$in": _user_department_ids(current_user)}
+        scope_dept_ids = _user_department_ids(current_user)
+        f["department_id"] = {"$in": scope_dept_ids}
     elif current_user["role"] != UserRole.ADMIN:
         fids = _user_faculty_ids(current_user)
         if fids:
+            scope_fac_ids = fids
             f["faculty_id"] = {"$in": fids}
     if faculty_id:
-        f["faculty_id"] = faculty_id
+        f["faculty_id"] = faculty_id if scope_fac_ids is None or faculty_id in scope_fac_ids else "__none__"
     if department_id:
-        f["department_id"] = department_id
+        f["department_id"] = department_id if scope_dept_ids is None or department_id in scope_dept_ids else "__none__"
     if q:
         f["$or"] = [{"student_name": {"$regex": q, "$options": "i"}}, {"student_no": {"$regex": q}}, {"ref_no": {"$regex": q, "$options": "i"}}]
     docs = await db.student_excuses.find(f).sort("created_at", -1).to_list(1000)
