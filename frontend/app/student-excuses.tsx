@@ -10,6 +10,7 @@ const STATUS_TABS = [['pending', 'قيد المراجعة'], ['needs_info', 'م�
 export default function StudentExcusesPage() {
   const [items, setItems] = useState<any[]>([]); const [pendingByRoute, setPendingByRoute] = useState<Record<string, number>>({});
   const [status, setStatus] = useState('pending'); const [route, setRoute] = useState(''); const [q, setQ] = useState('');
+  const [facFilter, setFacFilter] = useState(''); const [deptFilter, setDeptFilter] = useState(''); const [levelFilter, setLevelFilter] = useState(''); const [sectionFilter, setSectionFilter] = useState('');
   const [sel, setSel] = useState<any>(null); const [showForm, setShowForm] = useState(false);
   const [err, setErr] = useState(''); const [loading, setLoading] = useState(true); const [token, setToken] = useState(''); const [meta, setMeta] = useState<any>(null);
 
@@ -24,6 +25,17 @@ export default function StudentExcusesPage() {
 
   const open = async (it: any) => { setErr(''); try { const r = await api.get(`/student-excuses/${it.id}`); setSel(r.data); } catch (e) { setErr(errOf(e, 'تعذر فتح الطلب')); } };
   const totalPending = useMemo(() => Object.values(pendingByRoute).reduce((a, b) => a + b, 0), [pendingByRoute]);
+
+  // قوائم الفلاتر مشتقة من الطلبات الظاهرة فعلاً للمستخدم (محدودة بنطاقه من الخادم أصلاً — لا تسريب نطاق)
+  const faculties = useMemo(() => Array.from(new Map(items.filter((i) => i.faculty_id).map((i) => [i.faculty_id, i.faculty_name || i.faculty_id])).entries()), [items]);
+  const depts = useMemo(() => Array.from(new Map(items.filter((i) => i.department_id && (!facFilter || i.faculty_id === facFilter)).map((i) => [i.department_id, i.department_name || i.department_id])).entries()), [items, facFilter]);
+  const levels = useMemo(() => Array.from(new Set(items.map((i) => i.student?.level).filter((v) => v !== undefined && v !== null && v !== ''))).sort((a, b) => a - b), [items]);
+  const sections = useMemo(() => Array.from(new Set(items.map((i) => i.student?.section).filter((v) => v))), [items]);
+  const shown = items.filter((i) =>
+    (!facFilter || i.faculty_id === facFilter) &&
+    (!deptFilter || i.department_id === deptFilter) &&
+    (!levelFilter || String(i.student?.level) === levelFilter) &&
+    (!sectionFilter || i.student?.section === sectionFilter));
 
   return (
     <CorrPage title="📄 أعذار غياب الطلاب" subtitle={meta?.rule || 'تصل جميع الطلبات أولاً إلى مسجل الكلية، وهو من يقرر الاعتماد مباشرة أو التحويل إلى عميد الكلية أو مجلس الكلية. الاعتماد يحوّل الغياب ضمن الفترة إلى «بعذر».'} testID="se-page" hideNav
@@ -40,19 +52,23 @@ export default function StudentExcusesPage() {
         ))}
       </div>
       <div style={card} data-testid="se-list">
-        <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <input style={{ ...inp, width: 260 }} placeholder="بحث بالاسم / رقم القيد / رقم الطلب" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && load()} data-testid="se-search" />
+          <select style={{ ...inp, width: 'auto', minWidth: 160 }} value={facFilter} onChange={(e) => { setFacFilter(e.target.value); setDeptFilter(''); }} data-testid="se-faculty-filter"><option value="">كل الكليات</option>{faculties.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+          <select style={{ ...inp, width: 'auto', minWidth: 160 }} value={deptFilter} onChange={(e) => setDeptFilter(e.target.value)} data-testid="se-dept-filter"><option value="">كل الأقسام</option>{depts.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
+          <select style={{ ...inp, width: 'auto', minWidth: 110 }} value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)} data-testid="se-level-filter"><option value="">كل المستويات</option>{levels.map((lv) => <option key={lv} value={lv}>مستوى {lv}</option>)}</select>
+          <select style={{ ...inp, width: 'auto', minWidth: 110 }} value={sectionFilter} onChange={(e) => setSectionFilter(e.target.value)} data-testid="se-section-filter"><option value="">كل الشعب</option>{sections.map((sc) => <option key={sc} value={sc}>شعبة {sc}</option>)}</select>
           <button onClick={load} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 10px', fontSize: 12 })} data-testid="se-refresh">↻ تحديث</button>
-          <span style={{ fontSize: 12, color: '#64748b' }} data-testid="se-count">{items.length} طلب</span>
+          <span style={{ fontSize: 12, color: '#64748b' }} data-testid="se-count">{shown.length} طلب</span>
         </div>
-        {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>جاري التحميل…</div> : items.length === 0 ? <Empty text="لا توجد طلبات في هذا التصنيف" /> : (
+        {loading ? <div style={{ color: '#94a3b8', fontSize: 13 }}>جاري التحميل…</div> : shown.length === 0 ? <Empty text="لا توجد طلبات في هذا التصنيف" /> : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead><tr>{excuseTableHeaders.map((h, i) => <th key={i} style={th}>{h}</th>)}</tr></thead>
-            <tbody>{items.map((it) => (
+            <tbody>{shown.map((it) => (
               <tr key={it.id} data-testid={`se-row-${it.id}`}>
                 <td style={{ ...td, fontWeight: 800 }}>{it.ref_no}</td>
                 <td style={td}>{it.student?.full_name}<div style={{ fontSize: 10.5, color: '#64748b' }}>{it.student?.student_id} · م{it.student?.level}/{it.student?.section}</div></td>
-                <td style={td}>{it.department_name || '—'}</td><td style={td}>{it.excuse_type_label}</td>
+                <td style={td}>{it.department_name || '—'}<div style={{ fontSize: 10.5, color: '#64748b' }}>{it.faculty_name || ''}</div></td><td style={td}>{it.excuse_type_label}</td>
                 <td style={td}>{it.from_date} → {it.to_date}<div style={{ fontSize: 10.5, color: '#64748b' }}>{(it.items || []).length ? `📱 ${it.items.length} غياب من التطبيق` : `${it.days} يوم`}{it.course_name ? ` · ${it.course_name}` : ''}</div></td>
                 <td style={td}>{it.route_label}{it.forwarded_to && <div style={{ fontSize: 10.5, color: '#7c3aed', fontWeight: 700 }} data-testid={`se-row-forwarded-${it.id}`}>(محوَّل من المسجل)</div>}</td><td style={td}>{(it.attachments || []).length}</td><td style={td}>{fmt(it.created_at)}</td>
                 <td style={td}><Badge text={STATUS_LABEL[it.status]} color={STATUS_COLOR[it.status]} /></td>

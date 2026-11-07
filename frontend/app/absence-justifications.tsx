@@ -10,7 +10,7 @@ const fmt = (iso?: string) => (iso ? iso.slice(0, 16).replace('T', ' ') : '—')
 const kb = (n?: number) => (n ? `${Math.max(1, Math.round(n / 1024))} KB` : '');
 
 export default function AbsenceJustificationsPage() {
-  const [items, setItems] = useState<any[]>([]); const [status, setStatus] = useState('pending'); const [dept, setDept] = useState('');
+  const [items, setItems] = useState<any[]>([]); const [status, setStatus] = useState('pending'); const [fac, setFac] = useState(''); const [dept, setDept] = useState('');
   const [sel, setSel] = useState<any>(null); const [decision, setDecision] = useState<'approved' | 'rejected' | 'needs_info' | ''>(''); const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false); const [err, setErr] = useState(''); const [loading, setLoading] = useState(true); const [token, setToken] = useState('');
   const base = (process.env.EXPO_PUBLIC_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || '') + '/api';
@@ -19,8 +19,9 @@ export default function AbsenceJustificationsPage() {
   useEffect(load, [status]); // eslint-disable-line
   useEffect(() => { AsyncStorage.getItem('token').then((t) => setToken(t || '')); }, []);
 
-  const depts = useMemo(() => Array.from(new Map(items.filter((i) => i.department_id).map((i) => [i.department_id, i.department_name || i.department_id])).entries()), [items]);
-  const shown = dept ? items.filter((i) => i.department_id === dept) : items;
+  const faculties = useMemo(() => Array.from(new Map(items.filter((i) => i.faculty_id).map((i) => [i.faculty_id, i.faculty_name || i.faculty_id])).entries()), [items]);
+  const depts = useMemo(() => Array.from(new Map(items.filter((i) => i.department_id && (!fac || i.faculty_id === fac)).map((i) => [i.department_id, i.department_name || i.department_id])).entries()), [items, fac]);
+  const shown = items.filter((i) => (!fac || i.faculty_id === fac) && (!dept || i.department_id === dept));
   const counts = useMemo(() => ({ pending: items.filter((i) => i.status === 'pending').length }), [items]);
 
   const open = async (it: any) => { setErr(''); setDecision(''); setNote(''); try { const r = await api.get(`/absence-justifications/${it.id}`); setSel(r.data); } catch (e) { setErr(errOf(e, 'تعذر فتح الطلب')); } };
@@ -40,6 +41,7 @@ export default function AbsenceJustificationsPage() {
       {!!err && !sel && <div style={{ ...card, color: '#b91c1c', fontWeight: 700 }} data-testid="aj-error">{err}</div>}
       <div style={card} data-testid="aj-list">
         <div style={{ display: 'flex', gap: 8, marginBottom: 10, alignItems: 'center' }}>
+          <select style={{ ...inp, width: 'auto', minWidth: 160 }} value={fac} onChange={(e) => { setFac(e.target.value); setDept(''); }} data-testid="aj-faculty-filter"><option value="">كل الكليات</option>{faculties.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
           <select style={{ ...inp, width: 'auto', minWidth: 220 }} value={dept} onChange={(e) => setDept(e.target.value)} data-testid="aj-dept-filter"><option value="">كل الأقسام</option>{depts.map(([id, name]) => <option key={id} value={id}>{name}</option>)}</select>
           <span style={{ fontSize: 12, color: '#64748b' }} data-testid="aj-count">{shown.length} طلب</span>
           <button onClick={load} style={btn('#f1f5f9', { color: '#0f2440', padding: '6px 10px', fontSize: 12 })} data-testid="aj-refresh">↻ تحديث</button>
@@ -50,7 +52,7 @@ export default function AbsenceJustificationsPage() {
             <tbody>{shown.map((it) => (
               <tr key={it.id} data-testid={`aj-row-${it.id}`} style={it.resubmit_count ? { background: '#fffbeb' } : undefined}>
                 <td style={{ ...td, fontWeight: 800 }}>{it.ref_no}{it.resubmit_count ? <div style={{ fontSize: 10, color: '#b45309' }}>إعادة تقديم</div> : null}</td>
-                <td style={td}>{it.teacher_name}</td><td style={td}>{it.department_name || '—'}</td><td style={td}>{it.excuse_type_label}</td>
+                <td style={td}>{it.teacher_name}</td><td style={td}>{it.department_name || '—'}<div style={{ fontSize: 10, color: '#64748b' }}>{it.faculty_name || ''}</div></td><td style={td}>{it.excuse_type_label}</td>
                 <td style={td}>{(it.lectures || []).length} — {(it.lectures || []).slice(0, 2).map((l: any) => `${l.course_name} ${l.date}`).join('، ')}{(it.lectures || []).length > 2 ? '…' : ''}</td>
                 <td style={td}>{(it.attachments || []).length}</td><td style={td}>{fmt(it.created_at)}</td>
                 <td style={td}><Badge text={STATUS_LABEL[it.status] || it.status_label} color={STATUS_COLOR[it.status] || '#64748b'} /></td>

@@ -106,6 +106,7 @@ def build_router(db, get_current_user, send_push_many=None, user_from_token=None
             "department_id": doc.get("department_id"),
             "department_name": doc.get("department_name"),
             "faculty_id": doc.get("faculty_id"),
+            "faculty_name": doc.get("faculty_name"),
             "decision_note": doc.get("decision_note", ""),
             "decided_by_name": doc.get("decided_by_name"),
             "decided_at": doc.get("decided_at"),
@@ -284,6 +285,7 @@ def build_router(db, get_current_user, send_push_many=None, user_from_token=None
             department_id = (courses.get(lectures[0]["course_id"]) or {}).get("department_id")
         dept = await db.departments.find_one({"_id": ObjectId(department_id)}) if department_id else None
         faculty_id = ctx["faculty_id"] or (dept or {}).get("faculty_id")
+        fac = await db.faculties.find_one({"_id": ObjectId(faculty_id)}, {"name": 1}) if faculty_id and ObjectId.is_valid(faculty_id) else None
         seq = await db.absence_justifications.count_documents({}) + 1
         doc = {
             "ref_no": f"AJ-{current.year}-{seq:04d}",
@@ -293,6 +295,7 @@ def build_router(db, get_current_user, send_push_many=None, user_from_token=None
             "department_id": department_id,
             "department_name": (dept or {}).get("name"),
             "faculty_id": faculty_id,
+            "faculty_name": (fac or {}).get("name"),
             "course_ids": list({l["course_id"] for l in lectures}),
             "lecture_ids": ids,
             "lectures": [{
@@ -421,21 +424,33 @@ def build_router(db, get_current_user, send_push_many=None, user_from_token=None
         return StreamingResponse(iter([pdf]), media_type="application/pdf", headers=export_headers(export_filename("استمارة تبرير غياب أستاذ", doc.get("teacher_name", ""), doc.get("ref_no", ""), ext="pdf")))
 
     @router.get("")
-    async def list_requests(status: Optional[str] = None, department_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
+    async def list_requests(status: Optional[str] = None, department_id: Optional[str] = None, faculty_id: Optional[str] = None, current_user: dict = Depends(get_current_user)):
         if current_user["role"] not in REVIEWER_ROLES:
             raise HTTPException(status_code=403, detail="غير مصرح لك")
         q = {}
         if status:
             q["status"] = {"$in": status.split(",")}
         u = await db.users.find_one({"_id": ObjectId(current_user["id"])}) or {}
+        scope_dept_ids: Optional[List[str]] = None
+        scope_faculty: Optional[str] = None
         if current_user["role"] == "dean":
-            q["faculty_id"] = u.get("faculty_id")
+            scope_faculty = u.get("faculty_id")
+            if scope_faculty:
+                q["faculty_id"] = scope_faculty
         elif current_user["role"] == "department_head":
-            dept_ids = u.get("department_ids") or ([u["department_id"]] if u.get("department_id") else [])
-            q["department_id"] = {"$in": dept_ids}
+            scope_dept_ids = u.get("department_ids") or ([u["department_id"]] if u.get("department_id") else [])
+            q["department_id"] = {"$in": scope_dept_ids}
         if department_id:
-            q["department_id"] = department_id
+            q["department_id"] = department_id if scope_dept_ids is None or department_id in scope_dept_ids else "__none__"
+        if faculty_id:
+            q["faculty_id"] = faculty_id if scope_faculty is None or faculty_id == scope_faculty else "__none__"
         docs = await db.absence_justifications.find(q).sort("created_at", -1).to_list(1000)
+        missing_fids = {d["faculty_id"] for d in docs if d.get("faculty_id") and not d.get("faculty_name") and ObjectId.is_valid(d["faculty_id"])}
+        if missing_fids:
+            fac_names = {str(f["_id"]): f.get("name") async for f in db.faculties.find({"_id": {"$in": [ObjectId(f) for f in missing_fids]}}, {"name": 1})}
+            for d in docs:
+                if d.get("faculty_id") and not d.get("faculty_name"):
+                    d["faculty_name"] = fac_names.get(d["faculty_id"])
         return {"items": [serialize(d) for d in docs]}
     @router.get("/{request_id}")
     async def get_request(request_id: str, current_user: dict = Depends(get_current_user)):
