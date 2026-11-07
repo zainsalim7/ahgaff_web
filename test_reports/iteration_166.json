@@ -1,0 +1,37 @@
+{
+  "summary": "Correspondence Attachments feature tested end-to-end. Backend: 11/11 pytest passed (list, upload, 15MB cap, /api/files download w/ and w/o auth, multi-faculty curriculum attach -> 3 PDFs (dept without curriculum skipped), empty faculty list 400, no-data faculty -> Arabic 400, delete + 404 on re-delete, ISSUED -> 409 for upload/curriculum, unauth list rejected). Frontend (Playwright, admin): details page card shows count; upload via hidden input adds row with filename/size and working download link (200); curriculum modal renders 2 faculty checkboxes, multi-select 'إرفاق (2)' produced 3 PDFs with 'خطة دراسية — كلية/قسم' badges; delete with confirm dialog removes row; compose screen shows same card (shared state) above editor; ISSUED correspondence shows card read-only (no upload/curriculum/delete buttons) on both details and compose; negative case (mocked faculty with no curriculum) surfaces Arabic error in corr-att-error.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/files/{path}", "issue": "Only checks that the JWT is valid. It does not check whether the user can see the correspondence, so any logged-in user with the storage_path can download any attachment. Soft-deleting an attachment does not set files.is_deleted=true, so a deleted attachment can still be downloaded from its old link."},
+      {"endpoint": "GET /api/files/{path}", "issue": "No Content-Disposition filename is sent, so a downloaded file is saved under its UUID name instead of original_filename."},
+      {"endpoint": "POST /api/correspondence/{id}/attachments/curriculum", "issue": "No de-duplication: attaching the same faculty twice creates duplicate PDFs for each department."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CorrAttachments curriculum modal", "issues": ["On attach failure the error (corr-att-error) shows in the card behind the dimmed modal overlay, not inside the modal, so the user can easily miss it. Show the error inside the modal."]},
+      {"screen": "CorrAttachments list", "issues": ["fmtSize shows '0 كيلوبايت' for files under 512 bytes. Show bytes, or a minimum of '<1 كيلوبايت'."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_corr_attachments.py", "/app/test_reports/pytest/corr_attachments.xml"],
+  "action_items": [
+    "Optional: render the curriculum-attach error inside the modal",
+    "Optional: mark db.files is_deleted=true when an attachment is soft-deleted, and/or check correspondence access in /api/files for correspondence_attachments",
+    "Optional: return Content-Disposition with original_filename on file serve",
+    "Optional: fix the size display for very small files"
+  ],
+  "critical_code_review_comments": [
+    "CorrAttachments reads the token once via useAuthStore.getState() and does not subscribe to it. Acceptable, but if the token refreshes, the download links keep the old token until the component remounts.",
+    "upload_attachment reads the whole file into memory before the 15MB check. Acceptable at this size.",
+    "Attachments of a soft-deleted draft stay in correspondence_attachments (no cascade). Harmless, but leaves orphan records."
+  ],
+  "updated_files": ["/app/backend/tests/test_corr_attachments.py"],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "seed_data_creation": "Created TEST_ drafts 'TEST_مرفقات pytest' (via the pytest fixture) and 'TEST_مرفقات UI' (6aef4efbb1657caebacc3ee9). Both were soft-deleted afterwards. ISSUED corr 6ac5048305549193bba94794 was used read-only. Corr 6ac5206a80c5f91155a6d15b was not touched.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest with '-p no:xdist' because the tests share class state in order. In the DB every faculty has curriculum data (كلية الشريعة: الشريعة والقانون=16 courses, عقيدة=1, قسم اختبار=0; كلية البنات: الدراسات الإسلامية=4), so the no-data negative case was tested with a fake faculty id: page.route mock of /api/faculties in the UI, and id 000...0 via the API. Login on web uses inputs with placeholders 'اسم المستخدم / رقم القيد / الرقم المرجعي' and 'كلمة المرور'."
+}

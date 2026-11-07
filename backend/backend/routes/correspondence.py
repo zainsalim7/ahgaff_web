@@ -1104,6 +1104,7 @@ async def delete_attachment(attachment_id: str, request: Request, ctx: CorrConte
         raise HTTPException(status_code=404, detail="المرفق غير موجود")
     c = await _editable(db, ctx, att["correspondence_id"], request)
     await db.correspondence_attachments.update_one({"_id": att["_id"]}, {"$set": {"deleted_at": _now()}})
+    await db.files.update_one({"file_id": att["file_id"]}, {"$set": {"is_deleted": True}})
     await db.correspondences.update_one({"_id": c["_id"]}, {"$inc": {"version": 1}, "$set": {"updated_at": _now()}})
     await audit(db, ctx, "ATTACHMENT_REMOVED", "correspondence", str(c["_id"]), request, old={"filename": att.get("original_filename")}, organization_id=c["organization_id"])
     return {"message": "تم حذف المرفق"}

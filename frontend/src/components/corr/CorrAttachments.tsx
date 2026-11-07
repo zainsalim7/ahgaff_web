@@ -4,7 +4,7 @@ import api from '../../services/api';
 import { useAuthStore } from '../../store/authStore';
 import { card, btn, Modal, Badge } from './CorrUI';
 
-const fmtSize = (n: number) => (n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} كيلوبايت` : `${(n / 1024 / 1024).toFixed(1)} ميجابايت`);
+const fmtSize = (n: number) => (n < 1024 ? '<1 كيلوبايت' : n < 1024 * 1024 ? `${(n / 1024).toFixed(0)} كيلوبايت` : `${(n / 1024 / 1024).toFixed(1)} ميجابايت`);
 
 export const CorrAttachments: React.FC<{ corrId: string; canEdit: boolean }> = ({ corrId, canEdit }) => {
   const [items, setItems] = useState<any[]>([]);
@@ -86,6 +86,7 @@ export const CorrAttachments: React.FC<{ corrId: string; canEdit: boolean }> = (
       {showCurr && (
         <Modal title="إرفاق خطة دراسية (منهج)" onClose={() => setShowCurr(false)} testID="corr-curriculum-modal">
           <div style={{ fontSize: 12, color: '#64748b', marginBottom: 8 }}>اختر كلية واحدة أو أكثر — سيتم توليد ملف PDF لكل قسم ضمن الكليات المختارة من بيانات الخطة الدراسية وإرفاقه تلقائياً بالخطاب.</div>
+          {!!err && <div style={{ color: '#b91c1c', fontSize: 12, marginBottom: 8 }} data-testid="corr-curriculum-error">{err}</div>}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 6, maxHeight: 260, overflowY: 'auto' }}>
             {faculties.map((f: any) => {
               const fid = f.id || f._id;
