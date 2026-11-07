@@ -8,7 +8,6 @@ export const STATUS_LABEL: Record<string, string> = { pending: 'قيد المر�
 export const STATUS_COLOR: Record<string, string> = { pending: '#d97706', approved: '#16a34a', rejected: '#b91c1c', needs_info: '#6d28d9', cancelled: '#64748b' };
 export const errOf = (e: any, d: string) => e?.response?.data?.detail || d;
 
-export const routeFor = (type: string, days: number) => (type === 'sick' ? 'registration' : type === 'exam' || days > 2 ? 'board' : 'dean');
 export const daysBetween = (a: string, b: string) => (a && b ? Math.floor((new Date(b).getTime() - new Date(a).getTime()) / 86400000) + 1 : 0);
 
 /** نموذج تقديم عذر نيابةً عن طالب (ويب — الإدارة/التسجيل) */
@@ -62,7 +61,7 @@ export const ExcuseSubmitForm: React.FC<{ onDone: () => void; onClose: () => voi
         <select style={inp} value={form.course_id} onChange={(e) => setForm({ ...form, course_id: e.target.value })} disabled={!student} data-testid="se-form-course"><option value="">كل مقررات الطالب</option>{(student?.courses || []).map((c: any) => <option key={c.id} value={c.id}>{c.name}</option>)}</select></div>
       <div style={{ marginTop: 8 }}><label style={lbl}>الوصف</label><textarea style={{ ...inp, minHeight: 60 }} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} data-testid="se-form-desc" /></div>
       <div style={{ marginTop: 8 }}><label style={lbl}>المستندات (PDF/صور، حتى 3 ملفات × 5MB) — إلزامي</label><input type="file" multiple accept="application/pdf,image/*" onChange={(e) => setFiles(Array.from(e.target.files || []).slice(0, 3))} data-testid="se-form-files" /></div>
-      {days > 0 && <div style={{ marginTop: 10, background: '#eef3f9', borderRadius: 8, padding: 10, fontSize: 12.5 }} data-testid="se-form-route">المدة: <b>{days}</b> يوم — سيُوجَّه الطلب إلى: <b>{ROUTE_LABEL[routeFor(form.excuse_type, days)]}</b></div>}
+      {days > 0 && <div style={{ marginTop: 10, background: '#eef3f9', borderRadius: 8, padding: 10, fontSize: 12.5 }} data-testid="se-form-route">المدة: <b>{days}</b> يوم — سيصل الطلب أولاً إلى <b>مسجل الكلية</b> ليقرر اعتماده مباشرة أو تحويله إلى العميد أو مجلس الكلية</div>}
       {!!err && <div style={{ color: '#b91c1c', fontWeight: 700, marginTop: 8, fontSize: 12.5 }} data-testid="se-form-error">{err}</div>}
       <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
         <button onClick={submit} disabled={busy} style={btn('#0f2440')} data-testid="se-form-submit">{busy ? 'جاري الإرسال…' : 'إرسال الطلب'}</button>

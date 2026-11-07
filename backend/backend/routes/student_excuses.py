@@ -37,14 +37,6 @@ def _oid(v: str) -> ObjectId:
         raise HTTPException(status_code=400, detail="معرّف غير صحيح")
 
 
-def route_for(excuse_type: str, days: int) -> str:
-    if excuse_type == "sick":
-        return "registration"
-    if excuse_type == "exam" or days > DEAN_MAX_DAYS:
-        return "board"
-    return "dean"
-
-
 def _days(a: str, b: str) -> int:
     try:
         d1, d2 = datetime.strptime(a, "%Y-%m-%d"), datetime.strptime(b, "%Y-%m-%d")
@@ -53,6 +45,20 @@ def _days(a: str, b: str) -> int:
     if d2 < d1:
         raise HTTPException(status_code=400, detail="تاريخ النهاية قبل تاريخ البداية")
     return (d2 - d1).days + 1
+
+
+def _user_faculty_ids(user: dict) -> List[str]:
+    ids = user.get("faculty_ids") or []
+    if not ids and user.get("faculty_id"):
+        ids = [user["faculty_id"]]
+    return ids
+
+
+def _user_department_ids(user: dict) -> List[str]:
+    ids = user.get("department_ids") or []
+    if not ids and user.get("department_id"):
+        ids = [user["department_id"]]
+    return ids
 
 
 def _can_manage(user: dict) -> bool:
@@ -74,9 +80,19 @@ def _in_scope(user: dict, doc: dict) -> bool:
     if user["role"] == UserRole.ADMIN:
         return True
     if user["role"] == UserRole.DEPARTMENT_HEAD:
-        return doc.get("department_id") in (user.get("department_ids") or [])
-    fids = user.get("faculty_ids") or []
+        return doc.get("department_id") in _user_department_ids(user)
+    fids = _user_faculty_ids(user)
     return not fids or doc.get("faculty_id") in fids
+
+
+def _can_forward(user: dict, doc: dict) -> bool:
+    if doc["route"] != "registration" or doc["status"] != "pending":
+        return False
+    if user["role"] == UserRole.ADMIN:
+        return True
+    if user["role"] not in (UserRole.REGISTRAR, UserRole.REGISTRATION_MANAGER):
+        return False
+    return _in_scope(user, doc)
 
 
 def serialize(d: dict) -> dict:
@@ -93,6 +109,8 @@ def serialize(d: dict) -> dict:
         "attachments": [{"idx": i, "name": a["name"], "size": a.get("size"), "mime": a.get("mime")} for i, a in enumerate(d.get("attachments", []))],
         "submitted_by_name": d.get("submitted_by_name"), "submitted_by_role": d.get("submitted_by_role"),
         "decision_note": d.get("decision_note", ""), "decided_by_name": d.get("decided_by_name"), "decided_at": d.get("decided_at"),
+        "forwarded_to": d.get("forwarded_to"), "forwarded_to_label": ROUTES.get(d["forwarded_to"]) if d.get("forwarded_to") else None,
+        "forwarded_by_name": d.get("forwarded_by_name"), "forwarded_at": d.get("forwarded_at"),
         "board_session_no": d.get("board_session_no"), "board_session_date": d.get("board_session_date"),
         "applied": d.get("applied"), "history": d.get("history", []),
         "source": d.get("source", "web"), "items": d.get("items", []),
@@ -214,7 +232,7 @@ async def _notify_student(db, doc: dict, title: str, msg: str, decision: bool = 
 async def meta(current_user: dict = Depends(get_current_user)):
     return {"excuse_types": [{"key": k, "label": v} for k, v in EXCUSE_TYPES.items()], "routes": ROUTES, "statuses": STATUS,
             "dean_max_days": DEAN_MAX_DAYS, "max_files": MAX_FILES, "max_size": MAX_SIZE,
-            "rule": "مرضي → التسجيل · غير مرضي حتى يومين → العميد · أكثر من يومين أو عذر عن اختبار → مجلس الكلية",
+            "rule": "تصل جميع الطلبات أولاً إلى مسجل الكلية، وهو من يقرر الاعتماد مباشرة أو التحويل إلى عميد الكلية أو مجلس الكلية",
             "can_manage": _can_manage(current_user), "is_student": current_user["role"] == UserRole.STUDENT}
 
 
@@ -254,7 +272,7 @@ async def create_excuse(
     fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])}, {"name": 1}) if dept and dept.get("faculty_id") and ObjectId.is_valid(dept["faculty_id"]) else None
     now = _now()
     seq = await db.student_excuses.count_documents({}) + 1
-    route = route_for(excuse_type, days)
+    route = "registration"
     doc = {
         "ref_no": f"SE-{now.year}-{seq:04d}", "student_db_id": sid, "student_no": st.get("student_id"), "student_name": st.get("full_name"),
         "level": st.get("level"), "section": st.get("section"), "department_id": st.get("department_id"), "department_name": (dept or {}).get("name"),
@@ -421,9 +439,11 @@ async def list_excuses(status: Optional[str] = None, route: Optional[str] = None
     if route:
         f["route"] = route
     if current_user["role"] == UserRole.DEPARTMENT_HEAD:
-        f["department_id"] = {"$in": current_user.get("department_ids") or []}
-    elif current_user["role"] != UserRole.ADMIN and current_user.get("faculty_ids"):
-        f["faculty_id"] = {"$in": current_user["faculty_ids"]}
+        f["department_id"] = {"$in": _user_department_ids(current_user)}
+    elif current_user["role"] != UserRole.ADMIN:
+        fids = _user_faculty_ids(current_user)
+        if fids:
+            f["faculty_id"] = {"$in": fids}
     if faculty_id:
         f["faculty_id"] = faculty_id
     if department_id:
@@ -434,6 +454,7 @@ async def list_excuses(status: Optional[str] = None, route: Optional[str] = None
     items = [serialize(d) for d in docs]
     for it, d in zip(items, docs):
         it["can_decide"] = d["status"] in ("pending", "needs_info") and _can_decide(current_user, d)
+        it["can_forward"] = _can_forward(current_user, d)
     base = {k: v for k, v in f.items() if k not in ("status", "route")}
     pending = {}
     async for r in db.student_excuses.aggregate([{"$match": {**base, "status": "pending"}}, {"$group": {"_id": "$route", "n": {"$sum": 1}}}]):
@@ -448,10 +469,12 @@ async def search_students(q: str, current_user: dict = Depends(get_current_user)
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     f = {"is_active": {"$ne": False}, "$or": [{"full_name": {"$regex": q, "$options": "i"}}, {"student_id": {"$regex": q}}, {"reference_number": {"$regex": q, "$options": "i"}}]}
     if current_user["role"] == UserRole.DEPARTMENT_HEAD:
-        f["department_id"] = {"$in": current_user.get("department_ids") or []}
-    elif current_user["role"] != UserRole.ADMIN and current_user.get("faculty_ids"):
-        dids = [str(d["_id"]) for d in await db.departments.find({"faculty_id": {"$in": current_user["faculty_ids"]}}, {"_id": 1}).to_list(500)]
-        f["department_id"] = {"$in": dids}
+        f["department_id"] = {"$in": _user_department_ids(current_user)}
+    elif current_user["role"] != UserRole.ADMIN:
+        fids = _user_faculty_ids(current_user)
+        if fids:
+            dids = [str(d["_id"]) for d in await db.departments.find({"faculty_id": {"$in": fids}}, {"_id": 1}).to_list(500)]
+            f["department_id"] = {"$in": dids}
     sts = await db.students.find(f, {"student_id": 1, "full_name": 1, "level": 1, "section": 1, "department_id": 1}).limit(20).to_list(20)
     out = []
     for s in sts:
@@ -474,7 +497,35 @@ async def get_excuse(excuse_id: str, current_user: dict = Depends(get_current_us
         raise HTTPException(status_code=403, detail="غير مصرح لك")
     out = serialize(doc)
     out["can_decide"] = doc["status"] in ("pending", "needs_info") and _can_decide(current_user, doc)
+    out["can_forward"] = _can_forward(current_user, doc)
     return out
+
+
+@router.post("/{excuse_id}/forward")
+async def forward_excuse(excuse_id: str, request: Request, current_user: dict = Depends(get_current_user)):
+    """مسجل الكلية يُحوّل الطلب إلى العميد أو مجلس الكلية بدل البت فيه مباشرة"""
+    db = get_db()
+    body = await request.json()
+    to = body.get("to")
+    note = (body.get("note") or "").strip()
+    if to not in ("dean", "board"):
+        raise HTTPException(status_code=400, detail="الجهة يجب أن تكون عميد الكلية أو مجلس الكلية")
+    doc = await db.student_excuses.find_one({"_id": _oid(excuse_id)})
+    if not doc:
+        raise HTTPException(status_code=404, detail="الطلب غير موجود")
+    if not _can_forward(current_user, doc):
+        raise HTTPException(status_code=403, detail="لا يمكنك تحويل هذا الطلب")
+    now = _now().isoformat()
+    upd = {"route": to, "forwarded_to": to, "forwarded_by": current_user["id"], "forwarded_by_name": current_user.get("full_name"), "forwarded_at": now, "updated_at": now}
+    hist_note = f"حُوّل إلى {ROUTES[to]}" + (f" — {note}" if note else "")
+    await db.student_excuses.update_one({"_id": doc["_id"]}, {"$set": upd, "$push": {"history": {"at": now, "by_name": current_user.get("full_name"), "action": "forwarded", "note": hist_note}}})
+    doc.update(upd)
+    await notify_users(db, await _reviewer_ids(db, doc), "طلب عذر غياب مُحوَّل من مسجل الكلية",
+                       f"{doc.get('student_name')} — الطلب {doc.get('ref_no')} محوَّل إليك من مسجل الكلية للبت فيه",
+                       "student_excuse", {"data": {"type": "student_excuse", "id": excuse_id}})
+    await _notify_student(db, doc, "تم تحويل طلب عذرك", f"حُوّل طلبك {doc.get('ref_no')} إلى {ROUTES[to]} للبت فيه نهائياً")
+    await log_activity(current_user, "student_excuse_forward", "student_excuse", excuse_id, doc["ref_no"], {"to": to, "student": doc.get("student_name")})
+    return {"message": f"تم تحويل الطلب إلى {ROUTES[to]}"}
 
 
 @router.post("/{excuse_id}/decide")

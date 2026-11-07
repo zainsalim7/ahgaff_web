@@ -5,12 +5,13 @@ import { STATUS_LABEL, STATUS_COLOR, ROUTE_LABEL, errOf } from './ExcuseSubmitFo
 
 const fmt = (iso?: string) => (iso ? iso.slice(0, 16).replace('T', ' ') : '—');
 const kb = (n?: number) => (n ? `${Math.max(1, Math.round(n / 1024))} KB` : '');
-const ACTION_AR: Record<string, string> = { submitted: 'تقديم', approved: 'اعتماد', rejected: 'رفض', needs_info: 'طلب استكمال', attachments_added: 'إضافة مرفقات', cancelled: 'إلغاء' };
+const ACTION_AR: Record<string, string> = { submitted: 'تقديم', approved: 'اعتماد', rejected: 'رفض', needs_info: 'طلب استكمال', attachments_added: 'إضافة مرفقات', cancelled: 'إلغاء', forwarded: 'تحويل' };
 
 /** تفاصيل طلب العذر + البت فيه (ويب) */
 export const ExcuseDetail: React.FC<{ sel: any; token: string; onDecided: () => void }> = ({ sel, token, onDecided }) => {
   const [decision, setDecision] = useState<'approved' | 'rejected' | 'needs_info' | ''>(''); const [note, setNote] = useState('');
   const [sessNo, setSessNo] = useState(''); const [sessDate, setSessDate] = useState(''); const [busy, setBusy] = useState(false); const [err, setErr] = useState('');
+  const [fwdTo, setFwdTo] = useState<'dean' | 'board' | ''>(''); const [fwdNote, setFwdNote] = useState(''); const [fwdBusy, setFwdBusy] = useState(false); const [fwdErr, setFwdErr] = useState('');
   const base = (process.env.EXPO_PUBLIC_BACKEND_URL || process.env.REACT_APP_BACKEND_URL || '') + '/api';
   const attUrl = (a: any) => `${base}/student-excuses/${sel.id}/attachments/${a.idx}?token=${encodeURIComponent(token)}`;
 
@@ -23,6 +24,13 @@ export const ExcuseDetail: React.FC<{ sel: any; token: string; onDecided: () => 
     catch (e) { setErr(errOf(e, 'فشل تسجيل القرار')); } finally { setBusy(false); }
   };
 
+  const forward = async () => {
+    if (!fwdTo) return;
+    setFwdBusy(true); setFwdErr('');
+    try { const r = await api.post(`/student-excuses/${sel.id}/forward`, { to: fwdTo, note: fwdNote.trim() }); window.alert(r.data.message); onDecided(); }
+    catch (e) { setFwdErr(errOf(e, 'فشل تحويل الطلب')); } finally { setFwdBusy(false); }
+  };
+
   return (
     <div style={{ direction: 'rtl' }}>
       <div style={{ display: 'flex', justifyContent: 'flex-start', marginBottom: 8 }}>
@@ -31,6 +39,7 @@ export const ExcuseDetail: React.FC<{ sel: any; token: string; onDecided: () => 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, fontSize: 13 }}>
         <div><label style={lbl}>الحالة</label><Badge text={STATUS_LABEL[sel.status]} color={STATUS_COLOR[sel.status]} testID="se-detail-status" /></div>
         <div><label style={lbl}>المسار</label><b data-testid="se-detail-route">{ROUTE_LABEL[sel.route]}</b></div>
+        {sel.forwarded_to && <div><label style={lbl}>تحويل مسجل الكلية</label><b data-testid="se-detail-forwarded">↳ {sel.forwarded_to_label} ({sel.forwarded_by_name}، {fmt(sel.forwarded_at)})</b></div>}
         <div><label style={lbl}>نوع العذر</label>{sel.excuse_type_label}</div>
         <div><label style={lbl}>الطالب</label>{sel.student?.full_name} · {sel.student?.student_id}</div>
         <div><label style={lbl}>القسم / المستوى</label>{sel.department_name || '—'} · م{sel.student?.level}/{sel.student?.section}</div>
@@ -65,6 +74,17 @@ export const ExcuseDetail: React.FC<{ sel: any; token: string; onDecided: () => 
       {sel.decided_by_name && <div style={{ marginTop: 10, background: '#f1f5f9', borderRadius: 8, padding: 10, fontSize: 12.5 }} data-testid="se-detail-decision"><b>القرار:</b> {sel.decided_by_name} · {fmt(sel.decided_at)}{sel.decision_note ? ` — ${sel.decision_note}` : ''}{sel.board_session_no ? ` · جلسة مجلس الكلية رقم ${sel.board_session_no} بتاريخ ${sel.board_session_date}` : ''}</div>}
       {(sel.history || []).length > 1 && <details style={{ marginTop: 8, fontSize: 12 }}><summary style={{ cursor: 'pointer', fontWeight: 700 }}>سجل الطلب</summary>
         <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 6 }}><tbody>{sel.history.map((h: any, i: number) => <tr key={i}><td style={td}>{fmt(h.at)}</td><td style={td}>{ACTION_AR[h.action] || h.action}</td><td style={td}>{h.by_name}</td><td style={td}>{h.note || ''}</td></tr>)}</tbody></table></details>}
+      {sel.can_forward && (
+        <div style={{ marginTop: 14, borderTop: '2px dashed #cbd5e1', paddingTop: 12 }} data-testid="se-forward">
+          <label style={lbl}>تحويل الطلب إلى جهة أخرى (بدل البت فيه مباشرة)</label>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+            {([['dean', 'تحويل إلى عميد الكلية', '#2563eb'], ['board', 'تحويل إلى مجلس الكلية', '#7c3aed']] as const).map(([k, l, c]) => <button key={k} onClick={() => setFwdTo(k)} style={btn(fwdTo === k ? c : '#f1f5f9', { color: fwdTo === k ? '#fff' : '#0f2440' })} data-testid={`se-forward-${k}`}>{l}</button>)}
+          </div>
+          <textarea style={{ ...inp, minHeight: 50 }} placeholder="ملاحظة للجهة المحوَّل إليها (اختياري)" value={fwdNote} onChange={(e) => setFwdNote(e.target.value)} data-testid="se-forward-note" />
+          {!!fwdErr && <div style={{ color: '#b91c1c', fontWeight: 700, marginTop: 6, fontSize: 12.5 }} data-testid="se-forward-error">{fwdErr}</div>}
+          <button onClick={forward} disabled={!fwdTo || fwdBusy} style={btn('#334155', { marginTop: 8, opacity: !fwdTo || fwdBusy ? 0.6 : 1 })} data-testid="se-forward-submit">{fwdBusy ? 'جاري التحويل…' : 'تأكيد التحويل'}</button>
+        </div>
+      )}
       {sel.can_decide && (
         <div style={{ marginTop: 14, borderTop: '2px solid #e2e8f0', paddingTop: 12 }} data-testid="se-decide">
           <label style={lbl}>القرار ({ROUTE_LABEL[sel.route]})</label>

@@ -10,7 +10,7 @@ from pydantic import BaseModel
 
 from .deps import get_current_user, get_db, log_activity
 from .hr_common import notify_users
-from .student_excuses import (EXCUSE_TYPES, ROUTES, STATUS, _now, _reviewer_ids, _student_for, route_for, serialize)
+from .student_excuses import (EXCUSE_TYPES, ROUTES, STATUS, _now, _reviewer_ids, _student_for, serialize)
 from models.permissions import UserRole
 from services import storage_service
 
@@ -97,7 +97,7 @@ async def _absent_records(db, sid: str, days: int):
 
 def _my_row(d: dict) -> dict:
     return {"id": str(d["_id"]), "ref_no": d.get("ref_no"), "message": d.get("description", ""), "status": d["status"], "status_label": STATUS.get(d["status"], d["status"]),
-            "route_label": ROUTES.get(d.get("route"), ""), "reject_reason": d.get("decision_note") if d["status"] == "rejected" else None,
+            "route_label": ROUTES.get(d.get("route"), ""), "forwarded": bool(d.get("forwarded_to")), "reject_reason": d.get("decision_note") if d["status"] == "rejected" else None,
             "decision_note": d.get("decision_note") or None, "created_at": d.get("created_at"), "reviewed_at": d.get("decided_at"), "reviewed_by": d.get("decided_by_name"),
             "items": [{"record_id": i["record_id"], "course_id": i.get("course_id"), "course_name": i.get("course_name"), "date": i.get("date")} for i in d.get("items", [])]}
 
@@ -155,7 +155,7 @@ async def create(data: ExcuseIn, current_user: dict = Depends(get_current_user))
     fac = await db.faculties.find_one({"_id": ObjectId(dept["faculty_id"])}, {"name": 1}) if dept and ObjectId.is_valid(dept.get("faculty_id") or "") else None
     now = _now()
     seq = await db.student_excuses.count_documents({}) + 1
-    route = route_for(excuse_type, span)
+    route = "registration"
     course_ids = {i["course_id"] for i in items}
     doc = {
         "ref_no": f"SE-{now.year}-{seq:04d}", "source": "app", "student_db_id": sid, "student_no": st.get("student_id"), "student_name": st.get("full_name"),
