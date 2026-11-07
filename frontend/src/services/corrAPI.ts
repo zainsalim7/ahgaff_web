@@ -67,6 +67,11 @@ export const corrAPI = {
   deletePosition: (id: string) => api.delete(`${base}/positions/${id}`),
   pdf: (id: string) => api.get(`${base}/${id}/pdf`, { responseType: 'blob' }),
   pdfInfo: (id: string) => api.get(`${base}/${id}/pdf/info`),
+  // 🏢 المرفقات (ميزة عامة لكل المراسلات)
+  attachments: (id: string) => api.get(`${base}/${id}/attachments`),
+  uploadAttachment: (id: string, file: File) => { const fd = new FormData(); fd.append('file', file); return api.post(`${base}/${id}/attachments/upload`, fd, { headers: { 'Content-Type': 'multipart/form-data' } }); },
+  attachCurriculum: (id: string, faculty_ids: string[]) => api.post(`${base}/${id}/attachments/curriculum`, { faculty_ids }),
+  deleteAttachment: (attachmentId: string) => api.delete(`${base}/attachments/${attachmentId}`),
   preview: (id: string, mode: 'preview' | 'edit' = 'preview') => api.post(`${base}/${id}/preview`, null, { params: { mode } }),
 };
 

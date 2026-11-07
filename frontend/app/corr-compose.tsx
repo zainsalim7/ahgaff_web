@@ -6,6 +6,7 @@ import { CorrPage, card, btn, inp, lbl, Badge, Modal, Field, Empty, useCorrMe } 
 import { TipTapEditor } from '../src/components/corr/TipTapEditor';
 import { A4Preview } from '../src/components/corr/A4Preview';
 import { EntityPicker } from '../src/components/corr/EntityPicker';
+import { CorrAttachments } from '../src/components/corr/CorrAttachments';
 
 const EDITABLE = ['EDITABLE', 'DEFAULT_EDITABLE', 'STRUCTURED'];
 
@@ -241,6 +242,7 @@ export default function CorrCompose() {
   return (
     <CorrPage title={`محرر الخطاب — ${c.subject}`} subtitle={`${c.organization_name} · ${c.document_type_name}`} testID="corr-compose">
       {header}
+      <CorrAttachments corrId={id!} canEdit={canEdit} />
       <div style={{ display: 'grid', gridTemplateColumns: narrow ? '1fr' : 'minmax(0,1fr) minmax(0,600px)', gap: 16, alignItems: 'start' }}>
         {editorPane}
         {previewPane}

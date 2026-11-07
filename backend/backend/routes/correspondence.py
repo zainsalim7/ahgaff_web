@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Optional, List
 
-from fastapi import APIRouter, HTTPException, Depends, Request, Query
+from fastapi import APIRouter, HTTPException, Depends, Request, Query, UploadFile, File
 from pydantic import BaseModel, Field
 from bson import ObjectId
 from pymongo import ReturnDocument, ASCENDING, DESCENDING
@@ -1014,6 +1014,99 @@ async def remove_entity(corr_id: str, entity_link_id: str, request: Request, ctx
         raise HTTPException(status_code=404, detail="الرابط غير موجود")
     await audit(db, ctx, "ENTITY_UNLINKED", "correspondence", cid, request, old={"entity_link_id": entity_link_id}, organization_id=c["organization_id"])
     return {"message": "تم فك الربط"}
+
+
+# ───────────────────────── Attachments (ميزة عامة لكل المراسلات) ─────────────────────────
+class CurriculumAttachIn(BaseModel):
+    faculty_ids: List[str]
+
+
+@router.get("/{corr_id}/attachments")
+async def list_attachments(corr_id: str, request: Request, ctx: CorrContext = Depends(ctx_dep)):
+    db = get_db()
+    c = await _get_readable(db, ctx, corr_id, request)
+    atts = await db.correspondence_attachments.find({"correspondence_id": str(c["_id"]), "deleted_at": None}).sort("created_at", 1).to_list(200)
+    return [_ser(a) for a in atts]
+
+
+@router.post("/{corr_id}/attachments/upload")
+async def upload_attachment(corr_id: str, request: Request, file: UploadFile = File(...), ctx: CorrContext = Depends(ctx_dep)):
+    db = get_db()
+    c = await _editable(db, ctx, corr_id, request)
+    cid = str(c["_id"])
+    data = await file.read()
+    if len(data) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="حجم الملف يتجاوز الحد الأقصى المسموح (15 ميجابايت)")
+    from services.storage_service import upload_file
+    res = upload_file(data, file.filename, file.content_type or "application/octet-stream", folder="correspondence_attachments")
+    rec = {
+        "correspondence_id": cid, "file_id": res["file_id"], "storage_path": res["storage_path"],
+        "original_filename": file.filename, "content_type": res["content_type"], "size": res["size"],
+        "source": "UPLOAD", "uploaded_by": ctx.user_id, "created_at": _now(), "deleted_at": None,
+    }
+    r = await db.correspondence_attachments.insert_one(rec)
+    await db.files.insert_one({"file_id": res["file_id"], "storage_path": res["storage_path"], "content_type": res["content_type"],
+                                "folder": "correspondence_attachments", "uploaded_by": ctx.user_id, "is_deleted": False, "created_at": _now()})
+    await db.correspondences.update_one({"_id": c["_id"]}, {"$inc": {"version": 1}, "$set": {"updated_at": _now()}})
+    await audit(db, ctx, "ATTACHMENT_ADDED", "correspondence", cid, request, new={"filename": file.filename}, organization_id=c["organization_id"])
+    return _ser(await db.correspondence_attachments.find_one({"_id": r.inserted_id}))
+
+
+@router.post("/{corr_id}/attachments/curriculum")
+async def attach_curriculum(corr_id: str, data: CurriculumAttachIn, request: Request, ctx: CorrContext = Depends(ctx_dep)):
+    """🎓 إرفاق الخطة الدراسية (تُولَّد تلقائياً من بيانات النظام /curriculum) لكلية واحدة أو أكثر — PDF لكل قسم"""
+    db = get_db()
+    c = await _editable(db, ctx, corr_id, request)
+    cid = str(c["_id"])
+    if not data.faculty_ids:
+        raise HTTPException(status_code=400, detail="يرجى تحديد كلية واحدة على الأقل")
+    from services.storage_service import upload_file
+    from .curriculum import _gather_curriculum_rows, _build_curriculum_pdf_bytes
+    created = []
+    for fid in data.faculty_ids:
+        if not ObjectId.is_valid(fid):
+            continue
+        fac = await db.faculties.find_one({"_id": ObjectId(fid)})
+        if not fac:
+            continue
+        depts = await db.departments.find({"faculty_id": fid}).to_list(100)
+        for dept in depts:
+            dept_id = str(dept["_id"])
+            rows = await _gather_curriculum_rows(db, dept_id)
+            if not rows:
+                continue
+            pdf_bytes = _build_curriculum_pdf_bytes(rows, dept.get("name", ""), fac.get("name", ""), "كامل الخطة")
+            filename = f"الخطة الدراسية - {fac.get('name', '')} - {dept.get('name', '')}.pdf"
+            res = upload_file(pdf_bytes, filename, "application/pdf", folder="correspondence_attachments")
+            rec = {
+                "correspondence_id": cid, "file_id": res["file_id"], "storage_path": res["storage_path"],
+                "original_filename": filename, "content_type": "application/pdf", "size": res["size"],
+                "source": "CURRICULUM", "faculty_id": fid, "faculty_name": fac.get("name", ""),
+                "department_id": dept_id, "department_name": dept.get("name", ""),
+                "uploaded_by": ctx.user_id, "created_at": _now(), "deleted_at": None,
+            }
+            r = await db.correspondence_attachments.insert_one(rec)
+            await db.files.insert_one({"file_id": res["file_id"], "storage_path": res["storage_path"], "content_type": "application/pdf",
+                                        "folder": "correspondence_attachments", "uploaded_by": ctx.user_id, "is_deleted": False, "created_at": _now()})
+            created.append(_ser(await db.correspondence_attachments.find_one({"_id": r.inserted_id})))
+    if not created:
+        raise HTTPException(status_code=400, detail="لا توجد بيانات خطة دراسية مُدخَلة في النظام لهذه الكلية/الكليات لإنشاء المرفقات منها")
+    await db.correspondences.update_one({"_id": c["_id"]}, {"$inc": {"version": 1}, "$set": {"updated_at": _now()}})
+    await audit(db, ctx, "ATTACHMENT_ADDED", "correspondence", cid, request, new={"count": len(created), "faculty_ids": data.faculty_ids}, organization_id=c["organization_id"])
+    return created
+
+
+@router.delete("/attachments/{attachment_id}")
+async def delete_attachment(attachment_id: str, request: Request, ctx: CorrContext = Depends(ctx_dep)):
+    db = get_db()
+    att = await db.correspondence_attachments.find_one({"_id": _oid(attachment_id), "deleted_at": None})
+    if not att:
+        raise HTTPException(status_code=404, detail="المرفق غير موجود")
+    c = await _editable(db, ctx, att["correspondence_id"], request)
+    await db.correspondence_attachments.update_one({"_id": att["_id"]}, {"$set": {"deleted_at": _now()}})
+    await db.correspondences.update_one({"_id": c["_id"]}, {"$inc": {"version": 1}, "$set": {"updated_at": _now()}})
+    await audit(db, ctx, "ATTACHMENT_REMOVED", "correspondence", str(c["_id"]), request, old={"filename": att.get("original_filename")}, organization_id=c["organization_id"])
+    return {"message": "تم حذف المرفق"}
 
 
 # ───────────────────────── State machine ─────────────────────────

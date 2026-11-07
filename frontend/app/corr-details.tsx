@@ -3,6 +3,7 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import { corrAPI, errMsg, openPdf, STATUS_AR, STATUS_COLOR, PRIORITY_AR, CLASS_AR, ACTION_AR, RECIPIENT_TYPE_AR, ENTITY_KIND } from '../src/services/corrAPI';
 import { EntityPicker } from '../src/components/corr/EntityPicker';
 import { PersonRecipientFields } from '../src/components/corr/PersonRecipientFields';
+import { CorrAttachments } from '../src/components/corr/CorrAttachments';
 import { CorrPage, card, btn, inp, lbl, th, td, Badge, Modal, Field, Empty, useCorrMe } from '../src/components/corr/CorrUI';
 
 const Row = ({ k, v, testID }: { k: string; v: any; testID?: string }) => (
@@ -125,6 +126,8 @@ export default function CorrDetails() {
           ))}
         </div>
       </div>
+
+      <CorrAttachments corrId={id!} canEdit={!!c.can_edit} />
 
       <div style={card} data-testid="corr-history">
         <b style={{ color: '#0f2440' }}>سجل الحالات ({hist.length})</b>

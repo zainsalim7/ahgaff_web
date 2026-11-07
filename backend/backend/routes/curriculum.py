@@ -1708,6 +1708,16 @@ def _export_xlsx(rows, dept_name, fac_name, scope_label, filename_safe):
 
 def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
     """PDF - عربي + RTL + كل فصل تحت الآخر + KeepTogether لمنع تقسيم الجدول."""
+    pdf_bytes = _build_curriculum_pdf_bytes(rows, dept_name, fac_name, scope_label)
+    return StreamingResponse(
+        BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers=export_headers(f"{filename_safe}.pdf"),
+    )
+
+
+def _build_curriculum_pdf_bytes(rows, dept_name, fac_name, scope_label) -> bytes:
+    """🎓 يبني بايتات PDF للخطة الدراسية (يُستخدم في تصدير القسم وفي مرفقات المراسلات أيضاً)."""
     import os
     from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
@@ -1833,8 +1843,4 @@ def _export_pdf(rows, dept_name, fac_name, scope_label, filename_safe):
 
     doc.build(elements)
     buf.seek(0)
-    return StreamingResponse(
-        buf,
-        media_type="application/pdf",
-        headers=export_headers(f"{filename_safe}.pdf"),
-    )
+    return buf.getvalue()
