@@ -6,7 +6,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import api from '../src/services/api';
 import { useAuth, PERMISSIONS } from '../src/contexts/AuthContext';
 import { ExportButton } from '../src/components/ExportButton';
-import { ChangeRequest, FilterOptions, REQ_STATUS, PAGE_SIZE, filtersToQuery } from '../src/components/attendance/approvals/types';
+import { ChangeRequest, FilterOptions, REQ_STATUS, PAGE_SIZE_OPTIONS, filtersToQuery } from '../src/components/attendance/approvals/types';
 import { useApprovalFilters } from '../src/components/attendance/approvals/useApprovalFilters';
 import { ApprovalFilterBar } from '../src/components/attendance/approvals/ApprovalFilterBar';
 import { ApprovalStats, ApprovalStatsData } from '../src/components/attendance/approvals/ApprovalStats';
@@ -246,7 +246,7 @@ export default function AttendanceApprovalsScreen() {
           </View>
         )}
 
-        {!loading && <Pagination page={filters.page} pages={pages} total={total} pageSize={PAGE_SIZE} onChange={p => update({ page: p })} />}
+        {!loading && <Pagination page={filters.page} pages={pages} total={total} pageSize={filters.page_size} onChange={p => update({ page: p })} pageSizeOptions={PAGE_SIZE_OPTIONS} onPageSizeChange={sz => update({ page_size: sz })} />}
       </ScrollView>
 
       <Modal visible={!!rejectModal} transparent animationType="fade" onRequestClose={() => setRejectModal(null)}>

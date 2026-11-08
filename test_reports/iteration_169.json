@@ -1,0 +1,43 @@
+{
+  "summary": "Tested the per-lecture exceptions in the Day Shift modal end to end, on both backend and frontend. Test data was 4 TEST lectures seeded on 2026-12-15 in slots 1, 2, 4 and 5 of course 'مقرر اختبار 180156' (faculty كلية الشريعة والقانون). Backend: 9 of 9 pytest tests passed for preview with exceptions: baseline counts and new times, keep on a morning lecture, cancel on the 4th period, keep on a late lecture, cancel on a morning lecture, several exceptions together, unknown lecture id ignored, and no-auth rejected. Frontend (logged in by putting the token in localStorage; the login form was not used, so there were no input/tooling problems): the existing preview is unchanged (stats cards, 📏 rules, cancelled sample, days table, sample line, apply button text). The new toggle shows only after preview, sits below the preview and above the action buttons, and is collapsed by default with '(0 مُخصَّصة)'. When expanded it lists all 4 lectures with correct labels (ستُزاح/ستُزاح/تبقى بوقتها الفعلي/ستُلغى) and exactly 3 buttons per row, with 'القاعدة' active by default. Keep on the morning lecture: shifted count 2→1, counter 1, row label updated, button highlighted green. Cancel on the 4th period: kept 1→0, cancelled 1→2. Keep on the late lecture: cancelled 2→1. Switching it back to 'القاعدة' returned cancelled to 2 and the counter to 2. The list stays open while you change actions. Apply: the confirm and success dialogs appeared and the modal closed. In the DB the kept morning lecture stayed 08:00-09:30 'scheduled' with no day_shift_id, the untouched morning lecture moved to 11:10-12:10, the 4th-period lecture is 'cancelled', and the late lecture is 'cancelled'. The day_shifts audit doc has exceptions={L1:'keep',L4:'cancel'}. Reverting via the API returned all 3 changed lectures to their original values. Reset check: changing the start time or the date clears the preview; after re-preview the toggle is collapsed again with '(0 مُخصَّصة)'. Closing and reopening the modal also resets it. All seeded data was removed afterwards: lectures, the day_shift doc and the 2 shift notifications.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/day-shift/apply", "issue": "Force-cancelled morning or 4th-period lectures get the cancel_reason 'إلغاء ما بعد الفترة الرابعة بسبب إزاحة اليوم الدراسي', and the notification text says 'ملغاة (بعد الرابعة)'. Both are wrong for an exception cancel. The success message 'وإلغاء N محاضرة بعد الرابعة' also counts the exception cancels."},
+      {"endpoint": "POST /api/day-shift/preview|apply (_compute morning branch)", "issue": "A morning lecture excepted as 'keep' still takes up its compressed slot index. Example: slot 1 kept at 08:00, so slot 2 moves to 11:10 instead of 10:00, leaving an empty gap. There is no clash check, so a kept lecture can overlap a shifted one (e.g. new start 09:00 + keep slot 2 at 09:45-11:15, while slot 1 moves to 09:00-10:00). The days table still shows 'البداية 08:00 → 10:00' even when the first lecture stays at 08:00 and nothing starts at 10:00."},
+      {"endpoint": "POST /api/day-shift/preview|apply (_compute)", "issue": "When new_start_time <= first lecture (the 'won't shift' warning path), the morning loop is skipped with `continue`. Morning lectures then get no rows in `lectures`, so they cannot be excepted, and a 'cancel' exception on them is silently ignored."},
+      {"endpoint": "DayShiftRequest.exceptions", "issue": "Typed as Optional[dict] with no validation, so values other than 'keep'/'cancel' (e.g. 'bogus') are accepted silently with 200 and treated as the rule. It should be Optional[Dict[str, Literal['keep','cancel']]]."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Apply confirm dialog", "issue": "The window.confirm text says '0 محاضرة في الفترة الرابعة تبقى' and '2 محاضرة بعد الرابعة تُلغى' even when one cancel is a 4th-period force-cancel. It never mentions how many exceptions are active, so the admin cannot see that overrides will be applied.", "affected_selectors": ["[data-testid='day-shift-apply-btn']"]},
+      {"flow": "setExceptionAction error path", "issue": "exceptions state is updated before the preview call. If the call fails, the button shows active but the stats show the previous preview (they go out of sync).", "affected_selectors": ["[data-testid^='day-shift-exception-']"]}
+    ],
+    "design_issues": [
+      {"screen": "DayShiftModal exceptions list at mobile 390px", "issues": ["The third button 'إلغاء مباشر' is partly clipped at the row's left edge, and the floating AI FAB overlaps the bottom of the list.", "Date and time inputs use the browser's native picker (this was already the case, not new)."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_day_shift_exceptions.py", "/app/backend/tests/seed_day_shift_exceptions.py", "/app/test_reports/pytest/day_shift_exceptions.xml"],
+  "action_items": [
+    "Use a separate cancel_reason/notification wording for exception cancels (e.g. 'إلغاء مباشر ضمن إزاحة اليوم الدراسي') instead of 'ما بعد الفترة الرابعة'",
+    "Consider not giving a compressed slot to morning lectures excepted as 'keep' (or warn about overlaps between kept and shifted lectures), and compute old_first/new_first from lectures that actually move",
+    "Validate exceptions values with Literal['keep','cancel']",
+    "Show the active exceptions count in the apply confirm dialog and stop labelling the stats as '4th/after 4th' when overrides change them",
+    "Roll exceptions state back if the refresh preview call fails",
+    "Fix the clipped exception buttons at mobile width (wrap the button group)"
+  ],
+  "critical_code_review_comments": [
+    "The apply path reuses _compute rows/moves/cancels, so preview and apply share one source of logic. Good.",
+    "In _compute's morning branch, the 'new_start <= first' warning path skips morning rows entirely, so the UI list leaves those lectures out.",
+    "total_kept counts only 4th-period keeps. Keep exceptions on morning or late lectures are not shown in any stat card (they just leave the shift/cancel counts). Consider a 'مستثناة يدوياً' stat."
+  ],
+  "updated_files": ["/app/backend/tests/test_day_shift_exceptions.py", "/app/backend/tests/seed_day_shift_exceptions.py"],
+  "success_rate": {"backend": "100% (9/9)", "frontend": "100% of requested flows"},
+  "seed_data_creation": "4 lectures on 2026-12-15 (course 698f671431cfba92c49a550d) seeded with tests/seed_day_shift_exceptions.py. One day_shift was applied and then reverted. All deleted afterwards: the 4 lectures, day_shift 6af04eb57778029a55c78e4e, and 2 notifications 6af04eb57778029a55c78e50/51.",
+  "test_credentials": "admin/admin123 (from /app/memory/test_credentials.md)",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run `python backend/tests/seed_day_shift_exceptions.py seed`, then the pytest file, then `... cleanup`. cleanup does NOT delete day_shifts or notifications created by apply; delete those by id. UI login: POST /api/auth/login, then set localStorage token/user, then go to /schedule and click [data-testid=day-shift-open-btn]. Select faculty 698e4f9297fef774e66e93a4 to keep the scope narrow. Turn off the notify checkbox to avoid sending notifications."
+}

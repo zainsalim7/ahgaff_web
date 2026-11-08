@@ -1,6 +1,6 @@
 """⏰ إزاحة اليوم الدراسي: تأخير بداية اليوم (يوم أو مدى) بإزاحة أفقية موحّدة لكل المحاضرات مع تراجع وإشعارات"""
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Optional, Dict, Literal
 
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
@@ -23,7 +23,7 @@ class DayShiftRequest(BaseModel):
     offset_minutes: Optional[int] = None  # بديل: إزاحة ثابتة بالدقائق
     reason: str = ""
     notify: bool = True
-    exceptions: Optional[dict] = None  # lecture_id → "keep" (تبقى بوقتها الفعلي) | "cancel" (إلغاء مباشر) — خلاف ذلك تُطبَّق القاعدة الأساسية
+    exceptions: Optional[Dict[str, Literal["keep", "cancel"]]] = None  # lecture_id → "keep" (تبقى بوقتها الفعلي) | "cancel" (إلغاء مباشر) — خلاف ذلك تُطبَّق القاعدة الأساسية
 
 
 def _t2m(t: str) -> Optional[int]:
@@ -150,7 +150,7 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
                 lid, ov = str(l["_id"]), exceptions.get(str(l["_id"]))
                 row = {"id": lid, "date": d, "course": courses.get(l["course_id"], {}).get("name", ""), "old_start": l.get("start_time", ""), "old_end": l.get("end_time", ""), "rule_action": "keep"}
                 if ov == "cancel":
-                    cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d})
+                    cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d, "is_exception": True})
                     day_cancels += 1
                     row.update({"final_action": "cancel", "exception": "cancel", "new_start": "", "new_end": ""})
                 else:
@@ -165,7 +165,7 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
                     row.update({"final_action": "keep", "exception": "keep", "new_start": l.get("start_time", ""), "new_end": l.get("end_time", "")})
                     rows.append(row)
                     continue
-                cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d})
+                cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d, "is_exception": False})
                 day_cancels += 1
                 row.update({"final_action": "cancel", "exception": "cancel" if ov == "cancel" else None, "new_start": "", "new_end": ""})
                 rows.append(row)
@@ -174,11 +174,25 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
                 continue
             first = min(_t2m(l["start_time"]) for grp in morning.values() for l in grp)
             new_start = _t2m(data.new_start_time) if data.new_start_time else first + (data.offset_minutes or 0)
-            if new_start <= first and data.new_start_time:
+            no_shift = bool(data.new_start_time) and new_start <= first
+            if no_shift:
                 warnings.append(f"يوم {d}: وقت البداية الجديد لا يتأخر عن بداية اليوم الفعلية ({_m2t(first)}) — لن تُزاح محاضرات الصباح")
+                for sn, grp in morning.items():
+                    for l in grp:
+                        lid, ov = str(l["_id"]), exceptions.get(str(l["_id"]))
+                        row = {"id": lid, "date": d, "course": courses.get(l["course_id"], {}).get("name", ""), "old_start": l["start_time"], "old_end": l.get("end_time", ""), "rule_action": "keep"}
+                        if ov == "cancel":
+                            cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d, "is_exception": True})
+                            day_cancels += 1
+                            row.update({"final_action": "cancel", "exception": "cancel", "new_start": "", "new_end": ""})
+                        else:
+                            row.update({"final_action": "keep", "exception": "keep" if ov == "keep" else None, "new_start": l.get("start_time", ""), "new_end": l.get("end_time", "")})
+                        rows.append(row)
                 continue
-            order = sorted(morning)  # الفترات الصباحية الموجودة فعلاً، متتابعة بعد الإزاحة
-            for i, sn in enumerate(order):
+            # الفترات التي يبقى فيها عنصر واحد فعلي على الأقل تحجز موضعاً في التسلسل؛ الفترات المستثناة بالكامل (تبقى/إلغاء) لا تُحجز فراغاً
+            active_slots = sorted(sn for sn, grp in morning.items() if any(exceptions.get(str(l["_id"])) not in ("keep", "cancel") for l in grp))
+            slot_time: dict = {}
+            for i, sn in enumerate(active_slots):
                 n_st = new_start + i * (COMPRESSED_MIN + BREAK_MIN)
                 dur = COMPRESSED_MIN
                 if fixed_start is not None and n_st + dur > fixed_start:
@@ -189,16 +203,21 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
                 n_en = n_st + dur
                 if n_en >= 24 * 60:
                     raise HTTPException(status_code=400, detail=f"الإزاحة تُخرج محاضرات يوم {d} خارج حدود اليوم")
-                for l in morning[sn]:
+                slot_time[sn] = (n_st, n_en)
+            for sn, grp in sorted(morning.items()):
+                n_st, n_en = slot_time.get(sn, (None, None))
+                for l in grp:
                     lid, ov = str(l["_id"]), exceptions.get(str(l["_id"]))
                     st, en = _t2m(l["start_time"]), _t2m(l.get("end_time", "")) or (_t2m(l["start_time"]) + 90)
                     row = {"id": lid, "date": d, "course": courses.get(l["course_id"], {}).get("name", ""), "old_start": l["start_time"], "old_end": l.get("end_time", ""), "rule_action": "move"}
                     if ov == "keep":
                         row.update({"final_action": "keep", "exception": "keep", "new_start": l["start_time"], "new_end": l.get("end_time", "")})
                         rows.append(row)
+                        if any(st < o_en and o_st < en for o_st, o_en in slot_time.values()):
+                            warnings.append(f"يوم {d}: المحاضرة المستثناة (تبقى بوقتها) «{courses.get(l['course_id'], {}).get('name', '')}» قد تتداخل زمنياً مع محاضرة أخرى أُزيحت لنفس الفترة تقريباً — راجع الجدول يدوياً")
                         continue
                     if ov == "cancel":
-                        cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d})
+                        cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d, "is_exception": True})
                         day_cancels += 1
                         row.update({"final_action": "cancel", "exception": "cancel", "new_start": "", "new_end": ""})
                         rows.append(row)
@@ -207,11 +226,11 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
                                   "new_st": _m2t(n_st), "new_en": _m2t(n_en), "credited_minutes": max(en - st, 0), "slot": sn})
                     day_moves += 1
                     last_end_old = max(last_end_old, en)
+                    last_end_new = max(last_end_new, n_en)
+                    if first_old is None or st < first_old:
+                        first_old, first_new, day_offset = st, n_st, n_st - st
                     row.update({"final_action": "move", "exception": None, "new_start": _m2t(n_st), "new_end": _m2t(n_en)})
                     rows.append(row)
-                last_end_new = max(last_end_new, n_en)
-            if first_old is None or first < first_old:
-                first_old, first_new, day_offset = first, new_start, new_start - first
         days.append({"date": d, "lectures": day_moves, "cancelled": day_cancels, "kept": day_kept, "skipped": len(day_lecs) - len(movable), "offset_minutes": day_offset,
                      "old_first": _m2t(first_old) if first_old is not None else "", "new_first": _m2t(first_new) if first_new is not None else "",
                      "old_last_end": _m2t(last_end_old) if last_end_old else "", "new_last_end": _m2t(last_end_new) if last_end_new else ""})
@@ -303,19 +322,23 @@ async def apply_day_shift(data: DayShiftRequest, current_user: dict = Depends(ge
             changes.append({"kind": "move", "lecture_id": str(lec["_id"]), "course_id": lec["course_id"], "date": m["date"], "old_start": m["old_st"], "old_end": m["old_en"], "new_start": m["new_st"], "new_end": m["new_en"], "was_locked": bool(lec.get("time_locked"))})
         except Exception:
             continue
-    reason_txt = f"إلغاء ما بعد الفترة الرابعة بسبب إزاحة اليوم الدراسي{(' — ' + data.reason.strip()) if data.reason.strip() else ''}"
+    reason_after_fourth = f"إلغاء ما بعد الفترة الرابعة بسبب إزاحة اليوم الدراسي{(' — ' + data.reason.strip()) if data.reason.strip() else ''}"
+    reason_exception = f"إلغاء مباشر ضمن إزاحة اليوم الدراسي (استثناء يدوي){(' — ' + data.reason.strip()) if data.reason.strip() else ''}"
     for c in cancels:
         lec = c["lec"]
+        reason_txt = reason_exception if c.get("is_exception") else reason_after_fourth
         try:
             await db.lectures.update_one({"_id": lec["_id"]}, {"$set": {
                 "status": "cancelled", "cancel_reason": reason_txt, "cancelled_at": now.isoformat(), "cancelled_by_name": current_user.get("full_name", ""),
                 "day_shift_id": str(shift_id), "day_shift_cancelled": True,
             }})
-            changes.append({"kind": "cancel", "lecture_id": str(lec["_id"]), "course_id": lec["course_id"], "date": c["date"], "old_status": lec.get("status", "scheduled"), "old_start": lec.get("start_time", ""), "old_end": lec.get("end_time", "")})
+            changes.append({"kind": "cancel", "lecture_id": str(lec["_id"]), "course_id": lec["course_id"], "date": c["date"], "old_status": lec.get("status", "scheduled"), "old_start": lec.get("start_time", ""), "old_end": lec.get("end_time", ""), "is_exception": bool(c.get("is_exception"))})
         except Exception:
             continue
     n_moved = sum(1 for ch in changes if ch["kind"] == "move")
     n_cancel = sum(1 for ch in changes if ch["kind"] == "cancel")
+    n_cancel_exception = sum(1 for ch in changes if ch["kind"] == "cancel" and ch.get("is_exception"))
+    n_cancel_rule = n_cancel - n_cancel_exception
     doc = {
         "_id": shift_id, "date_from": data.date_from, "date_to": data.date_to or data.date_from,
         "faculty_id": data.faculty_id, "new_start_time": data.new_start_time, "offset_minutes": data.offset_minutes,
@@ -334,7 +357,7 @@ async def apply_day_shift(data: DayShiftRequest, current_user: dict = Depends(ge
         await db.day_shifts.update_one({"_id": shift_id}, {"$set": {"notified": notified}})
     day_desc = data.date_from if not data.date_to or data.date_to == data.date_from else f"من {data.date_from} إلى {data.date_to}"
     return {"id": str(shift_id), "updated": n_moved, "cancelled": n_cancel, "skipped": len(skipped), "notified": notified, "days": days, "warnings": warnings,
-            "message": f"تمت إزاحة {n_moved} محاضرة صباحية ({day_desc})" + (f" وإلغاء {n_cancel} محاضرة بعد الرابعة" if n_cancel else "") + (f" — استُثنيت {len(skipped)} محاضرة منعقدة/ملغاة/مفتوحة التحضير" if skipped else "")}
+            "message": f"تمت إزاحة {n_moved} محاضرة صباحية ({day_desc})" + (f" وإلغاء {n_cancel_rule} محاضرة بعد الرابعة" if n_cancel_rule else "") + (f" وإلغاء {n_cancel_exception} محاضرة مباشرة ضمن الاستثناءات اليدوية" if n_cancel_exception else "") + (f" — استُثنيت {len(skipped)} محاضرة منعقدة/ملغاة/مفتوحة التحضير" if skipped else "")}
 
 
 async def _notify(db, moves: list, cancels: list, days: list, reason: str) -> int:
@@ -368,12 +391,15 @@ async def _notify(db, moves: list, cancels: list, days: list, reason: str) -> in
     for (uid, date), ms in per_user_day.items():
         d = offsets.get(date, {})
         moved = sorted([x for x in ms if not x.get("cancelled")], key=lambda x: x["new_st"])
-        canc = [x for x in ms if x.get("cancelled")]
+        canc_rule = [x for x in ms if x.get("cancelled") and not x.get("is_exception")]
+        canc_exc = [x for x in ms if x.get("cancelled") and x.get("is_exception")]
         parts = []
         if moved:
             parts.append("محاضراتك: " + "، ".join(f"{x['course'].get('name', '')} {x['new_st']}–{x['new_en']}" for x in moved[:4]) + (" …" if len(moved) > 4 else ""))
-        if canc:
-            parts.append("ملغاة (بعد الرابعة): " + "، ".join(x["course"].get("name", "") for x in canc[:3]) + (" …" if len(canc) > 3 else ""))
+        if canc_rule:
+            parts.append("ملغاة (بعد الرابعة): " + "، ".join(x["course"].get("name", "") for x in canc_rule[:3]) + (" …" if len(canc_rule) > 3 else ""))
+        if canc_exc:
+            parts.append("ملغاة (استثناء يدوي): " + "، ".join(x["course"].get("name", "") for x in canc_exc[:3]) + (" …" if len(canc_exc) > 3 else ""))
         head = (f"{_fmt_offset(d.get('offset_minutes', 0))} لبداية اليوم الدراسي يوم {date} إلى {d.get('new_first', '')} (المحاضرات الصباحية 60 دقيقة)" if d.get("offset_minutes") else f"تغيير في محاضرات يوم {date}") + (f" ({reason})" if reason else "")
         msg = head + ". " + " · ".join(parts)
         events.append({"user_id": uid, "title": "⏰ تغيير مواعيد اليوم الدراسي", "message": msg, "course_id": ms[0]["lec"]["course_id"], "course_name": ms[0]["course"].get("name", "")})

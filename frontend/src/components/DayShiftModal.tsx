@@ -62,6 +62,7 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
   };
 
   const setExceptionAction = async (id: string, action: string) => {
+    const prev = exceptions;
     const next = { ...exceptions };
     if (!action) delete next[id]; else next[id] = action;
     setExceptions(next);
@@ -70,6 +71,7 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
       const r = await api.post('/day-shift/preview', { ...body(), exceptions: next });
       setPreview(r.data);
     } catch (e: any) {
+      setExceptions(prev);
       setErr(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'خطأ في المعاينة');
     } finally { setBusy(false); }
   };
@@ -77,7 +79,7 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
   const runApply = async () => {
     if (!preview) return;
     const daysWithMoves = (preview.days || []).filter((d: any) => d.lectures > 0 || d.cancelled > 0);
-    if (!window.confirm(`⚠️ تأكيد الإزاحة:\n\n• ${preview.total_lectures} محاضرة صباحية تُزاح وتتقلص إلى 60 دقيقة في ${daysWithMoves.length} يوم\n• ${preview.total_kept || 0} محاضرة في الفترة الرابعة تبقى بوقتها\n• ${preview.total_cancelled || 0} محاضرة بعد الرابعة تُلغى\n• النطاق: ${preview.faculty_name}\n• البداية الجديدة: ${newStart}\n${notify ? '• سيُرسل إشعار لكل الأساتذة والطلاب المتأثرين' : '• بدون إشعارات'}\n\nيمكن التراجع لاحقاً من شارة اليوم. متابعة؟`)) return;
+    if (!window.confirm(`⚠️ تأكيد الإزاحة:\n\n• ${preview.total_lectures} محاضرة صباحية تُزاح وتتقلص إلى 60 دقيقة في ${daysWithMoves.length} يوم\n• ${preview.total_kept || 0} محاضرة في الفترة الرابعة تبقى بوقتها\n• ${preview.total_cancelled || 0} محاضرة بعد الرابعة تُلغى\n${preview.exceptions_applied ? `• ${preview.exceptions_applied} محاضرة بتخصيص يدوي (استثناء) مُطبَّق — راجعها في القائمة أعلاه\n` : ''}• النطاق: ${preview.faculty_name}\n• البداية الجديدة: ${newStart}\n${notify ? '• سيُرسل إشعار لكل الأساتذة والطلاب المتأثرين' : '• بدون إشعارات'}\n\nيمكن التراجع لاحقاً من شارة اليوم. متابعة؟`)) return;
     setBusy(true); setErr('');
     try {
       const r = await api.post('/day-shift/apply', body());
@@ -197,12 +199,12 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
             {exceptionsOpen && (
               <div style={{ marginTop: 8, maxHeight: 280, overflowY: 'auto', border: '1px solid #e3e7ee', borderRadius: 8 }} data-testid="day-shift-exceptions-list">
                 {preview.lectures.map((r: any) => (
-                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '7px 10px', borderTop: '1px solid #f1f3f7', fontSize: 11.5 }} data-testid={`day-shift-exception-row-${r.id}`}>
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '7px 10px', borderTop: '1px solid #f1f3f7', fontSize: 11.5, flexWrap: 'wrap' }} data-testid={`day-shift-exception-row-${r.id}`}>
                     <div style={{ textAlign: 'right', flex: 1, minWidth: 0 }}>
                       <div style={{ fontWeight: 700, color: '#1a2540', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.course}</div>
                       <div style={{ color: '#8a95a8' }}>{r.date} · {r.old_start} — {r.exception ? r.final_action_label : r.rule_action_label}</div>
                     </div>
-                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                       {[['', 'القاعدة', '#1565c0'], ['keep', 'تبقى بوقتها', '#2e7d32'], ['cancel', 'إلغاء مباشر', '#c62828']].map(([v, l, c]: any) => {
                         const active = (exceptions[r.id] || '') === v;
                         return (

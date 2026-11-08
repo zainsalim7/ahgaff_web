@@ -5,7 +5,7 @@ import { EMPTY_FILTERS, Filters } from './types';
 
 const RESET_PAGE_KEYS: (keyof Filters)[] = [
   'status', 'faculty_id', 'department_id', 'level', 'section', 'course_id', 'semester_id',
-  'requested_by', 'new_status', 'q', 'lecture_from', 'lecture_to', 'requested_from', 'requested_to', 'sort',
+  'requested_by', 'new_status', 'q', 'lecture_from', 'lecture_to', 'requested_from', 'requested_to', 'sort', 'page_size',
 ];
 
 const fromParams = (params: Record<string, any>): Filters => {
@@ -14,6 +14,7 @@ const fromParams = (params: Record<string, any>): Filters => {
     const v = params[k];
     if (v === undefined || v === null || v === '') return;
     if (k === 'page') (f as any)[k] = Math.max(1, parseInt(String(v), 10) || 1);
+    else if (k === 'page_size') (f as any)[k] = Math.max(1, Math.min(200, parseInt(String(v), 10) || 50));
     else (f as any)[k] = String(v);
   });
   return f;
@@ -60,7 +61,7 @@ export const useApprovalFilters = () => {
 
   const effective = useMemo<Filters>(() => ({ ...filters, q: debouncedQ }), [filters, debouncedQ]);
 
-  const activeCount = useMemo(() => RESET_PAGE_KEYS.filter(k => k !== 'status' && k !== 'sort' && filters[k] !== '').length, [filters]);
+  const activeCount = useMemo(() => RESET_PAGE_KEYS.filter(k => k !== 'status' && k !== 'sort' && k !== 'page_size' && filters[k] !== '').length, [filters]);
 
   return { filters, effective, update, reset, activeCount };
 };

@@ -53,14 +53,17 @@ export interface Filters {
   requested_to: string;
   sort: string;
   page: number;
+  page_size: number;
   view: 'list' | 'grouped';
 }
 
 export const EMPTY_FILTERS: Filters = {
   status: 'pending', faculty_id: '', department_id: '', level: '', section: '', course_id: '', semester_id: '',
   requested_by: '', new_status: '', q: '', lecture_from: '', lecture_to: '', requested_from: '', requested_to: '',
-  sort: 'newest', page: 1, view: 'list',
+  sort: 'newest', page: 1, page_size: 50, view: 'list',
 };
+
+export const PAGE_SIZE_OPTIONS = [50, 100, 200];
 
 export const STATUS_LABELS: Record<string, { label: string; color: string; bg: string }> = {
   present: { label: 'حاضر', color: '#0d5a2c', bg: '#e8f5ee' },
@@ -90,12 +93,12 @@ export const PAGE_SIZE = 50;
 export const filtersToQuery = (f: Filters, withPage = true): string => {
   const p = new URLSearchParams();
   (Object.keys(f) as (keyof Filters)[]).forEach(k => {
-    if (k === 'view') return;
+    if (k === 'view' || k === 'page_size') return;
     if (k === 'page') { if (withPage) p.set('page', String(f.page)); return; }
     const v = f[k];
     if (v !== '' && v !== undefined && v !== null) p.set(k, String(v));
   });
-  if (withPage) p.set('page_size', String(PAGE_SIZE));
+  if (withPage) p.set('page_size', String(f.page_size || PAGE_SIZE));
   return p.toString();
 };
 

@@ -8,9 +8,11 @@ interface Props {
   total: number;
   pageSize: number;
   onChange: (page: number) => void;
+  pageSizeOptions?: number[];
+  onPageSizeChange?: (size: number) => void;
 }
 
-export const Pagination: React.FC<Props> = ({ page, pages, total, pageSize, onChange }) => {
+export const Pagination: React.FC<Props> = ({ page, pages, total, pageSize, onChange, pageSizeOptions, onPageSizeChange }) => {
   if (total === 0) return null;
   const from = (page - 1) * pageSize + 1;
   const to = Math.min(total, page * pageSize);
@@ -18,7 +20,19 @@ export const Pagination: React.FC<Props> = ({ page, pages, total, pageSize, onCh
   for (let p = Math.max(1, page - 2); p <= Math.min(pages, page + 2); p++) nums.push(p);
   return (
     <View style={st.bar} testID="pagination">
-      <Text style={st.info} testID="pagination-info">عرض {from}–{to} من {total}</Text>
+      <View style={st.infoRow}>
+        <Text style={st.info} testID="pagination-info">عرض {from}–{to} من {total}</Text>
+        {!!pageSizeOptions && !!onPageSizeChange && (
+          <View style={st.sizeGroup} testID="page-size-group">
+            <Text style={st.sizeLabel}>لكل صفحة:</Text>
+            {pageSizeOptions.map(sz => (
+              <TouchableOpacity key={sz} style={[st.sizeBtn, sz === pageSize && st.sizeBtnOn]} onPress={() => onPageSizeChange(sz)} testID={`page-size-${sz}`}>
+                <Text style={[st.sizeBtnText, sz === pageSize && { color: '#fff' }]}>{sz}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
       <View style={st.btns}>
         <TouchableOpacity style={[st.btn, page <= 1 && st.off]} disabled={page <= 1} onPress={() => onChange(page - 1)} testID="pagination-prev">
           <Ionicons name="chevron-forward" size={16} color={page <= 1 ? '#c0c8d4' : '#1565c0'} />
@@ -39,8 +53,14 @@ export const Pagination: React.FC<Props> = ({ page, pages, total, pageSize, onCh
 };
 
 const st = StyleSheet.create({
-  bar: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eef1f6' },
+  bar: { flexDirection: 'row-reverse', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingVertical: 8, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#eef1f6', flexWrap: 'wrap', gap: 8 },
+  infoRow: { flexDirection: 'row-reverse', alignItems: 'center', gap: 10, flexWrap: 'wrap' },
   info: { fontSize: 12, color: '#5b6678', fontWeight: '600' },
+  sizeGroup: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 },
+  sizeLabel: { fontSize: 11.5, color: '#8a95a8', fontWeight: '600' },
+  sizeBtn: { paddingHorizontal: 8, paddingVertical: 3, borderRadius: 6, backgroundColor: '#f0f2f5' },
+  sizeBtnOn: { backgroundColor: '#1565c0' },
+  sizeBtnText: { fontSize: 11.5, fontWeight: '700', color: '#1a2540' },
   btns: { flexDirection: 'row-reverse', alignItems: 'center', gap: 4 },
   btn: { padding: 6, borderRadius: 6, backgroundColor: '#e3f0ff' },
   off: { backgroundColor: '#f0f2f5' },
