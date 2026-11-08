@@ -41,6 +41,25 @@ class BatchActionPayload(BaseModel):
     review_notes: Optional[str] = None
 
 
+class BatchAllPayload(BaseModel):
+    """اعتماد/رفض كل الطلبات المعلّقة المطابقة للفلتر الحالي (وليس فقط صفحة العرض)."""
+    exclude_ids: Optional[List[str]] = None
+    review_notes: Optional[str] = None
+    faculty_id: Optional[str] = None
+    department_id: Optional[str] = None
+    level: Optional[str] = None
+    section: Optional[str] = None
+    course_id: Optional[str] = None
+    semester_id: Optional[str] = None
+    requested_by: Optional[str] = None
+    new_status: Optional[str] = None
+    q: Optional[str] = None
+    lecture_from: Optional[str] = None
+    lecture_to: Optional[str] = None
+    requested_from: Optional[str] = None
+    requested_to: Optional[str] = None
+
+
 # ─────────────────────────────────────────────────────────────
 # Internal Helper — يُستدعى من endpoint تسجيل الحضور
 # ─────────────────────────────────────────────────────────────
@@ -741,6 +760,90 @@ async def batch_reject(
         except Exception as e:
             errors.append({"id": req_id, "reason": str(e)})
     return {"success": True, "rejected": rejected, "errors": errors}
+
+
+async def _matching_pending_query(db, current_user: dict, payload: "BatchAllPayload") -> dict:
+    query = await _build_filter_query(
+        db, current_user, faculty_id=payload.faculty_id, department_id=payload.department_id,
+        level=payload.level, section=payload.section, course_id=payload.course_id,
+        semester_id=payload.semester_id, requested_by=payload.requested_by, new_status=payload.new_status,
+        q=payload.q, lecture_from=payload.lecture_from, lecture_to=payload.lecture_to,
+        requested_from=payload.requested_from, requested_to=payload.requested_to,
+    )
+    query["status"] = "pending"
+    if payload.exclude_ids:
+        query["_id"] = {"$nin": [ObjectId(i) for i in payload.exclude_ids if ObjectId.is_valid(i)]}
+    return query
+
+
+@router.post("/attendance-changes/batch/approve-all")
+async def batch_approve_all(
+    payload: BatchAllPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """اعتماد كل الطلبات المعلّقة المطابقة للفلتر الحالي — عبر كل الصفحات، وليس المعروضة فقط."""
+    if not _can_approve(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بالاعتماد")
+    db = get_db()
+    query = await _matching_pending_query(db, current_user, payload)
+    docs = await db.attendance_change_requests.find(query).to_list(10000)
+    approved = 0
+    errors: List[dict] = []
+    for doc in docs:
+        try:
+            await _apply_change_to_attendance(doc, current_user)
+            await db.attendance_change_requests.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {
+                    "status": "approved",
+                    "reviewed_by": current_user["id"],
+                    "reviewed_by_name": current_user.get("full_name", ""),
+                    "reviewed_at": datetime.now(timezone.utc),
+                }}
+            )
+            approved += 1
+        except Exception as e:
+            errors.append({"id": str(doc["_id"]), "reason": str(e)})
+    await log_activity(
+        current_user, "batch_approve_attendance_changes_all", "attendance_change_request",
+        None, f"اعتماد جماعي شامل لكل الطلبات المطابقة للفلتر: {approved} طلب"
+    )
+    return {"success": True, "approved": approved, "errors": errors, "total_matched": len(docs)}
+
+
+@router.post("/attendance-changes/batch/reject-all")
+async def batch_reject_all(
+    payload: BatchAllPayload,
+    current_user: dict = Depends(get_current_user),
+):
+    """رفض كل الطلبات المعلّقة المطابقة للفلتر الحالي — عبر كل الصفحات، وليس المعروضة فقط."""
+    if not _can_approve(current_user):
+        raise HTTPException(status_code=403, detail="غير مصرح لك بالرفض")
+    db = get_db()
+    query = await _matching_pending_query(db, current_user, payload)
+    docs = await db.attendance_change_requests.find(query).to_list(10000)
+    rejected = 0
+    errors: List[dict] = []
+    for doc in docs:
+        try:
+            await db.attendance_change_requests.update_one(
+                {"_id": doc["_id"]},
+                {"$set": {
+                    "status": "rejected",
+                    "reviewed_by": current_user["id"],
+                    "reviewed_by_name": current_user.get("full_name", ""),
+                    "reviewed_at": datetime.now(timezone.utc),
+                    "review_notes": payload.review_notes or "",
+                }}
+            )
+            rejected += 1
+        except Exception as e:
+            errors.append({"id": str(doc["_id"]), "reason": str(e)})
+    await log_activity(
+        current_user, "batch_reject_attendance_changes_all", "attendance_change_request",
+        None, f"رفض جماعي شامل لكل الطلبات المطابقة للفلتر: {rejected} طلب"
+    )
+    return {"success": True, "rejected": rejected, "errors": errors, "total_matched": len(docs)}
 
 
 @router.post("/attendance-changes/{req_id}/approve")

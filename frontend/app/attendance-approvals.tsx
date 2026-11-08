@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Platform, Modal, TextInput } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator, Alert, Platform, Modal, TextInput, useWindowDimensions } from 'react-native';
 import { Stack } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,11 +35,17 @@ export default function AttendanceApprovalsScreen() {
   const [options, setOptions] = useState<FilterOptions | null>(null);
   const [stats, setStats] = useState<ApprovalStatsData | null>(null);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectAllMatching, setSelectAllMatching] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [rejectModal, setRejectModal] = useState<{ ids: string[] } | null>(null);
+  const [rejectModal, setRejectModal] = useState<{ ids: string[]; all?: boolean } | null>(null);
   const [rejectNotes, setRejectNotes] = useState('');
 
   const queryString = useMemo(() => filtersToQuery(effective), [effective]);
+  const { width: winWidth } = useWindowDimensions();
+  const cardCols = winWidth >= 1300 ? 3 : winWidth >= 760 ? 2 : 1;
+  const groupCols = winWidth >= 1300 ? 2 : 1;
+  const cardColWidth: any = `${100 / cardCols}%`;
+  const groupColWidth: any = `${100 / groupCols}%`;
 
   const fetchList = useCallback(async () => {
     setLoading(true);
@@ -50,6 +56,7 @@ export default function AttendanceApprovalsScreen() {
       setPages(res.data?.pages || 1);
       setCounts(res.data?.counts || {});
       setSelectedIds(new Set());
+      setSelectAllMatching(false);
     } catch (e: any) {
       notify('خطأ', e?.response?.data?.detail || 'فشل تحميل الطلبات');
     } finally {
@@ -70,10 +77,20 @@ export default function AttendanceApprovalsScreen() {
 
   const refreshAll = useCallback(async () => { await Promise.all([fetchList(), fetchMeta()]); }, [fetchList, fetchMeta]);
 
-  const toggleSelect = (id: string) => setSelectedIds(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
-  const toggleMany = (ids: string[], on: boolean) => setSelectedIds(prev => { const s = new Set(prev); ids.forEach(id => on ? s.add(id) : s.delete(id)); return s; });
+  const toggleSelect = (id: string) => setSelectedIds(prev => {
+    const base = selectAllMatching ? new Set(pendingItems.map(i => i.id)) : prev;
+    setSelectAllMatching(false);
+    const s = new Set(base); s.has(id) ? s.delete(id) : s.add(id); return s;
+  });
+  const toggleMany = (ids: string[], on: boolean) => { setSelectAllMatching(false); setSelectedIds(prev => { const s = new Set(prev); ids.forEach(id => on ? s.add(id) : s.delete(id)); return s; }); };
   const pendingItems = items.filter(i => i.status === 'pending');
-  const selectAll = () => setSelectedIds(selectedIds.size === pendingItems.length ? new Set() : new Set(pendingItems.map(i => i.id)));
+  const totalPending = counts.pending ?? pendingItems.length;
+  const selectedCount = selectAllMatching ? totalPending : selectedIds.size;
+  const selectAll = () => {
+    if (selectAllMatching || selectedIds.size === pendingItems.length) { setSelectAllMatching(false); setSelectedIds(new Set()); }
+    else { setSelectedIds(new Set(pendingItems.map(i => i.id))); }
+  };
+  const selectAllAcrossPages = () => { setSelectAllMatching(true); setSelectedIds(new Set(pendingItems.map(i => i.id))); };
 
   const doApprove = async (ids: string[]) => {
     if (!ids.length) return;
@@ -88,10 +105,36 @@ export default function AttendanceApprovalsScreen() {
     } finally { setProcessing(false); }
   };
 
-  const openReject = (ids: string[]) => { setRejectModal({ ids }); setRejectNotes(''); };
+  const doApproveAllMatching = async () => {
+    setProcessing(true);
+    try {
+      const { faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to } = effective;
+      const res = await api.post('/attendance-changes/batch/approve-all', { faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to });
+      notify('نجاح', `تم اعتماد ${res.data.approved} طلب من كل الصفحات المطابقة للفلتر`);
+      await refreshAll();
+    } catch (e: any) {
+      notify('خطأ', e?.response?.data?.detail || 'فشل الاعتماد الشامل');
+    } finally { setProcessing(false); }
+  };
+
+  const openReject = (ids: string[]) => { setRejectModal({ ids, all: false }); setRejectNotes(''); };
+  const openRejectAllMatching = () => { setRejectModal({ ids: [], all: true }); setRejectNotes(''); };
 
   const doReject = async () => {
     if (!rejectModal) return;
+    if (rejectModal.all) {
+      setProcessing(true);
+      try {
+        const { faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to } = effective;
+        const res = await api.post('/attendance-changes/batch/reject-all', { review_notes: rejectNotes, faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to });
+        notify('تم', `تم رفض ${res.data.rejected} طلب من كل الصفحات المطابقة للفلتر`);
+        setRejectModal(null); setRejectNotes('');
+        await refreshAll();
+      } catch (e: any) {
+        notify('خطأ', e?.response?.data?.detail || 'فشل الرفض الشامل');
+      } finally { setProcessing(false); }
+      return;
+    }
     const ids = rejectModal.ids;
     setProcessing(true);
     try {
@@ -156,14 +199,19 @@ export default function AttendanceApprovalsScreen() {
         {filters.status === 'pending' && pendingItems.length > 0 && (
           <View style={styles.bulkBar}>
             <TouchableOpacity onPress={selectAll} style={styles.bulkBtnGhost} testID="select-all-btn">
-              <Text style={styles.bulkBtnGhostText}>{selectedIds.size === pendingItems.length ? 'إلغاء الكل' : 'تحديد الكل'} ({selectedIds.size}/{pendingItems.length})</Text>
+              <Text style={styles.bulkBtnGhostText}>{selectAllMatching || selectedIds.size === pendingItems.length ? 'إلغاء الكل' : 'تحديد الكل'} ({selectedCount}/{totalPending})</Text>
             </TouchableOpacity>
-            {selectedIds.size > 0 && (
+            {!selectAllMatching && selectedIds.size === pendingItems.length && totalPending > pendingItems.length && (
+              <TouchableOpacity onPress={selectAllAcrossPages} style={styles.bulkBtnGhost} testID="select-all-matching-btn">
+                <Text style={styles.bulkBtnGhostText}>تحديد كل {totalPending} المطابقة للفلتر (كل الصفحات)</Text>
+              </TouchableOpacity>
+            )}
+            {selectedCount > 0 && (
               <>
-                <TouchableOpacity style={[styles.bulkBtn, styles.approveBtn]} onPress={() => doApprove(Array.from(selectedIds))} disabled={processing} testID="batch-approve-btn">
-                  <Text style={styles.bulkBtnText}>اعتماد المحدد ({selectedIds.size})</Text>
+                <TouchableOpacity style={[styles.bulkBtn, styles.approveBtn]} onPress={() => selectAllMatching ? doApproveAllMatching() : doApprove(Array.from(selectedIds))} disabled={processing} testID="batch-approve-btn">
+                  <Text style={styles.bulkBtnText}>اعتماد المحدد ({selectedCount})</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={[styles.bulkBtn, styles.rejectBtn]} onPress={() => openReject(Array.from(selectedIds))} disabled={processing} testID="batch-reject-btn">
+                <TouchableOpacity style={[styles.bulkBtn, styles.rejectBtn]} onPress={() => selectAllMatching ? openRejectAllMatching() : openReject(Array.from(selectedIds))} disabled={processing} testID="batch-reject-btn">
                   <Text style={styles.bulkBtnText}>رفض المحدد</Text>
                 </TouchableOpacity>
               </>
@@ -182,13 +230,17 @@ export default function AttendanceApprovalsScreen() {
             )}
           </View>
         ) : (
-          <View style={{ padding: 12 }} testID="results-list">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 12 }} testID="results-list">
             {filters.view === 'grouped'
               ? groups.map(g => (
-                <LectureGroupCard key={g.lecture_id} group={g} selectedIds={selectedIds} processing={processing} onToggle={toggleSelect} onToggleMany={toggleMany} onApprove={doApprove} onReject={openReject} />
+                <View key={g.lecture_id} style={{ width: groupColWidth, padding: 5 }}>
+                  <LectureGroupCard group={g} selectedIds={selectedIds} processing={processing} onToggle={toggleSelect} onToggleMany={toggleMany} onApprove={doApprove} onReject={openReject} />
+                </View>
               ))
               : items.map(item => (
-                <RequestCard key={item.id} item={item} selected={selectedIds.has(item.id)} processing={processing} onToggle={toggleSelect} onApprove={doApprove} onReject={openReject} />
+                <View key={item.id} style={{ width: cardColWidth, padding: 5 }}>
+                  <RequestCard item={item} selected={selectAllMatching && item.status === 'pending' ? true : selectedIds.has(item.id)} processing={processing} onToggle={toggleSelect} onApprove={doApprove} onReject={openReject} />
+                </View>
               ))}
           </View>
         )}
@@ -199,7 +251,7 @@ export default function AttendanceApprovalsScreen() {
       <Modal visible={!!rejectModal} transparent animationType="fade" onRequestClose={() => setRejectModal(null)}>
         <View style={styles.modalBackdrop}>
           <View style={styles.modalCard}>
-            <Text style={styles.modalTitle}>سبب الرفض (اختياري) — {rejectModal?.ids.length || 0} طلب</Text>
+            <Text style={styles.modalTitle}>سبب الرفض (اختياري) — {rejectModal?.all ? totalPending : (rejectModal?.ids.length || 0)} طلب</Text>
             <TextInput style={styles.textArea} value={rejectNotes} onChangeText={setRejectNotes} placeholder="اكتب سبب الرفض..." multiline numberOfLines={3} textAlign="right" testID="reject-notes-input" />
             <View style={styles.modalActions}>
               <TouchableOpacity style={[styles.actionBtn, styles.rejectBtn]} onPress={doReject} disabled={processing} testID="confirm-reject-btn">
