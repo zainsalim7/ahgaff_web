@@ -25,10 +25,12 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
   const [preview, setPreview] = useState<any>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
+  const [exceptions, setExceptions] = useState<Record<string, string>>({});
+  const [exceptionsOpen, setExceptionsOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setDateFrom(initialDate); setDateTo(''); setPreview(null); setErr(''); setReason('');
+    setDateFrom(initialDate); setDateTo(''); setPreview(null); setErr(''); setReason(''); setExceptions({}); setExceptionsOpen(false);
     api.get('/faculties').then((r) => {
       const list = r.data || [];
       setFaculties(list);
@@ -46,12 +48,26 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
     new_start_time: newStart,
     reason,
     notify,
+    exceptions: Object.keys(exceptions).length ? exceptions : undefined,
   });
 
   const runPreview = async () => {
     setBusy(true); setErr(''); setPreview(null);
     try {
       const r = await api.post('/day-shift/preview', body());
+      setPreview(r.data);
+    } catch (e: any) {
+      setErr(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'خطأ في المعاينة');
+    } finally { setBusy(false); }
+  };
+
+  const setExceptionAction = async (id: string, action: string) => {
+    const next = { ...exceptions };
+    if (!action) delete next[id]; else next[id] = action;
+    setExceptions(next);
+    setBusy(true); setErr('');
+    try {
+      const r = await api.post('/day-shift/preview', { ...body(), exceptions: next });
       setPreview(r.data);
     } catch (e: any) {
       setErr(typeof e?.response?.data?.detail === 'string' ? e.response.data.detail : 'خطأ في المعاينة');
@@ -72,7 +88,7 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
     } finally { setBusy(false); }
   };
 
-  const reset = () => setPreview(null);
+  const reset = () => { setPreview(null); setExceptions({}); setExceptionsOpen(false); };
 
   return (
     <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 100, backgroundColor: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', direction: 'rtl' }} onClick={() => !busy && onClose()}>
@@ -168,6 +184,34 @@ export const DayShiftModal: React.FC<Props> = ({ open, onClose, initialDate, onA
             {preview.sample?.length > 0 && (
               <div style={{ marginTop: 8, fontSize: 11, color: '#5b6678', textAlign: 'right', lineHeight: 1.8 }}>
                 عينة: {preview.sample.slice(0, 4).map((x: any) => `${x.course} (${x.from} ⇒ ${x.to})`).join(' · ')}
+              </div>
+            )}
+          </div>
+        )}
+
+        {preview && preview.lectures?.length > 0 && (
+          <div style={{ marginBottom: 12 }} data-testid="day-shift-exceptions-section">
+            <button onClick={() => setExceptionsOpen(!exceptionsOpen)} style={{ width: '100%', textAlign: 'right', padding: '8px 10px', borderRadius: 8, border: '1px dashed #90a4c0', backgroundColor: '#f0f4fa', color: '#1565c0', fontWeight: 700, fontSize: 12.5, cursor: 'pointer' }} data-testid="day-shift-exceptions-toggle">
+              {exceptionsOpen ? '▲' : '▼'} تخصيص استثناءات لكل محاضرة ({Object.keys(exceptions).length} مُخصَّصة) — الافتراضي: تطبيق القاعدة الأساسية
+            </button>
+            {exceptionsOpen && (
+              <div style={{ marginTop: 8, maxHeight: 280, overflowY: 'auto', border: '1px solid #e3e7ee', borderRadius: 8 }} data-testid="day-shift-exceptions-list">
+                {preview.lectures.map((r: any) => (
+                  <div key={r.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, padding: '7px 10px', borderTop: '1px solid #f1f3f7', fontSize: 11.5 }} data-testid={`day-shift-exception-row-${r.id}`}>
+                    <div style={{ textAlign: 'right', flex: 1, minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, color: '#1a2540', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.course}</div>
+                      <div style={{ color: '#8a95a8' }}>{r.date} · {r.old_start} — {r.exception ? r.final_action_label : r.rule_action_label}</div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexShrink: 0 }}>
+                      {[['', 'القاعدة', '#1565c0'], ['keep', 'تبقى بوقتها', '#2e7d32'], ['cancel', 'إلغاء مباشر', '#c62828']].map(([v, l, c]: any) => {
+                        const active = (exceptions[r.id] || '') === v;
+                        return (
+                          <button key={v || 'rule'} onClick={() => setExceptionAction(r.id, v)} disabled={busy} style={{ padding: '4px 7px', borderRadius: 6, fontSize: 10.5, fontWeight: 700, cursor: 'pointer', border: active ? `2px solid ${c}` : '1px solid #ddd', backgroundColor: active ? `${c}1a` : '#fff', color: active ? c : '#777' }} data-testid={`day-shift-exception-${r.id}-${v || 'rule'}`}>{l}</button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
               </div>
             )}
           </div>

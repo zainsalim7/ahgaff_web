@@ -23,6 +23,7 @@ class DayShiftRequest(BaseModel):
     offset_minutes: Optional[int] = None  # بديل: إزاحة ثابتة بالدقائق
     reason: str = ""
     notify: bool = True
+    exceptions: Optional[dict] = None  # lecture_id → "keep" (تبقى بوقتها الفعلي) | "cancel" (إلغاء مباشر) — خلاف ذلك تُطبَّق القاعدة الأساسية
 
 
 def _t2m(t: str) -> Optional[int]:
@@ -99,11 +100,13 @@ def _slot_of(start: str, slots: dict) -> Optional[int]:
 
 async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = None):
     """القواعد: تُزاح الفترات الصباحية (قبل الرابعة) فقط وتتقلص إلى 60 د باستراحة 10 د،
-    الرابعة تبقى، وما بعدها يُلغى. يعيد (الأيام، الإزاحات، الإلغاءات، المستثناة، التحذيرات)"""
+    الرابعة تبقى، وما بعدها يُلغى — إلا إن حدّد المستخدم استثناءً صريحاً لمحاضرة (تبقى بوقتها الفعلي أو تُلغى مباشرة).
+    يعيد (الأيام، الإزاحات، الإلغاءات، المستثناة لأسباب نظامية، التحذيرات، قائمة كل محاضرة بتفاصيلها)"""
     if not data.new_start_time and data.offset_minutes is None:
         raise HTTPException(status_code=400, detail="حدد وقت البداية الجديد أو مقدار الإزاحة")
     if data.new_start_time and _t2m(data.new_start_time) is None:
         raise HTTPException(status_code=400, detail="صيغة وقت البداية غير صحيحة (HH:MM)")
+    exceptions = data.exceptions or {}
     from .weekly_schedule import _faculty_slot_times
     dates = _dates(data.date_from, data.date_to)
     courses = await _course_map(db, data.faculty_id, own_dept_ids)
@@ -116,7 +119,7 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
         return slot_cache[fid]
 
     lecs = await db.lectures.find({"date": {"$in": dates}, "course_id": {"$in": list(courses.keys())}}).to_list(50000)
-    days, moves, cancels, skipped, warnings = [], [], [], [], []
+    days, moves, cancels, skipped, warnings, rows = [], [], [], [], [], []
     for d in dates:
         day_lecs = [l for l in lecs if l.get("date") == d]
         if not day_lecs:
@@ -133,18 +136,40 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
         for fid, fl in by_fac.items():
             slots = await slots_for(fid)
             fixed_start = _t2m(slots.get(FIXED_SLOT, ("", ""))[0]) if slots.get(FIXED_SLOT) else None
-            morning, late = {}, []
+            morning, late, fixed = {}, [], []
             for l in fl:
                 sn = _slot_of(l["start_time"], slots)
                 if sn is None or sn < FIXED_SLOT:
                     morning.setdefault(sn if sn is not None else 0, []).append(l)
                 elif sn == FIXED_SLOT:
-                    day_kept += 1
+                    fixed.append(l)
                 else:
                     late.append(l)
+
+            for l in fixed:
+                lid, ov = str(l["_id"]), exceptions.get(str(l["_id"]))
+                row = {"id": lid, "date": d, "course": courses.get(l["course_id"], {}).get("name", ""), "old_start": l.get("start_time", ""), "old_end": l.get("end_time", ""), "rule_action": "keep"}
+                if ov == "cancel":
+                    cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d})
+                    day_cancels += 1
+                    row.update({"final_action": "cancel", "exception": "cancel", "new_start": "", "new_end": ""})
+                else:
+                    day_kept += 1
+                    row.update({"final_action": "keep", "exception": None, "new_start": l.get("start_time", ""), "new_end": l.get("end_time", "")})
+                rows.append(row)
+
             for l in late:
+                lid, ov = str(l["_id"]), exceptions.get(str(l["_id"]))
+                row = {"id": lid, "date": d, "course": courses.get(l["course_id"], {}).get("name", ""), "old_start": l.get("start_time", ""), "old_end": l.get("end_time", ""), "rule_action": "cancel"}
+                if ov == "keep":
+                    row.update({"final_action": "keep", "exception": "keep", "new_start": l.get("start_time", ""), "new_end": l.get("end_time", "")})
+                    rows.append(row)
+                    continue
                 cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d})
-            day_cancels += len(late)
+                day_cancels += 1
+                row.update({"final_action": "cancel", "exception": "cancel" if ov == "cancel" else None, "new_start": "", "new_end": ""})
+                rows.append(row)
+
             if not morning:
                 continue
             first = min(_t2m(l["start_time"]) for grp in morning.values() for l in grp)
@@ -165,18 +190,32 @@ async def _compute(db, data: DayShiftRequest, own_dept_ids: Optional[list] = Non
                 if n_en >= 24 * 60:
                     raise HTTPException(status_code=400, detail=f"الإزاحة تُخرج محاضرات يوم {d} خارج حدود اليوم")
                 for l in morning[sn]:
+                    lid, ov = str(l["_id"]), exceptions.get(str(l["_id"]))
                     st, en = _t2m(l["start_time"]), _t2m(l.get("end_time", "")) or (_t2m(l["start_time"]) + 90)
+                    row = {"id": lid, "date": d, "course": courses.get(l["course_id"], {}).get("name", ""), "old_start": l["start_time"], "old_end": l.get("end_time", ""), "rule_action": "move"}
+                    if ov == "keep":
+                        row.update({"final_action": "keep", "exception": "keep", "new_start": l["start_time"], "new_end": l.get("end_time", "")})
+                        rows.append(row)
+                        continue
+                    if ov == "cancel":
+                        cancels.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d})
+                        day_cancels += 1
+                        row.update({"final_action": "cancel", "exception": "cancel", "new_start": "", "new_end": ""})
+                        rows.append(row)
+                        continue
                     moves.append({"lec": l, "course": courses.get(l["course_id"], {}), "date": d, "old_st": l["start_time"], "old_en": l.get("end_time", ""),
                                   "new_st": _m2t(n_st), "new_en": _m2t(n_en), "credited_minutes": max(en - st, 0), "slot": sn})
                     day_moves += 1
                     last_end_old = max(last_end_old, en)
+                    row.update({"final_action": "move", "exception": None, "new_start": _m2t(n_st), "new_end": _m2t(n_en)})
+                    rows.append(row)
                 last_end_new = max(last_end_new, n_en)
             if first_old is None or first < first_old:
                 first_old, first_new, day_offset = first, new_start, new_start - first
         days.append({"date": d, "lectures": day_moves, "cancelled": day_cancels, "kept": day_kept, "skipped": len(day_lecs) - len(movable), "offset_minutes": day_offset,
                      "old_first": _m2t(first_old) if first_old is not None else "", "new_first": _m2t(first_new) if first_new is not None else "",
                      "old_last_end": _m2t(last_end_old) if last_end_old else "", "new_last_end": _m2t(last_end_new) if last_end_new else ""})
-    return days, moves, cancels, skipped, warnings
+    return days, moves, cancels, skipped, warnings, sorted(rows, key=lambda r: (r["date"], r["old_start"]))
 
 
 def _fmt_offset(m: int) -> str:
@@ -213,11 +252,12 @@ async def preview_day_shift(data: DayShiftRequest, current_user: dict = Depends(
     db = get_db()
     own_dept_ids = await get_own_department_ids(current_user)
     await _check_faculty_scope(db, data.faculty_id, own_dept_ids)
-    days, moves, cancels, skipped, warnings = await _compute(db, data, own_dept_ids)
+    days, moves, cancels, skipped, warnings, rows = await _compute(db, data, own_dept_ids)
     fac = None
     if data.faculty_id and ObjectId.is_valid(data.faculty_id):
         fac = await db.faculties.find_one({"_id": ObjectId(data.faculty_id)}, {"name": 1})
     sample = sorted(moves, key=lambda m: (m["date"], m["old_st"]))[:8]
+    ACTION_LABEL = {"move": "ستُزاح", "cancel": "ستُلغى", "keep": "تبقى بوقتها الفعلي"}
     return {
         "days": days,
         "total_lectures": len(moves),
@@ -235,6 +275,8 @@ async def preview_day_shift(data: DayShiftRequest, current_user: dict = Depends(
         "faculty_name": (fac or {}).get("name") if fac else "جميع الكليات",
         "sample": [{"date": m["date"], "course": m["course"].get("name", ""), "from": f"{m['old_st']} - {m['old_en']}", "to": f"{m['new_st']} - {m['new_en']}"} for m in sample],
         "cancelled_sample": [{"date": c["date"], "course": c["course"].get("name", ""), "time": f"{c['lec'].get('start_time', '')} - {c['lec'].get('end_time', '')}"} for c in sorted(cancels, key=lambda c: (c["date"], c["lec"].get("start_time", "")))[:8]],
+        "lectures": [{**r, "rule_action_label": ACTION_LABEL.get(r["rule_action"], r["rule_action"]), "final_action_label": ACTION_LABEL.get(r["final_action"], r["final_action"])} for r in rows],
+        "exceptions_applied": len([r for r in rows if r.get("exception")]),
     }
 
 
@@ -244,7 +286,7 @@ async def apply_day_shift(data: DayShiftRequest, current_user: dict = Depends(ge
     db = get_db()
     own_dept_ids = await get_own_department_ids(current_user)
     await _check_faculty_scope(db, data.faculty_id, own_dept_ids)
-    days, moves, cancels, skipped, warnings = await _compute(db, data, own_dept_ids)
+    days, moves, cancels, skipped, warnings, rows = await _compute(db, data, own_dept_ids)
     if not moves and not cancels:
         raise HTTPException(status_code=400, detail="لا توجد محاضرات قابلة للإزاحة في هذا النطاق")
     now = datetime.now(YEMEN_TZ)
@@ -278,6 +320,7 @@ async def apply_day_shift(data: DayShiftRequest, current_user: dict = Depends(ge
         "_id": shift_id, "date_from": data.date_from, "date_to": data.date_to or data.date_from,
         "faculty_id": data.faculty_id, "new_start_time": data.new_start_time, "offset_minutes": data.offset_minutes,
         "reason": data.reason.strip(), "days": days, "changes": changes, "skipped": len(skipped), "cancelled": n_cancel, "warnings": warnings,
+        "exceptions": data.exceptions or {},
         "rules": {"fixed_slot": FIXED_SLOT, "compressed_minutes": COMPRESSED_MIN, "break_minutes": BREAK_MIN},
         "created_at": now.isoformat(), "created_by": current_user.get("id") or str(current_user.get("_id", "")), "created_by_name": current_user.get("full_name", ""),
         "status": "active", "notified": 0,
