@@ -808,7 +808,7 @@ async def batch_approve_all(
         current_user, "batch_approve_attendance_changes_all", "attendance_change_request",
         None, f"اعتماد جماعي شامل لكل الطلبات المطابقة للفلتر: {approved} طلب"
     )
-    return {"success": True, "approved": approved, "errors": errors, "total_matched": len(docs)}
+    return {"success": True, "approved": approved, "errors": errors, "total_matched": len(docs), "truncated": len(docs) >= 10000}
 
 
 @router.post("/attendance-changes/batch/reject-all")
@@ -843,7 +843,7 @@ async def batch_reject_all(
         current_user, "batch_reject_attendance_changes_all", "attendance_change_request",
         None, f"رفض جماعي شامل لكل الطلبات المطابقة للفلتر: {rejected} طلب"
     )
-    return {"success": True, "rejected": rejected, "errors": errors, "total_matched": len(docs)}
+    return {"success": True, "rejected": rejected, "errors": errors, "total_matched": len(docs), "truncated": len(docs) >= 10000}
 
 
 @router.post("/attendance-changes/{req_id}/approve")

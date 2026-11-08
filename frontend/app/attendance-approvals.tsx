@@ -106,11 +106,12 @@ export default function AttendanceApprovalsScreen() {
   };
 
   const doApproveAllMatching = async () => {
+    if (!window.confirm(`سيتم اعتماد ${totalPending} طلب من كل الصفحات المطابقة للفلتر الحالي. هل أنت متأكد؟`)) return;
     setProcessing(true);
     try {
       const { faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to } = effective;
       const res = await api.post('/attendance-changes/batch/approve-all', { faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to });
-      notify('نجاح', `تم اعتماد ${res.data.approved} طلب من كل الصفحات المطابقة للفلتر`);
+      notify('نجاح', `تم اعتماد ${res.data.approved} طلب من كل الصفحات المطابقة للفلتر` + (res.data.truncated ? ' — تنبيه: تجاوز عدد النتائج الحد الأقصى لعملية واحدة، كرر العملية لاعتماد الباقي' : ''));
       await refreshAll();
     } catch (e: any) {
       notify('خطأ', e?.response?.data?.detail || 'فشل الاعتماد الشامل');
@@ -127,7 +128,7 @@ export default function AttendanceApprovalsScreen() {
       try {
         const { faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to } = effective;
         const res = await api.post('/attendance-changes/batch/reject-all', { review_notes: rejectNotes, faculty_id, department_id, level, section, course_id, semester_id, requested_by, new_status, q, lecture_from, lecture_to, requested_from, requested_to });
-        notify('تم', `تم رفض ${res.data.rejected} طلب من كل الصفحات المطابقة للفلتر`);
+        notify('تم', `تم رفض ${res.data.rejected} طلب من كل الصفحات المطابقة للفلتر` + (res.data.truncated ? ' — تنبيه: تجاوز عدد النتائج الحد الأقصى لعملية واحدة، كرر العملية لرفض الباقي' : ''));
         setRejectModal(null); setRejectNotes('');
         await refreshAll();
       } catch (e: any) {
@@ -230,7 +231,7 @@ export default function AttendanceApprovalsScreen() {
             )}
           </View>
         ) : (
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', padding: 12 }} testID="results-list">
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'flex-start', padding: 12 }} testID="results-list">
             {filters.view === 'grouped'
               ? groups.map(g => (
                 <View key={g.lecture_id} style={{ width: groupColWidth, padding: 5 }}>

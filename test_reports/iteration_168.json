@@ -1,0 +1,48 @@
+{
+  "summary": "Tested the Attendance Approvals (/attendance-approvals) fixes end to end: the backend endpoints POST /attendance-changes/batch/approve-all and /reject-all, and the frontend grid layout plus 'select all matching filter' across pages. All 11 backend pytest tests passed. All 8 requested UI scenarios passed for admin and for the Dean (Salim). No functional bugs found. Login via token injection worked without problems; the screenshot/login flakiness seen by the main agent did not happen here. All tests ran on seeded TEST_ACR* records (55 in faculty a4 + 5 in faculty a6) with search q=TEST_ACR. Real data was never touched: the real pending count stayed at 36 before and after.",
+  "verified": [
+    "Grid at 1920px: list view shows 3 columns (card width 632px). Grouped view shows 2 columns (948px).",
+    "Narrower screens: 1000px shows 2 columns, 700px shows 1 column, and the page does not scroll sideways (scrollWidth equals clientWidth, 700).",
+    "With 60 matching items: select-all selects 50/60, then select-all-matching-btn appears with the text 'تحديد كل 60 المطابقة للفلتر (كل الصفحات)'. Clicking it changes the count to 60/60 and the approve button to 'اعتماد المحدد (60)'.",
+    "Approve-all from the UI shows 'تم اعتماد 60 طلب من كل الصفحات المطابقة للفلتر'. Pending goes 60→0, approved 0→60, and 60 attendance rows were written with status present.",
+    "Reject-all from the UI with 56 matching: the modal title reads '— 56 طلب'. All 56 were rejected and every one got review_notes='TEST_bulk_reject_note'. Notes are optional: the API saves '' when they are left out.",
+    "Manually ticking 2 checkboxes: the select-all-matching link does not appear, and only those 2 exact ids were approved (checked by id).",
+    "Clicking a single card's approve or reject button while select-all-matching was on affected only that 1 item (pending 58→57, then a 1-item reject).",
+    "Dean (Salim) sees only his faculty's 55 items. Select-all-matching plus approve approved 55, and the 5 faculty-a6 items stayed pending. A request with a tampered faculty_id (a6) was ignored and approved 0. The same holds for reject-all.",
+    "Calls without a login get 401/403, and a teacher gets 403 on approve-all."
+  ],
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/attendance-changes/batch/approve-all", "issue": "Approves records one at a time: an attendance find plus up to 2 updates per record, up to 10000 records, all within a single HTTP request. With thousands of pending items, as the user describes, the request may hit the ingress/proxy timeout. Better: use update_many for the status change plus bulk_write for the attendance rows, or run it as a background job."},
+      {"endpoint": "/api/attendance-changes/batch/approve-all|reject-all", "issue": "to_list(10000) is a silent cap. If more than 10000 records match, only part is processed and the response does not say so."},
+      {"endpoint": "/api/attendance-changes/batch/approve-all|reject-all", "issue": "Time-of-check vs time-of-use gap: the server processes whatever matches when the click arrives. That can be more than the count the user saw if new requests come in meanwhile. Consider sending the expected count or a requested_at cutoff."},
+      {"endpoint": "_build_filter_query", "issue": "(Pre-existing) int(level) raises a 500 for a non-numeric level value. Also, a non-admin user with the approve permission but no faculty_id gets a global scope."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "attendance-approvals bulk bar", "issues": ["One click on 'اعتماد المحدد' in select-all-matching mode approves every matching record (possibly thousands) with no confirmation step. A confirm dialog would be safer.", "In select-all-matching mode, unticking one card drops back to current-page selection minus that card, not 'all except this one'. The backend supports exclude_ids but the frontend never sends it."]},
+      {"screen": "Grouped view", "issues": ["Lecture-group boxes in the same row stretch to the tallest one, so a large group next to a small one leaves a lot of empty space."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/test_attendance_approvals_select_all.py", "/app/backend/tests/seed_acr_test_data.py", "/app/test_reports/pytest/acr_select_all.xml"],
+  "action_items": [
+    "Optional: add a confirmation dialog before approve-all/reject-all when the count is large.",
+    "Optional: make approve-all/reject-all faster with bulk writes, or run them in the background, to avoid timeouts with thousands of items. Report in the response when the 10000 cap cuts the run short.",
+    "Optional: use exclude_ids when the user unticks a card while select-all-matching mode is on."
+  ],
+  "critical_code_review_comments": [
+    "Per-card doApprove/openReject are correctly kept separate from the select-all-matching path (confirmed in the UI).",
+    "fetchList resets selectAllMatching whenever filters change, which is correct. Switching to grouped view keeps the mode on and the count stays correct (60/60).",
+    "Scope is enforced on the server through _scope_query: the faculty_id the client sends is ignored for the Dean (confirmed)."
+  ],
+  "updated_files": ["/app/backend/tests/test_attendance_approvals_select_all.py", "/app/backend/tests/seed_acr_test_data.py"],
+  "success_rate": {"backend": "100% (11/11)", "frontend": "100% (8/8 scenarios)"},
+  "seed_data_creation": "Records named TEST_ACR* were seeded into attendance_change_requests by seed_acr_test_data.py, with their ids tracked in /tmp/acr_test_ids.json. All were removed afterwards by id, together with the attendance rows they created (found by last_change_request_id). Final state: 0 TEST_ACR records and 36 real pending records, unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Use `python backend/tests/seed_acr_test_data.py seed|cleanup` to create or remove isolated test data, and always filter with q=TEST_ACR so real pending records are never approved. Log in through the UI by putting the token and user from /api/auth/login (username/password) into localStorage['token'] and localStorage['user']. The pytest file seeds unique-prefix data for each test and cleans up on its own."
+}
