@@ -458,7 +458,7 @@ async def compute_workload(db, teachers: List[dict], start: datetime, end: datet
         })
 
     if hide_empty:
-        result = [t for t in result if t["summary"]["total_scheduled_hours"] > 0]
+        result = [t for t in result if t["summary"]["total_scheduled_hours"] > 0 or t["summary"].get("extra_only_hours", 0) > 0]
     if only_overtime:
         result = [t for t in result if t["summary"]["overtime_hours"] > 0]
     if exclude_ids:
