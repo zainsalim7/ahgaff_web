@@ -194,7 +194,7 @@ async def rebuild_overtime_table(db, current_user: dict, lt: dict):
     if lr.get("type") != "overtime":
         return None
     start, end = parse_period(lr["start_date"], lr["end_date"])
-    report = await compute_workload(db, await select_teachers(db, current_user, None, lr.get("faculty_id"), lr.get("department_id"), lr.get("teach_department_id")), start, end, True, bool(lr.get("only_overtime")), set(lr.get("excluded") or []))
+    report = await compute_workload(db, await select_teachers(db, current_user, None, lr.get("faculty_id"), lr.get("department_id"), lr.get("teach_department_id")), start, end, True, bool(lr.get("only_overtime")), set(lr.get("excluded") or []), teach_department_id=lr.get("teach_department_id"))
     prev = {te["teacher_id"]: te.get("prev_letter") for te in lr.get("teachers_list", []) if te.get("prev_letter")}
     for t in report["teachers"]:
         if t["teacher_db_id"] in prev:
@@ -224,7 +224,7 @@ async def raise_letter(data: RaiseIn, current_user: dict = Depends(get_current_u
 
     start, end = parse_period(data.start_date, data.end_date)
     exclude = set(data.exclude_teacher_ids or [])
-    report = await compute_workload(db, await select_teachers(db, current_user, data.teacher_id, data.faculty_id, data.department_id, data.teach_department_id), start, end, data.hide_empty, data.only_overtime, exclude)
+    report = await compute_workload(db, await select_teachers(db, current_user, data.teacher_id, data.faculty_id, data.department_id, data.teach_department_id), start, end, data.hide_empty, data.only_overtime, exclude, teach_department_id=data.teach_department_id)
     if not report["teachers"]:
         raise HTTPException(status_code=400, detail="لا يوجد أساتذة في الكشف لهذه الفلاتر (بعد الاستبعاد)")
     raised = await find_raised(db, [t["teacher_db_id"] for t in report["teachers"]], data.start_date, data.end_date)
@@ -238,7 +238,8 @@ async def raise_letter(data: RaiseIn, current_user: dict = Depends(get_current_u
     if data.department_id:
         fac_name = f"{report['teachers'][0].get('department_name') or ''} — {fac_name}"
     elif data.teach_department_id:
-        fac_name = f"{report['teachers'][0].get('department_name') or ''} (يُدرّس فيه) — {fac_name}"
+        teach_dept = await db.departments.find_one({"_id": ObjectId(data.teach_department_id)}) if ObjectId.is_valid(data.teach_department_id) else None
+        fac_name = f"{(teach_dept or {}).get('name') or ''} (يُدرّس فيه) — {fac_name}"
     tot = report["summary"]
     cur = next((t["summary"].get("currency") for t in report["teachers"] if t["summary"].get("overtime_amount")), "")
     amount_txt = f"{tot['total_overtime_amount']:,.0f} {cur}" if tot.get("total_overtime_amount") else ""
