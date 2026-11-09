@@ -270,9 +270,10 @@ export default function CourseLecturesScreen() {
         completed: serverStats.completed,
         cancelled: serverStats.cancelled,
         absent: serverStats.absent,
+        completed_hours: serverStats.completed_hours || 0,
       };
     }
-    return { total: 0, scheduled: 0, completed: 0, cancelled: 0, absent: 0 };
+    return { total: 0, scheduled: 0, completed: 0, cancelled: 0, absent: 0, completed_hours: 0 };
   }, [serverStats]);
   
   // تبديل توسيع/طي الشهر
@@ -1104,7 +1105,7 @@ export default function CourseLecturesScreen() {
             </View>
           )}
 
-          {/* 4 بطاقات إحصائيات */}
+          {/* 5 بطاقات إحصائيات */}
           <View dataSet={{ responsive: "stats-grid" }} style={styles.statsGrid}>
             {(() => {
               const stats = getStats();
@@ -1136,6 +1137,15 @@ export default function CourseLecturesScreen() {
                     <View style={styles.statTextCol}>
                       <Text style={styles.statValueNew}>{stats.completed}</Text>
                       <Text style={styles.statLabelNew}>منفذة</Text>
+                    </View>
+                  </View>
+                  <View style={styles.statCard} data-testid="stat-completed-hours">
+                    <View style={[styles.statIconWrap, { backgroundColor: '#ede7f6' }]}>
+                      <Ionicons name="time" size={20} color="#673ab7" />
+                    </View>
+                    <View style={styles.statTextCol}>
+                      <Text style={styles.statValueNew}>{Number(stats.completed_hours || 0).toLocaleString('ar', { maximumFractionDigits: 2 })}</Text>
+                      <Text style={styles.statLabelNew}>الساعات المنجزة</Text>
                     </View>
                   </View>
                   <View style={styles.statCard}>

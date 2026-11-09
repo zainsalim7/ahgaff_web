@@ -8887,6 +8887,19 @@ async def get_course_lectures(
         "cancelled": await db.lectures.count_documents({**base_query, "status": "cancelled"}),
         "absent": await db.lectures.count_documents({**base_query, "status": "absent"}),
     }
+
+    # ⏱️ الساعات المنجزة = مجموع ساعات المحاضرات المنفذة (completed) فقط لهذا المقرر
+    def _calc_lec_hours(lec: dict) -> float:
+        if lec.get("credited_minutes"):
+            return float(lec["credited_minutes"]) / 60
+        try:
+            s = datetime.strptime(lec.get("start_time", "00:00"), "%H:%M")
+            e = datetime.strptime(lec.get("end_time", "00:00"), "%H:%M")
+            return ((e - s).seconds / 3600) or 1.0
+        except Exception:
+            return 1.0
+    completed_lectures = await db.lectures.find({**base_query, "status": "completed"}, {"credited_minutes": 1, "start_time": 1, "end_time": 1}).to_list(2000)
+    stats["completed_hours"] = round(sum(_calc_lec_hours(l) for l in completed_lectures), 2)
     if target_sem:
         stats["semester_id"] = target_sem["id"]
         stats["semester_name"] = target_sem.get("name", "")
