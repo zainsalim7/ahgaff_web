@@ -3,14 +3,14 @@ import { StatementBodyEditor } from '../statements/StatementBodyEditor';
 import { Badge } from '../corr/CorrUI';
 
 export type Sections = Record<string, string>;
-type Sec = { key: string; label: string; vars: string[]; align: 'right' | 'center'; h: number; hint: string };
+type Sec = { key: string; label: string; vars: string[]; align: 'right' | 'center'; h: number; hint: string; placeholder: string };
 
 const SECS: Sec[] = [
-  { key: 'recipient', label: 'المرسَل إليه', vars: ['{اسم_المرسل_إليه}', '{تكريم}', '{صفة_المرسل_إليه}', '{جهة_المرسل_إليه}'], align: 'right', h: 70, hint: 'يُملأ من حقل المرسَل إليه في نموذج الإصدار' },
-  { key: 'greeting', label: 'التحية', vars: [], align: 'right', h: 44, hint: '' },
-  { key: 'subject', label: 'سطر الموضوع', vars: ['{الموضوع}'], align: 'center', h: 44, hint: 'نص الموضوع نفسه يُكتب في نموذج الإصدار' },
-  { key: 'closing', label: 'الخاتمة', vars: [], align: 'right', h: 44, hint: '' },
-  { key: 'signature', label: 'التوقيع', vars: ['{صفة_الموقع}', '{اسم_الموقع}'], align: 'center', h: 60, hint: 'الاسم والصفة من حقل الموقِّع' },
+  { key: 'recipient', label: 'المرسَل إليه', vars: ['{اسم_المرسل_إليه}', '{تكريم}', '{صفة_المرسل_إليه}', '{جهة_المرسل_إليه}'], align: 'right', h: 70, hint: 'يُملأ من حقل المرسَل إليه في نموذج الإصدار', placeholder: 'فارغ — لن يظهر «المرسَل إليه» إطلاقاً في الخطاب' },
+  { key: 'greeting', label: 'التحية', vars: [], align: 'right', h: 44, hint: '', placeholder: 'فارغ — لن تظهر التحية إطلاقاً في الخطاب' },
+  { key: 'subject', label: 'سطر الموضوع', vars: ['{الموضوع}'], align: 'center', h: 44, hint: 'نص الموضوع نفسه يُكتب في نموذج الإصدار', placeholder: 'فارغ — لن يظهر سطر الموضوع إطلاقاً في الخطاب' },
+  { key: 'closing', label: 'الخاتمة', vars: [], align: 'right', h: 44, hint: '', placeholder: 'فارغ — لن تظهر الخاتمة إطلاقاً في الخطاب' },
+  { key: 'signature', label: 'التوقيع', vars: ['{صفة_الموقع}', '{اسم_الموقع}'], align: 'center', h: 60, hint: 'الاسم والصفة من حقل الموقِّع', placeholder: 'فارغ — لن يظهر التوقيع إطلاقاً في الخطاب' },
 ];
 
 type Num = [string, string, number, number, number];
@@ -152,6 +152,6 @@ export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onRe
 const SecBlock: React.FC<{ s: Sec; html: string; onChange: (k: string, h: string) => void; testID: string }> = ({ s, html, onChange, testID }) => (
   <div style={{ border: '1.5px solid #eef0f3', borderRadius: 10, padding: 8, marginBottom: 8, background: '#fff' }} data-testid={`${testID}-card-${s.key}`}>
     <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><b style={{ fontSize: 12.5 }}>{s.label}</b><Badge text="قابل للتحرير" color="#6d28d9" />{s.hint && <span style={{ fontSize: 11, color: '#94a3b8' }}>{s.hint}</span>}</div>
-    <StatementBodyEditor value={html} onChange={(h) => onChange(s.key, h)} variables={s.vars} defaultAlign={s.align} minHeight={s.h} testID={`${testID}-${s.key}`} />
+    <StatementBodyEditor value={html} onChange={(h) => onChange(s.key, h)} variables={s.vars} defaultAlign={s.align} minHeight={s.h} placeholder={s.placeholder} testID={`${testID}-${s.key}`} />
   </div>
 );

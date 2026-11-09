@@ -310,13 +310,14 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
             c.drawRightString(right - w_main - pdfmetrics.stringWidth(" ", fnt, size) - sgap, y, sfx)
     if "recipient" in secs:
         rich_sec("recipient", LM, RM - r_ind, default_size=rfont, default_align=r_align); y -= 2 * mm
+        y -= f("gap_recipient") * mm
     elif "recipient" not in raw_secs:
         rec_line(f"إلى: {rec.get('name') or rec.get('title') or ''}", suffix=rec.get("suffix") or ""); y -= rgap + 0.5 * mm
         if rec.get("name") and rec.get("title"):
             rec_line(rec["title"], sub=True); y -= rgap
         if rec.get("organization") and rec.get("organization") != rec.get("title"):
             rec_line(rec["organization"], sub=True); y -= rgap
-    y -= f("gap_recipient") * mm
+        y -= f("gap_recipient") * mm
     if "greeting" in secs:
         rich_sec("greeting", LM, RM - f("greeting_indent") * mm, default_size=f("greeting_font"), default_align=str(L.get("greeting_align") or "right")); y -= f("gap_greeting") * mm - 4 * mm
     elif "greeting" not in raw_secs and L.get("show_greeting"):
@@ -336,8 +337,6 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
         c.drawCentredString(W / 2, y, ar(f"الموضوع: {s.get('subject', '')}"))
         sw = pdfmetrics.stringWidth(ar(f"الموضوع: {s.get('subject', '')}"), BOLD, 14)
         c.setLineWidth(0.7); c.line(W / 2 - sw / 2, y - 1.6 * mm, W / 2 + sw / 2, y - 1.6 * mm); y -= f("gap_subject") * mm
-    else:
-        y -= f("gap_subject") * mm
 
     def draw_table(tbl, inherit=None):
         nonlocal y

@@ -1,0 +1,29 @@
+{
+  "summary": "Tested the fix for intentionally emptied letter template sections (recipient/greeting/subject). Backend: 5/5 pytest cases pass. Checked: section-defaults returns '' for emptied sections; PDF and DOCX with emptied sections contain no 'إلى:', 'السلام عليكم' or 'الموضوع:' while the body and closing still render; the template_id-only issue path (no sections sent) also hides them; letters with no template and no sections still render 'إلى: name / title', the greeting and 'الموضوع: ...' as before (no regression); PUT of a template keeps '' values. Frontend: logged in as admin via the UI with no problems. In the template modal, lt-sections shows only the recipient, greeting and subject editors (no closing or signature). Ctrl+A then Delete in the recipient editor leaves it empty after blur and after save. The saved template has sections={recipient:''}. Reopening with letter-template-edit-{id} shows the recipient still empty. Issue tab: picking the template loads an empty recipient, and the live preview has no 'إلى:' line. Editing the greeting updates the live preview. '⭐ كقالب' (letter-save-template-btn) saved a template with recipient '', the custom greeting and the subject, without closing or signature.",
+  "backend_issues": {"critical": [], "minor": [
+    {"endpoint": "services/letter_pdf.py & letter_docx.py", "issue": "When recipient or greeting is emptied, the layout gap after it (gap_recipient, and gap_greeting adjustments) is still applied, so a blank band stays at the top of the letter. Cosmetic only; for a free-text or agreement template the body starts lower than you might expect."}
+  ]},
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "LetterSectionsEditor -> StatementBodyEditor", "issue": "An emptied section editor shows the placeholder 'اكتب متن الإفادة هنا…' (statement-body text), which is misleading for recipient, greeting or subject. Suggest passing a placeholder such as 'فارغ — لن يظهر هذا الجزء في الخطاب'.", "selector": "[data-testid=lt-sections-recipient] .ProseMirror", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": ["/app/backend/tests/test_letters_empty_sections_iter170.py", "/app/test_reports/pytest/iter170.xml"],
+  "action_items": [
+    "Optional: skip the gap_recipient spacing in PDF and DOCX when the recipient was emptied on purpose ('recipient' in raw_secs but not in secs), and do the same for the greeting.",
+    "Optional: pass a section-specific placeholder to SecBlock's StatementBodyEditor so an emptied part reads as 'this part is hidden'."
+  ],
+  "critical_code_review_comments": [
+    "The v is not None checks in _effective_sections, _compose and finalize_draft are correct. The editor emits '' when empty, and the PDF/DOCX code treats '' and '<p></p>' as deliberately emptied.",
+    "Behavior change: any non-HTML plain-text section value is now hidden instead of falling back to the old default. A database check found 0 non-HTML and 0 empty section values across 121 letters, 42 templates and 1 letterhead, so existing data is not affected.",
+    "Frontend tplSecDefaults is fetched without template_id, which is correct because tform.sections overrides it in tplSections."
+  ],
+  "updated_files": ["/app/backend/tests/test_letters_empty_sections_iter170.py"],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (tests 4, 5 and 6 pass)"},
+  "seed_data_creation": "Created and then soft-deleted these TEST_ templates: TEST_empty_* (pytest), TEST_UI_EmptyRecipient_170 and TEST_UI_SavedAsTpl_170. Issued 3 TEST letters (subject TEST_SUBJ_MARKER) and revoked them, because issued letters cannot be deleted. They used up 3 serial numbers in the default series.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "UI login works: placeholder 'اسم المستخدم / رقم القيد / الرقم المرجعي', 'كلمة المرور', then get_by_text('تسجيل الدخول').last. Editor testids: template modal lt-sections-{key} .ProseMirror; issue-tab layout modal (open with letter-layout-toggle, close with letter-layout-done) letter-layout-{key} .ProseMirror. Save as template before issuing is letter-save-template-btn, which opens a window.prompt."
+}
