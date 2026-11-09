@@ -276,7 +276,8 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
         ensure(space)
         return y if y != before else None
 
-    secs = {k: v for k, v in (s.get("sections") or {}).items() if v and is_html(v) and any(p.get("type") == "table" or any(r["text"].strip() for r in p.get("runs", [])) for p in parse_rich(v))}
+    raw_secs = s.get("sections") or {}  # 🆕 يشمل الأقسام المُفرَّغة عمداً (قيمة فارغة لكن المفتاح موجود) — تُستبعد نهائياً دون رجوع للنمط القديم
+    secs = {k: v for k, v in raw_secs.items() if v and is_html(v) and any(p.get("type") == "table" or any(r["text"].strip() for r in p.get("runs", [])) for p in parse_rich(v))}
 
     def rich_sec(key, x_l, x_r, default_size=13, default_align="right", lead=1.5):
         """✍️ قسم منسّق (HTML من المحرر) بدل الكتلة المرسومة يدوياً"""
@@ -309,7 +310,7 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
             c.drawRightString(right - w_main - pdfmetrics.stringWidth(" ", fnt, size) - sgap, y, sfx)
     if "recipient" in secs:
         rich_sec("recipient", LM, RM - r_ind, default_size=rfont, default_align=r_align); y -= 2 * mm
-    else:
+    elif "recipient" not in raw_secs:
         rec_line(f"إلى: {rec.get('name') or rec.get('title') or ''}", suffix=rec.get("suffix") or ""); y -= rgap + 0.5 * mm
         if rec.get("name") and rec.get("title"):
             rec_line(rec["title"], sub=True); y -= rgap
@@ -318,7 +319,7 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
     y -= f("gap_recipient") * mm
     if "greeting" in secs:
         rich_sec("greeting", LM, RM - f("greeting_indent") * mm, default_size=f("greeting_font"), default_align=str(L.get("greeting_align") or "right")); y -= f("gap_greeting") * mm - 4 * mm
-    elif L.get("show_greeting"):
+    elif "greeting" not in raw_secs and L.get("show_greeting"):
         g_al, g_in = str(L.get("greeting_align") or "right"), f("greeting_indent") * mm
         c.setFont("Amiri", f("greeting_font")); g_txt = ar("السلام عليكم ورحمة الله وبركاته،")
         if g_al == "center":
@@ -330,11 +331,13 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
         y -= f("gap_greeting") * mm
     if "subject" in secs:
         rich_sec("subject", LM, RM, default_size=14, default_align="center"); y -= f("gap_subject") * mm - 5 * mm
-    else:
+    elif "subject" not in raw_secs:
         c.setFont(BOLD, 14)
         c.drawCentredString(W / 2, y, ar(f"الموضوع: {s.get('subject', '')}"))
         sw = pdfmetrics.stringWidth(ar(f"الموضوع: {s.get('subject', '')}"), BOLD, 14)
         c.setLineWidth(0.7); c.line(W / 2 - sw / 2, y - 1.6 * mm, W / 2 + sw / 2, y - 1.6 * mm); y -= f("gap_subject") * mm
+    else:
+        y -= f("gap_subject") * mm
 
     def draw_table(tbl, inherit=None):
         nonlocal y
@@ -415,7 +418,7 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
     ensure(4 * mm)  # 📏 سطر الخاتمة نفسه فقط — التوقيع والـQR يتكيّفان لاحقاً مع ما تبقّى من المساحة (لا يُحجز لهما فراغ إضافي مسبقاً)
     if "closing" in secs:
         rich_sec("closing", LM, RM, default_size=BODY)
-    elif L.get("show_closing"):
+    elif "closing" not in raw_secs and L.get("show_closing"):
         c.setFont("Amiri", BODY); c.drawRightString(RM, y, ar(settings.get("closing") or "وتفضلوا بقبول فائق الاحترام والتقدير،"))
     y -= f("gap_signature") * mm
     sig_img = _img("signature_base64")
@@ -440,7 +443,7 @@ def _build_letter_pdf_once(s: dict, settings: dict, draft: bool = False, letterh
         if sig_img:
             c.drawImage(sig_img, sig_cx - 19 * mm, y - 16 * mm, 38 * mm, 15 * mm, mask="auto", preserveAspectRatio=True); y -= 17 * mm
         y = min(y, y0 - 25 * mm)
-    else:
+    elif "signature" not in raw_secs:
         c.setFont(rt_font(sfam, bool(L.get("signature_title_bold", True))), f("signature_title_font")); c.drawCentredString(sig_cx, y, rt_fit(ar(sig_title), sfam, bool(L.get("signature_title_bold", True))))
         name_y = y - 9 * mm
         if sig_img:

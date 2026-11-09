@@ -230,6 +230,12 @@ export default function LettersPage() {
     catch (e) { setErr(errOf(e, 'فشل الاعتماد')); }
   };
   const saveTpl = async () => { setErr(''); try { if (tform.id) await api.put(`/letter-templates/${tform.id}`, tform); else await api.post('/letter-templates', tform); setTform(null); loadAll(); } catch (e) { setErr(errOf(e, 'فشل الحفظ')); } };
+  const [tplSecDefaults, setTplSecDefaults] = useState<Record<string, string>>({});
+  useEffect(() => {
+    if (!tform) return;
+    api.get('/letters/section-defaults', { params: { letterhead_id: tform.letterhead_id || lhId || undefined } }).then((r) => setTplSecDefaults(r.data.sections || {})).catch(() => {});
+  }, [tform?.letterhead_id, !!tform]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tplSections = useMemo(() => ({ ...tplSecDefaults, ...(tform?.sections || {}) }), [tplSecDefaults, tform?.sections]);
   const vars = settings?.variables || [];
 
   return (
@@ -409,6 +415,16 @@ export default function LettersPage() {
             </div>
             <Field label="الموقِّع (المرسِل)"><SignatoryPicker value={{ position_id: tform.signatory_position_id || '', name: tform.signatory_name || '', title: tform.signatory_title || '' }} onChange={(v) => setTform((f: any) => ({ ...f, signatory_position_id: v.position_id, signatory_name: v.name, signatory_title: v.title }))} defaultLabel="الافتراضي من الكليشة (يُحدَّد عند الإصدار)" hint="اختر منصباً من الدليل أو أدخل الاسم والصفة يدوياً." testID="lt-signatory" /></Field>
             <Field label="المتن * — منسّق، والمتغيرات تُدرج بنقرة عند المؤشر"><StatementBodyEditor value={tform.body || ''} onChange={(h) => setTform((f: any) => ({ ...f, body: h }))} variables={vars.map((v: string) => `{${v}}`)} defaultAlign="right" minHeight={180} testID="lt-body" /></Field>
+            <div style={{ marginTop: 10, border: '1px solid #e2e8f0', borderRadius: 10, padding: 10, background: '#fafbfc' }}>
+              <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>✍️ المرسَل إليه/التحية/الموضوع خاصة بهذا القالب — فرِّغ أي جزء (امسح محتواه بالكامل) ليختفي نهائياً من خطابات هذا القالب (مفيد لقالب حر/اتفاقية بلا هذه الأجزاء). الخاتمة والتوقيع دائماً من الكليشة المختارة.</div>
+              <LetterSectionsEditor
+                sections={tplSections}
+                onChange={(k, h) => setTform((f: any) => ({ ...f, sections: { ...(f.sections || {}), [k]: h } }))}
+                onReset={() => setTform((f: any) => ({ ...f, sections: {} }))}
+                keys={['recipient', 'greeting', 'subject']}
+                testID="lt-sections"
+              />
+            </div>
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}><button onClick={saveTpl} style={btn('#16a34a')} data-testid="lt-save">حفظ</button><button onClick={() => { setTform(null); setErr(''); }} style={btn('#f1f5f9', { color: '#0f2440' })}>إلغاء</button></div>
           </Modal>}
         </div>

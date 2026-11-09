@@ -455,7 +455,7 @@ async def _compose(db, data: IssueIn, settings: dict) -> dict:
     sig_name, sig_title = await _resolve_sig(db, data.signatory_position_id, data.signatory_name, data.signatory_title, settings)
     ctx = {**ctx, "اسم_الموقع": sig_name, "صفة_الموقع": sig_title, **{str(k): str(v) for k, v in (data.extra_vars or {}).items() if k}}
     raw_secs = data.sections if data.sections is not None else await _effective_sections(db, settings, data.template_id)
-    sections = {k: _apply_vars(v, ctx) for k, v in (raw_secs or {}).items() if k in SECTION_KEYS and v}
+    sections = {k: _apply_vars(v, ctx) for k, v in (raw_secs or {}).items() if k in SECTION_KEYS and v is not None}
     return {"subject": _apply_vars((data.subject or "").strip(), ctx), "body": _apply_vars((data.body or "").strip(), ctx), "table": table, "people": people, "sections": sections,
             "recipient": {k: (data.recipient or {}).get(k, "") for k in ("id", "name", "title", "organization", "suffix")},
             "template_id": data.template_id, "template_name": data.template_name or "", "notes": data.notes or "",
@@ -468,12 +468,13 @@ LETTERHEAD_ONLY_SECTIONS = {"closing", "signature"}  # 🖋️ هوية الكل
 
 
 async def _effective_sections(db, lh: dict, template_id: Optional[str] = None) -> dict:
-    """✍️ أقسام الخطاب الفعلية: النظام ← الكليشة ← القالب (القالب يتقدم، عدا الخاتمة والتوقيع فمن الكليشة دائماً)"""
+    """✍️ أقسام الخطاب الفعلية: النظام ← الكليشة ← القالب (القالب يتقدم، عدا الخاتمة والتوقيع فمن الكليشة دائماً)
+    🆕 قيمة فارغة صراحة (المستخدم أفرغ القسم عمداً) تطغى أيضاً — لا تُعامَل كـ«غير مخصَّصة» فترجع للنص الافتراضي"""
     out = dict(DEFAULT_SECTIONS)
-    out.update({k: v for k, v in (lh.get("sections") or {}).items() if k in SECTION_KEYS and v})
+    out.update({k: v for k, v in (lh.get("sections") or {}).items() if k in SECTION_KEYS and v is not None})
     if template_id and ObjectId.is_valid(template_id):
         t = await db.letter_templates.find_one({"_id": ObjectId(template_id)}, {"sections": 1})
-        out.update({k: v for k, v in ((t or {}).get("sections") or {}).items() if k in SECTION_KEYS and v and k not in LETTERHEAD_ONLY_SECTIONS})
+        out.update({k: v for k, v in ((t or {}).get("sections") or {}).items() if k in SECTION_KEYS and v is not None and k not in LETTERHEAD_ONLY_SECTIONS})
     return out
 
 
@@ -652,7 +653,7 @@ async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user:
     ctx, table, people = await _build_ctx(db, inputs.get("recipient") or ex.get("recipient") or {}, ex.get("subject") or "", inputs.get("people") or [])
     sctx = {**ctx, "اسم_الموقع": ex.get("signatory_name", ""), "صفة_الموقع": ex.get("signatory_title", "")}
     upd = {**(await _finalize_fields(db, series, base_url, ex.get("valid_days"), current_user)), **_lh_fields(settings, series), "draft_number": ex.get("number_display"),
-           "sections": {k: _apply_vars(v, sctx) for k, v in (inputs.get("sections") or {}).items() if k in SECTION_KEYS and v} or ex.get("sections") or {},
+           "sections": {k: _apply_vars(v, sctx) for k, v in (inputs.get("sections") or {}).items() if k in SECTION_KEYS and v is not None} or ex.get("sections") or {},
            "body": _apply_vars((inputs.get("body") or ex.get("body") or "").strip(), ctx), "table": (ex.get("table") if ex.get("custom_table") and not people else table), "people": people}
     if ex.get("signatory_position_id"):
         upd["signatory_name"], upd["signatory_title"] = await _resolve_sig(db, ex["signatory_position_id"], ex.get("signatory_name"), ex.get("signatory_title"), settings)

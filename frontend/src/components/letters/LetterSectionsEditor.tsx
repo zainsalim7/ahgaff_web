@@ -46,10 +46,13 @@ const withSize = (html: string, s: number) => {
 
 type Props = {
   sections: Sections; onChange: (key: string, html: string) => void; onReset?: () => void; actions?: React.ReactNode;
-  layout?: Record<string, any>; layoutDefaults?: Record<string, any>; onLayoutChange?: (l: Record<string, any>) => void; hasTable?: boolean; testID?: string;
+  layout?: Record<string, any>; layoutDefaults?: Record<string, any>; onLayoutChange?: (l: Record<string, any>) => void; hasTable?: boolean; testID?: string; keys?: string[];
 };
 
-export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onReset, actions, layout = {}, layoutDefaults = {}, onLayoutChange, hasTable = true, testID = 'letter-sections' }) => {
+export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onReset, actions, layout = {}, layoutDefaults = {}, onLayoutChange, hasTable = true, testID = 'letter-sections', keys }) => {
+  const visible = keys ? SECS.filter((s) => keys.includes(s.key)) : SECS;
+  const head = visible.filter((s) => ['recipient', 'greeting', 'subject'].includes(s.key));
+  const tail = visible.filter((s) => ['closing', 'signature'].includes(s.key));
   const L = { ...layoutDefaults, ...Object.fromEntries(Object.entries(layout || {}).filter(([, v]) => v !== null && v !== undefined && v !== '')) };
   const handleSec = (key: string, html: string) => {
     onChange(key, html);
@@ -83,10 +86,10 @@ export const LetterSectionsEditor: React.FC<Props> = ({ sections, onChange, onRe
         </div>
       </div>
       {fixed('الرقم والتاريخ', 'يُنشأ الرقم من سلسلة الترقيم عند الإصدار، والتاريخ تلقائي (هجري/ميلادي)')}
-      {SECS.slice(0, 3).map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={handleSec} testID={testID} />)}
-      {fixed('المتن', 'يُكتب في نموذج الإصدار بمحرره الخاص')}
-      {hasTable && fixed('جدول الأسماء', 'يُدرج تلقائياً عند إضافة أسماء (أعمدته وألوانه من «إعدادات الجدول»)')}
-      {SECS.slice(3).map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={handleSec} testID={testID} />)}
+      {head.map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={handleSec} testID={testID} />)}
+      {tail.length > 0 && fixed('المتن', 'يُكتب في نموذج الإصدار بمحرره الخاص')}
+      {hasTable && tail.length > 0 && fixed('جدول الأسماء', 'يُدرج تلقائياً عند إضافة أسماء (أعمدته وألوانه من «إعدادات الجدول»)')}
+      {tail.map((s) => <SecBlock key={s.key} s={s} html={sections[s.key] || ''} onChange={handleSec} testID={testID} />)}
       {onLayoutChange && (
         <details style={{ marginTop: 10, border: '1px solid #e2e8f0', borderRadius: 10, padding: '6px 10px', background: '#fafbfc' }} data-testid={`${testID}-advanced`}>
           <summary style={{ cursor: 'pointer', fontWeight: 800, color: '#475569', fontSize: 12.5 }}>⚙️ إعدادات متقدمة (هوامش، مواضع، كليشة، علامة مائية) {Object.keys(layout || {}).length ? `· ${Object.keys(layout).length} تعديل` : ''}</summary>

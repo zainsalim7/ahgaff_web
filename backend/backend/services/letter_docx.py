@@ -176,12 +176,13 @@ def build_letter_docx(s: dict, settings: dict, letterhead: bool = True) -> bytes
     pd2 = cr.add_paragraph(); pd2.alignment = WD_ALIGN_PARAGRAPH.RIGHT; _rtl(pd2); _run(pd2, f"الموافق: {issued.replace('-', '/')}م", size=f("ref_font") - 1.5, bold=True, color="#008022")
     _para(doc, space_after=6)
 
-    secs = {k: v for k, v in (s.get("sections") or {}).items() if v and is_html(v) and any(p.get("type") == "table" or any(r["text"].strip() for r in p.get("runs", [])) for p in parse_rich(v))}
+    raw_secs = s.get("sections") or {}  # 🆕 يشمل الأقسام المُفرَّغة عمداً — تُستبعد نهائياً دون رجوع للنمط القديم
+    secs = {k: v for k, v in raw_secs.items() if v and is_html(v) and any(p.get("type") == "table" or any(r["text"].strip() for r in p.get("runs", [])) for p in parse_rich(v))}
     rec = s.get("recipient") or {}
     r_align = str(L.get("recipient_align") or "right")
     if "recipient" in secs:
         _rich(doc, secs["recipient"], default_size=f("recipient_font"), default_align=r_align)
-    else:
+    elif "recipient" not in raw_secs:
         _plain(doc, f"إلى: {rec.get('name') or rec.get('title') or ''}   {rec.get('suffix') or ''}".rstrip(), size=f("recipient_font"), align=r_align, bold=bool(L.get("recipient_bold", True)))
         if rec.get("name") and rec.get("title"):
             _plain(doc, rec["title"], size=f("recipient_sub_font"), align=r_align)
@@ -189,11 +190,11 @@ def build_letter_docx(s: dict, settings: dict, letterhead: bool = True) -> bytes
             _plain(doc, rec["organization"], size=f("recipient_sub_font"), align=r_align)
     if "greeting" in secs:
         _rich(doc, secs["greeting"], default_size=f("greeting_font"), default_align=str(L.get("greeting_align") or "right"))
-    elif L.get("show_greeting"):
+    elif "greeting" not in raw_secs and L.get("show_greeting"):
         _plain(doc, "السلام عليكم ورحمة الله وبركاته،", size=f("greeting_font"), align=str(L.get("greeting_align") or "right"))
     if "subject" in secs:
         _rich(doc, secs["subject"], default_size=14, default_align="center")
-    else:
+    elif "subject" not in raw_secs:
         _plain(doc, f"الموضوع: {s.get('subject', '')}", size=14, align="center", bold=True, underline=True)
 
     def table(tbl):
@@ -229,14 +230,14 @@ def build_letter_docx(s: dict, settings: dict, letterhead: bool = True) -> bytes
 
     if "closing" in secs:
         _rich(doc, secs["closing"], default_size=f("body_font"))
-    elif L.get("show_closing"):
+    elif "closing" not in raw_secs and L.get("show_closing"):
         _plain(doc, settings.get("closing") or "وتفضلوا بقبول فائق الاحترام والتقدير،", size=f("body_font"))
     _para(doc, space_after=10)
 
     s_align = str(L.get("signature_align") or "left")
     if "signature" in secs:
         _rich(doc, secs["signature"], default_size=f("signature_title_font"), default_align=s_align if s_align != "left" else "left")
-    else:
+    elif "signature" not in raw_secs:
         _plain(doc, (s.get("signatory_title") or "").strip(), size=f("signature_title_font"), align=s_align, bold=bool(L.get("signature_title_bold", True)))
         _plain(doc, (s.get("signatory_name") or "").strip(), size=f("signature_name_font"), align=s_align, bold=bool(L.get("signature_name_bold", False)))
     sig = _img_stream(settings.get("signature_base64") or "")
