@@ -19,6 +19,7 @@ export default function OvertimeLettersRegister() {
   const [q, setQ] = useState('');
   const [status, setStatus] = useState('');
   const [openId, setOpenId] = useState('');
+  const [busyId, setBusyId] = useState('');
 
   const load = async () => {
     setLoading(true); setErr('');
@@ -27,6 +28,19 @@ export default function OvertimeLettersRegister() {
     finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [status]);
+
+  const toggleRevoke = async (it: any) => {
+    const willRevoke = it.status !== 'revoked';
+    const msg = willRevoke
+      ? `إلغاء الخطاب ${it.number}؟\n\nسيُعاد الأساتذة الـ${it.teachers} المشمولين فيه إلى حالة «لم يُرفعوا بعد» لهذه الفترة، ويمكن رفعهم في خطاب جديد. الخطاب نفسه يبقى محفوظاً في الأرشيف بوسم «ملغي».`
+      : `استرجاع الخطاب ${it.number}؟\n\nسيعود يُحتسب كخطاب ساري، وسيُمنع رفع الأساتذة المشمولين فيه مرة أخرى لنفس الفترة.`;
+    if (Platform.OS === 'web' ? !window.confirm(msg) : true) {
+      setBusyId(it.letter_id);
+      try { await api.post(`/letters/${it.letter_id}/${willRevoke ? 'revoke' : 'restore'}`); await load(); }
+      catch (e: any) { if (Platform.OS === 'web') window.alert(e?.response?.data?.detail || 'فشلت العملية'); }
+      finally { setBusyId(''); }
+    }
+  };
 
   const rows = useMemo(() => {
     const nq = normAr(q);
@@ -83,7 +97,13 @@ export default function OvertimeLettersRegister() {
                       <Text style={st.tName}>{i + 1}. {t.name}{t.department_name ? ` — ${t.department_name}` : ''}{t.prev_letter ? `  (سبق رفعه ${t.prev_letter})` : ''}</Text>
                     </View>
                   ))}
-                  <TouchableOpacity style={st.openBtn} onPress={() => router.push(`/letters?id=${it.letter_id}` as any)} testID={`ol-open-${it.letter_id}`}><Ionicons name="open-outline" size={14} color="#fff" /><Text style={st.openText}>فتح الخطاب في نظام الخطابات</Text></TouchableOpacity>
+                  <View style={{ flexDirection: 'row-reverse', gap: 8, marginTop: 8 }}>
+                    <TouchableOpacity style={[st.openBtn, { marginTop: 0 }]} onPress={() => router.push(`/letters?id=${it.letter_id}` as any)} testID={`ol-open-${it.letter_id}`}><Ionicons name="open-outline" size={14} color="#fff" /><Text style={st.openText}>فتح الخطاب في نظام الخطابات</Text></TouchableOpacity>
+                    <TouchableOpacity style={[st.openBtn, { marginTop: 0, backgroundColor: it.status === 'revoked' ? '#16a34a' : '#b91c1c', opacity: busyId === it.letter_id ? 0.6 : 1 }]} disabled={busyId === it.letter_id} onPress={() => toggleRevoke(it)} testID={`ol-revoke-${it.letter_id}`}>
+                      <Ionicons name={it.status === 'revoked' ? 'refresh-outline' : 'close-circle-outline'} size={14} color="#fff" />
+                      <Text style={st.openText}>{busyId === it.letter_id ? '...' : it.status === 'revoked' ? 'استرجاع الخطاب' : 'إلغاء الخطاب (تصفير الرفع)'}</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               )}
             </View>

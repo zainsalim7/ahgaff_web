@@ -14,10 +14,10 @@ export const RaiseLetterBar: React.FC<{ params: any; disabled?: boolean; raised?
   const [status, setStatus] = useState<any>(null);
   const [open, setOpen] = useState(false);
   const load = async () => {
-    try { const r = await api.get('/reports/teacher-workload/letter-status', { params: { start_date: params.start_date, end_date: params.end_date, faculty_id: params.faculty_id, department_id: params.department_id, teacher_id: params.teacher_id } }); setStatus(r.data); }
+    try { const r = await api.get('/reports/teacher-workload/letter-status', { params: { start_date: params.start_date, end_date: params.end_date, faculty_id: params.faculty_id, department_id: params.department_id, teach_department_id: params.teach_department_id, teacher_id: params.teacher_id } }); setStatus(r.data); }
     catch { setStatus(null); }
   };
-  useEffect(() => { load(); }, [params.start_date, params.end_date, params.faculty_id, params.department_id, params.teacher_id]);
+  useEffect(() => { load(); }, [params.start_date, params.end_date, params.faculty_id, params.department_id, params.teach_department_id, params.teacher_id]);
   return (
     <View style={st.bar} testID="raise-letter-bar">
       <TouchableOpacity style={[st.btn, disabled && { opacity: 0.5 }]} onPress={() => setOpen(true)} disabled={disabled} testID="raise-letter-btn">
@@ -70,7 +70,7 @@ const RaiseLetterModal: React.FC<{ visible: boolean; onClose: () => void; params
     setBusy(true);
     try {
       const exclude_teacher_ids = dupMode === 'exclude' ? raised.filter((r) => !keep[r.teacher_id]).map((r) => r.teacher_id) : [];
-      const r = await api.post('/reports/teacher-workload/raise-letter', { template_key: tpl, start_date: params.start_date, end_date: params.end_date, faculty_id: params.faculty_id, department_id: params.department_id, teacher_id: params.teacher_id, hide_empty: !!params.hide_empty, only_overtime: !!params.only_overtime, recipient, extra_note: note, mode: hasActive ? 'amend' : 'new', base_url: Platform.OS === 'web' ? window.location.origin : '', exclude_teacher_ids, tag_previous: dupMode === 'tag' || Object.values(keep).some(Boolean) });
+      const r = await api.post('/reports/teacher-workload/raise-letter', { template_key: tpl, start_date: params.start_date, end_date: params.end_date, faculty_id: params.faculty_id, department_id: params.department_id, teach_department_id: params.teach_department_id, teacher_id: params.teacher_id, hide_empty: !!params.hide_empty, only_overtime: !!params.only_overtime, recipient, extra_note: note, mode: hasActive ? 'amend' : 'new', base_url: Platform.OS === 'web' ? window.location.origin : '', exclude_teacher_ids, tag_previous: dupMode === 'tag' || Object.values(keep).some(Boolean) });
       setResult(r.data); onDone();
     } catch (e: any) { notify(e?.response?.data?.detail || 'فشل إنشاء الخطاب'); } finally { setBusy(false); }
   };

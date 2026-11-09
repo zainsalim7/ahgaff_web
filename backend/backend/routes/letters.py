@@ -687,6 +687,13 @@ async def preview_letter_pdf(data: IssueIn, fmt: str = "png", letterhead: bool =
     seq = max(cur + 1, int(series.get("start_at") or 1))
     doc = {**(await _compose(db, data, settings)), "auto_table": not per_person, "serial": seq, "number_display": format_number(series.get("format"), seq, year) + " (معاينة)", "year": year,
            "verify_url": "DRAFT-PREVIEW", "issued_at": datetime.now(timezone.utc).isoformat()}
+    if data.draft_id and ObjectId.is_valid(data.draft_id) and not doc.get("people"):
+        ex = await db.letters.find_one({"_id": ObjectId(data.draft_id)})
+        if ex and ex.get("custom_table"):
+            doc["table"] = ex.get("table")  # 👁️ جدول مخصص محفوظ (مثل كشف الساعات الإضافية) — يُعرض في المعاينة الحية كما سيظهر في PDF النهائي، بدل عرض {جدول_الأسماء} حرفياً
+            if not (doc["table"] or {}).get("rows"):
+                from .overtime_letter import rebuild_overtime_table
+                doc["table"] = await rebuild_overtime_table(db, current_user, ex)
     doc["layout"] = {**(doc.get("layout") or {}), "watermark": "معاينة — غير صادر"}
     meta: dict = {}
     pdf = build_letter_pdf(doc, settings, draft=True, letterhead=letterhead, meta=meta)

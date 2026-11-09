@@ -47,6 +47,7 @@ class RaiseIn(BaseModel):
     end_date: str
     faculty_id: Optional[str] = None
     department_id: Optional[str] = None
+    teach_department_id: Optional[str] = None  # 🆕 القسم الذي يُدرّس فيه فعلياً (مختلف عن department_id التنظيمي)
     teacher_id: Optional[str] = None
     hide_empty: bool = True
     only_overtime: bool = False
@@ -63,7 +64,7 @@ def _fs(db):
 
 
 def _period_key(d: RaiseIn) -> str:
-    return f"{d.start_date}|{d.end_date}|{d.faculty_id or ''}|{d.department_id or ''}|{d.teacher_id or ''}"
+    return f"{d.start_date}|{d.end_date}|{d.faculty_id or ''}|{d.department_id or ''}|{d.teach_department_id or ''}|{d.teacher_id or ''}"
 
 
 async def _templates(db) -> List[dict]:
@@ -99,11 +100,11 @@ def _summary_table(report: dict) -> dict:
 
 
 @router.get("/reports/teacher-workload/letter-status")
-async def letter_status(start_date: str, end_date: str, faculty_id: Optional[str] = None, department_id: Optional[str] = None, teacher_id: Optional[str] = None,
+async def letter_status(start_date: str, end_date: str, faculty_id: Optional[str] = None, department_id: Optional[str] = None, teach_department_id: Optional[str] = None, teacher_id: Optional[str] = None,
                         current_user: dict = Depends(get_current_user)):
     """الخطابات المرفوعة لهذه الفترة (للشارة في الكشف)"""
     db = get_db()
-    key = f"{start_date}|{end_date}|{faculty_id or ''}|{department_id or ''}|{teacher_id or ''}"
+    key = f"{start_date}|{end_date}|{faculty_id or ''}|{department_id or ''}|{teach_department_id or ''}|{teacher_id or ''}"
     out = []
     async for ln in db.overtime_letter_links.find({"period_key": key}).sort("created_at", -1):
         lt = await db.letters.find_one({"_id": ObjectId(ln["letter_id"])}, {"number_display": 1, "status": 1, "is_revoked": 1, "issued_at": 1, "recipient": 1, "subject": 1})
@@ -193,7 +194,7 @@ async def rebuild_overtime_table(db, current_user: dict, lt: dict):
     if lr.get("type") != "overtime":
         return None
     start, end = parse_period(lr["start_date"], lr["end_date"])
-    report = await compute_workload(db, await select_teachers(db, current_user, None, lr.get("faculty_id"), lr.get("department_id")), start, end, True, bool(lr.get("only_overtime")), set(lr.get("excluded") or []))
+    report = await compute_workload(db, await select_teachers(db, current_user, None, lr.get("faculty_id"), lr.get("department_id"), lr.get("teach_department_id")), start, end, True, bool(lr.get("only_overtime")), set(lr.get("excluded") or []))
     prev = {te["teacher_id"]: te.get("prev_letter") for te in lr.get("teachers_list", []) if te.get("prev_letter")}
     for t in report["teachers"]:
         if t["teacher_db_id"] in prev:
@@ -223,7 +224,7 @@ async def raise_letter(data: RaiseIn, current_user: dict = Depends(get_current_u
 
     start, end = parse_period(data.start_date, data.end_date)
     exclude = set(data.exclude_teacher_ids or [])
-    report = await compute_workload(db, await select_teachers(db, current_user, data.teacher_id, data.faculty_id, data.department_id), start, end, data.hide_empty, data.only_overtime, exclude)
+    report = await compute_workload(db, await select_teachers(db, current_user, data.teacher_id, data.faculty_id, data.department_id, data.teach_department_id), start, end, data.hide_empty, data.only_overtime, exclude)
     if not report["teachers"]:
         raise HTTPException(status_code=400, detail="لا يوجد أساتذة في الكشف لهذه الفلاتر (بعد الاستبعاد)")
     raised = await find_raised(db, [t["teacher_db_id"] for t in report["teachers"]], data.start_date, data.end_date)
@@ -236,6 +237,8 @@ async def raise_letter(data: RaiseIn, current_user: dict = Depends(get_current_u
     fac_name = report["teachers"][0].get("faculty_name") if data.faculty_id else "الجامعة"
     if data.department_id:
         fac_name = f"{report['teachers'][0].get('department_name') or ''} — {fac_name}"
+    elif data.teach_department_id:
+        fac_name = f"{report['teachers'][0].get('department_name') or ''} (يُدرّس فيه) — {fac_name}"
     tot = report["summary"]
     cur = next((t["summary"].get("currency") for t in report["teachers"] if t["summary"].get("overtime_amount")), "")
     amount_txt = f"{tot['total_overtime_amount']:,.0f} {cur}" if tot.get("total_overtime_amount") else ""
@@ -270,7 +273,7 @@ async def raise_letter(data: RaiseIn, current_user: dict = Depends(get_current_u
                       "amount": t["summary"].get("overtime_amount"), "prev_letter": t.get("prev_letter")} for t in report["teachers"]]
     await db.letters.update_one({"_id": ObjectId(lid)}, {"$set": {"attachments": atts, "table": _summary_table(report), "custom_table": True, "created_by_name": current_user.get("full_name", ""),
                                                                  "linked_report": {"type": "overtime", "period_key": key, "start_date": data.start_date, "end_date": data.end_date, "only_overtime": data.only_overtime,
-                                                                                   "faculty_id": data.faculty_id, "department_id": data.department_id, "teachers": tot["total_teachers"],
+                                                                                   "faculty_id": data.faculty_id, "department_id": data.department_id, "teach_department_id": data.teach_department_id, "teachers": tot["total_teachers"],
                                                                                    "overtime_hours": tot["total_overtime_hours"], "amount": tot.get("total_overtime_amount"),
                                                                                    "teachers_list": teachers_list, "excluded": sorted(exclude)}}})
     await db.overtime_letter_links.insert_one({"period_key": key, "letter_id": lid, "mode": data.mode, "template_key": data.template_key,
