@@ -662,6 +662,30 @@ async def finalize_draft(lid: str, base_url: Optional[str] = None, current_user:
     return {"id": lid, "number": upd["number_display"], "verify_url": upd["verify_url"], "token": upd["verify_token"]}
 
 
+DUPLICATE_EXCLUDE_KEYS = {"_id", "serial", "number_display", "year", "status", "verify_url", "verify_token", "qr_token",
+                          "issued_at", "created_by", "created_by_name", "created_by_faculty_ids", "is_revoked",
+                          "revoked_at", "revoked_by", "draft_seq", "draft_number", "attachments",
+                          "batch_id", "batch_index", "batch_total", "duplicated_from_number"}
+
+
+@router.post("/letters/{lid}/duplicate")
+async def duplicate_letter(lid: str, current_user: dict = Depends(get_current_user)):
+    """📋 نسخ خطاب محفوظ (مسودة أو صادر) بكل تفاصيله إلى مسودة جديدة برقم مسودة غير رسمي — لتعديل بعض الأمور ثم إصداره كخطاب مستقل"""
+    _guard(current_user)
+    db = get_db()
+    src = await _load_visible(db, current_user, lid)
+    doc = {k: v for k, v in src.items() if k not in DUPLICATE_EXCLUDE_KEYS}
+    counter = await db.letter_counters.find_one_and_update({"_id": "draft"}, {"$inc": {"seq": 1}}, upsert=True, return_document=True)
+    fac_scope = await hr_scope_isolation_faculty_ids(db, current_user)
+    doc.update({"status": "draft", "is_revoked": False, "draft_seq": counter["seq"], "number_display": f"م-{counter['seq']}",
+                "created_by": current_user.get("id", ""), "created_by_name": current_user.get("full_name", ""),
+                "created_by_faculty_ids": fac_scope or [], "issued_at": datetime.now(timezone.utc).isoformat(),
+                "duplicated_from_number": src.get("number_display", "")})
+    r = await db.letters.insert_one(doc)
+    await log_activity(current_user, "duplicate_letter", "letter", str(r.inserted_id), doc.get("subject", ""), {"from": src.get("number_display")})
+    return {"id": str(r.inserted_id), "number": doc["number_display"], "status": "draft"}
+
+
 @router.delete("/letters/{lid}")
 async def delete_draft(lid: str, current_user: dict = Depends(get_current_user)):
     _guard(current_user)
