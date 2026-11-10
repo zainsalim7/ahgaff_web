@@ -140,7 +140,7 @@ class TestOfflineSyncOverride:
 
     def test_override_twice_400(self, admin_h, ctx):
         r = requests.post(f"{API}/reports/offline-sync/{ctx['window_log']}/override", headers=admin_h, json={"reason": "again"})
-        assert r.status_code == 400 and r.json()["detail"] == "هذا السجل ليس محاولة فاشلة"
+        assert r.status_code == 400 and r.json()["detail"].startswith("هذا السجل ليس محاولة فاشلة")
 
     def test_failed_without_payload_cannot_override(self, admin_h, ctx):
         base = {"teacher_id": "698f671431cfba92c49a550e", "teacher_name": "أستاذ اختبار 180156",

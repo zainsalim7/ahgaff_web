@@ -1,0 +1,41 @@
+{
+  "summary": "Backend-only check of the offline-sync timestamp rules in POST /api/attendance/session (offline_recorded_at). I ran 10 new tests against the public URL, using TEST lectures created relative to the real server time (2026-11-10, Yemen UTC+3), plus the 13 older override tests. All 23 passed. The server checks the device time (offline_recorded_at), not the submit time: an in-window timestamp is accepted even when sent 36h or 156h later, and an out-of-window timestamp is rejected with a clear Arabic message. The max-hours setting is currently 168, not the code default of 72, and is enforced. Future timestamps more than 10 minutes ahead are rejected. Frontend code was reviewed only (no UI run): both addAttendanceRecord calls pass sessionOpenedAtRef.ts and syncPendingRecords sends the earliest timestamp as offline_recorded_at.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_offline_window_contract.py",
+    "/app/backend/tests/test_offline_sync_override.py",
+    "/app/test_reports/pytest/pytest_offline_window.xml"
+  ],
+  "verified_behaviour": [
+    "Inside window (lecture yesterday 08:00-09:00, device time 08:30, sent about 36h later): 200. Attendance saved, lecture marked completed, attendance_started_at = device time (not the submit time), attendance_operations.offline_recorded_at stored.",
+    "UTC 'Z' ISO format (what toISOString sends): converted correctly to Yemen time and accepted. A timestamp with no timezone is treated as Yemen time and accepted.",
+    "Device time at the lecture end time (end + 0 min, inside the grace period): accepted.",
+    "Device time 1h before start: 400 'وقت التسجيل الأوفلاين خارج نافذة المحاضرة (date start-end) — مرفوض'. Nothing written; the failure log diagnosis says 'قبل بداية المحاضرة'.",
+    "Device time 6h after the grace period ends (the old bug, where the submit time was sent): 400 with the window message, which includes the lecture date and times.",
+    "Older than max hours (currently 168 from db.settings): 400 'سجل التحضير الأوفلاين أقدم من 168 ساعة — لا يمكن قبوله'. Within max hours (156h) and inside the window: 200.",
+    "Future +30 min: 400 'وقت التسجيل الأوفلاين في المستقبل — تحقق من ساعة الجهاز'. Future +5 min (inside the 10-min tolerance): no future error; it moves on to the window check."
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Possible false rejection (worth a look): captureSessionOpenedAt() records the time the screen opened. If a teacher opens take-attendance a few minutes BEFORE lecture start, goes offline and saves, offline_recorded_at < lecture_start and the server rejects it as 'before lecture start'. The old submit-time behaviour would have accepted it. Fix options: clamp the timestamp on the client to max(sessionOpenedAt, lecture start), or allow a small early tolerance on the server (e.g. lecture_start - 10min).",
+    "The default value is inconsistent: the code default OFFLINE_SYNC_MAX_HOURS is 72, but the live DB setting is 168, so the setting wins. This is not a bug; it is noted for awareness.",
+    "server.py is very large (more than 13k lines); record_attendance_session should be split into a module."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_offline_window_contract.py (new)",
+    "/app/backend/tests/test_offline_sync_override.py (test_override_twice_400 assertion relaxed to startswith, because the backend message now ends with ' (ربما جرى التعامل معه للتو)')"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "not tested (code review only)"},
+  "seed_data_creation": "None kept. TEST lectures (room TEST_OWC) on course 698f0000d803b27aab0120af, plus their attendance, attendance_operations and offline_sync_log entries, were created and deleted by id. Cleanup was confirmed: 0 leftovers.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Run: cd /app/backend && python -m pytest tests/test_offline_window_contract.py tests/test_offline_sync_override.py -p no:xdist. Lectures have a unique index (course_id, date, start_time, group), so each test lecture needs its own start_time. teacher180156/teacher123 owns course 698f0000d803b27aab0120af. The server clock is about 2026-11-10."
+}

@@ -11453,9 +11453,12 @@ async def record_attendance_session(
                 await _log_offline_sync(db, current_user=current_user, lecture=lecture, course=course, session=session, now=now, lecture_end=lecture_end, status="failed", reason=_reason, records_count=len(records), diagnosis=_diag, pending_payload=_pending_payload)
                 raise HTTPException(status_code=400, detail=_reason)
             offline_window_end = lecture_end + timedelta(minutes=attendance_duration + max_delay)
-            if offline_time < lecture_start or offline_time > offline_window_end:
+            # 🕒 سماحية 15 دقيقة قبل بداية المحاضرة: الأستاذ قد يفتح شاشة الحضور مبكراً ثم ينقطع اتصاله فوراً،
+            # فيُعتمَد وقت فتح الشاشة (قبل بداية المحاضرة بدقائق) كوقت تسجيل — لا يجب رفضه كخطأ ساعة جهاز
+            offline_window_start = lecture_start - timedelta(minutes=15)
+            if offline_time < offline_window_start or offline_time > offline_window_end:
                 _reason = f"وقت التسجيل الأوفلاين خارج نافذة المحاضرة ({lecture['date']} {lecture['start_time']}-{lecture['end_time']}) — مرفوض"
-                if offline_time < lecture_start:
+                if offline_time < offline_window_start:
                     _gap_min = int((lecture_start - offline_time).total_seconds() // 60)
                     _diag = f"سجّل جهاز الأستاذ وقت الحضور {offline_time.strftime('%Y-%m-%d %H:%M')} — أي قبل بداية المحاضرة ({lecture_start.strftime('%Y-%m-%d %H:%M')}) بـ {_gap_min} دقيقة. السبب غالباً: ساعة/تاريخ الجهاز غير صحيحة."
                 else:
