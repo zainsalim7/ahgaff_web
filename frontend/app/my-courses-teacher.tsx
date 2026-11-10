@@ -15,6 +15,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuthStore } from '../src/store/authStore';
 import { coursesAPI, lecturesAPI } from '../src/services/api';
+import { getAdenDate, toAPIDate } from '../src/utils/dateUtils';
 
 interface Course {
   id: string;
@@ -51,6 +52,9 @@ export default function TeacherCoursesScreen() {
   const [todayLectures, setTodayLectures] = useState<TodayLecture[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  // 🔐 تُعرَض فقط محاضرات تطابق تاريخ اليوم الحقيقي (جهاز) — تمنع عرض/فتح محاضرة قديمة بقيت محفوظة من قبل انقطاع اتصال طويل كأنها "محاضرة اليوم"
+  const todayStr = toAPIDate(getAdenDate());
+  const safeTodayLectures = todayLectures.filter((l) => l.date === todayStr);
 
   const fetchData = useCallback(async () => {
     try {
@@ -302,14 +306,14 @@ export default function TeacherCoursesScreen() {
             </View>
           </View>
           
-          {todayLectures.length === 0 ? (
+          {safeTodayLectures.length === 0 ? (
             <View style={styles.noLecturesToday}>
               <Ionicons name="calendar-outline" size={40} color="#ccc" />
               <Text style={styles.noLecturesText}>لا توجد محاضرات مجدولة لليوم</Text>
             </View>
           ) : (
             <FlatList
-              data={todayLectures}
+              data={safeTodayLectures}
               renderItem={renderTodayLecture}
               keyExtractor={(item) => item.id}
               scrollEnabled={false}

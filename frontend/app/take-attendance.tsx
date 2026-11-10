@@ -28,7 +28,7 @@ import { useAuth, PERMISSIONS, PermissionGate } from '../src/contexts/AuthContex
 import { useRealEnforcementStore } from '../src/store/realEnforcementStore';
 import OfflineIndicator from '../src/components/OfflineIndicator';
 import AbsenceReminderButton from '../src/components/AbsenceReminderButton';
-import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR } from '../src/utils/dateUtils';
+import { formatGregorianDate, formatHijriDate, parseDate, WEEKDAYS_AR, getAdenDate, toAPIDate } from '../src/utils/dateUtils';
 
 interface EnrolledStudent {
   id: string;
@@ -281,6 +281,13 @@ export default function TakeAttendanceScreen() {
   // دالة تحميل البيانات المخزنة
   const loadCachedData = (apiError?: any) => {
     const cachedLecture = getCachedLecture(lectureId as string);
+    // 🔐 حماية قاطعة: محاضرة مخزَّنة منذ فترة (انقطاع اتصال طويل) قد تبقى ظاهرة في قوائم قديمة على الجهاز
+    // كأنها "محاضرة اليوم" رغم أنها ليست كذلك فعلياً — نمنع تسجيل حضورها أوفلاين إن اختلف تاريخها عن تاريخ اليوم الحقيقي
+    const todayStr = toAPIDate(getAdenDate());
+    if (cachedLecture && cachedLecture.date && cachedLecture.date !== todayStr) {
+      setErrorMessage(`⚠️ هذه بيانات محاضرة قديمة بتاريخ ${cachedLecture.date} وليست محاضرة اليوم (${todayStr}) — جرى تجاهلها تلقائياً لمنع تسجيل حضور بتاريخ خاطئ. يرجى الاتصال بالإنترنت وإعادة فتح قائمة محاضرات اليوم من جديد.`);
+      return;
+    }
     if (cachedLecture) {
       setLecture({
         id: cachedLecture.id,
