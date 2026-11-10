@@ -144,7 +144,8 @@ export default function OfflineSyncReportPage() {
                   {it.actual_recorder && (
                     <div style={{ color: '#0e7490', marginTop: 4, fontWeight: 700 }} data-testid={`osr-actual-recorder-${it.id}`}>
                       ⓘ من سجّل الحضور الفعلي لهذه المحاضرة: {it.actual_recorder.name || '—'} — {it.actual_recorder.method}
-                      {it.actual_recorder.recorded_at && ` (${String(it.actual_recorder.recorded_at).slice(0, 16).replace('T', ' ')})`}
+                      {it.actual_recorder.recorded_at && ` — وقت الحضور الفعلي: ${String(it.actual_recorder.recorded_at).slice(0, 16).replace('T', ' ')}`}
+                      {it.actual_recorder.synced_at && it.actual_recorder.synced_at !== it.actual_recorder.recorded_at && ` (وصلت للخادم: ${String(it.actual_recorder.synced_at).slice(0, 16).replace('T', ' ')})`}
                     </div>
                   )}
                   {it.is_duplicate_attempt && (

@@ -66,9 +66,12 @@ def build_router(db, get_current_user) -> APIRouter:
                     actual_method = "مزامنة أوفلاين من جهاز الأستاذ"
                 else:
                     actual_method = "تسجيل مباشر (أونلاين)"
+                # 🔒 وقت الحضور الفعلي الحقيقي هو offline_recorded_at (وقت التقاطه على جهاز الأستاذ) إن وُجد —
+                # recorded_at هو فقط وقت وصول الطلب للخادم (قد يتأخر عن الحضور الفعلي لو تأخرت المزامنة نفسها)
                 actual_recorder = {
                     "name": op.get("user_name", ""), "method": actual_method,
-                    "recorded_at": op.get("recorded_at"),
+                    "recorded_at": op.get("offline_recorded_at") or op.get("recorded_at"),
+                    "synced_at": op.get("recorded_at"),
                 }
             items.append({
                 "id": str(l["_id"]),
