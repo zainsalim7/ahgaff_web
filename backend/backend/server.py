@@ -19085,6 +19085,7 @@ async def _startup_db_tasks():
         ("restore_lecture_permissions_v1", restore_lecture_permissions_v1),
         ("cleanup_orphan_permissions", cleanup_orphan_permissions),
         ("migrate_broken_user_roles", migrate_broken_user_roles),
+        ("backfill_offline_override_attendance_started_at", backfill_offline_override_attendance_started_at),
         ("backfill_teaching_loads_semester_internal", backfill_teaching_loads_semester_internal),
         ("backfill_alumni_department_snapshot_internal", backfill_alumni_department_snapshot_internal),
         ("letters_backfill_people_faculty", lambda: letters_backfill_people_faculty(db)),
@@ -19558,6 +19559,29 @@ async def migrate_broken_user_roles():
             logging.info("User role migration: all users consistent (no fixes needed).")
     except Exception as e:
         logging.error(f"User role migration failed (non-critical): {e}")
+
+
+async def backfill_offline_override_attendance_started_at():
+    """يُصلح لمرة واحدة محاضرات قُبلت يدوياً (قبول يدوي لمزامنة أوفلاين) قبل إصلاح 10-11-2026
+    لكن لم يُسجَّل لها attendance_started_at — فبقيت غائبة عن تقرير 'تأخر الأساتذة'.
+    Idempotent: لا يمسّ محاضرة لديها attendance_started_at مسبقاً."""
+    try:
+        fixed = 0
+        async for op in db.attendance_operations.find({"manual_override_by_name": {"$exists": True, "$ne": None}}):
+            lec_id = op.get("lecture_id")
+            if not lec_id or not ObjectId.is_valid(lec_id) or not op.get("offline_recorded_at"):
+                continue
+            lec = await db.lectures.find_one({"_id": ObjectId(lec_id)}, {"attendance_started_at": 1})
+            if lec and not lec.get("attendance_started_at"):
+                await db.lectures.update_one(
+                    {"_id": ObjectId(lec_id)},
+                    {"$set": {"attendance_started_at": op["offline_recorded_at"]}}
+                )
+                fixed += 1
+        if fixed:
+            logging.info(f"✅ Backfill: {fixed} overridden lecture(s) now show correctly in teacher-delays report.")
+    except Exception as e:
+        logging.warning(f"Backfill offline override attendance_started_at failed (non-critical): {e}")
 
 async def _ensure_weekly_schedule_unique_indexes(db, dedupe: bool = False):
     """

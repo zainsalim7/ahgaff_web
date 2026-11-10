@@ -138,6 +138,12 @@ export default function OfflineSyncReportPage() {
                 <td style={td}>{it.records_count}</td>
                 <td style={{ ...td, fontSize: 11.5, color: it.status === 'overridden' ? '#64748b' : '#b91c1c', maxWidth: 320 }}>{it.diagnosis || it.reason || '—'}
                   {it.status === 'overridden' && <div style={{ color: '#2563eb', marginTop: 4, fontWeight: 700 }}>✓ قُبل يدوياً بواسطة {it.overridden_by_name || '—'} — السبب: {it.override_reason}</div>}
+                  {it.actual_recorder && (
+                    <div style={{ color: '#0e7490', marginTop: 4, fontWeight: 700 }} data-testid={`osr-actual-recorder-${it.id}`}>
+                      ⓘ من سجّل الحضور الفعلي لهذه المحاضرة: {it.actual_recorder.name || '—'} — {it.actual_recorder.method}
+                      {it.actual_recorder.recorded_at && ` (${String(it.actual_recorder.recorded_at).slice(0, 16).replace('T', ' ')})`}
+                    </div>
+                  )}
                 </td>
                 <td style={td}>{it.can_override && <button onClick={() => { setOverrideItem(it); setOverrideReason(''); setOverrideErr(''); }} style={btn('#2563eb', { padding: '5px 10px', fontSize: 11.5 })} data-testid={`osr-override-btn-${it.id}`}>قبول يدوياً</button>}</td>
               </tr>); })}</tbody>

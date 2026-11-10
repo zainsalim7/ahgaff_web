@@ -42,12 +42,34 @@ def build_router(db, get_current_user) -> APIRouter:
 
         logs = await db.offline_sync_log.find(q).sort("synced_at", -1).to_list(5000)
 
+        # 🔎 من سجّل فعلياً حضور كل محاضرة (حتى للمحاولات المرفوضة/المُتجاهَلة) — من attendance_operations
+        lec_ids = list({l.get("lecture_id") for l in logs if l.get("lecture_id")})
+        ops_by_lecture: dict = {}
+        if lec_ids:
+            async for op in db.attendance_operations.find(
+                {"lecture_id": {"$in": lec_ids}}
+            ).sort("recorded_at", 1):
+                ops_by_lecture.setdefault(op["lecture_id"], op)
+
         items = []
         summary = {"success": 0, "failed": 0, "overridden": 0, "max_delay_minutes": 0, "avg_delay_minutes": 0}
         delay_sum = 0
         delay_count = 0
         for l in logs:
             delay_minutes = round((l.get("delay_seconds") or 0) / 60)
+            op = ops_by_lecture.get(l.get("lecture_id"))
+            actual_recorder = None
+            if op:
+                if op.get("manual_override_by_name"):
+                    actual_method = f"قُبل يدوياً بواسطة {op['manual_override_by_name']}"
+                elif op.get("offline_recorded_at"):
+                    actual_method = "مزامنة أوفلاين من جهاز الأستاذ"
+                else:
+                    actual_method = "تسجيل مباشر (أونلاين)"
+                actual_recorder = {
+                    "name": op.get("user_name", ""), "method": actual_method,
+                    "recorded_at": op.get("recorded_at"),
+                }
             items.append({
                 "id": str(l["_id"]),
                 "teacher_id": l.get("teacher_id"), "teacher_name": l.get("teacher_name", ""),
@@ -64,6 +86,7 @@ def build_router(db, get_current_user) -> APIRouter:
                 "overridden_by_name": l.get("overridden_by_name"),
                 "override_reason": l.get("override_reason"),
                 "records_count": l.get("records_count", 0),
+                "actual_recorder": actual_recorder,
             })
             summary[l.get("status") if l.get("status") in ("success", "failed", "overridden") else "failed"] += 1
             if delay_minutes > 0:
