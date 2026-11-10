@@ -545,6 +545,7 @@ export default function TakeAttendanceScreen() {
               student_name: student_names[studentId],
               status: status as 'present' | 'absent' | 'late' | 'excused',
               method: 'manual_offline',
+              timestamp: sessionOpenedAtRef.current?.lectureId === lectureId ? sessionOpenedAtRef.current.ts : undefined,
             });
           }
           
