@@ -13070,7 +13070,7 @@ async def get_teacher_delays_report(
     # 🔎 مصدر بدء التحضير: أول عملية تحضير لكل محاضرة (من سجّل؟ أوفلاين؟) + حد التأخير للكلية لتفسير التأخيرات الكبيرة
     first_ops: dict = {}
     lec_ids = [str(lec["_id"]) for lec in lectures]
-    async for op in db.attendance_operations.find({"lecture_id": {"$in": lec_ids}}, {"lecture_id": 1, "user_id": 1, "user_name": 1, "offline_recorded_at": 1, "recorded_at": 1}).sort("recorded_at", 1):
+    async for op in db.attendance_operations.find({"lecture_id": {"$in": lec_ids}}, {"lecture_id": 1, "user_id": 1, "user_name": 1, "offline_recorded_at": 1, "recorded_at": 1, "manual_override_by_name": 1}).sort("recorded_at", 1):
         first_ops.setdefault(op["lecture_id"], op)
     fac_delay_cache: dict = {}
 
@@ -13153,7 +13153,9 @@ async def get_teacher_delays_report(
             op = first_ops.get(str(lec["_id"])) or {}
             max_delay = await _max_delay_for(course.get("department_id"))
             recorded_by_other = bool(op.get("user_id")) and op.get("user_id") not in (teacher_id, str((await db.teachers.find_one({"_id": ObjectId(teacher_id)}, {"user_id": 1}) or {}).get("user_id") or "")) if ObjectId.is_valid(teacher_id) else False
-            if op.get("offline_recorded_at"):
+            if op.get("manual_override_by_name"):
+                source, source_label = "manual_override", f"قُبل يدوياً بواسطة {op['manual_override_by_name']} (مزامنة أوفلاين متأخرة)"
+            elif op.get("offline_recorded_at"):
                 source, source_label = "offline", "مزامنة أوفلاين (وقت الجهاز)"
             elif recorded_by_other:
                 source, source_label = "other_user", f"سجّله {op.get('user_name') or 'مستخدم آخر'} (صلاحية تعديل)"

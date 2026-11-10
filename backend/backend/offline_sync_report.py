@@ -152,6 +152,10 @@ def build_router(db, get_current_user) -> APIRouter:
                 lecture_update["lesson_title"] = payload["lesson_title"]
             if payload.get("plan_topic_id"):
                 lecture_update["plan_topic_id"] = payload["plan_topic_id"]
+            # 🔎 تسجيل وقت بدء التحضير الفعلي كما يفعل مسار النجاح العادي تماماً، وإلا يبقى هذا القبول
+            # اليدوي غائباً تماماً عن تقرير "تأخر الأساتذة" (يعتمد حصراً على وجود attendance_started_at)
+            if log.get("offline_recorded_at"):
+                lecture_update["attendance_started_at"] = log["offline_recorded_at"]
             await db.lectures.update_one({"_id": ObjectId(log["lecture_id"])}, {"$set": lecture_update})
 
             await db.attendance_operations.insert_one({
