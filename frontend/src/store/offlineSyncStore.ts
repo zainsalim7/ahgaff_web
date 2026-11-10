@@ -58,8 +58,9 @@ export interface OfflineSyncState {
   // الإجراءات
   setOnlineStatus: (status: boolean) => void;
   
-  // إدارة الحضور أوفلاين
-  addAttendanceRecord: (record: Omit<OfflineAttendanceRecord, 'local_id' | 'synced' | 'timestamp'>) => Promise<void>;
+  // إدارة الحضور أوفلاين — timestamp اختياري: إن مُرِّر (مثلاً وقت فتح شاشة المحاضرة) يُعتمَد بدل وقت الحفظ الفعلي،
+  // لأن الفاصل بين فتح الشاشة (وقت المحاضرة الحقيقي) وضغط "حفظ" (قد يتأخر لو عُلِّق التطبيق بالخلفية) لا يعكس وقت الحضور الفعلي
+  addAttendanceRecord: (record: Omit<OfflineAttendanceRecord, 'local_id' | 'synced'> & { timestamp?: string }) => Promise<void>;
   getPendingRecordsCount: () => number;
   
   // التخزين المؤقت
@@ -119,7 +120,7 @@ export const useOfflineSyncStore = create<OfflineSyncState>((set, get) => ({
     const newRecord: OfflineAttendanceRecord = {
       ...record,
       local_id: `offline_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      timestamp: new Date().toISOString(),
+      timestamp: record.timestamp || new Date().toISOString(),
       synced: false,
     };
     

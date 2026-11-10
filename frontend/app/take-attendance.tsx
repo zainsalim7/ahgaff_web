@@ -1,6 +1,6 @@
 import { goBack } from '../src/utils/navigation';
 import { exportName } from '../src/utils/exportName';
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -156,6 +156,14 @@ export default function TakeAttendanceScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [errorTitle, setErrorTitle] = useState('تعذر تحميل البيانات');
   const [exportingPdf, setExportingPdf] = useState(false);
+  // 🕒 وقت فتح شاشة هذه المحاضرة أول مرة (يُعتمَد كوقت الحضور الفعلي بدل وقت ضغط "حفظ" لاحقاً — الفارق بينهما
+  // قد يصل لساعات/أيام لو عُلِّق التطبيق بالخلفية بعد الفتح مباشرة، فلا يعكس وقت ضغط "حفظ" وقت الحضور الحقيقي)
+  const sessionOpenedAtRef = useRef<{ lectureId: string; ts: string } | null>(null);
+  const captureSessionOpenedAt = () => {
+    if (!sessionOpenedAtRef.current || sessionOpenedAtRef.current.lectureId !== lectureId) {
+      sessionOpenedAtRef.current = { lectureId: lectureId as string, ts: new Date().toISOString() };
+    }
+  };
 
   // تصدير PDF
   const handleExportPdf = async () => {
@@ -211,6 +219,7 @@ export default function TakeAttendanceScreen() {
           setStudents(data.students);
           setAttendanceRecorded(data.attendance_recorded);
           setOfflineMode(false);
+          captureSessionOpenedAt();
           
           // تخزين البيانات محلياً للاستخدام أوفلاين (مع حالة الحضور)
           await cacheLecture({
@@ -313,6 +322,7 @@ export default function TakeAttendanceScreen() {
       })));
       setOfflineMode(true);
       setAttendanceRecorded(cachedLecture.attendance_recorded || false);
+      captureSessionOpenedAt();
       
       // تحميل الحضور المحفوظ من الكاش
       const initialAttendance: { [key: string]: string } = {};
@@ -487,6 +497,7 @@ export default function TakeAttendanceScreen() {
             student_name: student_names[studentId],
             status: status as 'present' | 'absent' | 'late' | 'excused',
             method: 'manual_offline',
+            timestamp: sessionOpenedAtRef.current?.lectureId === lectureId ? sessionOpenedAtRef.current.ts : undefined,
           });
         }
         
