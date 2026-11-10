@@ -129,14 +129,17 @@ export default function OfflineSyncReportPage() {
               {['تاريخ المحاضرة', 'المقرر', 'الأستاذ', 'الحالة', 'التأخر عن نهاية المحاضرة', 'وقت المزامنة', 'عدد السجلات', 'السبب الحقيقي (إن فشلت)', ''].map((h) => <th key={h} style={th}>{h}</th>)}
             </tr></thead>
             <tbody>{shown.map((it: any) => { const st = STATUS[it.status] || STATUS.failed; return (
-              <tr key={it.id} data-testid={`osr-row-${it.id}`} style={it.status === 'failed' ? { background: '#fff5f5' } : selected.has(it.id) ? { background: '#eff6ff' } : undefined}>
+              <tr key={it.id} data-testid={`osr-row-${it.id}`} style={it.is_duplicate_attempt ? { background: '#f0fdfa' } : it.status === 'failed' ? { background: '#fff5f5' } : selected.has(it.id) ? { background: '#eff6ff' } : undefined}>
                 <td style={td}><input type="checkbox" checked={selected.has(it.id)} onChange={() => toggleSelect(it.id)} data-testid={`osr-row-checkbox-${it.id}`} /></td>
                 <td style={td}>{it.lecture_date}</td><td style={td}>{it.course_name}</td><td style={td}>{it.teacher_name || '—'}</td>
-                <td style={td}><Badge text={st.label} color={st.color} /></td>
+                <td style={td}>
+                  <Badge text={st.label} color={st.color} />
+                  {it.is_duplicate_attempt && <div style={{ fontSize: 10.5, color: '#0e7490', fontWeight: 700, marginTop: 3 }}>محاولة مكررة — غير مؤثرة</div>}
+                </td>
                 <td style={{ ...td, fontWeight: 800, color: it.delay_minutes > 60 ? '#b91c1c' : it.delay_minutes > 0 ? '#92400e' : '#16a34a' }}>{fmtDelay(it.delay_minutes)}</td>
                 <td style={td}>{String(it.synced_at || '').slice(0, 16).replace('T', ' ')}</td>
                 <td style={td}>{it.records_count}</td>
-                <td style={{ ...td, fontSize: 11.5, color: it.status === 'overridden' ? '#64748b' : '#b91c1c', maxWidth: 320 }}>{it.diagnosis || it.reason || '—'}
+                <td style={{ ...td, fontSize: 11.5, color: it.status === 'overridden' ? '#64748b' : it.is_duplicate_attempt ? '#334155' : '#b91c1c', maxWidth: 320 }}>{it.diagnosis || it.reason || '—'}
                   {it.status === 'overridden' && <div style={{ color: '#2563eb', marginTop: 4, fontWeight: 700 }}>✓ قُبل يدوياً بواسطة {it.overridden_by_name || '—'} — السبب: {it.override_reason}</div>}
                   {it.actual_recorder && (
                     <div style={{ color: '#0e7490', marginTop: 4, fontWeight: 700 }} data-testid={`osr-actual-recorder-${it.id}`}>
@@ -144,8 +147,13 @@ export default function OfflineSyncReportPage() {
                       {it.actual_recorder.recorded_at && ` (${String(it.actual_recorder.recorded_at).slice(0, 16).replace('T', ' ')})`}
                     </div>
                   )}
+                  {it.is_duplicate_attempt && (
+                    <div style={{ color: '#16a34a', marginTop: 4, fontWeight: 700 }} data-testid={`osr-no-action-needed-${it.id}`}>
+                      ✅ لا حاجة لأي تدخل — حضور هذه المحاضرة مسجَّل مسبقاً وصحيح (انظر أعلاه). هذه فقط محاولة مزامنة متأخرة عالقة من نفس جهاز الأستاذ، لم تُكتب فوق أي شيء ولا تؤثر على دقة السجل.
+                    </div>
+                  )}
                 </td>
-                <td style={td}>{it.can_override && <button onClick={() => { setOverrideItem(it); setOverrideReason(''); setOverrideErr(''); }} style={btn('#2563eb', { padding: '5px 10px', fontSize: 11.5 })} data-testid={`osr-override-btn-${it.id}`}>قبول يدوياً</button>}</td>
+                <td style={td}>{it.can_override && <button onClick={() => { setOverrideItem(it); setOverrideReason(''); setOverrideErr(''); }} style={btn(it.is_duplicate_attempt ? '#94a3b8' : '#2563eb', { padding: '5px 10px', fontSize: 11.5 })} data-testid={`osr-override-btn-${it.id}`}>قبول يدوياً</button>}</td>
               </tr>); })}</tbody>
           </table>
         )}

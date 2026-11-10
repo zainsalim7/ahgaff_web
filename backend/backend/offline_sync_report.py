@@ -87,6 +87,9 @@ def build_router(db, get_current_user) -> APIRouter:
                 "override_reason": l.get("override_reason"),
                 "records_count": l.get("records_count", 0),
                 "actual_recorder": actual_recorder,
+                # 🔎 محاولة مزامنة فاشلة لكن الحضور الحقيقي لهذه المحاضرة مسجَّل مسبقاً من محاولة أخرى ناجحة —
+                # ليست مشكلة تحتاج تدخلاً، فقط محاولة متأخرة/عالقة من نفس جهاز الأستاذ لم تُكتب فوق شيء
+                "is_duplicate_attempt": l.get("status") == "failed" and actual_recorder is not None,
             })
             summary[l.get("status") if l.get("status") in ("success", "failed", "overridden") else "failed"] += 1
             if delay_minutes > 0:
