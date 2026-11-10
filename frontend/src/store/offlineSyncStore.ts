@@ -15,6 +15,7 @@ export interface OfflineAttendanceRecord {
   timestamp: string;
   synced: boolean;
   sync_error?: string;
+  permanently_rejected?: boolean;
 }
 
 export interface OfflineLecture {
@@ -250,15 +251,21 @@ export const useOfflineSyncStore = create<OfflineSyncState>((set, get) => ({
         const errorMsg = error.response?.data?.detail || error.message || 'خطأ غير معروف';
         errors.push(`محاضرة ${lectureId}: ${errorMsg}`);
         
-        // تحديث السجلات بالخطأ
+        // 🔒 رفض نهائي من الخادم (400 — مثل "خارج نافذة المحاضرة"/"أقدم من الحد الأقصى"/"وقت مستقبلي") لن ينجح
+        // مهما أُعيدت المحاولة لاحقاً — يجب التوقف عنه نهائياً، وإلا يبقى يتكرر في كل مزامنة للأبد (مثل "زومبي")
+        // ويُنشئ سجل فشل جديد في كل مرة رغم أن البيانات نفسها لم ولن تتغيّر. أخطاء الشبكة (بلا response، أو 5xx)
+        // تبقى تُعاد محاولتها كالمعتاد لأنها قد تنجح لاحقاً فعلاً.
+        const isPermanentRejection = error.response?.status === 400;
         records.forEach(record => {
           const idx = updatedRecords.findIndex(r => r.local_id === record.local_id);
           if (idx !== -1) {
-            updatedRecords[idx] = { ...updatedRecords[idx], sync_error: errorMsg };
+            updatedRecords[idx] = isPermanentRejection
+              ? { ...updatedRecords[idx], synced: true, permanently_rejected: true, sync_error: errorMsg }
+              : { ...updatedRecords[idx], sync_error: errorMsg };
           }
         });
         
-        console.error(`❌ فشل مزامنة المحاضرة ${lectureId}:`, errorMsg);
+        console.error(`❌ فشل مزامنة المحاضرة ${lectureId}:`, errorMsg, isPermanentRejection ? '(رفض نهائي — لن تُعاد المحاولة)' : '');
       }
     }
     
