@@ -154,6 +154,7 @@ export default function TakeAttendanceScreen() {
 
   // State لرسالة الخطأ
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [errorTitle, setErrorTitle] = useState('تعذر تحميل البيانات');
   const [exportingPdf, setExportingPdf] = useState(false);
 
   // تصدير PDF
@@ -197,6 +198,7 @@ export default function TakeAttendanceScreen() {
 
   const fetchData = useCallback(async () => {
     setErrorMessage(null);
+    setErrorTitle('تعذر تحميل البيانات');
     try {
       if (lectureId) {
         // محاولة جلب البيانات من الخادم أولاً
@@ -282,10 +284,13 @@ export default function TakeAttendanceScreen() {
   const loadCachedData = (apiError?: any) => {
     const cachedLecture = getCachedLecture(lectureId as string);
     // 🔐 حماية قاطعة: محاضرة مخزَّنة منذ فترة (انقطاع اتصال طويل) قد تبقى ظاهرة في قوائم قديمة على الجهاز
-    // كأنها "محاضرة اليوم" رغم أنها ليست كذلك فعلياً — نمنع تسجيل حضورها أوفلاين إن اختلف تاريخها عن تاريخ اليوم الحقيقي
-    const todayStr = toAPIDate(getAdenDate());
-    if (cachedLecture && cachedLecture.date && cachedLecture.date !== todayStr) {
-      setErrorMessage(`⚠️ هذه بيانات محاضرة قديمة بتاريخ ${cachedLecture.date} وليست محاضرة اليوم (${todayStr}) — جرى تجاهلها تلقائياً لمنع تسجيل حضور بتاريخ خاطئ. يرجى الاتصال بالإنترنت وإعادة فتح قائمة محاضرات اليوم من جديد.`);
+    // كأنها "محاضرة اليوم" رغم أنها ليست كذلك فعلياً — نمنع تسجيل حضورها أوفلاين إن كانت أقدم من الأمس (نسمح بالأمس أيضاً لتغطية محاضرة تمتد لما بعد منتصف الليل)
+    const today = getAdenDate();
+    const todayStr = toAPIDate(today);
+    const yesterdayStr = toAPIDate(new Date(today.getTime() - 24 * 3600000));
+    if (cachedLecture && cachedLecture.date && cachedLecture.date !== todayStr && cachedLecture.date !== yesterdayStr) {
+      setErrorTitle('محاضرة ليست لليوم');
+      setErrorMessage(`⚠️ هذه بيانات محاضرة ليست لليوم (بتاريخ ${cachedLecture.date}، واليوم ${todayStr}) — جرى تجاهلها تلقائياً لمنع تسجيل حضور بتاريخ خاطئ. يرجى الاتصال بالإنترنت وإعادة فتح قائمة محاضرات اليوم من جديد.`);
       return;
     }
     if (cachedLecture) {
@@ -622,24 +627,24 @@ export default function TakeAttendanceScreen() {
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         {errorMessage ? (
           <ScrollView style={{ flex: 1 }} contentContainerStyle={[styles.pageScroll, { flexGrow: 1, justifyContent: 'center' }]}>
-            <View style={styles.errorCard} data-testid="attendance-error-container">
+            <View style={styles.errorCard} data-testid="attendance-error-container" testID="attendance-error-container">
               <View style={styles.errorIconWrap}>
                 <Ionicons name="alert-circle" size={48} color="#f44336" />
               </View>
-              <Text style={styles.errorTitle}>تعذر تحميل البيانات</Text>
-              <Text style={styles.errorText} data-testid="attendance-error-message">{errorMessage}</Text>
+              <Text style={styles.errorTitle}>{errorTitle}</Text>
+              <Text style={styles.errorText} data-testid="attendance-error-message" testID="attendance-error-message">{errorMessage}</Text>
               <View style={{ flexDirection: 'row-reverse', gap: 10, marginTop: 16 }}>
                 <TouchableOpacity
                   style={styles.errorPrimaryBtn}
-                  data-testid="attendance-retry-btn"
-                  onPress={() => { setErrorMessage(null); setLoading(true); fetchData(); }}
+                  data-testid="attendance-retry-btn" testID="attendance-retry-btn"
+                  onPress={() => { setErrorMessage(null); setErrorTitle('تعذر تحميل البيانات'); setLoading(true); fetchData(); }}
                 >
                   <Ionicons name="refresh" size={18} color="#fff" />
                   <Text style={styles.errorPrimaryBtnText}>إعادة المحاولة</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={styles.errorGhostBtn}
-                  data-testid="attendance-back-btn"
+                  data-testid="attendance-back-btn" testID="attendance-back-btn"
                   onPress={() => goBack()}
                 >
                   <Ionicons name="arrow-back" size={18} color="#1565c0" />

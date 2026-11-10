@@ -1,0 +1,40 @@
+{
+  "summary": "Frontend testing of the stale offline lecture cache guard (take-attendance.tsx loadCachedData) and the safeTodayLectures filter (my-courses-teacher.tsx). Teacher login from the web is blocked by design (routes/auth.py returns 403 for teacher/student logins from browsers), so I got a teacher session from the API (X-Platform: android) and put token/user into localStorage. I then put fake lectures into 'offline_cached_lectures' and opened /take-attendance?lectureId=FAKE_OLD_LECTURE_ID. Results: lectures dated yesterday (2026-11-09) and 2 days ago (2026-11-08) both show the new warning ('⚠️ هذه بيانات محاضرة قديمة بتاريخ ...') with the retry and back buttons and 0 student rows. A lecture dated tomorrow (2026-11-11) is also blocked. The 2-days-old and tomorrow cases were also run with every /api/** request aborted to simulate real offline. Pressing retry shows the same warning again and never shows students. Regression: a cached lecture dated today (2026-11-10) shows the normal attendance screen (1 student row, offline badge, save button, no error) both when the API returns 404 and when the network is aborted. my-courses-teacher loads with no page errors. With a mocked /api/lectures/today response holding one lecture for today and one for 2 days ago, only today's lecture shows. Backend light check: POST /api/attendance/session works and returns 404 for an unknown valid ObjectId, and server.py compiles. The online attendance happy path could not be run end-to-end: there are 0 lectures dated today in the DB and teacher180156 has 0 courses, and I did not create real lecture data.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/lectures/{id}/details and POST /api/attendance/session", "issue": "A non-ObjectId lecture id (e.g. FAKE_OLD_LECTURE_ID) returns 500 Internal Server Error instead of 400/404 because ObjectId() is called without validation. This existed before this change."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "take-attendance error card", "issue": "data-testid on RN <Text>/<TouchableOpacity> is not rendered on react-native-web, so attendance-error-message, retry and back were not findable. Fixed by adding matching testID props.", "selector": "[data-testid=attendance-error-message]", "priority": "LOW (fixed)"},
+      {"component": "take-attendance back button", "issue": "When the page is opened directly with no history, 'العودة' goes to /login instead of the teacher home.", "selector": "[data-testid=attendance-back-btn]", "priority": "LOW"}
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "take-attendance stale cache error", "issues": ["The message says 'محاضرة قديمة' even when the cached lecture is dated in the future (tomorrow). Wording could be 'ليست بتاريخ اليوم'.", "The title 'تعذر تحميل البيانات' is generic. A specific title such as 'محاضرة ليست لليوم' would be clearer."]},
+      {"screen": "my-courses-teacher", "issue_note": "existed before this change", "issues": ["The header shows the raw route name 'my-courses-teacher' instead of an Arabic title."]}
+    ]
+  },
+  "test_report_links": [],
+  "action_items": [
+    "Optional: guard ObjectId parsing in /lectures/{id}/details and /attendance/session so bad ids return 400/404 instead of 500.",
+    "Optional: adjust the stale-cache message for future-dated lectures and make the error title specific.",
+    "Edge case to consider: for a lecture that ends near midnight Aden time (e.g. 23:00-23:59), the allowed attendance window runs past midnight. After midnight, the cached date no longer equals today, so the new guard blocks legitimate offline attendance even though the backend window would accept it. Consider comparing against the lecture end time plus the allowed window instead of strict date equality.",
+    "Optional: in take-attendance, loadFromStorage() is called without being awaited before fetchData. If the API fails very fast, getCachedLecture may run before the cache is hydrated. It worked in every run here (the root _layout loads it too), but awaiting hydration would be safer."
+  ],
+  "critical_code_review_comments": [
+    "The guard in loadCachedData is correct: it uses getAdenDate()/toAPIDate() and returns before setStudents/setAttendanceStatus, so no attendance UI is shown for a lecture not dated today.",
+    "The guard only applies to the cached/offline path. The online path relies on backend validation, which is as intended.",
+    "safeTodayLectures is computed on every render (cheap) and the backend /lectures/today returns the 'date' field, so the filter does not hide valid lectures.",
+    "take-attendance.tsx is about 1260 lines and server.py is about 976KB. Both are far above the 700-line guideline."
+  ],
+  "updated_files": ["/app/frontend/app/take-attendance.tsx (added testID to the 4 error-card elements, testability only)"],
+  "success_rate": {"backend": "N/A (light check only; online happy path not run, no lectures today)", "frontend": "100% of requested scenarios"},
+  "seed_data_creation": "None in the DB. Only localStorage was injected in the browser context and then removed (offline_cached_lectures / offline_pending_records). No attendance was saved, so no offline sync record was created.",
+  "test_credentials": "teacher180156/teacher123 works through the API. Web UI login for teachers is blocked by design (403), so inject token/user into localStorage.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "To test teacher pages on the web: POST /api/auth/login with headers User-Agent okhttp and X-Platform android, then localStorage.setItem('token') and setItem('user', JSON). To test the offline cache, set localStorage 'offline_cached_lectures' (an array of OfflineLecture objects with students[{id, student_id, full_name}]) before navigating, and use page.route('**/api/**', abort) to simulate offline. DB has no lectures dated 2026-11-10 and teacher180156 has 0 courses."
+}
