@@ -20,7 +20,7 @@ if BASE_URL.endswith('/'):
     BASE_URL = BASE_URL.rstrip('/')
 
 # Test credentials
-TEACHER_CREDENTIALS = {"username": "9999", "password": "9999"}
+TEACHER_CREDENTIALS = {"username": "9999", "password": "teacher123"}
 STUDENT_CREDENTIALS = {"username": "234", "password": "student123"}
 ADMIN_CREDENTIALS = {"username": "admin", "password": "admin123"}
 

@@ -6271,6 +6271,23 @@ async def get_courses(
         query["$or"] = [{"level": _lv}, {"shared_links": {"$elemMatch": {"level": _lv}}}]
     courses = await db.courses.find(query).to_list(None)
 
+    # 🗓️ توحيد الفصل الدراسي مع /lectures/{today,month,all-schedule}: قد تُسجَّل محاضرة بالفصل النشط
+    # بينما مقررها الأصلي لا يزال يحمل semester_id قديماً (بيانات غير متسقة) — فيظهر المقرر في /lectures
+    # ويختفي من /courses رغم أنه نفس المقرر. نُضيف هنا أي مقرر له محاضرات فعلية ضمن الفصل النشط.
+    _extra_sem_cids: set = set()
+    if auto_filter_active and query.get("semester_id"):
+        _active_sem_id = query["semester_id"]
+        _have = {str(c["_id"]) for c in courses}
+        _extra_sem_cids = set(await db.lectures.distinct("course_id", {"semester_id": _active_sem_id})) - _have
+        if _extra_sem_cids:
+            _extra_query = {k: v for k, v in query.items() if k != "semester_id"}
+            _oids = [ObjectId(c) for c in _extra_sem_cids if ObjectId.is_valid(c)]
+            _extra_query["_id"] = {"$in": _oids}
+            async for ec in db.courses.find(_extra_query):
+                if str(ec["_id"]) not in _have:
+                    courses.append(ec)
+                    _have.add(str(ec["_id"]))
+
     # 👥 المدرّس يرى أيضاً المقررات التي يقود فيها مجموعة فقط (بشارة المجموعة)
     group_roles: dict = {}
     if current_user["role"] == UserRole.TEACHER and "teacher_id" in query:
@@ -6281,12 +6298,20 @@ async def get_courses(
             _gq = {k: v for k, v in query.items() if k != "teacher_id"}
             _gq["groups"] = {"$elemMatch": {"teacher_id": {"$in": _tids}}}
             _have = {str(c["_id"]) for c in courses}
-            for gc in await db.courses.find(_gq).to_list(None):
-                if str(gc["_id"]) in _have:
-                    continue
-                _gs = [g for g in (gc.get("groups") or []) if g.get("teacher_id") in _tids]
-                group_roles[str(gc["_id"])] = [{"key": g["key"], "name": g.get("name") or f"مجموعة {g['key']}"} for g in _gs]
-                courses.append(gc)
+            _group_queries = [_gq]
+            # 🗓️ نفس توحيد الفصل أعلاه: مقرر المجموعة قد يحمل semester_id قديماً رغم محاضرات فعلية بالفصل النشط
+            if _extra_sem_cids:
+                _gq_extra = {k: v for k, v in _gq.items() if k != "semester_id"}
+                _gq_extra["_id"] = {"$in": [ObjectId(c) for c in _extra_sem_cids if ObjectId.is_valid(c)]}
+                _group_queries.append(_gq_extra)
+            for _one_gq in _group_queries:
+                for gc in await db.courses.find(_one_gq).to_list(None):
+                    if str(gc["_id"]) in _have:
+                        continue
+                    _gs = [g for g in (gc.get("groups") or []) if g.get("teacher_id") in _tids]
+                    group_roles[str(gc["_id"])] = [{"key": g["key"], "name": g.get("name") or f"مجموعة {g['key']}"} for g in _gs]
+                    courses.append(gc)
+                    _have.add(str(gc["_id"]))
     
     # 👥 إثراء مجموعات المقررات: اسم مدرّس المجموعة + عدد طلابها + عدد محاضراتها
     _grp_course_ids = [str(c["_id"]) for c in courses if c.get("groups")]
@@ -12088,20 +12113,6 @@ async def sync_offline_attendance(
                     continue
 
             course_id = record["course_id"]
-
-            # 🔐 تحقق ملكية المقرر للأستاذ (user_id أو teacher_record_id)
-            if current_user["role"] == UserRole.TEACHER:
-                if course_id not in course_owner_cache:
-                    try:
-                        _course = await db.courses.find_one({"_id": ObjectId(course_id)})
-                    except Exception:
-                        _course = None
-                    course_owner_cache[course_id] = (_course or {}).get("teacher_id")
-                owner = course_owner_cache[course_id]
-                if owner not in _tids:
-                    errors.append(f"غير مصرح لك بمزامنة حضور المقرر {course_id}")
-                    continue
-
             lecture_id = record.get("lecture_id")
 
             # 🔐 فحص زمني بوقت السيرفر: المحاضرة موجودة + بدأت فعلاً + لم تمضِ OFFLINE_SYNC_MAX_HOURS ساعة على نهايتها
@@ -12117,6 +12128,25 @@ async def sync_offline_attendance(
             if not _lec:
                 errors.append(f"المحاضرة {lecture_id} غير موجودة — مرفوض")
                 continue
+
+            # 🔐 تحقق ملكية المقرر/المحاضرة للأستاذ — نفس قاعدة POST /attendance/session تماماً
+            # (course.teacher_id أو lecture.teacher_id ضمن معرّفاته 👥 قائد مجموعة/مدرّس تبادل، مع قاعدة التبادل)
+            if current_user["role"] == UserRole.TEACHER:
+                if course_id not in course_owner_cache:
+                    try:
+                        _course = await db.courses.find_one({"_id": ObjectId(course_id)})
+                    except Exception:
+                        _course = None
+                    course_owner_cache[course_id] = (_course or {}).get("teacher_id")
+                owner = course_owner_cache[course_id]
+                _lec_teacher = _lec.get("teacher_id")
+                if _lec.get("swap_id") and _lec_teacher not in _tids:
+                    errors.append(f"محاضرة {lecture_id} أُسندت بالتبادل/الإنابة إلى زميل آخر — مرفوض")
+                    continue
+                if owner not in _tids and _lec_teacher not in _tids:
+                    errors.append(f"غير مصرح لك بمزامنة حضور المقرر {course_id}")
+                    continue
+
             try:
                 _lstart = datetime.strptime(f"{_lec['date']} {_lec['start_time']}", "%Y-%m-%d %H:%M").replace(tzinfo=YEMEN_TIMEZONE)
                 _lend = datetime.strptime(f"{_lec['date']} {_lec['end_time']}", "%Y-%m-%d %H:%M").replace(tzinfo=YEMEN_TIMEZONE)

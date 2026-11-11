@@ -13,7 +13,7 @@ import os
 BASE_URL = os.environ.get('EXPO_PUBLIC_BACKEND_URL', 'https://schedule-hub-272.preview.emergentagent.com').rstrip('/')
 
 # Test credentials
-TEACHER_CREDENTIALS = {"username": "9999", "password": "9999"}
+TEACHER_CREDENTIALS = {"username": "9999", "password": "teacher123"}
 ADMIN_CREDENTIALS = {"username": "admin", "password": "admin123"}
 TEST_STUDENT_ID = "69996b9971e8c36b973c5d88"
 TEST_COURSE_ID = "698f82b0539792f8917b7bd8"

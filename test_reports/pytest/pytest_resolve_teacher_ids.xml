@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="24" time="8.221" timestamp="2026-11-11T17:29:41.372475+00:00" hostname="agent-env-09acf16a-7ac0-4f4f-bdd8-550445b492cb"><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_month_lecture_courses_subset_of_courses[teacher180156]" time="3.458" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_month_lecture_courses_subset_of_courses[9999]" time="0.551" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_month_lecture_courses_subset_of_courses[222222]" time="0.515"><failure message="AssertionError: 222222: courses in /lectures/month not in /courses: {'2026-10': ['698f0000d803b27aab0120af', '698f671431cfba92c49a550d']}&#10;assert not {'2026-10': ['698f0000d803b27aab0120af', '698f671431cfba92c49a550d']}">self = &lt;tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency object at 0xfa40154c9190&gt;
+who = '222222'
+
+    @pytest.mark.parametrize("who", ["teacher180156", "9999", "222222"])
+    def test_month_lecture_courses_subset_of_courses(self, who):
+        h = _login(who, "teacher123")
+        courses = _course_ids(h)
+        now = datetime.now(YEMEN)
+        missing_all = {}
+        months = [(now.year, now.month)]
+        prev = now.replace(day=1) - timedelta(days=1)
+        months.append((prev.year, prev.month))
+        total = 0
+        for y, m in months:
+            r = requests.get(f"{API}/lectures/month/{y}/{m}", headers=h, timeout=60)
+            assert r.status_code == 200, r.text[:300]
+            lecs = _lectures_list(r.json())
+            total += len(lecs)
+            lc = {l.get("course_id") for l in lecs if l.get("course_id")}
+            miss = lc - courses
+            if miss:
+                missing_all[f"{y}-{m}"] = list(miss)
+        print(f"{who}: courses={len(courses)} month_lectures={total}")
+&gt;       assert not missing_all, f"{who}: courses in /lectures/month not in /courses: {missing_all}"
+E       AssertionError: 222222: courses in /lectures/month not in /courses: {'2026-10': ['698f0000d803b27aab0120af', '698f671431cfba92c49a550d']}
+E       assert not {'2026-10': ['698f0000d803b27aab0120af', '698f671431cfba92c49a550d']}
+
+tests/test_resolve_teacher_ids_unified.py:99: AssertionError</failure></testcase><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_today_lecture_courses_subset_of_courses[teacher180156]" time="0.148" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_today_lecture_courses_subset_of_courses[9999]" time="0.185" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_today_lecture_courses_subset_of_courses[222222]" time="0.169" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_month_lecture_courses_subset_of_all_semester_courses[teacher180156]" time="0.248" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_month_lecture_courses_subset_of_all_semester_courses[9999]" time="0.251" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_month_lecture_courses_subset_of_all_semester_courses[222222]" time="0.248" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_teacher180156_sees_hadramout_course" time="0.080" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_9999_courses_include_teacher_record_courses" time="0.084" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCoursesLecturesConsistency" name="test_all_schedule_ok" time="0.085" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestCourseEndpoints" name="test_lectures_by_course_and_enrollments" time="0.229" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestUserIdAssignedCourse" name="test_userid_course_visible_in_courses_and_month" time="0.187" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestUserIdAssignedCourse" name="test_userid_course_lectures_and_details" time="0.163" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestLectureDetailsOwnership" name="test_owner_200" time="0.156" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestLectureDetailsOwnership" name="test_non_owner_403" time="0.270" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestAttendanceSessionOwnership" name="test_non_owner_403" time="0.145" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestAttendanceSessionOwnership" name="test_owner_teacher180156_success" time="0.172" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestAttendanceSessionOwnership" name="test_owner_9999_record_id_course_success" time="0.083" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestAttendanceSessionOwnership" name="test_owner_9999_userid_course_success" time="0.100" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestAttendanceSessionOwnership" name="test_outside_30min_window_rejected_400" time="0.076" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestOfflineSyncOwnership" name="test_mixed_batch" time="0.082" /><testcase classname="tests.test_resolve_teacher_ids_unified.TestFcmTokenSingleOwner" name="test_shared_token_moves_to_last_user" time="0.255" /></testsuite></testsuites>
